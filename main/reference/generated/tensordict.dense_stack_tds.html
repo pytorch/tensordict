@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4434+gf28307b68.d20261007)
+                  main (0.14.0.dev4442+gdb91d479c.d20261007)
                 </div>
               
             
@@ -367,14 +367,14 @@
 <dd><p>Densely stack a list of <a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> objects (or a <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>) given that they have the same structure.</p>
 <p>This function is called with a list of <a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> (either passed directly or obtrained from
 a <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>).
-Instead of calling <code class="docutils literal notranslate"><span class="pre">torch.stack(td_list)</span></code>, which would return a <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>,
+Instead of calling <code class="docutils literal notranslate"><span class="pre">lazy_stack(td_list)</span></code>, which would return a <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>,
 this function expands the first element of the input list and stacks the input list onto that element.
 This works only when all the elements of the input list have the same structure.
 The <a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> returned will have the same type of the elements of the input list.</p>
 <p>This function is useful when some of the <a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> objects that need to be stacked
 are <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a> or have <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>
 among entries (or nested entries).
-In those cases, calling <code class="docutils literal notranslate"><span class="pre">torch.stack(td_list).to_tensordict()</span></code> is infeasible.
+In those cases, calling <code class="docutils literal notranslate"><span class="pre">lazy_stack(td_list).to_tensordict()</span></code> is infeasible.
 Thus, this function provides an alternative for densely stacking the list provided.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -387,15 +387,15 @@ If td_list is a LazyStackedTensorDict, it will be retrieved automatically.</p></
 </dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">lazy_stack</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">dense_stack_tds</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">assert_allclose_td</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td0</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},[])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td1</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="s2">"b"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">)},[])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_lazy</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">td0</span><span class="p">,</span> <span class="n">td1</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_lazy</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="n">td0</span><span class="p">,</span> <span class="n">td1</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td_container</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"lazy"</span><span class="p">:</span> <span class="n">td_lazy</span><span class="p">},</span> <span class="p">[])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td_container_clone</span> <span class="o">=</span> <span class="n">td_container</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_stack</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">td_container</span><span class="p">,</span> <span class="n">td_container_clone</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_stack</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="n">td_container</span><span class="p">,</span> <span class="n">td_container_clone</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td_stack</span>
 <span class="go">LazyStackedTensorDict(</span>
 <span class="go">    fields={</span>
@@ -415,6 +415,7 @@ If td_list is a LazyStackedTensorDict, it will be retrieved automatically.</p></
 <span class="go">    is_shared=False,</span>
 <span class="go">    stack_dim=0)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td_stack</span> <span class="o">=</span> <span class="n">dense_stack_tds</span><span class="p">(</span><span class="n">td_stack</span><span class="p">)</span> <span class="c1"># Automatically use the LazyStackedTensorDict stack_dim</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_stack</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
 <span class="go">        lazy: LazyStackedTensorDict(</span>
@@ -430,12 +431,12 @@ If td_list is a LazyStackedTensorDict, it will be retrieved automatically.</p></
 <span class="go">    batch_size=torch.Size([2]),</span>
 <span class="go">    device=None,</span>
 <span class="go">    is_shared=False)</span>
-<span class="go"># Note that</span>
-<span class="go"># (1) td_stack is now a TensorDict</span>
-<span class="go"># (2) this has pushed the stack_dim of "lazy" (0 -&gt; 1)</span>
-<span class="go"># (3) this has revealed the exclusive keys.</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">assert_allclose_td</span><span class="p">(</span><span class="n">td_stack</span><span class="p">,</span> <span class="n">dense_stack_tds</span><span class="p">([</span><span class="n">td_container</span><span class="p">,</span> <span class="n">td_container_clone</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
-<span class="go"># This shows it is the same to pass a list or a LazyStackedTensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Note that</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># (1) td_stack is now a TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># (2) this has pushed the stack_dim of "lazy" (0 -&gt; 1)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># (3) this has revealed the exclusive keys.</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">assert_allclose_td</span><span class="p">(</span><span class="n">td_stack</span><span class="p">,</span> <span class="n">dense_stack_tds</span><span class="p">([</span><span class="n">td_container</span><span class="p">,</span> <span class="n">td_container_clone</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># This shows it is the same to pass a list or a LazyStackedTensorDict</span>
 </pre></div>
 </div>
 </dd></dl>

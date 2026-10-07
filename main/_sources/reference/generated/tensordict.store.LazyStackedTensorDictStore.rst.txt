@@ -1,0 +1,9 @@
+﻿.. currentmodule:: tensordict.store
+
+
+LazyStackedTensorDictStore
+==========================
+
+.. autoclass:: LazyStackedTensorDictStore
+    :members:
+    :inherited-members:

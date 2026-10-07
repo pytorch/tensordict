@@ -1,0 +1,9 @@
+﻿.. currentmodule:: tensordict._ucxx
+
+
+TensorDictServer
+================
+
+.. autoclass:: TensorDictServer
+    :members:
+    :inherited-members:

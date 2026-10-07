@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4434+gf28307b68.d20261007)
+                  main (0.14.0.dev4442+gdb91d479c.d20261007)
                 </div>
               
             
@@ -403,11 +403,17 @@ or <code class="docutils literal notranslate"><span class="pre">cat</span></code
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.from_consolidated.html#tensordict.from_consolidated" title="tensordict.from_consolidated"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_consolidated</span></code></a>(filename)</p></td>
 <td><p>Reconstructs a tensordict from a consolidated file.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.from_dict.html#tensordict.from_dict" title="tensordict.from_dict"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_dict</span></code></a>(d, *[, auto_batch_size, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.from_csv.html#tensordict.from_csv" title="tensordict.from_csv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_csv</span></code></a>(path, *[, auto_batch_size, ...])</p></td>
+<td><p>Creates a TensorDict from a CSV file.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.from_dict.html#tensordict.from_dict" title="tensordict.from_dict"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_dict</span></code></a>(d, *[, auto_batch_size, ...])</p></td>
 <td><p>Converts a dictionary to a TensorDict.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.from_h5.html#tensordict.from_h5" title="tensordict.from_h5"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_h5</span></code></a>(h5_file, *[, auto_batch_size, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.from_h5.html#tensordict.from_h5" title="tensordict.from_h5"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_h5</span></code></a>(h5_file, *[, auto_batch_size, ...])</p></td>
 <td><p>Converts an HDF5 file to a TensorDict.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.from_json.html#tensordict.from_json" title="tensordict.from_json"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_json</span></code></a>(path, *[, auto_batch_size, ...])</p></td>
+<td><p>Creates a TensorDict from a JSON file.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.from_module.html#tensordict.from_module" title="tensordict.from_module"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_module</span></code></a>(module[, as_module, lock, ...])</p></td>
 <td><p>Copies the params and buffers of a module in a tensordict.</p></td>
@@ -417,6 +423,12 @@ or <code class="docutils literal notranslate"><span class="pre">cat</span></code
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.from_namedtuple.html#tensordict.from_namedtuple" title="tensordict.from_namedtuple"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_namedtuple</span></code></a>(named_tuple, *[, ...])</p></td>
 <td><p>Converts a namedtuple to a TensorDict.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.from_pandas.html#tensordict.from_pandas" title="tensordict.from_pandas"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_pandas</span></code></a>(dataframe, *[, auto_batch_size, ...])</p></td>
+<td><p>Converts a pandas DataFrame to a TensorDict.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.from_parquet.html#tensordict.from_parquet" title="tensordict.from_parquet"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_parquet</span></code></a>(path, *[, auto_batch_size, ...])</p></td>
+<td><p>Creates a TensorDict from a Parquet file.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.from_pytree.html#tensordict.from_pytree" title="tensordict.from_pytree"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_pytree</span></code></a>(pytree, *[, batch_size, ...])</p></td>
 <td><p>Converts a pytree to a TensorDict instance.</p></td>
@@ -483,7 +495,7 @@ locking/unlocking a tensordict</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="o">.</span><span class="n">lock_</span><span class="p">()</span>  <span class="c1"># data.set will result in an exception</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">data</span><span class="o">.</span><span class="n">unlock_</span><span class="p">():</span>
 <span class="gp">... </span>    <span class="n">data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">"key"</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">data</span><span class="o">.</span><span class="n">is_locked</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">data</span><span class="o">.</span><span class="n">is_locked</span>
 </pre></div>
 </div>
 <p>or to execute functional calls with a TensorDict instance containing the
@@ -502,7 +514,7 @@ the original parameters after this call is completed.</p>
 <section id="memory-mapped-tensors">
 <h2>Memory-mapped tensors<a class="headerlink" href="#memory-mapped-tensors" title="Permalink to this heading">¶</a></h2>
 <p><cite>tensordict</cite> offers the <a class="reference internal" href="generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a> primitive which
-allows you to work with tensors stored in physical memory in a handy way.
+allows you to work with tensors stored in files on disk in a handy way.
 The main advantages of <a class="reference internal" href="generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a>
 are its ease of construction (no need to handle the storage of a tensor),
 the possibility to work with big contiguous data that would not fit in memory,
@@ -516,15 +528,38 @@ tensors as long as the data-pointer of their storage is the same as the original
 one.</p>
 <p>Indexing memory-mapped tensors is much faster than loading several independent files from
 the disk and does not require to load the full content of the array in memory.
-However, physical storage of PyTorch tensors should not be any different:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="o">&gt;&gt;&gt;</span> <span class="n">my_images</span> <span class="o">=</span> <span class="n">MemoryMappedTensor</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">1_000_000</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">480</span><span class="p">,</span> <span class="mi">480</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">unint8</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">mini_batch</span> <span class="o">=</span> <span class="n">my_images</span><span class="p">[:</span><span class="mi">10</span><span class="p">]</span>  <span class="c1"># just reads the first 10 images of the dataset</span>
+Apart from the file that backs it, a memory-mapped tensor is created and indexed like a regular
+PyTorch tensor:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="o">&gt;&gt;&gt;</span> <span class="n">my_images</span> <span class="o">=</span> <span class="n">MemoryMappedTensor</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span>
+<span class="o">...</span>     <span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s2">"images.memmap"</span>
+<span class="o">...</span> <span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">mini_batch</span> <span class="o">=</span> <span class="n">my_images</span><span class="p">[:</span><span class="mi">10</span><span class="p">]</span>  <span class="c1"># a MemoryMappedTensor view on the first 10 images</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="c1"># the file can be opened again later, or from another process</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">my_images</span> <span class="o">=</span> <span class="n">MemoryMappedTensor</span><span class="o">.</span><span class="n">from_filename</span><span class="p">(</span>
+<span class="o">...</span>     <span class="s2">"images.memmap"</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">)</span>
+<span class="o">...</span> <span class="p">)</span>
 </pre></div>
 </div>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a>(source, *[, dtype, ...])</p></td>
 <td><p>A Memory-mapped Tensor.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="key-value-stores">
+<h2>Key-value stores<a class="headerlink" href="#key-value-stores" title="Permalink to this heading">¶</a></h2>
+<p><a class="reference internal" href="generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore" title="tensordict.store.TensorDictStore"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictStore</span></code></a> and <a class="reference internal" href="generated/tensordict.store.LazyStackedTensorDictStore.html#tensordict.store.LazyStackedTensorDictStore" title="tensordict.store.LazyStackedTensorDictStore"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDictStore</span></code></a>
+are tensordicts whose entries are kept in a Redis-compatible key-value store (Redis, Dragonfly, KeyDB, …).
+See <a class="reference internal" href="../storage.html#storage"><span class="std std-ref">Storing large heterogeneous data</span></a> for their usage.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore" title="tensordict.store.TensorDictStore"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictStore</span></code></a>(*[, backend, host, port, ...])</p></td>
+<td><p>A TensorDict backed by an in-memory key-value store for out-of-core storage.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.store.LazyStackedTensorDictStore.html#tensordict.store.LazyStackedTensorDictStore" title="tensordict.store.LazyStackedTensorDictStore"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LazyStackedTensorDictStore</span></code></a>(*[, backend, ...])</p></td>
+<td><p>A LazyStackedTensorDict backed by a key-value store.</p></td>
 </tr>
 </tbody>
 </table>
@@ -583,7 +618,7 @@ stored within it. These operations are similar to those performed on regular PyT
 <span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">td</span> <span class="o">*</span> <span class="n">tensor</span>
 </pre></div>
 </div>
-<p>ere, the * operator is applied element-wise to each tensor in td and the provided tensor. The tensor is broadcasted to match the shape of each tensor in the Tensordict.</p>
+<p>Here, the * operator is applied element-wise to each tensor in td and the provided tensor. The tensor is broadcasted to match the shape of each tensor in the Tensordict.</p>
 </section>
 <section id="example-3-tensordict-scalar-operation">
 <h4>Example 3: Tensordict-Scalar Operation<a class="headerlink" href="#example-3-tensordict-scalar-operation" title="Permalink to this heading">¶</a></h4>
@@ -627,12 +662,13 @@ Some operations, like <a class="reference internal" href="generated/tensordict.T
 to operate with tensordict with exclusive entries.
 If <code class="docutils literal notranslate"><span class="pre">default=None</span></code> (the default), the two Tensordicts must have exactly matching key sets.
 If <code class="docutils literal notranslate"><span class="pre">default=&quot;intersection&quot;</span></code>, only the intersecting key sets will be considered, and other keys will be ignored.
-In all other cases, <code class="docutils literal notranslate"><span class="pre">default</span></code> will be used for all missing entries on both sides of the operation.</p>
+In all other cases, <code class="docutils literal notranslate"><span class="pre">default</span></code> must be a tensor (e.g. <code class="docutils literal notranslate"><span class="pre">default=torch.tensor(0.0)</span></code>, not <code class="docutils literal notranslate"><span class="pre">default=0</span></code>), which
+will be used for all missing entries on both sides of the operation.</p>
 </section>
 </section>
 <section id="gradient-computation-with-torch-autograd-grad">
 <h2>Gradient computation with <code class="docutils literal notranslate"><span class="pre">torch.autograd.grad</span></code><a class="headerlink" href="#gradient-computation-with-torch-autograd-grad" title="Permalink to this heading">¶</a></h2>
-<p>Tensordict extends <a href="#id1"><span class="problematic" id="id2">:pyfunc:`torch.autograd.grad`</span></a> so that gradients can be
+<p>Tensordict extends <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.autograd.grad.html#torch.autograd.grad" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.autograd.grad()</span></code></a> so that gradients can be
 computed directly on (nested) <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> structures.  All tensors are
 extracted into tuples, the underlying PyTorch op is executed and the
 result is packed back into a new <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> with the same key structure.
@@ -690,6 +726,22 @@ whose entries match the differentiable leaves by nested key:</p>
 </pre></div>
 </div>
 </section>
+</section>
+<section id="ucxx-transport">
+<h2>UCXX transport<a class="headerlink" href="#ucxx-transport" title="Permalink to this heading">¶</a></h2>
+<p><a class="reference internal" href="generated/tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe" title="tensordict._ucxx.TensorDictPipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPipe</span></code></a> and <a class="reference internal" href="generated/tensordict._ucxx.TensorDictServer.html#tensordict._ucxx.TensorDictServer" title="tensordict._ucxx.TensorDictServer"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictServer</span></code></a> stream tensordicts
+over UCXX. They are imported from <code class="docutils literal notranslate"><span class="pre">tensordict._ucxx</span></code> and need the optional <code class="docutils literal notranslate"><span class="pre">ucxx</span></code> package.
+See <a class="reference internal" href="../distributed.html#distributed"><span class="std std-ref">TensorDict in distributed settings</span></a> for their usage.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe" title="tensordict._ucxx.TensorDictPipe"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictPipe</span></code></a>(endpoint, *[, consolidated, ...])</p></td>
+<td><p>A persistent point-to-point channel for streaming TensorDicts over UCXX.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict._ucxx.TensorDictServer.html#tensordict._ucxx.TensorDictServer" title="tensordict._ucxx.TensorDictServer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictServer</span></code></a>(port, *[, consolidated])</p></td>
+<td><p>A one-to-many listener that accepts connections and yields TensorDictPipe instances.</p></td>
+</tr>
+</tbody>
+</table>
 </section>
 <section id="utils">
 <h2>Utils<a class="headerlink" href="#utils" title="Permalink to this heading">¶</a></h2>
@@ -807,6 +859,7 @@ whose entries match the differentiable leaves by nested key:</p>
 <li><a class="reference internal" href="#constructors-and-handlers">Constructors and handlers</a></li>
 <li><a class="reference internal" href="#tensordict-as-a-context-manager">TensorDict as a context manager</a></li>
 <li><a class="reference internal" href="#memory-mapped-tensors">Memory-mapped tensors</a></li>
+<li><a class="reference internal" href="#key-value-stores">Key-value stores</a></li>
 <li><a class="reference internal" href="#pointwise-operations">Pointwise Operations</a><ul>
 <li><a class="reference internal" href="#supported-operations">Supported Operations</a></li>
 <li><a class="reference internal" href="#performing-pointwise-operations">Performing Pointwise Operations</a><ul>
@@ -826,6 +879,7 @@ whose entries match the differentiable leaves by nested key:</p>
 <li><a class="reference internal" href="#backpropagation-with-tensordict-backward">Backpropagation with <code class="docutils literal notranslate"><span class="pre">TensorDict.backward</span></code></a></li>
 </ul>
 </li>
+<li><a class="reference internal" href="#ucxx-transport">UCXX transport</a></li>
 <li><a class="reference internal" href="#utils">Utils</a></li>
 </ul>
 </li>

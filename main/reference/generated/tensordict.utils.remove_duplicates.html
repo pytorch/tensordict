@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4434+gf28307b68.d20261007)
+                  main (0.14.0.dev4442+gdb91d479c.d20261007)
                 </div>
               
             
@@ -385,7 +385,7 @@ returned as well. Defaults to <code class="docutils literal notranslate"><span c
 <dd class="field-even"><p><dl class="simple">
 <dt>input tensordict with the indices corrsponding to duplicated elements</dt><dd><p>in tensor <cite>key</cite> along dimension <cite>dim</cite> removed.</p>
 </dd>
-<dt>unique_indices (torch.Tensor, optional): The indices of the first occurrences of the unique elements in the</dt><dd><p>input tensordict for the specified <cite>key</cite> along the specified <cite>dim</cite>. Only provided if return_index is True.</p>
+<dt>unique_indices (torch.Tensor, optional): The indices of the first occurrences of the unique elements in the</dt><dd><p>input tensordict for the specified <cite>key</cite> along the specified <cite>dim</cite>. Only provided if <cite>return_indices</cite> is True.</p>
 </dd>
 </dl>
 </p>
@@ -399,10 +399,10 @@ returned as well. Defaults to <code class="docutils literal notranslate"><span c
 <span class="gp">... </span>    <span class="p">{</span>
 <span class="gp">... </span>        <span class="s2">"tensor1"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="p">[</span><span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">]]),</span>
 <span class="gp">... </span>        <span class="s2">"tensor2"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">],</span> <span class="p">[</span><span class="mi">30</span><span class="p">,</span> <span class="mi">40</span><span class="p">],</span> <span class="p">[</span><span class="mi">40</span><span class="p">,</span> <span class="mi">50</span><span class="p">],</span> <span class="p">[</span><span class="mi">50</span><span class="p">,</span> <span class="mi">60</span><span class="p">]]),</span>
-<span class="gp">... </span>    <span class="p">}</span>
+<span class="gp">... </span>    <span class="p">},</span>
 <span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span>
 <span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">output_tensordict</span> <span class="o">=</span> <span class="n">remove_duplicate_elements</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="s2">"tensor1"</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">output_tensordict</span> <span class="o">=</span> <span class="n">remove_duplicates</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="s2">"tensor1"</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">expected_output</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="p">{</span>
 <span class="gp">... </span>        <span class="s2">"tensor1"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">],</span> <span class="p">[</span><span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">]]),</span>
@@ -410,7 +410,7 @@ returned as well. Defaults to <code class="docutils literal notranslate"><span c
 <span class="gp">... </span>    <span class="p">},</span>
 <span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
 <span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span><span class="n">td</span> <span class="o">==</span> <span class="n">expected_output</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span><span class="n">output_tensordict</span> <span class="o">==</span> <span class="n">expected_output</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 </pre></div>
 </div>
 </dd></dl>

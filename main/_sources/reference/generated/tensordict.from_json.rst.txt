@@ -1,0 +1,9 @@
+﻿.. currentmodule:: tensordict
+
+
+from_json
+=========
+
+.. autoclass:: from_json
+    :members:
+    :inherited-members:

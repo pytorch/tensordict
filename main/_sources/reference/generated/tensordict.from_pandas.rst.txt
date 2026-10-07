@@ -1,0 +1,9 @@
+﻿.. currentmodule:: tensordict
+
+
+from_pandas
+===========
+
+.. autoclass:: from_pandas
+    :members:
+    :inherited-members:

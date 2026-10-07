@@ -1,0 +1,9 @@
+﻿.. currentmodule:: tensordict._ucxx
+
+
+TensorDictPipe
+==============
+
+.. autoclass:: TensorDictPipe
+    :members:
+    :inherited-members:

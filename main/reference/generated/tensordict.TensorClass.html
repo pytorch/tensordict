@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4434+gf28307b68.d20261007)
+                  main (0.14.0.dev4442+gdb91d479c.d20261007)
                 </div>
               
             
@@ -489,7 +489,7 @@ construction. <code class="docutils literal notranslate"><span class="pre">shado
 flags:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Base</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">"autocast"</span><span class="p">]):</span>
 <span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="nb">int</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Sub</span><span class="p">(</span><span class="n">Base</span><span class="p">,</span> <span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>   <span class="c1"># autocast inherited, frozen added</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Sub</span><span class="p">(</span><span class="n">Base</span><span class="p">,</span> <span class="n">shadow</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>   <span class="c1"># autocast inherited, shadow added</span>
 <span class="gp">... </span>    <span class="n">y</span><span class="p">:</span> <span class="nb">float</span>
 </pre></div>
 </div>

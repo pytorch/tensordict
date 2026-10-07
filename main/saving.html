@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4434+gf28307b68.d20261007)
+                  main (0.14.0.dev4442+gdb91d479c.d20261007)
                 </div>
               
             
@@ -363,9 +363,11 @@ One can easily imagine situations where this is sub-optimal!</p>
 <p>TensorDict serialization API mainly relies on <a class="reference internal" href="reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a>
 which is used to write tensors independently on disk with a data structure
 that mimics the TensorDict’s one.</p>
-<p>TensorDict’s serialization speed can be an order of magnitude <strong>faster</strong> than
-PyTorch’s one with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a>’s pickle reliance. This document explains
-how to create and interact with data stored on disk using TensorDict.</p>
+<p>Because each leaf is written to an independent file, saving can be spread over
+several threads, and loading is lazy: the files are memory-mapped and only read
+when accessed. A speed comparison with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a> and other formats is
+given below. This document explains how to create and interact with data
+stored on disk using TensorDict.</p>
 <section id="saving-memory-mapped-tensordicts">
 <h2>Saving memory-mapped TensorDicts<a class="headerlink" href="#saving-memory-mapped-tensordicts" title="Permalink to this heading">¶</a></h2>
 <p>When a tensordict is dumped as a mmap data structure, each entry corresponds
@@ -458,9 +460,13 @@ needs to be preallocated on disk, the typical usage being:</p>
 <p>As illustrated above, when converting entries of a <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>
 to <a class="reference internal" href="reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a>, it is possible to control where
 the memory maps are saved on disk so that they persist and can
-be loaded at a later date. On the other hand, the file system can also be used.
-To use this, simply discard the <code class="docutils literal notranslate"><span class="pre">prefix</span></code> argument in the three serialization
-methods above.</p>
+be loaded at a later date. If the <code class="docutils literal notranslate"><span class="pre">prefix</span></code> argument of the three serialization
+methods above is omitted, each tensor is instead stored in an anonymous
+temporary mapping: on Linux, an unlinked file in shared memory (<code class="docutils literal notranslate"><span class="pre">/dev/shm</span></code>,
+i.e. in RAM) when it has enough free space; on other platforms (or when
+<code class="docutils literal notranslate"><span class="pre">/dev/shm</span></code> is too small), an unlinked temporary file or, on Windows, a named
+shared-memory block. Such tensors have no associated file name, do not persist
+and cannot be reloaded with <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a>.</p>
 <p>When a <code class="docutils literal notranslate"><span class="pre">prefix</span></code> is specified, the data structure follows the TensorDict’s one:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
@@ -481,7 +487,7 @@ methods above.</p>
 tensordict, such as device, batch-size, but also the tensordict subtypes.
 This means that <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.load_memmap" title="tensordict.TensorDict.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a> will be able to
 reconstruct complex nested structures where sub-tensordicts have different types
-than parents:</p>
+than parents, such as a tensorclass stored in a <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">tensorclass</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">print_directory_tree</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -498,32 +504,31 @@ than parents:</p>
 <span class="gp">...</span>
 <span class="gp">... </span>    <span class="n">loaded_data</span> <span class="o">=</span> <span class="n">TensorDictBase</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="n">tempdir</span><span class="p">)</span>
 <span class="gp">... </span>    <span class="k">assert</span> <span class="p">(</span><span class="n">loaded_data</span> <span class="o">==</span> <span class="n">data</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-<span class="gp">... </span>    <span class="n">print_directory_tree</span><span class="p">(</span><span class="n">tempdir</span><span class="p">)</span>
-<span class="go">tmpzy1jcaoq/</span>
-<span class="go">    tensorclass/</span>
-<span class="go">        _tensordict/</span>
-<span class="go">            data.memmap</span>
-<span class="go">            meta.json</span>
-<span class="go">        meta.json</span>
-<span class="go">    td_list/</span>
-<span class="go">        0/</span>
-<span class="go">            item.memmap</span>
-<span class="go">            meta.json</span>
-<span class="go">        1/</span>
-<span class="go">            item.memmap</span>
-<span class="go">            meta.json</span>
-<span class="go">        3/</span>
-<span class="go">            item.memmap</span>
-<span class="go">            meta.json</span>
-<span class="go">        2/</span>
-<span class="go">            item.memmap</span>
-<span class="go">            meta.json</span>
-<span class="go">        meta.json</span>
-<span class="go">    meta.json</span>
+<span class="gp">... </span>    <span class="n">tree</span> <span class="o">=</span> <span class="n">print_directory_tree</span><span class="p">(</span><span class="n">tempdir</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">loaded_data</span><span class="p">[</span><span class="s2">"tensorclass"</span><span class="p">])</span> <span class="ow">is</span> <span class="n">MyClass</span>
+<span class="go">True</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">print_directory_tree</span></code> writes the tree through the <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> logger (one
+<code class="docutils literal notranslate"><span class="pre">INFO</span></code> record per line) and also returns it as a string. The logged messages
+are:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Directory</span> <span class="n">size</span><span class="p">:</span> <span class="mf">673.00</span> <span class="n">B</span>
+<span class="n">tmp5h_fgq76</span><span class="o">/</span>
+    <span class="n">meta</span><span class="o">.</span><span class="n">json</span>
+    <span class="n">tensorclass</span><span class="o">/</span>
+        <span class="n">_tensordict</span><span class="o">/</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">memmap</span>
+            <span class="n">meta</span><span class="o">.</span><span class="n">json</span>
+            <span class="n">metadata</span><span class="o">/</span>
+                <span class="n">meta</span><span class="o">.</span><span class="n">json</span>
+        <span class="n">meta</span><span class="o">.</span><span class="n">json</span>
+    <span class="n">td_list</span><span class="o">/</span>
+        <span class="n">item</span><span class="o">.</span><span class="n">memmap</span>
+        <span class="n">meta</span><span class="o">.</span><span class="n">json</span>
 </pre></div>
 </div>
 <section id="handling-existing-memorymappedtensor">
-<h3>Handling existing <a class="reference internal" href="reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a><a class="headerlink" href="#handling-existing-memorymappedtensor" title="Permalink to this heading">¶</a></h3>
+<h3>Handling existing <code class="docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code><a class="headerlink" href="#handling-existing-memorymappedtensor" title="Permalink to this heading">¶</a></h3>
 <p>If the <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> already contains
 <a class="reference internal" href="reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a> entries there are a few
 possible behaviours.</p>
@@ -545,11 +550,16 @@ unless <cite>copy_existing=True</cite> is passed:</p>
 <span class="gp">... </span>    <span class="n">td0</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="n">tmpdir_0</span><span class="p">)</span>
 <span class="gp">... </span>    <span class="n">td0</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="n">tmpdir_0</span><span class="p">)</span>  <span class="c1"># works, results are just overwritten</span>
 <span class="gp">... </span>    <span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">tmpdir_1</span><span class="p">:</span>
-<span class="gp">... </span>        <span class="n">td1</span> <span class="o">=</span> <span class="n">td0</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="n">tmpdir_1</span><span class="p">)</span>
-<span class="gp">... </span>        <span class="n">td_load</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="n">tmpdir_1</span><span class="p">)</span>  <span class="c1"># works!</span>
-<span class="gp">... </span>    <span class="k">assert</span> <span class="p">(</span><span class="n">td_load</span> <span class="o">==</span> <span class="n">td</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="gp">... </span>        <span class="n">td1</span> <span class="o">=</span> <span class="n">td0</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="n">tmpdir_1</span><span class="p">)</span>  <span class="c1"># breaks!</span>
+<span class="gt">Traceback (most recent call last):</span>
+<span class="c">...</span>
+<span class="gr">RuntimeError</span>: <span class="n">A filename was provided but the tensor already has a file associated (...). To copy the tensor onto the new location, pass copy_existing=True.</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">tmpdir_0</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">td0</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="n">tmpdir_0</span><span class="p">)</span>
 <span class="gp">... </span>    <span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">tmpdir_1</span><span class="p">:</span>
-<span class="gp">... </span>        <span class="n">td_load</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="n">tmpdir_1</span><span class="p">)</span>  <span class="c1"># breaks!</span>
+<span class="gp">... </span>        <span class="n">td1</span> <span class="o">=</span> <span class="n">td0</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="n">tmpdir_1</span><span class="p">,</span> <span class="n">copy_existing</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># works!</span>
+<span class="gp">... </span>        <span class="n">td_load</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="n">tmpdir_1</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="k">assert</span> <span class="p">(</span><span class="n">td_load</span> <span class="o">==</span> <span class="n">td</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 </pre></div>
 </div>
 <p>This feature is implemented to prevent users from inadvertently copying memory-mapped
@@ -617,7 +627,7 @@ weights barely do.</p>
 <p class="admonition-title">Note</p>
 <p>Two differences with directory-backed tensordicts are worth keeping in
 mind. First, by default an archive-loaded tensordict behaves like the
-result of <code class="xref py py-meth docutils literal notranslate"><span class="pre">from_consolidated()</span></code>: leaves are
+result of <a class="reference internal" href="reference/generated/tensordict.from_consolidated.html#tensordict.from_consolidated" title="tensordict.from_consolidated"><code class="xref py py-func docutils literal notranslate"><span class="pre">from_consolidated()</span></code></a>: leaves are
 views into a single storage and in-place writes do <strong>not</strong> propagate to
 the file. Second, archives written by external zip tools (without payload
 alignment) load correctly, but misaligned leaves are copied in memory
@@ -869,7 +879,7 @@ mimics the TensorDict’s one.</p>
 <li><a class="reference internal" href="#saving-memory-mapped-tensordicts">Saving memory-mapped TensorDicts</a></li>
 <li><a class="reference internal" href="#pickled-non-tensor-data">Pickled non-tensor data</a></li>
 <li><a class="reference internal" href="#filesystem-considerations">Filesystem considerations</a><ul>
-<li><a class="reference internal" href="#handling-existing-memorymappedtensor">Handling existing <code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a></li>
+<li><a class="reference internal" href="#handling-existing-memorymappedtensor">Handling existing <code class="docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a></li>
 <li><a class="reference internal" href="#copy-on-write-loading">Copy-on-write loading</a></li>
 </ul>
 </li>

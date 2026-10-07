@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4434+gf28307b68.d20261007)
+                  main (0.14.0.dev4442+gdb91d479c.d20261007)
                 </div>
               
             
@@ -405,14 +405,14 @@ Use with caution, as this may cause unintended consequences. Defaults to False.<
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.tensorclass</span><span class="w"> </span><span class="kn">import</span> <span class="n">from_dataclass</span>
 <span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nd">@dataclass</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">X</span><span class="p">:</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">X</span><span class="p">:</span>
 <span class="gp">... </span>    <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
 <span class="gp">... </span>    <span class="n">b</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
 <span class="gp">...</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">x</span> <span class="o">=</span> <span class="n">X</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">x2</span> <span class="o">=</span> <span class="n">from_dataclass</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">x2</span><span class="p">)</span>
-<span class="go">X(</span>
+<span class="go">X_tc(</span>
 <span class="go">    a=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
 <span class="go">    b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
 <span class="go">    batch_size=torch.Size([]),</span>
@@ -420,7 +420,7 @@ Use with caution, as this may cause unintended consequences. Defaults to False.<
 <span class="go">    is_shared=False)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">X2</span> <span class="o">=</span> <span class="n">from_dataclass</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">autocast</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">X2</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
-<span class="go">X(</span>
+<span class="go">X_tc(</span>
 <span class="go">    a=NonTensorData(data=0, batch_size=torch.Size([]), device=None),</span>
 <span class="go">    b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
 <span class="go">    batch_size=torch.Size([]),</span>

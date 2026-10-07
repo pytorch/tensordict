@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4434+gf28307b68.d20261007)
+                  main (0.14.0.dev4442+gdb91d479c.d20261007)
                 </div>
               
             
@@ -408,9 +408,10 @@ attribute.</p>
 </div>
 <p>The contents of the <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> can be sent to a device like a PyTorch tensor
 with <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.cuda" title="tensordict.TensorDict.cuda"><code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDict.cuda()</span></code></a> or
-<a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.device" title="tensordict.TensorDict.device"><code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDict.device(device)</span></code></a> with <code class="docutils literal notranslate"><span class="pre">device</span></code>
-being the desired device.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">"cpu"</span><span class="p">))</span>
+<a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.to" title="tensordict.TensorDict.to"><code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDict.to(device)</span></code></a> with <code class="docutils literal notranslate"><span class="pre">device</span></code>
+being the desired device. Like their PyTorch counterparts, these methods return the
+result rather than modifying the <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> in place.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">"cpu"</span><span class="p">))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
@@ -419,7 +420,7 @@ being the desired device.</p>
 <span class="go">    batch_size=torch.Size([10]),</span>
 <span class="go">    device=cpu,</span>
 <span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
@@ -430,11 +431,11 @@ being the desired device.</p>
 <span class="go">    is_shared=True)</span>
 </pre></div>
 </div>
-<p>The <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.device" title="tensordict.TensorDict.device"><code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDict.device</span></code></a> method requires a valid
+<p>The <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.to" title="tensordict.TensorDict.to"><code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDict.to</span></code></a> method requires a valid
 device to be passed as the argument. If you want to remove the device from the
 <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> to allow values with different devices, you should use the
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDict.clear_device</span></code> method.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span><span class="o">.</span><span class="n">clear_device</span><span class="p">()</span>
+<a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.clear_device_" title="tensordict.TensorDict.clear_device_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDict.clear_device_</span></code></a> method.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">clear_device_</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
@@ -492,20 +493,20 @@ preferred to <code class="docutils literal notranslate"><span class="pre">memmap
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>MemoryMappedTensor([0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
 </pre></div>
 </div>
-<p>By default the contents of the <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> will be saved to a temporary
-location on disk, however if you would like to control where they are saved you can
-use the keyword argument <code class="docutils literal notranslate"><span class="pre">prefix=&quot;/path/to/root&quot;</span></code>.</p>
+<p>By default the contents of the <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> are stored in anonymous
+temporary memory maps (on Linux, in shared memory under <code class="docutils literal notranslate"><span class="pre">/dev/shm</span></code> when it has
+room; otherwise in an unlinked temporary file, or a shared-memory block on Windows),
+which do not persist and cannot be reloaded from disk. If you would like to control
+where they are saved you can use the keyword argument <code class="docutils literal notranslate"><span class="pre">prefix=&quot;/path/to/root&quot;</span></code>.</p>
 <p>The contents of the <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> are saved in a directory structure that mimics
-the structure of the <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> itself. The contents of the tensor is saved
-in a NumPy memmap, and the metadata in an associated PyTorch save file. For example,
-the above <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> is saved as follows:</p>
+the structure of the <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> itself. The contents of each tensor are
+saved as a raw memory-mapped <code class="docutils literal notranslate"><span class="pre">.memmap</span></code> file, and the metadata in <code class="docutils literal notranslate"><span class="pre">meta.json</span></code>
+files. For example, the above <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> is saved as follows:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>├── a.memmap
-├── a.meta.pt
 ├── b
 │ ├── c.memmap
-│ ├── c.meta.pt
-│ └── meta.pt
-└── meta.pt
+│ └── meta.json
+└── meta.json
 </pre></div>
 </div>
 <p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.004 seconds)</p>
