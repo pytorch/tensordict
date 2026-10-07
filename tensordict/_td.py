@@ -102,6 +102,7 @@ from tensordict.utils import (
     DeviceType,
     expand_as_right,
     IndexType,
+    is_batchedtensor,
     is_non_tensor,
     is_tensorclass,
     lock_blocked,
@@ -5370,6 +5371,17 @@ def _warn_to_module_preserve_module_state(memo) -> None:
     )
 
 
+def _tracks_gradients(tensor: torch.Tensor) -> bool:
+    """Whether wrapping ``tensor`` in a new ``nn.Parameter`` would stop its gradients.
+
+    A new ``nn.Parameter`` is a new leaf, so gradients would no longer reach a
+    tensor that requires grad (a leaf or a computed tensor) or a ``vmap`` slice.
+    """
+    return not isinstance(tensor, torch.nn.Parameter) and (
+        tensor.requires_grad or is_batchedtensor(tensor)
+    )
+
+
 def _maybe_preserve_module_state(
     module: torch.nn.Module,
     name: str,
@@ -5397,6 +5409,9 @@ def _maybe_preserve_module_state(
             not isinstance(tensor, torch.nn.Parameter)
             or tensor.requires_grad != param.requires_grad
         ):
+            if _tracks_gradients(tensor):
+                # swap_tensor writes it to module._parameters as it is
+                return tensor
             return torch.nn.Parameter(tensor, requires_grad=param.requires_grad)
     elif (
         preserve_module_state
@@ -5451,6 +5466,7 @@ def _set_tensor_dict(  # noqa: F811
             _buffers[name] = tensor
             return out
     was_buffer = False
+    keep_parameter_slot = False
     out = _parameters.pop(name, NO_DEFAULT)  # type: ignore[assignment]
     was_parameter = out is not NO_DEFAULT
     if out is NO_DEFAULT:
@@ -5477,7 +5493,10 @@ def _set_tensor_dict(  # noqa: F811
             not isinstance(tensor, torch.nn.Parameter)
             or tensor.requires_grad != out.requires_grad
         ):
-            tensor = torch.nn.Parameter(tensor, requires_grad=out.requires_grad)
+            if _tracks_gradients(tensor):
+                keep_parameter_slot = True
+            else:
+                tensor = torch.nn.Parameter(tensor, requires_grad=out.requires_grad)
     elif (
         preserve_module_state is True
         and was_buffer
@@ -5498,6 +5517,10 @@ def _set_tensor_dict(  # noqa: F811
                 _add_batch_dim_pre_hook(), with_kwargs=True
             )
 
+    elif keep_parameter_slot:
+        # keep the registration without making a new leaf, as
+        # torch.func.functional_call does
+        _parameters[name] = tensor
     elif was_buffer and isinstance(tensor, torch.Tensor):
         _buffers[name] = tensor
     else:
