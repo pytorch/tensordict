@@ -386,6 +386,16 @@ class TestTensorDictStore:
         with pytest.raises(NotImplementedError):
             store_td.share_memory_()
 
+    def test_close_releases_event_loop(self, store_kwargs):
+        """close() closes the event loop, which releases the sockets that it holds."""
+        td = TensorDictStore(batch_size=[5], **store_kwargs)
+        # a closed store must not appear in a failed assertion: its repr would
+        # wait on the loop forever
+        loop = td._loop
+        td.clear_redis()
+        td.close()
+        assert loop.is_closed()
+
     def test_reconnect_by_id(self, store_kwargs):
         """Connect to an existing TensorDictStore by ID."""
 
@@ -1053,6 +1063,16 @@ class TestLazyStackedTensorDictStore:
         assert torch.allclose(sub["a"][1], tds[2]["a"])
         assert torch.allclose(sub["a"][2], tds[4]["a"])
 
+    def test_close_releases_event_loop(self, store_kwargs):
+        """close() closes the event loop, which releases the sockets that it holds."""
+        store = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack([TensorDict({"a": torch.zeros(2)}, [2])]), **store_kwargs
+        )
+        loop = store._loop
+        store.clear_redis()
+        store.close()
+        assert loop.is_closed()
+
     # ---- Read: td[list_of_bools] ----
 
     def test_getitem_bool_list(self, store_stack):
@@ -1486,6 +1506,7 @@ class TestTensorClassStore:
             assert type(restored).__name__ == "_MyDataWithNonTensor"
             assert torch.allclose(restored.obs, tc.obs)
             assert restored.label == "hello"
+            restored._tensordict.close()
         finally:
             store.clear_redis()
             store.close()
