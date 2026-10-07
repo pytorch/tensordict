@@ -5,6 +5,7 @@
 
 import importlib
 
+import numpy as np
 import pytest
 import torch
 
@@ -230,3 +231,64 @@ def test_store_bool_list_is_a_mask(idx):
         (row * 12, 12) for row in rows
     ]
     assert helper_module._getitem_result_shape([10, 3], idx) == [len(rows), 3]
+
+
+_MASK5 = torch.tensor([True, False, False, True, False])
+
+
+@pytest.mark.parametrize(
+    "idx",
+    [
+        3,
+        -1,
+        torch.tensor(3),
+        (3,),
+        slice(1, 4),
+        slice(None, None, 2),
+        slice(2, 2),
+        Ellipsis,
+        [0, 3],
+        [-1, 0],
+        [],
+        range(1, 3),
+        torch.tensor([0, -2]),
+        np.array([0, 3]),
+        _MASK5,
+        _MASK5.tolist(),
+        torch.zeros(5, dtype=torch.bool),
+    ],
+)
+def test_store_non_tensor_positions_match_torch(idx):
+    helper_module = importlib.import_module("tensordict.store._utils")
+    expected = torch.arange(5)[idx]
+    expected = expected.item() if expected.ndim == 0 else expected.tolist()
+    assert helper_module._non_tensor_positions(idx, 5) == expected
+    assert helper_module._non_tensor_write_positions(idx, 5) == expected
+
+
+@pytest.mark.parametrize(
+    "idx",
+    [True, (0, slice(None)), torch.tensor(True), torch.ones(5, 2, dtype=torch.bool)],
+)
+def test_store_non_tensor_positions_unsupported(idx):
+    helper_module = importlib.import_module("tensordict.store._utils")
+    assert helper_module._non_tensor_positions(idx, 5) is None
+    with pytest.raises(TypeError, match="Non-tensor indexed writes"):
+        helper_module._non_tensor_write_positions(idx, 5)
+
+
+def test_store_non_tensor_write_positions_flatten():
+    helper_module = importlib.import_module("tensordict.store._utils")
+    idx = torch.tensor([[0, 1], [3, -1]])
+    # a read keeps the shape of an N-D index by indexing locally
+    assert helper_module._non_tensor_positions(idx, 5) is None
+    assert helper_module._non_tensor_write_positions(idx, 5) == [0, 1, 3, 4]
+
+
+@pytest.mark.parametrize("idx", [5, -6, [0, 5], torch.tensor([True] * 4)])
+def test_store_non_tensor_positions_reject_out_of_bounds(idx):
+    helper_module = importlib.import_module("tensordict.store._utils")
+    with pytest.raises(IndexError):
+        torch.arange(5)[idx]
+    with pytest.raises(IndexError):
+        helper_module._non_tensor_positions(idx, 5)
