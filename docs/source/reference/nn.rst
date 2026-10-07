@@ -304,7 +304,7 @@ We can duplicate and reinitialize model copies using the :class:`tensordict.nn.E
 
 .. autosummary::
     :toctree: generated/
-    :template: rl_template_noinherit.rst
+    :template: td_template_noinherit.rst
 
     EnsembleModule
 
@@ -325,7 +325,7 @@ Distributions
 
 .. autosummary::
     :toctree: generated/
-    :template: rl_template_noinherit.rst
+    :template: td_template_noinherit.rst
 
     AddStateIndependentNormalScale
     CompositeDistribution
@@ -342,7 +342,7 @@ Utils
 
 .. autosummary::
     :toctree: generated/
-    :template: rl_template_noinherit.rst
+    :template: td_template_noinherit.rst
 
     make_tensordict
     dispatch

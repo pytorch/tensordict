@@ -155,7 +155,7 @@ latex_elements = {}
 
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
-man_pages = [(master_doc, "torchvision", "tensordict Documentation", [author], 1)]
+man_pages = [(master_doc, "tensordict", "tensordict Documentation", [author], 1)]
 
 
 # -- Options for Texinfo output -------------------------------------------
@@ -179,9 +179,10 @@ texinfo_documents = [
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3/", None),
-    "torch": ("https://pytorch.org/docs/stable/", None),
+    "torch": ("https://docs.pytorch.org/docs/stable/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
     "pytorch_tutorials": ("https://docs.pytorch.org/tutorials/", None),
+    "zarr": ("https://zarr.readthedocs.io/en/stable/", None),
 }
 
 
