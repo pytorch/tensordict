@@ -3,39 +3,27 @@
   "(False,)",
   "(True,)",
   "([[0],[-1]],)",
-  "(t(True),)",
   "False",
   "True",
   "[[0],[-1]]",
-  "m2",
-  "m2.list",
-  "t(True)"
+  "m2.list"
  ],
  "LazyStackedTensorDictStore (5, 4) getitem": [
-  "(..., m2)",
   "(False,)",
   "(True,)",
   "([[0],[-1]],)",
-  "(m2, ...)",
-  "(t(True),)",
   "...",
   "False",
   "True",
   "[[0],[-1]]",
-  "m2",
-  "m2.list",
-  "t(True)"
+  "m2.list"
  ],
  "LazyStackedTensorDictStore (5, 4) setitem": [
   "(False,)",
   "(True,)",
   "([[0],[-1]],)",
-  "(t(True),)",
   "False",
-  "True",
-  "m2",
-  "m2.list",
-  "t(True)"
+  "True"
  ],
  "TensorDict getitem (3, 4)": [],
  "TensorDict getitem (3, 4, 5)": [],
@@ -258,67 +246,49 @@
   "(False,)",
   "(True,)",
   "([[0],[-1]],)",
-  "(t(True),)",
   "False",
   "True",
   "[[0],[-1]]",
-  "m2",
-  "m2.list",
-  "t(True)"
+  "m2.list"
  ],
  "TensorDictStore (5, 4) getitem": [
-  "(..., m2)",
   "(False,)",
   "(True,)",
   "([[0],[-1]],)",
-  "(m2, ...)",
-  "(t(True),)",
   "False",
   "True",
   "[[0],[-1]]",
-  "m2",
-  "m2.list",
-  "t(True)"
+  "m2.list"
  ],
  "TensorDictStore (5, 4) setitem": [
   "(False,)",
   "(True,)",
   "([[0],[-1]],)",
-  "(t(True),)",
   "False",
-  "True",
-  "m2",
-  "m2.list",
-  "t(True)"
+  "True"
  ],
  "TensorDictStore (5,) get_at": [
   "(False,)",
   "(True,)",
   "([[0],[-1]],)",
-  "(t(True),)",
   "False",
   "True",
-  "[[0],[-1]]",
-  "t(True)"
+  "[[0],[-1]]"
  ],
  "TensorDictStore (5,) getitem": [
   "(False,)",
   "(True,)",
   "([[0],[-1]],)",
-  "(t(True),)",
   "False",
   "True",
-  "[[0],[-1]]",
-  "t(True)"
+  "[[0],[-1]]"
  ],
  "TensorDictStore (5,) setitem": [
   "(False,)",
   "(True,)",
   "([[0],[-1]],)",
-  "(t(True),)",
   "False",
-  "True",
-  "t(True)"
+  "True"
  ],
  "idx_td getitem": [],
  "idx_td setitem": [],
