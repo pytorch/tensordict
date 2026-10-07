@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4445+g33ed12a60.d20261007)
+                  main (0.14.0.dev4447+g0dee7fcb2.d20261007)
                 </div>
               
             
@@ -677,19 +677,19 @@ like <a class="reference external" href="https://docs.pytorch.org/docs/stable/ge
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>index:
- tensor([[1, 2, 2, 1],
-        [0, 1, 1, 2],
-        [2, 2, 2, 1]])
+ tensor([[0, 3, 0, 3],
+        [0, 0, 3, 0],
+        [0, 0, 0, 1]])
 
 tensordict['a']:
- tensor([[0.0485, 0.9687, 0.2716, 0.0964],
-        [0.0136, 0.0982, 0.5322, 0.2572],
-        [0.2756, 0.4691, 0.2704, 0.9560]])
+ tensor([[0.8371, 0.7061, 0.9723, 0.4017],
+        [0.2158, 0.7006, 0.2554, 0.8114],
+        [0.6591, 0.9190, 0.9040, 0.6389]])
 
 gathered_tensordict['a']:
- tensor([[0.9687, 0.2716, 0.2716, 0.9687],
-        [0.0136, 0.0982, 0.0982, 0.5322],
-        [0.2704, 0.2704, 0.2704, 0.4691]])
+ tensor([[0.8371, 0.4017, 0.8371, 0.4017],
+        [0.2158, 0.2158, 0.8114, 0.2158],
+        [0.6591, 0.6591, 0.6591, 0.9190]])
 </pre></div>
 </div>
 <p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.008 seconds)</p>

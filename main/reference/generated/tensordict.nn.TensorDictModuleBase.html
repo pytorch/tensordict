@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4445+g33ed12a60.d20261007)
+                  main (0.14.0.dev4447+g0dee7fcb2.d20261007)
                 </div>
               
             
@@ -377,7 +377,7 @@ convention:</p>
 you can wrap any python function in a <cite>TensorDictModuleBase</cite> subclass, as long as the subclass forward reads and
 writes tensordict (or related types) instances.</p>
 <p>The <cite>in_keys</cite> and <cite>out_keys</cite> should be properly specified. For example, <cite>out_keys</cite> can be dynamically reduced using
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">select_out_keys()</span></code>.</p>
+<a class="reference internal" href="#tensordict.nn.TensorDictModuleBase.select_out_keys" title="tensordict.nn.TensorDictModuleBase.select_out_keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">select_out_keys()</span></code></a>.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModuleBase</span>
@@ -463,7 +463,7 @@ useful for functional modules where the parameters are not stored in the module 
 <span class="gp">&gt;&gt;&gt; </span><span class="n">net</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">),</span> <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">())</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">old_param</span> <span class="o">=</span> <span class="n">net</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s1">'bork'</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s1">'dork'</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="o">.</span><span class="n">reset_parameters</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="o">.</span><span class="n">reset_parameters_recursive</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="n">old_param</span> <span class="o">==</span> <span class="n">net</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
 <span class="go">tensor(False)</span>
 </pre></div>
@@ -476,7 +476,7 @@ useful for functional modules where the parameters are not stored in the module 
 <span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s1">'bork'</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s1">'dork'</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">old_params</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">clone</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="o">.</span><span class="n">reset_parameters</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">reset_parameters_recursive</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="n">old_params</span> <span class="o">==</span> <span class="n">params</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
 <span class="go">False</span>
 </pre></div>
@@ -531,7 +531,7 @@ out_keys that should be found in the output tensordict.</p>
 <p>This feature will also work with dispatched arguments:
 .. rubric:: Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(()))</span>
-<span class="go">tensor(2.)</span>
+<span class="go">tensor(3.)</span>
 </pre></div>
 </div>
 <p>This change will occur in-place (ie the same module will be returned

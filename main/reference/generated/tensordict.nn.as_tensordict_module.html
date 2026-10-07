@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4445+g33ed12a60.d20261007)
+                  main (0.14.0.dev4447+g0dee7fcb2.d20261007)
                 </div>
               
             
@@ -366,10 +366,10 @@
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">as_tensordict_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">in_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.14)"><span class="pre">Union</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.14)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.14)"><span class="pre">Union</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.14)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.as_tensordict_module" title="Permalink to this definition">¶</a></dt>
 <dd><p>A decorator that converts a function into a TensorDictModule.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>in_keys</strong> (<em>List</em><em>[</em><em>NestedKey</em><em>] </em><em>| </em><em>NestedKey</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The input keys of the resulting TensorDictModule.</p></li>
-<li><p><strong>out_keys</strong> (<em>List</em><em>[</em><em>NestedKey</em><em>] </em><em>| </em><em>NestedKey</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The output keys of the resulting TensorDictModule.</p></li>
+<li><p><strong>in_keys</strong> (<em>List</em><em>[</em><em>NestedKey</em><em>] </em><em>| </em><em>NestedKey</em>) – The input keys of the resulting TensorDictModule.</p></li>
+<li><p><strong>out_keys</strong> (<em>List</em><em>[</em><em>NestedKey</em><em>] </em><em>| </em><em>NestedKey</em>) – The output keys of the resulting TensorDictModule.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -386,12 +386,14 @@
 <span class="gp">... </span>        <span class="k">return</span> <span class="n">c</span> <span class="o">+</span> <span class="mi">1</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">obj</span> <span class="o">=</span> <span class="n">MyClass</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">my_method</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">c</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">"d"</span><span class="p">])</span>  <span class="c1"># prints: 1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">"d"</span><span class="p">])</span>
+<span class="go">tensor(1)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nd">@as_tensordict_module</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="s2">"c"</span><span class="p">,</span> <span class="n">out_keys</span><span class="o">=</span><span class="s2">"d"</span><span class="p">)</span>
 <span class="gp">... </span><span class="k">def</span><span class="w"> </span><span class="nf">my_function</span><span class="p">(</span><span class="n">c</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="k">return</span> <span class="n">c</span> <span class="o">+</span> <span class="mi">1</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">my_function</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">c</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">"d"</span><span class="p">])</span>  <span class="c1"># prints: 1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">"d"</span><span class="p">])</span>
+<span class="go">tensor(1)</span>
 </pre></div>
 </div>
 </dd></dl>

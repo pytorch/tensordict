@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4445+g33ed12a60.d20261007)
+                  main (0.14.0.dev4447+g0dee7fcb2.d20261007)
                 </div>
               
             
@@ -372,7 +372,7 @@ to be performed on a collection of distributions, returning a TensorDict. The in
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>params</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – A nested key-tensor map where the root entries correspond to sample names, and the leaves
 are the distribution parameters. Entry names must match those specified in <cite>distribution_map</cite>.</p></li>
-<li><p><strong>distribution_map</strong> (<em>Dict</em><em>[</em><em>NestedKey</em><em>, </em><em>Type</em><em>[</em><em>torch.distribution.Distribution</em><em>]</em><em>]</em>) – Specifies the distribution types to be used.
+<li><p><strong>distribution_map</strong> (<em>Dict</em><em>[</em><em>NestedKey</em><em>, </em><em>Type</em><em>[</em><em>torch.distributions.Distribution</em><em>]</em><em>]</em>) – Specifies the distribution types to be used.
 The names of the distributions should match the sample names in the <cite>TensorDict</cite>.</p></li>
 </ul>
 </dd>
@@ -385,18 +385,18 @@ the key names from <cite>distribution_map</cite> will be used.</p></li>
 Defaults to <cite>‘sample_log_prob’</cite>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>if <code class="xref py py-func docutils literal notranslate"><span class="pre">tensordict.nn.probabilistic.composite_lp_aggregate()</span></code> returns <code class="docutils literal notranslate"><span class="pre">False</span></code>, tbe log-probabilities will
+<p>if <a class="reference internal" href="tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate" title="tensordict.nn.composite_lp_aggregate"><code class="xref py py-func docutils literal notranslate"><span class="pre">tensordict.nn.composite_lp_aggregate()</span></code></a> returns <code class="docutils literal notranslate"><span class="pre">False</span></code>, tbe log-probabilities will
 be written under <cite>(“path”, “to”, “leaf”, “&lt;sample_name&gt;_log_prob”)</cite>
-where <cite>(“path”, “to”, “leaf”, “&lt;sample_name&gt;”)</cite> is the <code class="xref py py-class docutils literal notranslate"><span class="pre">NestedKey</span></code> corresponding to
+where <cite>(“path”, “to”, “leaf”, “&lt;sample_name&gt;”)</cite> is the <code class="docutils literal notranslate"><span class="pre">NestedKey</span></code> corresponding to
 the leaf tensor being sampled. In that case, the <code class="docutils literal notranslate"><span class="pre">log_prob_key</span></code> argument will be ignored.</p>
 </div>
 </p></li>
 <li><p><strong>entropy_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – <p>The key where the entropy will be stored. Defaults to <cite>‘entropy’</cite></p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>if <code class="xref py py-func docutils literal notranslate"><span class="pre">tensordict.nn.probabilistic.composite_lp_aggregate()</span></code> returns <code class="docutils literal notranslate"><span class="pre">False</span></code>, tbe entropies will
+<p>if <a class="reference internal" href="tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate" title="tensordict.nn.composite_lp_aggregate"><code class="xref py py-func docutils literal notranslate"><span class="pre">tensordict.nn.composite_lp_aggregate()</span></code></a> returns <code class="docutils literal notranslate"><span class="pre">False</span></code>, tbe entropies will
 be written under <cite>(“path”, “to”, “leaf”, “&lt;sample_name&gt;_entropy”)</cite>
-where <cite>(“path”, “to”, “leaf”, “&lt;sample_name&gt;”)</cite> is the <code class="xref py py-class docutils literal notranslate"><span class="pre">NestedKey</span></code> corresponding to
+where <cite>(“path”, “to”, “leaf”, “&lt;sample_name&gt;”)</cite> is the <code class="docutils literal notranslate"><span class="pre">NestedKey</span></code> corresponding to
 the leaf tensor being sampled. In that case, the <code class="docutils literal notranslate"><span class="pre">entropy_key</span></code> argument will be ignored.</p>
 </div>
 </p></li>
@@ -431,16 +431,14 @@ to learn how to use this class as part of a model.</p>
 <span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">sample</span><span class="p">)</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
-<span class="go">        cont: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        cont_log_prob: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        nested: TensorDict(</span>
 <span class="go">            fields={</span>
-<span class="go">                disc: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.int64, is_shared=False),</span>
 <span class="go">                disc_log_prob: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([4]),</span>
+<span class="go">            batch_size=torch.Size([4, 3]),</span>
 <span class="go">            device=None,</span>
 <span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([4]),</span>
+<span class="go">    batch_size=torch.Size([4, 3]),</span>
 <span class="go">    device=None,</span>
 <span class="go">    is_shared=False)</span>
 </pre></div>

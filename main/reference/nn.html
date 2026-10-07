@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4445+g33ed12a60.d20261007)
+                  main (0.14.0.dev4447+g0dee7fcb2.d20261007)
                 </div>
               
             
@@ -605,7 +605,7 @@ by default, the result of the sequence) only see those outputs, not the converte
 <td><p>Base class to TensorDict modules.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>(*args, **kwargs)</p></td>
-<td><p>A TensorDictModule, is a python wrapper around a <code class="xref py py-obj docutils literal notranslate"><span class="pre">nn.Module</span></code> that reads and writes to a TensorDict.</p></td>
+<td><p>A TensorDictModule, is a python wrapper around a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> that reads and writes to a TensorDict.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.TensorClassModuleBase.html#tensordict.nn.TensorClassModuleBase" title="tensordict.nn.TensorClassModuleBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorClassModuleBase</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A TensorClassModuleBase is a base class for modules that operate on TensorClass instances.</p></td>
@@ -617,7 +617,7 @@ by default, the result of the sequence) only see those outputs, not the converte
 <td><p>A probabilistic TD Module.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.ProbabilisticTensorDictSequential.html#tensordict.nn.ProbabilisticTensorDictSequential" title="tensordict.nn.ProbabilisticTensorDictSequential"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProbabilisticTensorDictSequential</span></code></a>(*args, ...)</p></td>
-<td><p>A sequence of <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModules</span></code> containing at least one <a class="reference internal" href="generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a>.</p></td>
+<td><p>A sequence of <a class="reference internal" href="generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> instances containing at least one <a class="reference internal" href="generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A sequence of TensorDictModules.</p></td>
@@ -638,10 +638,10 @@ by default, the result of the sequence) only see those outputs, not the converte
 <td><p>Sets all ProbabilisticTDModules sampling to the desired type.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.set_composite_lp_aggregate.html#tensordict.nn.set_composite_lp_aggregate" title="tensordict.nn.set_composite_lp_aggregate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_composite_lp_aggregate</span></code></a>([mode])</p></td>
-<td><p>Controls whether <code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code> log-probabilities and entropies will be aggregated in a single tensor.</p></td>
+<td><p>Controls whether <a class="reference internal" href="generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution" title="tensordict.nn.distributions.CompositeDistribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code></a> log-probabilities and entropies will be aggregated in a single tensor.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate" title="tensordict.nn.composite_lp_aggregate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">composite_lp_aggregate</span></code></a>([nowarn])</p></td>
-<td><p>Returns whether a <code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code> log-probabilities and entropies will be aggregated in a single tensor.</p></td>
+<td><p>Returns whether a <a class="reference internal" href="generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution" title="tensordict.nn.distributions.CompositeDistribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code></a> log-probabilities and entropies will be aggregated in a single tensor.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.as_tensordict_module.html#tensordict.nn.as_tensordict_module" title="tensordict.nn.as_tensordict_module"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_tensordict_module</span></code></a>(*, in_keys, out_keys)</p></td>
 <td><p>A decorator that converts a function into a TensorDictModule.</p></td>

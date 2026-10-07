@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4445+g33ed12a60.d20261007)
+                  main (0.14.0.dev4447+g0dee7fcb2.d20261007)
                 </div>
               
             
@@ -365,9 +365,9 @@
 <dt class="sig sig-object py" id="tensordict.nn.TensorDictSequential">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">TensorDictSequential</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.TensorDictSequential" title="Permalink to this definition">¶</a></dt>
 <dd><p>A sequence of TensorDictModules.</p>
-<p>Similarly to <code class="xref py py-obj docutils literal notranslate"><span class="pre">nn.Sequence</span></code> which passes a tensor through a chain of mappings that read and write a single tensor
+<p>Similarly to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Sequential</span></code></a> which passes a tensor through a chain of mappings that read and write a single tensor
 each, this module will read and write over a tensordict by querying each of the input modules.
-When calling a <code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictSequencial</span></code> instance with a functional module, it is expected that the parameter lists (and
+When calling a <a class="reference internal" href="#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> instance with a functional module, it is expected that the parameter lists (and
 buffers) will be concatenated in a single list.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -420,9 +420,9 @@ can be used after instantiation, or <cite>selected_out_keys</cite> may be passed
 <span class="go">    is_shared=False)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># with tensor input: returns all the output keys in the order of the modules, ie "x+1" and "w*(x+1)+b"</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
-<span class="go">(tensor([1., 1., 1.]), tensor([-0.7214, -0.8748,  0.1571, -0.1138], grad_fn=&lt;AddBackward0&gt;))</span>
+<span class="go">(tensor([1., 1., 1.]), tensor([-0.7214, -0.8748,  0.1571, -0.1138], grad_fn=&lt;ViewBackward0&gt;))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
-<span class="go">(tensor([1., 1., 1.]), tensor([-0.7214, -0.8748,  0.1571, -0.1138], grad_fn=&lt;AddBackward0&gt;))</span>
+<span class="go">(tensor([1., 1., 1.]), tensor([-0.7214, -0.8748,  0.1571, -0.1138], grad_fn=&lt;ViewBackward0&gt;))</span>
 </pre></div>
 </div>
 <p>TensorDictSequence supports functional, modular and vmap coding.</p>
@@ -466,11 +466,11 @@ can be used after instantiation, or <cite>selected_out_keys</cite> may be passed
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
 <span class="go">        hidden: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        hidden_log_prob: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        input: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        output: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        params: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        sample_log_prob: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
 <span class="go">    batch_size=torch.Size([3]),</span>
 <span class="go">    device=None,</span>
@@ -488,11 +488,11 @@ can be used after instantiation, or <cite>selected_out_keys</cite> may be passed
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
 <span class="go">        hidden: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        hidden_log_prob: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        input: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        loc: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        output: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        params: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        sample_log_prob: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        scale: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
 <span class="go">    batch_size=torch.Size([4, 3]),</span>
 <span class="go">    device=None,</span>
@@ -546,98 +546,39 @@ can be used after instantiation, or <cite>selected_out_keys</cite> may be passed
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.nn.TensorDictSequential.select_out_keys">
 <span class="sig-name descname"><span class="pre">select_out_keys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">selected_out_keys</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#tensordict.nn.TensorDictSequential" title="tensordict.nn.sequence.TensorDictSequential"><span class="pre">TensorDictSequential</span></a></span></span><a class="headerlink" href="#tensordict.nn.TensorDictSequential.select_out_keys" title="Permalink to this definition">¶</a></dt>
-<dd><p>Selects the keys that will be found in the output tensordict.</p>
-<p>This is useful whenever one wants to get rid of intermediate keys in a
-complicated graph, or when the presence of these keys may trigger unexpected
-behaviours.</p>
-<p>The original <code class="docutils literal notranslate"><span class="pre">out_keys</span></code> can still be accessed via <code class="docutils literal notranslate"><span class="pre">module.out_keys_source</span></code>.</p>
+<dd><p>Selects the keys within the <code class="docutils literal notranslate"><span class="pre">out_keys</span></code> that will be found in the output tensordict.</p>
+<p>This change occurs in-place and can be reverted using <a class="reference internal" href="#tensordict.nn.TensorDictSequential.reset_out_keys" title="tensordict.nn.TensorDictSequential.reset_out_keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reset_out_keys()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>*out_keys</strong> (<em>a sequence of strings</em><em> or </em><em>tuples of strings</em>) – the
-out_keys that should be found in the output tensordict.</p>
+<dd class="field-odd"><p><strong>*selected_out_keys</strong> (<em>a sequence of strings</em><em> or </em><em>tuples of strings</em>) – the
+out_keys that should be found in the output tensordict. Each of them
+must be part of the module’s <code class="docutils literal notranslate"><span class="pre">out_keys</span></code>.</p>
 </dd>
 </dl>
 <p>Returns: the same module, modified in-place with updated <code class="docutils literal notranslate"><span class="pre">out_keys</span></code>.</p>
-<p>The simplest usage is with <a class="reference internal" href="tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>:</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – if a key in <code class="docutils literal notranslate"><span class="pre">selected_out_keys</span></code> is not part of <code class="docutils literal notranslate"><span class="pre">out_keys</span></code>.</p>
+</dd>
+</dl>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModule</span><span class="p">,</span> <span class="n">TensorDictSequential</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="p">(</span><span class="n">x</span><span class="o">+</span><span class="mi">2</span><span class="p">,</span> <span class="n">y</span><span class="o">+</span><span class="mi">2</span><span class="p">),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"a"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"c"</span><span class="p">,</span> <span class="s2">"d"</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span> <span class="s2">"b"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(())},</span> <span class="p">[])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span><span class="o">.</span><span class="n">select_out_keys</span><span class="p">(</span><span class="s2">"d"</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span> <span class="s2">"b"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(())},</span> <span class="p">[])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-</pre></div>
-</div>
-<p>This feature will also work with dispatched arguments:
-.. rubric:: Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(()))</span>
-<span class="go">tensor(2.)</span>
-</pre></div>
-</div>
-<p>This change will occur in-place (ie the same module will be returned
-with an updated list of out_keys). It can be reverted using the
-<a class="reference internal" href="tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase.reset_out_keys" title="tensordict.nn.TensorDictModuleBase.reset_out_keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDictModuleBase.reset_out_keys()</span></code></a> method.</p>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span><span class="o">.</span><span class="n">reset_out_keys</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span> <span class="s2">"b"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(())},</span> <span class="p">[]))</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-</pre></div>
-</div>
-<p>This will work with other classes too, such as Sequential:
-.. rubric:: Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictSequential</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">seq</span> <span class="o">=</span> <span class="n">TensorDictSequential</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">TensorDictModule</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"x"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"y"</span><span class="p">]),</span>
-<span class="gp">... </span>    <span class="n">TensorDictModule</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"y"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"z"</span><span class="p">]),</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModule</span> <span class="k">as</span> <span class="n">Mod</span><span class="p">,</span> <span class="n">TensorDictSequential</span> <span class="k">as</span> <span class="n">Seq</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">seq</span> <span class="o">=</span> <span class="n">Seq</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">Mod</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"x"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"y"</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">Mod</span><span class="p">(</span><span class="k">lambda</span> <span class="n">y</span><span class="p">:</span> <span class="n">y</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"y"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"z"</span><span class="p">]),</span>
 <span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"x"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())},</span> <span class="p">[])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">seq</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        x: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        y: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        z: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">seq</span><span class="o">.</span><span class="n">select_out_keys</span><span class="p">(</span><span class="s2">"z"</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"x"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())},</span> <span class="p">[])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">seq</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        x: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        z: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">seq</span><span class="o">.</span><span class="n">select_out_keys</span><span class="p">(</span><span class="s2">"z"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">seq</span><span class="o">.</span><span class="n">out_keys</span>
+<span class="go">['z']</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">seq</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="s2">"y"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">td</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"z"</span><span class="p">]</span>
+<span class="go">tensor(2.)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">seq</span><span class="o">.</span><span class="n">reset_out_keys</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">seq</span><span class="o">.</span><span class="n">out_keys</span>
+<span class="go">['y', 'z']</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -684,26 +625,21 @@ If none is provided, the module’s <code class="docutils literal notranslate"><
 <span class="go">    module=ModuleList(</span>
 <span class="go">      (0): TensorDictModule(</span>
 <span class="go">          module=&lt;function &lt;lambda&gt; at 0x126ed1ca0&gt;,</span>
-<span class="go">          device=cpu,</span>
 <span class="go">          in_keys=['a'],</span>
 <span class="go">          out_keys=['b'])</span>
 <span class="go">      (1): TensorDictModule(</span>
 <span class="go">          module=&lt;function &lt;lambda&gt; at 0x126ed1ca0&gt;,</span>
-<span class="go">          device=cpu,</span>
 <span class="go">          in_keys=['b'],</span>
 <span class="go">          out_keys=['c'])</span>
 <span class="go">      (2): TensorDictModule(</span>
 <span class="go">          module=&lt;function &lt;lambda&gt; at 0x126ed1ca0&gt;,</span>
-<span class="go">          device=cpu,</span>
 <span class="go">          in_keys=['c'],</span>
 <span class="go">          out_keys=['d'])</span>
 <span class="go">      (3): TensorDictModule(</span>
 <span class="go">          module=&lt;function &lt;lambda&gt; at 0x126ed1ca0&gt;,</span>
-<span class="go">          device=cpu,</span>
 <span class="go">          in_keys=['a'],</span>
 <span class="go">          out_keys=['e'])</span>
 <span class="go">    ),</span>
-<span class="go">    device=cpu,</span>
 <span class="go">    in_keys=['a'],</span>
 <span class="go">    out_keys=['b', 'c', 'd', 'e'])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># select all modules whose output depend on "c"</span>
@@ -712,11 +648,9 @@ If none is provided, the module’s <code class="docutils literal notranslate"><
 <span class="go">    module=ModuleList(</span>
 <span class="go">      (0): TensorDictModule(</span>
 <span class="go">          module=&lt;function &lt;lambda&gt; at 0x126ed1ca0&gt;,</span>
-<span class="go">          device=cpu,</span>
 <span class="go">          in_keys=['c'],</span>
 <span class="go">          out_keys=['d'])</span>
 <span class="go">    ),</span>
-<span class="go">    device=cpu,</span>
 <span class="go">    in_keys=['c'],</span>
 <span class="go">    out_keys=['d'])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># select all modules that affect the value of "c"</span>
@@ -725,16 +659,13 @@ If none is provided, the module’s <code class="docutils literal notranslate"><
 <span class="go">    module=ModuleList(</span>
 <span class="go">      (0): TensorDictModule(</span>
 <span class="go">          module=&lt;function &lt;lambda&gt; at 0x126ed1ca0&gt;,</span>
-<span class="go">          device=cpu,</span>
 <span class="go">          in_keys=['a'],</span>
 <span class="go">          out_keys=['b'])</span>
 <span class="go">      (1): TensorDictModule(</span>
 <span class="go">          module=&lt;function &lt;lambda&gt; at 0x126ed1ca0&gt;,</span>
-<span class="go">          device=cpu,</span>
 <span class="go">          in_keys=['b'],</span>
 <span class="go">          out_keys=['c'])</span>
 <span class="go">    ),</span>
-<span class="go">    device=cpu,</span>
 <span class="go">    in_keys=['a'],</span>
 <span class="go">    out_keys=['b', 'c'])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># select all modules that affect the value of "e"</span>
@@ -743,11 +674,9 @@ If none is provided, the module’s <code class="docutils literal notranslate"><
 <span class="go">    module=ModuleList(</span>
 <span class="go">      (0): TensorDictModule(</span>
 <span class="go">          module=&lt;function &lt;lambda&gt; at 0x126ed1ca0&gt;,</span>
-<span class="go">          device=cpu,</span>
 <span class="go">          in_keys=['a'],</span>
 <span class="go">          out_keys=['e'])</span>
 <span class="go">    ),</span>
-<span class="go">    device=cpu,</span>
 <span class="go">    in_keys=['a'],</span>
 <span class="go">    out_keys=['e'])</span>
 </pre></div>
@@ -771,20 +700,16 @@ If none is provided, the module’s <code class="docutils literal notranslate"><
 <span class="go">          module=ModuleList(</span>
 <span class="go">            (0): TensorDictModule(</span>
 <span class="go">                module=&lt;function &lt;lambda&gt; at 0x129efae50&gt;,</span>
-<span class="go">                device=cpu,</span>
 <span class="go">                in_keys=['b'],</span>
 <span class="go">                out_keys=['d'])</span>
 <span class="go">            (1): TensorDictModule(</span>
 <span class="go">                module=&lt;function &lt;lambda&gt; at 0x129efae50&gt;,</span>
-<span class="go">                device=cpu,</span>
 <span class="go">                in_keys=['d'],</span>
 <span class="go">                out_keys=['e'])</span>
 <span class="go">          ),</span>
-<span class="go">          device=cpu,</span>
 <span class="go">          in_keys=['b'],</span>
 <span class="go">          out_keys=['d', 'e'])</span>
 <span class="go">    ),</span>
-<span class="go">    device=cpu,</span>
 <span class="go">    in_keys=['b'],</span>
 <span class="go">    out_keys=['d', 'e'])</span>
 </pre></div>
@@ -820,7 +745,6 @@ the result of the computational graph in the input object without tracking the i
 <span class="go">MyClass(</span>
 <span class="go">    input=Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">    output=Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">    output=None,</span>
 <span class="go">    batch_size=torch.Size([2]),</span>
 <span class="go">    device=None,</span>
 <span class="go">    is_shared=False)</span>

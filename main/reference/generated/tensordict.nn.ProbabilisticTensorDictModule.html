@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4445+g33ed12a60.d20261007)
+                  main (0.14.0.dev4447+g0dee7fcb2.d20261007)
                 </div>
               
             
@@ -385,7 +385,7 @@ created, and a value computed (depending on the <code class="docutils literal no
 ‘dist.mode’, ‘dist.median’ attributes could be used, as well as
 the ‘dist.rsample’, ‘dist.sample’ method). The sampling step is skipped if the supplied
 TensorDict has all the desired key-value pairs already.</p>
-<p>By default, <cite>ProbabilisticTensorDictModule</cite> distribution class is a <code class="xref py py-class docutils literal notranslate"><span class="pre">Delta</span></code>
+<p>By default, <cite>ProbabilisticTensorDictModule</cite> distribution class is a <a class="reference internal" href="tensordict.nn.distributions.Delta.html#tensordict.nn.distributions.Delta" title="tensordict.nn.distributions.Delta"><code class="xref py py-class docutils literal notranslate"><span class="pre">Delta</span></code></a>
 distribution, making <cite>ProbabilisticTensorDictModule</cite> a simple wrapper around
 a deterministic mapping function.</p>
 <dl class="field-list simple">
@@ -406,21 +406,21 @@ Importantly, if these keys are found in the input TensorDict, the sampling step 
 <dd class="field-even"><ul class="simple">
 <li><p><strong>default_interaction_type</strong> (<a class="reference internal" href="tensordict.nn.InteractionType.html#tensordict.nn.InteractionType" title="tensordict.nn.InteractionType"><em>InteractionType</em></a><em>, </em><em>optional</em>) – <p>keyword-only argument.
 Default method to be used to retrieve
-the output value. Should be one of InteractionType: MODE, MEDIAN, MEAN or RANDOM
+the output value. Should be one of InteractionType: DETERMINISTIC, MODE, MEDIAN, MEAN or RANDOM
 (in which case the value is sampled randomly from the distribution). Default
-is MODE.</p>
+is DETERMINISTIC.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>When a sample is drawn, the
 <a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a> instance will
 first look for the interaction mode dictated by the
-<code class="xref py py-func docutils literal notranslate"><span class="pre">interaction_type()</span></code>
+<code class="docutils literal notranslate"><span class="pre">interaction_type()</span></code>
 global function. If this returns <cite>None</cite> (its default value), then the
 <cite>default_interaction_type</cite> of the <cite>ProbabilisticTDModule</cite>
 instance will be used. Note that
-<code class="xref py py-class docutils literal notranslate"><span class="pre">DataCollectorBase</span></code>
+<code class="docutils literal notranslate"><span class="pre">torchrl.collectors.DataCollectorBase</span></code>
 instances will use <cite>set_interaction_type</cite> to
-<code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.InteractionType.RANDOM</span></code> by default.</p>
+<code class="docutils literal notranslate"><span class="pre">InteractionType.RANDOM</span></code> by default.</p>
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -450,7 +450,7 @@ Keyword-argument pairs to be passed to the distribution.</p>
 <p class="admonition-title">Note</p>
 <p>if your kwargs contain tensors that you would like to transfer to device with the module, or
 tensors that should see their dtype modified when calling <cite>module.to(dtype)</cite>, you can wrap the kwargs
-in a <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictParams</span></code> to do this automatically.</p>
+in a <a class="reference internal" href="tensordict.TensorDictParams.html#tensordict.TensorDictParams" title="tensordict.TensorDictParams"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictParams</span></code></a> to do this automatically.</p>
 </div>
 </p></li>
 <li><p><strong>return_log_prob</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – keyword-only argument.
@@ -461,15 +461,15 @@ distribution sample will be written in the tensordict with the key
 Defaults to <cite>‘&lt;sample_key_name&gt;_log_prob’</cite>, where <cite>&lt;sample_key_name&gt;</cite> is each of the <code class="xref py py-attr docutils literal notranslate"><span class="pre">out_keys</span></code>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>This is only available when <code class="xref py py-func docutils literal notranslate"><span class="pre">composite_lp_aggregate()</span></code> is set to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+<p>This is only available when <a class="reference internal" href="tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate" title="tensordict.nn.composite_lp_aggregate"><code class="xref py py-func docutils literal notranslate"><span class="pre">composite_lp_aggregate()</span></code></a> is set to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </div>
 </p></li>
 <li><p><strong>log_prob_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – <p>key where to write the log_prob if <code class="docutils literal notranslate"><span class="pre">return_log_prob=True</span></code>.
-Defaults to <cite>‘sample_log_prob’</cite> when <code class="xref py py-func docutils literal notranslate"><span class="pre">composite_lp_aggregate()</span></code> is set to <cite>True</cite>
+Defaults to <cite>‘sample_log_prob’</cite> when <a class="reference internal" href="tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate" title="tensordict.nn.composite_lp_aggregate"><code class="xref py py-func docutils literal notranslate"><span class="pre">composite_lp_aggregate()</span></code></a> is set to <cite>True</cite>
 or <cite>‘&lt;sample_key_name&gt;_log_prob’</cite> otherwise.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>When there is more than one sample, this is only available when <code class="xref py py-func docutils literal notranslate"><span class="pre">composite_lp_aggregate()</span></code> is set to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+<p>When there is more than one sample, this is only available when <a class="reference internal" href="tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate" title="tensordict.nn.composite_lp_aggregate"><code class="xref py py-func docutils literal notranslate"><span class="pre">composite_lp_aggregate()</span></code></a> is set to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 </div>
 </p></li>
 <li><p><strong>cache_dist</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – keyword-only argument.
@@ -493,7 +493,7 @@ samples. The generator must live on the same device as the distribution
 parameters.</p></li>
 <li><p><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a>: shorthand for <code class="docutils literal notranslate"><span class="pre">torch.Generator().manual_seed(int)</span></code>; a CPU
 generator is created at construction time and used statefully thereafter.</p></li>
-<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">NestedKey</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code> or <code class="docutils literal notranslate"><span class="pre">tuple</span></code>): the generator is fetched from the
+<li><p><code class="docutils literal notranslate"><span class="pre">NestedKey</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code> or <code class="docutils literal notranslate"><span class="pre">tuple</span></code>): the generator is fetched from the
 input tensordict at this key on every call. The value may be a
 <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Generator</span></code></a> (used in place, state mutates) or an integer scalar
 (read as a stream-key, then a fresh <code class="docutils literal notranslate"><span class="pre">next_seed</span></code> is written back to the
@@ -552,11 +552,11 @@ approach portable across all distributions (including reparameterized
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
 <span class="go">        action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        action_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        hidden: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        input: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        params: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        sample_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
 <span class="go">    batch_size=torch.Size([3]),</span>
 <span class="go">    device=None,</span>
@@ -576,11 +576,11 @@ approach portable across all distributions (including reparameterized
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
 <span class="go">        action: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        action_log_prob: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        hidden: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        input: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        loc: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        params: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        sample_log_prob: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        scale: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
 <span class="go">    batch_size=torch.Size([4, 3]),</span>
 <span class="go">    device=None,</span>
@@ -590,13 +590,13 @@ approach portable across all distributions (including reparameterized
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.nn.ProbabilisticTensorDictModule.build_dist_from_params">
 <span class="sig-name descname"><span class="pre">build_dist_from_params</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution" title="(in PyTorch v2.14)"><span class="pre">Distribution</span></a></span></span><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.build_dist_from_params" title="Permalink to this definition">¶</a></dt>
-<dd><p>Creates a <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distribution.Distribution</span></code> instance with the parameters provided in the input tensordict.</p>
+<dd><p>Creates a <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distributions.Distribution</span></code> instance with the parameters provided in the input tensordict.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>tensordict</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – The input tensordict containing the distribution parameters.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distribution.Distribution</span></code> instance created from the input tensordict.</p>
+<dd class="field-even"><p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distributions.Distribution</span></code> instance created from the input tensordict.</p>
 </dd>
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#TypeError" title="(in Python v3.14)"><strong>TypeError</strong></a> – If the input tensordict does not match the distribution keywords.</p>
@@ -633,13 +633,13 @@ registered hooks while the latter silently ignores them.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.nn.ProbabilisticTensorDictModule.get_dist">
 <span class="sig-name descname"><span class="pre">get_dist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution" title="(in PyTorch v2.14)"><span class="pre">Distribution</span></a></span></span><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.get_dist" title="Permalink to this definition">¶</a></dt>
-<dd><p>Creates a <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distribution.Distribution</span></code> instance with the parameters provided in the input tensordict.</p>
+<dd><p>Creates a <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distributions.Distribution</span></code> instance with the parameters provided in the input tensordict.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>tensordict</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – The input tensordict containing the distribution parameters.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distribution.Distribution</span></code> instance created from the input tensordict.</p>
+<dd class="field-even"><p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distributions.Distribution</span></code> instance created from the input tensordict.</p>
 </dd>
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#TypeError" title="(in Python v3.14)"><strong>TypeError</strong></a> – If the input tensordict does not match the distribution keywords.</p>
