@@ -1,6 +1,8 @@
-﻿tensordict.nn.distributions.Delta
-=================================
+﻿.. currentmodule:: tensordict.nn.distributions
 
-.. currentmodule:: tensordict.nn.distributions
+
+Delta
+=====
 
 .. autoclass:: Delta
+    :members:

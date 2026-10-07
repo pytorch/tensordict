@@ -1,6 +1,8 @@
-﻿tensordict.nn.EnsembleModule
-============================
+﻿.. currentmodule:: tensordict.nn
 
-.. currentmodule:: tensordict.nn
+
+EnsembleModule
+==============
 
 .. autoclass:: EnsembleModule
+    :members:

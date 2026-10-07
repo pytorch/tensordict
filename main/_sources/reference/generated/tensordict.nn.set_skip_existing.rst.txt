@@ -1,6 +1,8 @@
-﻿tensordict.nn.set\_skip\_existing
-=================================
+﻿.. currentmodule:: tensordict.nn
 
-.. currentmodule:: tensordict.nn
+
+set_skip_existing
+=================
 
 .. autoclass:: set_skip_existing
+    :members:

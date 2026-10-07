@@ -1,6 +1,7 @@
-﻿tensordict.nn.add\_custom\_mapping
-==================================
+﻿.. currentmodule:: tensordict.nn
 
-.. currentmodule:: tensordict.nn
+
+add_custom_mapping
+==================
 
 .. autofunction:: add_custom_mapping

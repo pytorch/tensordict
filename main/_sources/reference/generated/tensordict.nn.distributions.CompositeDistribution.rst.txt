@@ -1,6 +1,8 @@
-﻿tensordict.nn.distributions.CompositeDistribution
-=================================================
+﻿.. currentmodule:: tensordict.nn.distributions
 
-.. currentmodule:: tensordict.nn.distributions
+
+CompositeDistribution
+=====================
 
 .. autoclass:: CompositeDistribution
+    :members:

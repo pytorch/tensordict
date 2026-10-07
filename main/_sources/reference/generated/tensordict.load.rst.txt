@@ -4,6 +4,4 @@
 load
 ====
 
-.. autoclass:: load
-    :members:
-    :inherited-members:
+.. autofunction:: load

@@ -4,6 +4,4 @@
 remove_duplicates
 =================
 
-.. autoclass:: remove_duplicates
-    :members:
-    :inherited-members:
+.. autofunction:: remove_duplicates

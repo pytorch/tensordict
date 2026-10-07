@@ -4,6 +4,4 @@
 lazy_stack
 ==========
 
-.. autoclass:: lazy_stack
-    :members:
-    :inherited-members:
+.. autofunction:: lazy_stack

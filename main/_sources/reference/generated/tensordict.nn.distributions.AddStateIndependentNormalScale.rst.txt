@@ -1,6 +1,8 @@
-﻿tensordict.nn.distributions.AddStateIndependentNormalScale
-==========================================================
+﻿.. currentmodule:: tensordict.nn.distributions
 
-.. currentmodule:: tensordict.nn.distributions
+
+AddStateIndependentNormalScale
+==============================
 
 .. autoclass:: AddStateIndependentNormalScale
+    :members:

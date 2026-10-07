@@ -4,6 +4,4 @@
 list_to_stack
 =============
 
-.. autoclass:: list_to_stack
-    :members:
-    :inherited-members:
+.. autofunction:: list_to_stack

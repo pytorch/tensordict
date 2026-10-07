@@ -1,6 +1,7 @@
-﻿tensordict.nn.make\_tensordict
-==============================
+﻿.. currentmodule:: tensordict.nn
 
-.. currentmodule:: tensordict.nn
+
+make_tensordict
+===============
 
 .. autofunction:: make_tensordict

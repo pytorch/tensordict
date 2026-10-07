@@ -4,6 +4,4 @@
 from_zarr
 =========
 
-.. autoclass:: from_zarr
-    :members:
-    :inherited-members:
+.. autofunction:: from_zarr

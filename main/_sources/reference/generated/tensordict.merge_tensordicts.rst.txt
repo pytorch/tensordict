@@ -4,6 +4,4 @@
 merge_tensordicts
 =================
 
-.. autoclass:: merge_tensordicts
-    :members:
-    :inherited-members:
+.. autofunction:: merge_tensordicts

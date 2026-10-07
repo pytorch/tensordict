@@ -4,6 +4,4 @@
 get_defaults_to_none
 ====================
 
-.. autoclass:: get_defaults_to_none
-    :members:
-    :inherited-members:
+.. autofunction:: get_defaults_to_none

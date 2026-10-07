@@ -4,6 +4,4 @@
 fromkeys
 ========
 
-.. autoclass:: fromkeys
-    :members:
-    :inherited-members:
+.. autofunction:: fromkeys

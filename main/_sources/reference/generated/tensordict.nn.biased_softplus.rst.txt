@@ -1,6 +1,8 @@
-﻿tensordict.nn.biased\_softplus
-==============================
+﻿.. currentmodule:: tensordict.nn
 
-.. currentmodule:: tensordict.nn
+
+biased_softplus
+===============
 
 .. autoclass:: biased_softplus
+    :members:

@@ -1,6 +1,8 @@
-﻿tensordict.nn.distributions.OneHotCategorical
-=============================================
+﻿.. currentmodule:: tensordict.nn.distributions
 
-.. currentmodule:: tensordict.nn.distributions
+
+OneHotCategorical
+=================
 
 .. autoclass:: OneHotCategorical
+    :members:

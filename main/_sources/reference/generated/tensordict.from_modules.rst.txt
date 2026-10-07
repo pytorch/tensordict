@@ -4,6 +4,4 @@
 from_modules
 ============
 
-.. autoclass:: from_modules
-    :members:
-    :inherited-members:
+.. autofunction:: from_modules

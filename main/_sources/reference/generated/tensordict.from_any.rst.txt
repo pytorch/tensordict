@@ -4,6 +4,4 @@
 from_any
 ========
 
-.. autoclass:: from_any
-    :members:
-    :inherited-members:
+.. autofunction:: from_any

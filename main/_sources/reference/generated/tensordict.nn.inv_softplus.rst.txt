@@ -1,6 +1,7 @@
-﻿tensordict.nn.inv\_softplus
-===========================
+﻿.. currentmodule:: tensordict.nn
 
-.. currentmodule:: tensordict.nn
+
+inv_softplus
+============
 
 .. autofunction:: inv_softplus

@@ -4,6 +4,4 @@
 from_json
 =========
 
-.. autoclass:: from_json
-    :members:
-    :inherited-members:
+.. autofunction:: from_json

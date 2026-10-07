@@ -1,6 +1,7 @@
-﻿tensordict.nn.mappings
-======================
+﻿.. currentmodule:: tensordict.nn
 
-.. currentmodule:: tensordict.nn
+
+mappings
+========
 
 .. autofunction:: mappings

@@ -4,6 +4,4 @@
 stack
 =====
 
-.. autoclass:: stack
-    :members:
-    :inherited-members:
+.. autofunction:: stack

@@ -4,6 +4,4 @@
 refresh_archive_checksums
 =========================
 
-.. autoclass:: refresh_archive_checksums
-    :members:
-    :inherited-members:
+.. autofunction:: refresh_archive_checksums

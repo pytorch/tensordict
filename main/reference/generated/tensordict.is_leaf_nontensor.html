@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4449+g219597c3c.d20261007)
+                  main (0.14.0.dev4453+g1d0db33f3.d20261007)
                 </div>
               
             
@@ -362,10 +362,24 @@
               
   <section id="is-leaf-nontensor">
 <h1>is_leaf_nontensor<a class="headerlink" href="#is-leaf-nontensor" title="Permalink to this heading">¶</a></h1>
-<dl class="py attribute">
+<dl class="py function">
 <dt class="sig sig-object py" id="tensordict.is_leaf_nontensor">
-<span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">is_leaf_nontensor</span></span><a class="headerlink" href="#tensordict.is_leaf_nontensor" title="Permalink to this definition">¶</a></dt>
-<dd><p>alias of <code class="xref py py-class docutils literal notranslate"><span class="pre">_is_leaf_nontensor</span></code></p>
+<span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">is_leaf_nontensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cls</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Type" title="(in Python v3.14)"><span class="pre">Type</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.is_leaf_nontensor" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns <code class="docutils literal notranslate"><span class="pre">True</span></code> if a type is not a tensor collection (tensordict or tensorclass) or is a non-tensor.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">is_leaf_nontensor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="p">{},</span> <span class="n">b</span><span class="o">=</span><span class="s2">"a string!"</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(()))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">is_leaf</span><span class="o">=</span><span class="n">is_leaf_nontensor</span><span class="p">))</span>
+<span class="go">_TensorDictKeysView(['b', 'c'],</span>
+<span class="go">    include_nested=False,</span>
+<span class="go">    leaves_only=True)</span>
+</pre></div>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="tensordict.default_is_leaf.html#tensordict.default_is_leaf" title="tensordict.default_is_leaf"><code class="xref py py-meth docutils literal notranslate"><span class="pre">default_is_leaf()</span></code></a>.</p>
+</div>
 </dd></dl>
 
 </section>

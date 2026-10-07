@@ -4,6 +4,4 @@
 save
 ====
 
-.. autoclass:: save
-    :members:
-    :inherited-members:
+.. autofunction:: save

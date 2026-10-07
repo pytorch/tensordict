@@ -4,6 +4,4 @@
 from_dict
 =========
 
-.. autoclass:: from_dict
-    :members:
-    :inherited-members:
+.. autofunction:: from_dict

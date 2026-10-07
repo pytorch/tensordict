@@ -4,6 +4,4 @@
 from_struct_array
 =================
 
-.. autoclass:: from_struct_array
-    :members:
-    :inherited-members:
+.. autofunction:: from_struct_array

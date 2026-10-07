@@ -1,6 +1,7 @@
-﻿tensordict.nn.skip\_existing
-============================
+﻿.. currentmodule:: tensordict.nn
 
-.. currentmodule:: tensordict.nn
+
+skip_existing
+=============
 
 .. autofunction:: skip_existing

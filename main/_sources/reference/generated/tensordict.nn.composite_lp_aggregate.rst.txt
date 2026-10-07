@@ -4,5 +4,4 @@
 composite_lp_aggregate
 ======================
 
-.. autoclass:: composite_lp_aggregate
-    :members:
+.. autofunction:: composite_lp_aggregate

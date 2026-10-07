@@ -4,6 +4,4 @@
 from_csv
 ========
 
-.. autoclass:: from_csv
-    :members:
-    :inherited-members:
+.. autofunction:: from_csv

@@ -4,6 +4,4 @@
 is_leaf_nontensor
 =================
 
-.. autoclass:: is_leaf_nontensor
-    :members:
-    :inherited-members:
+.. autofunction:: is_leaf_nontensor

@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>tensordict.nn.EnsembleModule &mdash; tensordict main documentation</title>
+  <title>EnsembleModule &mdash; tensordict main documentation</title>
   
 
   
@@ -36,7 +36,7 @@
   <link rel="stylesheet" href="../../_static/sg_gallery-rendered-html.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="tensordict.nn.distributions.AddStateIndependentNormalScale" href="tensordict.nn.distributions.AddStateIndependentNormalScale.html" />
+    <link rel="next" title="AddStateIndependentNormalScale" href="tensordict.nn.distributions.AddStateIndependentNormalScale.html" />
     <link rel="prev" title="as_tensordict_module" href="tensordict.nn.as_tensordict_module.html" />
   <!-- Google Analytics -->
   
@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4449+g219597c3c.d20261007)
+                  main (0.14.0.dev4453+g1d0db33f3.d20261007)
                 </div>
               
             
@@ -328,7 +328,7 @@
         
           <li><a href="../nn.html">tensordict.nn package</a> &gt;</li>
         
-      <li>tensordict.nn.EnsembleModule</li>
+      <li>EnsembleModule</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
@@ -360,8 +360,8 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="tensordict-nn-ensemblemodule">
-<h1>tensordict.nn.EnsembleModule<a class="headerlink" href="#tensordict-nn-ensemblemodule" title="Permalink to this heading">¶</a></h1>
+  <section id="ensemblemodule">
+<h1>EnsembleModule<a class="headerlink" href="#ensemblemodule" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.nn.EnsembleModule">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">EnsembleModule</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.EnsembleModule" title="Permalink to this definition">¶</a></dt>
@@ -419,6 +419,35 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">True</s
 <span class="go">    is_shared=False)</span>
 </pre></div>
 </div>
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.nn.EnsembleModule.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict._td.TensorDict"><span class="pre">TensorDict</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict._td.TensorDict"><span class="pre">TensorDict</span></a></span></span><a class="headerlink" href="#tensordict.nn.EnsembleModule.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Define the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.nn.EnsembleModule.reset_parameters_recursive">
+<span class="sig-name descname"><span class="pre">reset_parameters_recursive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">parameters</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></span><a class="headerlink" href="#tensordict.nn.EnsembleModule.reset_parameters_recursive" title="Permalink to this definition">¶</a></dt>
+<dd><p>Resets the parameters of all the copies of the module.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>parameters</strong> (<a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><em>TensorDict</em></a>) – A TensorDict of parameters for self.module. The batch dimension(s) of the tensordict
+denote the number of module copies to reset.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A TensorDict of pointers to the reset parameters.</p>
+</dd>
+</dl>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -431,7 +460,7 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">True</s
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="tensordict.nn.distributions.AddStateIndependentNormalScale.html" class="btn btn-neutral float-right" title="tensordict.nn.distributions.AddStateIndependentNormalScale" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="tensordict.nn.distributions.AddStateIndependentNormalScale.html" class="btn btn-neutral float-right" title="AddStateIndependentNormalScale" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
         <a href="tensordict.nn.as_tensordict_module.html" class="btn btn-neutral" title="as_tensordict_module" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
@@ -466,7 +495,7 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">True</s
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">tensordict.nn.EnsembleModule</a></li>
+<li><a class="reference internal" href="#">EnsembleModule</a></li>
 </ul>
 
             </div>

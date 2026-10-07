@@ -4,6 +4,4 @@
 from_parquet
 ============
 
-.. autoclass:: from_parquet
-    :members:
-    :inherited-members:
+.. autofunction:: from_parquet

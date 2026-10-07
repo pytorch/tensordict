@@ -4,6 +4,4 @@
 is_batchedtensor
 ================
 
-.. autoclass:: is_batchedtensor
-    :members:
-    :inherited-members:
+.. autofunction:: is_batchedtensor

@@ -4,6 +4,4 @@
 cat
 ===
 
-.. autoclass:: cat
-    :members:
-    :inherited-members:
+.. autofunction:: cat

@@ -4,6 +4,4 @@
 tensorclass
 ===========
 
-.. autoclass:: tensorclass
-    :members:
-    :inherited-members:
+.. autofunction:: tensorclass

@@ -4,6 +4,4 @@
 pad
 ===
 
-.. autoclass:: pad
-    :members:
-    :inherited-members:
+.. autofunction:: pad

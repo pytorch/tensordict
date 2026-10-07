@@ -4,6 +4,4 @@
 pack_memmap
 ===========
 
-.. autoclass:: pack_memmap
-    :members:
-    :inherited-members:
+.. autofunction:: pack_memmap

@@ -1,6 +1,8 @@
-﻿tensordict.nn.dispatch
-======================
+﻿.. currentmodule:: tensordict.nn
 
-.. currentmodule:: tensordict.nn
+
+dispatch
+========
 
 .. autoclass:: dispatch
+    :members:

@@ -4,6 +4,4 @@
 load_memmap
 ===========
 
-.. autoclass:: load_memmap
-    :members:
-    :inherited-members:
+.. autofunction:: load_memmap

@@ -4,6 +4,4 @@
 memmap
 ======
 
-.. autoclass:: memmap
-    :members:
-    :inherited-members:
+.. autofunction:: memmap

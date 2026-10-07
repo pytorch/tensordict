@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>tensordict.nn.distributions.NormalParamExtractor &mdash; tensordict main documentation</title>
+  <title>NormalParamExtractor &mdash; tensordict main documentation</title>
   
 
   
@@ -36,8 +36,8 @@
   <link rel="stylesheet" href="../../_static/sg_gallery-rendered-html.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="tensordict.nn.distributions.OneHotCategorical" href="tensordict.nn.distributions.OneHotCategorical.html" />
-    <link rel="prev" title="tensordict.nn.distributions.Delta" href="tensordict.nn.distributions.Delta.html" />
+    <link rel="next" title="OneHotCategorical" href="tensordict.nn.distributions.OneHotCategorical.html" />
+    <link rel="prev" title="Delta" href="tensordict.nn.distributions.Delta.html" />
   <!-- Google Analytics -->
   
     <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4449+g219597c3c.d20261007)
+                  main (0.14.0.dev4453+g1d0db33f3.d20261007)
                 </div>
               
             
@@ -328,7 +328,7 @@
         
           <li><a href="../nn.html">tensordict.nn package</a> &gt;</li>
         
-      <li>tensordict.nn.distributions.NormalParamExtractor</li>
+      <li>NormalParamExtractor</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
@@ -360,8 +360,8 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="tensordict-nn-distributions-normalparamextractor">
-<h1>tensordict.nn.distributions.NormalParamExtractor<a class="headerlink" href="#tensordict-nn-distributions-normalparamextractor" title="Permalink to this heading">¶</a></h1>
+  <section id="normalparamextractor">
+<h1>NormalParamExtractor<a class="headerlink" href="#normalparamextractor" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.nn.distributions.NormalParamExtractor">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.distributions.</span></span><span class="sig-name descname"><span class="pre">NormalParamExtractor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scale_mapping</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'biased_softplus_1.0'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale_lb</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/numbers.html#numbers.Number" title="(in Python v3.14)"><span class="pre">Number</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0001</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.distributions.NormalParamExtractor" title="Permalink to this definition">¶</a></dt>
@@ -398,6 +398,20 @@ See <a class="reference internal" href="tensordict.nn.mappings.html#tensordict.n
 <span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span><span class="n">scale</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 </pre></div>
 </div>
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.nn.distributions.NormalParamExtractor.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">tensors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">torch.Tensor</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#tensordict.nn.distributions.NormalParamExtractor.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Define the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -410,10 +424,10 @@ See <a class="reference internal" href="tensordict.nn.mappings.html#tensordict.n
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="tensordict.nn.distributions.OneHotCategorical.html" class="btn btn-neutral float-right" title="tensordict.nn.distributions.OneHotCategorical" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="tensordict.nn.distributions.OneHotCategorical.html" class="btn btn-neutral float-right" title="OneHotCategorical" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="tensordict.nn.distributions.Delta.html" class="btn btn-neutral" title="tensordict.nn.distributions.Delta" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="tensordict.nn.distributions.Delta.html" class="btn btn-neutral" title="Delta" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -445,7 +459,7 @@ See <a class="reference internal" href="tensordict.nn.mappings.html#tensordict.n
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">tensordict.nn.distributions.NormalParamExtractor</a></li>
+<li><a class="reference internal" href="#">NormalParamExtractor</a></li>
 </ul>
 
             </div>

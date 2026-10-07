@@ -4,6 +4,4 @@
 isin
 ====
 
-.. autoclass:: isin
-    :members:
-    :inherited-members:
+.. autofunction:: isin

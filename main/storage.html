@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4449+g219597c3c.d20261007)
+                  main (0.14.0.dev4453+g1d0db33f3.d20261007)
                 </div>
               
             
@@ -605,7 +605,7 @@ batch-size inference instead.</p>
 <p>By default each tensor is written as a single uncompressed chunk, which is
 the fastest layout for checkpoint-style save/load.  For dataset-style
 workloads, pass <code class="docutils literal notranslate"><span class="pre">chunks=</span></code> and/or <code class="docutils literal notranslate"><span class="pre">compressors=</span></code> (forwarded to
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">zarr.Group.create_array()</span></code>) to enable partial out-of-core reads with
+<a class="reference external" href="https://zarr.readthedocs.io/en/stable/api/zarr/group/#zarr.Group.create_array" title="(in zarr-python v0.0.0)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">zarr.Group.create_array</span></code></a>) to enable partial out-of-core reads with
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.get_at" title="tensordict.TensorDictBase.get_at"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_at()</span></code></a> and on-disk compression:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td_mem</span><span class="o">.</span><span class="n">to_zarr</span><span class="p">(</span><span class="n">d</span> <span class="o">+</span> <span class="s2">"/chunked.zarr"</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>  <span class="c1"># one row per chunk</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">zarr.codecs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZstdCodec</span>
@@ -616,7 +616,7 @@ workloads, pass <code class="docutils literal notranslate"><span class="pre">chu
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">filename</span></code> (required) – path to the zarr store, or a
 <code class="docutils literal notranslate"><span class="pre">zarr.abc.store.Store</span></code> instance.</p></li>
-<li><p>any <code class="xref py py-meth docutils literal notranslate"><span class="pre">zarr.Group.create_array()</span></code> argument (<code class="docutils literal notranslate"><span class="pre">chunks</span></code>,
+<li><p>any <a class="reference external" href="https://zarr.readthedocs.io/en/stable/api/zarr/group/#zarr.Group.create_array" title="(in zarr-python v0.0.0)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">zarr.Group.create_array</span></code></a> argument (<code class="docutils literal notranslate"><span class="pre">chunks</span></code>,
 <code class="docutils literal notranslate"><span class="pre">compressors</span></code>, …).</p></li>
 </ul>
 </section>

@@ -4,6 +4,4 @@
 from_pandas
 ===========
 
-.. autoclass:: from_pandas
-    :members:
-    :inherited-members:
+.. autofunction:: from_pandas

@@ -4,6 +4,4 @@
 expand_as_right
 ===============
 
-.. autoclass:: expand_as_right
-    :members:
-    :inherited-members:
+.. autofunction:: expand_as_right

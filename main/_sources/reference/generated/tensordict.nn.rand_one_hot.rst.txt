@@ -1,6 +1,7 @@
-﻿tensordict.nn.rand\_one\_hot
-============================
+﻿.. currentmodule:: tensordict.nn
 
-.. currentmodule:: tensordict.nn
+
+rand_one_hot
+============
 
 .. autofunction:: rand_one_hot
