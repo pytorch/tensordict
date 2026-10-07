@@ -191,6 +191,37 @@ def test_store_byte_ranges_normalize_negative_indices(idx):
     ]
 
 
+_MASK_2D = torch.tensor(
+    [[True, False, True, False], [False, False, True, True], [True, True, False, False]]
+)
+
+
+@pytest.mark.parametrize(
+    "mask", [torch.tensor(True), torch.tensor(False), _MASK_2D, (_MASK_2D,)]
+)
+def test_store_byte_ranges_skip_masks_that_are_not_1d(mask):
+    # these masks select across dims, so the whole tensor is read or written
+    helper_module = importlib.import_module("tensordict.store._utils")
+    assert helper_module._compute_byte_ranges([3, 4, 5], torch.float32, mask) is None
+
+
+@pytest.mark.parametrize(
+    "mask",
+    [
+        torch.tensor(True),
+        torch.tensor([True, False, True]),
+        _MASK_2D,
+        _MASK_2D[:, :, None],
+    ],
+)
+def test_store_result_shape_of_masks_matches_torch(mask):
+    helper_module = importlib.import_module("tensordict.store._utils")
+    if mask.ndim == 3:
+        mask = mask.expand(3, 4, 5)
+    expected = list(torch.zeros(3, 4, 5)[mask].shape)
+    assert helper_module._getitem_result_shape([3, 4, 5], mask) == expected
+
+
 @pytest.mark.parametrize("idx", [_MASK.tolist(), (_MASK.tolist(),)])
 def test_store_bool_list_is_a_mask(idx):
     helper_module = importlib.import_module("tensordict.store._utils")
