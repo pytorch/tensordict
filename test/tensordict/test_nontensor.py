@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import importlib.util
+import inspect
 import math
 import operator
 import os
@@ -13,6 +15,7 @@ import platform
 import sys
 import warnings
 from dataclasses import dataclass
+from unittest import mock
 
 import numpy as np
 import pytest
@@ -89,6 +92,24 @@ def _record_pickle_load():
 class _PickleLoadMarker:
     def __reduce__(self):
         return _record_pickle_load, ()
+
+
+@functools.cache
+def _fallback_unbatched_tensor_cls():
+    """Returns the ``UnbatchedTensor`` used when PyTorch lacks pytorch/pytorch#176977.
+
+    The implementation is chosen when its module is imported, so this executes
+    a separate copy of the module in which the PyTorch fix is not detected.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "_unbatched_fallback", inspect.getfile(UnbatchedTensor)
+    )
+    module = importlib.util.module_from_spec(spec)
+    # The fix is detected from the source of MetaConverter.meta_tensor.
+    with mock.patch.object(inspect, "getsource", side_effect=OSError):
+        spec.loader.exec_module(module)
+    assert not module._HAS_WRAPPER_SUBCLASS_FIX
+    return module.UnbatchedTensor
 
 
 # Capture all warnings
@@ -1417,14 +1438,34 @@ class TestUnbatchedTensor:
         assert td.unflatten_keys(separator="_")["c", "d"] is td["c_d"]
         assert td.unflatten_keys(separator="_").flatten_keys()["c.d"] is td["c_d"]
 
-    def test_unbatched_view_base(self):
-        view = UnbatchedTensor(torch.arange(6.0)).clone().reshape(2, 3)
+    @pytest.fixture(params=["UnbatchedTensor", "fallback"])
+    def unbatched_cls(self, request):
+        if request.param == "fallback":
+            return _fallback_unbatched_tensor_cls()
+        return UnbatchedTensor
+
+    def test_unbatched_view_base(self, unbatched_cls):
+        view = unbatched_cls(torch.arange(6.0)).clone().reshape(2, 3)
         base = view._base
         assert base is not None
         assert view._base is base
         assert base._base is None
         base.zero_()
         assert not view.any()
+
+    def test_unbatched_grad(self, unbatched_cls):
+        td = TensorDict(
+            a=torch.randn(4, 3),
+            unbatched=unbatched_cls(torch.randn(7, 11)),
+            batch_size=[4],
+        )
+        td.requires_grad_()
+        out = td + 1
+        out.backward(torch.ones_like(out))
+        grad = td["unbatched"].grad
+        assert isinstance(grad, unbatched_cls)
+        assert grad.batch_size == td.batch_size
+        assert (td.grad == 1).all()
 
     def test_unbatched_getitem_returns_unbatched(self):
         data = torch.randn(7, 11)
