@@ -226,7 +226,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4442+gdb91d479c.d20261007)
+                  main (0.14.0.dev4445+g33ed12a60.d20261007)
                 </div>
               
             
@@ -396,11 +396,15 @@ $ cd tensordict
 $ pip install -e .
 </pre></div>
 </div>
+<p>This compiles tensordict’s C++ extension, which requires CMake &gt;= 3.22 and a
+C++20 compiler.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>If you’re using <strong>uv</strong> with a <strong>PyTorch nightly</strong> installed from the PyTorch nightly wheel index,
 prefer installing tensordict editable with <code class="docutils literal notranslate"><span class="pre">--no-deps</span></code> (or configure uv to use the nightly wheel index),
-otherwise uv may re-resolve and replace the existing nightly <code class="docutils literal notranslate"><span class="pre">torch</span></code> with a stable build from PyPI.</p>
+otherwise uv may re-resolve and replace the existing nightly <code class="docutils literal notranslate"><span class="pre">torch</span></code> with a stable build from PyPI.
+<code class="docutils literal notranslate"><span class="pre">--no-deps</span></code> also skips tensordict’s other runtime dependencies (listed in <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code>),
+so install those first.</p>
 </div>
 </section>
 <section id="tutorials">
