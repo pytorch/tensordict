@@ -135,7 +135,11 @@ def _compute_byte_ranges(
 
     if isinstance(idx, torch.Tensor):
         if idx.dtype == torch.bool:
-            if idx.ndim == 1 and idx.shape[0] != shape[0]:
+            if idx.ndim != 1:
+                # a 0-d or N-D mask does not select rows of dim 0: the caller
+                # reads or writes the whole tensor and indexes it locally
+                return None
+            if idx.shape[0] != shape[0]:
                 raise IndexError(
                     f"The shape of the mask {list(idx.shape)} does not match "
                     f"dimension 0 with size {shape[0]}"
@@ -244,8 +248,9 @@ def _getitem_result_shape(
 
     if isinstance(idx, torch.Tensor):
         if idx.dtype == torch.bool:
+            # a k-D mask replaces the k dims it covers with one dim
             n = int(idx.sum().item())
-            return [n] + rest
+            return [n] + list(shape[idx.ndim :])
         return list(idx.shape) + rest
 
     return list(torch.zeros(shape)[idx].shape)
