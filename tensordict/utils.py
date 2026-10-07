@@ -420,7 +420,7 @@ def expand_as_right(
         >>> tensor = torch.zeros(3,4)
         >>> dest = torch.zeros(3,4,5)
         >>> print(expand_as_right(tensor, dest).shape)
-        torch.Size([3,4,5])
+        torch.Size([3, 4, 5])
 
     """
     if dest.ndimension() < tensor.ndimension():
@@ -457,7 +457,7 @@ def expand_right(tensor: Tensor, shape: Sequence[int]) -> Tensor:
         >>> tensor = torch.zeros(3,4)
         >>> shape = (3,4,5)
         >>> print(expand_right(tensor, shape).shape)
-        torch.Size([3,4,5])
+        torch.Size([3, 4, 5])
 
     """
     tensor_expand = tensor
@@ -2644,17 +2644,17 @@ def remove_duplicates(
         output (TensorDictBase): input tensordict with the indices corrsponding to duplicated elements
             in tensor `key` along dimension `dim` removed.
         unique_indices (torch.Tensor, optional): The indices of the first occurrences of the unique elements in the
-            input tensordict for the specified `key` along the specified `dim`. Only provided if return_index is True.
+            input tensordict for the specified `key` along the specified `dim`. Only provided if `return_indices` is True.
 
     Example:
         >>> td = TensorDict(
         ...     {
         ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
         ...         "tensor2": torch.tensor([[10, 20], [30, 40], [40, 50], [50, 60]]),
-        ...     }
+        ...     },
         ...     batch_size=[4],
         ... )
-        >>> output_tensordict = remove_duplicate_elements(td, key="tensor1", dim=0)
+        >>> output_tensordict = remove_duplicates(td, key="tensor1", dim=0)
         >>> expected_output = TensorDict(
         ...     {
         ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]]),
@@ -2662,7 +2662,7 @@ def remove_duplicates(
         ...     },
         ...     batch_size=[3],
         ... )
-        >>> assert (td == expected_output).all()
+        >>> assert (output_tensordict == expected_output).all()
     """
     tensor = input.get(key)
 
@@ -2939,11 +2939,11 @@ def unravel_key(key):
 
     Examples:
         >>> unravel_key("a")
-        "a"
+        'a'
         >>> unravel_key(("a",))
-        "a"
+        'a'
         >>> unravel_key((("a", ("b",))))
-        ("a", "b")
+        ('a', 'b')
 
     """
     if not is_compiling():

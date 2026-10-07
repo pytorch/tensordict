@@ -664,7 +664,7 @@ def dense_stack_tds(
 
     This function is called with a list of :class:`~tensordict.TensorDictBase` (either passed directly or obtrained from
     a :class:`~tensordict.LazyStackedTensorDict`).
-    Instead of calling ``torch.stack(td_list)``, which would return a :class:`~tensordict.LazyStackedTensorDict`,
+    Instead of calling ``lazy_stack(td_list)``, which would return a :class:`~tensordict.LazyStackedTensorDict`,
     this function expands the first element of the input list and stacks the input list onto that element.
     This works only when all the elements of the input list have the same structure.
     The :class:`~tensordict.TensorDictBase` returned will have the same type of the elements of the input list.
@@ -672,7 +672,7 @@ def dense_stack_tds(
     This function is useful when some of the :class:`~tensordict.TensorDictBase` objects that need to be stacked
     are :class:`~tensordict.LazyStackedTensorDict` or have :class:`~tensordict.LazyStackedTensorDict`
     among entries (or nested entries).
-    In those cases, calling ``torch.stack(td_list).to_tensordict()`` is infeasible.
+    In those cases, calling ``lazy_stack(td_list).to_tensordict()`` is infeasible.
     Thus, this function provides an alternative for densely stacking the list provided.
 
     Args:
@@ -682,15 +682,15 @@ def dense_stack_tds(
 
     Examples:
         >>> import torch
-        >>> from tensordict import TensorDict
+        >>> from tensordict import TensorDict, lazy_stack
         >>> from tensordict import dense_stack_tds
         >>> from tensordict.tensordict import assert_allclose_td
         >>> td0 = TensorDict({"a": torch.zeros(3)},[])
         >>> td1 = TensorDict({"a": torch.zeros(4), "b": torch.zeros(2)},[])
-        >>> td_lazy = torch.stack([td0, td1], dim=0)
+        >>> td_lazy = lazy_stack([td0, td1], dim=0)
         >>> td_container = TensorDict({"lazy": td_lazy}, [])
         >>> td_container_clone = td_container.clone()
-        >>> td_stack = torch.stack([td_container, td_container_clone], dim=0)
+        >>> td_stack = lazy_stack([td_container, td_container_clone], dim=0)
         >>> td_stack
         LazyStackedTensorDict(
             fields={
@@ -710,6 +710,7 @@ def dense_stack_tds(
             is_shared=False,
             stack_dim=0)
         >>> td_stack = dense_stack_tds(td_stack) # Automatically use the LazyStackedTensorDict stack_dim
+        >>> td_stack
         TensorDict(
             fields={
                 lazy: LazyStackedTensorDict(
@@ -725,12 +726,12 @@ def dense_stack_tds(
             batch_size=torch.Size([2]),
             device=None,
             is_shared=False)
-        # Note that
-        # (1) td_stack is now a TensorDict
-        # (2) this has pushed the stack_dim of "lazy" (0 -> 1)
-        # (3) this has revealed the exclusive keys.
-        >>> assert_allclose_td(td_stack, dense_stack_tds([td_container, td_container_clone], dim=0))
-        # This shows it is the same to pass a list or a LazyStackedTensorDict
+        >>> # Note that
+        >>> # (1) td_stack is now a TensorDict
+        >>> # (2) this has pushed the stack_dim of "lazy" (0 -> 1)
+        >>> # (3) this has revealed the exclusive keys.
+        >>> assert assert_allclose_td(td_stack, dense_stack_tds([td_container, td_container_clone], dim=0))
+        >>> # This shows it is the same to pass a list or a LazyStackedTensorDict
 
     """
     if isinstance(td_list, LazyStackedTensorDict):
@@ -758,7 +759,7 @@ def make_tensordict(
 ) -> TensorDict:
     """Returns a TensorDict created from the keyword arguments or an input dictionary.
 
-    If ``batch_size`` is not specified, returns the maximum batch size possible.
+    If ``batch_size`` is not specified and ``auto_batch_size=True``, the maximum batch size possible is used.
 
     This function works on nested dictionaries too, or can be used to determine the
     batch-size of a nested tensordict.
@@ -775,7 +776,7 @@ def make_tensordict(
 
     Examples:
         >>> input_dict = {"a": torch.randn(3, 4), "b": torch.randn(3)}
-        >>> print(make_tensordict(input_dict))
+        >>> print(make_tensordict(input_dict, auto_batch_size=True))
         TensorDict(
             fields={
                 a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -788,7 +789,7 @@ def make_tensordict(
         >>> # nested dict: the nested TensorDict can have a different batch-size
         >>> # as long as its leading dims match.
         >>> input_dict = {"a": torch.randn(3), "b": {"c": torch.randn(3, 4)}}
-        >>> print(make_tensordict(input_dict))
+        >>> print(make_tensordict(input_dict, auto_batch_size=True))
         TensorDict(
             fields={
                 a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -803,7 +804,7 @@ def make_tensordict(
             is_shared=False)
         >>> # we can also use this to work out the batch sie of a tensordict
         >>> input_td = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3, 4)}}, [])
-        >>> print(make_tensordict(input_td))
+        >>> print(make_tensordict(input_td, auto_batch_size=True))
         TensorDict(
             fields={
                 a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),

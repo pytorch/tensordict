@@ -731,14 +731,14 @@ def from_dataclass(
         >>> from tensordict.tensorclass import from_dataclass
         >>>
         >>> @dataclass
-        >>> class X:
+        ... class X:
         ...     a: int
         ...     b: torch.Tensor
         ...
         >>> x = X(0, 0)
         >>> x2 = from_dataclass(x)
         >>> print(x2)
-        X(
+        X_tc(
             a=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
             b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
             batch_size=torch.Size([]),
@@ -746,7 +746,7 @@ def from_dataclass(
             is_shared=False)
         >>> X2 = from_dataclass(X, autocast=True)
         >>> print(X2(a=0, b=0))
-        X(
+        X_tc(
             a=NonTensorData(data=0, batch_size=torch.Size([]), device=None),
             b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
             batch_size=torch.Size([]),
@@ -924,14 +924,14 @@ def tensorclass(
         >>> data = MyData(
         ...     X=torch.ones(3, 4, 1),
         ...     y=torch.zeros(3, 4, 2, 2, dtype=torch.bool),
-        ...     z="test"
+        ...     z="test",
         ...     batch_size=[3, 4])
         >>> print(data)
         MyData(
-            X=Tensor(torch.Size([3, 4, 1]), dtype=torch.float32),
-            y=Tensor(torch.Size([3, 4, 2, 2]), dtype=torch.bool),
-            z="test"
-            batch_size=[3, 4],
+            X=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+            y=Tensor(shape=torch.Size([3, 4, 2, 2]), device=cpu, dtype=torch.bool, is_shared=False),
+            z=NonTensorData(data=test, batch_size=torch.Size([3, 4]), device=None),
+            batch_size=torch.Size([3, 4]),
             device=None,
             is_shared=False)
         >>> print(data.expand_and_mask())
@@ -3863,7 +3863,7 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
 
         >>> class Base(TensorClass["autocast"]):
         ...     x: int
-        >>> class Sub(Base, frozen=True):   # autocast inherited, frozen added
+        >>> class Sub(Base, shadow=True):   # autocast inherited, shadow added
         ...     y: float
 
     **Type-checking.** ``TensorClass[...]`` is implemented via :meth:`~object.__class_getitem__`,
@@ -5102,7 +5102,7 @@ class NonTensorStack(LazyStackedTensorDict):
             convert_tensors (bool): if ``True``, tensors will be converted to lists.
                 Otherwise, they will remain as tensors. Default: ``False``.
             tolist_first (bool, optional): if ``True``, the tensordict will be converted to a list first when
-                it has batch dimensions. Default: ``True``.
+                it has batch dimensions. Default: ``False``.
             as_linked_list (bool, optional): if ``True``, the list will be converted to a :class:`tensordict.utils.LinkedList`
                 which will automatically update the tensordict when the list is modified. Default: ``False``.
 
