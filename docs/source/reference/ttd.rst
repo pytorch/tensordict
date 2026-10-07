@@ -63,9 +63,10 @@ TypedTensorDict vs TensorClass
 ------------------------------
 
 Both ``TypedTensorDict`` and ``TensorClass`` provide typed tensor containers.
-They share the same class-option syntax (``["shadow"]``, ``["frozen"]``, etc.)
-and both use ``@dataclass_transform()`` for IDE support. The key difference is
-in the underlying model:
+They share the same class-option syntax (``["shadow"]``, ``["frozen"]``, etc.),
+although some options behave differently (see `Class options`_). Both use
+``@dataclass_transform()`` for IDE support. The key difference is in the
+underlying model:
 
 .. list-table::
    :header-rows: 1
@@ -82,7 +83,7 @@ in the underlying model:
      - Yes (``from_tensordict``)
    * - Inheritance
      - Standard Python (``class Child(Parent): ...``)
-     - Supported via metaclass
+     - Standard Python (``class Child(Parent): ...``); subclasses add fields
    * - ``**state`` spreading
      - Works natively (``MutableMapping``)
      - Requires manual field-by-field repacking
@@ -91,10 +92,12 @@ in the underlying model:
      - Raises ``ValueError`` -- use ``state.key`` or ``state.get("key")``
    * - Optional fields
      - Supported
-     - Not supported
+     - Supported (``Optional[Tensor] = None``; absent from ``keys()`` if not set)
    * - Non-tensor fields
-     - Not supported (tensor-only)
-     - Supported (strings, ints, arbitrary objects)
+     - Accepted but annotations are not validated; non-tensor values are stored
+       as ``NonTensorData`` and attribute access returns the wrapper
+     - Supported (strings, arbitrary objects); attribute access returns the
+       plain value (Python scalars are cast to tensors unless ``nocast``)
    * - Custom methods
      - Supported (regular class methods)
      - Supported (regular class methods)
@@ -105,13 +108,12 @@ in the underlying model:
 **When to use which:**
 
 - Use ``TypedTensorDict`` when you have a typed pipeline with progressive state
-  accumulation, need ``**state`` spreading, want standard Python inheritance
-  for schema composition, or need to wrap persistent backends while keeping
-  full ``TensorDictBase`` API compatibility.
+  accumulation, need ``**state`` spreading, or need to wrap persistent
+  backends while keeping full ``TensorDictBase`` API compatibility.
 
-- Use ``TensorClass`` when you need non-tensor fields (strings, metadata),
-  custom ``__init__`` logic, or your codebase already uses ``@tensorclass``
-  extensively.
+- Use ``TensorClass`` when you need non-tensor fields (strings, metadata)
+  returned as plain values, custom ``__init__`` logic, or your codebase
+  already uses ``@tensorclass`` extensively.
 
 Inheritance and field accumulation
 ----------------------------------
@@ -136,10 +138,10 @@ inheriting all parent fields:
   ...     indicator: Tensor
   ...     observed_time: Tensor
 
-  >>> ObservedState.__required_keys__
-  frozenset({'eta', 'X', 'beta', 'y', 'mu'})
-  >>> ObservedState.__optional_keys__
-  frozenset({'noise'})
+  >>> sorted(ObservedState.__required_keys__)
+  ['X', 'beta', 'eta', 'mu', 'y']
+  >>> sorted(ObservedState.__optional_keys__)
+  ['noise']
 
 Inheritance works as standard Python: ``isinstance(obs, PredictorState)``
 returns ``True`` for an ``ObservedState`` instance, and a function typed as
@@ -213,10 +215,16 @@ Class options
 - ``"shadow"`` -- Allow field names that clash with ``TensorDictBase`` attributes.
   Without this, conflicting names raise ``AttributeError`` at class definition
   time.
-- ``"frozen"`` -- Lock the ``TensorDict`` after construction (read-only).
-- ``"autocast"`` -- Automatically cast assigned values.
-- ``"nocast"`` -- Disable type casting on assignment.
-- ``"tensor_only"`` -- Restrict fields to tensor types only.
+- ``"frozen"`` -- Lock the ``TensorDict`` after construction. Attribute
+  assignment and adding keys raise ``RuntimeError``, but in-place writes such as
+  ``set_()`` or ``state.x.add_(1)`` still succeed, so the instance is not
+  read-only. This differs from ``TensorClass["frozen"]``, where attribute
+  assignment raises ``dataclasses.FrozenInstanceError``.
+- ``"autocast"``, ``"nocast"``, ``"tensor_only"`` -- Accepted with the same
+  syntax as ``TensorClass`` and inherited by subclasses, but they currently have
+  no effect on ``TypedTensorDict``: values are stored as a regular
+  ``TensorDict`` would store them (for example, ``x=1`` is stored as a tensor
+  even with ``"nocast"``).
 
 Options propagate through inheritance: a subclass of a ``"frozen"`` class is
 also frozen.
@@ -241,7 +249,7 @@ through the typed wrapper go directly to the underlying storage:
   torch.Size([5, 3])
   >>> state.eta = torch.ones(5, 3)  # writes to td
   >>> (td["eta"] == 1).all()
-  True
+  tensor(True)
 
 This works with any backend: ``PersistentTensorDict`` (H5),
 ``TensorDictStore`` (Redis), ``LazyStackedTensorDict``, memory-mapped
