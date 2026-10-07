@@ -2447,7 +2447,7 @@ class TensorDictStore(TensorDictBase):
             if hasattr(self, "_thread") and self._thread.is_alive():
                 self._thread.join(timeout=2)
             if hasattr(self, "_loop") and not self._loop.is_running():
-                # releases the sockets that the loop holds
+                # releases the selector and the self-pipe sockets of the loop
                 self._loop.close()
             self._owns_loop = False
 
@@ -4835,7 +4835,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
             if hasattr(self, "_thread") and self._thread.is_alive():
                 self._thread.join(timeout=2)
             if hasattr(self, "_loop") and not self._loop.is_running():
-                # releases the sockets that the loop holds
+                # releases the selector and the self-pipe sockets of the loop
                 self._loop.close()
             self._owns_loop = False
 

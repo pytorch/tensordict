@@ -744,6 +744,15 @@ class TestTensorDictStore:
         assert torch.allclose(full[:3], torch.zeros(3, 3))
         assert torch.allclose(full[4:], torch.zeros(6, 3))
 
+    def test_close_closes_event_loop(self, store_kwargs):
+        """close() releases the background event loop of the store."""
+        store = TensorDictStore(batch_size=[2], **store_kwargs)
+        loop = store._loop
+        store.clear_redis()
+        store.close()
+        assert loop.is_closed()
+        store.close()  # closing again is a no-op
+
     # ---- Metadata caching tests ----
 
     def test_cache_metadata_default(self, store_td):
@@ -994,6 +1003,18 @@ class TestLazyStackedTensorDictStore:
         assert store_td._count == 5
         assert store_td._stack_dim == 0
         assert store_td._inner_batch_size == torch.Size([4])
+
+    def test_close_closes_event_loop(self, store_kwargs):
+        """close() releases the background event loop of the store."""
+        tds = [TensorDict({"a": torch.zeros(3)}, [3]) for _ in range(2)]
+        store = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        loop = store._loop
+        store.clear_redis()
+        store.close()
+        assert loop.is_closed()
+        store.close()  # closing again is a no-op
 
     def test_from_lazy_stack_keys(self, store_stack):
         store_td, tds, lazy_td = store_stack
