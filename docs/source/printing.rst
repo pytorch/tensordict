@@ -44,23 +44,42 @@ your work is on CPU and nothing is shared, ``device=cpu`` and
 
 :class:`~tensordict.set_printoptions` lets you control exactly which attributes
 appear.  It works as a **global setter**, a **context manager** or a
-**decorator**, following the same pattern as :class:`~tensordict.set_lazy_legacy`
-and :func:`torch.set_printoptions`.
+**decorator**, following the same pattern as :class:`~tensordict.set_lazy_legacy`.
+Its role is similar to :func:`torch.set_printoptions`, which is a plain function
+rather than a context manager or decorator.
 
 Global configuration
 ~~~~~~~~~~~~~~~~~~~~
 
-Call :meth:`~tensordict.set_printoptions.set` to change the defaults for the
-rest of the process:
+Call ``set_printoptions(...).set()`` to change the defaults for the
+rest of the process.  ``show_device`` and ``show_is_shared`` control the
+TensorDict-level lines, ``show_field_device`` and ``show_field_is_shared`` the
+per-field attributes:
 
     >>> from tensordict import set_printoptions
-    >>> set_printoptions(show_device=False, show_is_shared=False).set()
+    >>> set_printoptions(
+    ...     show_device=False,
+    ...     show_is_shared=False,
+    ...     show_field_device=False,
+    ...     show_field_is_shared=False,
+    ... ).set()
     >>> print(td)
     TensorDict(
         fields={
             image: Tensor(shape=torch.Size([32, 3, 64, 64]), dtype=torch.float32),
             label: Tensor(shape=torch.Size([32]), dtype=torch.int64)},
         batch_size=torch.Size([32]))
+
+``set()`` only changes the options it is given, so calling
+``set_printoptions().set()`` without arguments does not reset anything.  To go
+back to the defaults, set the changed options again explicitly:
+
+    >>> set_printoptions(
+    ...     show_device=True,
+    ...     show_is_shared=True,
+    ...     show_field_device=True,
+    ...     show_field_is_shared=True,
+    ... ).set()
 
 Scoped configuration (context manager)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -69,8 +88,8 @@ Use the context-manager form when you only want the change for a specific
 block of code.  The previous settings are automatically restored on exit:
 
     >>> from tensordict import set_printoptions
-    >>> with set_printoptions(show_dtype=False, show_is_shared=False):
-    ...     print(td)  # dtype and is_shared hidden
+    >>> with set_printoptions(show_dtype=False, show_field_is_shared=False):
+    ...     print(td)  # dtype and per-field is_shared hidden
     >>> print(td)  # back to defaults
 
 Decorator
@@ -199,8 +218,9 @@ replaced by zeros (since the repr does not contain actual data):
 .. note::
 
     :func:`~tensordict.parse_tensor_dict_string` currently only works with the
-    default (``plain``) print format -- the one that includes ``shape=``,
+    default print format -- the one that includes ``shape=``,
     ``device=``, ``dtype=`` and ``is_shared=`` for every field.
-    If attributes have been hidden via :class:`~tensordict.set_printoptions`,
+    If field attributes have been hidden, or extra ones (such as the ``plain``
+    value summary) added, via :class:`~tensordict.set_printoptions`,
     the regex parser will not find the expected fields and reconstruction will
-    fail.  Support for non-default formats will be added in a follow-up PR.
+    fail.
