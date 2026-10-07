@@ -1459,7 +1459,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             call_on_nested=False,
             batch_size=self.batch_size,
         )
-        if isinstance(result, (torch.Tensor, torch.return_types.cummin)):
+        if isinstance(result, (torch.Tensor, torch.return_types.cummax)):
             return result
         if dim is not NO_DEFAULT and return_indices:
             # Split the tensordict
