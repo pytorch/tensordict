@@ -252,7 +252,9 @@ For :class:`~tensordict.tensorclass` instances, both attribute access and ``get(
 Limitations
 ^^^^^^^^^^^
 
-- **Memory-mapped serialization** is not currently supported for ``UnbatchedTensor``.
+- **Memory-mapped serialization and consolidation** are not supported yet for ``UnbatchedTensor``:
+  :meth:`~tensordict.TensorDictBase.memmap` and :meth:`~tensordict.TensorDictBase.consolidate`
+  raise an error when the tensordict contains one. :func:`torch.save` keeps them.
 - **Stacking with different data**: when stacking TensorDicts that contain ``UnbatchedTensor`` entries with
   different underlying data, only the first element's data is kept. A warning is emitted when this is detected.
 

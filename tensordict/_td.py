@@ -3169,6 +3169,13 @@ class TensorDict(TensorDictBase):
         existsok,
         robust_key,
     ) -> Self:
+        for key, value in self.items():
+            if _is_unbatched(value):
+                # the leaf would be written and loaded back as a plain tensor
+                raise NotImplementedError(
+                    f"UnbatchedTensor entries cannot be memory-mapped yet, but "
+                    f"{key!r} is one. Exclude it first, e.g. with td.exclude({key!r})."
+                )
         if prefix is not None:
             prefix = Path(prefix)
             if not prefix.exists():
