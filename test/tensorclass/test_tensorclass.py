@@ -3477,6 +3477,59 @@ class TestShadow:
     is_shared=False)"""
         )
 
+    # A TensorClass subclass inherits TensorClass methods and properties, which
+    # dataclass() used to take as the defaults of fields with the same name.
+    @pytest.mark.parametrize("subclass", [False, True])
+    def test_no_shadow_method_name(self, subclass):
+        with pytest.raises(AttributeError, match="Attribute name sum can't"):
+            if subclass:
+
+                class MyClass(TensorClass):
+                    sum: torch.Tensor
+                    other: torch.Tensor
+
+            else:
+
+                @tensorclass
+                class MyClass:  # noqa: F811
+                    sum: torch.Tensor
+                    other: torch.Tensor
+
+    @pytest.mark.parametrize("subclass", [False, True])
+    @pytest.mark.parametrize("frozen", [False, True])
+    def test_shadow_method_name(self, subclass, frozen):
+        if subclass:
+            base = TensorClass["shadow", "frozen"] if frozen else TensorClass["shadow"]
+
+            class MyClass(base):
+                sum: torch.Tensor  # a method
+                shape: torch.Tensor  # a property
+                other: torch.Tensor
+
+        else:
+
+            @tensorclass(shadow=True, frozen=frozen)
+            class MyClass:
+                sum: torch.Tensor
+                shape: torch.Tensor
+                other: torch.Tensor
+
+        with pytest.raises(TypeError, match="sum"):
+            MyClass(shape=torch.ones(3), other=torch.zeros(3), batch_size=[3])
+        c = MyClass(
+            sum=torch.ones(3), shape=torch.ones(3), other=torch.zeros(3), batch_size=[3]
+        )
+        for name in ("sum", "shape"):
+            assert (getattr(c, name) == 1).all()
+            assert getattr(c[0], name) == 1
+            if frozen:
+                with pytest.raises(dataclasses.FrozenInstanceError):
+                    setattr(c, name, torch.full((3,), 2.0))
+            else:
+                setattr(c, name, torch.full((3,), 2.0))
+                assert (getattr(c, name) == 2).all()
+                assert (c.get(name) == 2).all()
+
 
 class TestVMAP:
     def test_regular_vmap(self):
