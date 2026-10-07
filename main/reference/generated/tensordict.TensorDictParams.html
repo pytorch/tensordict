@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4431+gb3210f0fe.d20261007)
+                  main (0.14.0.dev4432+g12f72aadb.d20261007)
                 </div>
               
             
@@ -9724,7 +9724,10 @@ to the host.</p></li>
 <code class="xref py py-class docutils literal notranslate"><span class="pre">Parameter</span></code> and buffer registrations are
 preserved when writing tensor leaves to <code class="docutils literal notranslate"><span class="pre">module</span></code>: parameters
 remain parameters with their original <code class="docutils literal notranslate"><span class="pre">requires_grad</span></code> value,
-and buffers remain registered buffers. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, tensor
+and buffers remain registered buffers. Leaves that are not
+parameters but require gradients, or that are batched by
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a>, are registered as they are, so that
+gradients still reach them. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, tensor
 leaves are written with the historical replacement semantics,
 which may deregister an existing parameter when the source leaf
 is not an <code class="xref py py-class docutils literal notranslate"><span class="pre">Parameter</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.
