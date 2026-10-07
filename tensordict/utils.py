@@ -2145,7 +2145,8 @@ def _num_indexed_dims(index) -> int:
         return 0
     if isinstance(index, list):
         index = _nested_list_to_tensor(index)
-    if isinstance(index, torch.Tensor) and index.dtype == torch.bool:
+    if isinstance(index, torch.Tensor) and index.dtype in (torch.bool, torch.uint8):
+        # torch reads a uint8 tensor as a mask (deprecated)
         return index.ndim
     if isinstance(index, np.ndarray) and index.dtype == np.dtype("bool"):
         return index.ndim
@@ -2209,14 +2210,19 @@ def _getitem_batch_size(batch_size, index):
                 # int() graph-breaks on the data-dependent size under compile
                 shape = torch.Size([int(idx.sum())])
                 num_dims = idx.ndim
-            else:
+            elif idx.ndim:
                 shape = idx.shape
+            else:
+                # like torch, read a 0-d integer index as an int
+                shape = None
         elif isinstance(idx, np.ndarray):
             if idx.dtype == np.dtype("bool"):
                 shape = torch.Size([int(idx.sum())])
                 num_dims = idx.ndim
-            else:
+            elif idx.ndim:
                 shape = idx.shape
+            else:
+                shape = None
         elif isinstance(idx, slice) or idx is None:
             # as in torch, advanced indices separated by a slice or None put
             # their dims first
