@@ -132,8 +132,8 @@ stacked_tensordict = LazyStackedTensorDict.lazy_stack(
 print(stacked_tensordict)
 
 # Previously, torch.stack was always returning a lazy stack. For consistency with
-# the regular PyTorch API, this behaviour will soon be adapted to deliver only
-# dense tensordicts. To control which behaviour you are relying on, you can use
+# the regular PyTorch API, torch.stack returns a dense tensordict by default.
+# The legacy lazy behaviour can still be enabled with
 # the :func:`~tensordict.utils.set_lazy_legacy` decorator/context manager:
 
 from tensordict.utils import set_lazy_legacy
@@ -217,12 +217,13 @@ print(unsqueezed_tensordict)
 
 ##############################################################################
 # .. note::
-#    Until now, operations like :meth:`~tensordict.TensorDictBase.unsqueeze`,
+#    Operations like :meth:`~tensordict.TensorDictBase.unsqueeze`,
 #    :meth:`~tensordict.TensorDictBase.squeeze`, :meth:`~tensordict.TensorDictBase.view`,
 #    :meth:`~tensordict.TensorDictBase.permute`, :meth:`~tensordict.TensorDictBase.transpose`
-#    were all returning a lazy version of these operations (ie, a container where the original
-#    tensordict was stored and where the operations was applied every time a key was accessed).
-#    This behaviour will be deprecated in the future and can be already controlled via the
+#    are applied eagerly and return a regular :class:`~.TensorDict`. The legacy lazy version
+#    of these operations (ie, a container where the original
+#    tensordict was stored and where the operations was applied every time a key was accessed)
+#    is only returned when enabled via the
 #    :func:`~tensordict.utils.set_lazy_legacy` function:
 #
 #       >>> with set_lazy_legacy(True):
@@ -242,14 +243,14 @@ assert squeezed_tensordict["a"].shape == torch.Size([3, 1, 4])
 ##############################################################################
 # Viewing a TensorDict
 # --------------------
-# :class:`~.TensorDict` also supports ``view``. This creates a ``_ViewedTensorDict``
-# which lazily creates views on its contents when they are accessed.
+# :class:`~.TensorDict` also supports ``view``. This returns a :class:`~.TensorDict`
+# whose entries are views of the original entries.
 
 tensordict = TensorDict({"a": torch.arange(12)}, [12])
-# no views are created at this step
+# the entries are viewed at this step
 viewed_tensordict = tensordict.view((2, 3, 2))
 
-# the view of "a" is created on-demand when we access it
+# "a" is a view of the original tensor
 assert viewed_tensordict["a"].shape == torch.Size([2, 3, 2])
 
 
@@ -260,9 +261,8 @@ assert viewed_tensordict["a"].shape == torch.Size([2, 3, 2])
 # permute the batch dimensions much like :func:`torch.permute`. Non batch dimensions are
 # left untouched.
 #
-# This operation is lazy, so batch dimensions are only permuted when we try to access
-# the entries. As ever, if you are likely to need to access a particular entry multiple
-# times, consider converting to a :class:`~.TensorDict`.
+# Like the other shape operations above, the permutation is applied to the entries
+# when the method is called.
 
 tensordict = TensorDict({"a": torch.rand(3, 4), "b": torch.rand(3, 4, 5)}, [3, 4])
 # swap the batch dimensions
