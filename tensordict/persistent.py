@@ -796,9 +796,20 @@ class PersistentTensorDict(TensorDictBase):
     Examples:
         >>> import tempfile
         >>> with tempfile.NamedTemporaryFile() as f:
-        ...     data = PersistentTensorDict(file=f, batch_size=[3], mode="w")
+        ...     data = PersistentTensorDict(filename=f.name, batch_size=[3], mode="w")
         ...     data["a", "b"] = torch.randn(3, 4)
         ...     print(data)
+        PersistentTensorDict(
+            fields={
+                a: PersistentTensorDict(
+                    fields={
+                        b: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([3]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=None,
+            is_shared=False)
 
     """
 
@@ -1114,6 +1125,17 @@ class PersistentTensorDict(TensorDictBase):
     def get_at(
         self, key: NestedKey, idx: IndexType, default: CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
+        """Gets the value of the entry ``key`` at the index ``idx``.
+
+        Args:
+            key (str, tuple of str): key to be retrieved.
+            idx (int, slice, torch.Tensor, iterable): index of the entry.
+            default (torch.Tensor, optional): default value to return if the key is
+                not present in the tensordict. If not provided, a missing key
+                raises a ``KeyError``.
+
+        See :meth:`~tensordict.TensorDictBase.get_at`.
+        """
         # Unlike TensorDictBase.get_at, a missing key raises unless a default is given
         return self._get_at_tuple(key, idx, default)
 
@@ -1505,6 +1527,17 @@ class PersistentTensorDict(TensorDictBase):
         copy_existing: bool = False,
         num_threads: int = 0,
     ) -> PersistentTensorDict:
+        """Raises a ``RuntimeError``: a PersistentTensorDict cannot be memory-mapped in-place.
+
+        Use :meth:`~tensordict.TensorDictBase.memmap` to build a memory-mapped copy instead.
+
+        Args:
+            prefix (str, optional): unused.
+            copy_existing (bool, optional): unused.
+            num_threads (int, optional): unused.
+
+        See :meth:`~tensordict.TensorDictBase.memmap_`.
+        """
         raise RuntimeError(
             "Cannot build a memmap TensorDict in-place from a PersistentTensorDict. Use `td.memmap()` instead."
         )
@@ -1822,6 +1855,17 @@ class PersistentTensorDict(TensorDictBase):
 
     @_as_context_manager()
     def flatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
+        """Returns an in-memory copy where the nested keys are joined by ``separator``.
+
+        The content is first loaded with :meth:`~tensordict.TensorDictBase.to_tensordict`.
+
+        Args:
+            separator (str, optional): the separator between the nested items. Defaults to ``"."``.
+            inplace (bool, optional): must be ``False``; ``True`` raises a ``ValueError``.
+                Defaults to ``False``.
+
+        See :meth:`~tensordict.TensorDictBase.flatten_keys`.
+        """
         if inplace:
             raise ValueError(
                 "Cannot call flatten_keys in_place with a PersistentTensorDict."
