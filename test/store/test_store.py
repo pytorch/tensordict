@@ -10,7 +10,7 @@ import pickle
 import numpy as np
 import pytest
 import torch
-from tensordict import is_tensor_collection, lazy_stack, TensorDict
+from tensordict import is_tensor_collection, lazy_stack, NonTensorStack, TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.store import LazyStackedTensorDictStore, TensorDictStore
 
@@ -1573,6 +1573,21 @@ class TestNonTensorIndexing:
             local = store.to_tensordict()
             tags = [local[i]["tag"] for i in range(3)]
             assert tags == ["x", "y", "x"]
+        finally:
+            store.clear_redis()
+            store.close()
+
+    def test_non_tensor_to_tensordict_is_writable(self, store_kwargs):
+        """A per-element entry is read as a NonTensorStack, so the copy that
+        ``to_tensordict()`` returns takes indexed writes."""
+        td = TensorDict({"val": torch.randn(3, 2), "tag": "x"}, [3])
+        store = TensorDictStore.from_tensordict(td, **store_kwargs)
+        try:
+            store[1] = TensorDict({"val": torch.zeros(2), "tag": "y"}, [])
+            local = store.to_tensordict()
+            assert isinstance(local.get("tag"), NonTensorStack)
+            local[[0, 1]] = TensorDict({"val": torch.ones(2, 2), "tag": "z"}, [2])
+            assert local.get("tag").tolist() == ["z", "z", "x"]
         finally:
             store.clear_redis()
             store.close()

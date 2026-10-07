@@ -1248,10 +1248,9 @@ class TensorDictStore(TensorDictBase):
             if positions is not None:
                 array = [array[p] for p in positions]
             # Wrap in NonTensorStack for TensorClass compat
-            from tensordict._lazy import LazyStackedTensorDict
-            from tensordict.tensorclass import NonTensorData
+            from tensordict.tensorclass import NonTensorData, NonTensorStack
 
-            stack = LazyStackedTensorDict(
+            stack = NonTensorStack(
                 *[NonTensorData(data=v, batch_size=[]) for v in array]
             )
             if idx is not None and positions is None:
