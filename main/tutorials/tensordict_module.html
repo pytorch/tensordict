@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4411+g70ebfb74f.d20261007)
+                  main (0.14.0.dev4431+gb3210f0fe.d20261007)
                 </div>
               
             
@@ -386,7 +386,7 @@ later on that this API enables users to programatically concatenate modules toge
 in between modules or programmatically build one.
 One of the simplest examples of this is a recurrent module in an architecture like ResNet, where the input of the
 module is cached and added to the output of a tiny multi-layered perceptron (MLP).</p>
-<p>To start, let’s first consider we you would chunk an MLP, and code it using <code class="xref py py-mod docutils literal notranslate"><span class="pre">tensordict.nn</span></code>.
+<p>To start, let’s first consider we you would chunk an MLP, and code it using <a class="reference internal" href="../reference/nn.html#module-tensordict.nn" title="tensordict.nn"><code class="xref py py-mod docutils literal notranslate"><span class="pre">tensordict.nn</span></code></a>.
 The first layer of the stack would presumably be a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Linear</span></code></a> layer, taking an entry as input
 (let us name it <cite>x</cite>) and outputting another entry (which we will name <cite>y</cite>).</p>
 <p>To feed to our module, we have a <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> instance with a single entry,
@@ -565,13 +565,13 @@ executed, as they need to read and write from a tensordict. However, we can grea
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Without compile
-Regular:  206.6223 us
-TDM:  254.6334 us
-Sequential:  433.1427 us
+Regular:  205.9658 us
+TDM:  252.2425 us
+Sequential:  435.1950 us
 Compiled versions
-Compiled regular:  274.1550 us
-Compiled TDM:  288.9760 us
-Compiled sequential:  300.6750 us
+Compiled regular:  273.8490 us
+Compiled TDM:  286.6240 us
+Compiled sequential:  299.2345 us
 </pre></div>
 </div>
 <p>As one can see, the onverhead introduced by <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> has been completely resolved.</p>
@@ -579,7 +579,7 @@ Compiled sequential:  300.6750 us
 <section id="do-s-and-don-t-with-tensordictmodule">
 <h2>Do’s and don’t with TensorDictModule<a class="headerlink" href="#do-s-and-don-t-with-tensordictmodule" title="Permalink to this heading">¶</a></h2>
 <ul>
-<li><p>Don’t use <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequence</span></code> around modules from <code class="xref py py-mod docutils literal notranslate"><span class="pre">tensordict.nn</span></code>. It would break the input/output
+<li><p>Don’t use <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequence</span></code> around modules from <a class="reference internal" href="../reference/nn.html#module-tensordict.nn" title="tensordict.nn"><code class="xref py py-mod docutils literal notranslate"><span class="pre">tensordict.nn</span></code></a>. It would break the input/output
 key structure.
 Always try to rely on <code class="xref py py-class docutils literal notranslate"><span class="pre">nn:TensorDictSequential</span></code> instead.</p></li>
 <li><p>Don’t assign the output tensordict to a new variable, as the output tensordict is just the input modified in-place.
@@ -671,7 +671,7 @@ them without recurring to <a class="reference internal" href="../reference/gener
 introduced by <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictSequential</span></code></a> can be completely removed, leaving users with a neat,
 tensordict-free version of their module.</p>
 <p>In the next tutorial, we will be seeing how <code class="docutils literal notranslate"><span class="pre">torch.export</span></code> can be used to isolate a module and export it.</p>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 15.482 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 15.709 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensordict-module-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/ba42555713e16dc342a5f3e550dec192/tensordict_module.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">tensordict_module.ipynb</span></code></a></p>

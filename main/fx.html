@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4411+g70ebfb74f.d20261007)
+                  main (0.14.0.dev4431+gb3210f0fe.d20261007)
                 </div>
               
             
@@ -357,14 +357,14 @@
               
   <section id="tracing-tensordictmodule">
 <h1>Tracing TensorDictModule<a class="headerlink" href="#tracing-tensordictmodule" title="Permalink to this heading">¶</a></h1>
-<p>We support tracing execution of <code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictModule</span></code> to create FX graphs. Simply import <code class="xref py py-obj docutils literal notranslate"><span class="pre">symbolic_trace</span></code> from <code class="docutils literal notranslate"><span class="pre">tensordict.prototype.fx</span></code> instead of <code class="docutils literal notranslate"><span class="pre">torch.fx</span></code>.</p>
+<p>We support tracing execution of <a class="reference internal" href="reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> to create FX graphs. Simply import <code class="docutils literal notranslate"><span class="pre">symbolic_trace</span></code> from <code class="docutils literal notranslate"><span class="pre">tensordict.prototype.fx</span></code> instead of <code class="docutils literal notranslate"><span class="pre">torch.fx</span></code>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Support for <code class="docutils literal notranslate"><span class="pre">torch.fx</span></code> is highly experimental and subject to change. Use with caution, and raise an issue if you try it out and encounter problems.</p>
 </div>
 <section id="tracing-a-tensordictmodule">
-<h2>Tracing a <code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictModule</span></code><a class="headerlink" href="#tracing-a-tensordictmodule" title="Permalink to this heading">¶</a></h2>
-<p>We’ll illustrate with an example from the overview. We create a <code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictModule</span></code>, trace it, and inspect the graph and generated code.</p>
+<h2>Tracing a <code class="docutils literal notranslate"><span class="pre">TensorDictModule</span></code><a class="headerlink" href="#tracing-a-tensordictmodule" title="Permalink to this heading">¶</a></h2>
+<p>We’ll illustrate with an example from the overview. We create a <a class="reference internal" href="reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>, trace it, and inspect the graph and generated code.</p>
 <div class="literal-block-wrapper docutils container" id="id1">
 <div class="code-block-caption"><span class="caption-text">Tracing a TensorDictModule</span><a class="headerlink" href="#id1" title="Permalink to this code">¶</a></div>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -389,13 +389,12 @@
 <span class="gp">&gt;&gt;&gt; </span><span class="n">graph_module</span> <span class="o">=</span> <span class="n">symbolic_trace</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">graph_module</span><span class="o">.</span><span class="n">graph</span><span class="p">)</span>
 <span class="go">graph():</span>
-<span class="go">    %tensordict : [#users=1] = placeholder[target=tensordict]</span>
-<span class="go">    %getitem : [#users=1] = call_function[target=operator.getitem](args = (%tensordict, input), kwargs = {})</span>
-<span class="go">    %linear : [#users=2] = call_module[target=linear](args = (%getitem,), kwargs = {})</span>
-<span class="go">    %sigmoid : [#users=1] = call_function[target=torch.sigmoid](args = (%linear,), kwargs = {})</span>
+<span class="go">    %tensordict : [num_users=1] = placeholder[target=tensordict]</span>
+<span class="go">    %getitem : [num_users=1] = call_function[target=operator.getitem](args = (%tensordict, input), kwargs = {})</span>
+<span class="go">    %linear : [num_users=2] = call_module[target=linear](args = (%getitem,), kwargs = {})</span>
+<span class="go">    %sigmoid : [num_users=1] = call_function[target=torch.sigmoid](args = (%linear,), kwargs = {})</span>
 <span class="go">    return (linear, sigmoid)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">graph_module</span><span class="o">.</span><span class="n">code</span><span class="p">)</span>
-
 <span class="go">def forward(self, tensordict):</span>
 <span class="go">    getitem = tensordict['input'];  tensordict = None</span>
 <span class="go">    linear = self.linear(getitem);  getitem = None</span>
@@ -419,8 +418,8 @@
 </div>
 </section>
 <section id="tracing-a-tensordictsequential">
-<h2>Tracing a <code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictSequential</span></code><a class="headerlink" href="#tracing-a-tensordictsequential" title="Permalink to this heading">¶</a></h2>
-<p>We can also trace <code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictSequential</span></code>. In this case the entire execution of the module is traced into a single graph, eliminating intermediate reads and writes on the input <code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDict</span></code>.</p>
+<h2>Tracing a <code class="docutils literal notranslate"><span class="pre">TensorDictSequential</span></code><a class="headerlink" href="#tracing-a-tensordictsequential" title="Permalink to this heading">¶</a></h2>
+<p>We can also trace <a class="reference internal" href="reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a>. In this case the entire execution of the module is traced into a single graph, eliminating intermediate reads and writes on the input <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>.</p>
 <p>We demonstrate by tracing the sequential example from the overview.</p>
 <div class="literal-block-wrapper docutils container" id="id2">
 <div class="code-block-caption"><span class="caption-text">Tracing TensorDictSequential</span><a class="headerlink" href="#id2" title="Permalink to this code">¶</a></div>
@@ -453,7 +452,6 @@
 <span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">TensorDictSequential</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">masker</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">graph_module</span> <span class="o">=</span> <span class="n">symbolic_trace</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">graph_module</span><span class="o">.</span><span class="n">code</span><span class="p">)</span>
-
 <span class="go">def forward(self, tensordict):</span>
 <span class="go">    getitem = tensordict[('input', 'x')]</span>
 <span class="go">    _0_fc1 = getattr(self, "0").module.fc1(getitem);  getitem = None</span>
@@ -524,8 +522,8 @@
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">Tracing TensorDictModule</a><ul>
-<li><a class="reference internal" href="#tracing-a-tensordictmodule">Tracing a <code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a></li>
-<li><a class="reference internal" href="#tracing-a-tensordictsequential">Tracing a <code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a></li>
+<li><a class="reference internal" href="#tracing-a-tensordictmodule">Tracing a <code class="docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a></li>
+<li><a class="reference internal" href="#tracing-a-tensordictsequential">Tracing a <code class="docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a></li>
 </ul>
 </li>
 </ul>
