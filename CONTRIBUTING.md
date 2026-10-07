@@ -16,7 +16,8 @@ You will need the following packages to be installed:
 ```bash
 pip install ninja "pybind11[global]" -U
 ```
-as well as cmake (using `apt-get`, `conda` or any other package manager).
+as well as CMake >= 3.22 (using `apt-get`, `conda` or any other package manager)
+and a C++20-capable compiler.
 
 Make sure you install tensordict in develop mode by running
 ```
@@ -78,5 +79,5 @@ disclosure of security bugs. In those cases, please go through the process
 outlined on that page and do not file a public issue.
 
 ## License
-By contributing to rl, you agree that your contributions will be licensed
+By contributing to tensordict, you agree that your contributions will be licensed
 under the LICENSE file in the root directory of this source tree.
