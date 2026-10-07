@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4448+g1a875722f.d20261007)
+                  main (0.14.0.dev4449+g219597c3c.d20261007)
                 </div>
               
             
@@ -397,14 +397,22 @@ your work is on CPU and nothing is shared, <code class="docutils literal notrans
 <code class="docutils literal notranslate"><span class="pre">is_shared=False</span></code> are repeated on every line without adding information.</p>
 <p><a class="reference internal" href="reference/generated/tensordict.set_printoptions.html#tensordict.set_printoptions" title="tensordict.set_printoptions"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_printoptions</span></code></a> lets you control exactly which attributes
 appear.  It works as a <strong>global setter</strong>, a <strong>context manager</strong> or a
-<strong>decorator</strong>, following the same pattern as <a class="reference internal" href="reference/generated/tensordict.set_lazy_legacy.html#tensordict.set_lazy_legacy" title="tensordict.set_lazy_legacy"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_lazy_legacy</span></code></a>
-and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.set_printoptions.html#torch.set_printoptions" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.set_printoptions()</span></code></a>.</p>
+<strong>decorator</strong>, following the same pattern as <a class="reference internal" href="reference/generated/tensordict.set_lazy_legacy.html#tensordict.set_lazy_legacy" title="tensordict.set_lazy_legacy"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_lazy_legacy</span></code></a>.
+Its role is similar to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.set_printoptions.html#torch.set_printoptions" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.set_printoptions()</span></code></a>, which is a plain function
+rather than a context manager or decorator.</p>
 <section id="global-configuration">
 <h3>Global configuration<a class="headerlink" href="#global-configuration" title="Permalink to this heading">¶</a></h3>
-<p>Call <code class="xref py py-meth docutils literal notranslate"><span class="pre">set()</span></code> to change the defaults for the
-rest of the process:</p>
+<p>Call <code class="docutils literal notranslate"><span class="pre">set_printoptions(...).set()</span></code> to change the defaults for the
+rest of the process.  <code class="docutils literal notranslate"><span class="pre">show_device</span></code> and <code class="docutils literal notranslate"><span class="pre">show_is_shared</span></code> control the
+TensorDict-level lines, <code class="docutils literal notranslate"><span class="pre">show_field_device</span></code> and <code class="docutils literal notranslate"><span class="pre">show_field_is_shared</span></code> the
+per-field attributes:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_printoptions</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">set_printoptions</span><span class="p">(</span><span class="n">show_device</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">show_is_shared</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">set_printoptions</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">show_device</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">show_is_shared</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">show_field_device</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">show_field_is_shared</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
@@ -413,14 +421,25 @@ rest of the process:</p>
 <span class="go">    batch_size=torch.Size([32]))</span>
 </pre></div>
 </div>
+<p><code class="docutils literal notranslate"><span class="pre">set()</span></code> only changes the options it is given, so calling
+<code class="docutils literal notranslate"><span class="pre">set_printoptions().set()</span></code> without arguments does not reset anything.  To go
+back to the defaults, set the changed options again explicitly:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">set_printoptions</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">show_device</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">show_is_shared</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">show_field_device</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">show_field_is_shared</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+</pre></div>
+</div>
 </section>
 <section id="scoped-configuration-context-manager">
 <h3>Scoped configuration (context manager)<a class="headerlink" href="#scoped-configuration-context-manager" title="Permalink to this heading">¶</a></h3>
 <p>Use the context-manager form when you only want the change for a specific
 block of code.  The previous settings are automatically restored on exit:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_printoptions</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_printoptions</span><span class="p">(</span><span class="n">show_dtype</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">show_is_shared</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>  <span class="c1"># dtype and is_shared hidden</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_printoptions</span><span class="p">(</span><span class="n">show_dtype</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">show_field_is_shared</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>  <span class="c1"># dtype and per-field is_shared hidden</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>  <span class="c1"># back to defaults</span>
 </pre></div>
 </div>
@@ -608,11 +627,12 @@ replaced by zeros (since the repr does not contain actual data):</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p><a class="reference internal" href="reference/generated/tensordict.parse_tensor_dict_string.html#tensordict.parse_tensor_dict_string" title="tensordict.parse_tensor_dict_string"><code class="xref py py-func docutils literal notranslate"><span class="pre">parse_tensor_dict_string()</span></code></a> currently only works with the
-default (<code class="docutils literal notranslate"><span class="pre">plain</span></code>) print format – the one that includes <code class="docutils literal notranslate"><span class="pre">shape=</span></code>,
+default print format – the one that includes <code class="docutils literal notranslate"><span class="pre">shape=</span></code>,
 <code class="docutils literal notranslate"><span class="pre">device=</span></code>, <code class="docutils literal notranslate"><span class="pre">dtype=</span></code> and <code class="docutils literal notranslate"><span class="pre">is_shared=</span></code> for every field.
-If attributes have been hidden via <a class="reference internal" href="reference/generated/tensordict.set_printoptions.html#tensordict.set_printoptions" title="tensordict.set_printoptions"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_printoptions</span></code></a>,
+If field attributes have been hidden, or extra ones (such as the <code class="docutils literal notranslate"><span class="pre">plain</span></code>
+value summary) added, via <a class="reference internal" href="reference/generated/tensordict.set_printoptions.html#tensordict.set_printoptions" title="tensordict.set_printoptions"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_printoptions</span></code></a>,
 the regex parser will not find the expected fields and reconstruction will
-fail.  Support for non-default formats will be added in a follow-up PR.</p>
+fail.</p>
 </div>
 </section>
 </section>

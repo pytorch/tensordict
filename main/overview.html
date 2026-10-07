@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4448+g1a875722f.d20261007)
+                  main (0.14.0.dev4449+g219597c3c.d20261007)
                 </div>
               
             
@@ -448,30 +448,6 @@ a few characters (notice that indexing the nth leading dimensions with tree_map 
 </div>
 <p>One can also use the set method with <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> or the <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.set_" title="tensordict.TensorDict.set_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set_()</span></code></a> method to do inplace updates of the contents.
 The former is a fault-tolerant version of the latter: if no matching key is found, it will write a new one.</p>
-<section id="in-place-conventions">
-<h3>In-place conventions<a class="headerlink" href="#in-place-conventions" title="Permalink to this heading">¶</a></h3>
-<p>Throughout the library, two related-but-distinct flavors of in-place
-operation are used:</p>
-<ul class="simple">
-<li><p>A trailing-underscore method (<code class="docutils literal notranslate"><span class="pre">method_</span></code>, for example
-<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.add_" title="tensordict.TensorDict.add_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">add_()</span></code></a>, <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.mul_" title="tensordict.TensorDict.mul_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">mul_()</span></code></a>,
-<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.masked_fill_" title="tensordict.TensorDict.masked_fill_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">masked_fill_()</span></code></a>) writes into the <strong>same
-underlying tensor storage</strong> for every leaf. Each leaf’s <code class="docutils literal notranslate"><span class="pre">data_ptr</span></code> is
-preserved. This mirrors PyTorch’s own convention and is only available
-when the operation can be performed without changing a tensor’s shape,
-dtype, or layout.</p></li>
-<li><p>An <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> keyword (for example
-<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.pad" title="tensordict.TensorDict.pad"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pad()</span></code></a>, <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.update" title="tensordict.TensorDict.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a>,
-<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.apply" title="tensordict.TensorDict.apply"><code class="xref py py-meth docutils literal notranslate"><span class="pre">apply()</span></code></a>) preserves the <strong>tensordict’s
-object identity and key set</strong>, but individual leaf storages may be
-replaced with freshly allocated tensors. The guarantee is “no extra
-tensordict-shaped allocation”, and the implementation will release each
-old leaf storage as soon as its replacement is written so that peak
-memory stays close to <code class="docutils literal notranslate"><span class="pre">1x</span></code> rather than <code class="docutils literal notranslate"><span class="pre">2x</span></code>. This is the only
-meaningful flavor of in-place for shape-changing operations.</p></li>
-</ul>
-<p>In short: <code class="docutils literal notranslate"><span class="pre">method_</span></code> keeps the bytes; <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> keeps the
-container.</p>
 <p>The contents of the TensorDict can now be manipulated collectively.
 For example, to place all of the contents onto a particular device one can simply do</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">"cuda:0"</span><span class="p">)</span>
@@ -502,6 +478,36 @@ For example, to place all of the contents onto a particular device one can simpl
 <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">stack()</span></code></a>, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">cat()</span></code></a> and many more.</p>
 <p>If an operation is not present, the <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.apply" title="tensordict.TensorDict.apply"><code class="xref py py-meth docutils literal notranslate"><span class="pre">apply()</span></code></a> method will usually provide the solution
 that was needed.</p>
+<section id="in-place-conventions">
+<h3>In-place conventions<a class="headerlink" href="#in-place-conventions" title="Permalink to this heading">¶</a></h3>
+<p>Throughout the library, two related-but-distinct flavors of in-place
+operation are used:</p>
+<ul class="simple">
+<li><p>A trailing-underscore method (<code class="docutils literal notranslate"><span class="pre">method_</span></code>, for example
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.add_" title="tensordict.TensorDict.add_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">add_()</span></code></a>, <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.mul_" title="tensordict.TensorDict.mul_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">mul_()</span></code></a>,
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.masked_fill_" title="tensordict.TensorDict.masked_fill_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">masked_fill_()</span></code></a>) writes into the <strong>same
+underlying tensor storage</strong> for every leaf. Each leaf’s <code class="docutils literal notranslate"><span class="pre">data_ptr</span></code> is
+preserved. This mirrors PyTorch’s own convention and is only available
+when the operation can be performed without changing a tensor’s shape,
+dtype, or layout.</p></li>
+<li><p>An <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> keyword on a shape-changing operation (for example
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.pad" title="tensordict.TensorDict.pad"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pad()</span></code></a>, <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.repeat" title="tensordict.TensorDict.repeat"><code class="xref py py-meth docutils literal notranslate"><span class="pre">repeat()</span></code></a>,
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.gather" title="tensordict.TensorDict.gather"><code class="xref py py-meth docutils literal notranslate"><span class="pre">gather()</span></code></a>,
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.repeat_interleave" title="tensordict.TensorDict.repeat_interleave"><code class="xref py py-meth docutils literal notranslate"><span class="pre">repeat_interleave()</span></code></a>) preserves the
+<strong>tensordict’s object identity and key set</strong>, but individual leaf storages
+may be replaced with freshly allocated tensors. The guarantee is “no extra
+tensordict-shaped allocation”, and the implementation will release each
+old leaf storage as soon as its replacement is written so that peak
+memory stays close to <code class="docutils literal notranslate"><span class="pre">1x</span></code> rather than <code class="docutils literal notranslate"><span class="pre">2x</span></code>. This is the only
+meaningful flavor of in-place for shape-changing operations.</p></li>
+</ul>
+<p>In short: <code class="docutils literal notranslate"><span class="pre">method_</span></code> keeps the bytes; <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> on a shape-changing
+operation keeps the container.</p>
+<p>For <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.set" title="tensordict.TensorDict.set"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set()</span></code></a>, <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.update" title="tensordict.TensorDict.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a>
+and <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.apply" title="tensordict.TensorDict.apply"><code class="xref py py-meth docutils literal notranslate"><span class="pre">apply()</span></code></a>, <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> means that values
+are written into the existing leaves when the key exists, so each leaf’s
+<code class="docutils literal notranslate"><span class="pre">data_ptr</span></code> is preserved. <code class="docutils literal notranslate"><span class="pre">set()</span></code> and <code class="docutils literal notranslate"><span class="pre">update()</span></code> add the key when it is
+missing.</p>
 </section>
 <section id="escaping-shape-operations-unbatchedtensor">
 <h3>Escaping shape operations: UnbatchedTensor<a class="headerlink" href="#escaping-shape-operations-unbatchedtensor" title="Permalink to this heading">¶</a></h3>
@@ -626,7 +632,7 @@ the tensordict batch-size.</p>
 </section>
 <section id="accessing-non-tensor-data">
 <h3>Accessing Non-Tensor Data<a class="headerlink" href="#accessing-non-tensor-data" title="Permalink to this heading">¶</a></h3>
-<p>You can access the non-tensor data using the key or the get method. Regular <cite>getattr</cite> calls will return the content of
+<p>You can access the non-tensor data using the key or the get method. Indexing with a key (<code class="docutils literal notranslate"><span class="pre">td[&quot;a&quot;]</span></code>) will return the content of
 the <a class="reference internal" href="reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> object whereas <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.get" title="tensordict.TensorDict.get"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get()</span></code></a> will return the
 <a class="reference internal" href="reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> object itself.</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">"a"</span><span class="p">])</span>  <span class="c1"># prints: a string!</span>
@@ -791,10 +797,10 @@ below will be converted to nested TensorDicts).</p>
 </section>
 <section id="lazy-evaluation">
 <h2>Lazy evaluation<a class="headerlink" href="#lazy-evaluation" title="Permalink to this heading">¶</a></h2>
-<p>Some operations on <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> defer execution until items are accessed. For example lazy stacking,
-squeezing, unsqueezing, permuting batch dimensions and creating a view are not executed immediately on all the contents
-of the <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>. Instead they are performed lazily when values in the <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>
-are accessed. This can save a lot of unnecessary calculation should the <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> contain many values.</p>
+<p>Some operations on <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> defer execution until items are accessed. For example, lazy stacking
+with <a class="reference internal" href="reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack" title="tensordict.lazy_stack"><code class="xref py py-func docutils literal notranslate"><span class="pre">lazy_stack()</span></code></a> is not executed immediately on all the contents of the stacked tensordicts.
+Instead it is performed lazily when values in the resulting tensordict are accessed. This can save a lot of unnecessary
+calculation should the <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> contain many values.</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">lazy_stack</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">tensordicts</span> <span class="o">=</span> <span class="p">[</span><span class="n">TensorDict</span><span class="p">({</span>
 <span class="gp">... </span>    <span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span>
@@ -810,9 +816,10 @@ are accessed. This can save a lot of unnecessary calculation should the <a class
 </pre></div>
 </div>
 <p>The caveat is that the get method has now become an expensive operation and, if repeated many times, may cause some
-overhead. One can avoid this by simply calling tensordict.contiguous() after the execution of stack. To further mitigate
-this, TensorDict comes with its own meta-data class (MetaTensor) that keeps track of the type, shape, dtype and device
-of each entry of the dict, without performing the expensive operation.</p>
+overhead. One can avoid this by simply calling tensordict.contiguous() after the execution of stack.</p>
+<p>Shape operations such as squeezing, unsqueezing, permuting batch dimensions and creating a view are executed eagerly
+and return a regular <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>. Their legacy lazy versions are only returned when
+<a class="reference internal" href="reference/generated/tensordict.set_lazy_legacy.html#tensordict.set_lazy_legacy" title="tensordict.set_lazy_legacy"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_lazy_legacy</span></code></a> is enabled (<code class="docutils literal notranslate"><span class="pre">set_lazy_legacy(True)</span></code>).</p>
 </section>
 <section id="lazy-pre-allocation">
 <h2>Lazy pre-allocation<a class="headerlink" href="#lazy-pre-allocation" title="Permalink to this heading">¶</a></h2>
@@ -822,7 +829,7 @@ of each entry of the dict, without performing the expensive operation.</p>
 <span class="gp">... </span>    <span class="n">tensordict</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">foo</span><span class="p">()</span>
 </pre></div>
 </div>
-<p>When <code class="docutils literal notranslate"><span class="pre">i</span> <span class="pre">==</span> <span class="pre">0</span></code> the empty <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> will automatically be populated with empty tensors with batch
+<p>When <code class="docutils literal notranslate"><span class="pre">i</span> <span class="pre">==</span> <span class="pre">0</span></code> the empty <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> will automatically be populated with zero-filled tensors with batch
 size N. In subsequent iterations of the loop the updates will all be written in-place.</p>
 </section>
 <section id="per-leaf-device-and-dtype-casting">
@@ -935,7 +942,7 @@ predecessors, or take additional input from the tensordict as necessary. Here’
 <span class="gp">&gt;&gt;&gt; </span><span class="n">probabilities</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">"output"</span><span class="p">,</span> <span class="s2">"probabilities"</span><span class="p">]</span>
 </pre></div>
 </div>
-<p>In this example, the second module combines the output of the first with the mask stored under (“inputs”, “mask”) in the
+<p>In this example, the second module combines the output of the first with the mask stored under (“input”, “mask”) in the
 <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>.</p>
 <p><a class="reference internal" href="reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> offers a bunch of other features: one can access the list of input and
 output keys by querying the in_keys and out_keys attributes. It is also possible to ask for a sub-graph by querying
