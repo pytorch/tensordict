@@ -64,6 +64,8 @@ from tensordict.utils import (
     _BatchedUninitializedParameter,
     _canonicalize_tensor,
     _check_inbuild,
+    _CHECK_INVARIANTS,
+    _check_invariants,
     _clone_value,
     _create_segments_from_int,
     _create_segments_from_list,
@@ -102,6 +104,7 @@ from tensordict.utils import (
     DeviceType,
     expand_as_right,
     IndexType,
+    is_batchedtensor,
     is_non_tensor,
     is_tensorclass,
     lock_blocked,
@@ -435,8 +438,6 @@ class TensorDict(TensorDictBase):
                         non_blocking=sub_non_blocking,
                     )
                 _tensordict[key] = value
-        # assert names is None or len(names) == self.batch_dims, (names, batch_size)
-        # assert (names is None) or (not all(name is None for name in names))
         self._td_dim_names = names
         if lock:
             self.lock_()
@@ -444,6 +445,8 @@ class TensorDict(TensorDictBase):
             self._is_shared = True
         if is_memmap:
             self._is_memmap = True
+        if _CHECK_INVARIANTS and not is_compiling():
+            _check_invariants(self)
         return self
 
     @classmethod
@@ -970,17 +973,26 @@ class TensorDict(TensorDictBase):
         ):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         # Convert index like (True,) or True to (0,) over unsqueezed self
+        # (False selects nothing, like a 0-d False mask, so it is not converted)
         if isinstance(index, tuple) and len(index) == 1:
             index = index[0]
-        if isinstance(index, (bool, type(None))) or (
-            isinstance(index, torch.Tensor)
-            and index.shape == ()
-            and index.dtype == torch.bool
-            and index.all()
+        if (
+            index is True
+            or index is None
+            or (
+                isinstance(index, torch.Tensor)
+                and index.shape == ()
+                and index.dtype == torch.bool
+                and index.all()
+            )
         ):
             with self.unsqueeze(0) as td_unsqueezed:
                 td_unsqueezed[:] = value
             return
+        if isinstance(index, list):
+            # Index with (list,), as __getitem__ does: torch reads a bare nested
+            # list, and _SubTensorDict any bare list, as per-dim indices
+            index = (index,)
 
         if isinstance(value, (TensorDictBase, dict)):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
@@ -1224,7 +1236,7 @@ class TensorDict(TensorDictBase):
                     if values_only:
                         result = result.values
                     else:
-                        return TensorDict.from_namedtuple(result)
+                        return TensorDict.from_namedtuple(result, batch_size=batch_size)
                 return result
 
             if batch_size is not None:
@@ -1773,7 +1785,7 @@ class TensorDict(TensorDictBase):
         def _check_for_invalid_index(index):
             if batch_size:
                 return
-            if index is None:
+            if index is None or isinstance(index, (bool, np.bool_)):
                 return
             if (
                 isinstance(index, torch.Tensor)
@@ -3157,6 +3169,13 @@ class TensorDict(TensorDictBase):
         existsok,
         robust_key,
     ) -> Self:
+        for key, value in self.items():
+            if _is_unbatched(value):
+                # the leaf would be written and loaded back as a plain tensor
+                raise NotImplementedError(
+                    f"UnbatchedTensor entries cannot be memory-mapped yet, but "
+                    f"{key!r} is one. Exclude it first, e.g. with td.exclude({key!r})."
+                )
         if prefix is not None:
             prefix = Path(prefix)
             if not prefix.exists():
@@ -3267,6 +3286,7 @@ class TensorDict(TensorDictBase):
         *,
         robust_key,
         allow_pickle: bool | None = None,
+        mode: str | None = None,
     ) -> Self:
         if metadata.get("device", "None") == "None":
             metadata["device"] = None
@@ -3281,9 +3301,28 @@ class TensorDict(TensorDictBase):
                 device=metadata.pop("device") if device is None else device,
             )
         else:
+            if is_tensorclass(out):
+                # A tensordict save, such as the ``_tensordict`` directory
+                # refreshed by ``memmap_refresh_``, loads into the tensordict
+                # of a tensorclass.
+                out = out._tensordict
             result = out
+            if out.device is not None:
+                # An unindexed device (e.g. "cuda") matches any index of its type.
+                if device is not None and (
+                    device.type != out.device.type
+                    or device.index is not None
+                    and out.device.index is not None
+                    and device.index != out.device.index
+                ):
+                    raise ValueError(
+                        f"Cannot load a tensordict on device {device} into a "
+                        f"tensordict on device {out.device}."
+                    )
+                device = out.device
 
         paths = []
+        loaded_keys = set()
         for key, entry_metadata in metadata.items():
             if not isinstance(entry_metadata, dict):
                 # there can be other metadata
@@ -3337,6 +3376,7 @@ class TensorDict(TensorDictBase):
                     inplace=False,
                     non_blocking=False,
                 )
+                loaded_keys.add(key)
                 continue
             try:
                 # this was absent in earlier versions of pytorch
@@ -3353,6 +3393,7 @@ class TensorDict(TensorDictBase):
                         (prefix / f"{safe_key}.memmap").with_suffix(".shape.memmap"),
                         shape=shape,
                         dtype=torch.long,
+                        mode=mode,
                     )
                 else:
                     shape = torch.Size(shape)
@@ -3360,6 +3401,7 @@ class TensorDict(TensorDictBase):
                     prefix / f"{safe_key}.memmap",
                     dtype=_STR_DTYPE_TO_DTYPE[dtype],
                     shape=shape,
+                    mode=mode,
                 )
                 if device is not None:
                     tensor = tensor.to(device, non_blocking=True)
@@ -3376,6 +3418,7 @@ class TensorDict(TensorDictBase):
                 inplace=False,
                 non_blocking=False,
             )
+            loaded_keys.add(key)
         # Load collection directories named by metadata. New saves use robust
         # encoding; safe single-component legacy names remain readable.
         for key in paths:
@@ -3393,29 +3436,34 @@ class TensorDict(TensorDictBase):
             if not path.is_dir():
                 continue
             existing_elt = result._get_str(key, default=None)
-            if existing_elt is not None:
-                existing_elt.load_memmap_(
-                    path,
-                    robust_key=robust_key,
-                    allow_pickle=allow_pickle,
-                )
-            else:
-                result._set_str(
-                    key,
-                    TensorDict.load_memmap(
-                        path,
-                        device=device,
-                        non_blocking=True,
-                        robust_key=robust_key,
-                        allow_pickle=allow_pickle,
-                    ),
-                    inplace=False,
-                    validated=False,
-                )
-        # Archive paths are read-only views inside a zip file: they cannot be
-        # used as a target for a subsequent memmap_()/refresh, so only real
-        # directories are recorded.
-        result._memmap_prefix = prefix if isinstance(prefix, Path) else None
+            if existing_elt is not None and not _is_tensor_collection(
+                type(existing_elt)
+            ):
+                existing_elt = None
+            loaded = TensorDict.load_memmap(
+                path,
+                device=device,
+                non_blocking=True,
+                out=existing_elt,
+                robust_key=robust_key,
+                allow_pickle=allow_pickle,
+                mode=mode,
+            )
+            if loaded is not existing_elt:
+                result._set_str(key, loaded, inplace=False, validated=False)
+            loaded_keys.add(key)
+        if out is not None:
+            # Keys of ``out`` that are absent from the saved data are stale.
+            for key in list(result.keys()):
+                if key not in loaded_keys:
+                    result.del_(key)
+        # Archive paths are read-only views inside a zip file, and directories
+        # mapped copy-on-write can hold writes that their files lack: neither
+        # can be used as a target for a subsequent memmap_()/refresh, so only
+        # the other directories are recorded.
+        result._memmap_prefix = (
+            prefix if isinstance(prefix, Path) and mode != "r" else None
+        )
         return result
 
     def _make_memmap_subtd(self, key, *, robust_key):
@@ -4880,6 +4928,7 @@ class _SubTensorDict(TensorDictBase):
         robust_key,
         out=None,
         allow_pickle: bool | None = None,
+        mode: str | None = None,
     ):
         index = _str_to_index(metadata["index"])
         if out is not None:
@@ -4894,6 +4943,7 @@ class _SubTensorDict(TensorDictBase):
                 out=out._source,
                 robust_key=robust_key,
                 allow_pickle=allow_pickle,
+                mode=mode,
             )
             return out
         return _SubTensorDict(
@@ -4902,6 +4952,7 @@ class _SubTensorDict(TensorDictBase):
                 device=device,
                 robust_key=robust_key,
                 allow_pickle=allow_pickle,
+                mode=mode,
             ),
             index,
         )
@@ -5329,6 +5380,17 @@ def _warn_to_module_preserve_module_state(memo) -> None:
     )
 
 
+def _tracks_gradients(tensor: torch.Tensor) -> bool:
+    """Whether wrapping ``tensor`` in a new ``nn.Parameter`` would stop its gradients.
+
+    A new ``nn.Parameter`` is a new leaf, so gradients would no longer reach a
+    tensor that requires grad (a leaf or a computed tensor) or a ``vmap`` slice.
+    """
+    return not isinstance(tensor, torch.nn.Parameter) and (
+        tensor.requires_grad or is_batchedtensor(tensor)
+    )
+
+
 def _maybe_preserve_module_state(
     module: torch.nn.Module,
     name: str,
@@ -5356,6 +5418,9 @@ def _maybe_preserve_module_state(
             not isinstance(tensor, torch.nn.Parameter)
             or tensor.requires_grad != param.requires_grad
         ):
+            if _tracks_gradients(tensor):
+                # swap_tensor writes it to module._parameters as it is
+                return tensor
             return torch.nn.Parameter(tensor, requires_grad=param.requires_grad)
     elif (
         preserve_module_state
@@ -5410,6 +5475,7 @@ def _set_tensor_dict(  # noqa: F811
             _buffers[name] = tensor
             return out
     was_buffer = False
+    keep_parameter_slot = False
     out = _parameters.pop(name, NO_DEFAULT)  # type: ignore[assignment]
     was_parameter = out is not NO_DEFAULT
     if out is NO_DEFAULT:
@@ -5436,7 +5502,10 @@ def _set_tensor_dict(  # noqa: F811
             not isinstance(tensor, torch.nn.Parameter)
             or tensor.requires_grad != out.requires_grad
         ):
-            tensor = torch.nn.Parameter(tensor, requires_grad=out.requires_grad)
+            if _tracks_gradients(tensor):
+                keep_parameter_slot = True
+            else:
+                tensor = torch.nn.Parameter(tensor, requires_grad=out.requires_grad)
     elif (
         preserve_module_state is True
         and was_buffer
@@ -5457,6 +5526,10 @@ def _set_tensor_dict(  # noqa: F811
                 _add_batch_dim_pre_hook(), with_kwargs=True
             )
 
+    elif keep_parameter_slot:
+        # keep the registration without making a new leaf, as
+        # torch.func.functional_call does
+        _parameters[name] = tensor
     elif was_buffer and isinstance(tensor, torch.Tensor):
         _buffers[name] = tensor
     else:

@@ -319,49 +319,19 @@ def convert_ellipsis_to_idx(
         istuple and all(_idx is not Ellipsis for _idx in idx)
     ):
         return idx
-    new_index = ()
     num_dims = len(batch_size)
 
     if idx is Ellipsis:
         idx = (...,)
 
-    num_ellipsis = sum(_idx is Ellipsis for _idx in idx)
-    if num_dims < (len(idx) - num_ellipsis - sum(item is None for item in idx)):
+    if sum(_idx is Ellipsis for _idx in idx) > 1:
+        raise RuntimeError("An index can only have one ellipsis at most.")
+    # the ellipsis covers the dims that the other index elements do not consume
+    ellipsis_length = num_dims - sum(_num_indexed_dims(item) for item in idx)
+    if ellipsis_length < 0:
         raise RuntimeError("Not enough dimensions in TensorDict for index provided.")
-
-    start_pos, after_ellipsis_length = None, 0
-    for i, item in enumerate(idx):
-        if item is Ellipsis:
-            if start_pos is not None:
-                raise RuntimeError("An index can only have one ellipsis at most.")
-            else:
-                start_pos = i
-        if item is not Ellipsis and start_pos is not None:
-            after_ellipsis_length += 1
-        if item is None:
-            # unsqueeze
-            num_dims += 1
-
-    before_ellipsis_length = start_pos
-    if start_pos is None:
-        return idx
-    else:
-        ellipsis_length = num_dims - after_ellipsis_length - before_ellipsis_length
-
-    new_index += idx[:start_pos]
-
-    ellipsis_start = start_pos
-    ellipsis_end = start_pos + ellipsis_length
-    new_index += (slice(None),) * (ellipsis_end - ellipsis_start)
-
-    new_index += idx[start_pos + 1 : start_pos + 1 + after_ellipsis_length]
-
-    if len(new_index) != num_dims:
-        raise RuntimeError(
-            f"The new index {new_index} is incompatible with the dimensions of the batch size {num_dims}."
-        )
-
-    return new_index
+    start_pos = next(i for i, item in enumerate(idx) if item is Ellipsis)
+    return idx[:start_pos] + (slice(None),) * ellipsis_length + idx[start_pos + 1 :]
 
 
 def _copy(self: list[int]) -> list[int]:
@@ -450,7 +420,7 @@ def expand_as_right(
         >>> tensor = torch.zeros(3,4)
         >>> dest = torch.zeros(3,4,5)
         >>> print(expand_as_right(tensor, dest).shape)
-        torch.Size([3,4,5])
+        torch.Size([3, 4, 5])
 
     """
     if dest.ndimension() < tensor.ndimension():
@@ -487,7 +457,7 @@ def expand_right(tensor: Tensor, shape: Sequence[int]) -> Tensor:
         >>> tensor = torch.zeros(3,4)
         >>> shape = (3,4,5)
         >>> print(expand_right(tensor, shape).shape)
-        torch.Size([3,4,5])
+        torch.Size([3, 4, 5])
 
     """
     tensor_expand = tensor
@@ -2211,6 +2181,48 @@ class BufferLegacy(_parent_buffer_cls):
         return t
 
 
+def _is_list_of_bools(index) -> bool:
+    """Whether ``index`` is a non-empty list of bools (a boolean mask for torch)."""
+    return (
+        isinstance(index, list)
+        and bool(index)
+        and all(isinstance(elt, (bool, np.bool_)) for elt in index)
+    )
+
+
+def _nested_list_to_tensor(index):
+    """Converts a nested list index to a tensor, which is how torch reads it."""
+    if isinstance(index, list) and index and isinstance(index[0], list):
+        return torch.tensor(index)
+    return index
+
+
+def _num_indexed_dims(index) -> int:
+    """Number of dims that an element of an index consumes.
+
+    ``None``, ``Ellipsis`` and scalar bools consume no dim, a k-D boolean mask
+    consumes k dims, and any other element consumes one dim.
+    """
+    if index is None or index is Ellipsis or isinstance(index, (bool, np.bool_)):
+        return 0
+    if isinstance(index, list):
+        index = _nested_list_to_tensor(index)
+    if isinstance(index, torch.Tensor) and index.dtype == torch.bool:
+        return index.ndim
+    if isinstance(index, np.ndarray) and index.dtype == np.dtype("bool"):
+        return index.ndim
+    return 1
+
+
+def _bool_lists_to_masks(index):
+    """Converts the lists of bools in an index to boolean tensors."""
+    if isinstance(index, tuple):
+        return tuple(_bool_lists_to_masks(idx) for idx in index)
+    if _is_list_of_bools(index):
+        return torch.tensor(index)
+    return index
+
+
 def _getitem_batch_size(batch_size, index):
     """Given an input shape and an index, returns the size of the resulting indexed tensor.
 
@@ -2231,7 +2243,7 @@ def _getitem_batch_size(batch_size, index):
         torch.Size([1, 4, 3, 2, 1, 1])
     """
     if not isinstance(index, tuple):
-        if isinstance(index, int):
+        if isinstance(index, int) and not isinstance(index, bool):
             return batch_size[1:]
         if isinstance(index, slice) and index == slice(None):
             return batch_size
@@ -2241,43 +2253,59 @@ def _getitem_batch_size(batch_size, index):
     shapes_dict = {}
     look_for_disjoint = False
     disjoint = False
-    bools = []
+    consumed_dims = []
     for i, idx in enumerate(index):
-        boolean = False
-        if isinstance(idx, (range, list)):
+        num_dims = 1
+        if isinstance(idx, list):
+            idx = _nested_list_to_tensor(idx)
+        if _is_list_of_bools(idx):
+            # like torch, a list of bools is a boolean mask
+            shape = torch.Size([int(sum(idx))])
+        elif isinstance(idx, (range, list)):
             shape = len(idx)
         elif isinstance(idx, torch.Tensor):
+            if idx.dtype == torch.uint8:
+                # torch reads a uint8 tensor as a mask (deprecated)
+                idx = idx.bool()
             if idx.dtype == torch.bool:
-                shape = torch.Size([idx.sum()])
-                boolean = True
+                # int() graph-breaks on the data-dependent size under compile
+                shape = torch.Size([int(idx.sum())])
+                num_dims = idx.ndim
             else:
                 shape = idx.shape
         elif isinstance(idx, np.ndarray):
             if idx.dtype == np.dtype("bool"):
-                shape = torch.Size([idx.sum()])
-                boolean = True
+                shape = torch.Size([int(idx.sum())])
+                num_dims = idx.ndim
             else:
                 shape = idx.shape
-        elif isinstance(idx, slice):
+        elif isinstance(idx, slice) or idx is None:
+            # as in torch, advanced indices separated by a slice or None put
+            # their dims first
             look_for_disjoint = not disjoint and (len(shapes_dict) > 0)
             shape = None
+        elif isinstance(idx, (bool, np.bool_)):
+            # like a 0-d mask: an index of size 1 (True) or 0 (False) that
+            # consumes no dim and broadcasts with the other indices
+            shape = torch.Size([int(idx)])
+            num_dims = 0
         else:
             shape = None
         if shape is not None:
             if look_for_disjoint:
                 disjoint = True
             shapes_dict[i] = shape
-        bools.append(boolean)
+        consumed_dims.append(num_dims)
     bs_shape = None
     if shapes_dict:
         bs_shape = torch.broadcast_shapes(*shapes_dict.values())
     out = []
     count = -1
     for i, idx in enumerate(index):
-        if idx is True or idx is None:
+        if idx is None:
             out.append(1)
             continue
-        count += 1 if not bools[i] else idx.ndim
+        count += consumed_dims[i]
         if i in shapes_dict:
             if bs_shape is not None:
                 if disjoint:
@@ -2616,17 +2644,17 @@ def remove_duplicates(
         output (TensorDictBase): input tensordict with the indices corrsponding to duplicated elements
             in tensor `key` along dimension `dim` removed.
         unique_indices (torch.Tensor, optional): The indices of the first occurrences of the unique elements in the
-            input tensordict for the specified `key` along the specified `dim`. Only provided if return_index is True.
+            input tensordict for the specified `key` along the specified `dim`. Only provided if `return_indices` is True.
 
     Example:
         >>> td = TensorDict(
         ...     {
         ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
         ...         "tensor2": torch.tensor([[10, 20], [30, 40], [40, 50], [50, 60]]),
-        ...     }
+        ...     },
         ...     batch_size=[4],
         ... )
-        >>> output_tensordict = remove_duplicate_elements(td, key="tensor1", dim=0)
+        >>> output_tensordict = remove_duplicates(td, key="tensor1", dim=0)
         >>> expected_output = TensorDict(
         ...     {
         ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]]),
@@ -2634,7 +2662,7 @@ def remove_duplicates(
         ...     },
         ...     batch_size=[3],
         ... )
-        >>> assert (td == expected_output).all()
+        >>> assert (output_tensordict == expected_output).all()
     """
     tensor = input.get(key)
 
@@ -2771,6 +2799,50 @@ def _is_unbatched(data) -> bool:
     return out
 
 
+# Set the TD_CHECK_INVARIANTS environment variable (as the CI does) to check the
+# tensordicts that are built without validation, see _check_invariants.
+_CHECK_INVARIANTS = bool(strtobool(os.environ.get("TD_CHECK_INVARIANTS", "0")))
+
+
+def _check_invariants(td) -> None:
+    """Raise an ``AssertionError`` if the batch size, entries or dim names of ``td`` disagree.
+
+    ``TensorDict._new_unsafe`` does not validate its inputs. When
+    ``TD_CHECK_INVARIANTS`` is set, it calls this function, so that code that
+    builds a tensordict with a wrong batch size or wrong dim names fails where
+    the error is made. The ``except RuntimeError`` fallbacks of the library do
+    not catch an ``AssertionError``.
+    """
+    from tensordict.base import _is_tensor_collection
+
+    batch_size = td._batch_size
+    if type(batch_size) is not torch.Size:
+        raise AssertionError(
+            f"The batch size {batch_size!r} is a {type(batch_size).__name__}, "
+            f"not a torch.Size."
+        )
+    batch_dims = len(batch_size)
+    for key, value in td._tensordict.items():
+        if not isinstance(value, Tensor) and not _is_tensor_collection(type(value)):
+            # other values have no batch dims (e.g. the tuples that torch.func
+            # puts in a pytree)
+            continue
+        if _is_unbatched(value):
+            # unbatched entries do not follow the batch size
+            continue
+        shape = _shape(value)
+        if shape[:batch_dims] != batch_size:
+            raise AssertionError(
+                f"The entry {key!r} has shape {shape}, which does not start with "
+                f"the batch size {batch_size}."
+            )
+    names = td._td_dim_names
+    if names is not None and len(names) != batch_dims:
+        raise AssertionError(
+            f"The dim names {names} do not match the batch size {batch_size}."
+        )
+
+
 _NON_TENSOR_MEMO = {}
 
 
@@ -2867,11 +2939,11 @@ def unravel_key(key):
 
     Examples:
         >>> unravel_key("a")
-        "a"
+        'a'
         >>> unravel_key(("a",))
-        "a"
+        'a'
         >>> unravel_key((("a", ("b",))))
-        ("a", "b")
+        ('a', 'b')
 
     """
     if not is_compiling():

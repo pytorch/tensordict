@@ -33,6 +33,7 @@ from tensordict import (
     lazy_legacy,
     lazy_stack,
     LazyStackedTensorDict,
+    load_memmap,
     pack_memmap,
     PersistentTensorDict,
     refresh_archive_checksums,
@@ -1293,6 +1294,20 @@ class TestTensorDicts(TestTensorDictsBase):
             with pytest.raises(TypeError, match="Invalid index"):
                 td[idx]
 
+    def test_getitem_bool_list(self, td_name, device):
+        # a list of bools is a boolean mask, as in torch
+        td = getattr(self, td_name)(device)
+        mask0 = [True, False, True, False]
+        mask1 = [False, True, True]
+        for index, mask_index in (
+            (mask0, torch.tensor(mask0)),
+            ((slice(None), mask1), (slice(None), torch.tensor(mask1))),
+        ):
+            result, expected = td[index], td[mask_index]
+            # assert_allclose_td does not compare batch sizes
+            assert result.batch_size == expected.batch_size
+            assert_allclose_td(result, expected)
+
     def test_getitem_string(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -1955,6 +1970,8 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("use_dir", [True, False])
     @pytest.mark.parametrize("num_threads", [2])
     def test_memmap_threads(self, td_name, device, use_dir, tmpdir, num_threads):
+        if td_name == "td_with_unbatched":
+            pytest.skip("UnbatchedTensor memmap support not yet implemented")
         td = getattr(self, td_name)(device)
         tdmmap = td.memmap(
             prefix=tmpdir if use_dir else None,
@@ -4940,6 +4957,211 @@ class TestSubTensorDictMemmapRoundtrip:
             ["slice", {"start": 0, "stop": 2, "step": None}],
         ]
         assert _str_to_index(legacy) == (slice(None), slice(0, 2))
+
+
+class TestMemmapLoadMode:
+    """``load_memmap(..., mode=...)`` on memmap directories."""
+
+    @staticmethod
+    def _save(path):
+        td = TensorDict(
+            {
+                "a": torch.zeros(3, 4),
+                "nested": {"b": torch.zeros(3)},
+                "stack": lazy_stack([TensorDict(c=torch.zeros(2)) for _ in range(3)]),
+            },
+            batch_size=[3],
+        )
+        td.memmap(path)
+        return td
+
+    @pytest.mark.parametrize("mode", [None, "r", "r+"])
+    def test_in_place_writes(self, tmp_path, mode):
+        self._save(tmp_path)
+        loaded = TensorDict.load_memmap(tmp_path, mode=mode)
+        loaded.add_(1)
+        # a pickled copy maps the files the same way
+        pickle.loads(pickle.dumps(loaded)).add_(1)
+        # "r" keeps in-place writes in memory, the other modes write them
+        # to the files
+        in_memory, on_disk = (1, 0) if mode == "r" else (2, 2)
+        assert (loaded == in_memory).all()
+        assert (TensorDict.load_memmap(tmp_path) == on_disk).all()
+
+    def test_mode_r_maps_copy_on_write(self, tmp_path, monkeypatch):
+        # Shared writable mappings make page faults take write locks on some
+        # network file systems (e.g. Lustre), which stalls concurrent readers.
+        td = self._save(tmp_path / "td")
+        td._get_sub_tensordict((slice(0, 2),)).memmap(tmp_path / "sub")
+        nt = torch.nested.nested_tensor([torch.zeros(2), torch.zeros(3)])
+        TensorDict({"nt": nt}, batch_size=[]).memmap(tmp_path / "nt")
+        shared = []
+        from_file = torch.from_file
+
+        def spy(*args, **kwargs):
+            shared.append(kwargs["shared"])
+            return from_file(*args, **kwargs)
+
+        monkeypatch.setattr(torch, "from_file", spy)
+        for name in ("td", "sub", "nt"):
+            loaded = TensorDict.load_memmap(tmp_path / name, mode="r")
+            pickle.loads(pickle.dumps(loaded))
+        assert shared and not any(shared)
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS or os.getuid() == 0, reason="root can write to read-only files"
+    )
+    def test_mode_rplus_requires_writable_files(self, tmp_path):
+        self._save(tmp_path)
+        (tmp_path / "a.memmap").chmod(stat.S_IREAD)
+        with pytest.raises(PermissionError, match="not writable"):
+            TensorDict.load_memmap(tmp_path, mode="r+")
+
+    def test_mode_r_memmap_(self, tmp_path):
+        self._save(tmp_path)
+        loaded = TensorDict.load_memmap(tmp_path, mode="r")
+        loaded.add_(1)
+        # the loaded tensordict is not bound to the directory
+        loaded.memmap_()
+        assert (loaded == 1).all()
+        assert (TensorDict.load_memmap(tmp_path) == 0).all()
+
+    def test_mode_r_save(self, tmp_path):
+        self._save(tmp_path)
+        loaded = TensorDict.load_memmap(tmp_path, mode="r")
+        loaded.add_(1)
+        # saving to the directory writes the values held in memory
+        saved = loaded.save(tmp_path)
+        assert (saved == 1).all()
+        assert (TensorDict.load_memmap(tmp_path) == 1).all()
+
+    def test_load_memmap_(self, tmp_path):
+        td = self._save(tmp_path)
+        dest = td.clone()
+        dest.load_memmap_(tmp_path, mode="r")
+        dest.add_(1)
+        # the free function forwards the mode too
+        load_memmap(tmp_path, mode="r").add_(1)
+        assert (TensorDict.load_memmap(tmp_path) == 0).all()
+
+    @pytest.mark.parametrize("mode", [None, "r+"])
+    def test_load_memmap_into_memmap(self, tmp_path, mode):
+        dest = self._save(tmp_path / "src").memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "src", mode=mode)
+        assert dest.is_memmap() and dest.saved_path == tmp_path / "src"
+        dest.add_(1)
+        assert (TensorDict.load_memmap(tmp_path / "src") == 1).all()
+
+    def test_mode_r_load_memmap_into_memmap(self, tmp_path):
+        dest = self._save(tmp_path / "src").memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "src", mode="r")
+        dest.add_(1)
+        # the leaves keep their copy-on-write mapping of the files
+        assert dest["a"].filename == str(tmp_path / "src" / "a.memmap")
+        assert (TensorDict.load_memmap(tmp_path / "src") == 0).all()
+        # like a load_memmap() result
+        assert not dest.is_memmap() and not dest.is_locked
+
+    def test_mode_rplus_load_memmap_archive_into_memmap(self, tmp_path):
+        dest = self._save(tmp_path / "td.tdz").memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "td.tdz", mode="r+")
+        dest.add_(1)
+        # in-place writes reach the archive
+        assert (TensorDict.load_memmap(tmp_path / "td.tdz") == 1).all()
+
+    def test_load_memmap_into_memmap_lazy_stack(self, tmp_path):
+        td = lazy_stack([TensorDict(c=torch.zeros(2)) for _ in range(3)])
+        td.memmap(tmp_path / "src")
+        dest = td.memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "src")
+        dest.add_(1)
+        # in-place writes reach the files
+        assert (TensorDict.load_memmap(tmp_path / "src") == 1).all()
+
+
+class TestLoadMemmapOut:
+    """``load_memmap(..., out=...)`` and ``load_memmap_``."""
+
+    @staticmethod
+    def _save(path):
+        td = TensorDict(
+            {"a": torch.ones(3), "nested": {"b": torch.ones(3)}}, batch_size=[3]
+        )
+        td.memmap(path)
+        return td
+
+    def test_nested_device(self, tmp_path):
+        self._save(tmp_path)
+        # out has no device, so only the requested device can place the
+        # leaves of its existing nested containers
+        out = TensorDict(
+            {
+                "a": torch.zeros(3, device="meta"),
+                "nested": {"b": torch.zeros(3, device="meta")},
+            },
+            batch_size=[3],
+        )
+        loaded = TensorDict.load_memmap(tmp_path, device="meta", out=out)
+        assert loaded is out
+        assert loaded["a"].device == torch.device("meta")
+        assert loaded["nested", "b"].device == torch.device("meta")
+
+    def test_device_from_out(self, tmp_path):
+        self._save(tmp_path)
+        out = TensorDict({"nested": {}}, batch_size=[3], device="meta")
+        loaded = TensorDict.load_memmap(tmp_path, out=out)
+        assert loaded["a"].device == torch.device("meta")
+        assert loaded["nested", "b"].device == torch.device("meta")
+
+    def test_device_mismatch(self, tmp_path):
+        self._save(tmp_path)
+        out = TensorDict(batch_size=[3], device="meta")
+        with pytest.raises(ValueError, match="Cannot load a tensordict on device"):
+            TensorDict.load_memmap(tmp_path, device="cpu", out=out)
+
+    def test_stale_keys(self, tmp_path):
+        self._save(tmp_path)
+        out = TensorDict(
+            {
+                "a": torch.zeros(3),
+                "stale": torch.zeros(3),
+                "nested": {"b": torch.zeros(3), "stale": torch.zeros(3)},
+                "stale_nested": {"c": torch.zeros(3)},
+            },
+            batch_size=[3],
+        )
+        nested = out["nested"]
+        loaded = TensorDict.load_memmap(tmp_path, out=out)
+        assert loaded is out
+        assert loaded["nested"] is nested
+        assert set(loaded.keys(True, True)) == {"a", ("nested", "b")}
+        assert (loaded == 1).all()
+
+    def test_load_memmap_stale_keys_into_memmap(self, tmp_path):
+        self._save(tmp_path / "src")
+        dest = TensorDict(
+            {
+                "a": torch.zeros(3),
+                "stale": torch.zeros(3),
+                "nested": {"b": torch.zeros(3), "stale": torch.zeros(3)},
+            },
+            batch_size=[3],
+        ).memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "src")
+        assert set(dest.keys(True, True)) == {"a", ("nested", "b")}
+        assert (dest == 1).all()
+        assert dest.is_memmap() and dest.saved_path == tmp_path / "src"
+        assert dest["nested"].is_memmap()
+        assert dest["nested"].saved_path == tmp_path / "src" / "nested"
+        assert dest["nested", "b"].filename == str(
+            tmp_path / "src" / "nested" / "b.memmap"
+        )
+
+    def test_lazy_stack_length_mismatch(self, tmp_path):
+        lazy_stack([TensorDict(c=torch.zeros(2)) for _ in range(3)]).memmap(tmp_path)
+        out = lazy_stack([TensorDict(c=torch.zeros(2)) for _ in range(2)])
+        with pytest.raises(ValueError, match="Cannot load 3 stacked tensordicts"):
+            TensorDict.load_memmap(tmp_path, out=out)
 
 
 class TestBackward:

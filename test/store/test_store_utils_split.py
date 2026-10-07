@@ -5,6 +5,7 @@
 
 import importlib
 
+import numpy as np
 import pytest
 import torch
 
@@ -98,6 +99,7 @@ _MASK[[0, 2]] = True
         torch.tensor([0, 2]),
         torch.tensor([[0, 2], [1, 3]]),
         _MASK,
+        _MASK.tolist(),
     ],
 )
 @pytest.mark.parametrize("dtype", [torch.float32, torch.int32, torch.int64])
@@ -160,6 +162,8 @@ def test_store_masked_scalar_overflow(value_shape, dtype, number, boundary):
         torch.tensor([-11, 0]),
         torch.tensor([True] + [False] * 8),
         torch.tensor([True] + [False] * 10),
+        [True] + [False] * 8,
+        [True] + [False] * 10,
     ],
 )
 def test_store_byte_ranges_reject_out_of_bounds(idx):
@@ -186,3 +190,105 @@ def test_store_byte_ranges_normalize_negative_indices(idx):
     assert helper_module._compute_byte_ranges([10, 3], torch.float32, idx) == [
         (row * 12, 12) for row in rows
     ]
+
+
+_MASK_2D = torch.tensor(
+    [[True, False, True, False], [False, False, True, True], [True, True, False, False]]
+)
+
+
+@pytest.mark.parametrize(
+    "mask", [torch.tensor(True), torch.tensor(False), _MASK_2D, (_MASK_2D,)]
+)
+def test_store_byte_ranges_skip_masks_that_are_not_1d(mask):
+    # these masks select across dims, so the whole tensor is read or written
+    helper_module = importlib.import_module("tensordict.store._utils")
+    assert helper_module._compute_byte_ranges([3, 4, 5], torch.float32, mask) is None
+
+
+@pytest.mark.parametrize(
+    "mask",
+    [
+        torch.tensor(True),
+        torch.tensor([True, False, True]),
+        _MASK_2D,
+        _MASK_2D[:, :, None],
+    ],
+)
+def test_store_result_shape_of_masks_matches_torch(mask):
+    helper_module = importlib.import_module("tensordict.store._utils")
+    if mask.ndim == 3:
+        mask = mask.expand(3, 4, 5)
+    expected = list(torch.zeros(3, 4, 5)[mask].shape)
+    assert helper_module._getitem_result_shape([3, 4, 5], mask) == expected
+
+
+@pytest.mark.parametrize("idx", [_MASK.tolist(), (_MASK.tolist(),)])
+def test_store_bool_list_is_a_mask(idx):
+    helper_module = importlib.import_module("tensordict.store._utils")
+    rows = torch.arange(10)[idx].tolist()
+    assert helper_module._compute_byte_ranges([10, 3], torch.float32, idx) == [
+        (row * 12, 12) for row in rows
+    ]
+    assert helper_module._getitem_result_shape([10, 3], idx) == [len(rows), 3]
+
+
+_MASK5 = torch.tensor([True, False, False, True, False])
+
+
+@pytest.mark.parametrize(
+    "idx",
+    [
+        3,
+        -1,
+        torch.tensor(3),
+        (3,),
+        slice(1, 4),
+        slice(None, None, 2),
+        slice(2, 2),
+        Ellipsis,
+        [0, 3],
+        [-1, 0],
+        [],
+        range(1, 3),
+        torch.tensor([0, -2]),
+        np.array([0, 3]),
+        _MASK5,
+        _MASK5.tolist(),
+        torch.zeros(5, dtype=torch.bool),
+    ],
+)
+def test_store_non_tensor_positions_match_torch(idx):
+    helper_module = importlib.import_module("tensordict.store._utils")
+    expected = torch.arange(5)[idx]
+    expected = expected.item() if expected.ndim == 0 else expected.tolist()
+    assert helper_module._non_tensor_positions(idx, 5) == expected
+    assert helper_module._non_tensor_write_positions(idx, 5) == expected
+
+
+@pytest.mark.parametrize(
+    "idx",
+    [True, (0, slice(None)), torch.tensor(True), torch.ones(5, 2, dtype=torch.bool)],
+)
+def test_store_non_tensor_positions_unsupported(idx):
+    helper_module = importlib.import_module("tensordict.store._utils")
+    assert helper_module._non_tensor_positions(idx, 5) is None
+    with pytest.raises(TypeError, match="Non-tensor indexed writes"):
+        helper_module._non_tensor_write_positions(idx, 5)
+
+
+def test_store_non_tensor_write_positions_flatten():
+    helper_module = importlib.import_module("tensordict.store._utils")
+    idx = torch.tensor([[0, 1], [3, -1]])
+    # a read keeps the shape of an N-D index by indexing locally
+    assert helper_module._non_tensor_positions(idx, 5) is None
+    assert helper_module._non_tensor_write_positions(idx, 5) == [0, 1, 3, 4]
+
+
+@pytest.mark.parametrize("idx", [5, -6, [0, 5], torch.tensor([True] * 4)])
+def test_store_non_tensor_positions_reject_out_of_bounds(idx):
+    helper_module = importlib.import_module("tensordict.store._utils")
+    with pytest.raises(IndexError):
+        torch.arange(5)[idx]
+    with pytest.raises(IndexError):
+        helper_module._non_tensor_positions(idx, 5)

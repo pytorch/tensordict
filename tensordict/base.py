@@ -94,6 +94,8 @@ from tensordict.utils import (
     _lock_warn,
     _make_dtype_promotion,
     _maybe_correct_neg_dim,
+    _nested_list_to_tensor,
+    _num_indexed_dims,
     _parse_to,
     _pass_through,
     _pass_through_cls,
@@ -666,9 +668,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Examples:
             >>> td = TensorDict({"root": torch.arange(2), ("nested", "entry"): torch.arange(2)}, [2])
             >>> td["root"]
-            torch.tensor([0, 1])
+            tensor([0, 1])
             >>> td["nested", "entry"]
-            torch.tensor([0, 1])
+            tensor([0, 1])
             >>> td[:1]
             TensorDict(
                 fields={
@@ -977,9 +979,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
-            return_argmins (bool, optional): :func:`~torch.min` returns a named tuple with values and indices
-                when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a tensorclass
-                with entries ``"values"`` and ``"indices"`` with idendical structure within. Defaults to ``True``.
+            return_indices (bool, optional): :func:`~torch.min` returns a named tuple with values and indices
+                when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a named tuple
+                with ``values`` and ``indices`` tensordicts of identical structure. If ``False``, only the values
+                are returned. Defaults to ``True``.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -994,36 +997,33 @@ class TensorDictBase(MutableMapping, TensorCollection):
             ...     batch_size=(3, 4)
             ... )
             >>> td.min(dim=0)
-            min(
-                indices=TensorDict(
-                    fields={
-                        a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False),
-                        b: TensorDict(
-                            fields={
-                                c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False),
-                                d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False)},
-                            batch_size=torch.Size([4]),
-                            device=None,
-                            is_shared=False)},
-                    batch_size=torch.Size([4]),
-                    device=None,
-                    is_shared=False),
-                vals=TensorDict(
-                    fields={
-                        a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                        b: TensorDict(
-                            fields={
-                                c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
-                                d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                            batch_size=torch.Size([4]),
-                            device=None,
-                            is_shared=False)},
-                    batch_size=torch.Size([4]),
-                    device=None,
-                    is_shared=False),
+            torch.return_types.min(
+            values=TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([4]),
+                        device=None,
+                        is_shared=False)},
                 batch_size=torch.Size([4]),
                 device=None,
-                is_shared=False)
+                is_shared=False),
+            indices=TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False),
+                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False)},
+                        batch_size=torch.Size([4]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([4]),
+                device=None,
+                is_shared=False))
             >>> td.min()
             TensorDict(
                 fields={
@@ -1145,9 +1145,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
-            return_argmins (bool, optional): :func:`~torch.max` returns a named tuple with values and indices
-                when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a tensorclass
-                with entries ``"values"`` and ``"indices"`` with idendical structure within. Defaults to ``True``.
+            return_indices (bool, optional): :func:`~torch.max` returns a named tuple with values and indices
+                when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a named tuple
+                with ``values`` and ``indices`` tensordicts of identical structure. If ``False``, only the values
+                are returned. Defaults to ``True``.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -1162,36 +1163,33 @@ class TensorDictBase(MutableMapping, TensorCollection):
             ...     batch_size=(3, 4)
             ... )
             >>> td.max(dim=0)
-            max(
-                indices=TensorDict(
-                    fields={
-                        a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False),
-                        b: TensorDict(
-                            fields={
-                                c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False),
-                                d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False)},
-                            batch_size=torch.Size([4]),
-                            device=None,
-                            is_shared=False)},
-                    batch_size=torch.Size([4]),
-                    device=None,
-                    is_shared=False),
-                vals=TensorDict(
-                    fields={
-                        a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                        b: TensorDict(
-                            fields={
-                                c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
-                                d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                            batch_size=torch.Size([4]),
-                            device=None,
-                            is_shared=False)},
-                    batch_size=torch.Size([4]),
-                    device=None,
-                    is_shared=False),
+            torch.return_types.max(
+            values=TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([4]),
+                        device=None,
+                        is_shared=False)},
                 batch_size=torch.Size([4]),
                 device=None,
-                is_shared=False)
+                is_shared=False),
+            indices=TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False),
+                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False)},
+                        batch_size=torch.Size([4]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([4]),
+                device=None,
+                is_shared=False))
             >>> td.max()
             TensorDict(
                 fields={
@@ -1268,9 +1266,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
-            return_argmins (bool, optional): :func:`~torch.cummin` returns a named tuple with values and indices
-                when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a tensorclass
-                with entries ``"values"`` and ``"indices"`` with idendical structure within. Defaults to ``True``.
+            return_indices (bool, optional): :func:`~torch.cummin` returns a named tuple with values and indices
+                when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a named tuple
+                with ``values`` and ``indices`` tensordicts of identical structure. If ``False``, only the values
+                are returned. Defaults to ``True``.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -1285,36 +1284,33 @@ class TensorDictBase(MutableMapping, TensorCollection):
             ...     batch_size=(3, 4)
             ... )
             >>> td.cummin(dim=0)
-            cummin(
-                indices=TensorDict(
-                    fields={
-                        a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False),
-                        b: TensorDict(
-                            fields={
-                                c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False),
-                                d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False)},
-                            batch_size=torch.Size([4]),
-                            device=None,
-                            is_shared=False)},
-                    batch_size=torch.Size([4]),
-                    device=None,
-                    is_shared=False),
-                vals=TensorDict(
-                    fields={
-                        a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                        b: TensorDict(
-                            fields={
-                                c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
-                                d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                            batch_size=torch.Size([4]),
-                            device=None,
-                            is_shared=False)},
-                    batch_size=torch.Size([4]),
-                    device=None,
-                    is_shared=False),
-                batch_size=torch.Size([4]),
+            torch.return_types.cummin(
+            values=TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 4]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3, 4]),
                 device=None,
-                is_shared=False)
+                is_shared=False),
+            indices=TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.int64, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False),
+                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.int64, is_shared=False)},
+                        batch_size=torch.Size([3, 4]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3, 4]),
+                device=None,
+                is_shared=False))
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
             ...     b=TensorDict(
@@ -1388,9 +1384,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
-            return_argmins (bool, optional): :func:`~torch.cummax` returns a named tuple with values and indices
-                when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a tensorclass
-                with entries ``"values"`` and ``"indices"`` with idendical structure within. Defaults to ``True``.
+            return_indices (bool, optional): :func:`~torch.cummax` returns a named tuple with values and indices
+                when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a named tuple
+                with ``values`` and ``indices`` tensordicts of identical structure. If ``False``, only the values
+                are returned. Defaults to ``True``.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -1405,36 +1402,33 @@ class TensorDictBase(MutableMapping, TensorCollection):
             ...     batch_size=(3, 4)
             ... )
             >>> td.cummax(dim=0)
-            cummax(
-                indices=TensorDict(
-                    fields={
-                        a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False),
-                        b: TensorDict(
-                            fields={
-                                c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False),
-                                d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False)},
-                            batch_size=torch.Size([4]),
-                            device=None,
-                            is_shared=False)},
-                    batch_size=torch.Size([4]),
-                    device=None,
-                    is_shared=False),
-                vals=TensorDict(
-                    fields={
-                        a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                        b: TensorDict(
-                            fields={
-                                c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
-                                d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                            batch_size=torch.Size([4]),
-                            device=None,
-                            is_shared=False)},
-                    batch_size=torch.Size([4]),
-                    device=None,
-                    is_shared=False),
-                batch_size=torch.Size([4]),
+            torch.return_types.cummax(
+            values=TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 4]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3, 4]),
                 device=None,
-                is_shared=False)
+                is_shared=False),
+            indices=TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.int64, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False),
+                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.int64, is_shared=False)},
+                        batch_size=torch.Size([3, 4]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3, 4]),
+                device=None,
+                is_shared=False))
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
             ...     b=TensorDict(
@@ -1457,7 +1451,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             call_on_nested=False,
             batch_size=self.batch_size,
         )
-        if isinstance(result, (torch.Tensor, torch.return_types.cummin)):
+        if isinstance(result, (torch.Tensor, torch.return_types.cummax)):
             return result
         if dim is not NO_DEFAULT and return_indices:
             # Split the tensordict
@@ -2786,10 +2780,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
     ):
         """Returns a TensorDict created from a dictionary or another :class:`~.tensordict.TensorDict`.
 
-        If ``batch_size`` is not specified, returns the maximum batch size possible.
+        If ``batch_size`` is not specified and ``auto_batch_size=True``, the maximum batch size possible is used.
 
-        This function works on nested dictionaries too, or can be used to determine the
-        batch-size of a nested tensordict.
+        This function works on nested dictionaries too. For :class:`~tensordict.TensorDict`, a tensor
+        collection passed as ``input_dict`` is currently returned as is, and the keyword arguments are
+        not applied to it: use :meth:`~.auto_batch_size_` to compute the batch size of an existing
+        tensordict.
 
         Args:
             input_dict (dictionary, optional): a dictionary to use as a data source
@@ -2808,7 +2804,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         Examples:
             >>> input_dict = {"a": torch.randn(3, 4), "b": torch.randn(3)}
-            >>> print(TensorDict.from_dict(input_dict))
+            >>> print(TensorDict.from_dict(input_dict, auto_batch_size=True))
             TensorDict(
                 fields={
                     a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -2819,7 +2815,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> # nested dict: the nested TensorDict can have a different batch-size
             >>> # as long as its leading dims match.
             >>> input_dict = {"a": torch.randn(3), "b": {"c": torch.randn(3, 4)}}
-            >>> print(TensorDict.from_dict(input_dict))
+            >>> print(TensorDict.from_dict(input_dict, auto_batch_size=True))
             TensorDict(
                 fields={
                     a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -2832,9 +2828,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 batch_size=torch.Size([3]),
                 device=None,
                 is_shared=False)
-            >>> # we can also use this to work out the batch sie of a tensordict
+            >>> # to work out the batch size of an existing tensordict, use auto_batch_size_
             >>> input_td = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3, 4)}}, [])
-            >>> print(TensorDict.from_dict(input_td))
+            >>> print(input_td.auto_batch_size_())
             TensorDict(
                 fields={
                     a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -2881,7 +2877,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> import torch
             >>>
             >>> @tensorclass
-            >>> class MyClass:
+            ... class MyClass:
             ...     x: torch.Tensor
             ...     y: int
             >>>
@@ -2969,8 +2965,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> pytree_recon = td.to_pytree()
             >>> # Check that the leaves match
             >>> def check(v1, v2):
-            >>>     assert (v1 == v2).all()
-            >>>
+            ...     assert (v1 == v2).all()
+            ...
             >>> torch.utils._pytree.tree_map(check, pytree, pytree_recon)
             >>> assert weird_key in pytree_recon[1]
 
@@ -3544,9 +3540,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         Keyword Args:
             inplace (bool, optional): if ``True``, the parameters or tensors
-                in the module are updated in-place. Defaults to ``False``.
+                in the module are updated in-place. Defaults to ``None``, which
+                behaves like ``False``. Cannot be passed together with
+                ``use_state_dict=True``.
             return_swap (bool, optional): if ``True``, the old parameter configuration
-                will be returned. Defaults to ``False``.
+                will be returned. Defaults to ``True``.
             swap_dest (TensorDictBase, optional): if ``return_swap`` is ``True``,
                 the tensordict where the swap should be written.
             use_state_dict (bool, optional): if ``True``, state-dict API will be
@@ -3559,7 +3557,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 :class:`~torch.nn.Parameter` and buffer registrations are
                 preserved when writing tensor leaves to ``module``: parameters
                 remain parameters with their original ``requires_grad`` value,
-                and buffers remain registered buffers. If ``False``, tensor
+                and buffers remain registered buffers. Leaves that are not
+                parameters but require gradients, or that are batched by
+                :func:`~torch.vmap`, are registered as they are, so that
+                gradients still reach them. If ``False``, tensor
                 leaves are written with the historical replacement semantics,
                 which may deregister an existing parameter when the source leaf
                 is not an :class:`~torch.nn.Parameter`. Defaults to ``True``.
@@ -3704,6 +3705,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Examples:
             >>> from tensordict import TensorDict
             >>> td = TensorDict(a=torch.randn(2), b=torch.randn(2), batch_size=[2])
+            >>> td0 = td.unsqueeze(0)  # the leaves of td0 are views on the leaves of td
             >>> assert (td0.data_ptr() == td.data_ptr()).all()
 
         .. note:: :class:`~tensordict.LazyStackedTensorDict` instances will be displayed as nested tensordicts to
@@ -4419,7 +4421,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             ... }, batch_size=[3, 4])
             >>> with td.unsqueeze(-2) as tds:
             ...     tds.set("y", torch.zeros(3, 1, 4))
-            >>> assert td.get("y").shape == [3, 4]
+            >>> assert td.get("y").shape == (3, 4)
 
         """
         _lazy_legacy = lazy_legacy()
@@ -4489,7 +4491,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             ... }, batch_size=[3, 1, 4])
             >>> with td.squeeze(1) as tds:
             ...     tds.set("y", torch.zeros(3, 4))
-            >>> assert td.get("y").shape == [3, 1, 4]
+            >>> assert td.get("y").shape == (3, 1, 4)
 
         """
         _lazy_legacy = lazy_legacy()
@@ -4581,7 +4583,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             ... }, batch_size=[3, 4])
             >>> td = td.reshape(12)
             >>> print(td['x'])
-            torch.Tensor([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+            tensor([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11])
 
         """
         raise NotImplementedError
@@ -4661,7 +4663,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             :func:`numpy.tile`. For the operator similar to :func:`numpy.repeat`, see :meth:`~tensordict.TensorDictBase.repeat_interleave`.
 
         Args:
-            repeat (torch.Size, int..., tuple of int or list of int): The number of times to repeat this tensor along
+            repeats (torch.Size, int..., tuple of int or list of int): The number of times to repeat this tensor along
                 each dimension.
 
         Keyword Args:
@@ -5002,7 +5004,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             ... }, batch_size=[3, 4])
             >>> td0, td1 = td.split([1, 2], dim=0)
             >>> print(td0['x'])
-            torch.Tensor([[0, 1, 2, 3]])
+            tensor([[0, 1, 2, 3]])
         """
         raise NotImplementedError
 
@@ -5062,7 +5064,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> td.names = ["a", "b"]
             >>> td_gather = td.gather(dim=1, index=index)
             >>> td_gather.names
-            ["a", "b"]
+            ['a', 'b']
         """
         if inplace:
             if out is not None:
@@ -5204,16 +5206,18 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def transpose(self, dim0, dim1):
         """Returns a tensordict that is a transposed version of input. The given dimensions ``dim0`` and ``dim1`` are swapped.
 
-        In-place or out-place modifications of the transposed tensordict will
-        impact the original tensordict too as the memory is shared and the operations
-        are mapped back on the original tensordict.
+        In-place modifications of the transposed tensordict will impact the
+        original tensordict too as the memory is shared. To map out-place
+        modifications (such as new entries) back on the original tensordict,
+        use the transposed tensordict as a context manager.
 
         Examples:
             >>> tensordict = TensorDict({"a": torch.randn(3, 4, 5)}, [3, 4])
             >>> tensordict_transpose = tensordict.transpose(0, 1)
             >>> print(tensordict_transpose.shape)
             torch.Size([4, 3])
-            >>> tensordict_transpose.set("b",, torch.randn(4, 3))
+            >>> with tensordict.transpose(0, 1) as tensordict_transpose:
+            ...     tensordict_transpose["b"] = torch.randn(4, 3)
             >>> print(tensordict.get("b").shape)
             torch.Size([3, 4])
         """
@@ -5308,32 +5312,26 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Examples:
             >>> tensordict = TensorDict({"a": torch.randn(3, 4, 5)}, [3, 4])
             >>> print(tensordict.permute([1, 0]))
-            PermutedTensorDict(
-                source=TensorDict(
-                    fields={
-                        a: Tensor(torch.Size([3, 4, 5]), dtype=torch.float32)},
-                    batch_size=torch.Size([3, 4]),
-                    device=cpu,
-                    is_shared=False),
-                op=permute(dims=[1, 0]))
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([4, 3, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                batch_size=torch.Size([4, 3]),
+                device=None,
+                is_shared=False)
             >>> print(tensordict.permute(1, 0))
-            PermutedTensorDict(
-                source=TensorDict(
-                    fields={
-                        a: Tensor(torch.Size([3, 4, 5]), dtype=torch.float32)},
-                    batch_size=torch.Size([3, 4]),
-                    device=cpu,
-                    is_shared=False),
-                op=permute(dims=[1, 0]))
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([4, 3, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                batch_size=torch.Size([4, 3]),
+                device=None,
+                is_shared=False)
             >>> print(tensordict.permute(dims=[1, 0]))
-            PermutedTensorDict(
-                source=TensorDict(
-                    fields={
-                        a: Tensor(torch.Size([3, 4, 5]), dtype=torch.float32)},
-                    batch_size=torch.Size([3, 4]),
-                    device=cpu,
-                    is_shared=False),
-                op=permute(dims=[1, 0]))
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([4, 3, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                batch_size=torch.Size([4, 3]),
+                device=None,
+                is_shared=False)
         """
         _lazy_legacy = lazy_legacy()
 
@@ -5949,30 +5947,48 @@ class TensorDictBase(MutableMapping, TensorCollection):
         num_boolean_dim = is_boolean(idx)
         names = self.names
         if num_boolean_dim:
-            names = [None] + names[num_boolean_dim:]
+            # an N-D mask merges N dims into one unnamed dim, a 1-D mask keeps
+            # the name of its dim
+            if num_boolean_dim > 1:
+                names = [None] + names[num_boolean_dim:]
         else:
             if not isinstance(idx, tuple):
                 idx = (idx,)
-            if len([_idx for _idx in idx if _idx is not None]) < self.ndim:
+            if sum(_num_indexed_dims(_idx) for _idx in idx) < self.ndim:
                 idx = (*idx, Ellipsis)
             idx_names = convert_ellipsis_to_idx(idx, self.batch_size)
+            idx_names = [_nested_list_to_tensor(_idx) for _idx in idx_names]
+            # scalar bools and 0-d masks add an unnamed dim, unless they
+            # broadcast with another tensor-like index
+            add_0d_dim = not any(
+                isinstance(_idx, (list, range))
+                or (isinstance(_idx, (torch.Tensor, np.ndarray)) and _idx.ndim)
+                for _idx in idx_names
+            )
             # this will convert a [None, :, :, 0, None, 0] in [None, 0, 1, None, 3]
             count = 0
             idx_to_take = []
             no_more_tensors = False
             for _idx in idx_names:
+                num_dims = _num_indexed_dims(_idx)
                 if _idx is None:
                     idx_to_take.append(None)
+                elif not num_dims:
+                    if add_0d_dim:
+                        idx_to_take.append(None)
+                        add_0d_dim = False
                 elif _is_number(_idx):
                     count += 1
                 elif isinstance(_idx, (torch.Tensor, np.ndarray)):
                     if not no_more_tensors:
-                        idx_to_take.extend([count] * _idx.ndim)
-                        count += 1
+                        if num_dims == 1:
+                            idx_to_take.extend([count] * _idx.ndim)
+                        else:
+                            # an N-D mask merges the dims it consumes into one
+                            idx_to_take.append(None)
                         no_more_tensors = True
-                    else:
-                        # skip this one
-                        count += 1
+                    # the other tensors are skipped
+                    count += num_dims
                 else:
                     idx_to_take.append(count)
                     count += 1
@@ -6105,7 +6121,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Examples:
             >>> td = TensorDict({}, batch_size=[1, 2, 3 ,4])
             >>> td.names = list("abcd")
-            >>> assert td.rename_(c="g")
+            >>> td_renamed = td.rename_(c="g")
+            >>> assert td_renamed is td
             >>> assert td.names == list("abgd")
         """
         if len(names) == 1 and names[0] is None:
@@ -6841,6 +6858,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             # Tensors: DTensor, nested and then regular
             if hasattr(value, "full_tensor"):
                 raise NotImplementedError("DTensor is not supported yet")
+            if _is_unbatched(value):
+                # the leaf would be rebuilt as a plain tensor
+                raise NotImplementedError(
+                    f"UnbatchedTensor entries cannot be consolidated yet, but "
+                    f"{unravel_key(total_key)!r} is one."
+                )
             if getattr(value, "is_nested", False):
                 if value.layout is torch.jagged:
                     # Get the values
@@ -6990,7 +7013,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> data_consolidated = data.consolidate()
             >>> # check that the data has a single data_ptr()
             >>> assert torch.tensor([
-            ...     v.untyped_storage().data_ptr() for v in data_c.values(True, True)
+            ...     v.untyped_storage().data_ptr() for v in data_consolidated.values(True, True)
             ... ]).unique().numel() == 1
             >>> # Serializing the tensordict will be faster with data_consolidated
             >>> with open("data.pickle", "wb") as f:
@@ -7864,7 +7887,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         out: TensorDictBase | None = None,
         robust_key: bool | None = True,
         subpath: NestedKey | None = None,
-        mode: str = "r",
+        mode: str | None = None,
         num_threads: int = 0,
         allow_pickle: bool | None = None,
     ) -> Self:
@@ -7880,7 +7903,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 view into the mapping: only the pages of the leaves that are
                 actually accessed are read from disk. Unlike directory-backed
                 tensordicts, in-place writes to the leaves of an
-                archive-loaded tensordict do not propagate to the file.
+                archive-loaded tensordict do not propagate to the file by
+                default (see ``mode``).
             device (torch.device or equivalent, optional): if provided, the
                 data will be asynchronously cast to that device.
                 Supports `"meta"` device, in which case the data isn't loaded
@@ -7890,7 +7914,14 @@ class TensorDictBase(MutableMapping, TensorCollection):
             non_blocking (bool, optional): if ``True``, synchronize won't be
                 called after loading tensors on device. Defaults to ``False``.
             out (TensorDictBase, optional): optional tensordict where the data
-                should be written.
+                should be loaded. Its nested containers are reused, but its
+                leaves are rebound to the loaded tensors, so their storage is
+                not reused. Keys of ``out`` that are missing from the saved
+                data are removed. If ``out`` has a device, the data is loaded
+                on it, and a different ``device`` raises a ``ValueError``.
+                To write the data into the preallocated storage of ``out``,
+                use ``out.update_(TensorDict.load_memmap(prefix, device=device))``
+                instead.
             robust_key (bool, optional): if ``True`` (default), expects robust key encoding was used
                 when saving and decodes filenames accordingly. If ``False``, uses legacy
                 behavior. If ``None``, uses the default robust behavior.
@@ -7901,12 +7932,23 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 Only that subtree is loaded. Works both for directories
                 (equivalent to appending the path to ``prefix``) and for
                 archives.
-            mode (str, optional): ``"r"`` (default) or ``"r+"``. Only
-                relevant when loading an archive: with ``"r"`` the archive is
-                mapped copy-on-write and in-place writes to the leaves stay
-                in memory; with ``"r+"`` the mapping is shared and in-place
-                writes propagate to the file, like directory-backed
-                tensordicts. ``"r+"`` requires uncompressed, aligned tensor
+            mode (str, optional): how the files are memory-mapped. With
+                ``"r"``, the mapping is copy-on-write: in-place writes to the
+                leaves stay in memory. They reach the files only if the
+                tensordict is saved there, and :meth:`~.memmap_` without a
+                prefix does not write back to ``prefix``. With ``"r+"``, the
+                mapping is shared: in-place writes propagate to the files,
+                and a file that is not writable raises a
+                :class:`PermissionError`. Defaults to ``None``, which maps
+                archives as with ``"r"``, and each file of a directory as with
+                ``"r+"`` if the process can write it, as with ``"r"``
+                otherwise. Prefer ``"r"`` for data that is only read: on some
+                network file systems (e.g. Lustre), page faults on a shared
+                writable mapping take write locks, so readers on different
+                nodes block each other. On Linux, copy-on-write mappings count
+                against the memory commit limit, so a file larger than the
+                available RAM and swap can fail to map with ``"r"``. With
+                archives, ``"r+"`` requires uncompressed, aligned tensor
                 payloads (i.e. archives written by tensordict without
                 ``compression``) and is not available for nested-tensor
                 leaves. In-place writes do not update the per-entry CRC-32
@@ -7914,8 +7956,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 checksums, but call
                 :func:`~tensordict.refresh_archive_checksums` before handing
                 a modified archive to tools that verify them (``unzip``,
-                :func:`~tensordict.unpack_memmap`, ...). Directory prefixes
-                are always write-through and ignore this argument.
+                :func:`~tensordict.unpack_memmap`, ...).
             num_threads (int, optional): number of threads used to decompress
                 the leaves of a compressed archive (deflate entries are
                 inflated in parallel, which scales nearly linearly). Without
@@ -7982,8 +8023,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 is_shared=False)
 
         """
-        if mode not in ("r", "r+"):
-            raise ValueError(f"mode must be 'r' or 'r+', got {mode!r}.")
+        if mode not in (None, "r", "r+"):
+            raise ValueError(f"mode must be 'r', 'r+' or None, got {mode!r}.")
         if allow_pickle is not None and not isinstance(allow_pickle, bool):
             raise TypeError("allow_pickle must be a bool or None.")
         if not isinstance(prefix, _ArchivePath):
@@ -8060,10 +8101,13 @@ class TensorDictBase(MutableMapping, TensorCollection):
             "robust_key": robust_key,
         }
         # Avoid changing the default call contract of third-party registered
-        # tensor collection loaders. They only see the new private keyword
-        # when the caller explicitly selects a pickle policy.
+        # tensor collection loaders. They only see the new private keywords
+        # when the caller explicitly selects a pickle policy, or a mode for
+        # the files of a directory (an archive is mapped once, above).
         if allow_pickle is not None:
             load_kwargs["allow_pickle"] = allow_pickle
+        if mode is not None and not isinstance(prefix, _ArchivePath):
+            load_kwargs["mode"] = mode
         out = other_cls._load_memmap(prefix, metadata, **load_kwargs)
         if (
             not non_blocking
@@ -8079,21 +8123,33 @@ class TensorDictBase(MutableMapping, TensorCollection):
         robust_key: bool | None = True,
         *,
         allow_pickle: bool | None = None,
+        mode: str | None = None,
     ):
         """Loads the content of a memory-mapped tensordict within the tensordict where ``load_memmap_`` is called.
+
+        The tensordict and its nested containers are reused, but the leaves
+        are rebound to the loaded tensors, so their storage is not reused.
+        Keys that are missing from the saved data are removed. To write the
+        data into the existing storage, use
+        ``td.update_(TensorDict.load_memmap(prefix, device=td.device))``
+        instead.
 
         See :meth:`~tensordict.TensorDictBase.load_memmap` for more info.
         """
         is_memmap = self.is_memmap()
-        with self.unlock_() if is_memmap else contextlib.nullcontext():
-            self.load_memmap(
-                prefix=prefix,
-                device=self.device,
-                out=self,
-                robust_key=robust_key,
-                allow_pickle=allow_pickle,
-            )
         if is_memmap:
+            self.unlock_()
+        self.load_memmap(
+            prefix=prefix,
+            device=self.device,
+            out=self,
+            robust_key=robust_key,
+            allow_pickle=allow_pickle,
+            mode=mode,
+        )
+        # Without a directory (archive, lazy stack, mode="r"), memmap_() would
+        # copy every leaf into memory: leave the tensordict unlocked instead.
+        if is_memmap and self._memmap_prefix is not None:
             self.memmap_()
         return self
 
@@ -8127,6 +8183,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         robust_key,
         out=None,
         allow_pickle: bool | None = None,
+        mode: str | None = None,
     ):
         raise NotImplementedError
 
@@ -8172,7 +8229,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             self
 
         Examples:
-            >>> td = TensorDict({}, batch_size[3, 4])
+            >>> td = TensorDict({}, batch_size=[3, 4])
             >>> td.set("x", torch.randn(3, 4))
             >>> y = torch.randn(3, 4, 5)
             >>> td.set("y", y, inplace=True) # works, even if 'y' is not present yet
@@ -8222,11 +8279,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> assert data.get_non_tensor(("nested", "the string")) == "a string!"
             >>> # regular `get` works but returns a NonTensorData object
             >>> data.get(("nested", "the string"))
-            NonTensorData(
-                data='a string!',
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)
+            NonTensorData(data=a string!, batch_size=torch.Size([]), device=None)
 
         """
         key = unravel_key(key)
@@ -8284,11 +8337,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> assert data.get_non_tensor(("nested", "the string")) == "a string!"
             >>> # regular `get` works but returns a NonTensorData object
             >>> data.get(("nested", "the string"))
-            NonTensorData(
-                data='a string!',
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)
+            NonTensorData(data=a string!, batch_size=torch.Size([]), device=None)
 
         """
         key = unravel_key(key)
@@ -8416,7 +8465,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             self
 
         Examples:
-            >>> td = TensorDict({}, batch_size[3, 4])
+            >>> td = TensorDict({}, batch_size=[3, 4])
             >>> x = torch.randn(3, 4)
             >>> td.set("x", x)
             >>> td.set_at_("x", value=torch.ones(1, 4), index=slice(1))
@@ -8458,7 +8507,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             self
 
         Examples:
-            >>> td = TensorDict({}, batch_size[3, 4])
+            >>> td = TensorDict({}, batch_size=[3, 4])
             >>> x = torch.randn(3, 4)
             >>> td.set("x", x)
             >>> td.set_("x", torch.zeros_like(x))
@@ -8738,7 +8787,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> assert td['a'] is other_td['a']
             >>> other_td = other_td.clone().zero_()
             >>> td.update(other_td)
-            >>> assert td['a'] is not other_td['a']
+            >>> assert td['a'] is other_td['a']  # entries are written by reference unless clone=True
             >>> # keyword form for top-level entries
             >>> td.update(monkey=torch.zeros(3))
             >>> assert (td["monkey"] == 0).all()
@@ -9112,8 +9161,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
             ...    slice(1, 2))
             TensorDict(
                 fields={
-                    a: Tensor(torch.Size([3, 4, 5]), dtype=torch.float32),
-                    b: Tensor(torch.Size([3, 4, 10]), dtype=torch.float32)},
+                    a: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: Tensor(shape=torch.Size([3, 4, 10]), device=cpu, dtype=torch.float32, is_shared=False)},
                 batch_size=torch.Size([3, 4]),
                 device=None,
                 is_shared=False)
@@ -9703,12 +9752,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Examples:
             >>> from tensordict import TensorDict
             >>> data = TensorDict({"0": 0, "1": {"2": 2}}, batch_size=[])
-            >>> data.keys()
+            >>> list(data.keys())
             ['0', '1']
             >>> list(data.keys(leaves_only=True))
             ['0']
             >>> list(data.keys(include_nested=True, leaves_only=True))
-            ['0', '1', ('1', '2')]
+            ['0', ('1', '2')]
         """
         raise NotImplementedError
 
@@ -11224,8 +11273,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 filtered out. This also comes with a lower computational cost as
                 empty data structures won't be created and destroyed. Non-tensor data
                 is considered as a leaf and thereby will be kept in the tensordict even
-                if left untouched by the function.
-                Defaults to ``False`` for backward compatibility.
+                if left untouched by the function. If ``False``, empty tensordicts are kept.
+                Defaults to ``None``, which behaves like ``True`` (tensordicts left empty by
+                ``fn`` are filtered out, and ``None`` is returned if ``fn`` returns no value at
+                all) except that tensordicts that were already empty are kept.
             propagate_lock (bool, optional): if ``True``, a locked tensordict will produce
                 another locked tensordict. Defaults to ``False``.
             call_on_nested (bool, optional): if ``True``, the function will be called on first-level tensors
@@ -11247,6 +11298,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     ...         return val.apply(mean_any, call_on_nested=True)
                     ...     return val.mean()
                     >>> td_mean = td.apply(mean_any, call_on_nested=True)
+
             out (TensorDictBase, optional): a tensordict where to write the results. This can be used to avoid
                 creating a new tensordict:
 
@@ -11379,8 +11431,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 raise a `KeyError`.
             filter_empty (bool, optional): if ``True``, empty tensordicts will be
                 filtered out. This also comes with a lower computational cost as
-                empty data structures won't be created and destroyed. Defaults to
-                ``False`` for backward compatibility.
+                empty data structures won't be created and destroyed. If ``False``,
+                empty tensordicts are kept. Defaults to ``None``, which behaves like
+                ``True`` (tensordicts left empty by ``fn`` are filtered out, and ``None``
+                is returned if ``fn`` returns no value at all) except that tensordicts
+                that were already empty are kept.
             propagate_lock (bool, optional): if ``True``, a locked tensordict will produce
                 another locked tensordict. Defaults to ``False``.
             call_on_nested (bool, optional): if ``True``, the function will be called on first-level tensors
@@ -13462,7 +13517,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         r"""Performs the element-wise division of :attr:`other1` by :attr:`other2`, multiplies the result by the scalar :attr:`value` and adds it to ``self``.
 
         .. math::
-            \text{out}_i = \text{input}_i + \text{value} \times \frac{\text{tensor1}_i}{\text{tensor2}_i}
+            \text{out}_i = \text{input}_i + \text{value} \times \frac{\text{other1}_i}{\text{other2}_i}
 
         The shapes of the elements of ``self``, :attr:`other1`, and :attr:`other2` must be
         broadcastable.
@@ -13472,10 +13527,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         Args:
             other1 (TensorDict or Tensor): the numerator tensordict (or tensor)
-            tensor2 (TensorDict or Tensor): the denominator tensordict (or tensor)
+            other2 (TensorDict or Tensor): the denominator tensordict (or tensor)
 
         Keyword Args:
-            value (Number, optional): multiplier for :math:`\text{tensor1} / \text{tensor2}`
+            value (Number, optional): multiplier for :math:`\text{other1} / \text{other2}`
         """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other1)):
@@ -15186,26 +15241,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> from tensordict import TensorDict
             >>>
             >>> td = TensorDict(
-            ...     a=torch.arange(24).view(2, 3, 4),
-            ...     b=TensorDict(c=torch.arange(12).reshape(2, 3, 2), batch_size=(2, 3, 2)),
-            ...     batch_size=(2, 3)
+            ...     a=torch.arange(6).view(2, 3),
+            ...     b=TensorDict(c=torch.arange(4).reshape(2, 2), batch_size=(2, 2)),
+            ...     batch_size=(2,)
             ... )
             >>> print(td.to_dict())
-            {'a': tensor([[[ 0,  1,  2,  3],
-                     [ 4,  5,  6,  7],
-                     [ 8,  9, 10, 11]],
-
-                    [[12, 13, 14, 15],
-                     [16, 17, 18, 19],
-                     [20, 21, 22, 23]]]), 'b': {'c': tensor([[[ 0,  1],
-                     [ 2,  3],
-                     [ 4,  5]],
-
-                    [[ 6,  7],
-                     [ 8,  9],
-                     [10, 11]]])}}
+            {'a': tensor([[0, 1, 2],
+                    [3, 4, 5]]), 'b': {'c': tensor([[0, 1],
+                    [2, 3]])}}
             >>> print(td.to_dict(convert_tensors=True))
-            {'a': [[[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]], [[12, 13, 14, 15], [16, 17, 18, 19], [20, 21, 22, 23]]], 'b': {'c': [[[0, 1], [2, 3], [4, 5]], [[6, 7], [8, 9], [10, 11]]]}}
+            {'a': [[0, 1, 2], [3, 4, 5]], 'b': {'c': [[0, 1], [2, 3]]}}
 
         """
         result = {}
@@ -15246,7 +15291,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         Args:
             convert_nodes (bool): if ``True``, leaf nodes will be converted to dictionaries.
-                Otherwise, they will be returned as lists of values. Default: ``True``.
+                Otherwise, they will be returned as tensordicts. Default: ``True``.
             convert_tensors (bool, "numpy"): if ``True``, tensors will be converted to lists when creating the dictionary.
                 If "numpy", tensors will be converted to numpy arrays.
                 Otherwise, they will remain as tensors. Default: ``False``.
@@ -15271,40 +15316,21 @@ class TensorDictBase(MutableMapping, TensorCollection):
             [[{'a': tensor([0, 1, 2, 3]), 'b': [{'c': tensor(0)}, {'c': tensor(1)}]}, {'a': tensor([4, 5, 6, 7]), 'b': [{'c': tensor(2)}, {'c': tensor(3)}]}, {'a': tensor([ 8,  9, 10, 11]), 'b': [{'c': tensor(4)}, {'c': tensor(5)}]}], [{'a': tensor([12, 13, 14, 15]), 'b': [{'c': tensor(6)}, {'c': tensor(7)}]}, {'a': tensor([16, 17, 18, 19]), 'b': [{'c': tensor(8)}, {'c': tensor(9)}]}, {'a': tensor([20, 21, 22, 23]), 'b': [{'c': tensor(10)}, {'c': tensor(11)}]}]]
             >>> print(td.tolist(tolist_first=False))
             [[{'a': tensor([0, 1, 2, 3]), 'b': {'c': tensor([0, 1])}}, {'a': tensor([4, 5, 6, 7]), 'b': {'c': tensor([2, 3])}}, {'a': tensor([ 8,  9, 10, 11]), 'b': {'c': tensor([4, 5])}}], [{'a': tensor([12, 13, 14, 15]), 'b': {'c': tensor([6, 7])}}, {'a': tensor([16, 17, 18, 19]), 'b': {'c': tensor([8, 9])}}, {'a': tensor([20, 21, 22, 23]), 'b': {'c': tensor([10, 11])}}]]
-            >>> print(td.tolist(convert_tensors=False))
-            [[{'a': [0, 1, 2, 3], 'b': [{'c': 0}, {'c': 1}]}, {'a': [4, 5, 6, 7], 'b': [{'c': 2}, {'c': 3}]}, {'a': [8, 9, 10, 11], 'b': [{'c': 4}, {'c': 5}]}], [{'a': [12, 13, 14, 15], 'b': [{'c': 6}, {'c': 7}]}, {'a': [16, 17, 18, 19], 'b': [{'c': 8}, {'c': 9}]}, {'a': [20, 21, 22, 23], 'b': [{'c': 10}, {'c': 11}]}]]
-            >>> print(td.tolist(convert_nodes=False))
-            [[[tensor([0, 1, 2, 3]), TensorDict(
+            >>> print(td.tolist(convert_tensors=True))
+            [[{'a': [0, 1, 2, 3], 'b': {'c': [0, 1]}}, {'a': [4, 5, 6, 7], 'b': {'c': [2, 3]}}, {'a': [8, 9, 10, 11], 'b': {'c': [4, 5]}}], [{'a': [12, 13, 14, 15], 'b': {'c': [6, 7]}}, {'a': [16, 17, 18, 19], 'b': {'c': [8, 9]}}, {'a': [20, 21, 22, 23], 'b': {'c': [10, 11]}}]]
+            >>> print(td.tolist(convert_nodes=False)[0][0])
+            TensorDict(
                 fields={
-                    c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
-                batch_size=torch.Size([2]),
+                    a: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.int64, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
+                        batch_size=torch.Size([2]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
                 device=None,
-                is_shared=False)], [tensor([4, 5, 6, 7]), TensorDict(
-                fields={
-                    c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
-                batch_size=torch.Size([2]),
-                device=None,
-                is_shared=False)], [tensor([ 8,  9, 10, 11]), TensorDict(
-                fields={
-                    c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
-                batch_size=torch.Size([2]),
-                device=None,
-                is_shared=False)]], [[tensor([12, 13, 14, 15]), TensorDict(
-                fields={
-                    c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
-                batch_size=torch.Size([2]),
-                device=None,
-                is_shared=False)], [tensor([16, 17, 18, 19]), TensorDict(
-                fields={
-                    c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
-                batch_size=torch.Size([2]),
-                device=None,
-                is_shared=False)], [tensor([20, 21, 22, 23]), TensorDict(
-                fields={
-                    c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
-                batch_size=torch.Size([2]),
-                device=None,
-                is_shared=False)]]]
+                is_shared=False)
 
         """
         if convert_tensors and not convert_nodes:
@@ -17394,18 +17420,24 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def to(self, *args, **kwargs) -> Self:
         """Maps a TensorDictBase subclass either on another device, dtype or to another TensorDictBase subclass (if permitted).
 
-        Casting tensors to a new dtype is not allowed, as tensordicts are not bound to contain a single
-        tensor dtype.
+        When a dtype is passed, every tensor leaf is cast to that dtype, whatever its original
+        dtype (including integer and boolean leaves).
 
         Args:
             device (torch.device, optional): the desired device of the tensordict.
-            dtype (torch.dtype, optional): the desired floating point or complex dtype of
+            dtype (torch.dtype, optional): the desired dtype of all the tensors in
                 the tensordict.
             tensor (torch.Tensor, optional): Tensor whose dtype and device are the desired
                 dtype and device for all tensors in this TensorDict.
 
         Keyword Args:
-            non_blocking (bool, optional): whether the operations should be blocking.
+            non_blocking (bool, optional): controls how the leaves are copied.
+                If ``None`` (default), the leaves are copied with ``non_blocking=True``
+                and, when the target device is not a CUDA device (e.g. device-to-host
+                copies), the tensordict synchronizes once after all the copies have been
+                issued. If ``True``, the copies are non-blocking and no synchronization
+                is performed: the caller is responsible for synchronizing before reading
+                the results. If ``False``, the copies are blocking.
             memory_format (torch.memory_format, optional): the desired memory
                 format for 4D parameters and buffers in this tensordict.
             batch_size (torch.Size, optional): resulting batch-size of the
@@ -18322,10 +18354,10 @@ def _is_leaf_nontensor(cls: Type) -> bool:
     """Returns ``True`` if a type is not a tensor collection (tensordict or tensorclass) or is a non-tensor.
 
     Examples:
-        >>> from tensordict import TensorDict, default_is_leaf
+        >>> from tensordict import TensorDict, is_leaf_nontensor
         >>> import torch
         >>> td = TensorDict(a={}, b="a string!", c=torch.randn(()))
-        >>> print(td.keys(leaves_only=True, is_leaf=default_is_leaf))
+        >>> print(td.keys(leaves_only=True, is_leaf=is_leaf_nontensor))
         _TensorDictKeysView(['b', 'c'],
             include_nested=False,
             leaves_only=True)

@@ -22,7 +22,7 @@ authors = [
   { name="Vincent Moens", email="vincentmoens@gmail.com" }
 ]
 readme = "README.md"
-license = { text = "BSD" }
+license = { text = "MIT" }
 requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3.10",

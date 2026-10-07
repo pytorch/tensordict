@@ -199,6 +199,17 @@ class TestTD:
             assert (add_one_c(data)["a", "b"] == torch.arange(1, 3)).all()
             assert add_one_c(data).shape == torch.Size([2])
 
+    def test_td_index_bool_mask(self, mode):
+        # the masked size depends on the data, so this graph-breaks
+        def add_one(td, mask):
+            return td[mask] + 1
+
+        add_one_c = torch.compile(add_one, mode=mode)
+        data = TensorDict({"a": {"b": torch.arange(3)}}, [3])
+        result = add_one_c(data, torch.tensor([True, False, True]))
+        assert result.shape == torch.Size([2])
+        assert (result["a", "b"] == torch.tensor([1, 3])).all()
+
     def test_stack(self, mode):
         def stack_tds(td0, td1):
             # return TensorDict.stack([td0, td1])
@@ -1454,6 +1465,28 @@ class TestNN:
         prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
         prob_mod_c(TensorDict(inp=torch.randn(3)))
 
+    @pytest.mark.parametrize("mean_raises", [False, True])
+    def test_prob_module_mean(self, mode, mean_raises):
+        class NoMeanNormal(torch.distributions.Normal):
+            @property
+            def mean(self):
+                raise NotImplementedError
+
+        dist_cls = NoMeanNormal if mean_raises else torch.distributions.Normal
+        prob_mod = Prob(
+            in_keys=["loc", "scale"],
+            out_keys=["sample"],
+            distribution_class=dist_cls,
+            default_interaction_type=InteractionType.MEAN,
+            n_empirical_estimate=8,
+        )
+        td = TensorDict(loc=torch.randn(3), scale=torch.ones(3))
+        prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
+        sample = prob_mod_c(td.copy())["sample"]
+        assert sample.shape == td["loc"].shape
+        if not mean_raises:
+            torch.testing.assert_close(sample, td["loc"])
+
 
 @pytest.mark.skipif(
     TORCH_VERSION <= version.parse("2.4.0"), reason="requires torch>2.4"
@@ -1564,7 +1597,8 @@ class TestFunctional:
     @pytest.mark.skipif(
         TORCH_VERSION <= version.parse("2.5.0"), reason="requires torch>2.5"
     )
-    def test_vmap_functional(self, mode):
+    @pytest.mark.parametrize("preserve_module_state", [False, True])
+    def test_vmap_functional(self, mode, preserve_module_state):
         module = torch.nn.Sequential(
             torch.nn.Linear(3, 4),
             torch.nn.ReLU(),
@@ -1575,7 +1609,7 @@ class TestFunctional:
         td_zero = TensorDictParams(td.data.expand(10).clone().zero_())
 
         def call(x, td):
-            with td.to_module(module, preserve_module_state=False):
+            with td.to_module(module, preserve_module_state=preserve_module_state):
                 result = module(x)
             return result
 

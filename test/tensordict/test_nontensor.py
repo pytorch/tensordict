@@ -775,6 +775,27 @@ class TestNonTensorData:
         loaded = TensorDict.load_memmap(tmp_path, allow_pickle=False)
         assert loaded.tolist() == ["a", "b"]
 
+    def test_load_memmap_refreshes_non_tensor(self, tmp_path):
+        def make(version):
+            return TensorDict(
+                {
+                    "a": torch.full((2,), float(version)),
+                    "data": NonTensorData(f"v{version}", batch_size=[2]),
+                    "stack": NonTensorStack(f"s{version}", f"t{version}"),
+                    "nested": {"data": NonTensorData(f"w{version}", batch_size=[2])},
+                },
+                batch_size=[2],
+            )
+
+        make(2).memmap(tmp_path / "src")
+        dest = make(1).memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "src", allow_pickle=False)
+        assert (dest["a"] == 2).all()
+        assert dest["data"] == "v2"
+        assert list(dest["stack"]) == ["s2", "t2"]
+        assert dest["nested", "data"] == "w2"
+        assert dest.is_memmap()
+
     @pytest.mark.parametrize("allow_pickle", [0, 1, np.bool_(False), np.bool_(True)])
     def test_memmap_pickle_policy_requires_bool(self, tmp_path, allow_pickle):
         td = TensorDict(
@@ -1416,6 +1437,36 @@ class TestUnbatchedTensor:
         assert isinstance(result, torch.Tensor)
         assert isinstance(result, UnbatchedTensor)
         assert result.data_ptr() == data.data_ptr()
+
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize(
+        "method", ["memmap", "memmap_", "memmap_threads", "save", "consolidate"]
+    )
+    def test_unbatched_memmap_consolidate_raise(self, method, nested, tmpdir):
+        # Not supported yet: these used to write the entry as a plain tensor
+        # that no longer matches the batch size.
+        td = TensorDict(
+            a=torch.randn(2, 3),
+            config=UnbatchedTensor(torch.arange(3.0)),
+            batch_size=(2, 3),
+        )
+        if nested:
+            td = TensorDict(nested=td, b=torch.randn(2), batch_size=(2,))
+        match = "memory-mapped" if method != "consolidate" else "consolidated"
+        with pytest.raises(NotImplementedError, match=f"cannot be {match} yet"):
+            if method == "memmap":
+                td.memmap(tmpdir)
+            elif method == "memmap_":
+                td.memmap_(tmpdir)
+            elif method == "memmap_threads":
+                td.memmap(tmpdir, num_threads=2)
+            elif method == "save":
+                td.save(tmpdir)
+            else:
+                td.consolidate()
+        if method == "memmap_" and not nested:
+            assert not td.is_memmap()
+            assert isinstance(td.get("config"), UnbatchedTensor)
 
     def test_unbatched_stack_same_data_no_warning(self):
         data = torch.randn(5)

@@ -1469,7 +1469,8 @@ class TestGeneric:
     @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
     @pytest.mark.parametrize("as_module", [False, True])
     @pytest.mark.parametrize("lazy_stack", [False, True])
-    def test_from_modules(self, as_module, lazy_stack):
+    @pytest.mark.parametrize("preserve_module_state", [False, True])
+    def test_from_modules(self, as_module, lazy_stack, preserve_module_state):
         empty_module = nn.Linear(3, 4, device="meta")
         modules = [nn.Linear(3, 4) for _ in range(3)]
         if as_module and lazy_stack:
@@ -1484,7 +1485,9 @@ class TestGeneric:
         )
 
         def exec_module(params, x):
-            with params.to_module(empty_module, preserve_module_state=False):
+            with params.to_module(
+                empty_module, preserve_module_state=preserve_module_state
+            ):
                 return empty_module(x)
 
         x = torch.zeros(3)
@@ -1691,6 +1694,104 @@ class TestGeneric:
         expected_shape = mocking_tensor[idx].shape
         resulting_shape = _getitem_batch_size(shape, idx)
         assert expected_shape == resulting_shape, (idx, expected_shape, resulting_shape)
+
+    def test_getitem_bool_list(self):
+        # A list of bools is a boolean mask, as in torch
+        td = TensorDict(
+            {"a": torch.arange(12).view(3, 4), "n": {"b": torch.arange(3)}}, [3]
+        )
+        sub = td[[True, False, True]]
+        assert sub.batch_size == torch.Size([2])
+        assert sub["n"].batch_size == torch.Size([2])
+        assert (sub["a"] == torch.tensor([[0, 1, 2, 3], [8, 9, 10, 11]])).all()
+        assert (sub["n", "b"] == torch.tensor([0, 2])).all()
+
+        td = TensorDict({"a": torch.arange(12).view(3, 4)}, [3, 4])
+        sub = td[:, [True, False, True, False]]
+        assert sub.batch_size == torch.Size([3, 2])
+        assert (sub["a"] == torch.tensor([[0, 2], [4, 6], [8, 10]])).all()
+
+    @pytest.mark.parametrize("index", [[True, False, True], [0, 2]])
+    @pytest.mark.parametrize("batch_size", [[3], [3, 4]])
+    def test_setitem_list_index_new_key(self, index, batch_size):
+        # "new" is missing from td, so it is written through a sub-tensordict
+        td = TensorDict({"a": torch.zeros(batch_size)}, batch_size)
+        value_shape = [2, *batch_size[1:]]
+        td[index] = TensorDict(
+            {"a": torch.ones(value_shape), "new": torch.ones(value_shape)},
+            value_shape,
+        )
+        expected = torch.zeros(batch_size)
+        expected[[0, 2]] = 1
+        assert (td["a"] == expected).all()
+        assert td["new"].shape == torch.Size(batch_size)
+        assert (td["new"] == expected).all()
+
+    @pytest.mark.parametrize(
+        "index",
+        [
+            [np.True_, np.False_, np.True_],
+            np.array([True, False, True]),
+            [[0, 1], [1, 2]],
+            (slice(None), [[0, 1], [1, 2]]),
+            [[True, False, True, False], [False, True, False, True], [True] * 4],
+            True,
+            False,
+            (slice(None), False),
+            (True, [0, 2]),
+            (torch.ones(3, 4, dtype=torch.bool), ...),
+            (..., torch.ones(4, 5, dtype=torch.bool)),
+            (slice(None), [2], None, torch.tensor([2])),
+        ],
+    )
+    def test_index_types_follow_torch(self, index):
+        # a bare nested list is a single index, as for (index,) in torch
+        torch_index = index if isinstance(index, tuple) else (index,)
+        tensor = torch.arange(60.0).view(3, 4, 5)
+        expected = tensor[torch_index]
+        td = TensorDict({"a": tensor, "n": {"b": tensor}}, [3, 4, 5])
+        sub = td[index]
+        assert sub.batch_size == expected.shape
+        assert (sub["a"] == expected).all()
+        assert (sub["n", "b"] == expected).all()
+
+        # write a tensordict with an existing and a new key, and a scalar
+        written = tensor.clone()
+        written[torch_index] = -1
+        new = torch.zeros(3, 4, 5)
+        new[torch_index] = -1
+        td = TensorDict({"a": tensor.clone()}, [3, 4, 5])
+        value = -torch.ones(expected.shape)
+        td[index] = TensorDict({"a": value, "new": value}, expected.shape)
+        assert (td["a"] == written).all()
+        assert (td["new"] == new).all()
+        td = TensorDict({"a": tensor.clone()}, [3, 4, 5])
+        td[index] = -1.0
+        assert (td["a"] == written).all()
+
+    def test_index_uint8_mask(self):
+        mask = torch.tensor([1, 0, 2], dtype=torch.uint8)
+        tensor = torch.arange(60.0).view(3, 4, 5)
+        td = TensorDict({"a": tensor, "n": {"b": tensor}}, [3, 4, 5])
+        with warnings.catch_warnings():
+            # torch reads a uint8 tensor as a mask, and warns that it is deprecated
+            warnings.filterwarnings("ignore", "indexing with dtype torch.uint8")
+            expected = tensor[mask]
+            sub = td[mask]
+            value = -torch.ones(expected.shape)
+            written = tensor.clone()
+            written[mask] = value
+            td_written = TensorDict({"a": tensor.clone()}, [3, 4, 5])
+            td_written[mask] = TensorDict({"a": value}, expected.shape)
+        assert sub.batch_size == expected.shape
+        assert (sub["a"] == expected).all()
+        assert (sub["n", "b"] == expected).all()
+        assert (td_written["a"] == written).all()
+
+    def test_getitem_scalar_bool_0d(self):
+        td = TensorDict({"a": torch.tensor(1.0)}, [])
+        assert td[True].batch_size == torch.Size([1])
+        assert td[False].batch_size == torch.Size([0])
 
     def test_getitem_nested(self):
         tensor = torch.randn(4, 5, 6, 7)
@@ -4022,6 +4123,20 @@ class TestGeneric:
                 assert other.shape == td.shape
             else:
                 assert other.shape == td[k[:-1]].shape
+
+    def test_cummin_cummax_reduce(self):
+        td = TensorDict(
+            a=torch.randn(3, 4, 5),
+            b=TensorDict(
+                c=torch.randn(3, 4, 5), d=torch.randn(3, 4, 5), batch_size=(3, 4, 5)
+            ),
+            batch_size=(3, 4),
+        )
+        cummax = td.cummax(reduce=True, dim=0)
+        cummin = (-td).cummin(reduce=True, dim=0)
+        assert isinstance(cummax, torch.return_types.cummax)
+        torch.testing.assert_close(cummax.values, -cummin.values)
+        torch.testing.assert_close(cummax.indices, cummin.indices)
 
     @pytest.mark.parametrize(
         "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "quantile"]

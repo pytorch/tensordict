@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
+import numpy as np
 import torch
+from tensordict.utils import _bool_lists_to_masks
 
 __all__ = [
     "_LUA_GETRANGES",
@@ -18,6 +20,8 @@ __all__ = [
     "_get_local_idx",
     "_getitem_result_shape",
     "_is_scattered_index",
+    "_non_tensor_positions",
+    "_non_tensor_write_positions",
     "_normalize_index",
     "_prepare_indexed_value",
     "_str_to_dtype",
@@ -95,12 +99,70 @@ def _normalize_index(idx: int, size: int) -> int:
     return idx + size if idx < 0 else idx
 
 
+def _non_tensor_positions(
+    idx, size: int, flatten: bool = False
+) -> int | list[int] | None:
+    """Return the positions along dim 0 that *idx* selects in a ``json_array``.
+
+    Returns an int for an integer index, which removes the dim, a list of
+    positions for an index that keeps the dim, and ``None`` for any other index.
+    With ``flatten=True``, an N-D integer index gives its flattened positions.
+    """
+    if isinstance(idx, tuple):
+        if len(idx) != 1:
+            return None
+        idx = idx[0]
+    if idx is Ellipsis:
+        idx = slice(None)
+    if isinstance(idx, (list, np.ndarray)):
+        idx = torch.as_tensor(idx)
+    if isinstance(idx, bool) or (
+        isinstance(idx, torch.Tensor) and idx.dtype == torch.bool and idx.ndim != 1
+    ):
+        # scalar bools and N-D masks add or merge dims
+        return None
+    if isinstance(idx, torch.Tensor) and idx.ndim == 0:
+        idx = int(idx)
+    if isinstance(idx, int):
+        return _normalize_index(idx, size)
+    if isinstance(idx, slice):
+        return list(range(*idx.indices(size)))
+    if isinstance(idx, range):
+        return [_normalize_index(p, size) for p in idx]
+    if isinstance(idx, torch.Tensor):
+        if idx.dtype == torch.bool:
+            if idx.shape[0] != size:
+                raise IndexError(
+                    f"The shape of the mask {list(idx.shape)} does not match "
+                    f"dimension 0 with size {size}"
+                )
+            return idx.nonzero().squeeze(-1).tolist()
+        if idx.ndim == 1 or flatten:
+            return [_normalize_index(p, size) for p in idx.reshape(-1).tolist()]
+    return None
+
+
+def _non_tensor_write_positions(idx, size: int) -> int | list[int]:
+    """Like :func:`_non_tensor_positions`, but raise for an unsupported index.
+
+    A write only needs the positions, so an N-D integer index is flattened.
+    """
+    positions = _non_tensor_positions(idx, size, flatten=True)
+    if positions is None:
+        raise TypeError(
+            f"Non-tensor indexed writes support indices along dim 0, got {idx!r}"
+        )
+    return positions
+
+
 def _compute_byte_ranges(
     shape: list[int],
     dtype: torch.dtype,
     idx,
 ) -> list[tuple[int, int]] | None:
     """Compute per-row ``(byte_offset, byte_length)`` pairs for the write path."""
+    # like torch, a list of bools is a boolean mask
+    idx = _bool_lists_to_masks(idx)
     if isinstance(idx, tuple):
         if len(idx) == 1:
             idx = idx[0]
@@ -132,7 +194,11 @@ def _compute_byte_ranges(
 
     if isinstance(idx, torch.Tensor):
         if idx.dtype == torch.bool:
-            if idx.ndim == 1 and idx.shape[0] != shape[0]:
+            if idx.ndim != 1:
+                # a 0-d or N-D mask does not select rows of dim 0: the caller
+                # reads or writes the whole tensor and indexes it locally
+                return None
+            if idx.shape[0] != shape[0]:
                 raise IndexError(
                     f"The shape of the mask {list(idx.shape)} does not match "
                     f"dimension 0 with size {shape[0]}"
@@ -214,6 +280,7 @@ def _getitem_result_shape(
     idx,
 ) -> list[int]:
     """Compute the result shape of ``tensor[idx]`` without creating a tensor."""
+    idx = _bool_lists_to_masks(idx)
     if isinstance(idx, tuple):
         if len(idx) == 1:
             idx = idx[0]
@@ -240,8 +307,9 @@ def _getitem_result_shape(
 
     if isinstance(idx, torch.Tensor):
         if idx.dtype == torch.bool:
+            # a k-D mask replaces the k dims it covers with one dim
             n = int(idx.sum().item())
-            return [n] + rest
+            return [n] + list(shape[idx.ndim :])
         return list(idx.shape) + rest
 
     return list(torch.zeros(shape)[idx].shape)
@@ -251,6 +319,7 @@ def _prepare_indexed_value(
     value: torch.Tensor, shape: list[int], dtype: torch.dtype, idx
 ) -> torch.Tensor:
     """Match the selected shape and data type before converting values to bytes."""
+    idx = _bool_lists_to_masks(idx)
     if isinstance(idx, tuple) and len(idx) == 1:
         idx = idx[0]
     if isinstance(idx, torch.Tensor) and idx.ndim == 0 and idx.dtype != torch.bool:

@@ -33,6 +33,7 @@ from tensordict.base import (
 )
 from tensordict.utils import (
     _as_context_manager,
+    _bool_lists_to_masks,
     _getitem_batch_size,
     _is_tensorclass,
     _KEY_ERROR,
@@ -68,6 +69,8 @@ from tensordict.store._utils import (
     _is_scattered_index,
     _LUA_GETRANGES,
     _LUA_SETRANGES,
+    _non_tensor_positions,
+    _non_tensor_write_positions,
     _normalize_index,
     _prepare_indexed_value,
     _str_to_dtype,
@@ -508,29 +511,14 @@ class TensorDictStore(TensorDictBase):
             # Key doesn't exist yet — create one filled with None
             array = [None] * batch_dim
 
-        if isinstance(idx, int):
-            array[idx] = value
-        elif isinstance(idx, slice):
-            indices = range(*idx.indices(len(array)))
-            if not isinstance(value, (list, tuple)):
-                value = [value] * len(indices)
-            for i, v in zip(indices, value):
-                array[i] = v
-        elif isinstance(idx, torch.Tensor):
-            indices = idx.reshape(-1).tolist()
-            if not isinstance(value, (list, tuple)):
-                value = [value] * len(indices)
-            for i, v in zip(indices, value):
-                array[i] = v
-        elif isinstance(idx, (list, range)):
-            if not isinstance(value, (list, tuple)):
-                value = [value] * len(idx)
-            for i, v in zip(idx, value):
-                array[i] = v
+        positions = _non_tensor_write_positions(idx, len(array))
+        if isinstance(positions, int):
+            array[positions] = value
         else:
-            raise TypeError(
-                f"Non-tensor indexed write supports int/slice/Tensor/list, got {type(idx)}"
-            )
+            if not isinstance(value, (list, tuple)):
+                value = [value] * len(positions)
+            for i, v in zip(positions, value):
+                array[i] = v
 
         serialized = json.dumps(array).encode("utf-8")
         new_meta = {"is_non_tensor": "1", "encoding": "json_array"}
@@ -581,29 +569,14 @@ class TensorDictStore(TensorDictBase):
             else:
                 array = [None] * batch_dim
 
-            if isinstance(idx, int):
-                array[idx] = value
-            elif isinstance(idx, slice):
-                indices = range(*idx.indices(len(array)))
-                if not isinstance(value, (list, tuple)):
-                    value = [value] * len(indices)
-                for j, v in zip(indices, value):
-                    array[j] = v
-            elif isinstance(idx, torch.Tensor):
-                indices = idx.reshape(-1).tolist()
-                if not isinstance(value, (list, tuple)):
-                    value = [value] * len(indices)
-                for j, v in zip(indices, value):
-                    array[j] = v
-            elif isinstance(idx, (list, range)):
-                if not isinstance(value, (list, tuple)):
-                    value = [value] * len(idx)
-                for j, v in zip(idx, value):
-                    array[j] = v
+            positions = _non_tensor_write_positions(idx, len(array))
+            if isinstance(positions, int):
+                array[positions] = value
             else:
-                raise TypeError(
-                    f"Non-tensor indexed write supports int/slice/Tensor/list, got {type(idx)}"
-                )
+                if not isinstance(value, (list, tuple)):
+                    value = [value] * len(positions)
+                for j, v in zip(positions, value):
+                    array[j] = v
 
             serialized = json.dumps(array).encode("utf-8")
             new_meta = {"is_non_tensor": "1", "encoding": "json_array"}
@@ -683,12 +656,13 @@ class TensorDictStore(TensorDictBase):
         return {k.decode() if isinstance(k, bytes) else k for k in raw}
 
     async def _aget_metadata_batch(
-        self, key_paths: list[str]
+        self, key_paths: list[str], non_tensor: dict | None = None
     ) -> dict[str, tuple[list[int], torch.dtype]]:
         """Get ``(shape, dtype)`` for multiple keys, using the local cache when available.
 
         Cache misses are fetched via a single Redis pipeline and stored back
-        into ``_meta_cache`` (when caching is enabled).
+        into ``_meta_cache`` (when caching is enabled). When *non_tensor* is
+        given, the metadata of non-tensor keys is stored there instead.
         """
         result: dict[str, tuple[list[int], torch.dtype]] = {}
         uncached: list[str] = []
@@ -705,6 +679,9 @@ class TensorDictStore(TensorDictBase):
             raw_metas = await pipe.execute()
             for kp, raw_meta in zip(uncached, raw_metas):
                 meta = _decode_meta(raw_meta)
+                if non_tensor is not None and meta.get("is_non_tensor") == "1":
+                    non_tensor[kp] = meta
+                    continue
                 shape = json.loads(meta["shape"])
                 dtype = _str_to_dtype(meta["dtype"])
                 result[kp] = (shape, dtype)
@@ -790,11 +767,24 @@ class TensorDictStore(TensorDictBase):
           returning concatenated bytes.
 
         Falls back to full ``GET`` + local indexing for unsupported index types.
+        Non-tensor keys are read in full and indexed as in ``store[idx]``.
         """
         if not key_paths:
             return {}
 
-        meta_map = await self._aget_metadata_batch(key_paths)
+        non_tensor_metas: dict[str, dict] = {}
+        meta_map = await self._aget_metadata_batch(
+            key_paths, non_tensor=non_tensor_metas
+        )
+        result: dict[str, torch.Tensor | Any] = {}
+        if non_tensor_metas:
+            pipe = self._client.pipeline()
+            for kp in non_tensor_metas:
+                pipe.get(self._data_key(kp))
+            for (kp, meta), data in zip(non_tensor_metas.items(), await pipe.execute()):
+                if data is not None:
+                    result[kp] = self._deserialize_non_tensor(data, meta, idx=idx)
+            key_paths = [kp for kp in key_paths if kp not in non_tensor_metas]
         scattered = _is_scattered_index(idx)
 
         pipe = self._client.pipeline()
@@ -839,7 +829,6 @@ class TensorDictStore(TensorDictBase):
         has_cmds = any(has_cmd for _, _, _, _, has_cmd in plan)
         raw_results = await pipe.execute() if has_cmds else []
 
-        result: dict[str, torch.Tensor] = {}
         ri = 0
         for kp, result_shape, dtype, local_idx, has_cmd in plan:
             if not has_cmd:
@@ -1253,23 +1242,21 @@ class TensorDictStore(TensorDictBase):
 
         if encoding == "json_array":
             array = json.loads(text)
-            if idx is not None:
-                if isinstance(idx, int):
-                    return array[idx]
-                if isinstance(idx, slice):
-                    return array[idx]
-                if isinstance(idx, (list, torch.Tensor)):
-                    indices = idx
-                    if isinstance(indices, torch.Tensor):
-                        indices = indices.tolist()
-                    return [array[i] for i in indices]
-            # Full-batch read: wrap in NonTensorStack for TensorClass compat
-            from tensordict._lazy import LazyStackedTensorDict
-            from tensordict.tensorclass import NonTensorData
+            positions = None if idx is None else _non_tensor_positions(idx, len(array))
+            if isinstance(positions, int):
+                return array[positions]
+            if positions is not None:
+                array = [array[p] for p in positions]
+            # Wrap in NonTensorStack for TensorClass compat
+            from tensordict.tensorclass import NonTensorData, NonTensorStack
 
-            return LazyStackedTensorDict(
+            stack = NonTensorStack(
                 *[NonTensorData(data=v, batch_size=[]) for v in array]
             )
+            if idx is not None and positions is None:
+                # other indices, e.g. multi-dimensional ones: index locally
+                return stack[idx]
+            return stack
 
         # Scalar encoding — return the single stored value (broadcast).
         if encoding == "json":
@@ -1336,8 +1323,12 @@ class TensorDictStore(TensorDictBase):
         prefix = (self._prefix + _KEY_SEP) if self._prefix else ""
         leaf_kps = sorted(k for k in all_keys if k.startswith(prefix) or not prefix)
 
-        # Single batched pipeline for all keys
-        result_map = self._run_sync(self._abatch_index(leaf_kps, index))
+        # Single batched pipeline for all keys. The byte-range planner reads a
+        # list as integer positions, so a list of bools is passed as a mask
+        # to match new_batch_size.
+        result_map = self._run_sync(
+            self._abatch_index(leaf_kps, _bool_lists_to_masks(index))
+        )
 
         # Build nested source dict from flat key paths
         prefix_len = len(prefix)
@@ -1398,6 +1389,11 @@ class TensorDictStore(TensorDictBase):
             elif not is_tensor_collection(val):
                 non_tensor_items.append((key_path, val))
 
+        if non_tensor_items:
+            # check the index before writing anything, to avoid a partial write
+            _non_tensor_write_positions(
+                index, self._batch_size[0] if self._batch_size else 1
+            )
         if tensor_items:
             self._run_sync(self._abatch_set_at(tensor_items))
         if non_tensor_items:
@@ -2450,6 +2446,9 @@ class TensorDictStore(TensorDictBase):
                 self._loop.call_soon_threadsafe(self._loop.stop)
             if hasattr(self, "_thread") and self._thread.is_alive():
                 self._thread.join(timeout=2)
+            if hasattr(self, "_loop") and not self._loop.is_running():
+                # releases the selector and the self-pipe sockets of the loop
+                self._loop.close()
             self._owns_loop = False
 
     def clear_redis(self):
@@ -2609,6 +2608,17 @@ class TensorDictStore(TensorDictBase):
         )
 
     def memmap_(self, prefix=None, copy_existing=False, num_threads=0):
+        """Raises a ``RuntimeError``: a TensorDictStore cannot be memory-mapped in-place.
+
+        Use :meth:`~tensordict.TensorDictBase.memmap` to build a memory-mapped copy instead.
+
+        Args:
+            prefix (str, optional): unused.
+            copy_existing (bool, optional): unused.
+            num_threads (int, optional): unused.
+
+        See :meth:`~tensordict.TensorDictBase.memmap_`.
+        """
         raise RuntimeError(
             f"Cannot build a memmap TensorDict in-place from a {type(self).__name__}. "
             "Use `td.memmap()` instead."
@@ -2641,6 +2651,17 @@ class TensorDictStore(TensorDictBase):
 
     @_as_context_manager()
     def flatten_keys(self, separator=".", inplace=False):
+        """Returns an in-memory copy where the nested keys are joined by ``separator``.
+
+        The content is first loaded with :meth:`~tensordict.TensorDictBase.to_tensordict`.
+
+        Args:
+            separator (str, optional): the separator between the nested items. Defaults to ``"."``.
+            inplace (bool, optional): must be ``False``; ``True`` raises a ``ValueError``.
+                Defaults to ``False``.
+
+        See :meth:`~tensordict.TensorDictBase.flatten_keys`.
+        """
         if inplace:
             raise ValueError(
                 f"Cannot call flatten_keys in_place with a {type(self).__name__}."
@@ -3148,6 +3169,15 @@ class _StoreStackElementView(TensorDictBase):
         raise RuntimeError(f"Cannot make memmap on a {type(self).__name__}.")
 
     def memmap_(self, prefix=None, copy_existing=False, num_threads=0):
+        """Raises a ``RuntimeError``: a stack element view cannot be memory-mapped in-place.
+
+        Args:
+            prefix (str, optional): unused.
+            copy_existing (bool, optional): unused.
+            num_threads (int, optional): unused.
+
+        See :meth:`~tensordict.TensorDictBase.memmap_`.
+        """
         raise RuntimeError(f"Cannot call memmap_ on a {type(self).__name__}.")
 
     def pin_memory(self, *a, **kw):
@@ -3168,6 +3198,17 @@ class _StoreStackElementView(TensorDictBase):
 
     @_as_context_manager()
     def flatten_keys(self, separator=".", inplace=False):
+        """Returns an in-memory copy where the nested keys are joined by ``separator``.
+
+        The content is first loaded with :meth:`~tensordict.TensorDictBase.to_tensordict`.
+
+        Args:
+            separator (str, optional): the separator between the nested items. Defaults to ``"."``.
+            inplace (bool, optional): ignored; a new tensordict is always returned.
+                Defaults to ``False``.
+
+        See :meth:`~tensordict.TensorDictBase.flatten_keys`.
+        """
         return self.to_tensordict().flatten_keys(separator=separator)
 
     @_as_context_manager()
@@ -4099,7 +4140,10 @@ class LazyStackedTensorDictStore(TensorDictBase):
             names = self._get_names_idx(index)
 
         all_keys = sorted(self._get_all_keys())
-        result_map = self._run_sync(self._abatch_get_at(all_keys, index))
+        # As in TensorDictStore._index_tensordict: a list of bools is a mask.
+        result_map = self._run_sync(
+            self._abatch_get_at(all_keys, _bool_lists_to_masks(index))
+        )
 
         source: dict = {}
         for kp, value in result_map.items():
@@ -4790,6 +4834,9 @@ class LazyStackedTensorDictStore(TensorDictBase):
                 self._loop.call_soon_threadsafe(self._loop.stop)
             if hasattr(self, "_thread") and self._thread.is_alive():
                 self._thread.join(timeout=2)
+            if hasattr(self, "_loop") and not self._loop.is_running():
+                # releases the selector and the self-pipe sockets of the loop
+                self._loop.close()
             self._owns_loop = False
 
     def clear_redis(self):
@@ -4936,6 +4983,15 @@ class LazyStackedTensorDictStore(TensorDictBase):
         )
 
     def memmap_(self, prefix=None, copy_existing=False, num_threads=0):
+        """Raises a ``RuntimeError``: a LazyStackedTensorDictStore cannot be memory-mapped in-place.
+
+        Args:
+            prefix (str, optional): unused.
+            copy_existing (bool, optional): unused.
+            num_threads (int, optional): unused.
+
+        See :meth:`~tensordict.TensorDictBase.memmap_`.
+        """
         raise RuntimeError(
             f"Cannot build a memmap TensorDict in-place from a {type(self).__name__}."
         )
@@ -4958,6 +5014,17 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     @_as_context_manager()
     def flatten_keys(self, separator=".", inplace=False):
+        """Returns an in-memory copy where the nested keys are joined by ``separator``.
+
+        The content is first loaded with :meth:`~tensordict.TensorDictBase.to_tensordict`.
+
+        Args:
+            separator (str, optional): the separator between the nested items. Defaults to ``"."``.
+            inplace (bool, optional): must be ``False``; ``True`` raises a ``ValueError``.
+                Defaults to ``False``.
+
+        See :meth:`~tensordict.TensorDictBase.flatten_keys`.
+        """
         if inplace:
             raise ValueError(
                 f"Cannot call flatten_keys in_place with a {type(self).__name__}."

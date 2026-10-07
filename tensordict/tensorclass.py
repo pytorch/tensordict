@@ -215,6 +215,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "_reduce_get_metadata",
     "_set_device",
     "_set_names",
+    "_sync_all",
     "_values_list",
     "all_gather",
     "all_reduce",
@@ -464,7 +465,6 @@ _FALLBACK_METHOD_FROM_TD = [
     "lerp_",
     "lgamma",
     "lgamma_",
-    "load_memmap_",
     "lock_",
     "log",
     "log10",
@@ -731,14 +731,14 @@ def from_dataclass(
         >>> from tensordict.tensorclass import from_dataclass
         >>>
         >>> @dataclass
-        >>> class X:
+        ... class X:
         ...     a: int
         ...     b: torch.Tensor
         ...
         >>> x = X(0, 0)
         >>> x2 = from_dataclass(x)
         >>> print(x2)
-        X(
+        X_tc(
             a=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
             b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
             batch_size=torch.Size([]),
@@ -746,7 +746,7 @@ def from_dataclass(
             is_shared=False)
         >>> X2 = from_dataclass(X, autocast=True)
         >>> print(X2(a=0, b=0))
-        X(
+        X_tc(
             a=NonTensorData(data=0, batch_size=torch.Size([]), device=None),
             b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
             batch_size=torch.Size([]),
@@ -924,14 +924,14 @@ def tensorclass(
         >>> data = MyData(
         ...     X=torch.ones(3, 4, 1),
         ...     y=torch.zeros(3, 4, 2, 2, dtype=torch.bool),
-        ...     z="test"
+        ...     z="test",
         ...     batch_size=[3, 4])
         >>> print(data)
         MyData(
-            X=Tensor(torch.Size([3, 4, 1]), dtype=torch.float32),
-            y=Tensor(torch.Size([3, 4, 2, 2]), dtype=torch.bool),
-            z="test"
-            batch_size=[3, 4],
+            X=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+            y=Tensor(shape=torch.Size([3, 4, 2, 2]), device=cpu, dtype=torch.bool, is_shared=False),
+            z=NonTensorData(data=test, batch_size=torch.Size([3, 4]), device=None),
+            batch_size=torch.Size([3, 4]),
             device=None,
             is_shared=False)
         >>> print(data.expand_and_mask())
@@ -1192,6 +1192,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         cls.load_memmap = TensorDictBase.load_memmap
     if not hasattr(cls, "load") and "load" not in expected_keys:
         cls.load = TensorDictBase.load
+    if not hasattr(cls, "load_memmap_") and "load_memmap_" not in expected_keys:
+        cls.load_memmap_ = _load_memmap_
     if not hasattr(cls, "_load_memmap"):
         cls._load_memmap = classmethod(_load_memmap)
     if not hasattr(cls, "from_dict") and "from_dict" not in expected_keys:
@@ -1984,19 +1986,71 @@ def _load_memmap(
                 allow_pickle=allow_pickle,
             )
         )
+    out = kwargs.pop("out", None)
+    tc_out = None
+    if is_tensorclass(out):
+        # Only an instance of the saved class can be loaded in place. The
+        # saved class is looked up by name, so compare names: a class that is
+        # redefined under the same name (e.g. in a notebook) also matches.
+        tc_out = out if str(type(out)) == str(cls) else None
+        out = tc_out._tensordict if tc_out is not None else None
     if (prefix / "_tensordict").exists():
         td = TensorDict.load_memmap(
             prefix / "_tensordict",
             **kwargs,
             non_blocking=False,
+            out=out,
             robust_key=robust_key,
             allow_pickle=allow_pickle,
         )
     else:
         if not issubclass(cls, NonTensorDataBase):
             raise ValueError("The _tensordict directory seems to be missing.")
-        td = TensorDict(device="cpu")
-    return cls._from_tensordict(td, non_tensordict)
+        td = TensorDict(device="cpu") if tc_out is None else tc_out._tensordict
+    result = cls._from_tensordict(td, non_tensordict)
+    if tc_out is not None:
+        tc_out._non_tensordict.clear()
+        tc_out._non_tensordict.update(result._non_tensordict)
+        return tc_out
+    return result
+
+
+def _load_memmap_(
+    self,
+    prefix: str | Path,
+    robust_key: bool | None = True,
+    *,
+    allow_pickle: bool | None = None,
+    mode: str | None = None,
+):
+    """Loads the content of a memory-mapped tensorclass within the tensorclass where ``load_memmap_`` is called.
+
+    See :meth:`~tensordict.TensorDictBase.load_memmap_` for more info.
+    """
+    # Lock and memmap state live on the tensordict, but loading through the
+    # tensorclass also refreshes the non-tensor fields.
+    td = self._tensordict
+    is_memmap = td.is_memmap()
+    if is_memmap:
+        td.unlock_()
+    loaded = type(self).load_memmap(
+        prefix,
+        device=td.device,
+        out=self,
+        robust_key=robust_key,
+        allow_pickle=allow_pickle,
+        mode=mode,
+    )
+    # A tensordict save (e.g. the ``_tensordict`` directory refreshed by
+    # ``memmap_refresh_``) is loaded into ``td``.
+    if loaded is not self and loaded is not td:
+        raise ValueError(
+            f"Cannot load a saved {type(loaded).__name__} in place into an "
+            f"instance of {type(self).__name__}."
+        )
+    if is_memmap and td._memmap_prefix is not None:
+        td.memmap_()
+    return self
 
 
 def _getstate(self) -> dict[str, Any]:
@@ -3564,6 +3618,7 @@ def _patch_tc(cls):
     cls.share_memory_ = _share_memory_
     cls.load_memmap = TensorDictBase.load_memmap
     cls.load = TensorDictBase.load
+    cls.load_memmap_ = _load_memmap_
     cls.from_dict_instance = _from_dict_instance
 
     # # Methods from lists
@@ -3808,7 +3863,7 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
 
         >>> class Base(TensorClass["autocast"]):
         ...     x: int
-        >>> class Sub(Base, frozen=True):   # autocast inherited, frozen added
+        >>> class Sub(Base, shadow=True):   # autocast inherited, shadow added
         ...     y: float
 
     **Type-checking.** ``TensorClass[...]`` is implemented via :meth:`~object.__class_getitem__`,
@@ -5047,7 +5102,7 @@ class NonTensorStack(LazyStackedTensorDict):
             convert_tensors (bool): if ``True``, tensors will be converted to lists.
                 Otherwise, they will remain as tensors. Default: ``False``.
             tolist_first (bool, optional): if ``True``, the tensordict will be converted to a list first when
-                it has batch dimensions. Default: ``True``.
+                it has batch dimensions. Default: ``False``.
             as_linked_list (bool, optional): if ``True``, the list will be converted to a :class:`tensordict.utils.LinkedList`
                 which will automatically update the tensordict when the list is modified. Default: ``False``.
 
