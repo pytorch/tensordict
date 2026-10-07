@@ -2661,17 +2661,25 @@ class LazyStackedTensorDict(TensorDictBase):
                             result[-1] = result[-1].squeeze(cat_dim)
                 if not result:
                     return self._empty_getitem_result(index, cat_dim)
+                # a 1-D mask keeps the name of the stack dim
                 return self._new_lazy_unsafe(
                     *result,
                     stack_dim=cat_dim,
                     device=self.device,
                     names=self.names,
+                    stack_dim_name=self._td_dim_name,
                 )
             else:
                 for i, _idx in converted_idx.items():
                     self_idx = (slice(None),) * split_index["mask_loc"] + (i,)
                     result.append(self[self_idx][_idx])
-                return torch.cat(result, cat_dim)
+                result = torch.cat(result, cat_dim)
+                if result._has_names():
+                    # an N-D mask merges the dims it covers into one unnamed dim
+                    names = result.names
+                    names[cat_dim] = None
+                    result.names = names
+                return result
         elif is_nd_tensor:
             new_stack_dim = self.stack_dim - num_single + num_none
 

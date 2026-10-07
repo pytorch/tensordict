@@ -5954,7 +5954,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
         num_boolean_dim = is_boolean(idx)
         names = self.names
         if num_boolean_dim:
-            names = [None] + names[num_boolean_dim:]
+            # an N-D mask merges N dims into one unnamed dim, a 1-D mask keeps
+            # the name of its dim
+            if num_boolean_dim > 1:
+                names = [None] + names[num_boolean_dim:]
         else:
             if not isinstance(idx, tuple):
                 idx = (idx,)
