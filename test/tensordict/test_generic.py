@@ -1446,7 +1446,8 @@ class TestGeneric:
     @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
     @pytest.mark.parametrize("as_module", [False, True])
     @pytest.mark.parametrize("lazy_stack", [False, True])
-    def test_from_modules(self, as_module, lazy_stack):
+    @pytest.mark.parametrize("preserve_module_state", [False, True])
+    def test_from_modules(self, as_module, lazy_stack, preserve_module_state):
         empty_module = nn.Linear(3, 4, device="meta")
         modules = [nn.Linear(3, 4) for _ in range(3)]
         if as_module and lazy_stack:
@@ -1461,7 +1462,9 @@ class TestGeneric:
         )
 
         def exec_module(params, x):
-            with params.to_module(empty_module, preserve_module_state=False):
+            with params.to_module(
+                empty_module, preserve_module_state=preserve_module_state
+            ):
                 return empty_module(x)
 
         x = torch.zeros(3)

@@ -1582,7 +1582,8 @@ class TestFunctional:
     @pytest.mark.skipif(
         TORCH_VERSION <= version.parse("2.5.0"), reason="requires torch>2.5"
     )
-    def test_vmap_functional(self, mode):
+    @pytest.mark.parametrize("preserve_module_state", [False, True])
+    def test_vmap_functional(self, mode, preserve_module_state):
         module = torch.nn.Sequential(
             torch.nn.Linear(3, 4),
             torch.nn.ReLU(),
@@ -1593,7 +1594,7 @@ class TestFunctional:
         td_zero = TensorDictParams(td.data.expand(10).clone().zero_())
 
         def call(x, td):
-            with td.to_module(module, preserve_module_state=False):
+            with td.to_module(module, preserve_module_state=preserve_module_state):
                 result = module(x)
             return result
 

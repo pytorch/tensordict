@@ -4534,6 +4534,37 @@ class TestToModule:
         torch.testing.assert_close(module.weight, params["weight"])
         torch.testing.assert_close(module.bias, params["bias"])
 
+    @pytest.mark.parametrize("source", ["computed", "leaf"])
+    @pytest.mark.parametrize("custom_setattr", [False, True])
+    def test_preserve_module_state_keeps_gradients(
+        self, as_module, source, custom_setattr
+    ):
+        class MyLinear(nn.Linear):
+            def __setattr__(self, key, value):
+                return super().__setattr__(key, value)
+
+        module = MyLinear(4, 2) if custom_setattr else nn.Linear(4, 2)
+        weight, bias = module.weight, module.bias
+        params = TensorDict.from_module(module, as_module=as_module)
+        if source == "computed":
+            params = params.apply(lambda p: p * 2)
+            grad_targets = [weight, bias]
+        else:
+            params = params.data.clone().requires_grad_()
+            grad_targets = [params["weight"], params["bias"]]
+        state_dict_keys = set(module.state_dict())
+
+        with params.to_module(module):
+            assert set(module.state_dict()) == state_dict_keys
+            assert set(dict(module.named_parameters())) == {"weight", "bias"}
+            y = module(torch.randn(3, 4))
+        y.sum().backward()
+
+        assert module.weight is weight
+        assert module.bias is bias
+        for target in grad_targets:
+            assert target.grad is not None
+
     def test_plain_tensor_to_module_can_keep_current_behavior(self, as_module):
         module = nn.Linear(4, 2)
         params = TensorDict.from_module(module, as_module=as_module).data.detach()
