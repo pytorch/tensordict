@@ -147,6 +147,9 @@ def test_getitem_batch_size_mask(tensor, idx, ndim, slice_leading_dims):
         (torch.ones(3, 4, dtype=torch.bool), Ellipsis),
         (Ellipsis, torch.ones(4, 5, dtype=torch.bool)),
         (slice(None), [2], None, torch.tensor([2])),
+        # torch reads a uint8 tensor as a mask (deprecated)
+        torch.tensor([1, 0, 2], dtype=torch.uint8),
+        (slice(None), torch.tensor([[0, 1, 1, 0, 1]] * 4, dtype=torch.uint8)),
     ],
 )
 def test_getitem_batch_size_index_types(index):
