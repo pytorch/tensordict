@@ -1438,6 +1438,36 @@ class TestUnbatchedTensor:
         assert isinstance(result, UnbatchedTensor)
         assert result.data_ptr() == data.data_ptr()
 
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize(
+        "method", ["memmap", "memmap_", "memmap_threads", "save", "consolidate"]
+    )
+    def test_unbatched_memmap_consolidate_raise(self, method, nested, tmpdir):
+        # Not supported yet: these used to write the entry as a plain tensor
+        # that no longer matches the batch size.
+        td = TensorDict(
+            a=torch.randn(2, 3),
+            config=UnbatchedTensor(torch.arange(3.0)),
+            batch_size=(2, 3),
+        )
+        if nested:
+            td = TensorDict(nested=td, b=torch.randn(2), batch_size=(2,))
+        match = "memory-mapped" if method != "consolidate" else "consolidated"
+        with pytest.raises(NotImplementedError, match=f"cannot be {match} yet"):
+            if method == "memmap":
+                td.memmap(tmpdir)
+            elif method == "memmap_":
+                td.memmap_(tmpdir)
+            elif method == "memmap_threads":
+                td.memmap(tmpdir, num_threads=2)
+            elif method == "save":
+                td.save(tmpdir)
+            else:
+                td.consolidate()
+        if method == "memmap_" and not nested:
+            assert not td.is_memmap()
+            assert isinstance(td.get("config"), UnbatchedTensor)
+
     def test_unbatched_stack_same_data_no_warning(self):
         data = torch.randn(5)
         td1 = TensorDict(a=torch.ones(3), ub=UnbatchedTensor(data), batch_size=[3])

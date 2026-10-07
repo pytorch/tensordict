@@ -1,4 +1,4 @@
-.. currentmodule:: tensordict.nn
+.. module:: tensordict.nn
 
 tensordict.nn package
 =====================
@@ -23,16 +23,16 @@ instance with a list of input and output keys:
   >>> print(data)
   TensorDict(
       fields={
-          feature: Tensor(torch.Size([10, 11, 512]), dtype=torch.float32),
-          prediction: Tensor(torch.Size([10, 11, 512]), dtype=torch.float32),
-          target: Tensor(torch.Size([10, 11, 512]), dtype=torch.float32)},
+          feature: Tensor(shape=torch.Size([10, 11, 512]), device=cpu, dtype=torch.float32, is_shared=False),
+          prediction: Tensor(shape=torch.Size([10, 11, 512]), device=cpu, dtype=torch.float32, is_shared=False),
+          target: Tensor(shape=torch.Size([10, 11, 512]), device=cpu, dtype=torch.float32, is_shared=False)},
       batch_size=torch.Size([10, 11]),
       device=None,
       is_shared=False)
 
 One does not necessarily need to use :class:`~.TensorDictModule`, a custom :class:`torch.nn.Module`
-with an ordered list of input and output keys (named :obj:`module.in_keys` and
-:obj:`module.out_keys`) will suffice.
+with an ordered list of input and output keys (named ``module.in_keys`` and
+``module.out_keys``) will suffice.
 
 A key pain-point of multiple PyTorch users is the inability of nn.Sequential to
 handle modules with multiple inputs. Working with key-based graphs can easily
@@ -47,6 +47,7 @@ additional input from the tensordict as necessary. Here's an example:
 
 .. code-block::
 
+  >>> from torch import nn
   >>> from tensordict.nn import TensorDictSequential
   >>> class Net(nn.Module):
   ...     def __init__(self, input_size=100, hidden_size=50, output_size=10):
@@ -87,20 +88,20 @@ additional input from the tensordict as necessary. Here's an example:
       fields={
           input: TensorDict(
               fields={
-                  mask: Tensor(torch.Size([32, 10]), dtype=torch.int64),
-                  x: Tensor(torch.Size([32, 100]), dtype=torch.float32)},
+                  mask: Tensor(shape=torch.Size([32, 10]), device=cpu, dtype=torch.int64, is_shared=False),
+                  x: Tensor(shape=torch.Size([32, 100]), device=cpu, dtype=torch.float32, is_shared=False)},
               batch_size=torch.Size([32]),
               device=None,
               is_shared=False),
           intermediate: TensorDict(
               fields={
-                  x: Tensor(torch.Size([32, 10]), dtype=torch.float32)},
+                  x: Tensor(shape=torch.Size([32, 10]), device=cpu, dtype=torch.float32, is_shared=False)},
               batch_size=torch.Size([32]),
               device=None,
               is_shared=False),
           output: TensorDict(
               fields={
-                  probabilities: Tensor(torch.Size([32, 10]), dtype=torch.float32)},
+                  probabilities: Tensor(shape=torch.Size([32, 10]), device=cpu, dtype=torch.float32, is_shared=False)},
               batch_size=torch.Size([32]),
               device=None,
               is_shared=False)},
@@ -122,20 +123,20 @@ We can also select sub-graphs easily through the :meth:`~.TensorDictSequential.s
   ...     },
   ...     batch_size=[32],
   ... )
-  >>> sub_module(td)
+  >>> td = sub_module(td)
   >>> print(td)  # the "output" has not been computed
   TensorDict(
       fields={
           input: TensorDict(
               fields={
-                  mask: Tensor(torch.Size([32, 10]), dtype=torch.int64),
-                  x: Tensor(torch.Size([32, 100]), dtype=torch.float32)},
+                  mask: Tensor(shape=torch.Size([32, 10]), device=cpu, dtype=torch.int64, is_shared=False),
+                  x: Tensor(shape=torch.Size([32, 100]), device=cpu, dtype=torch.float32, is_shared=False)},
               batch_size=torch.Size([32]),
               device=None,
               is_shared=False),
           intermediate: TensorDict(
               fields={
-                  x: Tensor(torch.Size([32, 10]), dtype=torch.float32)},
+                  x: Tensor(shape=torch.Size([32, 10]), device=cpu, dtype=torch.float32, is_shared=False)},
               batch_size=torch.Size([32]),
               device=None,
               is_shared=False)},
@@ -153,7 +154,7 @@ to build distributions from network outputs and get summary statistics or sample
   >>> from tensordict import TensorDict
   >>> from tensordict.nn import TensorDictModule
   >>> from tensordict.nn.distributions import NormalParamExtractor
-  >>> from tensordict.nn.prototype import (
+  >>> from tensordict.nn import (
   ...     ProbabilisticTensorDictModule,
   ...     ProbabilisticTensorDictSequential,
   ... )
@@ -161,9 +162,11 @@ to build distributions from network outputs and get summary statistics or sample
   >>> td = TensorDict(
   ...     {"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3]
   ... )
-  >>> net = torch.nn.Sequential(torch.nn.GRUCell(4, 8), NormalParamExtractor())
-  >>> module = TensorDictModule(
-  ...     net, in_keys=["input", "hidden"], out_keys=["loc", "scale"]
+  >>> gru = TensorDictModule(
+  ...     torch.nn.GRUCell(4, 8), in_keys=["input", "hidden"], out_keys=["hidden"]
+  ... )
+  >>> param_extractor = TensorDictModule(
+  ...     NormalParamExtractor(), in_keys=["hidden"], out_keys=["loc", "scale"]
   ... )
   >>> prob_module = ProbabilisticTensorDictModule(
   ...     in_keys=["loc", "scale"],
@@ -171,17 +174,17 @@ to build distributions from network outputs and get summary statistics or sample
   ...     distribution_class=Normal,
   ...     return_log_prob=True,
   ... )
-  >>> td_module = ProbabilisticTensorDictSequential(module, prob_module)
-  >>> td_module(td)
+  >>> td_module = ProbabilisticTensorDictSequential(gru, param_extractor, prob_module)
+  >>> td = td_module(td)
   >>> print(td)
   TensorDict(
       fields={
-          action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-          hidden: Tensor(torch.Size([3, 8]), dtype=torch.float32),
-          input: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-          loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-          sample_log_prob: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-          scale: Tensor(torch.Size([3, 4]), dtype=torch.float32)},
+          hidden: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+          input: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+          loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+          sample: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+          sample_log_prob: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+          scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
       batch_size=torch.Size([3]),
       device=None,
       is_shared=False)
@@ -190,7 +193,7 @@ Type-Safe TensorClass Modules
 -----------------------------
 
 The :class:`~.TensorClassModuleBase` provides a type-safe way to define modules that work with
-:class:`~tensordict.tensorclass.TensorClass` inputs and outputs. This offers compile-time type
+:class:`~tensordict.TensorClass` inputs and outputs. This enables static type
 checking and improved code clarity compared to working with string-based keys.
 
 A :class:`~.TensorClassModuleBase` subclass specifies its input and output types through generic
@@ -210,14 +213,14 @@ type parameters. The module can be converted to work with :class:`~.TensorDict` 
   ...     b: torch.Tensor
   ...
   >>> class OutputTC(TensorClass):
-  ...     sum: torch.Tensor
+  ...     total: torch.Tensor
   ...     difference: torch.Tensor
   ...
   >>> # Create a type-safe module
   >>> class MyModule(TensorClassModuleBase[InputTC, OutputTC]):
   ...     def forward(self, x: InputTC) -> OutputTC:
   ...         return OutputTC(
-  ...             sum=x.a + x.b,
+  ...             total=x.a + x.b,
   ...             difference=x.a - x.b,
   ...             batch_size=x.batch_size
   ...         )
@@ -226,7 +229,7 @@ type parameters. The module can be converted to work with :class:`~.TensorDict` 
   >>> module = MyModule()
   >>> input_tc = InputTC(a=torch.tensor([1.0, 2.0]), b=torch.tensor([3.0, 4.0]), batch_size=[2])
   >>> output = module(input_tc)
-  >>> print(output.sum)
+  >>> print(output.total)
   tensor([4., 6.])
   >>> print(output.difference)
   tensor([-2., -2.])
@@ -234,14 +237,12 @@ type parameters. The module can be converted to work with :class:`~.TensorDict` 
   >>> # Convert to TensorDictModule for use in TensorDict workflows
   >>> td_module = module.as_td_module()
   >>> td = TensorDict({"a": torch.tensor([1.0, 2.0]), "b": torch.tensor([3.0, 4.0])}, batch_size=[2])
-  >>> result = td_module(td)
+  >>> result = td_module(td)  # a new TensorDict holding the output fields only
   >>> print(result)
   TensorDict(
       fields={
-          a: Tensor(torch.Size([2]), dtype=torch.float32),
-          b: Tensor(torch.Size([2]), dtype=torch.float32),
-          difference: Tensor(torch.Size([2]), dtype=torch.float32),
-          sum: Tensor(torch.Size([2]), dtype=torch.float32)},
+          difference: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
+          total: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False)},
       batch_size=torch.Size([2]),
       device=None,
       is_shared=False)
@@ -254,7 +255,9 @@ The type-safe approach offers several benefits:
 * **Nested structures**: Support for nested TensorClass types with automatic key extraction
 
 :class:`~.TensorClassModuleBase` modules can be composed and used in :class:`~.TensorDictSequential`
-after conversion via :meth:`~.TensorClassModuleBase.as_td_module`.
+after conversion via :meth:`~.TensorClassModuleBase.as_td_module`. Since the converted module returns
+a new TensorDict that contains only its output fields, the modules that follow it in the sequence (and,
+by default, the result of the sequence) only see those outputs, not the converted module's input keys.
 
 
 .. autosummary::
@@ -287,7 +290,7 @@ We can duplicate and reinitialize model copies using the :class:`tensordict.nn.E
     >>> import torch
     >>> from torch import nn
     >>> from tensordict.nn import TensorDictModule
-    >>> from torchrl.modules import EnsembleModule
+    >>> from tensordict.nn import EnsembleModule
     >>> from tensordict import TensorDict
     >>> net = nn.Sequential(nn.Linear(4, 32), nn.ReLU(), nn.Linear(32, 2))
     >>> mod = TensorDictModule(net, in_keys=['a'], out_keys=['b'])
@@ -304,7 +307,7 @@ We can duplicate and reinitialize model copies using the :class:`tensordict.nn.E
 
 .. autosummary::
     :toctree: generated/
-    :template: rl_template_noinherit.rst
+    :template: td_template_noinherit.rst
 
     EnsembleModule
 
@@ -314,9 +317,8 @@ Compiling TensorDictModules
 .. currentmodule:: tensordict.nn
 
 Since v0.5, TensorDict components are compatible with :func:`~torch.compile`.
-For instance, a :class:`~tensordict.TensorDictSequential` module can be compiled with
-``torch.compile`` and reach a runtime similar to a regular PyTorch module wrapped in
-a :class:`~tensordict.nn.TensorDictModule`.
+For instance, a :class:`~tensordict.nn.TensorDictSequential` module can be compiled with
+``torch.compile``.
 
 Distributions
 -------------
@@ -325,7 +327,7 @@ Distributions
 
 .. autosummary::
     :toctree: generated/
-    :template: rl_template_noinherit.rst
+    :template: td_template_noinherit.rst
 
     AddStateIndependentNormalScale
     CompositeDistribution
@@ -342,7 +344,7 @@ Utils
 
 .. autosummary::
     :toctree: generated/
-    :template: rl_template_noinherit.rst
+    :template: td_template_noinherit.rst
 
     make_tensordict
     dispatch

@@ -23,7 +23,8 @@ jobs:
   build-docs:
     strategy:
       matrix:
-        python_version: ["3.10"]
+        # The zarr tutorial needs zarr>=3, which requires Python>=3.11.
+        python_version: ["3.12"]
         cuda_arch_version: ["12.8"]
     runs-on: "mt-l-x86aavx2-11-41-a10g"
     container:
@@ -59,7 +60,7 @@ jobs:
           set -v
 
           # Set up environment variables
-          export PYTHON_VERSION=3.10
+          export PYTHON_VERSION=${{ matrix.python_version }}
           export CU_VERSION="cpu"
           export TORCH_VERSION=nightly
           export ARCH=x86_64

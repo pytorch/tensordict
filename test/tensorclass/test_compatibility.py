@@ -185,6 +185,15 @@ def _make_redis():
     return TensorDictStore.from_tensordict(td)
 
 
+def _close_store(store):
+    """Delete the keys of a Redis-backed store and close its connection.
+
+    Only the keys of ``store`` are deleted, so tests can share a server.
+    """
+    store.clear_redis()
+    store.close()
+
+
 # ---------------------------------------------------------------------------
 # Parametrize helpers
 # ---------------------------------------------------------------------------
@@ -225,7 +234,10 @@ class TestTensorClassCompat:
     def backend_td(self, request, tmp_path):
         if request.param == "redis":
             request.getfixturevalue("redis_server")
-        return request.param, _get_backend(request.param, tmp_path)
+        td = _get_backend(request.param, tmp_path)
+        yield request.param, td
+        if request.param == "redis":
+            _close_store(td)
 
     def test_construction(self, backend_td):
         name, td = backend_td
@@ -280,6 +292,8 @@ class TestTensorClassCompat:
         tc = MyTC.from_tensordict(td)
         cloned = tc.clone()
         assert cloned.a.shape == tc.a.shape
+        if name == "redis":
+            _close_store(cloned._tensordict)
 
     def test_stack(self, backend_td):
         name, td = backend_td
@@ -340,11 +354,16 @@ class TestTypedTensorDictCompat:
     @pytest.mark.usefixtures("redis_server")
     def test_from_redis_data(self):
         store = _make_redis()
-        materialized = store.to_tensordict()
-        ttd = MyTTD(
-            a=materialized["a"], b=materialized["b"], batch_size=materialized.batch_size
-        )
-        assert isinstance(ttd, MyTTD)
+        try:
+            materialized = store.to_tensordict()
+            ttd = MyTTD(
+                a=materialized["a"],
+                b=materialized["b"],
+                batch_size=materialized.batch_size,
+            )
+            assert isinstance(ttd, MyTTD)
+        finally:
+            _close_store(store)
 
     def test_from_lazy_stack_data(self):
         ls = _make_lazy_stacked()
@@ -440,9 +459,12 @@ class TestTypedTensorDictCompat:
     def test_to_redis_and_back(self):
         ttd = _make_typed_td()
         store = TensorDictStore.from_tensordict(ttd)
-        assert store["a"].shape == (BATCH, FEAT_A)
-        back = store.to_tensordict()
-        assert back["a"].shape == (BATCH, FEAT_A)
+        try:
+            assert store["a"].shape == (BATCH, FEAT_A)
+            back = store.to_tensordict()
+            assert back["a"].shape == (BATCH, FEAT_A)
+        finally:
+            _close_store(store)
 
 
 # ===================================================================
@@ -513,7 +535,10 @@ class TestTypedTensorDictWrapping:
     def backend_td(self, request, tmp_path):
         if request.param == "redis":
             request.getfixturevalue("redis_server")
-        return request.param, _get_backend(request.param, tmp_path)
+        td = _get_backend(request.param, tmp_path)
+        yield request.param, td
+        if request.param == "redis":
+            _close_store(td)
 
     def test_construction(self, backend_td):
         name, td = backend_td
@@ -562,6 +587,8 @@ class TestTypedTensorDictWrapping:
         cloned = ttd.clone()
         assert isinstance(cloned, MyTTD)
         assert cloned.a.shape == ttd.a.shape
+        if name == "redis":
+            _close_store(cloned)
 
     def test_update(self, backend_td):
         name, td = backend_td
@@ -589,6 +616,8 @@ class TestTypedTensorDictWrapping:
         stacked = torch.stack([ttd1, ttd2])
         assert isinstance(stacked, MyTTD)
         assert stacked.batch_size[0] == 2
+        if name == "redis":
+            _close_store(td2)
 
     def test_live_link(self, backend_td):
         """Mutations through TypedTensorDict reflect in the original backend."""
@@ -627,7 +656,7 @@ class TestTensorDictStoreFromSchema:
             assert store["b"].shape == torch.Size([BATCH, FEAT_B])
             assert (store["a"] == 0).all()
         finally:
-            store._run_sync(store._client.flushdb())
+            _close_store(store)
 
     def test_from_schema_write_and_read(self):
         store = TensorDictStore.from_schema(
@@ -643,7 +672,7 @@ class TestTensorDictStoreFromSchema:
             assert (store[0]["a"] == 1).all()
             assert (store[1]["a"] == 0).all()
         finally:
-            store._run_sync(store._client.flushdb())
+            _close_store(store)
 
     def test_from_schema_with_typed_td(self):
         store = TensorDictStore.from_schema(
@@ -662,7 +691,7 @@ class TestTensorDictStoreFromSchema:
             )
             assert (ttd[0].a == 1).all()
         finally:
-            store._run_sync(store._client.flushdb())
+            _close_store(store)
 
     def test_from_schema_scalar_shape(self):
         store = TensorDictStore.from_schema(
@@ -672,7 +701,7 @@ class TestTensorDictStoreFromSchema:
         try:
             assert store["reward"].shape == torch.Size([BATCH])
         finally:
-            store._run_sync(store._client.flushdb())
+            _close_store(store)
 
 
 @pytest.mark.usefixtures("redis_server")
@@ -696,7 +725,7 @@ class TestTypedTDPreallocationWorkflow:
                 assert (ttd[i].a == float(i)).all()
                 assert (ttd[i].b == float(i)).all()
         finally:
-            store._run_sync(store._client.flushdb())
+            _close_store(store)
 
     def test_deferred_validation_then_fill(self):
         """Wrap empty store with check=False, then fill."""
@@ -714,7 +743,7 @@ class TestTypedTDPreallocationWorkflow:
             assert (ttd[0].a == 1).all()
             assert set(ttd.keys()) == {"a", "b"}
         finally:
-            store._run_sync(store._client.flushdb())
+            _close_store(store)
 
 
 if __name__ == "__main__":

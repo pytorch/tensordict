@@ -58,12 +58,13 @@ or by utilizing memory maps.
 #
 # The contents of the :class:`TensorDict` can be sent to a device like a PyTorch tensor
 # with :meth:`TensorDict.cuda() <tensordict.TensorDict.cuda>` or
-# :meth:`TensorDict.device(device) <tensordict.TensorDict.device>` with ``device``
-# being the desired device.
+# :meth:`TensorDict.to(device) <tensordict.TensorDict.to>` with ``device``
+# being the desired device. Like their PyTorch counterparts, these methods return the
+# result rather than modifying the :class:`TensorDict` in place.
 #
 # .. code-block::
 #
-#    >>> tensordict.to(torch.device("cpu"))
+#    >>> tensordict = tensordict.to(torch.device("cpu"))
 #    >>> print(tensordict)
 #    TensorDict(
 #        fields={
@@ -72,7 +73,7 @@ or by utilizing memory maps.
 #        batch_size=torch.Size([10]),
 #        device=cpu,
 #        is_shared=False)
-#    >>> tensordict.cuda()
+#    >>> tensordict = tensordict.cuda()
 #    >>> print(tensordict)
 #    TensorDict(
 #        fields={
@@ -82,14 +83,14 @@ or by utilizing memory maps.
 #        device=cuda:0,
 #        is_shared=True)
 #
-# The :meth:`TensorDict.device <tensordict.TensorDict.device>` method requires a valid
+# The :meth:`TensorDict.to <tensordict.TensorDict.to>` method requires a valid
 # device to be passed as the argument. If you want to remove the device from the
 # :class:`TensorDict` to allow values with different devices, you should use the
-# :meth:`TensorDict.clear_device <tensordict.TensorDict.clear_device>` method.
+# :meth:`TensorDict.clear_device_ <tensordict.TensorDict.clear_device_>` method.
 #
 # .. code-block::
 #
-#    >>> tensordict.clear_device()
+#    >>> tensordict = tensordict.clear_device_()
 #    >>> print(tensordict)
 #    TensorDict(
 #        fields={
@@ -140,21 +141,21 @@ mm_tensordict = tensordict.memmap_like()
 print(mm_tensordict["a"].contiguous())
 
 ##############################################################################
-# By default the contents of the :class:`TensorDict` will be saved to a temporary
-# location on disk, however if you would like to control where they are saved you can
-# use the keyword argument ``prefix="/path/to/root"``.
+# By default the contents of the :class:`TensorDict` are stored in anonymous
+# temporary memory maps (on Linux, in shared memory under ``/dev/shm`` when it has
+# room; otherwise in an unlinked temporary file, or a shared-memory block on Windows),
+# which do not persist and cannot be reloaded from disk. If you would like to control
+# where they are saved you can use the keyword argument ``prefix="/path/to/root"``.
 #
 # The contents of the :class:`TensorDict` are saved in a directory structure that mimics
-# the structure of the :class:`TensorDict` itself. The contents of the tensor is saved
-# in a NumPy memmap, and the metadata in an associated PyTorch save file. For example,
-# the above :class:`TensorDict` is saved as follows:
+# the structure of the :class:`TensorDict` itself. The contents of each tensor are
+# saved as a raw memory-mapped ``.memmap`` file, and the metadata in ``meta.json``
+# files. For example, the above :class:`TensorDict` is saved as follows:
 #
 # ::
 #
 #    ├── a.memmap
-#    ├── a.meta.pt
 #    ├── b
 #    │ ├── c.memmap
-#    │ ├── c.meta.pt
-#    │ └── meta.pt
-#    └── meta.pt
+#    │ └── meta.json
+#    └── meta.json

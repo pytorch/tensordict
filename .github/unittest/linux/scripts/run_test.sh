@@ -25,6 +25,8 @@ export MKL_THREADING_LAYER=GNU
 export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
 export TD_GET_DEFAULTS_TO_NONE=1
 export LIST_TO_STACK=1
+# check the tensordicts that are built without validation (see _check_invariants)
+export TD_CHECK_INVARIANTS=1
 
 # Start Redis server on port 6379 (non-fatal if unavailable)
 if command -v redis-server &> /dev/null; then

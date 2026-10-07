@@ -57,9 +57,9 @@ __all__ = ["TensorDictSequential"]
 class TensorDictSequential(TensorDictModule):
     """A sequence of TensorDictModules.
 
-    Similarly to :obj:`nn.Sequence` which passes a tensor through a chain of mappings that read and write a single tensor
+    Similarly to :class:`torch.nn.Sequential` which passes a tensor through a chain of mappings that read and write a single tensor
     each, this module will read and write over a tensordict by querying each of the input modules.
-    When calling a :obj:`TensorDictSequencial` instance with a functional module, it is expected that the parameter lists (and
+    When calling a :class:`TensorDictSequential` instance with a functional module, it is expected that the parameter lists (and
     buffers) will be concatenated in a single list.
 
     Args:
@@ -109,9 +109,9 @@ class TensorDictSequential(TensorDictModule):
             is_shared=False)
         >>> # with tensor input: returns all the output keys in the order of the modules, ie "x+1" and "w*(x+1)+b"
         >>> module(x=torch.zeros(3))
-        (tensor([1., 1., 1.]), tensor([-0.7214, -0.8748,  0.1571, -0.1138], grad_fn=<AddBackward0>))
+        (tensor([1., 1., 1.]), tensor([-0.7214, -0.8748,  0.1571, -0.1138], grad_fn=<ViewBackward0>))
         >>> module(torch.zeros(3))
-        (tensor([1., 1., 1.]), tensor([-0.7214, -0.8748,  0.1571, -0.1138], grad_fn=<AddBackward0>))
+        (tensor([1., 1., 1.]), tensor([-0.7214, -0.8748,  0.1571, -0.1138], grad_fn=<ViewBackward0>))
 
     TensorDictSequence supports functional, modular and vmap coding.
 
@@ -155,11 +155,11 @@ class TensorDictSequential(TensorDictModule):
         TensorDict(
             fields={
                 hidden: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                hidden_log_prob: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
                 input: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
                 loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
                 output: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
                 params: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                sample_log_prob: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
                 scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([3]),
             device=None,
@@ -176,11 +176,11 @@ class TensorDictSequential(TensorDictModule):
         TensorDict(
             fields={
                 hidden: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                hidden_log_prob: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
                 input: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
                 loc: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
                 output: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
                 params: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                sample_log_prob: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
                 scale: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([4, 3]),
             device=None,
@@ -342,6 +342,40 @@ class TensorDictSequential(TensorDictModule):
         return fmodule
 
     def select_out_keys(self, *selected_out_keys) -> TensorDictSequential:
+        """Selects the keys within the ``out_keys`` that will be found in the output tensordict.
+
+        This change occurs in-place and can be reverted using :meth:`~.reset_out_keys`.
+
+        Args:
+            *selected_out_keys (a sequence of strings or tuples of strings): the
+                out_keys that should be found in the output tensordict. Each of them
+                must be part of the module's ``out_keys``.
+
+        Returns: the same module, modified in-place with updated ``out_keys``.
+
+        Raises:
+            ValueError: if a key in ``selected_out_keys`` is not part of ``out_keys``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
+            >>> seq = Seq(
+            ...     Mod(lambda x: x + 1, in_keys=["x"], out_keys=["y"]),
+            ...     Mod(lambda y: y + 1, in_keys=["y"], out_keys=["z"]),
+            ... )
+            >>> _ = seq.select_out_keys("z")
+            >>> seq.out_keys
+            ['z']
+            >>> td = seq(TensorDict(x=torch.zeros(())))
+            >>> assert "y" not in td
+            >>> td["z"]
+            tensor(2.)
+            >>> _ = seq.reset_out_keys()
+            >>> seq.out_keys
+            ['y', 'z']
+
+        """
         self._select_before_return = True
         selected_out_keys = unravel_key_list(selected_out_keys)
         if not all(key in self.out_keys for key in selected_out_keys):
@@ -390,26 +424,21 @@ class TensorDictSequential(TensorDictModule):
                 module=ModuleList(
                   (0): TensorDictModule(
                       module=<function <lambda> at 0x126ed1ca0>,
-                      device=cpu,
                       in_keys=['a'],
                       out_keys=['b'])
                   (1): TensorDictModule(
                       module=<function <lambda> at 0x126ed1ca0>,
-                      device=cpu,
                       in_keys=['b'],
                       out_keys=['c'])
                   (2): TensorDictModule(
                       module=<function <lambda> at 0x126ed1ca0>,
-                      device=cpu,
                       in_keys=['c'],
                       out_keys=['d'])
                   (3): TensorDictModule(
                       module=<function <lambda> at 0x126ed1ca0>,
-                      device=cpu,
                       in_keys=['a'],
                       out_keys=['e'])
                 ),
-                device=cpu,
                 in_keys=['a'],
                 out_keys=['b', 'c', 'd', 'e'])
             >>> # select all modules whose output depend on "c"
@@ -418,11 +447,9 @@ class TensorDictSequential(TensorDictModule):
                 module=ModuleList(
                   (0): TensorDictModule(
                       module=<function <lambda> at 0x126ed1ca0>,
-                      device=cpu,
                       in_keys=['c'],
                       out_keys=['d'])
                 ),
-                device=cpu,
                 in_keys=['c'],
                 out_keys=['d'])
             >>> # select all modules that affect the value of "c"
@@ -431,16 +458,13 @@ class TensorDictSequential(TensorDictModule):
                 module=ModuleList(
                   (0): TensorDictModule(
                       module=<function <lambda> at 0x126ed1ca0>,
-                      device=cpu,
                       in_keys=['a'],
                       out_keys=['b'])
                   (1): TensorDictModule(
                       module=<function <lambda> at 0x126ed1ca0>,
-                      device=cpu,
                       in_keys=['b'],
                       out_keys=['c'])
                 ),
-                device=cpu,
                 in_keys=['a'],
                 out_keys=['b', 'c'])
             >>> # select all modules that affect the value of "e"
@@ -449,11 +473,9 @@ class TensorDictSequential(TensorDictModule):
                 module=ModuleList(
                   (0): TensorDictModule(
                       module=<function <lambda> at 0x126ed1ca0>,
-                      device=cpu,
                       in_keys=['a'],
                       out_keys=['e'])
                 ),
-                device=cpu,
                 in_keys=['a'],
                 out_keys=['e'])
 
@@ -477,20 +499,16 @@ class TensorDictSequential(TensorDictModule):
                       module=ModuleList(
                         (0): TensorDictModule(
                             module=<function <lambda> at 0x129efae50>,
-                            device=cpu,
                             in_keys=['b'],
                             out_keys=['d'])
                         (1): TensorDictModule(
                             module=<function <lambda> at 0x129efae50>,
-                            device=cpu,
                             in_keys=['d'],
                             out_keys=['e'])
                       ),
-                      device=cpu,
                       in_keys=['b'],
                       out_keys=['d', 'e'])
                 ),
-                device=cpu,
                 in_keys=['b'],
                 out_keys=['d', 'e'])
 
@@ -526,7 +544,6 @@ class TensorDictSequential(TensorDictModule):
             MyClass(
                 input=Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
                 output=Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                output=None,
                 batch_size=torch.Size([2]),
                 device=None,
                 is_shared=False)

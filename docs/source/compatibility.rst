@@ -16,7 +16,7 @@ Architecture overview
    ├── TensorDictBase
    │   ├── TensorDict                 (in-memory)
    │   ├── TypedTensorDict            (typed fields, wraps any TensorDictBase)
-   │   ├── PersistentTensorDict       (HDF5-backed)
+   │   ├── PersistentTensorDict       (HDF5- or zarr-backed)
    │   ├── TensorDictStore            (Redis / Dragonfly / KeyDB)
    │   └── LazyStackedTensorDict      (lazy stack of heterogeneous TDs)
    │
@@ -29,8 +29,7 @@ Two patterns exist for adding typed field declarations:
 - **TypedTensorDict** wraps any ``TensorDictBase`` via ``from_tensordict(td)``,
   similar to ``TensorClass``.  Direct construction creates a ``TensorDict``
   internally.  Unlike ``TensorClass``, it inherits from ``TensorDictBase``
-  directly, supports ``**state`` spreading natively, and uses standard
-  Python inheritance for schema composition.
+  directly and supports ``**state`` spreading natively.
 
 TensorClass + backends
 ----------------------
@@ -181,7 +180,7 @@ Building a TensorClass on each backend
 
 .. code-block:: python
 
-   >>> td_mmap = td.memmap_("/tmp/my_memmap")
+   >>> td_mmap = td.memmap_("/tmp/my_tc_memmap")
    >>> tc_mmap = MyTC.from_tensordict(td_mmap)
    >>> tc_mmap.a.shape
    torch.Size([4, 3])
@@ -318,7 +317,7 @@ internally):
    torch.Size([4, 3])
    >>> state.x = torch.ones(4, 3)  # writes to td
    >>> (td["x"] == 1).all()
-   True
+   tensor(True)
 
 **HDF5 (PersistentTensorDict)**:
 
@@ -326,7 +325,7 @@ internally):
 
    >>> from tensordict import PersistentTensorDict
    >>>
-   >>> h5 = PersistentTensorDict.from_h5("data.h5")
+   >>> h5 = PersistentTensorDict.from_dict(td, filename="state.h5")
    >>> state = State.from_tensordict(h5)
    >>> state.x.shape  # reads from HDF5
    torch.Size([4, 3])
@@ -358,7 +357,7 @@ internally):
 
 .. code-block:: python
 
-   >>> td_mmap = td.memmap_("/tmp/my_memmap")
+   >>> td_mmap = td.memmap_("/tmp/my_state_memmap")
    >>> state = State.from_tensordict(td_mmap)
    >>> state.x.shape
    torch.Size([4, 3])
@@ -384,7 +383,7 @@ Lazy stacking also works.  Indexing a ``LazyStackedTensorDict`` of
 
 .. code-block:: python
 
-   >>> from tensordict._lazy import LazyStackedTensorDict
+   >>> from tensordict import LazyStackedTensorDict
    >>>
    >>> ls = LazyStackedTensorDict(s1, s2, stack_dim=0)
    >>> isinstance(ls[0], State)
@@ -415,7 +414,8 @@ tensor data passes through Python):
    ...     action: Tensor
    ...     reward: Tensor
    >>>
-   >>> # Pre-allocate 100k entries directly on Redis -- no RAM used
+   >>> # Pre-allocate 100k entries in the Redis server's memory -- nothing is
+   >>> # allocated in the client process
    >>> store = TensorDictStore.from_schema(
    ...     {"obs": ([84, 84, 3], torch.uint8),
    ...      "action": ([4], torch.float32),
@@ -471,13 +471,14 @@ they differ architecturally:
      - Field-by-field repacking
      - Natively (``MutableMapping``)
    * - Non-tensor fields
-     - Supported
-     - Not supported (tensor-only)
+     - Supported (attribute access returns the plain value)
+     - Accepted but annotations are not validated; non-tensor values are stored
+       as ``NonTensorData`` and attribute access returns the wrapper
    * - Backend stays live
      - Yes (writes go to original backend)
      - Yes (writes go to original backend)
    * - Python inheritance
-     - Not supported
+     - Supported (subclasses add fields)
      - Supported (standard class hierarchy)
    * - Composable with each other
      - Yes (``TC.from_tensordict(ttd)`` works)
@@ -487,7 +488,7 @@ Both wrappers keep the backend alive -- mutations through the typed wrapper go
 directly to the underlying storage.  Direct construction (without
 ``from_tensordict``) creates an in-memory ``TensorDict`` as the backend.
 
-Choose ``TensorClass`` when you need non-tensor fields or want to integrate
-with existing tensorclass-based APIs.  Choose ``TypedTensorDict`` when you
-want native ``**state`` spreading, standard Python inheritance for schema
-composition, and full ``TensorDictBase`` API compatibility.
+Choose ``TensorClass`` when you need non-tensor fields returned as plain values
+or want to integrate with existing tensorclass-based APIs.  Choose
+``TypedTensorDict`` when you want native ``**state`` spreading and full
+``TensorDictBase`` API compatibility.

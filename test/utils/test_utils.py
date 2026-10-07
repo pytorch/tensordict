@@ -7,6 +7,7 @@ import argparse
 
 import numpy as np
 import pytest
+import tensordict._td
 import torch
 from _utils_internal import get_available_devices
 from tensordict import (
@@ -147,6 +148,9 @@ def test_getitem_batch_size_mask(tensor, idx, ndim, slice_leading_dims):
         (torch.ones(3, 4, dtype=torch.bool), Ellipsis),
         (Ellipsis, torch.ones(4, 5, dtype=torch.bool)),
         (slice(None), [2], None, torch.tensor([2])),
+        # torch reads a uint8 tensor as a mask (deprecated)
+        torch.tensor([1, 0, 2], dtype=torch.uint8),
+        (slice(None), torch.tensor([[0, 1, 1, 0, 1]] * 4, dtype=torch.uint8)),
     ],
 )
 def test_getitem_batch_size_index_types(index):
@@ -154,6 +158,68 @@ def test_getitem_batch_size_index_types(index):
     expected = tensor[index].shape
     index = convert_ellipsis_to_idx(index, tensor.shape)
     assert _getitem_batch_size(tensor.shape, index) == expected
+
+
+@pytest.fixture
+def check_invariants(monkeypatch):
+    # what the TD_CHECK_INVARIANTS environment variable turns on
+    monkeypatch.setattr(tensordict._td, "_CHECK_INVARIANTS", True)
+
+
+@pytest.mark.parametrize(
+    "kwargs,match",
+    [
+        (
+            {"source": {"a": torch.zeros(3)}, "batch_size": torch.Size([4])},
+            "does not start with the batch size",
+        ),
+        (
+            {
+                "source": {"a": TensorDict(batch_size=[3])},
+                "batch_size": torch.Size([4]),
+            },
+            "does not start with the batch size",
+        ),
+        (
+            {
+                "source": {"a": torch.zeros(4)},
+                "batch_size": torch.Size([4]),
+                "names": ["x", "y"],
+            },
+            "dim names",
+        ),
+        ({"source": {"a": torch.zeros(4)}, "batch_size": [4]}, "not a torch.Size"),
+    ],
+)
+def test_check_invariants_raises(check_invariants, kwargs, match):
+    with pytest.raises(AssertionError, match=match):
+        TensorDict._new_unsafe(**kwargs)
+
+
+def test_check_invariants_valid(check_invariants):
+    td = TensorDict(
+        a=torch.zeros(4, 3),
+        nested=TensorDict(b=torch.zeros(4, 3, 2), batch_size=[4, 3, 2]),
+        batch_size=[4, 3],
+        names=["x", "y"],
+    )
+    # these are built with _new_unsafe
+    td[0], td[:, [0, 2]], td.clone(), td.apply(lambda x: x + 1)
+    # unbatched entries and values without a shape are not checked
+    TensorDict._new_unsafe(
+        {"u": UnbatchedTensor(torch.zeros(5)), "t": (torch.zeros(4),)},
+        batch_size=torch.Size([4]),
+    )
+
+
+@pytest.mark.parametrize("name", ["min", "max", "cummin", "cummax"])
+@pytest.mark.parametrize("dim", [0, 1])
+def test_check_invariants_reduction_with_indices(check_invariants, name, dim):
+    td = TensorDict(a=torch.randn(4, 3, 2), batch_size=[4, 3])
+    out = getattr(td, name)(dim=dim, return_indices=True)
+    expected = getattr(td["a"], name)(dim=dim)
+    assert (out.values["a"] == expected.values).all()
+    assert (out.indices["a"] == expected.indices).all()
 
 
 def test_make_cache_key():

@@ -84,22 +84,27 @@ class MemoryMappedTensor(torch.Tensor):
     MemoryMappedTensor supports multiple construction methods.
 
     Examples:
+          >>> import os
+          >>> import tempfile
           >>> # from an existing tensor
           >>> tensor = torch.randn(3)
-          >>> with tempfile.NamedTemporaryFile() as file:
-          ...     memmap_tensor = MemoryMappedTensor.from_tensor(tensor, filename=file.name)
+          >>> with tempfile.TemporaryDirectory() as tmpdir:
+          ...     memmap_tensor = MemoryMappedTensor.from_tensor(tensor, filename=os.path.join(tmpdir, "tensor.memmap"))
           ...     assert memmap_tensor.filename is not None
-          >>> # if no filename is passed, a handler is used
+          >>> # if no filename is passed, a handler is used and the tensor has no filename
           >>> tensor = torch.randn(3)
-          >>> memmap_tensor = MemoryMappedTensor.from_tensor(tensor, filename=file.name)
-          >>> assert memmap_tensor.filename is None
+          >>> memmap_tensor = MemoryMappedTensor.from_tensor(tensor)
+          >>> memmap_tensor.filename
+          Traceback (most recent call last):
+          ...
+          RuntimeError: The MemoryMappedTensor has no file associated.
           >>> # one can create an empty tensor too
-          >>> with tempfile.NamedTemporaryFile() as file:
-          ...     memmap_tensor_empty = MemoryMappedTensor.empty_like(tensor, filename=file.name)
-          >>> with tempfile.NamedTemporaryFile() as file:
-          ...     memmap_tensor_zero = MemoryMappedTensor.zeros_like(tensor, filename=file.name)
-          >>> with tempfile.NamedTemporaryFile() as file:
-          ...     memmap_tensor = MemoryMappedTensor.ones_like(tensor, filename=file.name)
+          >>> with tempfile.TemporaryDirectory() as tmpdir:
+          ...     memmap_tensor_empty = MemoryMappedTensor.empty_like(tensor, filename=os.path.join(tmpdir, "empty.memmap"))
+          >>> with tempfile.TemporaryDirectory() as tmpdir:
+          ...     memmap_tensor_zero = MemoryMappedTensor.zeros_like(tensor, filename=os.path.join(tmpdir, "zeros.memmap"))
+          >>> with tempfile.TemporaryDirectory() as tmpdir:
+          ...     memmap_tensor = MemoryMappedTensor.ones_like(tensor, filename=os.path.join(tmpdir, "ones.memmap"))
     """
 
     _filename: str | Path = None

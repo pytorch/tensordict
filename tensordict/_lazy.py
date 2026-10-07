@@ -229,7 +229,7 @@ class LazyStackedTensorDict(TensorDictBase):
         >>> import torch
         >>> tds = [TensorDict({'a': torch.randn(3, 4)}, batch_size=[3])
         ...     for _ in range(10)]
-        >>> td_stack = torch.stack(tds, -1)
+        >>> td_stack = LazyStackedTensorDict.lazy_stack(tds, -1)
         >>> print(td_stack.shape)
         torch.Size([3, 10])
         >>> print(td_stack.get("a").shape)
@@ -1659,14 +1659,17 @@ class LazyStackedTensorDict(TensorDictBase):
         out: T | None = None,
         strict: bool = False,
     ) -> Self:
-        """Stacks tensors or tensordicts densly if possible, or onto a LazyStackedTensorDict otherwise.
+        """Stacks tensordicts densely if possible, or onto a LazyStackedTensorDict otherwise.
+
+        ``items`` must be a sequence of tensordicts (or tensorclass instances).
 
         Examples:
             >>> td0 = TensorDict({"a": 0}, [])
             >>> td1 = TensorDict({"b": 0}, [])
-            >>> LazyStackedTensorDict.maybe_dense_stack([td0, td0])  # returns a TensorDict with shape [2]
-            >>> LazyStackedTensorDict.maybe_dense_stack([td0, td1])  # returns a LazyStackedTensorDict with shape [2]
-            >>> LazyStackedTensorDict.maybe_dense_stack(list(torch.randn(2)))  # returns a torch.Tensor with shape [2]
+            >>> out = LazyStackedTensorDict.maybe_dense_stack([td0, td0])  # same keys: dense stack
+            >>> assert type(out) is TensorDict and out.shape == (2,)
+            >>> out = LazyStackedTensorDict.maybe_dense_stack([td0, td1])  # different keys: lazy stack
+            >>> assert isinstance(out, LazyStackedTensorDict) and out.shape == (2,)
         """
         from ._torch_func import _stack
 
@@ -1856,11 +1859,11 @@ class LazyStackedTensorDict(TensorDictBase):
         Examples:
             >>> td0 = TensorDict({"a": torch.zeros(4), "b": torch.zeros(4)}, [])
             >>> td1 = TensorDict({"a": torch.ones(5)}, [])
-            >>> td = torch.stack([td0, td1], 0)
+            >>> td = LazyStackedTensorDict.lazy_stack([td0, td1], 0)
             >>> a = td.get_nestedtensor("a")
             >>> # using a tensor as default uses this default to build the nested tensor
             >>> b = td.get_nestedtensor("b", default=torch.ones(4))
-            >>> assert (a == b).all()
+            >>> assert (b[1] == 1).all()
             >>> # using anything else as default returns the default
             >>> b2 = td.get_nestedtensor("b", None)
             >>> assert b2 is None
@@ -2661,17 +2664,25 @@ class LazyStackedTensorDict(TensorDictBase):
                             result[-1] = result[-1].squeeze(cat_dim)
                 if not result:
                     return self._empty_getitem_result(index, cat_dim)
+                # a 1-D mask keeps the name of the stack dim
                 return self._new_lazy_unsafe(
                     *result,
                     stack_dim=cat_dim,
                     device=self.device,
                     names=self.names,
+                    stack_dim_name=self._td_dim_name,
                 )
             else:
                 for i, _idx in converted_idx.items():
                     self_idx = (slice(None),) * split_index["mask_loc"] + (i,)
                     result.append(self[self_idx][_idx])
-                return torch.cat(result, cat_dim)
+                result = torch.cat(result, cat_dim)
+                if result._has_names():
+                    # an N-D mask merges the dims it covers into one unnamed dim
+                    names = result.names
+                    names[cat_dim] = None
+                    result.names = names
+                return result
         elif is_nd_tensor:
             new_stack_dim = self.stack_dim - num_single + num_none
 
@@ -3443,6 +3454,28 @@ class LazyStackedTensorDict(TensorDictBase):
         *,
         non_blocking: bool = False,
     ) -> Self:
+        """Updates the lazy stack in-place at the specified index with values from either a dictionary or another TensorDict.
+
+        See :meth:`~tensordict.TensorDictBase.update_at_`. Unlike the base method,
+        this override does not accept ``keys_to_update``.
+
+        Args:
+            input_dict_or_td (TensorDictBase or dict): input data to be written
+                in self.
+            index (int, torch.Tensor, iterable, slice): index of the tensordict
+                where the update should occur.
+            clone (bool, optional): accepted for compatibility with the base
+                method. It has no effect, as the values are copied into the
+                existing entries. Default is `False`.
+
+        Keyword Args:
+            non_blocking (bool, optional): if ``True`` and this copy is between
+                different devices, the copy may occur asynchronously with respect
+                to the host.
+
+        Returns:
+            self
+        """
         if not _is_tensor_collection(type(input_dict_or_td)):
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_size=self.batch_size
