@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4432+g12f72aadb.d20261007)
+                  main (0.14.0.dev4434+gf28307b68.d20261007)
                 </div>
               
             
@@ -366,7 +366,7 @@ have caveats, and how to build these “chimera” objects.</p>
 ├── TensorDictBase
 │   ├── TensorDict                 (in-memory)
 │   ├── TypedTensorDict            (typed fields, wraps any TensorDictBase)
-│   ├── PersistentTensorDict       (HDF5-backed)
+│   ├── PersistentTensorDict       (HDF5- or zarr-backed)
 │   ├── TensorDictStore            (Redis / Dragonfly / KeyDB)
 │   └── LazyStackedTensorDict      (lazy stack of heterogeneous TDs)
 │
@@ -380,8 +380,7 @@ It delegates all storage to the wrapped object.</p></li>
 <li><p><strong>TypedTensorDict</strong> wraps any <code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code> via <code class="docutils literal notranslate"><span class="pre">from_tensordict(td)</span></code>,
 similar to <code class="docutils literal notranslate"><span class="pre">TensorClass</span></code>.  Direct construction creates a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code>
 internally.  Unlike <code class="docutils literal notranslate"><span class="pre">TensorClass</span></code>, it inherits from <code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code>
-directly, supports <code class="docutils literal notranslate"><span class="pre">**state</span></code> spreading natively, and uses standard
-Python inheritance for schema composition.</p></li>
+directly and supports <code class="docutils literal notranslate"><span class="pre">**state</span></code> spreading natively.</p></li>
 </ul>
 </section>
 <section id="tensorclass-backends">
@@ -537,7 +536,7 @@ assignment or <code class="docutils literal notranslate"><span class="pre">updat
 </pre></div>
 </div>
 <p><strong>Memory-mapped TensorDict</strong>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td_mmap</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="s2">"/tmp/my_memmap"</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td_mmap</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="s2">"/tmp/my_tc_memmap"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">tc_mmap</span> <span class="o">=</span> <span class="n">MyTC</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">td_mmap</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">tc_mmap</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">shape</span>
 <span class="go">torch.Size([4, 3])</span>
@@ -683,13 +682,13 @@ internally):</p>
 <span class="go">torch.Size([4, 3])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="o">.</span><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>  <span class="c1"># writes to td</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">"x"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-<span class="go">True</span>
+<span class="go">tensor(True)</span>
 </pre></div>
 </div>
 <p><strong>HDF5 (PersistentTensorDict)</strong>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">PersistentTensorDict</span>
 <span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">h5</span> <span class="o">=</span> <span class="n">PersistentTensorDict</span><span class="o">.</span><span class="n">from_h5</span><span class="p">(</span><span class="s2">"data.h5"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">h5</span> <span class="o">=</span> <span class="n">PersistentTensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s2">"state.h5"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">state</span> <span class="o">=</span> <span class="n">State</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">h5</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span>  <span class="c1"># reads from HDF5</span>
 <span class="go">torch.Size([4, 3])</span>
@@ -715,7 +714,7 @@ internally):</p>
 </pre></div>
 </div>
 <p><strong>Memory-mapped TensorDict</strong>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td_mmap</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="s2">"/tmp/my_memmap"</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td_mmap</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="s2">"/tmp/my_state_memmap"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">state</span> <span class="o">=</span> <span class="n">State</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">td_mmap</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span>
 <span class="go">torch.Size([4, 3])</span>
@@ -737,7 +736,7 @@ type:</p>
 </div>
 <p>Lazy stacking also works.  Indexing a <code class="docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code> of
 <code class="docutils literal notranslate"><span class="pre">TypedTensorDict</span></code> instances preserves the subclass type:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict._lazy</span><span class="w"> </span><span class="kn">import</span> <span class="n">LazyStackedTensorDict</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">LazyStackedTensorDict</span>
 <span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">ls</span> <span class="o">=</span> <span class="n">LazyStackedTensorDict</span><span class="p">(</span><span class="n">s1</span><span class="p">,</span> <span class="n">s2</span><span class="p">,</span> <span class="n">stack_dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">ls</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">State</span><span class="p">)</span>
@@ -763,7 +762,8 @@ tensor data passes through Python):</p>
 <span class="gp">... </span>    <span class="n">action</span><span class="p">:</span> <span class="n">Tensor</span>
 <span class="gp">... </span>    <span class="n">reward</span><span class="p">:</span> <span class="n">Tensor</span>
 <span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Pre-allocate 100k entries directly on Redis -- no RAM used</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Pre-allocate 100k entries in the Redis server's memory -- nothing is</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># allocated in the client process</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">store</span> <span class="o">=</span> <span class="n">TensorDictStore</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="p">{</span><span class="s2">"obs"</span><span class="p">:</span> <span class="p">([</span><span class="mi">84</span><span class="p">,</span> <span class="mi">84</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
 <span class="gp">... </span>     <span class="s2">"action"</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
@@ -826,15 +826,16 @@ they differ architecturally:</p>
 <td><p>Natively (<code class="docutils literal notranslate"><span class="pre">MutableMapping</span></code>)</p></td>
 </tr>
 <tr class="row-odd"><td><p>Non-tensor fields</p></td>
-<td><p>Supported</p></td>
-<td><p>Not supported (tensor-only)</p></td>
+<td><p>Supported (attribute access returns the plain value)</p></td>
+<td><p>Accepted but annotations are not validated; non-tensor values are stored
+as <code class="docutils literal notranslate"><span class="pre">NonTensorData</span></code> and attribute access returns the wrapper</p></td>
 </tr>
 <tr class="row-even"><td><p>Backend stays live</p></td>
 <td><p>Yes (writes go to original backend)</p></td>
 <td><p>Yes (writes go to original backend)</p></td>
 </tr>
 <tr class="row-odd"><td><p>Python inheritance</p></td>
-<td><p>Not supported</p></td>
+<td><p>Supported (subclasses add fields)</p></td>
 <td><p>Supported (standard class hierarchy)</p></td>
 </tr>
 <tr class="row-even"><td><p>Composable with each other</p></td>
@@ -846,10 +847,10 @@ they differ architecturally:</p>
 <p>Both wrappers keep the backend alive – mutations through the typed wrapper go
 directly to the underlying storage.  Direct construction (without
 <code class="docutils literal notranslate"><span class="pre">from_tensordict</span></code>) creates an in-memory <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> as the backend.</p>
-<p>Choose <code class="docutils literal notranslate"><span class="pre">TensorClass</span></code> when you need non-tensor fields or want to integrate
-with existing tensorclass-based APIs.  Choose <code class="docutils literal notranslate"><span class="pre">TypedTensorDict</span></code> when you
-want native <code class="docutils literal notranslate"><span class="pre">**state</span></code> spreading, standard Python inheritance for schema
-composition, and full <code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code> API compatibility.</p>
+<p>Choose <code class="docutils literal notranslate"><span class="pre">TensorClass</span></code> when you need non-tensor fields returned as plain values
+or want to integrate with existing tensorclass-based APIs.  Choose
+<code class="docutils literal notranslate"><span class="pre">TypedTensorDict</span></code> when you want native <code class="docutils literal notranslate"><span class="pre">**state</span></code> spreading and full
+<code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code> API compatibility.</p>
 </section>
 </section>
 
