@@ -2799,6 +2799,50 @@ def _is_unbatched(data) -> bool:
     return out
 
 
+# Set the TD_CHECK_INVARIANTS environment variable (as the CI does) to check the
+# tensordicts that are built without validation, see _check_invariants.
+_CHECK_INVARIANTS = bool(strtobool(os.environ.get("TD_CHECK_INVARIANTS", "0")))
+
+
+def _check_invariants(td) -> None:
+    """Raise an ``AssertionError`` if the batch size, entries or dim names of ``td`` disagree.
+
+    ``TensorDict._new_unsafe`` does not validate its inputs. When
+    ``TD_CHECK_INVARIANTS`` is set, it calls this function, so that code that
+    builds a tensordict with a wrong batch size or wrong dim names fails where
+    the error is made. The ``except RuntimeError`` fallbacks of the library do
+    not catch an ``AssertionError``.
+    """
+    from tensordict.base import _is_tensor_collection
+
+    batch_size = td._batch_size
+    if type(batch_size) is not torch.Size:
+        raise AssertionError(
+            f"The batch size {batch_size!r} is a {type(batch_size).__name__}, "
+            f"not a torch.Size."
+        )
+    batch_dims = len(batch_size)
+    for key, value in td._tensordict.items():
+        if not isinstance(value, Tensor) and not _is_tensor_collection(type(value)):
+            # other values have no batch dims (e.g. the tuples that torch.func
+            # puts in a pytree)
+            continue
+        if _is_unbatched(value):
+            # unbatched entries do not follow the batch size
+            continue
+        shape = _shape(value)
+        if shape[:batch_dims] != batch_size:
+            raise AssertionError(
+                f"The entry {key!r} has shape {shape}, which does not start with "
+                f"the batch size {batch_size}."
+            )
+    names = td._td_dim_names
+    if names is not None and len(names) != batch_dims:
+        raise AssertionError(
+            f"The dim names {names} do not match the batch size {batch_size}."
+        )
+
+
 _NON_TENSOR_MEMO = {}
 
 
