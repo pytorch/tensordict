@@ -55,6 +55,7 @@ def _elements(size):
     return {
         "0": 0,
         "-1": -1,
+        "t(1)": torch.tensor(1),
         ":": slice(None),
         "1:": slice(1, None),
         "::2": slice(None, None, 2),
@@ -124,6 +125,7 @@ def index_pool(batch_size):
         candidates["([0,1], :, t[1])"] = ([0, 1], slice(None), one)
         candidates["(m, :, t[1])"] = (mask, slice(None), one)
         candidates["(True, :, [0,1])"] = (True, slice(None), [0, 1])
+        candidates["(t(1), :, [0,1])"] = (torch.tensor(1), slice(None), [0, 1])
     reference = torch.zeros(batch_size)
     pool = {}
     for name, index in candidates.items():
