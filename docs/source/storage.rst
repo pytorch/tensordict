@@ -243,7 +243,7 @@ batch-size inference instead.
 By default each tensor is written as a single uncompressed chunk, which is
 the fastest layout for checkpoint-style save/load.  For dataset-style
 workloads, pass ``chunks=`` and/or ``compressors=`` (forwarded to
-:meth:`zarr.Group.create_array`) to enable partial out-of-core reads with
+:obj:`zarr.Group.create_array`) to enable partial out-of-core reads with
 :meth:`~tensordict.TensorDictBase.get_at` and on-disk compression:
 
 .. code-block:: python
@@ -256,7 +256,7 @@ Keyword arguments forwarded by ``from_schema``:
 
 - ``filename`` (required) -- path to the zarr store, or a
   ``zarr.abc.store.Store`` instance.
-- any :meth:`zarr.Group.create_array` argument (``chunks``,
+- any :obj:`zarr.Group.create_array` argument (``chunks``,
   ``compressors``, ...).
 
 
