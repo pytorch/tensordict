@@ -75,6 +75,7 @@ from tensordict.utils import (
     _get_robust_key_setting_with_warning,
     _get_shape_from_args,
     _getitem_batch_size,
+    _import_and_wrap_functorch,
     _index_preserve_data_ptr,
     _infer_size_impl,
     _is_safe_legacy_key,
@@ -113,7 +114,8 @@ from tensordict.utils import (
 )
 from torch import nn, Tensor
 from torch._functorch.vmap import _maybe_remove_batch_dim
-from torch.nn.parameter import UninitializedTensorMixin
+from torch.compiler import is_compiling
+from torch.nn.parameter import Buffer, UninitializedTensorMixin
 from torch.nn.utils._named_member_accessor import swap_tensor
 from torch.utils._pytree import tree_map
 
@@ -125,15 +127,6 @@ except ImportError:
     from tensordict.utils import _ftdim_mock as ftdim
 
     _has_funcdim = False
-try:
-    from torch.compiler import is_compiling
-except ImportError:  # torch 2.0
-    from torch._dynamo import is_compiling
-
-try:
-    from torch.nn.parameter import Buffer
-except ImportError:
-    from tensordict.utils import Buffer
 
 if TYPE_CHECKING:
     from typing import Self
@@ -144,19 +137,9 @@ _register_tensor_class(ftdim.Tensor)
 
 __base__setattr__ = torch.nn.Module.__setattr__
 
-try:
-    from tensordict.utils import _import_and_wrap_functorch
-
-    _add_batch_dim, _remove_batch_dim = _import_and_wrap_functorch(
-        "_add_batch_dim", "_remove_batch_dim"
-    )
-except ImportError:
-
-    def _add_batch_dim(*args, **kwargs) -> Tensor:
-        raise NotImplementedError
-
-    def _remove_batch_dim(*args, **kwargs) -> Tensor:
-        raise NotImplementedError
+_add_batch_dim, _remove_batch_dim = _import_and_wrap_functorch(
+    "_add_batch_dim", "_remove_batch_dim"
+)
 
 
 class TensorDict(TensorDictBase):
@@ -2995,12 +2978,8 @@ class TensorDict(TensorDictBase):
             ):
                 return NotImplemented
             indexed_dest_values.append(dest_indexed)
-        if _foreach_copy_ is not None:
-            copy_fn = _foreach_copy_compiled if is_compiling() else _foreach_copy_
-            copy_fn(indexed_dest_values, source_values, non_blocking=non_blocking)
-        else:
-            for dest, source in zip(indexed_dest_values, source_values):
-                dest.copy_(source, non_blocking=non_blocking)
+        copy_fn = _foreach_copy_compiled if is_compiling() else _foreach_copy_
+        copy_fn(indexed_dest_values, source_values, non_blocking=non_blocking)
         return self
 
     @lock_blocked
@@ -3378,14 +3357,7 @@ class TensorDict(TensorDictBase):
                 )
                 loaded_keys.add(key)
                 continue
-            try:
-                # this was absent in earlier versions of pytorch
-                is_fake = torch._guards.active_fake_mode()
-            except AttributeError:
-                # Let's just make sure that the private function is just not gone
-                if torch.__version__ > "2.3.0":
-                    raise
-                is_fake = False
+            is_fake = torch._guards.active_fake_mode()
             if (device is None or device != torch.device("meta")) and not is_fake:
                 if entry_metadata.get("is_nested", False):
                     # The shape is the shape of the shape, get the shape from it

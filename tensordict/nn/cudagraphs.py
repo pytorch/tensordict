@@ -25,16 +25,13 @@ from tensordict.nn.functional_modules import (
 from tensordict.utils import _zip_strict, logger as tensordict_logger, strtobool
 from torch import Tensor
 
-from torch.utils._pytree import SUPPORTED_NODES, tree_map
-
-try:
-    from torch.utils._pytree import tree_flatten, tree_leaves, tree_unflatten
-except ImportError:
-    from torch.utils._pytree import tree_flatten, tree_unflatten
-
-    def tree_leaves(pytree):
-        """Torch 2.0 compatible version of tree_leaves."""
-        return tree_flatten(pytree)[0]
+from torch.utils._pytree import (
+    SUPPORTED_NODES,
+    tree_flatten,
+    tree_leaves,
+    tree_map,
+    tree_unflatten,
+)
 
 
 class CudaGraphModule:

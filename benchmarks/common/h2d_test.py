@@ -11,12 +11,9 @@ from typing import Any
 
 import pytest
 import torch
-from packaging import version
 
 from tensordict import tensorclass, TensorDict
 from tensordict.utils import logger as tensordict_logger
-
-TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 
 @tensorclass
@@ -93,9 +90,6 @@ def default_device():
         ["reduce-overhead", None],
     ],
 )
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.5.0"), reason="requires torch>=2.5"
-)
 class TestConsolidate:
     def test_consolidate(
         self, benchmark, td, compile_mode, num_threads, default_device
@@ -153,9 +147,6 @@ class TestConsolidate:
         # [True, False, 16],
         [True, "default", None],
     ],
-)
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.5.2"), reason="requires torch>=2.5"
 )
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no CUDA device found")
 class TestTo:

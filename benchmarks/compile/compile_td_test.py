@@ -7,11 +7,9 @@ import sys
 
 import pytest
 import torch
-from packaging import version
 from tensordict import LazyStackedTensorDict, tensorclass, TensorDict, TypedTensorDict
 from torch.utils._pytree import tree_map
 
-TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 pytestmark = pytest.mark.skipif(
     sys.version_info >= (3, 14),
@@ -113,9 +111,6 @@ def get_flat_tc():
 
 
 # Tests runtime of a simple arithmetic op over a highly nested tensordict
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "pytree"])
 def test_compile_add_one_nested(mode, dict_type, benchmark):
@@ -137,9 +132,6 @@ def test_compile_add_one_nested(mode, dict_type, benchmark):
 
 
 # Tests the speed of copying a nested tensordict
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "pytree"])
 def test_compile_copy_nested(mode, dict_type, benchmark):
@@ -161,9 +153,6 @@ def test_compile_copy_nested(mode, dict_type, benchmark):
 
 
 # Tests runtime of a simple arithmetic op over a flat tensordict
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "tensorclass", "pytree"])
 def test_compile_add_one_flat(mode, dict_type, benchmark):
@@ -190,9 +179,6 @@ def test_compile_add_one_flat(mode, dict_type, benchmark):
     benchmark(func, td)
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", ["eager", "compile"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "tensorclass", "pytree"])
 def test_compile_add_self_flat(mode, dict_type, benchmark):
@@ -222,9 +208,6 @@ def test_compile_add_self_flat(mode, dict_type, benchmark):
 
 
 # Tests the speed of copying a flat tensordict
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "pytree"])
 def test_compile_copy_flat(mode, dict_type, benchmark):
@@ -252,9 +235,6 @@ def test_compile_copy_flat(mode, dict_type, benchmark):
 
 
 # Tests the speed of assigning entries to an empty tensordict
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "pytree"])
 def test_compile_assign_and_add(mode, dict_type, benchmark):
@@ -284,9 +264,6 @@ def test_compile_assign_and_add(mode, dict_type, benchmark):
 
 
 @pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
-@pytest.mark.skipif(
     torch.cuda.is_available(), reason="max recursion depth error with cuda"
 )
 @pytest.mark.parametrize("mode", ["compile", "eager"])
@@ -306,9 +283,6 @@ def test_compile_assign_and_add_stack(mode, benchmark):
 
 
 # Tests indexing speed
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "tensorclass", "pytree"])
 @pytest.mark.parametrize("index_type", ["tensor", "slice", "int"])
@@ -385,9 +359,6 @@ def _get_replace_state():
     )
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", ["eager", "compile"])
 @pytest.mark.parametrize("variant", ["single", "multi"])
 def test_compile_replace(mode, variant, benchmark):
@@ -469,9 +440,6 @@ def tc_getattr_sum(tc):
     return total
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", ["eager", "compile"])
 def test_compile_tc_getattr_20(mode, benchmark):
     func = tc_getattr_sum
@@ -483,9 +451,6 @@ def test_compile_tc_getattr_20(mode, benchmark):
     benchmark(func, tc)
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", ["eager", "compile"])
 def test_compile_ttd_getattr_20(mode, benchmark):
     func = tc_getattr_sum
@@ -513,9 +478,6 @@ def _get_flat_td_n(n):
     )
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", ["eager", "compile"])
 @pytest.mark.parametrize("n_fields", [20, 40, 80])
 def test_compile_clone_shallow(mode, n_fields, benchmark):
@@ -536,9 +498,6 @@ def update_inplace(td, src):
     return td
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", ["eager", "compile"])
 def test_compile_update_inplace(mode, benchmark):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

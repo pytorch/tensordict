@@ -54,9 +54,6 @@ TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
-_v2_5 = TORCH_VERSION >= version.parse("2.5.0")
-_v2_6 = TORCH_VERSION >= version.parse("2.6.0")
-_v2_7 = TORCH_VERSION >= version.parse("2.7.0")
 
 _IS_OSX = platform.system() == "Darwin"
 
@@ -122,9 +119,6 @@ def test_unravel_keys_compile(key):
     ), f"unravel_keys mismatch for {key!r}: eager={eager!r}, compiled={compiled!r}"
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
     def test_tensor_output(self, mode):
@@ -587,9 +581,6 @@ class _TTDOptionalState(TypedTensorDict):
     b: torch.Tensor | None = None
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTTD:
     def test_tensor_output(self, mode):
@@ -922,9 +913,6 @@ class TestTTD:
         assert (eager["b"] == compiled["b"]).all()
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 class TestTTDDynamoCompatibility:
     """Tests that probe known Dynamo limitations we work around.
 
@@ -984,9 +972,6 @@ class MyClass:
     c: Any = None
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTC:
     def test_tc_tensor_output(self, mode):
@@ -1301,10 +1286,6 @@ class TestTC:
         compiled_result = step_c(s)
         assert_close(eager_result, compiled_result)
 
-    @pytest.mark.skipif(
-        TORCH_VERSION < version.parse("2.6.0"),
-        reason="while_loop requires torch>=2.6",
-    )
     @pytest.mark.xfail(
         reason="Dynamo cannot symbolically trace TensorClass._tensordict "
         "access inside while_loop's pytree flatten (gh-1547). "
@@ -1366,9 +1347,6 @@ class TestTC:
         assert type(func_mytd()) is type(func_c_mytd())
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestNN:
     def test_func(self, mode):
@@ -1416,7 +1394,6 @@ class TestNN:
         assert_close(module(td), module_compile(td))
         assert module_compile(td) is not td
 
-    @pytest.mark.skipif(not _v2_5, reason="requires torch 2.5 or higher")
     def test_dispatch_nontensor(self, mode):
         # Non tensor
         x = torch.randn(3)
@@ -1426,10 +1403,9 @@ class TestNN:
             Mod(lambda x, z: z * x, in_keys=["x", "_z"], out_keys=["out"]),
         )
         assert mod(x=x, y=y)[-1].shape == torch.Size((1, 3))
-        mod_compile = torch.compile(mod, fullgraph=_v2_5, mode=mode)
+        mod_compile = torch.compile(mod, fullgraph=True, mode=mode)
         torch.testing.assert_close(mod(x=x, y=y), mod_compile(x=x, y=y))
 
-    @pytest.mark.skipif(not _v2_5, reason="requires torch 2.5 or higher")
     def test_dispatch_tensor(self, mode):
         x = torch.randn(3)
         y = torch.randn(3)
@@ -1438,7 +1414,7 @@ class TestNN:
             Mod(lambda x, z: z * x, in_keys=["x", "z"], out_keys=["out"]),
         )
         mod(x=x, y=y)
-        mod_compile = torch.compile(mod, fullgraph=_v2_5, mode=mode)
+        mod_compile = torch.compile(mod, fullgraph=True, mode=mode)
         torch.testing.assert_close(mod(x=x, y=y), mod_compile(x=x, y=y))
 
     @set_composite_lp_aggregate(False)
@@ -1488,9 +1464,6 @@ class TestNN:
             torch.testing.assert_close(sample, td["loc"])
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION <= version.parse("2.4.0"), reason="requires torch>2.4"
-)
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestFunctional:
     def test_functional_error(self, mode):
@@ -1528,9 +1501,6 @@ class TestFunctional:
 
     # in-place modif raises an error even if fullgraph=False
     @pytest.mark.parametrize("modif_param", [False])
-    @pytest.mark.skipif(
-        TORCH_VERSION <= version.parse("2.5.0"), reason="requires torch>2.5"
-    )
     def test_functional(self, modif_param, mode):
 
         # TODO: UNTESTED
@@ -1594,9 +1564,6 @@ class TestFunctional:
             assert (td_zero == 0).all()
 
     # in-place modif raises an error even if fullgraph=False
-    @pytest.mark.skipif(
-        TORCH_VERSION <= version.parse("2.5.0"), reason="requires torch>2.5"
-    )
     @pytest.mark.parametrize("preserve_module_state", [False, True])
     def test_vmap_functional(self, mode, preserve_module_state):
         module = torch.nn.Sequential(
@@ -1628,7 +1595,6 @@ class TestFunctional:
         assert (td_zero == 0).all()
 
 
-@pytest.mark.skipif(not _v2_5, reason="Requires PT>=2.5")
 @pytest.mark.skipif(
     sys.version_info >= (3, 14),
     reason="torch.export has compatibility issues with Python 3.14 (networkx/dataclasses)",
@@ -1713,7 +1679,6 @@ class TestExport:
         torch.testing.assert_close(out["y"], out["x"] * 2)
 
     @pytest.mark.parametrize("strict", [False])  # , True])
-    @pytest.mark.skipif(not _v2_7, reason="Requires PT>=2.7")
     def test_export_with_td_params(self, strict):
         module = torch.nn.Sequential(
             torch.nn.Linear(3, 4),
@@ -1830,13 +1795,6 @@ class TestONNXExport:
         )
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION <= version.parse("2.4.1"), reason="requires torch>=2.5"
-)
-@pytest.mark.skipif(
-    (TORCH_VERSION <= version.parse("2.7.0")) and _IS_OSX,
-    reason="requires torch>=2.7 ons OSX",
-)
 @pytest.mark.parametrize("compiled", [False, True])
 class TestCudaGraphs:
     @pytest.fixture(scope="class", autouse=True)
@@ -2256,9 +2214,6 @@ def _count_compiles(fn, *args):
     return first, second
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 class TestGuardCount:
     @pytest.mark.parametrize("tensor_only", [False, True])
     def test_tc_construction_eager_and_compiled(self, tensor_only):

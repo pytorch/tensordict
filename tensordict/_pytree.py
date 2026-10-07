@@ -10,15 +10,8 @@ from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import _SubTensorDict, TensorDict, TensorDictBase
 from tensordict.base import _NESTED_TENSORS_AS_LISTS
 from tensordict.persistent import PersistentTensorDict
-from tensordict.utils import _shape, implement_for, is_compiling
-
-try:
-    from torch.utils._pytree import Context, MappingKey, register_pytree_node
-except ImportError:
-    from torch.utils._pytree import (
-        _register_pytree_node as register_pytree_node,
-        Context,
-    )
+from tensordict.utils import _shape, is_compiling
+from torch.utils._pytree import Context, MappingKey, register_pytree_node
 
 PYTREE_REGISTERED_TDS = (
     _SubTensorDict,
@@ -213,17 +206,7 @@ def _lazy_td_flatten_with_keys(
     raise NotImplementedError
 
 
-@implement_for("torch", None, "2.3")
 def _register_td_node(cls):
-    register_pytree_node(
-        cls,
-        _tensordict_flatten,
-        _tensordict_unflatten,
-    )
-
-
-@implement_for("torch", "2.3")
-def _register_td_node(cls):  # noqa: F811
     register_pytree_node(
         cls,
         _tensordict_flatten,
@@ -232,17 +215,7 @@ def _register_td_node(cls):  # noqa: F811
     )
 
 
-@implement_for("torch", None, "2.3")
 def _register_lazy_td_node(cls):
-    register_pytree_node(
-        cls,
-        _lazy_tensordict_flatten,
-        _lazy_tensordict_unflatten,
-    )
-
-
-@implement_for("torch", "2.3")
-def _register_lazy_td_node(cls):  # noqa: F811
     register_pytree_node(
         cls,
         _lazy_tensordict_flatten,

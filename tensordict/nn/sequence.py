@@ -6,11 +6,11 @@
 from __future__ import annotations
 
 import collections
-import logging
 import sys
 from copy import deepcopy
 from typing import Any, Callable, Iterable, List, OrderedDict, overload, TYPE_CHECKING
 
+import functorch
 from tensordict._nestedkey import NestedKey
 from tensordict._td import TensorDict
 
@@ -24,24 +24,7 @@ from tensordict.nn.utils import _set_skip_existing_None
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import _zip_strict, unravel_key_list
 from torch import nn
-
-_has_functorch = False
-try:
-    import functorch
-
-    _has_functorch = True
-except ImportError:
-    logging.info(
-        "failed to import functorch. TensorDict's features that do not require "
-        "functional programming should work, but functionality and performance "
-        "may be affected. Consider installing functorch and/or upgrating pytorch."
-    )
-    FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
-
-try:
-    from torch.compiler import is_compiling
-except ImportError:
-    from torch._dynamo import is_compiling
+from torch.compiler import is_compiling
 
 _has_py311_or_greater = sys.version_info >= (3, 11)
 
@@ -327,8 +310,6 @@ class TensorDictSequential(TensorDictModule):
 
     @staticmethod
     def _find_functional_module(module: TensorDictModuleBase) -> nn.Module:
-        if not _has_functorch:
-            raise ImportError(FUNCTORCH_ERROR)
         fmodule = module
         while not isinstance(
             fmodule, (functorch.FunctionalModule, functorch.FunctionalModuleWithBuffers)

@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pytest
 import torch
-from packaging import version
 from tensordict import lazy_stack, LazyStackedTensorDict, TensorClass, TensorDict
 from tensordict._reductions import _reduce_td
 from tensordict._torch_func import _stack as stack_td
@@ -47,20 +46,15 @@ try:
     _has_h5py = True
 except ImportError:
     _has_h5py = False
-TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
-_v2_5 = TORCH_VERSION >= version.parse("2.5.0")
 PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
 
 _IS_OSX = platform.system() == "Darwin"
 _IS_WINDOWS = sys.platform == "win32"
 
 TD_BATCH_SIZE = 4
-HAS_NESTED_TENSOR = (
-    getattr(torch, "_nested_compute_contiguous_strides_offsets", None) is not None
-)
 
 # Capture all warnings
 pytestmark = [
@@ -586,9 +580,6 @@ class TestLazyStackedTensorDict:
         torch.utils._pytree.tree_map(check_id, td_c._consolidated, tdload._consolidated)
         assert tdload.is_consolidated()
 
-    @pytest.mark.skipif(
-        TORCH_VERSION < version.parse("2.6.0"), reason="v2.6 required for this test"
-    )
     @pytest.mark.parametrize("device", [None, *get_available_devices()])
     @pytest.mark.parametrize("use_file", [False, True])
     @pytest.mark.parametrize("num_threads", [0, 1, 4])
@@ -645,9 +636,6 @@ class TestLazyStackedTensorDict:
         assert tdload.is_consolidated()
         assert tdload["njt_lengths"]._lengths is not None
 
-    @pytest.mark.skipif(
-        TORCH_VERSION < version.parse("2.6.0"), reason="v2.6 required for this test"
-    )
     @pytest.mark.parametrize("device", [None, *get_available_devices()])
     @pytest.mark.parametrize("num_threads", [0, 1, 4])
     def test_consolidate_njt_ragged_idx(self, device, num_threads):
