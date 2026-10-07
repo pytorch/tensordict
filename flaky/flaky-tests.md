@@ -1,13 +1,13 @@
-# Flaky Test Report - 2026-10-06
+# Flaky Test Report - 2026-10-07
 
 ## Summary
 
 - **Confirmed flaky test families**: 1
 - **Affected parameterized cases**: 1
-- **Newly confirmed**: 1
+- **Newly confirmed**: 0
 - **Resolved since previous report**: 0
-- **Total tests analyzed**: 46544
-- **CI runs analyzed**: 17
+- **Total tests analyzed**: 52927
+- **CI runs analyzed**: 18
 
 ---
 
@@ -15,12 +15,8 @@
 
 | Test | Environments | Confirmed revisions | Failures | Last failed |
 |------|--------------|---------------------|----------|-------------|
-| `test.tensordict.test_mp.TestMap::test_map_seed_single` **NEW** | test-linux.yml / test-results-stable-cpu-3.10 | [`16c48b3`](https://github.com/pytorch/tensordict/actions/runs/36738062670) | 1/18 | 2026-09-30 |
+| `test.tensordict.test_mp.TestMap::test_map_seed_single` | test-linux.yml / test-results-stable-cpu-3.10 | [`16c48b3`](https://github.com/pytorch/tensordict/actions/runs/36738062670) | 1/19 | 2026-09-30 |
 
-
-### Newly Flaky
-
-- `test.tensordict.test_mp.TestMap::test_map_seed_single`
 
 ---
 
@@ -31,4 +27,4 @@
 
 ---
 
-*Generated at 2026-10-06T06:27:32.815827+00:00*
+*Generated at 2026-10-07T06:27:25.601264+00:00*
