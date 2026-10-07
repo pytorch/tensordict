@@ -629,6 +629,24 @@ class TestTensorDictStore:
         untouched = torch.tensor([0, 1, 3, 4, 6, 7, 9])
         assert torch.allclose(full[untouched], torch.zeros(7, 4))
 
+    def test_nd_mask(self, store_kwargs):
+        """Reads and writes through a 2-D mask match the same ops on a tensordict."""
+        td = TensorDict({"x": torch.arange(60.0).view(3, 4, 5)}, [3, 4])
+        store = TensorDictStore.from_tensordict(td, **store_kwargs)
+        try:
+            mask = torch.tensor([[True, False, True, False]] * 3)
+            torch.testing.assert_close(store[mask]["x"], td[mask]["x"])
+            torch.testing.assert_close(store.get_at("x", mask), td["x"][mask])
+            value = -torch.ones(6, 5)
+            store.set_at_("x", value, mask)
+            td.set_at_("x", value, mask)
+            store[~mask] = TensorDict({"x": torch.zeros(6, 5)}, [6])
+            td[~mask] = TensorDict({"x": torch.zeros(6, 5)}, [6])
+            torch.testing.assert_close(store["x"], td["x"])
+        finally:
+            store.clear_redis()
+            store.close()
+
     def test_indexed_write_bool_mask(self, store_td):
         """td[mask] = subtd should modify masked rows."""
         store_td["obs"] = torch.zeros(10, 3)
@@ -1088,6 +1106,17 @@ class TestLazyStackedTensorDictStore:
         expected = lazy_td["a"]
         torch.testing.assert_close(store_td.get_at("a", mask), expected[mask])
         store_td.set_at_("a", torch.zeros(3, 4, 3), mask)
+        expected[mask] = 0
+        torch.testing.assert_close(store_td["a"], expected)
+
+    def test_nd_mask(self, store_stack):
+        """A 2-D mask over the stack dim and an inner dim, as on the lazy stack."""
+        store_td, tds, lazy_td = store_stack
+        mask = torch.tensor([[True, False, True, False]] * 5)
+        expected = lazy_td["a"]
+        torch.testing.assert_close(store_td[mask]["a"], expected[mask])
+        torch.testing.assert_close(store_td.get_at("a", mask), expected[mask])
+        store_td.set_at_("a", torch.zeros(10, 3), mask)
         expected[mask] = 0
         torch.testing.assert_close(store_td["a"], expected)
 
