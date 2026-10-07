@@ -145,11 +145,11 @@ exit.
             [0.],
             [0.],
             [0.]], grad_fn=<AddmmBackward0>)
-    Output with original params: tensor([[-0.6101],
-            [-0.7330],
-            [ 0.1110],
-            [-0.2718],
-            [-0.3879]], grad_fn=<AddmmBackward0>)
+    Output with original params: tensor([[-0.4099],
+            [-0.4078],
+            [-0.5083],
+            [-0.4317],
+            [-0.5201]], grad_fn=<AddmmBackward0>)
 
 
 
@@ -246,7 +246,7 @@ leaving the standard PyTorch API.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.005 seconds)
+   **Total running time of the script:** (0 minutes 0.006 seconds)
 
 
 .. _sphx_glr_download_tutorials_functional.py:
