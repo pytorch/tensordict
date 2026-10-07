@@ -2455,6 +2455,9 @@ class TensorDictStore(TensorDictBase):
                 self._loop.call_soon_threadsafe(self._loop.stop)
             if hasattr(self, "_thread") and self._thread.is_alive():
                 self._thread.join(timeout=2)
+            if hasattr(self, "_loop") and not self._loop.is_running():
+                # releases the selector and the self-pipe sockets of the loop
+                self._loop.close()
             self._owns_loop = False
 
     def clear_redis(self):
@@ -4798,6 +4801,9 @@ class LazyStackedTensorDictStore(TensorDictBase):
                 self._loop.call_soon_threadsafe(self._loop.stop)
             if hasattr(self, "_thread") and self._thread.is_alive():
                 self._thread.join(timeout=2)
+            if hasattr(self, "_loop") and not self._loop.is_running():
+                # releases the selector and the self-pipe sockets of the loop
+                self._loop.close()
             self._owns_loop = False
 
     def clear_redis(self):
