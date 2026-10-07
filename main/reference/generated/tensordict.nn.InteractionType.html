@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4447+g0dee7fcb2.d20261007)
+                  main (0.14.0.dev4448+g1a875722f.d20261007)
                 </div>
               
             
@@ -263,6 +263,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_memory.html">Simplifying PyTorch Memory Management with TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/streamed_tensordict.html">Building tensordicts from streams</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/serialization_speed.html">Benchmarking TensorDict serialization speed</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/zarr_storage.html">Storing TensorDicts in zarr</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_module.html">TensorDictModule</a></li>
@@ -363,7 +364,7 @@
 <h1>InteractionType<a class="headerlink" href="#interactiontype" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.nn.InteractionType">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">InteractionType</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.InteractionType" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">InteractionType</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">names=&lt;not</span> <span class="pre">given&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">*values</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qualname=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start=1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">boundary=None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.InteractionType" title="Permalink to this definition">¶</a></dt>
 <dd><p>A list of possible interaction types with a distribution.</p>
 <p>MODE, MEDIAN and MEAN point to the property / attribute with the same name.
 RANDOM points to <code class="docutils literal notranslate"><span class="pre">rsample()</span></code> if that method exists or <code class="docutils literal notranslate"><span class="pre">sample()</span></code> if not.</p>

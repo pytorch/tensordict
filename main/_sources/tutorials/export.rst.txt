@@ -124,7 +124,7 @@ Let us run this model and see what the output looks like:
 
  .. code-block:: none
 
-    (tensor([[0.1014, 0.0000, 0.0000, 0.4767]], grad_fn=<ReluBackward0>), tensor([[ 0.1902,  0.3204, -0.2643,  0.1873]], grad_fn=<AddmmBackward0>), tensor([[0.1902, 0.3204]], grad_fn=<SplitBackward0>), tensor([[0.8422, 1.1217]], grad_fn=<ClampMinBackward0>))
+    (tensor([[0.1266, 1.0563, 0.9971, 0.2857]], grad_fn=<ReluBackward0>), tensor([[-0.3724, -0.6731,  0.3611,  0.3721]], grad_fn=<AddmmBackward0>), tensor([[-0.3724, -0.6731]], grad_fn=<SplitBackward0>), tensor([[1.2416, 1.2495]], grad_fn=<ClampMinBackward0>))
 
 
 
@@ -248,8 +248,8 @@ This module can be run exactly like our original module (with a lower overhead):
 
  .. code-block:: none
 
-    Time for TDModule:  425.10 micro-seconds
-    Time for exported module:  341.18 micro-seconds
+    Time for TDModule:  378.61 micro-seconds
+    Time for exported module:  337.84 micro-seconds
 
 
 
@@ -274,13 +274,13 @@ and the FX graph:
 
     class GraphModule(torch.nn.Module):
         def forward(self, p_module_0_module_weight: "f32[4, 3]", p_module_0_module_bias: "f32[4]", p_module_2_module_weight: "f32[4, 4]", p_module_2_module_bias: "f32[4]", x: "f32[1, 3]"):
-            # File: /__w/tensordict/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
+            # File: /__w/tensordict/tensordict/env/lib/python3.12/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
             linear: "f32[1, 4]" = torch.ops.aten.linear.default(x, p_module_0_module_weight, p_module_0_module_bias);  x = p_module_0_module_weight = p_module_0_module_bias = None
 
-            # File: /__w/tensordict/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:143 in forward, code: return F.relu(input, inplace=self.inplace)
+            # File: /__w/tensordict/tensordict/env/lib/python3.12/site-packages/torch/nn/modules/activation.py:143 in forward, code: return F.relu(input, inplace=self.inplace)
             relu: "f32[1, 4]" = torch.ops.aten.relu.default(linear);  linear = None
 
-            # File: /__w/tensordict/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
+            # File: /__w/tensordict/tensordict/env/lib/python3.12/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
             linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_module_2_module_weight, p_module_2_module_bias);  p_module_2_module_weight = p_module_2_module_bias = None
 
             # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
@@ -299,13 +299,13 @@ and the FX graph:
 
     fx graph: class GraphModule(torch.nn.Module):
         def forward(self, p_module_0_module_weight: "f32[4, 3]", p_module_0_module_bias: "f32[4]", p_module_2_module_weight: "f32[4, 4]", p_module_2_module_bias: "f32[4]", x: "f32[1, 3]"):
-            # File: /__w/tensordict/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
+            # File: /__w/tensordict/tensordict/env/lib/python3.12/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
             linear: "f32[1, 4]" = torch.ops.aten.linear.default(x, p_module_0_module_weight, p_module_0_module_bias);  x = p_module_0_module_weight = p_module_0_module_bias = None
 
-            # File: /__w/tensordict/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:143 in forward, code: return F.relu(input, inplace=self.inplace)
+            # File: /__w/tensordict/tensordict/env/lib/python3.12/site-packages/torch/nn/modules/activation.py:143 in forward, code: return F.relu(input, inplace=self.inplace)
             relu: "f32[1, 4]" = torch.ops.aten.relu.default(linear);  linear = None
 
-            # File: /__w/tensordict/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
+            # File: /__w/tensordict/tensordict/env/lib/python3.12/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
             linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_module_2_module_weight, p_module_2_module_bias);  p_module_2_module_weight = p_module_2_module_bias = None
 
             # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
@@ -432,7 +432,7 @@ When an `x` input is provided, we expect our model to output a single tensor cor
 
  .. code-block:: none
 
-    tensor([[0.1902, 0.3204]], grad_fn=<SplitBackward0>)
+    tensor([[-0.3724, -0.6731]], grad_fn=<SplitBackward0>)
 
 
 
@@ -514,7 +514,7 @@ Next steps and further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.335 seconds)
+   **Total running time of the script:** (0 minutes 0.351 seconds)
 
 
 .. _sphx_glr_download_tutorials_export.py:

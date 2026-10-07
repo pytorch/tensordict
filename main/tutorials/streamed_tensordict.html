@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4447+g0dee7fcb2.d20261007)
+                  main (0.14.0.dev4448+g1a875722f.d20261007)
                 </div>
               
             
@@ -263,6 +263,7 @@
 <li class="toctree-l1"><a class="reference internal" href="tensordict_memory.html">Simplifying PyTorch Memory Management with TensorDict</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Building tensordicts from streams</a></li>
 <li class="toctree-l1"><a class="reference internal" href="serialization_speed.html">Benchmarking TensorDict serialization speed</a></li>
+<li class="toctree-l1"><a class="reference internal" href="zarr_storage.html">Storing TensorDicts in zarr</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="tensordict_module.html">TensorDictModule</a></li>
@@ -464,7 +465,7 @@ As soon as <code class="docutils literal notranslate"><span class="pre">timeout<
     <span class="n">task</span> <span class="o">=</span> <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task" title="asyncio.create_task" class="sphx-glr-backref-module-asyncio sphx-glr-backref-type-py-function"><span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span></a><span class="p">(</span><span class="n">collect</span><span class="p">())</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="k">await</span> <a href="https://docs.python.org/3/library/asyncio-task.html#asyncio.wait_for" title="asyncio.wait_for" class="sphx-glr-backref-module-asyncio sphx-glr-backref-type-py-function"><span class="n">asyncio</span><span class="o">.</span><span class="n">wait_for</span></a><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
-    <span class="k">except</span> <a href="https://docs.python.org/3/library/asyncio-exceptions.html#asyncio.TimeoutError" title="asyncio.TimeoutError" class="sphx-glr-backref-module-asyncio sphx-glr-backref-type-py-exception"><span class="n">asyncio</span><span class="o">.</span><span class="n">TimeoutError</span></a><span class="p">:</span>
+    <span class="k">except</span> <a href="https://docs.python.org/3/builtins/exceptions.html#TimeoutError" title="builtins.TimeoutError" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-exception"><span class="n">asyncio</span><span class="o">.</span><span class="n">TimeoutError</span></a><span class="p">:</span>
         <span class="n">task</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
     <span class="k">return</span> <span class="n">values</span>
 </pre></div>
@@ -599,7 +600,7 @@ simplify complex data processing tasks, such as bucketizing data streams with di
 By leveraging the power of TensorDict and asyncio, you can build scalable and efficient data processing pipelines
 that can handle even the most demanding real-world applications.</p>
 <p>Thanks for following along with this tutorial! We hope you’ve found it helpful and informative.</p>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 11.023 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 11.021 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-streamed-tensordict-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/ea350b8ef859f0797dd9ceffacb742e6/streamed_tensordict.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">streamed_tensordict.ipynb</span></code></a></p>

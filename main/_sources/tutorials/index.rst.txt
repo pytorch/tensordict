@@ -98,6 +98,23 @@ README Tutos
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_zarr_storage_thumb.png
+    :alt:
+
+  :doc:`/tutorials/zarr_storage`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Storing TensorDicts in zarr</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="In this tutorial you will learn how to work with and manipulate the keys in a TensorDict, including getting and setting keys, iterating over keys, manipulating nested values, and flattening the keys.">
 
 .. only:: html
@@ -247,6 +264,7 @@ README Tutos
    /tutorials/tensordict_preallocation
    /tutorials/functional
    /tutorials/export
+   /tutorials/zarr_storage
    /tutorials/tensordict_keys
    /tutorials/streamed_tensordict
    /tutorials/tensordict_module
