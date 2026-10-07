@@ -759,6 +759,9 @@ class TestMap:
         )
         return td
 
+    # The tests below pass num_workers explicitly. The default, mp.cpu_count(),
+    # counts the host's CPUs rather than the container's, so on a large CI host
+    # the pool spawns more processes than the container has memory for.
     def test_map_non_tensor(self):
         gc.collect()
         # with NonTensorStack
@@ -766,14 +769,14 @@ class TestMap:
             {"tensor": torch.arange(10), "non_tensor": "a string!"}, batch_size=[10]
         )
         td[1::2] = TensorDict({"non_tensor": "another string!"}, [5])
-        td = td.map(self.nontensor_check, chunksize=0)
+        td = td.map(self.nontensor_check, chunksize=0, num_workers=2)
         assert td["check"].all()
         # with NonTensorData
         td = TensorDict(
             {"tensor": torch.zeros(10, dtype=torch.int), "non_tensor": "a string!"},
             batch_size=[10],
         )
-        td = td.map(self.nontensor_check, chunksize=0)
+        td = td.map(self.nontensor_check, chunksize=0, num_workers=2)
         assert td["check"].all()
 
     @staticmethod
@@ -803,6 +806,7 @@ class TestMap:
         data_prev = None
         for data in td.map_iter(
             self._return_identical,
+            num_workers=2,
             shuffle=shuffle,
             num_chunks=num_chunks,
             chunksize=chunksize,
@@ -849,6 +853,7 @@ class TestMap:
         )
         for _ in td.map_iter(
             self._return_identical,
+            num_workers=2,
             shuffle=shuffle,
             num_chunks=num_chunks,
             chunksize=chunksize,
