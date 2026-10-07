@@ -257,3 +257,62 @@ jobs:
           name: test-results-stable-cpu-${{ matrix.python_version }}
           path: ${{ github.workspace }}/artifacts
           if-no-files-found: ignore
+
+  # The oldest torch that pyproject.toml accepts. Update both together.
+  test-oldest-cpu:
+    strategy:
+      matrix:
+        python_version: ["3.10"]
+      fail-fast: false
+    runs-on: mt-l-x86iavx512-48-384
+    container:
+      image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    # The scripts below source conda, so a login shell.
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      # Before checkout on purpose: actions/checkout needs git in the
+      # container, and this image has none -- without it the checkout
+      # degrades to a REST API tarball with no .git, which the scripts need.
+      - name: Install git
+        run: |
+          set -eux
+          apt-get update
+          apt-get install -y git
+
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Run tests
+        env:
+          PYTHON_VERSION: ${{ matrix.python_version }}
+          CU_VERSION: cpu
+          TORCH_VERSION: "2.13"
+          ARCH: x86_64
+          RUNNER_ARTIFACT_DIR: ${{ github.workspace }}/artifacts
+        run: |
+          set -eux
+          mkdir -p "${RUNNER_ARTIFACT_DIR}"
+          echo "PYTHON_VERSION: $PYTHON_VERSION"
+          echo "CU_VERSION: $CU_VERSION"
+
+          bash .github/unittest/linux/scripts/setup_env.sh
+          bash .github/unittest/linux/scripts/install.sh
+          bash .github/unittest/linux/scripts/run_test.sh
+          bash .github/unittest/linux/scripts/post_process.sh
+
+      - name: Collect junit results
+        if: always()
+        run: ls -la "${{ github.workspace }}/artifacts" || true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-oldest-cpu-${{ matrix.python_version }}
+          path: ${{ github.workspace }}/artifacts
+          if-no-files-found: ignore
