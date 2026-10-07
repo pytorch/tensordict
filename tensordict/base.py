@@ -6864,6 +6864,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             # Tensors: DTensor, nested and then regular
             if hasattr(value, "full_tensor"):
                 raise NotImplementedError("DTensor is not supported yet")
+            if _is_unbatched(value):
+                # the leaf would be rebuilt as a plain tensor
+                raise NotImplementedError(
+                    f"UnbatchedTensor entries cannot be consolidated yet, but "
+                    f"{unravel_key(total_key)!r} is one."
+                )
             if getattr(value, "is_nested", False):
                 if value.layout is torch.jagged:
                     # Get the values
