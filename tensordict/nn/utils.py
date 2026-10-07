@@ -485,7 +485,7 @@ _composite_lp_aggregate = _ContextManager(
 
 
 def composite_lp_aggregate(nowarn: bool = False) -> bool | None:
-    """Returns whether a :class:`~tensordict.nn.CompositeDistribution` log-probabilities and entropies will be aggregated in a single tensor.
+    """Returns whether a :class:`~tensordict.nn.distributions.CompositeDistribution` log-probabilities and entropies will be aggregated in a single tensor.
 
     Args:
         nowarn (bool, optional): whether to ignore warnings. Defaults to False.
@@ -498,9 +498,9 @@ def composite_lp_aggregate(nowarn: bool = False) -> bool | None:
 
 
 class set_composite_lp_aggregate(_DecoratorContextManager):
-    """Controls whether :class:`~tensordict.nn.CompositeDistribution` log-probabilities and entropies will be aggregated in a single tensor.
+    """Controls whether :class:`~tensordict.nn.distributions.CompositeDistribution` log-probabilities and entropies will be aggregated in a single tensor.
 
-    When :func:`~tensordict.nn.composite_lp_aggregate` returns ``True``, the log-probs / entropies of :class:`~tensordict.nn.CompositeDistribution`
+    When :func:`~tensordict.nn.composite_lp_aggregate` returns ``True``, the log-probs / entropies of :class:`~tensordict.nn.distributions.CompositeDistribution`
     will be summed into a single tensor with the shape of the root tensordict. This behaviour is being deprecated in favor of
     non-aggregated log-probs, which offer more flexibility and a somewhat more natural API (tensordict samples, tensordict log-probs, tensordict entropies).
 
