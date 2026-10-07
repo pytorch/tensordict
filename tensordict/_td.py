@@ -64,6 +64,8 @@ from tensordict.utils import (
     _BatchedUninitializedParameter,
     _canonicalize_tensor,
     _check_inbuild,
+    _CHECK_INVARIANTS,
+    _check_invariants,
     _clone_value,
     _create_segments_from_int,
     _create_segments_from_list,
@@ -436,8 +438,6 @@ class TensorDict(TensorDictBase):
                         non_blocking=sub_non_blocking,
                     )
                 _tensordict[key] = value
-        # assert names is None or len(names) == self.batch_dims, (names, batch_size)
-        # assert (names is None) or (not all(name is None for name in names))
         self._td_dim_names = names
         if lock:
             self.lock_()
@@ -445,6 +445,8 @@ class TensorDict(TensorDictBase):
             self._is_shared = True
         if is_memmap:
             self._is_memmap = True
+        if _CHECK_INVARIANTS and not is_compiling():
+            _check_invariants(self)
         return self
 
     @classmethod
@@ -1234,7 +1236,7 @@ class TensorDict(TensorDictBase):
                     if values_only:
                         result = result.values
                     else:
-                        return TensorDict.from_namedtuple(result)
+                        return TensorDict.from_namedtuple(result, batch_size=batch_size)
                 return result
 
             if batch_size is not None:
