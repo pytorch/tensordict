@@ -2264,6 +2264,9 @@ def _getitem_batch_size(batch_size, index):
         elif isinstance(idx, (range, list)):
             shape = len(idx)
         elif isinstance(idx, torch.Tensor):
+            if idx.dtype == torch.uint8:
+                # torch reads a uint8 tensor as a mask (deprecated)
+                idx = idx.bool()
             if idx.dtype == torch.bool:
                 # int() graph-breaks on the data-dependent size under compile
                 shape = torch.Size([int(idx.sum())])
