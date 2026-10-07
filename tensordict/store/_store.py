@@ -2614,6 +2614,17 @@ class TensorDictStore(TensorDictBase):
         )
 
     def memmap_(self, prefix=None, copy_existing=False, num_threads=0):
+        """Raises a ``RuntimeError``: a TensorDictStore cannot be memory-mapped in-place.
+
+        Use :meth:`~tensordict.TensorDictBase.memmap` to build a memory-mapped copy instead.
+
+        Args:
+            prefix (str, optional): unused.
+            copy_existing (bool, optional): unused.
+            num_threads (int, optional): unused.
+
+        See :meth:`~tensordict.TensorDictBase.memmap_`.
+        """
         raise RuntimeError(
             f"Cannot build a memmap TensorDict in-place from a {type(self).__name__}. "
             "Use `td.memmap()` instead."
@@ -2646,6 +2657,17 @@ class TensorDictStore(TensorDictBase):
 
     @_as_context_manager()
     def flatten_keys(self, separator=".", inplace=False):
+        """Returns an in-memory copy where the nested keys are joined by ``separator``.
+
+        The content is first loaded with :meth:`~tensordict.TensorDictBase.to_tensordict`.
+
+        Args:
+            separator (str, optional): the separator between the nested items. Defaults to ``"."``.
+            inplace (bool, optional): must be ``False``; ``True`` raises a ``ValueError``.
+                Defaults to ``False``.
+
+        See :meth:`~tensordict.TensorDictBase.flatten_keys`.
+        """
         if inplace:
             raise ValueError(
                 f"Cannot call flatten_keys in_place with a {type(self).__name__}."
@@ -3153,6 +3175,15 @@ class _StoreStackElementView(TensorDictBase):
         raise RuntimeError(f"Cannot make memmap on a {type(self).__name__}.")
 
     def memmap_(self, prefix=None, copy_existing=False, num_threads=0):
+        """Raises a ``RuntimeError``: a stack element view cannot be memory-mapped in-place.
+
+        Args:
+            prefix (str, optional): unused.
+            copy_existing (bool, optional): unused.
+            num_threads (int, optional): unused.
+
+        See :meth:`~tensordict.TensorDictBase.memmap_`.
+        """
         raise RuntimeError(f"Cannot call memmap_ on a {type(self).__name__}.")
 
     def pin_memory(self, *a, **kw):
@@ -3173,6 +3204,17 @@ class _StoreStackElementView(TensorDictBase):
 
     @_as_context_manager()
     def flatten_keys(self, separator=".", inplace=False):
+        """Returns an in-memory copy where the nested keys are joined by ``separator``.
+
+        The content is first loaded with :meth:`~tensordict.TensorDictBase.to_tensordict`.
+
+        Args:
+            separator (str, optional): the separator between the nested items. Defaults to ``"."``.
+            inplace (bool, optional): ignored; a new tensordict is always returned.
+                Defaults to ``False``.
+
+        See :meth:`~tensordict.TensorDictBase.flatten_keys`.
+        """
         return self.to_tensordict().flatten_keys(separator=separator)
 
     @_as_context_manager()
@@ -4944,6 +4986,15 @@ class LazyStackedTensorDictStore(TensorDictBase):
         )
 
     def memmap_(self, prefix=None, copy_existing=False, num_threads=0):
+        """Raises a ``RuntimeError``: a LazyStackedTensorDictStore cannot be memory-mapped in-place.
+
+        Args:
+            prefix (str, optional): unused.
+            copy_existing (bool, optional): unused.
+            num_threads (int, optional): unused.
+
+        See :meth:`~tensordict.TensorDictBase.memmap_`.
+        """
         raise RuntimeError(
             f"Cannot build a memmap TensorDict in-place from a {type(self).__name__}."
         )
@@ -4966,6 +5017,17 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     @_as_context_manager()
     def flatten_keys(self, separator=".", inplace=False):
+        """Returns an in-memory copy where the nested keys are joined by ``separator``.
+
+        The content is first loaded with :meth:`~tensordict.TensorDictBase.to_tensordict`.
+
+        Args:
+            separator (str, optional): the separator between the nested items. Defaults to ``"."``.
+            inplace (bool, optional): must be ``False``; ``True`` raises a ``ValueError``.
+                Defaults to ``False``.
+
+        See :meth:`~tensordict.TensorDictBase.flatten_keys`.
+        """
         if inplace:
             raise ValueError(
                 f"Cannot call flatten_keys in_place with a {type(self).__name__}."
