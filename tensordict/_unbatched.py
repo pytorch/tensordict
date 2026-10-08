@@ -8,7 +8,6 @@ import math
 import warnings
 
 import torch
-from torch.overrides import get_default_nowrap_functions
 
 
 def _has_wrapper_subclass_vmap_fix():
@@ -409,7 +408,8 @@ else:
             with torch._C.DisableTorchFunctionSubclass():
                 result = func(*args, **kwargs)
                 # Rewrapping a view's base creates an endless chain of views.
-                if func in get_default_nowrap_functions():
+                # Gradients are rewrapped below, so they stay unbatched.
+                if func == torch.Tensor._base.__get__:
                     return result
                 if isinstance(result, torch.Tensor):
                     out = result.as_subclass(cls)
