@@ -1793,6 +1793,23 @@ class TestGeneric:
         assert td[True].batch_size == torch.Size([1])
         assert td[False].batch_size == torch.Size([0])
 
+    @pytest.mark.parametrize(
+        "index", [np.True_, np.False_, (slice(None), np.True_), (np.False_, ...)]
+    )
+    def test_index_numpy_bool_scalar(self, index):
+        # torch rejects a NumPy bool scalar with NumPy 2 (and reads it as an
+        # int with NumPy 1); tensordict rejects it with both
+        td = TensorDict({"a": torch.zeros(3, 4)}, [3, 4], names=["x", "y"])
+        with pytest.raises(IndexError, match="NumPy bool"):
+            td[index]
+        with pytest.raises(IndexError, match="NumPy bool"):
+            td[index] = 1.0
+        with pytest.raises(IndexError, match="NumPy bool"):
+            td[index] = TensorDict({"a": torch.ones(4)}, [4])
+        assert (td["a"] == 0).all()
+        # a list of NumPy bools is a mask, as in torch
+        assert td[[np.True_, np.False_, np.True_]].batch_size == torch.Size([2, 4])
+
     def test_getitem_nested(self):
         tensor = torch.randn(4, 5, 6, 7)
         sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])
