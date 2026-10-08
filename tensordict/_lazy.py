@@ -188,6 +188,13 @@ def _masks_to_nonzero(index: tuple) -> tuple:
     return tuple(new_index)
 
 
+def _selects_no_member(nested_index: list) -> bool:
+    """Whether a nested list of ``(member, index)`` pairs from ``_split_index`` has no pair."""
+    return all(
+        isinstance(item, list) and _selects_no_member(item) for item in nested_index
+    )
+
+
 def _fails_exclusive_keys(func):
     @wraps(func)
     def newfunc(self, *args, **kwargs):
@@ -1056,16 +1063,36 @@ class LazyStackedTensorDict(TensorDictBase):
             "num_squash": num_squash,
         }
 
-    def _empty_getitem_result(self, index: IndexType, stack_dim: int) -> Self:
-        """Build the zero-length lazy stack produced by an index that selects nothing.
+    def _empty_getitem_result(self, index: IndexType, stack_dim: int) -> TensorDictBase:
+        """Build the result of an index that selects no element along the stack dim.
 
-        ``_new_lazy_unsafe`` re-inserts the stack dim into the batch size it
-        is given, so it must receive the constituents' batch size (the
-        result's batch size with ``stack_dim`` removed), not the result's.
-        The result has zero constituents and therefore no key structure, but
-        it keeps the lazy-stack type so that e.g. ``torch.cat`` with sibling
-        lazy stacks still works.
+        A lazy stack of such a selection would have no members, and so no keys,
+        and the operations that read the structure of a stack from its members
+        fail on it. The result is instead what the index gives on a dense copy
+        of the stack: a tensordict with the keys, batch size and names of a
+        dense result. No data is copied: the index is applied to the first
+        member, repeated along the stack dim with ``expand``. Only the keys
+        that all members share are kept, as in :meth:`to_tensordict`, and
+        members that differ in shape give the shapes of the first member.
+        ``torch.cat`` with sibling lazy stacks still returns a lazy stack.
+
+        A non-tensor stack, or a stack without members, gives a lazy stack
+        without members. ``_new_lazy_unsafe`` re-inserts the stack dim into the
+        batch size it is given, so it must receive the constituents' batch size
+        (the result's batch size with ``stack_dim`` removed), not the result's.
         """
+        if self.tensordicts and not is_non_tensor(self):
+            td = self.tensordicts[0]
+            if self._has_exclusive_keys:
+                td = td.select(*self.keys(True))
+            td = td.unsqueeze(self.stack_dim)
+            if self._td_dim_name is not None:
+                names = td.names
+                names[self.stack_dim] = self._td_dim_name
+                td.names = names
+            shape = list(td.batch_size)
+            shape[self.stack_dim] = len(self.tensordicts)
+            return td.expand(shape)[index]
         batch_size = _getitem_batch_size(self.batch_size, index)
         constituent_batch_size = torch.Size(
             tuple(batch_size[:stack_dim]) + tuple(batch_size[stack_dim + 1 :])
@@ -2026,6 +2053,16 @@ class LazyStackedTensorDict(TensorDictBase):
         )
 
     def _clone(self, recurse: bool = True) -> Self:
+        if not self.tensordicts:
+            # a stack without members cannot read its batch size from them
+            batch_size = list(self.batch_size)
+            del batch_size[self.stack_dim]
+            return type(self)(
+                stack_dim=self.stack_dim,
+                batch_size=batch_size,
+                device=self.device,
+                stack_dim_name=self._td_dim_name,
+            )
         if recurse:
             # This could be optimized using copy but we must be careful with
             # metadata (_is_shared etc)
@@ -2684,6 +2721,10 @@ class LazyStackedTensorDict(TensorDictBase):
                 return result
         elif is_nd_tensor:
             new_stack_dim = self.stack_dim - num_single + num_none
+            if _selects_no_member(converted_idx) and not is_non_tensor(self):
+                # e.g. an empty index tensor along the stack dim. A non-tensor
+                # stack has no dense copy: the empty lazy_stack below raises.
+                return self._empty_getitem_result(index, new_stack_dim)
 
             def recompose(converted_idx, stack_dim=new_stack_dim):
                 stack = []
