@@ -60,11 +60,7 @@ from tensordict._archive import (
 )
 from tensordict._contextlib import LAST_OP_MAPS
 from tensordict._datasets import to_mds
-from tensordict._indexing import (
-    _nested_list_to_tensor,
-    _num_indexed_dims,
-    convert_ellipsis_to_idx,
-)
+from tensordict._indexing import _getitem_names, convert_ellipsis_to_idx
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
 from tensordict.memmap import MemoryMappedTensor
@@ -91,7 +87,6 @@ from tensordict.utils import (
     _is_dataclass as is_dataclass,
     _is_list_tensor_compatible,
     _is_non_tensor,
-    _is_number,
     _is_safe_legacy_key,
     _is_tensorclass,
     _is_unbatched,
@@ -5930,71 +5925,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def _get_names_idx(self, idx):
         if not self._has_names():
             return None
-
-        def is_boolean(idx):
-            try:
-                from functorch import dim as ftdim
-
-            except ImportError:
-                from tensordict.utils import _ftdim_mock as ftdim
-
-            if isinstance(idx, ftdim.Dim):
-                return None
-            if isinstance(idx, tuple) and len(idx) == 1:
-                return is_boolean(idx[0])
-            if hasattr(idx, "dtype") and idx.dtype is torch.bool:
-                return idx.ndim
-            return None
-
-        num_boolean_dim = is_boolean(idx)
-        names = self.names
-        if num_boolean_dim:
-            # an N-D mask merges N dims into one unnamed dim, a 1-D mask keeps
-            # the name of its dim
-            if num_boolean_dim > 1:
-                names = [None] + names[num_boolean_dim:]
-        else:
-            if not isinstance(idx, tuple):
-                idx = (idx,)
-            if sum(_num_indexed_dims(_idx) for _idx in idx) < self.ndim:
-                idx = (*idx, Ellipsis)
-            idx_names = convert_ellipsis_to_idx(idx, self.batch_size)
-            idx_names = [_nested_list_to_tensor(_idx) for _idx in idx_names]
-            # scalar bools and 0-d masks add an unnamed dim, unless they
-            # broadcast with another tensor-like index
-            add_0d_dim = not any(
-                isinstance(_idx, (list, range))
-                or (isinstance(_idx, (torch.Tensor, np.ndarray)) and _idx.ndim)
-                for _idx in idx_names
-            )
-            # this will convert a [None, :, :, 0, None, 0] in [None, 0, 1, None, 3]
-            count = 0
-            idx_to_take = []
-            no_more_tensors = False
-            for _idx in idx_names:
-                num_dims = _num_indexed_dims(_idx)
-                if _idx is None:
-                    idx_to_take.append(None)
-                elif not num_dims:
-                    if add_0d_dim:
-                        idx_to_take.append(None)
-                        add_0d_dim = False
-                elif _is_number(_idx):
-                    count += 1
-                elif isinstance(_idx, (torch.Tensor, np.ndarray)):
-                    if not no_more_tensors:
-                        if num_dims == 1:
-                            idx_to_take.extend([count] * _idx.ndim)
-                        else:
-                            # an N-D mask merges the dims it consumes into one
-                            idx_to_take.append(None)
-                        no_more_tensors = True
-                    # the other tensors are skipped
-                    count += num_dims
-                else:
-                    idx_to_take.append(count)
-                    count += 1
-            names = [names[i] if i is not None else None for i in idx_to_take]
+        names = _getitem_names(self.names, idx)
         if all(name is None for name in names):
             return None
         return names

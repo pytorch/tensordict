@@ -22,11 +22,20 @@ from tensordict import (
     UnbatchedTensor,
 )
 from tensordict._lazy import LazyStackedTensorDict
-from tensordict._torch_func import _stack as stack_td
 from tensordict.base import is_tensor_collection
 from tensordict.nn.params import TensorDictParams
 from tensordict.persistent import _has_h5 as _has_h5py
 from tensordict.utils import _check_recursive_properties, set_lazy_legacy
+
+
+def legacy_lazy_mode():
+    """Return ``set_lazy_legacy(True)``, without the warning that it is deprecated.
+
+    The legacy lazy mode stays tested until it is removed.
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", "The legacy lazy mode", DeprecationWarning)
+        return set_lazy_legacy(True)
 
 
 def prod(sequence):
@@ -150,7 +159,6 @@ class TestTensorDictsBase:
         TYPES_DEVICES_NOLAZY += [["nested_tensorclass", device]]
 
     @classmethod
-    @set_lazy_legacy(True)
     def nested_stacked_td(cls, device):
         td = TensorDict(
             source={
@@ -165,14 +173,15 @@ class TestTensorDictsBase:
             device=device,
         )
         # we need to clone to avoid passing a views other tensors
-        return torch.stack([_td.clone() for _td in td.unbind(1)], 1)
+        return LazyStackedTensorDict(
+            *[_td.clone() for _td in td.unbind(1)], stack_dim=1
+        )
 
     for device in get_available_devices():
         TYPES_DEVICES += [["nested_stacked_td", device]]
         TYPES_DEVICES_NOLAZY += [["nested_stacked_td", device]]
 
     @classmethod
-    @set_lazy_legacy(True)
     def stacked_td(cls, device):
         td1 = TensorDict(
             source={
@@ -192,7 +201,7 @@ class TestTensorDictsBase:
             batch_size=[4, 3, 1],
             device=device,
         )
-        return stack_td([td1, td2], 2)
+        return LazyStackedTensorDict(td1, td2, stack_dim=2)
 
     for device in get_available_devices():
         TYPES_DEVICES += [["stacked_td", device]]
@@ -258,7 +267,7 @@ class TestTensorDictsBase:
     TYPES_DEVICES_NOLAZY += [["memmap_td", torch.device("cpu")]]
 
     @classmethod
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def permute_td(cls, device):
         return TensorDict(
             source={
@@ -274,7 +283,7 @@ class TestTensorDictsBase:
         TYPES_DEVICES += [["permute_td", device]]
 
     @classmethod
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def unsqueezed_td(cls, device):
         td = TensorDict(
             source={
@@ -291,7 +300,7 @@ class TestTensorDictsBase:
         TYPES_DEVICES += [["unsqueezed_td", device]]
 
     @classmethod
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def squeezed_td(cls, device):
         td = TensorDict(
             source={

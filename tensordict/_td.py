@@ -35,6 +35,7 @@ import torch
 from tensordict._archive import _memmap_tensor_from_path
 from tensordict._indexing import (
     _getitem_batch_size,
+    _is_new_dim_index,
     _read_element,
     convert_ellipsis_to_idx,
 )
@@ -975,23 +976,21 @@ class TensorDict(TensorDictBase):
             isinstance(index, tuple) and any(idx is Ellipsis for idx in index)
         ):
             index = convert_ellipsis_to_idx(index, self.batch_size)
-        # Convert index like (True,) or True to (0,) over unsqueezed self
-        # (False selects nothing, like a 0-d False mask, so it is not converted)
         if isinstance(index, tuple) and len(index) == 1:
             index = index[0]
-        if (
-            index is True
-            or index is None
-            or (
-                isinstance(index, torch.Tensor)
-                and index.shape == ()
-                and index.dtype == torch.bool
-                and index.all()
-            )
-        ):
-            with self.unsqueeze(0) as td_unsqueezed:
-                td_unsqueezed[:] = value
-            return
+        if _is_new_dim_index(index):
+            # None and True add a dim of size 1, and the value is written to it
+            # (False selects nothing, as a 0-d False mask does)
+            if not self.batch_dims:
+                # the entries of a tensordict without batch dims may not take an
+                # index (e.g. NonTensorData), so write through a dim of size 1
+                with self.unsqueeze(0) as td_unsqueezed:
+                    td_unsqueezed[:] = value
+                return
+            if isinstance(value, (TensorDictBase, dict)):
+                # torch reads the other values with None and True itself
+                value = _value_at_new_dim(self, value)
+                index = (slice(None),) * self.batch_dims
         if isinstance(index, list):
             # Index with (list,), as __getitem__ does: torch reads a bare nested
             # list, and _SubTensorDict any bare list, as per-dim indices
@@ -5523,6 +5522,18 @@ def _set_tensor_dict(  # noqa: F811
     else:
         __dict__[name] = tensor
     return out
+
+
+def _value_at_new_dim(td: TensorDictBase, value):
+    """Return what ``td[None] = value`` and ``td[True] = value`` write to every element of ``td``.
+
+    ``None`` and ``True`` add a dim of size 1 in front of the batch dims. The
+    value is broadcast to that batch size, and its only element is written.
+    """
+    batch_size = torch.Size([1, *td.batch_size])
+    if isinstance(value, dict):
+        value = td.from_dict_instance(value, batch_size=batch_size, device=td.device)
+    return value.expand(batch_size)[0]
 
 
 def _index_to_str(index: IndexType) -> Any:
