@@ -65,9 +65,20 @@ else
 
     ${CONDA_RUN} conda install -c conda-forge pybind11 -y
 
-    # Python 3.15 beta packages on Linux split the static library from the interpreter.
-    if [[ "${OSTYPE:-}" == linux* && "${PYTHON_VERSION:-}" == 3.15* ]]; then
-        ${CONDA_RUN} conda install -c conda-forge/label/python_dev -c conda-forge libpython-static -y
+    if [[ "${PYTHON_VERSION:-}" == 3.15* ]]; then
+        # conda-forge's Python 3.15 package ships libpython in separate
+        # packages, and CMake's FindPython needs it for the Development component.
+        if [[ "${OSTYPE:-}" == linux* ]]; then
+            ${CONDA_RUN} conda install -c conda-forge/label/python_dev -c conda-forge libpython-static -y
+            # test-infra's Linux smoke test installs 3.15 wheels with
+            # --index-url https://download.pytorch.org/whl/..., which has no pyvers.
+            # Install it from PyPI first; drop this once test-infra installs
+            # 3.15 wheels from PyPI. Keep the range in sync with pyproject.toml.
+            ${CONDA_RUN} pip install "pyvers>=0.2.0,<0.3.0"
+        elif [[ "${OSTYPE:-}" == darwin* ]]; then
+            # macOS takes the shared library, the layout of its Python 3.14 env.
+            ${CONDA_RUN} conda install -c conda-forge/label/python_dev -c conda-forge libpython -y
+        fi
     fi
 
     # Install setuptools_scm which is required for building with --no-isolation
