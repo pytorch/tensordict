@@ -35,6 +35,7 @@ from typing import (
 import numpy as np
 
 import torch
+from tensordict._indexing import _getitem_batch_size, convert_ellipsis_to_idx
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
@@ -59,7 +60,6 @@ from tensordict.utils import (
     _check_is_flatten,
     _check_is_unflatten,
     _get_shape_from_args,
-    _getitem_batch_size,
     _infer_size_impl,
     _is_number,
     _is_unbatched,
@@ -73,7 +73,6 @@ from tensordict.utils import (
     _unravel_key_to_tuple,
     _zip_strict,
     cache,
-    convert_ellipsis_to_idx,
     DeviceType,
     erase_cache,
     expand_right,

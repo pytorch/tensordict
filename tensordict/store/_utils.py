@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import numpy as np
 import torch
-from tensordict.utils import _bool_lists_to_masks
+from tensordict._indexing import _bool_lists_to_masks
 
 __all__ = [
     "_LUA_GETRANGES",
