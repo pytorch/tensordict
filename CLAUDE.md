@@ -2,6 +2,8 @@
 
 House rules for LLM-driven contributions to `tensordict`. Sits on top of
 [`CONTRIBUTING.md`](CONTRIBUTING.md); this file wins for AI-generated changes.
+[`ARCHITECTURE.md`](ARCHITECTURE.md) maps the code: modules, class
+hierarchy, and the places a new operation touches.
 
 ## Imports
 
@@ -24,7 +26,7 @@ House rules for LLM-driven contributions to `tensordict`. Sits on top of
 `tensordict` *is* the container library — don't fork the abstraction:
 
 - Extend `TensorDictBase` / `TensorDict` / `LazyStackedTensorDict` /
-  `PersistentTensorDict` / `Tensorclass` / `TypedTensorDict` rather than
+  `PersistentTensorDict` / `TensorClass` / `TypedTensorDict` rather than
   introducing parallel dict-like types.
 - Use `NestedKey` semantics for keys.
 
@@ -57,13 +59,13 @@ Strongly encouraged — many downstream projects compile through us. Prefer
 `torch.where` over Python `if`/`else` on tensor values; avoid data-dependent
 shapes and `.item()` on hot paths; keep dtypes/devices stable. For hot paths
 (core ops, keys, batched ops, `nn`, memmap/store), verify under
-`torch.compile` and where reasonable cudagraphs — extend `test/test_compile.py`
+`torch.compile` and where reasonable cudagraphs — extend `test/compile/test_compile.py`
 and `benchmarks/compile/` rather than inventing a new harness.
 
 ## Tests
 
 Every new public class/function needs tests. **Don't create new test files**
-when an existing `test/test_*.py` covers the area — extend it.
+when an existing `test/<area>/test_*.py` covers the area — extend it.
 
 ## Documentation
 

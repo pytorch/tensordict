@@ -8,6 +8,9 @@
 We want to make contributing to this project as easy and transparent as
 possible.
 
+[`ARCHITECTURE.md`](ARCHITECTURE.md) maps the code: what each module is for,
+the class hierarchy, and the places a new operation touches.
+
 ## Installing the library
 Install the library as suggested in the README. For advanced features,
 it is preferable to install the nightly built of pytorch.
