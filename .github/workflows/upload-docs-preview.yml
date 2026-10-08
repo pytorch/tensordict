@@ -55,20 +55,24 @@ jobs:
           fi
           # A fork controls the artifact, so it could name another PR. Upload
           # only if that PR's head is the commit these docs were built from.
+          # A mismatch also happens when the PR got a new commit while its docs
+          # were building; the docs run for the new commit uploads instead.
           PR_HEAD_SHA="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq .head.sha)"
           if [[ "${PR_HEAD_SHA}" != "${HEAD_SHA}" ]]; then
-            echo "PR #${PR_NUMBER} head is ${PR_HEAD_SHA}, but the docs were built from ${HEAD_SHA}, aborting."
-            exit 1
+            echo "::notice::PR #${PR_NUMBER} head is ${PR_HEAD_SHA}, but the docs were built from ${HEAD_SHA}. Skipping the upload."
+            exit 0
           fi
           echo "pr-number=${PR_NUMBER}" >> "${GITHUB_OUTPUT}"
 
       - name: Configure AWS credentials
+        if: steps.metadata.outputs.pr-number != ''
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: arn:aws:iam::308535385114:role/arc
           aws-region: us-east-1
 
       - name: Upload docs preview to S3
+        if: steps.metadata.outputs.pr-number != ''
         env:
           PR_NUMBER: ${{ steps.metadata.outputs.pr-number }}
         run: |
