@@ -1,6 +1,7 @@
 # Builds the tensordict-nightly wheel, smoke-tests it on each platform and
 # uploads it to PyPI. tensordict is pure Python, so one py3-none-any wheel serves
-# every platform and Python version.
+# every platform and Python version. As before, failed smoke tests don't block
+# the upload.
 
 name: Push Binary Nightly
 
