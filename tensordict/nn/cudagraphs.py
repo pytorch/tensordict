@@ -8,6 +8,7 @@ import contextlib
 import functools
 import os
 import warnings
+import weakref
 from functools import partial
 from textwrap import indent
 from typing import Any, Callable, List
@@ -206,6 +207,7 @@ class CudaGraphModule:
             self.out_keys = out_keys
         self._is_tensordict_module = self.in_keys is not None
         self._out_matches_in = None
+        self_ref = weakref.proxy(self)
         for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
             if tdtype in SUPPORTED_NODES:
                 if not strtobool(os.environ.get("EXCLUDE_TD_FROM_PYTREE", "0")):
@@ -226,6 +228,7 @@ class CudaGraphModule:
                 tensordict_out: TensorDictBase | None = None,
                 **kwargs: Any,
             ) -> Any:
+                self = self_ref
                 if self.counter >= self._warmup:
                     # Copy into the leaves the captured kernels read. The module may
                     # have rebound entries of ``self._tensordict`` to its outputs
@@ -329,6 +332,7 @@ class CudaGraphModule:
         else:
 
             def _call(*args: torch.Tensor, **kwargs: torch.Tensor):
+                self = self_ref
                 if self.counter >= self._warmup:
                     srcs, dests = [], []
                     for arg_src, arg_dest in _zip_strict(
