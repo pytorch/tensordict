@@ -1035,7 +1035,7 @@ class TensorDict(TensorDictBase):
                     subtd.set(value_key, item, inplace=True, non_blocking=False)
         else:
             # torch indexes the entries, and would read a NumPy bool as an int
-            # with NumPy 1: _read_element rejects it, as getitem does
+            # before NumPy 2.3: _read_element rejects it, as getitem does
             for element in index if isinstance(index, tuple) else (index,):
                 _read_element(element)
             for key in self.keys():

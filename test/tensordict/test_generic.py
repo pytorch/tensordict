@@ -1797,8 +1797,8 @@ class TestGeneric:
         "index", [np.True_, np.False_, (slice(None), np.True_), (np.False_, ...)]
     )
     def test_index_numpy_bool_scalar(self, index):
-        # torch rejects a NumPy bool scalar with NumPy 2 (and reads it as an
-        # int with NumPy 1); tensordict rejects it with both
+        # torch rejects a NumPy bool scalar from NumPy 2.3 on (and reads it as
+        # an int before); tensordict rejects it with any NumPy
         td = TensorDict({"a": torch.zeros(3, 4)}, [3, 4], names=["x", "y"])
         with pytest.raises(IndexError, match="NumPy bool"):
             td[index]
