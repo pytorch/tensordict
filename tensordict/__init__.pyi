@@ -73,7 +73,7 @@ from tensordict.tensorclass import (
     TensorClass,
     tensorclass,
 )
-from tensordict.typedtensordict import TypedTensorDict as TypedTensorDict
+from tensordict.typedtensordict import TypedTensorDict
 from tensordict.utils import (
     assert_allclose_td,
     assert_close,
@@ -88,7 +88,7 @@ from tensordict.utils import (
     set_capture_non_tensor_stack,
     set_lazy_legacy,
     set_list_to_stack,
-    set_printoptions as set_printoptions,
+    set_printoptions,
     unravel_key,
     unravel_key_list,
 )
@@ -102,6 +102,7 @@ __all__ = [
     "LazyStackedTensorDict",
     "UnbatchedTensor",
     "TensorClass",
+    "TypedTensorDict",
     "MemoryMappedTensor",
     "PersistentTensorDict",
     "TensorDictStore",
@@ -168,6 +169,7 @@ __all__ = [
     "list_to_stack",
     "set_list_to_stack",
     "get_printoptions",
+    "set_printoptions",
     # TensorClass components
     "tensorclass",
     "MetaData",
