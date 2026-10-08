@@ -78,7 +78,6 @@ uv_pip_install \
   future \
   cloudpickle \
   pytest \
-  pytest-cov \
   pytest-mock \
   pytest-instafail \
   pytest-rerunfailures \
