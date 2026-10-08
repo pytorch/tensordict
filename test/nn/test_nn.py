@@ -29,8 +29,8 @@ from tensordict import (
     set_list_to_stack,
     tensorclass,
     TensorDict,
+    unravel_key_list,
 )
-from tensordict._C import unravel_key_list
 from tensordict.nn import (
     as_tensordict_module,
     dispatch,

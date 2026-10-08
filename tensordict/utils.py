@@ -41,12 +41,6 @@ import numpy as np
 import torch
 from pyvers import implement_for
 
-from tensordict._C import (  # noqa: F401  # @manual=//pytorch/tensordict:_C
-    _unravel_key_to_tuple as _unravel_key_to_tuple_cpp,
-    unravel_key as unravel_key_cpp,
-    unravel_key_list as unravel_key_list_cpp,
-)
-
 from tensordict._indexing import (  # noqa: F401
     _getitem_batch_size,
     convert_ellipsis_to_idx,
@@ -2721,19 +2715,38 @@ def _make_dtype_promotion(func):
 
 
 def _unravel_key_to_tuple(key):
-    if not is_compiling():
-        return _unravel_key_to_tuple_cpp(key)
+    """Return ``key`` as a flat tuple of str, or ``()`` if it is not a key."""
     if isinstance(key, str):
         return (key,)
     if not isinstance(key, tuple):
         return ()
-    result = ()
     for subkey in key:
-        subkey = _unravel_key_to_tuple(subkey)
-        if not subkey:
-            return ()
-        result = result + subkey
-    return result
+        if not isinstance(subkey, str):
+            break
+    else:
+        # A flat tuple of str, the most common nested key.
+        return key if type(key) is tuple else tuple(key)
+    result = []
+    if not _append_key_parts(key, result):
+        return ()
+    return tuple(result)
+
+
+def _append_key_parts(key: tuple, result: list) -> bool:
+    """Append the str parts of the nested ``key`` to ``result``.
+
+    Returns ``False`` if a part is neither a str nor a non-empty tuple of keys.
+    """
+    for subkey in key:
+        if isinstance(subkey, str):
+            result.append(subkey)
+        elif (
+            not isinstance(subkey, tuple)
+            or not subkey
+            or not _append_key_parts(subkey, result)
+        ):
+            return False
+    return True
 
 
 def unravel_key(key):
@@ -2753,8 +2766,6 @@ def unravel_key(key):
         ()
 
     """
-    if not is_compiling():
-        return unravel_key_cpp(key)
     if isinstance(key, str):
         return key
     if not isinstance(key, tuple):
@@ -2774,8 +2785,10 @@ def unravel_keys(*keys):
 
 def unravel_key_list(keys):
     """Unravels a list of keys."""
-    if not is_compiling():
-        return unravel_key_list_cpp(keys)
+    if not isinstance(keys, (list, tuple)):
+        raise TypeError(
+            f"unravel_key_list expects a list or a tuple of keys, got {type(keys)}."
+        )
     result = []
     for key in keys:
         key = unravel_key(key)
