@@ -131,8 +131,12 @@ TensorCollection                       _tensorcollection.py
     ├── NonTensorDataBase
     │   ├── NonTensorData
     │   └── MetaData
-    └── classes decorated with @tensorclass
+    └── user subclasses of TensorClass
 ```
+
+A class decorated with `@tensorclass` is not a subclass of `TensorClass` or
+`TensorCollection`: the decorator installs the same methods on the class
+itself. `is_tensorclass()` recognizes both forms.
 
 `MemoryMappedTensor` (`memmap.py`) and `UnbatchedTensor` (`_unbatched.py`)
 are `torch.Tensor` subclasses that a tensordict can store as entries.
