@@ -159,6 +159,11 @@ jobs:
         ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
     permissions:
       contents: write
+    # Every job that pushes to gh-pages joins this group, so they push one at a
+    # time. With `queue: max`, later jobs wait instead of being cancelled.
+    concurrency:
+      group: gh-pages
+      queue: max
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/tensordict
