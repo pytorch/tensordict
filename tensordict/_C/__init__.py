@@ -8,6 +8,8 @@ They are written in Python in :mod:`tensordict.utils` now. This module keeps
 ``tensordict._C`` importable until TensorDict 0.17.
 """
 
+from __future__ import annotations
+
 import warnings
 
 from tensordict.utils import _unravel_key_to_tuple, unravel_key, unravel_key_list
