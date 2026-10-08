@@ -48,6 +48,10 @@ from tensordict._C import (  # noqa: F401  # @manual=//pytorch/tensordict:_C
     unravel_keys as unravel_keys_cpp,
 )
 
+from tensordict._indexing import (  # noqa: F401
+    _getitem_batch_size,
+    convert_ellipsis_to_idx,
+)
 from tensordict._nestedkey import NestedKey
 
 from torch import Tensor
@@ -293,45 +297,6 @@ def _sub_index(tensor: Tensor, idx: IndexType) -> Tensor:
         idx1 = idx[1:]
         return _sub_index(_sub_index(tensor, idx0), idx1)
     return tensor[idx]
-
-
-def convert_ellipsis_to_idx(
-    idx: tuple[int | Ellipsis] | Ellipsis, batch_size: list[int]
-) -> tuple[int, ...]:
-    """Given an index containing an ellipsis or just an ellipsis, converts any ellipsis to slice(None).
-
-    Example:
-        >>> idx = (..., 0)
-        >>> batch_size = [1,2,3]
-        >>> new_index = convert_ellipsis_to_idx(idx, batch_size)
-        >>> print(new_index)
-        (slice(None, None, None), slice(None, None, None), 0)
-
-    Args:
-        idx (tuple, Ellipsis): Input index
-        batch_size (list): Shape of tensor to be indexed
-
-    Returns:
-        new_index (tuple): Output index
-    """
-    istuple = isinstance(idx, tuple)
-    if (not istuple and idx is not Ellipsis) or (
-        istuple and all(_idx is not Ellipsis for _idx in idx)
-    ):
-        return idx
-    num_dims = len(batch_size)
-
-    if idx is Ellipsis:
-        idx = (...,)
-
-    if sum(_idx is Ellipsis for _idx in idx) > 1:
-        raise RuntimeError("An index can only have one ellipsis at most.")
-    # the ellipsis covers the dims that the other index elements do not consume
-    ellipsis_length = num_dims - sum(_num_indexed_dims(item) for item in idx)
-    if ellipsis_length < 0:
-        raise RuntimeError("Not enough dimensions in TensorDict for index provided.")
-    start_pos = next(i for i, item in enumerate(idx) if item is Ellipsis)
-    return idx[:start_pos] + (slice(None),) * ellipsis_length + idx[start_pos + 1 :]
 
 
 def _copy(self: list[int]) -> list[int]:
@@ -2067,15 +2032,6 @@ def _is_number(item):
     return False
 
 
-def _expand_index(index, batch_size):
-    len_index = sum(True for idx in index if idx is not None)
-    if len_index > len(batch_size):
-        raise ValueError
-    if len_index < len(batch_size):
-        index = index + (slice(None),) * (len(batch_size) - len_index)
-    return index
-
-
 def _renamed_inplace_method(fn):
     def wrapper(*args, **kwargs):
         raise RuntimeError(
@@ -2098,15 +2054,6 @@ def _broadcast_tensors(index):
         index = tuple(
             idx if i not in tensors else tensors[i] for i, idx in enumerate(index)
         )
-    return index
-
-
-def _reduce_index(index):
-    if all(
-        idx is Ellipsis or (isinstance(idx, slice) and idx == slice(None))
-        for idx in index
-    ):
-        index = ()
     return index
 
 
@@ -2179,162 +2126,6 @@ class BufferLegacy(_parent_buffer_cls):
         t.persistent = persistent
         t._is_buffer = True
         return t
-
-
-def _is_list_of_bools(index) -> bool:
-    """Whether ``index`` is a non-empty list of bools (a boolean mask for torch)."""
-    return (
-        isinstance(index, list)
-        and bool(index)
-        and all(isinstance(elt, (bool, np.bool_)) for elt in index)
-    )
-
-
-def _nested_list_to_tensor(index):
-    """Converts a nested list index to a tensor, which is how torch reads it."""
-    if isinstance(index, list) and index and isinstance(index[0], list):
-        return torch.tensor(index)
-    return index
-
-
-def _num_indexed_dims(index) -> int:
-    """Number of dims that an element of an index consumes.
-
-    ``None``, ``Ellipsis`` and scalar bools consume no dim, a k-D boolean mask
-    consumes k dims, and any other element consumes one dim.
-    """
-    if index is None or index is Ellipsis or isinstance(index, (bool, np.bool_)):
-        return 0
-    if isinstance(index, list):
-        index = _nested_list_to_tensor(index)
-    if isinstance(index, torch.Tensor) and index.dtype in (torch.bool, torch.uint8):
-        # torch reads a uint8 tensor as a mask (deprecated)
-        return index.ndim
-    if isinstance(index, np.ndarray) and index.dtype == np.dtype("bool"):
-        return index.ndim
-    return 1
-
-
-def _bool_lists_to_masks(index):
-    """Converts the lists of bools in an index to boolean tensors."""
-    if isinstance(index, tuple):
-        return tuple(_bool_lists_to_masks(idx) for idx in index)
-    if _is_list_of_bools(index):
-        return torch.tensor(index)
-    return index
-
-
-def _getitem_batch_size(batch_size, index):
-    """Given an input shape and an index, returns the size of the resulting indexed tensor.
-
-    This function is aimed to be used when indexing is an
-    expensive operation.
-    Args:
-        shape (torch.Size): Input shape
-        items (index): Index of the hypothetical tensor
-
-    Returns:
-        Size of the resulting object (tensor or tensordict)
-
-    Examples:
-        >>> idx = (None, ..., None)
-        >>> torch.zeros(4, 3, 2, 1)[idx].shape
-        torch.Size([1, 4, 3, 2, 1, 1])
-        >>> _getitem_batch_size([4, 3, 2, 1], idx)
-        torch.Size([1, 4, 3, 2, 1, 1])
-    """
-    if not isinstance(index, tuple):
-        if isinstance(index, int) and not isinstance(index, bool):
-            return batch_size[1:]
-        if isinstance(index, slice) and index == slice(None):
-            return batch_size
-        index = (index,)
-    # index = convert_ellipsis_to_idx(index, batch_size)
-    # broadcast shapes
-    shapes_dict = {}
-    look_for_disjoint = False
-    disjoint = False
-    consumed_dims = []
-    for i, idx in enumerate(index):
-        num_dims = 1
-        if isinstance(idx, list):
-            idx = _nested_list_to_tensor(idx)
-        if _is_list_of_bools(idx):
-            # like torch, a list of bools is a boolean mask
-            shape = torch.Size([int(sum(idx))])
-        elif isinstance(idx, (range, list)):
-            shape = len(idx)
-        elif isinstance(idx, torch.Tensor):
-            if idx.dtype == torch.uint8:
-                # torch reads a uint8 tensor as a mask (deprecated)
-                idx = idx.bool()
-            if idx.dtype == torch.bool:
-                # int() graph-breaks on the data-dependent size under compile
-                shape = torch.Size([int(idx.sum())])
-                num_dims = idx.ndim
-            elif idx.ndim:
-                shape = idx.shape
-            else:
-                # like torch, read a 0-d integer index as an int
-                shape = None
-        elif isinstance(idx, np.ndarray):
-            if idx.dtype == np.dtype("bool"):
-                shape = torch.Size([int(idx.sum())])
-                num_dims = idx.ndim
-            elif idx.ndim:
-                shape = idx.shape
-            else:
-                shape = None
-        elif isinstance(idx, slice) or idx is None:
-            # as in torch, advanced indices separated by a slice or None put
-            # their dims first
-            look_for_disjoint = not disjoint and (len(shapes_dict) > 0)
-            shape = None
-        elif isinstance(idx, (bool, np.bool_)):
-            # like a 0-d mask: an index of size 1 (True) or 0 (False) that
-            # consumes no dim and broadcasts with the other indices
-            shape = torch.Size([int(idx)])
-            num_dims = 0
-        else:
-            shape = None
-        if shape is not None:
-            if look_for_disjoint:
-                disjoint = True
-            shapes_dict[i] = shape
-        consumed_dims.append(num_dims)
-    bs_shape = None
-    if shapes_dict:
-        bs_shape = torch.broadcast_shapes(*shapes_dict.values())
-    out = []
-    count = -1
-    for i, idx in enumerate(index):
-        if idx is None:
-            out.append(1)
-            continue
-        count += consumed_dims[i]
-        if i in shapes_dict:
-            if bs_shape is not None:
-                if disjoint:
-                    # the indices will be put at the beginning
-                    out = list(bs_shape) + out
-                else:
-                    # if there is a single tensor or similar, we just extend
-                    out.extend(bs_shape)
-                bs_shape = None
-            continue
-        elif isinstance(idx, (int, ftdim.Dim)):
-            # could be spared for efficiency
-            continue
-        elif isinstance(idx, slice):
-            batch = batch_size[count]
-            if is_compiling():
-                out.append(len(range(*_slice_indices(idx, batch))))
-            else:
-                out.append(len(range(*idx.indices(batch))))
-    count += 1
-    if batch_size[count:]:
-        out.extend(batch_size[count:])
-    return torch.Size(out)
 
 
 from tensordict._utils_options import (  # noqa: F401
@@ -2986,36 +2777,6 @@ from tensordict._utils_key_json import (  # noqa: F401
     _get_robust_key_setting_with_warning,
     _is_safe_legacy_key,
 )
-
-
-def _slice_indices(index: slice, len: int):
-    """A pure python implementation of slice.indices(len) since torch.compile doesn't recognise it."""
-    step = index.step
-    if step is None:
-        step = 1
-    elif step == 0:
-        raise ValueError("Step cannot be zero.")
-
-    start = index.start
-    stop = index.stop
-    if start is None:
-        if step > 0:
-            start = 0
-        else:
-            start = len - 1
-    elif start < 0:
-        start = max(0, len + start)
-
-    if stop is None:
-        if step > 0:
-            stop = len
-        else:
-            stop = -1
-    elif stop > 0:
-        stop = min(len, stop)
-    elif step < 0 or (step > 0 and start >= 0):
-        stop = len + stop
-    return start, stop, step
 
 
 assert_allclose_td = assert_close

@@ -199,6 +199,16 @@ class TestTD:
             assert (add_one_c(data)["a", "b"] == torch.arange(1, 3)).all()
             assert add_one_c(data).shape == torch.Size([2])
 
+    def test_td_index_empty_slice(self, mode):
+        def index(td):
+            return td[:0]
+
+        index_c = torch.compile(index, fullgraph=True, mode=mode)
+        data = TensorDict({"a": {"b": torch.arange(3)}}, [3])
+        result = index_c(data)
+        assert result.shape == torch.Size([0])
+        assert result["a", "b"].shape == torch.Size([0])
+
     def test_td_index_bool_mask(self, mode):
         # the masked size depends on the data, so this graph-breaks
         def add_one(td, mask):

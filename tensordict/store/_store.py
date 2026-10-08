@@ -18,6 +18,11 @@ import weakref
 from typing import Any, Callable, Literal, Sequence, Tuple, Type, TYPE_CHECKING
 
 import torch
+from tensordict._indexing import (
+    _bool_lists_to_masks,
+    _getitem_batch_size,
+    convert_ellipsis_to_idx,
+)
 from tensordict._td import (
     _TensorDictKeysView,
     _unravel_key_to_tuple,
@@ -33,12 +38,9 @@ from tensordict.base import (
 )
 from tensordict.utils import (
     _as_context_manager,
-    _bool_lists_to_masks,
-    _getitem_batch_size,
     _is_tensorclass,
     _KEY_ERROR,
     _LOCK_ERROR,
-    convert_ellipsis_to_idx,
     erase_cache,
     is_non_tensor,
     lock_blocked,

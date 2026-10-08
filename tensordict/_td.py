@@ -33,6 +33,7 @@ import numpy as np
 import torch
 
 from tensordict._archive import _memmap_tensor_from_path
+from tensordict._indexing import _getitem_batch_size, convert_ellipsis_to_idx
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
@@ -74,7 +75,6 @@ from tensordict.utils import (
     _get_leaf_tensordict,
     _get_robust_key_setting_with_warning,
     _get_shape_from_args,
-    _getitem_batch_size,
     _index_preserve_data_ptr,
     _infer_size_impl,
     _is_safe_legacy_key,
@@ -100,7 +100,6 @@ from tensordict.utils import (
     _unravel_key_to_tuple,
     _zip_strict,
     cache,
-    convert_ellipsis_to_idx,
     DeviceType,
     expand_as_right,
     IndexType,
@@ -4160,25 +4159,6 @@ class _SubTensorDict(TensorDictBase):
     @property
     def _is_memmap(self):
         return self._source._is_memmap
-
-    @staticmethod
-    def _convert_ellipsis(idx, shape):
-        if any(_idx is Ellipsis for _idx in idx):
-            new_idx = []
-            cursor = -1
-            for _idx in idx:
-                if _idx is Ellipsis:
-                    if cursor == len(idx) - 1:
-                        # then we can just skip
-                        continue
-                    n_upcoming = len(idx) - cursor - 1
-                    while cursor < len(shape) - n_upcoming:
-                        cursor += 1
-                        new_idx.append(slice(None))
-                else:
-                    new_idx.append(_idx)
-            return tuple(new_idx)
-        return idx
 
     @property
     def batch_size(self) -> torch.Size:

@@ -1890,6 +1890,8 @@ class TestLazyStackedTensorDict:
         )
         empty = lst_sd1[:, torch.zeros(2, dtype=torch.bool)]
         assert empty.batch_size == torch.Size([3, 0])
+        # with an Ellipsis before the empty selection
+        assert lst_sd1[..., 1:1].batch_size == torch.Size([3, 0])
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize(

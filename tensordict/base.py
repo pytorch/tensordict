@@ -60,6 +60,11 @@ from tensordict._archive import (
 )
 from tensordict._contextlib import LAST_OP_MAPS
 from tensordict._datasets import to_mds
+from tensordict._indexing import (
+    _nested_list_to_tensor,
+    _num_indexed_dims,
+    convert_ellipsis_to_idx,
+)
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
 from tensordict.memmap import MemoryMappedTensor
@@ -94,8 +99,6 @@ from tensordict.utils import (
     _lock_warn,
     _make_dtype_promotion,
     _maybe_correct_neg_dim,
-    _nested_list_to_tensor,
-    _num_indexed_dims,
     _parse_to,
     _pass_through,
     _pass_through_cls,
@@ -114,7 +117,6 @@ from tensordict.utils import (
     _zip_strict,
     cache,
     capture_non_tensor_stack,
-    convert_ellipsis_to_idx,
     DeviceType,
     erase_cache,
     expand_as_right,
