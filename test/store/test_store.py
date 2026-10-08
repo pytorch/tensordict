@@ -1899,6 +1899,17 @@ class TestNonTensorIndexing:
             store.close()
 
 
+def test_lazy_store_pickle_path():
+    # LazyStackedTensorDictStore moved from tensordict.store._store to
+    # tensordict.store._lazy. Pickles made before the move name the old module,
+    # so it must still resolve to the same class.
+    import tensordict.store._lazy as lazy_module
+    import tensordict.store._store as store_module
+
+    for name in ("LazyStackedTensorDictStore", "_StoreStackElementView"):
+        assert getattr(store_module, name) is getattr(lazy_module, name)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
