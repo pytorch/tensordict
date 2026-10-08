@@ -2054,6 +2054,16 @@ class LazyStackedTensorDict(TensorDictBase):
         )
 
     def _clone(self, recurse: bool = True) -> Self:
+        if not self.tensordicts:
+            # a stack without members cannot read its batch size from them
+            batch_size = list(self.batch_size)
+            del batch_size[self.stack_dim]
+            return type(self)(
+                stack_dim=self.stack_dim,
+                batch_size=batch_size,
+                device=self.device,
+                stack_dim_name=self._td_dim_name,
+            )
         if recurse:
             # This could be optimized using copy but we must be careful with
             # metadata (_is_shared etc)

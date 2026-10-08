@@ -748,6 +748,9 @@ class TestLazyStackedTensorDict:
         td = LazyStackedTensorDict(stack_dim=1, batch_size=[1, 2], device="cpu")
         assert td.device == torch.device("cpu")
         assert td.shape == torch.Size([1, 0, 2])
+        for clone in (td.clone(), td.clone(recurse=False)):
+            assert clone.shape == torch.Size([1, 0, 2])
+            assert clone.device == torch.device("cpu")
 
     def test_densify(self):
         td0 = TensorDict(
@@ -1957,6 +1960,26 @@ class TestLazyStackedTensorDict:
         assert isinstance(empty, NonTensorStack)
         assert empty.batch_size == torch.Size([0])
         assert empty.tolist() == []
+        # a mask copies the selection, and the copy keeps the batch size
+        stack = NonTensorStack(*[NonTensorStack("a", "b") for _ in range(3)])
+        empty = stack[torch.zeros(3, dtype=torch.bool)]
+        assert empty.batch_size == torch.Size([0, 2])
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_lazy_empty_selection_non_tensor_entries(self, stack_dim):
+        # Members with a non-tensor entry: the entry follows the batch size
+        lazy = LazyStackedTensorDict(
+            *[
+                TensorDict({"a": torch.zeros(4), "b": f"string {i}"}, [4])
+                for i in range(3)
+            ],
+            stack_dim=stack_dim,
+        )
+        index = (slice(None),) * stack_dim + (torch.zeros(3, dtype=torch.bool),)
+        empty = lazy[index]
+        assert empty.get("b").batch_size == empty.batch_size
+        assert empty.clone().get("b").batch_size == empty.batch_size
+        assert empty["b"] == []
 
 
 if __name__ == "__main__":
