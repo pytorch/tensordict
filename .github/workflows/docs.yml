@@ -192,26 +192,39 @@ jobs:
         fi
 
         echo "Target Folder: ${TARGET_FOLDER}"
-
-        mkdir -p "${TARGET_FOLDER}"
-        rm -rf "${TARGET_FOLDER}"/*
-
         echo $(ls "${RUNNER_ARTIFACT_DIR}")
-        # Was rsync, which linux_job.yml's conda-builder image had.
-        # almalinux-builder, the v3 default, does not; a plain recursive
-        # copy is all this needed.
-        cp -a "${RUNNER_ARTIFACT_DIR}"/. "${TARGET_FOLDER}"/
-        git add "${TARGET_FOLDER}" || true
-
-        if [[ "${TARGET_FOLDER}" == "main" ]] ; then
-          mkdir -p _static
-          rm -rf _static/*
-          cp -r "${TARGET_FOLDER}"/_static/* _static
-          git add _static || true
-        fi
 
         git config user.name 'pytorchbot'
         git config user.email 'soumith+bot@pytorch.org'
         git config http.postBuffer 524288000
-        git commit -m "auto-generating sphinx docs" || true
-        git push
+
+        # The benchmark upload and the docs uploads of other commits push to
+        # gh-pages too. If one of them pushes after this job's checkout, the
+        # push is rejected; then copy the docs again onto the new gh-pages.
+        for attempt in 1 2 3 4 5; do
+          mkdir -p "${TARGET_FOLDER}"
+          rm -rf "${TARGET_FOLDER}"/*
+
+          # Was rsync, which linux_job.yml's conda-builder image had.
+          # almalinux-builder, the v3 default, does not; a plain recursive
+          # copy is all this needed.
+          cp -a "${RUNNER_ARTIFACT_DIR}"/. "${TARGET_FOLDER}"/
+          git add "${TARGET_FOLDER}" || true
+
+          if [[ "${TARGET_FOLDER}" == "main" ]] ; then
+            mkdir -p _static
+            rm -rf _static/*
+            cp -r "${TARGET_FOLDER}"/_static/* _static
+            git add _static || true
+          fi
+
+          git commit -m "auto-generating sphinx docs" || true
+          if git push; then
+            exit 0
+          fi
+          echo "Push rejected (attempt ${attempt} of 5)"
+          sleep 10
+          git fetch origin gh-pages
+          git reset --hard FETCH_HEAD
+        done
+        exit 1
