@@ -1,7 +1,7 @@
 # Architecture
 
 A map of the `tensordict` package for contributors and agents. The house
-rules are in [`CLAUDE.md`](CLAUDE.md), and setup and the PR process are in
+rules are in [`AGENTS.md`](AGENTS.md), and setup and the PR process are in
 [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Modules
@@ -187,7 +187,7 @@ An operation that a backend cannot support raises. For example,
 - `torch.compile`: Dynamo traces the Python code of the library, and uses
   the pytree registration to flatten tensordicts. Some code paths branch
   on `is_compiling()` to take a path that Dynamo can trace. See the
-  `torch.compile` section of `CLAUDE.md`.
+  `torch.compile` section of `AGENTS.md`.
 
 ## Adding an operation
 
