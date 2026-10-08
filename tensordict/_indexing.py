@@ -59,13 +59,13 @@ def _nested_list_to_tensor(index):
     return index
 
 
-def _bool_lists_to_masks(index):
-    """Converts the lists of bools in an index to boolean tensors."""
-    if isinstance(index, tuple):
-        return tuple(_bool_lists_to_masks(idx) for idx in index)
-    if _is_list_of_bools(index):
-        return torch.tensor(index)
-    return index
+def _as_tuple(index) -> tuple:
+    """Return ``index`` as a tuple: tensordict reads a bare index as a 1-tuple.
+
+    torch reads a bare nested list, or a list with a slice or a tensor in it,
+    as a tuple of indices instead (deprecated).
+    """
+    return index if isinstance(index, tuple) else (index,)
 
 
 def _read_element(element):
