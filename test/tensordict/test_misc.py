@@ -16,7 +16,6 @@ import warnings
 
 import pytest
 import torch
-from packaging import version
 from tensordict import (
     LazyStackedTensorDict,
     make_tensordict,
@@ -37,6 +36,8 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from torch.func import hessian, jacfwd, jacrev
+
+from packaging import version
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True

@@ -13,10 +13,7 @@ import pytest
 import torch
 from _pytest.fixtures import fixture
 from _utils_internal import is_npu_available
-from packaging import version
-
 from packaging.version import parse
-
 from tensordict import LazyStackedTensorDict, MemoryMappedTensor, TensorDict
 from tensordict.utils import logger as tdlogger
 from torch import distributed as dist, multiprocessing as mp, nn
@@ -32,6 +29,8 @@ from torch.distributed.fsdp import (
     FullyShardedDataParallel as FSDP,
     # StateDictType,
 )
+
+from packaging import version
 
 TIMEOUT = 100
 

@@ -12,7 +12,6 @@ import sys
 
 import pytest
 import torch
-from packaging import version
 from tensordict import (
     get_printoptions,
     LazyStackedTensorDict,
@@ -21,6 +20,8 @@ from tensordict import (
     TensorDict,
 )
 from tensordict._torch_func import _stack as stack_td
+
+from packaging import version
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True

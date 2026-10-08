@@ -12,8 +12,9 @@ import sys
 
 import pytest
 import torch
-from packaging import version
 from tensordict import LazyStackedTensorDict, TensorAttrs, TensorDict
+
+from packaging import version
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True

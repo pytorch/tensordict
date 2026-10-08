@@ -11,10 +11,10 @@ from typing import Any
 
 import pytest
 import torch
-from packaging import version
-
 from tensordict import tensorclass, TensorDict
 from tensordict.utils import logger as tensordict_logger
+
+from packaging import version
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
@@ -126,7 +126,7 @@ class TestConsolidate:
         benchmark(consolidate, td, num_threads)
 
     def test_consolidate_njt(self, benchmark, njt_td, compile_mode, num_threads):
-        tensordict_logger.info(f"njtd size {njt_td.bytes() / 1024 / 1024 :.2f} Mb")
+        tensordict_logger.info(f"njtd size {njt_td.bytes() / 1024 / 1024:.2f} Mb")
 
         def consolidate(td, num_threads):
             return td.consolidate(num_threads=num_threads)
@@ -198,7 +198,7 @@ class TestTo:
                 "Compiling NJTs consolidation currently triggers a RuntimeError."
             )
 
-        tensordict_logger.info(f"njtd size {njt_td.bytes() / 1024 / 1024 :.2f} Mb")
+        tensordict_logger.info(f"njtd size {njt_td.bytes() / 1024 / 1024:.2f} Mb")
         pin_mem = default_device.type == "cuda"
         if consolidated is True:
             njt_td = njt_td.consolidate(pin_memory=pin_mem)

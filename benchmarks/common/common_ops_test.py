@@ -8,7 +8,6 @@ import argparse
 
 import pytest
 import torch
-
 from tensordict import is_tensor_collection, TensorDict
 
 

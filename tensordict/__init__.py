@@ -12,6 +12,7 @@ from tensordict._archive import (
 )
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
+from tensordict._pytree import *
 from tensordict._td import (
     cat,
     from_consolidated,
@@ -56,6 +57,12 @@ from tensordict.functional import (
     pad_sequence,
 )
 from tensordict.memmap import MemoryMappedTensor
+from tensordict.nn import (
+    as_tensordict_module,
+    TensorClassModuleBase,
+    TensorClassModuleWrapper,
+    TensorDictParams,
+)
 from tensordict.persistent import PersistentTensorDict
 from tensordict.store import LazyStackedTensorDictStore, TensorDictStore
 from tensordict.tensorclass import (
@@ -65,8 +72,8 @@ from tensordict.tensorclass import (
     NonTensorDataBase,
     NonTensorStack,
     TensorAttrs,
-    tensorclass,
     TensorClass,
+    tensorclass,
 )
 from tensordict.typedtensordict import TypedTensorDict
 from tensordict.utils import (
@@ -86,13 +93,6 @@ from tensordict.utils import (
     set_printoptions,
     unravel_key,
     unravel_key_list,
-)
-from tensordict._pytree import *
-from tensordict.nn import (
-    as_tensordict_module,
-    TensorClassModuleBase,
-    TensorClassModuleWrapper,
-    TensorDictParams,
 )
 
 __version__ = None  # type: ignore

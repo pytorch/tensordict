@@ -7,9 +7,10 @@ import sys
 
 import pytest
 import torch
-from packaging import version
 from tensordict import LazyStackedTensorDict, tensorclass, TensorDict, TypedTensorDict
 from torch.utils._pytree import tree_map
+
+from packaging import version
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 

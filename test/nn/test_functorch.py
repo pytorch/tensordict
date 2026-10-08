@@ -7,9 +7,7 @@ import argparse
 
 import pytest
 import torch
-
 from _utils_internal import expand_list, get_available_devices, TestTensorDictsBase
-
 from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.utils import implement_for
@@ -34,7 +32,6 @@ except ImportError as err:
 
 
 class TestVmap:
-
     @pytest.mark.skipif(
         not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
     )

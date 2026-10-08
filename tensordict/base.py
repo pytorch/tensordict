@@ -634,9 +634,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             return 0
         return batch_size[0]
 
-    def __deepcopy__(
-        self, memo: Dict[Any, Any]
-    ) -> "tensordict.TensorDict":  # noqa  # type: ignore
+    def __deepcopy__(self, memo: Dict[Any, Any]) -> "tensordict.TensorDict":  # noqa  # type: ignore
         return self.clone()
 
     def __contains__(self, key: NestedKey) -> bool:  # type: ignore
@@ -6030,8 +6028,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             )
         elif not rename_map and not names:
             raise ValueError(
-                "Neither a name map nor a name list was passed. "
-                "Only one is accepted."
+                "Neither a name map nor a name list was passed. Only one is accepted."
             )
         elif rename_map:
             cnames = list(clone.names)
@@ -6062,12 +6059,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
             self._set_names(None)
         if rename_map and names:
             raise ValueError(
-                "Passed both a name map and a name list. " "Only one is accepted."
+                "Passed both a name map and a name list. Only one is accepted."
             )
         elif not rename_map and not names and self.batch_dims:
             raise ValueError(
-                "Neither a name map nor a name list was passed. "
-                "Only one is accepted."
+                "Neither a name map nor a name list was passed. Only one is accepted."
             )
         elif rename_map:
             cnames = list(self.names)
@@ -7981,8 +7977,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 subpath = _unravel_key_to_tuple(subpath)
                 if not subpath:
                     raise ValueError(
-                        "subpath must be a string path or a (nested) tuple of "
-                        "strings."
+                        "subpath must be a string path or a (nested) tuple of strings."
                     )
             for part in subpath:
                 effective_robust_key = _get_robust_key_setting_with_warning(
@@ -9403,7 +9398,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 key=keyfunc,
             )
         else:
-
             if is_leaf is None:
                 is_leaf = _default_is_leaf
 
@@ -9486,7 +9480,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
             for _, value in self.items(include_nested, leaves_only, is_leaf, sort=sort):
                 yield value
         else:
-
             if is_leaf is None:
                 is_leaf = _default_is_leaf
 

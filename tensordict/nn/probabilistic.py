@@ -14,12 +14,10 @@ from textwrap import indent
 from typing import Any, Callable, Dict, List, OrderedDict, overload, TYPE_CHECKING
 
 import torch
-
 from tensordict._nestedkey import NestedKey
 from tensordict._td import TensorDict
 from tensordict.base import is_tensor_collection
 from tensordict.nn.common import dispatch, TensorDictModuleBase
-
 from tensordict.nn.distributions.composite import _add_suffix, CompositeDistribution
 from tensordict.nn.distributions.continuous import Delta
 from tensordict.nn.distributions.discrete import OneHotCategorical

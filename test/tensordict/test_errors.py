@@ -15,7 +15,6 @@ import warnings
 
 import pytest
 import torch
-from packaging import version
 from tensordict import (
     get_defaults_to_none,
     LazyStackedTensorDict,
@@ -25,6 +24,8 @@ from tensordict import (
 from tensordict.nn import TensorDictParams
 from tensordict.utils import _LOCK_ERROR
 from torch import nn
+
+from packaging import version
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True

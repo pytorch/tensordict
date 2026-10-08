@@ -16,7 +16,6 @@ from copy import copy, deepcopy
 from functools import wraps
 from pathlib import Path
 from textwrap import indent
-
 from typing import (
     Any,
     Callable,
@@ -33,7 +32,6 @@ from typing import (
 )
 
 import numpy as np
-
 import torch
 from tensordict._indexing import _getitem_batch_size, convert_ellipsis_to_idx
 from tensordict._td import (
@@ -56,7 +54,6 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
-
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
@@ -4343,9 +4340,10 @@ class _CustomOpTensorDict(TensorDictBase):
         return self
 
     def _set_at_str(self, key, value, idx, *, validated, non_blocking: bool):
-        transformed_tensor, original_tensor = self._get_str(
-            key, NO_DEFAULT
-        ), self._source._get_str(key, NO_DEFAULT)
+        transformed_tensor, original_tensor = (
+            self._get_str(key, NO_DEFAULT),
+            self._source._get_str(key, NO_DEFAULT),
+        )
         if transformed_tensor.data_ptr() != original_tensor.data_ptr():
             raise RuntimeError(
                 f"{self} original tensor and transformed_in do not point to the "
@@ -4357,9 +4355,10 @@ class _CustomOpTensorDict(TensorDictBase):
         return self
 
     def _set_at_tuple(self, key, value, idx, *, validated, non_blocking: bool):
-        transformed_tensor, original_tensor = self._get_tuple(
-            key, NO_DEFAULT
-        ), self._source._get_tuple(key, NO_DEFAULT)
+        transformed_tensor, original_tensor = (
+            self._get_tuple(key, NO_DEFAULT),
+            self._source._get_tuple(key, NO_DEFAULT),
+        )
         if transformed_tensor.data_ptr() != original_tensor.data_ptr():
             raise RuntimeError(
                 f"{self} original tensor and transformed_in do not point to the "

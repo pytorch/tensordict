@@ -5213,7 +5213,7 @@ class NonTensorStack(LazyStackedTensorDict):
         selfrepr = indent(selfrepr, prefix=4 * " ")
         batch_size = indent(f"batch_size={self.batch_size}", prefix=4 * " ")
         device = indent(f"device={self.device}", prefix=4 * " ")
-        return f"NonTensorStack(\n{selfrepr}," f"\n{batch_size}," f"\n{device})"
+        return f"NonTensorStack(\n{selfrepr},\n{batch_size},\n{device})"
 
     @classmethod
     def lazy_stack(

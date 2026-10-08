@@ -9,7 +9,6 @@ import concurrent.futures
 import functools
 import itertools
 import logging
-
 import math
 import os
 import re
@@ -40,20 +39,17 @@ from typing import (
 import numpy as np
 import torch
 from pyvers import implement_for
-
 from tensordict._C import (  # noqa: F401  # @manual=//pytorch/tensordict:_C
     _unravel_key_to_tuple as _unravel_key_to_tuple_cpp,
     unravel_key as unravel_key_cpp,
     unravel_key_list as unravel_key_list_cpp,
     unravel_keys as unravel_keys_cpp,
 )
-
 from tensordict._indexing import (  # noqa: F401
     _getitem_batch_size,
     convert_ellipsis_to_idx,
 )
 from tensordict._nestedkey import NestedKey
-
 from torch import Tensor
 from torch._C import _disabled_torch_function_impl
 from torch.nn.parameter import (
@@ -242,7 +238,7 @@ IndexType = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 DeviceType = Union[torch.device, str, int]
 
 
-_KEY_ERROR = 'key "{}" not found in {} with ' "keys {}"
+_KEY_ERROR = 'key "{}" not found in {} with keys {}'
 _LOCK_ERROR = (
     "Cannot modify locked TensorDict. For in-place modification, consider "
     "using the `set_()` method and make sure the key is present."
@@ -1140,7 +1136,7 @@ class _ErrorInteceptor:
 
     def _add_key_to_error_msg(self, msg: str) -> str:
         if msg.startswith(self.prefix):
-            return f'{self.prefix} "{self.key}" /{msg[len(self.prefix):]}'
+            return f'{self.prefix} "{self.key}" /{msg[len(self.prefix) :]}'
         return f'{self.prefix} "{self.key}". {msg}'
 
     def __enter__(self):
@@ -2777,7 +2773,6 @@ from tensordict._utils_key_json import (  # noqa: F401
     _get_robust_key_setting_with_warning,
     _is_safe_legacy_key,
 )
-
 
 assert_allclose_td = assert_close
 

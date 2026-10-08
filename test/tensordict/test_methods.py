@@ -27,7 +27,6 @@ import pytest
 import tensordict._archive as tensordict_archive
 import tensordict.base as tensordict_base
 import torch
-from packaging import version
 from tensordict import (
     is_memmap_archive,
     lazy_legacy,
@@ -58,6 +57,8 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from torch._subclasses import FakeTensor, FakeTensorMode
+
+from packaging import version
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
@@ -577,7 +578,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert item.device == device_cast
 
         assert td_device.device == device_cast, (
-            f"td_device first tensor device is " f"{next(td_device.items())[1].device}"
+            f"td_device first tensor device is {next(td_device.items())[1].device}"
         )
         assert td_device.clone().device == device_cast
         if device_cast != td.device:

@@ -26,13 +26,11 @@ from typing import (
 )
 
 import torch
-
 from tensordict._lazy import _CustomOpTensorDict, LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._td import _SubTensorDict, TensorDict
 from tensordict._tensorcollection import TensorCollection
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
-
 from tensordict.base import (
     _default_is_leaf,
     _is_tensor_collection,
@@ -42,7 +40,6 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
-
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _LOCK_ERROR,

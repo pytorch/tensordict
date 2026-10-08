@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pytest
 import torch
-from packaging import version
 from tensordict import (
     lazy_stack,
     LazyStackedTensorDict,
@@ -32,6 +31,8 @@ from tensordict.utils import (
     set_lazy_legacy,
     set_list_to_stack,
 )
+
+from packaging import version
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True

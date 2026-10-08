@@ -226,9 +226,9 @@ def test_pybind11_version_pin():
     pyproject = _ROOT / "pyproject.toml"
     text = pyproject.read_text()
     assert "pybind11" in text, "pybind11 not found in pyproject.toml"
-    assert (
-        "pybind11[global]>=2.13" in text or "pybind11>=2.13" in text
-    ), "pybind11 build requirement must pin >=2.13 for Python 3.13 support"
+    assert "pybind11[global]>=2.13" in text or "pybind11>=2.13" in text, (
+        "pybind11 build requirement must pin >=2.13 for Python 3.13 support"
+    )
 
 
 if __name__ == "__main__":

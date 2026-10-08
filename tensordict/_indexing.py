@@ -23,6 +23,7 @@ Torch reads the elements of an index from the first dim on:
   block takes the place of the first advanced index, unless a slice or
   ``None`` separates two advanced indices, in which case it goes first.
 """
+
 from __future__ import annotations
 
 import numpy as np

@@ -25,13 +25,12 @@ import numpy as np
 import pytest
 import tensordict.base as tensordict_base
 import torch
-from packaging import version
 from tensordict import (
     lazy_stack,
     LazyStackedTensorDict,
     set_capture_non_tensor_stack,
-    tensorclass,
     TensorClass,
+    tensorclass,
     TensorDict,
 )
 from tensordict._td import is_tensor_collection
@@ -54,6 +53,8 @@ from tensordict.utils import (
 from torch import nn
 from torch._subclasses import FakeTensor, FakeTensorMode
 from torch.nn.parameter import UninitializedTensorMixin
+
+from packaging import version
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
@@ -464,9 +465,9 @@ class TestGeneric:
         filename = Path(tmpdir) / "file.pkl"
         if not nested:
             torch.save(td, filename)
-            assert (
-                td == torch.load(filename, weights_only=False)
-            ).all(), td_c.to_dict()
+            assert (td == torch.load(filename, weights_only=False)).all(), (
+                td_c.to_dict()
+            )
         else:
             pass
             # wait for https://github.com/pytorch/pytorch/issues/129366 to be resolved
@@ -478,9 +479,9 @@ class TestGeneric:
         td_c = td.consolidate()
         torch.save(td_c, filename)
         if not nested:
-            assert (
-                td == torch.load(filename, weights_only=False)
-            ).all(), td_c.to_dict()
+            assert (td == torch.load(filename, weights_only=False)).all(), (
+                td_c.to_dict()
+            )
         else:
             assert all(
                 (_td == _td_c).all()
@@ -4417,15 +4418,15 @@ class TestGeneric:
         td_select._check_batch_size()
 
         td_reconstruct = stack_td(list(td), 0, contiguous=False)
-        assert (
-            td_reconstruct == td
-        ).all(), f"td and td_reconstruct differ, got {td} and {td_reconstruct}"
+        assert (td_reconstruct == td).all(), (
+            f"td and td_reconstruct differ, got {td} and {td_reconstruct}"
+        )
 
         superlist = [stack_td(list(_td), 0, contiguous=False) for _td in td]
         td_reconstruct = stack_td(superlist, 0, contiguous=False)
-        assert (
-            td_reconstruct == td
-        ).all(), f"td and td_reconstruct differ, got {td == td_reconstruct}"
+        assert (td_reconstruct == td).all(), (
+            f"td and td_reconstruct differ, got {td == td_reconstruct}"
+        )
 
         x = torch.randn(4, 5, device=device)
         td = TensorDict(
@@ -4754,9 +4755,9 @@ class TestGeneric:
         }
         td = TensorDict(batch_size=(4, 5), source=d)
         td_unbind = torch.unbind(td, dim=1)
-        assert (
-            td_unbind[0].batch_size == td[:, 0].batch_size
-        ), f"got {td_unbind[0].batch_size} and {td[:, 0].batch_size}"
+        assert td_unbind[0].batch_size == td[:, 0].batch_size, (
+            f"got {td_unbind[0].batch_size} and {td[:, 0].batch_size}"
+        )
 
     @pytest.mark.parametrize("stack", [True, False])
     @pytest.mark.parametrize("todict", [True, False])

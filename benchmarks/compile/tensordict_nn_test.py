@@ -10,11 +10,10 @@ import sys
 
 import pytest
 import torch
+from tensordict import TensorDict, TensorDictParams
+from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 
 from packaging import version
-from tensordict import TensorDict, TensorDictParams
-
-from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 

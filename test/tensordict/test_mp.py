@@ -16,13 +16,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from packaging import version
 from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict._td import is_tensor_collection
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.nn import TensorDictParams
 from tensordict.tensorclass import NonTensorData, NonTensorStack
 from torch import multiprocessing as mp, nn
+
+from packaging import version
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
@@ -122,9 +123,9 @@ class TestMPInplace:
             elif cmd == "send":
                 a = torch.ones(2) * val
                 tensordict.set_("a", a)
-                assert (
-                    tensordict.get("a") == a
-                ).all(), f'found {a} and {tensordict.get("a")}'
+                assert (tensordict.get("a") == a).all(), (
+                    f"found {a} and {tensordict.get('a')}"
+                )
                 command_pipe_child.send("done")
             elif cmd == "set_done":
                 tensordict.set_("done", torch.ones(1, dtype=torch.bool))
