@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4496+g3eb203220.d20261008)
+                  main (0.14.0.dev4499+gfeec1986e.d20261008)
                 </div>
               
             
@@ -467,7 +467,7 @@ the timings directly comparable with the other formats (see the
 <a class="reference internal" href="serialization_speed.html#sphx-glr-tutorials-serialization-speed-py"><span class="std std-ref">serialization speed tutorial</span></a>).
 A single chunk, however, means <code class="docutils literal notranslate"><span class="pre">get_at</span></code> must read the whole array. For
 dataset-style access, pass <code class="docutils literal notranslate"><span class="pre">chunks=</span></code> (forwarded to
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">zarr.Group.create_array()</span></code>) so that a row read only touches the
+<a class="reference external" href="https://zarr.readthedocs.io/en/stable/api/zarr/group/#zarr.Group.create_array" title="(in zarr-python v0.0.0)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">zarr.Group.create_array()</span></code></a>) so that a row read only touches the
 chunks it needs:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">td</span><span class="o">.</span><span class="n">to_zarr</span><span class="p">(</span><a href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath" class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">root</span></a> <span class="o">/</span> <span class="s2">"chunked.zarr"</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">32</span><span class="p">))</span>
 <span class="n">td_chunked</span> <span class="o">=</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="o">.</span><span class="n">from_zarr</span><span class="p">(</span><a href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath" class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">root</span></a> <span class="o">/</span> <span class="s2">"chunked.zarr"</span><span class="p">)</span>
@@ -560,7 +560,7 @@ the other on-disk formats.</p></li>
 <li><p>The <a class="reference external" href="https://zarr.readthedocs.io">zarr documentation</a> covers stores,
 codecs and the v3 format in depth.</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.220 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.214 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-zarr-storage-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/299d79c6946d13f056a08f21d56a241b/zarr_storage.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">zarr_storage.ipynb</span></code></a></p>

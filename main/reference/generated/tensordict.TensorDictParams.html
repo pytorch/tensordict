@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4496+g3eb203220.d20261008)
+                  main (0.14.0.dev4499+gfeec1986e.d20261008)
                 </div>
               
             
@@ -9949,7 +9949,7 @@ names) are persisted in the store attributes such that
 <li><p><strong>filename</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>path</em><em> or </em><em>zarr store</em>) – path to the zarr store (a
 directory), or a <code class="docutils literal notranslate"><span class="pre">zarr.abc.store.Store</span></code> instance (e.g. a
 <code class="docutils literal notranslate"><span class="pre">zarr.storage.ZipStore</span></code>).</p></li>
-<li><p><strong>**kwargs</strong> – kwargs to be passed to <code class="xref py py-meth docutils literal notranslate"><span class="pre">zarr.Group.create_array()</span></code>.
+<li><p><strong>**kwargs</strong> – kwargs to be passed to <a class="reference external" href="https://zarr.readthedocs.io/en/stable/api/zarr/group/#zarr.Group.create_array" title="(in zarr-python v0.0.0)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">zarr.Group.create_array()</span></code></a>.
 By default each tensor is stored as a single uncompressed chunk;
 pass <code class="docutils literal notranslate"><span class="pre">chunks=...</span></code> and/or <code class="docutils literal notranslate"><span class="pre">compressors=...</span></code> to override (e.g.
 for out-of-core row access or on-disk compression). Since leaves
