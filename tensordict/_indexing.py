@@ -83,7 +83,8 @@ def _read_element(element):
 
     The returned element is the given one, except that a list of bools or a
     nested list is returned as a tensor and a uint8 tensor as a boolean mask,
-    as torch reads them.
+    as torch reads them. A NumPy bool scalar raises an ``IndexError``, as in
+    torch with NumPy 2.3 and later.
     """
     if element is None:
         return _NONE, 0, element
@@ -91,10 +92,15 @@ def _read_element(element):
         return _ELLIPSIS, 0, element
     if isinstance(element, slice):
         return _SLICE, 1, element
-    if isinstance(element, (bool, np.bool_)):
-        # NumPy bools are read as by NumPy: torch reads them as ints with
-        # NumPy 1 and rejects them with NumPy 2
+    if isinstance(element, bool):
         return _BOOL, 0, element
+    if isinstance(element, np.bool_):
+        # torch reads a NumPy bool as an int before NumPy 2.3, and rejects it
+        # from NumPy 2.3 on: reject it with any NumPy
+        raise IndexError(
+            f"A NumPy bool scalar is not a valid index, got {element!r}. Use a "
+            "Python bool or a boolean tensor instead."
+        )
     if isinstance(element, range):
         return _INDEX, 1, element
     if isinstance(element, list):

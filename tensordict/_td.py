@@ -34,8 +34,10 @@ import torch
 
 from tensordict._archive import _memmap_tensor_from_path
 from tensordict._indexing import (
+    _as_tuple,
     _getitem_batch_size,
     _is_new_dim_index,
+    _read_element,
     convert_ellipsis_to_idx,
 )
 from tensordict._nestedkey import NestedKey
@@ -1032,6 +1034,10 @@ class TensorDict(TensorDictBase):
                         subtd = self._get_sub_tensordict(index)
                     subtd.set(value_key, item, inplace=True, non_blocking=False)
         else:
+            # torch indexes the entries, and would read a NumPy bool as an int
+            # before NumPy 2.3: _read_element rejects it, as getitem does
+            for element in _as_tuple(index):
+                _read_element(element)
             for key in self.keys():
                 self.set_at_(key, value, index)
 
