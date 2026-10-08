@@ -13,7 +13,6 @@ import logging
 import math
 import os
 import re
-import sys
 import threading
 import time
 import warnings
@@ -21,6 +20,7 @@ import weakref
 from collections import defaultdict
 from collections.abc import KeysView
 from contextlib import nullcontext
+from dataclasses import is_dataclass
 from functools import wraps
 from numbers import Number
 from textwrap import indent
@@ -77,15 +77,6 @@ except ImportError:  # torch 2.0
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
     from tensordict.tensorclass import NonTensorStack
-
-try:
-    from dataclasses import GenericAlias
-except ImportError:
-    # python < 3.9
-    class GenericAlias:
-        """Placeholder."""
-
-        ...
 
 
 try:
@@ -2822,17 +2813,7 @@ def _check_inbuild():
 
 _check_inbuild = assume_constant_result(_check_inbuild)
 
-if sys.version_info >= (3, 10):
-    _zip_strict = functools.partial(zip, strict=True)
-else:
-
-    def _zip_strict(*iterables):
-        iterables = tuple(tuple(it) for it in iterables)
-        lengths = {len(it) for it in iterables}
-        if len(lengths) > 1:
-            raise ValueError("lengths of iterables differ.")
-
-        return zip(*iterables)
+_zip_strict = functools.partial(zip, strict=True)
 
 
 def _pin_mem(q_in, q_out):
@@ -3022,18 +3003,7 @@ def _mismatch_keys(keys1, keys2):
 
 def _is_dataclass(obj):
     """Check if an object is a dataclass."""
-    try:
-        from dataclasses import is_dataclass
-
-        return is_dataclass(obj)
-    except ImportError:
-        # Fallback for older Python versions
-        cls = (
-            obj
-            if isinstance(obj, type) and not isinstance(obj, GenericAlias)
-            else type(obj)
-        )
-        return hasattr(cls, "__dataclass_fields__")
+    return is_dataclass(obj)
 
 
 def _is_list_tensor_compatible(t) -> Tuple[bool, tuple | None, type | None]:
