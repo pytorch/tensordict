@@ -177,15 +177,16 @@ def _expand_ellipsis(index: tuple, ndim: int) -> tuple:
 def _read_index(index, ndim):
     """Read ``index`` as torch does for a tensor with ``ndim`` dims.
 
-    Returns ``(dims, advanced, position)``:
+    Returns ``(dims, advanced, position, rest)``:
 
-    * ``dims`` describes the dims of the result outside of the advanced block,
-      in order, as ``(input_dim, element)``. ``input_dim`` is ``None`` for a dim
-      that ``None`` adds, and ``element`` is the slice of the input dim, or
-      ``None`` if the dim is kept whole.
+    * ``dims`` describes the dims that the slices and ``None`` give, in order,
+      as ``(input_dim, element)``: ``element`` is the slice of ``input_dim``,
+      and ``input_dim`` and ``element`` are ``None`` for a dim that ``None``
+      adds.
     * ``advanced`` has a ``(kind, element, input_dim, num_dims)`` for each
       advanced index, which uses the ``num_dims`` dims from ``input_dim``.
     * ``position`` is where the block of the advanced dims goes in ``dims``.
+    * The input dims from ``rest`` on are not indexed, and follow ``dims``.
     """
     if not isinstance(index, tuple):
         index = (index,)
@@ -213,10 +214,9 @@ def _read_index(index, ndim):
                 separated = True
             advanced.append((kind, element, dim, num_dims))
             dim += num_dims
-    dims.extend((dim, None) for dim in range(dim, ndim))
     if separated:
         position = 0
-    return dims, advanced, position
+    return dims, advanced, position, dim
 
 
 def _getitem_batch_size(batch_size, index):
@@ -243,15 +243,12 @@ def _getitem_batch_size(batch_size, index):
             return batch_size[1:]
         if isinstance(index, slice) and index == slice(None):
             return batch_size
-    dims, advanced, position = _read_index(index, len(batch_size))
-    out = []
-    for dim, element in dims:
-        if dim is None:
-            out.append(1)
-        elif element is None:
-            out.append(batch_size[dim])
-        else:
-            out.append(_slice_length(element, batch_size[dim]))
+    dims, advanced, position, rest = _read_index(index, len(batch_size))
+    out = [
+        1 if dim is None else _slice_length(element, batch_size[dim])
+        for dim, element in dims
+    ]
+    out.extend(batch_size[rest:])
     if advanced:
         shapes = [_advanced_shape(kind, element) for kind, element, _, _ in advanced]
         out[position:position] = (
@@ -270,8 +267,9 @@ def _getitem_names(names, index):
     adds, and the advanced dims that come from several input dims, such as
     the dim of an N-D mask or of advanced indices that broadcast together.
     """
-    dims, advanced, position = _read_index(index, len(names))
+    dims, advanced, position, rest = _read_index(index, len(names))
     out = [None if dim is None else names[dim] for dim, _ in dims]
+    out.extend(names[rest:])
     if advanced:
         out[position:position] = _block_names(names, advanced)
     return out
