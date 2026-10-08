@@ -152,21 +152,71 @@ def convert_ellipsis_to_idx(
         idx = (idx,)
     elif not isinstance(idx, tuple):
         return idx
+    return _expand_ellipsis(idx, len(batch_size))
+
+
+def _expand_ellipsis(index: tuple, ndim: int) -> tuple:
+    """Replace the ``Ellipsis`` of ``index`` by the ``:`` that it stands for."""
     position = None
-    for i, element in enumerate(idx):
+    for i, element in enumerate(index):
         if element is Ellipsis:
             if position is not None:
                 raise RuntimeError("An index can only have one ellipsis at most.")
             position = i
     if position is None:
-        return idx
+        return index
     # the ellipsis covers the dims that the other index elements do not use
-    ellipsis_length = len(batch_size) - sum(
-        _num_indexed_dims(element) for element in idx if element is not Ellipsis
+    ellipsis_length = ndim - sum(
+        _num_indexed_dims(element) for element in index if element is not Ellipsis
     )
     if ellipsis_length < 0:
         raise RuntimeError("Not enough dimensions in TensorDict for index provided.")
-    return idx[:position] + (slice(None),) * ellipsis_length + idx[position + 1 :]
+    return index[:position] + (slice(None),) * ellipsis_length + index[position + 1 :]
+
+
+def _read_index(index, ndim):
+    """Read ``index`` as torch does for a tensor with ``ndim`` dims.
+
+    Returns ``(dims, advanced, position, rest)``:
+
+    * ``dims`` describes the dims that the slices and ``None`` give, in order,
+      as ``(input_dim, element)``: ``element`` is the slice of ``input_dim``,
+      and ``input_dim`` and ``element`` are ``None`` for a dim that ``None``
+      adds.
+    * ``advanced`` has a ``(kind, element, input_dim, num_dims)`` for each
+      advanced index, which uses the ``num_dims`` dims from ``input_dim``.
+    * ``position`` is where the block of the advanced dims goes in ``dims``.
+    * The input dims from ``rest`` on are not indexed, and follow ``dims``.
+    """
+    if not isinstance(index, tuple):
+        index = (index,)
+    index = _expand_ellipsis(index, ndim)
+    dims = []
+    advanced = []
+    position = None
+    after_gap = separated = False
+    dim = 0
+    for element in index:
+        kind, num_dims, element = _read_element(element)
+        if kind == _INT:
+            dim += 1
+        elif kind == _SLICE:
+            dims.append((dim, element))
+            dim += 1
+            after_gap = position is not None
+        elif kind == _NONE:
+            dims.append((None, None))
+            after_gap = position is not None
+        else:
+            if position is None:
+                position = len(dims)
+            elif after_gap:
+                separated = True
+            advanced.append((kind, element, dim, num_dims))
+            dim += num_dims
+    if separated:
+        position = 0
+    return dims, advanced, position, dim
 
 
 def _getitem_batch_size(batch_size, index):
@@ -193,48 +243,82 @@ def _getitem_batch_size(batch_size, index):
             return batch_size[1:]
         if isinstance(index, slice) and index == slice(None):
             return batch_size
-        index = (index,)
-    index = convert_ellipsis_to_idx(index, batch_size)
-    out = []
-    dim = 0
-    # the shapes of the advanced indices, and where their block goes
-    advanced = []
-    position = None
-    after_gap = separated = False
-    for element in index:
-        kind, num_dims, element = _read_element(element)
-        if kind == _INT:
-            dim += 1
-        elif kind == _SLICE:
-            out.append(_slice_length(element, batch_size[dim]))
-            dim += 1
-            after_gap = position is not None
-        elif kind == _NONE:
-            out.append(1)
-            after_gap = position is not None
-        else:
-            if position is None:
-                position = len(out)
-            elif after_gap:
-                separated = True
-            if kind == _MASK:
-                # int() graph-breaks on the data-dependent size under compile
-                advanced.append((int(element.sum()),))
-            elif kind == _BOOL:
-                advanced.append((int(element),))
-            elif isinstance(element, (list, range)):
-                advanced.append((len(element),))
-            else:
-                advanced.append(element.shape)
-            dim += num_dims
-    out.extend(batch_size[dim:])
+    dims, advanced, position, rest = _read_index(index, len(batch_size))
+    out = [
+        1 if dim is None else _slice_length(element, batch_size[dim])
+        for dim, element in dims
+    ]
+    out.extend(batch_size[rest:])
     if advanced:
-        if separated:
-            position = 0
+        shapes = [_advanced_shape(kind, element) for kind, element, _, _ in advanced]
         out[position:position] = (
-            advanced[0] if len(advanced) == 1 else torch.broadcast_shapes(*advanced)
+            shapes[0] if len(shapes) == 1 else torch.broadcast_shapes(*shapes)
         )
     return torch.Size(out)
+
+
+def _getitem_names(names, index):
+    """Return the dim names that indexing a tensor with dim names ``names`` with ``index`` gives.
+
+    A dim of the result keeps the name of the input dim that it comes from,
+    if it comes from exactly one: the dim of a slice or a kept dim, or a dim of
+    the advanced block along which only advanced indices that use the same
+    single input dim vary. The other dims are unnamed: the dims that ``None``
+    adds, and the advanced dims that come from several input dims, such as
+    the dim of an N-D mask or of advanced indices that broadcast together.
+    """
+    dims, advanced, position, rest = _read_index(index, len(names))
+    out = [None if dim is None else names[dim] for dim, _ in dims]
+    out.extend(names[rest:])
+    if advanced:
+        out[position:position] = _block_names(names, advanced)
+    return out
+
+
+def _block_names(names, advanced):
+    """Return the names of the dims of the advanced block, see :func:`_getitem_names`."""
+    shapes = []
+    for kind, element, first, num_dims in advanced:
+        if kind == _BOOL:
+            # a scalar bool uses no dim
+            continue
+        if kind == _MASK:
+            # the number of selected elements, unknown without reading the mask
+            shape = (None,)
+        elif isinstance(element, (list, range)):
+            shape = (len(element),)
+        else:
+            shape = tuple(element.shape)
+        shapes.append((shape, range(first, first + num_dims)))
+    ndim = max(_advanced_ndim(kind, element) for kind, element, _, _ in advanced)
+    out = []
+    for dim in range(-ndim, 0):
+        # the input dims of the advanced indices that vary along this dim of
+        # the block, or of all those that have it if none varies along it
+        having = [(shape[dim], used) for shape, used in shapes if len(shape) >= -dim]
+        varying = [used for size, used in having if size != 1]
+        sources = set().union(*(varying or [used for _, used in having]))
+        out.append(names[sources.pop()] if len(sources) == 1 else None)
+    return out
+
+
+def _advanced_shape(kind, element):
+    """The shape that an advanced index contributes to the advanced block."""
+    if kind == _MASK:
+        # int() graph-breaks on the data-dependent size under compile
+        return (int(element.sum()),)
+    if kind == _BOOL:
+        return (int(element),)
+    if isinstance(element, (list, range)):
+        return (len(element),)
+    return element.shape
+
+
+def _advanced_ndim(kind, element):
+    """The number of dims that an advanced index contributes to the advanced block."""
+    if kind in (_MASK, _BOOL) or isinstance(element, (list, range)):
+        return 1
+    return element.ndim
 
 
 def _slice_length(index: slice, size: int) -> int:

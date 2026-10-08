@@ -246,6 +246,19 @@ class TestNamedDims(TestTensorDictsBase):
         assert td[..., mask, :].names == ["a", None, "d"]
         assert td[[[True] * 4] * 3].names == [None, "c", "d"]
 
+    def test_index_advanced_names(self):
+        td = TensorDict(batch_size=[3, 4, 5, 6], names=["a", "b", "c", "d"])
+        rows, cols = torch.tensor([0, 2]), torch.tensor([1, 3])
+        # advanced indices that broadcast together give unnamed dims
+        assert td[rows, cols].names == [None, "c", "d"]
+        assert td[rows, :, cols].names == [None, "b", "d"]
+        assert td[:, rows, None, cols].names == [None, "a", None, "d"]
+        # unless only one of them varies along a dim
+        assert td[rows[:, None], cols].names == ["a", "b", "c", "d"]
+        assert td[rows, :, [1]].names == ["a", "b", "d"]
+        assert td[rows, True].names == ["a", "b", "c", "d"]
+        assert td[True, :, rows].names == ["b", "a", "c", "d"]
+
     @pytest.mark.parametrize("stack_dim", [None, 0, 1, 2])
     @pytest.mark.parametrize(
         "index,names",
