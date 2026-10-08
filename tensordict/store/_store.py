@@ -18,11 +18,7 @@ import weakref
 from typing import Any, Callable, Literal, Sequence, Tuple, Type, TYPE_CHECKING
 
 import torch
-from tensordict._indexing import (
-    _as_tuple,
-    _getitem_batch_size,
-    convert_ellipsis_to_idx,
-)
+from tensordict._indexing import _as_tuple, _getitem_batch_size, convert_ellipsis_to_idx
 from tensordict._td import (
     _TensorDictKeysView,
     _unravel_key_to_tuple,
