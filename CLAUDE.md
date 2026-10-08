@@ -115,6 +115,13 @@ Pick the most specific. `[Feature]` = new user-facing capability;
 `[Refactor]` = behavior-preserving restructure; `[Compile]` = `torch.compile` /
 cudagraphs work.
 
+## Releases
+
+When asked to release a version, follow
+[`.github/RELEASE_AGENT_PROMPT.md`](.github/RELEASE_AGENT_PROMPT.md). Prepare
+and test the release without asking, then ask the maintainer once, with the
+release notes and the commit to release, before anything is published.
+
 ## When in doubt
 
 Read a recently-merged PR in the same area and match its conventions.
