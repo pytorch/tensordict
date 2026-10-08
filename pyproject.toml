@@ -2,17 +2,69 @@
 requires = ["setuptools", "wheel", "pybind11[global]>=2.13", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
-[tool.usort]
-first_party_detection = false
-target-version = ["py310"]
-excludes = [
-    "gallery",
-    "tutorials",
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.format]
+# black did not format the code blocks of Markdown files
+exclude = ["*.md"]
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, flake8-bugbear, flake8-comprehensions, flake8-print,
+# pydocstyle and import sorting: what flake8 (with its plugins), pydocstyle and
+# usort checked before ruff replaced them.
+select = ["E", "W", "F", "B", "C4", "T20", "D", "I"]
+ignore = [
+    "E402",  # imports below module code: several modules re-export at their end
+    "E501",  # line length is the formatter's job
+    "E701",  # one-line compound statements are the formatter's job
+    # Rules that the flake8 setup did not run: bugbear's opinionated B9 checks,
+    # and checks newer than the plugins it pinned.
+    "B026",  # star-arg unpacking after a keyword argument
+    "B028",  # warnings.warn without stacklevel
+    "B904",  # raise without from inside except
+    "B905",  # zip() without strict=
+    "C419",  # list comprehension in any() or all()
+    "C420",  # dict comprehension that dict.fromkeys() could replace
+    # pydocstyle codes the repo ignored
+    "D100",
+    "D102",
+    "D104",
+    "D105",
+    "D107",
+    "D417",
 ]
 
-[tool.black]
-line-length = 88
-target-version = ["py310"]
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403", "F405"]
+"test/smoke_test.py" = ["F401"]
+# flake8 matched test_*.py against file names anywhere, benchmarks included.
+# ruff's B018 also flags attribute access, which pytest.raises blocks use.
+"test_*.py" = ["B018", "E731"]
+# tutorial cells show values with bare expressions, and place their imports
+# where the text needs them
+"tutorials/**" = ["B018", "E741", "I", "T201"]
+"benchmarks/**" = ["T201"]
+".github/scripts/*.py" = ["T201"]
+".github/unittest/**" = ["B018"]
+"packaging/**" = ["T201"]
+"tensordict/functional.py" = ["E741"]
+"tensordict/nn/functional_modules.py" = ["D103"]
+# pydocstyle checked the .py files of tensordict/ only
+"!tensordict/**" = ["D"]
+# flake8 and pydocstyle did not check the stubs (black formatted them)
+"*.pyi" = ["ALL"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+# As usort did with first_party_detection = false: tensordict, torch and the
+# other third-party imports share one block.
+known-third-party = ["tensordict"]
+order-by-type = false
+combine-as-imports = true
 
 [project]
 name = "tensordict"

@@ -149,9 +149,20 @@ git commit -am "[Versioning] Prepare TensorDict $VERSION"
 
 ## 3. Test the branch
 
-**Lint** the changed files with the versions that `.pre-commit-config.yaml`
-pins. `pre-commit` can pick a Python on which the pinned libcst crashes
-(exit code -11); these commands avoid that.
+**Lint** the changed files with the tools and versions that the branch's
+`.pre-commit-config.yaml` pins. `pre-commit` can pick a Python on which libcst
+crashes (exit code -11): ufmt and torchfix use it. These commands avoid that.
+On a branch whose hooks run ruff (TensorDict 0.15 and later):
+
+```bash
+files=$(git diff --name-only "$PREV..HEAD" -- '*.py')
+uvx ruff@0.16.10 check $files
+uvx ruff@0.16.10 format --check $files
+uvx --python 3.12 --with torchfix==0.5.0 flake8==7.1.0 --select=TOR \
+  --per-file-ignores='test_*.py:TOR101' $files
+```
+
+On a branch whose hooks run ufmt and flake8 (the 0.14 line):
 
 ```bash
 files=$(git diff --name-only "$PREV..HEAD" -- '*.py')
