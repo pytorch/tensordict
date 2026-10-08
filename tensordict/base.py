@@ -14538,12 +14538,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def _check_device(self, *, raise_exception: bool = True) -> None | bool:
         raise NotImplementedError
 
-    def _validate_key(self, key: NestedKey) -> NestedKey:
-        key = _unravel_key_to_tuple(key)
-        if not key:
-            raise KeyError(_GENERIC_NESTED_ERR.format(key))
-        return key
-
     @property
     def _validate_value(self):
         if is_compiling():
