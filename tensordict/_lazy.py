@@ -36,7 +36,12 @@ import numpy as np
 
 import torch
 from tensordict._indexing import _getitem_batch_size, convert_ellipsis_to_idx
-from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
+from tensordict._td import (
+    _SubTensorDict,
+    _TensorDictKeysView,
+    _value_at_new_dim,
+    TensorDict,
+)
 from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _is_leaf_nontensor,
@@ -2560,10 +2565,13 @@ class LazyStackedTensorDict(TensorDictBase):
             and index.shape == ()
             and index.dtype == torch.bool
         ):
-            if index is None or bool(index):
-                self.unsqueeze(0).update(value)
-            # a scalar False mask selects nothing: no-op
-            return self
+            if index is not None and not bool(index):
+                # a scalar False mask selects nothing: no-op
+                return self
+            # None and True add a dim of size 1, and the value is written to it
+            if is_tensor_collection(value) or isinstance(value, dict):
+                value = _value_at_new_dim(self, value)
+            index = (slice(None),) * self.batch_dims
 
         if is_tensor_collection(value) or isinstance(value, dict):
             indexed_bs = _getitem_batch_size(self.batch_size, index)

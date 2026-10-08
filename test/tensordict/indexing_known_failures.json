@@ -312,10 +312,7 @@
   "(t[[0,-1]], t(1))",
   "(t[[0,-1]], t(True))",
   "(t[[0,-1]], t[0,-1])",
-  "(t[[0,-1]], t[[0,-1]])",
-  "None",
-  "True",
-  "t(True)"
+  "(t[[0,-1]], t[[0,-1]])"
  ],
  "nested_td getitem": [],
  "nested_td setitem": [],
@@ -324,23 +321,9 @@
  "nested_typed_td getitem": [],
  "nested_typed_td setitem": [],
  "permute_td getitem": [],
- "permute_td setitem": [
-  "(None,)",
-  "(True,)",
-  "(t(True),)",
-  "None",
-  "True",
-  "t(True)"
- ],
+ "permute_td setitem": [],
  "squeezed_td getitem": [],
- "squeezed_td setitem": [
-  "(None,)",
-  "(True,)",
-  "(t(True),)",
-  "None",
-  "True",
-  "t(True)"
- ],
+ "squeezed_td setitem": [],
  "stacked_td getitem": [
   "(-1, False)",
   "(..., False)",
@@ -481,29 +464,12 @@
   "(t[0,-1], True)",
   "(t[0,-1], t(True))",
   "(t[[0,-1]], True)",
-  "(t[[0,-1]], t(True))",
-  "None",
-  "True",
-  "t(True)"
+  "(t[[0,-1]], t(True))"
  ],
  "sub_td getitem": [],
- "sub_td setitem": [
-  "(None,)",
-  "(True,)",
-  "(t(True),)",
-  "None",
-  "True",
-  "t(True)"
- ],
+ "sub_td setitem": [],
  "sub_td2 getitem": [],
- "sub_td2 setitem": [
-  "(None,)",
-  "(True,)",
-  "(t(True),)",
-  "None",
-  "True",
-  "t(True)"
- ],
+ "sub_td2 setitem": [],
  "td getitem": [],
  "td setitem": [],
  "td_h5 getitem": [],
@@ -520,12 +486,5 @@
  "typed_td getitem": [],
  "typed_td setitem": [],
  "unsqueezed_td getitem": [],
- "unsqueezed_td setitem": [
-  "(None,)",
-  "(True,)",
-  "(t(True),)",
-  "None",
-  "True",
-  "t(True)"
- ]
+ "unsqueezed_td setitem": []
 }

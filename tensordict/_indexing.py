@@ -124,6 +124,18 @@ def _read_element(element):
     return _INT, 1, element
 
 
+def _is_new_dim_index(index) -> bool:
+    """Whether ``index`` is ``None`` or a true scalar bool, which add a dim of size 1 and select all of it."""
+    if index is None or index is True:
+        return True
+    return (
+        isinstance(index, torch.Tensor)
+        and index.shape == ()
+        and index.dtype == torch.bool
+        and bool(index)
+    )
+
+
 def _num_indexed_dims(index) -> int:
     """Number of dims that an element of an index uses."""
     return _read_element(index)[1]

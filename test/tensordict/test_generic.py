@@ -1729,6 +1729,27 @@ class TestGeneric:
         assert td["new"].shape == torch.Size(batch_size)
         assert (td["new"] == expected).all()
 
+    @pytest.mark.parametrize("index", [None, True, torch.tensor(True), (None,)])
+    @pytest.mark.parametrize("container", ["sub", "lazy"])
+    def test_setitem_new_dim_index(self, index, container):
+        # None and True add a dim of size 1, so the value is written to every
+        # element, as td.unsqueeze(0)[:] = value would
+        if container == "sub":
+            td = TensorDict({"a": torch.zeros(2, 3, 4)}, [2, 3, 4])
+            td = td._get_sub_tensordict(1)
+        else:
+            td = lazy_stack([TensorDict({"a": torch.zeros(4)}, [4]) for _ in range(3)])
+        td[index] = TensorDict(
+            {"a": torch.ones(1, 3, 4), "new": torch.ones(1, 3, 4)}, [1, 3, 4]
+        )
+        assert (td["a"] == 1).all()
+        assert (td["new"] == 1).all()
+        td[index] = {"a": torch.full((1, 3, 4), 2.0)}
+        assert (td["a"] == 2).all()
+        # the value is broadcast to the batch size with the new dim
+        td[index] = TensorDict({"a": torch.full((3, 4), 3.0)}, [3, 4])
+        assert (td["a"] == 3).all()
+
     @pytest.mark.parametrize(
         "index",
         [
