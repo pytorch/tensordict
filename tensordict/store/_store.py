@@ -1286,11 +1286,6 @@ class TensorDictStore(TensorDictBase):
         self._device = torch.device(value) if value is not None else None
         self._run_sync(self._apersist_metadata())
 
-    _erase_names = TensorDict._erase_names
-    _has_names = TensorDict._has_names
-    _set_names = TensorDict._set_names
-    names = TensorDict.names
-
     def _rename_subtds(self, names):
         if names is None:
             names = [None] * self.ndim
@@ -2237,8 +2232,6 @@ class TensorDictStore(TensorDictBase):
             return tc_type._from_tensordict(store)
         return store
 
-    from_dict_instance = TensorDict.from_dict_instance
-
     # ---- Cloning ----
 
     def _clone(self, recurse: bool = True) -> TensorDictStore:
@@ -2495,33 +2488,6 @@ class TensorDictStore(TensorDictBase):
 
     # ---- Delegated to TensorDict (same pattern as PersistentTensorDict) ----
 
-    __eq__ = TensorDict.__eq__
-    __ne__ = TensorDict.__ne__
-    __xor__ = TensorDict.__xor__
-    __or__ = TensorDict.__or__
-    __ge__ = TensorDict.__ge__
-    __gt__ = TensorDict.__gt__
-    __le__ = TensorDict.__le__
-    __lt__ = TensorDict.__lt__
-
-    _apply_nest = TensorDict._apply_nest
-    _cast_reduction = TensorDict._cast_reduction
-    _check_device = TensorDict._check_device
-    _check_is_shared = TensorDict._check_is_shared
-    _convert_to_tensordict = TensorDict._convert_to_tensordict
-    _get_names_idx = TensorDict._get_names_idx
-    _multithread_apply_flat = TensorDict._multithread_apply_flat
-    _multithread_rebuild = TensorDict._multithread_rebuild
-    _to_module = TensorDict._to_module
-    _unbind = TensorDict._unbind
-    all = TensorDict.all
-    any = TensorDict.any
-    expand = TensorDict.expand
-    _repeat = TensorDict._repeat
-    repeat_interleave = TensorDict.repeat_interleave
-    reshape = TensorDict.reshape
-    split = TensorDict.split
-
     # ---- Shape ops: raise NotImplementedError ----
 
     def _view(self, *args, **kwargs):
@@ -2740,11 +2706,6 @@ class _StoreStackElementView(TensorDictBase):
     def device(self, value):
         self._device = torch.device(value) if value is not None else None
 
-    _erase_names = TensorDict._erase_names
-    _has_names = TensorDict._has_names
-    _set_names = TensorDict._set_names
-    names = TensorDict.names
-
     def _rename_subtds(self, names):
         pass
 
@@ -2782,8 +2743,6 @@ class _StoreStackElementView(TensorDictBase):
         if default is not NO_DEFAULT:
             return default
         raise KeyError(f"key {key} not found in {type(self).__name__}")
-
-    _get_tuple = TensorDict._get_tuple
 
     def _get_at_str(self, key, idx, default=NO_DEFAULT, **kwargs):
         tensor = self._get_str(key, default=default, **kwargs)
@@ -3092,35 +3051,6 @@ class _StoreStackElementView(TensorDictBase):
     @classmethod
     def from_dict(cls, *args, **kwargs):
         raise NotImplementedError(f"{cls.__name__} cannot be created from a dict.")
-
-    from_dict_instance = TensorDict.from_dict_instance
-
-    __eq__ = TensorDict.__eq__
-    __ne__ = TensorDict.__ne__
-    __xor__ = TensorDict.__xor__
-    __or__ = TensorDict.__or__
-    __ge__ = TensorDict.__ge__
-    __gt__ = TensorDict.__gt__
-    __le__ = TensorDict.__le__
-    __lt__ = TensorDict.__lt__
-
-    _apply_nest = TensorDict._apply_nest
-    _cast_reduction = TensorDict._cast_reduction
-    _check_device = TensorDict._check_device
-    _check_is_shared = TensorDict._check_is_shared
-    _convert_to_tensordict = TensorDict._convert_to_tensordict
-    _get_names_idx = TensorDict._get_names_idx
-    _multithread_apply_flat = TensorDict._multithread_apply_flat
-    _multithread_rebuild = TensorDict._multithread_rebuild
-    _to_module = TensorDict._to_module
-    _unbind = TensorDict._unbind
-    all = TensorDict.all
-    any = TensorDict.any
-    expand = TensorDict.expand
-    _repeat = TensorDict._repeat
-    repeat_interleave = TensorDict.repeat_interleave
-    reshape = TensorDict.reshape
-    split = TensorDict.split
 
     def _clone(self, recurse=True):
         return self.to_tensordict()
@@ -4117,11 +4047,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
     def device(self, value):
         self._device = torch.device(value) if value is not None else None
 
-    _erase_names = TensorDict._erase_names
-    _has_names = TensorDict._has_names
-    _set_names = TensorDict._set_names
-    names = TensorDict.names
-
     def _rename_subtds(self, names):
         pass
 
@@ -4239,8 +4164,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
         if default is not NO_DEFAULT:
             return default
         raise KeyError(f"key {key} not found in {type(self).__name__}")
-
-    _get_tuple = TensorDict._get_tuple
 
     def _set_str(
         self,
@@ -4648,8 +4571,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
             "Use LazyStackedTensorDictStore.from_lazy_stack(lazy_td, ...) instead."
         )
 
-    from_dict_instance = TensorDict.from_dict_instance
-
     # ---- Cloning ----
 
     def _clone(self, recurse: bool = True) -> LazyStackedTensorDictStore:
@@ -4880,33 +4801,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
         )
 
     # ---- Delegated ops ----
-
-    __eq__ = TensorDict.__eq__
-    __ne__ = TensorDict.__ne__
-    __xor__ = TensorDict.__xor__
-    __or__ = TensorDict.__or__
-    __ge__ = TensorDict.__ge__
-    __gt__ = TensorDict.__gt__
-    __le__ = TensorDict.__le__
-    __lt__ = TensorDict.__lt__
-
-    _apply_nest = TensorDict._apply_nest
-    _cast_reduction = TensorDict._cast_reduction
-    _check_device = TensorDict._check_device
-    _check_is_shared = TensorDict._check_is_shared
-    _convert_to_tensordict = TensorDict._convert_to_tensordict
-    _get_names_idx = TensorDict._get_names_idx
-    _multithread_apply_flat = TensorDict._multithread_apply_flat
-    _multithread_rebuild = TensorDict._multithread_rebuild
-    _to_module = TensorDict._to_module
-    _unbind = TensorDict._unbind
-    all = TensorDict.all
-    any = TensorDict.any
-    expand = TensorDict.expand
-    _repeat = TensorDict._repeat
-    repeat_interleave = TensorDict.repeat_interleave
-    reshape = TensorDict.reshape
-    split = TensorDict.split
 
     # ---- Shape ops: not supported ----
 

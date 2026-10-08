@@ -1047,9 +1047,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             return self._param_td._propagate_unlock()
         return []
 
-    unlock_ = TensorDict.unlock_
-    lock_ = TensorDict.lock_
-
     @property
     def data(self) -> Self:
         return self._param_td._data()
@@ -1126,9 +1123,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
     @_carry_over
     def _legacy_unsqueeze(self, dim: int) -> TensorDictBase: ...
-
-    _check_device = TensorDict._check_device
-    _check_is_shared = TensorDict._check_is_shared
 
     @_fallback
     def _cast_reduction(self, **kwargs): ...
