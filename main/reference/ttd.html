@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4470+g662eb0c32.d20261007)
+                  main (0.14.0.dev4473+g635e20846.d20261008)
                 </div>
               
             
@@ -555,7 +555,8 @@ no transition function needs updating.</p>
 </section>
 <section id="class-options">
 <h2>Class options<a class="headerlink" href="#class-options" title="Permalink to this heading">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">TypedTensorDict</span></code> supports the same bracket-syntax options as <code class="docutils literal notranslate"><span class="pre">TensorClass</span></code>:</p>
+<p><code class="docutils literal notranslate"><span class="pre">TypedTensorDict</span></code> supports the <code class="docutils literal notranslate"><span class="pre">&quot;shadow&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;frozen&quot;</span></code> bracket-syntax
+options of <code class="docutils literal notranslate"><span class="pre">TensorClass</span></code>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">MyModel</span><span class="p">(</span><span class="n">TypedTensorDict</span><span class="p">[</span><span class="s2">"shadow"</span><span class="p">]):</span>
     <span class="n">data</span><span class="p">:</span> <span class="n">Tensor</span>      <span class="c1"># "data" shadows TensorDict.data -- allowed</span>
 
@@ -575,11 +576,12 @@ assignment and adding keys raise <code class="docutils literal notranslate"><spa
 <code class="docutils literal notranslate"><span class="pre">set_()</span></code> or <code class="docutils literal notranslate"><span class="pre">state.x.add_(1)</span></code> still succeed, so the instance is not
 read-only. This differs from <code class="docutils literal notranslate"><span class="pre">TensorClass[&quot;frozen&quot;]</span></code>, where attribute
 assignment raises <code class="docutils literal notranslate"><span class="pre">dataclasses.FrozenInstanceError</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">&quot;autocast&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;nocast&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;tensor_only&quot;</span></code> – Accepted with the same
-syntax as <code class="docutils literal notranslate"><span class="pre">TensorClass</span></code> and inherited by subclasses, but they currently have
-no effect on <code class="docutils literal notranslate"><span class="pre">TypedTensorDict</span></code>: values are stored as a regular
-<code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> would store them (for example, <code class="docutils literal notranslate"><span class="pre">x=1</span></code> is stored as a tensor
-even with <code class="docutils literal notranslate"><span class="pre">&quot;nocast&quot;</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;autocast&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;nocast&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;tensor_only&quot;</span></code> – Deprecated in 0.15, to be
+removed in 0.17. They are accepted with the same syntax as <code class="docutils literal notranslate"><span class="pre">TensorClass</span></code>
+and inherited by subclasses, but they have no effect on <code class="docutils literal notranslate"><span class="pre">TypedTensorDict</span></code>:
+values are stored as a regular <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> would store them (for example,
+<code class="docutils literal notranslate"><span class="pre">x=1</span></code> is stored as a tensor even with <code class="docutils literal notranslate"><span class="pre">&quot;nocast&quot;</span></code>). Using one of them
+emits a <code class="docutils literal notranslate"><span class="pre">DeprecationWarning</span></code>. Use <code class="docutils literal notranslate"><span class="pre">TensorClass</span></code> if you need them.</p></li>
 </ul>
 <p>Options propagate through inheritance: a subclass of a <code class="docutils literal notranslate"><span class="pre">&quot;frozen&quot;</span></code> class is
 also frozen.</p>
