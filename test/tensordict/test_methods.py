@@ -66,6 +66,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         DummyPicklableClass,
         get_available_devices,
         is_npu_available,
+        legacy_lazy_mode,
         prod,
         TestTensorDictsBase,
     )
@@ -76,6 +77,7 @@ else:
         DummyPicklableClass,
         get_available_devices,
         is_npu_available,
+        legacy_lazy_mode,
         prod,
         TestTensorDictsBase,
     )
@@ -807,7 +809,7 @@ class TestTensorDicts(TestTensorDictsBase):
     # getting values from lazy tensordicts in non-lazy contexts messes things up
     # so we set it to True. When we'll deprecate lazy tensordicts, we will just
     # remove this decorator
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_create_nested(self, td_name, device):
         td = getattr(self, td_name)(device)
         with td.unlock_():
@@ -1525,7 +1527,7 @@ class TestTensorDicts(TestTensorDictsBase):
     # getting values from lazy tensordicts in non-lazy contexts messes things up
     # so we set it to True. When we'll deprecate lazy tensordicts, we will just
     # remove this decorator
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_lock_nested(self, td_name, device):
         td = getattr(self, td_name)(device)
         if td_name in ("sub_td", "sub_td2") and td.is_locked:
@@ -2338,7 +2340,7 @@ class TestTensorDicts(TestTensorDictsBase):
     # This test fails on lazy tensordicts when lazy-legacy is False
     # Deprecating lazy modules will make this decorator useless (the test should
     # still run ok).
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_non_tensor_data(self, td_name, device):
         td = getattr(self, td_name)(device)
         # check lock
@@ -2389,7 +2391,7 @@ class TestTensorDicts(TestTensorDictsBase):
     # This test fails on lazy tensordicts when lazy-legacy is False
     # Deprecating lazy modules will make this decorator useless (the test should
     # still run ok).
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_non_tensor_data_flatten_keys(self, td_name, device):
         td = getattr(self, td_name)(device)
         with td.unlock_():
@@ -2418,7 +2420,7 @@ class TestTensorDicts(TestTensorDictsBase):
     # This test fails on lazy tensordicts when lazy-legacy is False
     # Deprecating lazy modules will make this decorator useless (the test should
     # still run ok).
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_non_tensor_data_pickle(self, td_name, device, tmpdir):
         if td_name == "td_with_unbatched":
             # UnbatchedTensor memmap/pickle requires special metadata handling
@@ -2507,7 +2509,7 @@ class TestTensorDicts(TestTensorDictsBase):
         with pytest.raises(RuntimeError):
             pad(td, [0])
 
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_permute_applied_twice(self, td_name, device):
         torch.manual_seed(0)
         tensordict = getattr(self, td_name)(device)
@@ -2990,7 +2992,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert td2 is not td
             assert len(list(td2.keys())) == 0
 
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_set_lazy_legacy(self, td_name, device):
         if td_name in (
             "sub_td",
@@ -3083,7 +3085,7 @@ class TestTensorDicts(TestTensorDictsBase):
                     assert td_unsqueeze is td
 
         td = getattr(self, td_name)(device)
-        with set_lazy_legacy(True):
+        with legacy_lazy_mode():
             assert lazy_legacy()
             test_id(td)
             with set_lazy_legacy(False):
@@ -3478,7 +3480,7 @@ class TestTensorDicts(TestTensorDictsBase):
         for key in td1.keys(True, True):
             assert key not in td0
 
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_squeeze_legacy(self, td_name, device, squeeze_dim=-1):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -3559,7 +3561,7 @@ class TestTensorDicts(TestTensorDictsBase):
             return
         assert (td == 1).all()
 
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_squeeze_with_none_legacy(self, td_name, device, squeeze_dim=None):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -3603,7 +3605,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert (td.get("a") == 1).all()
 
     @pytest.mark.filterwarnings("error")
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_stack_onto(self, td_name, device, tmpdir):
         if td_name == "td_with_unbatched":
             # UnbatchedTensor: stack_onto has issues with UnbatchedTensor validation
@@ -3660,7 +3662,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td_stack == td_out).all()
 
     @pytest.mark.filterwarnings("error")
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_stack_subclasses_on_td(self, td_name, device):
         if td_name == "td_with_unbatched":
             # UnbatchedTensor: stack subclasses has validation issues with UnbatchedTensor
@@ -3952,7 +3954,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td2 = td.to_tensordict(retain_none=True)
         assert (td2 == td).all()
 
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_transpose_legacy(self, td_name, device):
         td = getattr(self, td_name)(device)
         if td_name == "td_with_unbatched":
@@ -4355,7 +4357,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert not td.is_memmap()
 
     @pytest.mark.parametrize("squeeze_dim", [0, 1])
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_unsqueeze_legacy(self, td_name, device, squeeze_dim):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -4432,7 +4434,7 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("clone", [True, False])
     # This is needed because update in lazy permute/view etc does not behave correctly when
     # legacy is False. When these classes will be deprecated, we can just remove the decorator
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_update(self, td_name, device, clone):
         td = getattr(self, td_name)(device)
         td.unlock_()  # make sure that the td is not locked
@@ -4572,7 +4574,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
     # This is needed because update in lazy permute/view etc does not behave correctly when
     # legacy is False. When these classes will be deprecated, we can just remove the decorator
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_update_select(self, td_name, device):
         if td_name in ("memmap_td",):
             pytest.skip(reason="update not possible with memory-mapped td")
@@ -4649,7 +4651,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (sub_td == 2).all()
         assert (td[index] == 2).all()
 
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_view_legacy(self, td_name, device):
         if td_name in ("permute_td", "sub_td2"):
             pytest.skip("view incompatible with stride / permutation")

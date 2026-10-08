@@ -481,7 +481,8 @@ overhead. One can avoid this by simply calling tensordict.contiguous() after the
 
 Shape operations such as squeezing, unsqueezing, permuting batch dimensions and creating a view are executed eagerly
 and return a regular :class:`~tensordict.TensorDict`. Their legacy lazy versions are only returned when
-:class:`~tensordict.set_lazy_legacy` is enabled (``set_lazy_legacy(True)``).
+:class:`~tensordict.set_lazy_legacy` is enabled (``set_lazy_legacy(True)``). This legacy lazy mode is deprecated
+and will be removed in TensorDict 0.17.
 
 Lazy pre-allocation
 -------------------

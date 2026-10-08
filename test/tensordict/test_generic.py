@@ -61,6 +61,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         decompose,
         get_available_devices,
         is_npu_available,
+        legacy_lazy_mode,
         TestTensorDictsBase,
     )
 else:
@@ -69,6 +70,7 @@ else:
         decompose,
         get_available_devices,
         is_npu_available,
+        legacy_lazy_mode,
         TestTensorDictsBase,
     )
 
@@ -227,7 +229,7 @@ class TestGeneric:
         subtd.to_tensordict(retain_none=True).batch_size = [3, 2]
 
         td = TensorDict({"a": torch.randn(3, 4)}, [3, 4])
-        with set_lazy_legacy(True):
+        with legacy_lazy_mode():
             td_u = td.unsqueeze(0)
             with pytest.raises(
                 RuntimeError,
@@ -1118,7 +1120,7 @@ class TestGeneric:
     # getting values from lazy tensordicts in non-lazy contexts messes things up
     # so we set it to True. When we'll deprecate lazy tensordicts, we will just
     # remove this decorator
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_filling_empty_tensordict(self, device, td_type, update):
         if td_type == "tensordict":
             td = TensorDict(batch_size=[16], device=device)
@@ -1817,7 +1819,7 @@ class TestGeneric:
         assert sub_tensordict.shape == torch.Size([4, 5])
         assert sub_sub_tensordict.shape == torch.Size([4, 5, 6])
 
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_inferred_view_size(self):
         td = TensorDict({"a": torch.randn(3, 4)}, [3, 4])
         assert td.view(-1).view(-1, 4) is td
@@ -3035,7 +3037,7 @@ class TestGeneric:
         assert td2["a"].shape == torch.Size((4, 5, 6, 9))
 
     @pytest.mark.parametrize("device", get_available_devices())
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_permute_applied_twice(self, device):
         torch.manual_seed(1)
         d = {
@@ -3053,7 +3055,7 @@ class TestGeneric:
         assert td3 is not td1
 
     @pytest.mark.parametrize("device", get_available_devices())
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_permute_exceptions_legacy(self, device):
         torch.manual_seed(1)
         d = {
@@ -3771,7 +3773,7 @@ class TestGeneric:
     @pytest.mark.parametrize("lazy_leg", [True, False])
     @pytest.mark.parametrize("shared", [True, False])
     def test_shared_inheritance(self, shared, lazy_leg):
-        with set_lazy_legacy(lazy_leg):
+        with legacy_lazy_mode() if lazy_leg else set_lazy_legacy(False):
             if shared:
 
                 def assert_not_shared(td0):
