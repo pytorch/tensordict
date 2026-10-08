@@ -168,6 +168,12 @@ def test_getitem_batch_size_index_types(index):
     assert _getitem_batch_size(tensor.shape, index) == expected
 
 
+@pytest.mark.parametrize("index", [np.True_, (slice(None), np.False_)])
+def test_getitem_batch_size_numpy_bool_scalar(index):
+    with pytest.raises(IndexError, match="NumPy bool"):
+        _getitem_batch_size(torch.Size([3, 4]), index)
+
+
 @pytest.mark.parametrize(
     "index",
     [
