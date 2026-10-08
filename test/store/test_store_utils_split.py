@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import importlib
+import warnings
 
 import numpy as np
 import pytest
@@ -231,6 +232,43 @@ def test_store_bool_list_is_a_mask(idx):
         (row * 12, 12) for row in rows
     ]
     assert helper_module._getitem_result_shape([10, 3], idx) == [len(rows), 3]
+
+
+@pytest.mark.parametrize(
+    "idx",
+    [
+        # a nested list is an integer index with dims
+        [[0], [3]],
+        ([[0], [3]],),
+        # a uint8 tensor is a mask (deprecated)
+        torch.tensor([1, 0, 0, 2, 0], dtype=torch.uint8),
+        # NumPy integers and 0-d integer indices are ints
+        np.int64(3),
+        np.array(3),
+        torch.tensor(3),
+    ],
+)
+def test_store_byte_ranges_follow_torch(idx):
+    helper_module = importlib.import_module("tensordict.store._utils")
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", "indexing with dtype torch.uint8")
+        expected = torch.arange(5)[idx if isinstance(idx, tuple) else (idx,)]
+    rows = expected.reshape(-1).tolist()
+    assert helper_module._compute_byte_ranges([5, 3], torch.float32, idx) == [
+        (row * 12, 12) for row in rows
+    ]
+    assert helper_module._getitem_result_shape([5, 3], idx) == [*expected.shape, 3]
+
+
+@pytest.mark.parametrize("idx", [True, False, (True,), (False,)])
+def test_store_scalar_bool_is_not_a_row(idx):
+    # a scalar bool adds a dim, so the whole tensor is read or written
+    helper_module = importlib.import_module("tensordict.store._utils")
+    assert helper_module._compute_byte_ranges([5, 3], torch.float32, idx) is None
+    assert helper_module._compute_covering_range([5, 3], torch.float32, idx) is None
+    assert not helper_module._is_scattered_index(idx)
+    expected = list(torch.zeros(5, 3)[idx].shape)
+    assert helper_module._getitem_result_shape([5, 3], idx) == expected
 
 
 _MASK5 = torch.tensor([True, False, False, True, False])

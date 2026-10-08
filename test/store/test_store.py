@@ -649,6 +649,22 @@ class TestTensorDictStore:
             store.clear_redis()
             store.close()
 
+    @pytest.mark.filterwarnings("ignore:indexing with dtype torch.uint8")
+    def test_uint8_mask(self, store_kwargs):
+        """A uint8 tensor is a mask (deprecated in torch), not a list of rows."""
+        td = TensorDict({"x": torch.arange(5.0)}, [5])
+        store = TensorDictStore.from_tensordict(td, **store_kwargs)
+        try:
+            mask = torch.tensor([1, 0, 1, 0, 2], dtype=torch.uint8)
+            torch.testing.assert_close(store[mask]["x"], td[mask]["x"])
+            torch.testing.assert_close(store.get_at("x", mask), td["x"][mask])
+            store[mask] = TensorDict({"x": -torch.ones(3)}, [3])
+            td[mask] = TensorDict({"x": -torch.ones(3)}, [3])
+            torch.testing.assert_close(store["x"], td["x"])
+        finally:
+            store.clear_redis()
+            store.close()
+
     def test_indexed_write_bool_mask(self, store_td):
         """td[mask] = subtd should modify masked rows."""
         store_td["obs"] = torch.zeros(10, 3)

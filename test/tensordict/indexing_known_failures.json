@@ -1,83 +1,19 @@
 {
- "LazyStackedTensorDictStore (5, 4) get_at": [
-  "(False,)",
-  "(True,)",
-  "([[0],[-1]],)",
-  "False",
-  "True",
-  "[[0],[-1]]",
-  "m2.list"
- ],
- "LazyStackedTensorDictStore (5, 4) getitem": [
-  "(False,)",
-  "(True,)",
-  "([[0],[-1]],)",
-  "False",
-  "True",
-  "[[0],[-1]]",
-  "m2.list"
- ],
- "LazyStackedTensorDictStore (5, 4) setitem": [
-  "(False,)",
-  "(True,)",
-  "([[0],[-1]],)",
-  "False",
-  "True"
- ],
+ "LazyStackedTensorDictStore (5, 4) get_at": [],
+ "LazyStackedTensorDictStore (5, 4) getitem": [],
+ "LazyStackedTensorDictStore (5, 4) setitem": [],
  "TensorDict getitem (3, 4)": [],
  "TensorDict getitem (3, 4, 5)": [],
  "TensorDict names (3, 4)": [],
  "TensorDict names (3, 4, 5)": [],
  "TensorDict setitem (3, 4)": [],
  "TensorDict setitem (3, 4, 5)": [],
- "TensorDictStore (5, 4) get_at": [
-  "(False,)",
-  "(True,)",
-  "([[0],[-1]],)",
-  "False",
-  "True",
-  "[[0],[-1]]",
-  "m2.list"
- ],
- "TensorDictStore (5, 4) getitem": [
-  "(False,)",
-  "(True,)",
-  "([[0],[-1]],)",
-  "False",
-  "True",
-  "[[0],[-1]]",
-  "m2.list"
- ],
- "TensorDictStore (5, 4) setitem": [
-  "(False,)",
-  "(True,)",
-  "([[0],[-1]],)",
-  "False",
-  "True"
- ],
- "TensorDictStore (5,) get_at": [
-  "(False,)",
-  "(True,)",
-  "([[0],[-1]],)",
-  "False",
-  "True",
-  "[[0],[-1]]"
- ],
- "TensorDictStore (5,) getitem": [
-  "(False,)",
-  "(True,)",
-  "([[0],[-1]],)",
-  "False",
-  "True",
-  "[[0],[-1]]"
- ],
- "TensorDictStore (5,) setitem": [
-  "(False,)",
-  "(True,)",
-  "([[0],[-1]],)",
-  "False",
-  "True"
- ],
+ "TensorDictStore (5, 4) get_at": [],
+ "TensorDictStore (5, 4) getitem": [],
+ "TensorDictStore (5, 4) setitem": [],
+ "TensorDictStore (5,) get_at": [],
+ "TensorDictStore (5,) getitem": [],
+ "TensorDictStore (5,) setitem": [],
  "idx_td getitem": [],
  "idx_td setitem": [],
  "memmap_td getitem": [],
