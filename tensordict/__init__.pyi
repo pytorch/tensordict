@@ -3,6 +3,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from tensordict._archive import (
+    is_memmap_archive,
+    pack_memmap,
+    refresh_archive_checksums,
+    unpack_memmap,
+)
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._td import (
@@ -27,9 +33,13 @@ from tensordict.base import (
     _default_is_leaf as default_is_leaf,
     _is_leaf_nontensor as is_leaf_nontensor,
     from_any,
+    from_csv,
     from_dict,
     from_h5,
+    from_json,
     from_namedtuple,
+    from_pandas,
+    from_parquet,
     from_struct_array,
     from_tuple,
     from_zarr,
@@ -45,22 +55,30 @@ from tensordict.functional import (
     pad_sequence,
 )
 from tensordict.memmap import MemoryMappedTensor
-from tensordict.nn import as_tensordict_module, TensorDictParams
+from tensordict.nn import (
+    as_tensordict_module,
+    TensorClassModuleBase,
+    TensorClassModuleWrapper,
+    TensorDictParams,
+)
 from tensordict.persistent import PersistentTensorDict
+from tensordict.store import LazyStackedTensorDictStore, TensorDictStore
 from tensordict.tensorclass import (
     from_dataclass,
     MetaData,
     NonTensorData,
     NonTensorDataBase,
     NonTensorStack,
+    TensorAttrs,
     TensorClass,
     tensorclass,
 )
-from tensordict.typedtensordict import TypedTensorDict
+from tensordict.typedtensordict import TypedTensorDict as TypedTensorDict
 from tensordict.utils import (
     assert_allclose_td,
     assert_close,
     capture_non_tensor_stack,
+    get_printoptions,
     is_batchedtensor,
     is_non_tensor,
     is_tensorclass,
@@ -70,6 +88,7 @@ from tensordict.utils import (
     set_capture_non_tensor_stack,
     set_lazy_legacy,
     set_list_to_stack,
+    set_printoptions as set_printoptions,
     unravel_key,
     unravel_key_list,
 )
@@ -83,16 +102,21 @@ __all__ = [
     "LazyStackedTensorDict",
     "UnbatchedTensor",
     "TensorClass",
-    "TypedTensorDict",
     "MemoryMappedTensor",
     "PersistentTensorDict",
+    "TensorDictStore",
+    "LazyStackedTensorDictStore",
     "NestedKey",
     # Factory functions
+    "from_csv",
     "from_dict",
     "from_any",
     "from_h5",
     "from_zarr",
+    "from_json",
     "from_namedtuple",
+    "from_pandas",
+    "from_parquet",
     "from_struct_array",
     "from_tuple",
     "from_dataclass",
@@ -114,6 +138,10 @@ __all__ = [
     # Saving and loading
     "save",
     "load",
+    "pack_memmap",
+    "unpack_memmap",
+    "is_memmap_archive",
+    "refresh_archive_checksums",
     # Merging and padding
     "merge_tensordicts",
     "pad",
@@ -139,13 +167,19 @@ __all__ = [
     "set_lazy_legacy",
     "list_to_stack",
     "set_list_to_stack",
+    "get_printoptions",
     # TensorClass components
     "tensorclass",
     "MetaData",
     "NonTensorData",
     "NonTensorDataBase",
     "NonTensorStack",
+    "TensorAttrs",
     # NN imports
     "as_tensordict_module",
+    "TensorClassModuleBase",
+    "TensorClassModuleWrapper",
     "TensorDictParams",
+    # Version
+    "__version__",
 ]

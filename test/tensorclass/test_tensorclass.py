@@ -77,27 +77,88 @@ pytestmark = [
 IS_FB = os.getenv("PYTORCH_TEST_FBCODE")
 
 
-def _get_methods_from_pyi(file_path):
+_TENSORDICT_DIR = pathlib.Path(__file__).parents[2] / "tensordict"
+
+
+def _get_class_attrs_from_pyi(file_path, class_name):
     """
-    Reads a .pyi file and returns a set of method names.
+    Reads a .pyi file and returns the names that one of its classes declares.
+
+    Args:
+        file_path (str): Path to the .pyi file.
+        class_name (str): Name of the class in the .pyi file.
+
+    Returns:
+        set: The names of the methods, properties and attributes of the class.
+    """
+    with open(file_path, "r") as f:
+        tree = ast.parse(f.read())
+
+    (class_node,) = (
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == class_name
+    )
+    attrs = set()
+    for child_node in class_node.body:
+        if isinstance(child_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            attrs.add(child_node.name)
+        elif isinstance(child_node, ast.AnnAssign):
+            attrs.add(child_node.target.id)
+        elif isinstance(child_node, ast.Assign):
+            attrs.update(target.id for target in child_node.targets)
+    return attrs
+
+
+def _get_module_names_from_pyi(file_path):
+    """
+    Reads a .pyi file and returns the names that the module exports.
 
     Args:
         file_path (str): Path to the .pyi file.
 
     Returns:
-        set: A set of method names.
+        set: The names of the top-level classes, functions and variables, and
+        of the ``from x import y as y`` re-exports.
     """
     with open(file_path, "r") as f:
         tree = ast.parse(f.read())
 
-    methods = set()
+    names = set()
     for node in tree.body:
-        if isinstance(node, ast.ClassDef):
-            for child_node in node.body:
-                if isinstance(child_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    methods.add(child_node.name)
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.AnnAssign):
+            names.add(node.target.id)
+        elif isinstance(node, ast.Assign):
+            names.update(target.id for target in node.targets)
+        elif isinstance(node, ast.ImportFrom):
+            names.update(
+                alias.name for alias in node.names if alias.asname == alias.name
+            )
+    return names
 
-    return methods
+
+def _check_stub_class(stub_attrs, cls, exclusions):
+    """
+    Checks that a class stub declares every public attribute of ``cls``, and
+    nothing that ``cls`` lacks, except for the names in ``exclusions``.
+    """
+    runtime_attrs = set(dir(cls))
+    stale_exclusions = exclusions - (stub_attrs ^ runtime_attrs)
+    assert not stale_exclusions, f"Stale exclusions: {sorted(stale_exclusions)}"
+    missing = {
+        name
+        for name in runtime_attrs - stub_attrs - exclusions
+        if not name.startswith("_")
+    }
+    assert (
+        not missing
+    ), f"Public attributes of {cls.__name__} missing from its stub: {sorted(missing)}"
+    extra = stub_attrs - runtime_attrs - exclusions
+    assert (
+        not extra
+    ), f"Stub attributes that {cls.__name__} lacks at runtime: {sorted(extra)}"
 
 
 def _get_methods_from_class(cls):
@@ -124,11 +185,66 @@ def _get_methods_from_class(cls):
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
-def test_tensorclass_stub_methods():
-    tensorclass_pyi_path = (
-        pathlib.Path(__file__).parents[2] / "tensordict/tensorclass.pyi"
+def test_init_stub_exports():
+    # Type checkers read tensordict/__init__.pyi instead of __init__.py.
+    with open(_TENSORDICT_DIR / "__init__.pyi", "r") as f:
+        tree = ast.parse(f.read())
+
+    stub_all = None
+    stub_names = set()
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            module = importlib.import_module(node.module)
+            module_path = _TENSORDICT_DIR.parent / node.module.replace(".", "/")
+            module_stub = next(
+                (
+                    path
+                    for path in (
+                        module_path.with_suffix(".pyi"),
+                        module_path / "__init__.pyi",
+                    )
+                    if path.exists()
+                ),
+                None,
+            )
+            module_stub_names = (
+                _get_module_names_from_pyi(module_stub)
+                if module_stub is not None
+                else None
+            )
+            for alias in node.names:
+                assert hasattr(module, alias.name), (node.module, alias.name)
+                if module_stub_names is not None:
+                    assert alias.name in module_stub_names, (
+                        module_stub.name,
+                        alias.name,
+                    )
+                stub_names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.AnnAssign):
+            stub_names.add(node.target.id)
+        elif isinstance(node, ast.Assign) and node.targets[0].id == "__all__":
+            stub_all = ast.literal_eval(node.value)
+
+    assert sorted(stub_all) == sorted(tensordict.__all__)
+    unbound = set(stub_all) - stub_names
+    assert not unbound, f"__init__.pyi exports undefined names: {sorted(unbound)}"
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+def test_tensorcollection_stub_methods():
+    # TensorCollection is an empty base class at runtime; its stub declares
+    # the interface of TensorDictBase.
+    stub_attrs = _get_class_attrs_from_pyi(
+        str(_TENSORDICT_DIR / "_tensorcollection.pyi"), "TensorCollection"
     )
-    tensorclass_methods = _get_methods_from_pyi(str(tensorclass_pyi_path))
+    _check_stub_class(stub_attrs, TensorDictBase, exclusions=set())
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+def test_tensorclass_stub_methods():
+    tensorclass_methods = _get_class_attrs_from_pyi(
+        str(_TENSORDICT_DIR / "tensorclass.pyi"), "TensorClass"
+    )
 
     from tensordict import TensorDict
 
@@ -145,30 +261,38 @@ def test_tensorclass_stub_methods():
         )
 
 
+# Names on which the TensorClass stub and runtime tensorclasses differ on purpose.
+_TENSORCLASS_STUB_EXCLUSIONS = {
+    # Forwards to LazyStackedTensorDict.extend, so it works only when the
+    # tensorclass wraps a lazy stack; TensorDictBase has no extend.
+    "extend",
+    # Iteration goes through __getitem__ at runtime; the stub declares
+    # __iter__ so that type checkers know what a loop yields.
+    "__iter__",
+}
+
+
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
-def test_tensorclass_instance_methods():
-    @tensorclass
-    class X:
-        x: torch.Tensor
+@pytest.mark.parametrize("form", ["decorator", "subclass"])
+def test_tensorclass_instance_methods(form):
+    exclusions = set(_TENSORCLASS_STUB_EXCLUSIONS)
+    if form == "decorator":
 
-    tensorclass_pyi_path = (
-        pathlib.Path(__file__).parents[2] / "tensordict/tensorclass.pyi"
+        @tensorclass
+        class X:
+            x: torch.Tensor
+
+        # TensorClass["nocast"] and the like exist on TensorClass only.
+        exclusions.add("__class_getitem__")
+    else:
+
+        class X(TensorClass):
+            x: torch.Tensor
+
+    stub_attrs = _get_class_attrs_from_pyi(
+        str(_TENSORDICT_DIR / "tensorclass.pyi"), "TensorClass"
     )
-    tensorclass_abstract_methods = _get_methods_from_pyi(str(tensorclass_pyi_path))
-
-    tensorclass_methods = _get_methods_from_class(X)
-
-    missing_methods = (
-        tensorclass_abstract_methods - tensorclass_methods - {"data", "grad"}
-    )
-    missing_methods = [
-        method for method in missing_methods if (not method.startswith("_"))
-    ]
-
-    if missing_methods:
-        raise Exception(
-            f"Missing methods in tensorclass.pyi: {sorted(missing_methods)}"
-        )
+    _check_stub_class(stub_attrs, X, exclusions)
 
 
 def test_sorted_methods():
