@@ -241,9 +241,7 @@ class TensorDictSequential(TensorDictModule):
             modules_vals = self._convert_modules(modules[0].values())  # type: ignore[unreachable]
             in_keys, out_keys = self._compute_in_and_out_keys(modules_vals)
             self._complete_out_keys = list(out_keys)
-            modules = collections.OrderedDict(
-                **{key: val for key, val in _zip_strict(modules[0], modules_vals)}
-            )
+            modules = collections.OrderedDict(_zip_strict(modules[0], modules_vals))
             super().__init__(
                 module=nn.ModuleDict(modules),
                 in_keys=in_keys,
@@ -597,9 +595,7 @@ class TensorDictSequential(TensorDictModule):
             return type(self)(*modules)
         else:
             keys = [key for key in self.module if self.module[key] in modules]
-            modules_dict = collections.OrderedDict(
-                **{key: val for key, val in _zip_strict(keys, modules)}
-            )
+            modules_dict = collections.OrderedDict(_zip_strict(keys, modules))
             return type(self)(modules_dict)
 
     def _run_module(

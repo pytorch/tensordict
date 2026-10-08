@@ -7383,7 +7383,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 exception is raised.
             shape (torch.Size or equivalent, torch.Tensor for nested tensors): the shape of the tensor to write.
 
-        Keyword arguments:
+        Keyword Arguments:
             dtype (torch.dtype, optional): the dtype of the new tensor.
             robust_key (bool, optional): if ``True`` (default), uses robust key encoding that safely
                 handles keys with path separators and special characters. If ``False``,
@@ -7424,7 +7424,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 storage.
             shape (torch.Size or equivalent, torch.Tensor for nested tensors): the shape of the tensor to write.
 
-        Keyword arguments:
+        Keyword Arguments:
             dtype (torch.dtype, optional): the dtype of the new tensor.
             robust_key (bool, optional): if ``True`` (default), uses robust key encoding that safely
                 handles keys with path separators and special characters. If ``False``,
@@ -7459,7 +7459,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 exception is raised.
             tensor (torch.Tensor): the tensor to replicate on physical memory.
 
-        Keyword arguments:
+        Keyword Arguments:
             copy_data (bool, optionaL): if ``False``, the new tensor will share the metadata of the input such as
                 shape and dtype, but the content will be empty. Defaults to ``True``.
             robust_key (bool, optional): if ``True`` (default), uses robust key encoding that safely

@@ -333,7 +333,7 @@ def test_compile_indexing(mode, dict_type, index_type, benchmark):
         else:
             func = index_pytree
         td = td.to_dict()
-    if index_type == int:
+    if index_type is int:
         idx = 5
     else:
         idx = slice(None, None, 2)

@@ -242,6 +242,7 @@ def _getitem_batch_size(batch_size, index):
 
     This function is aimed to be used when indexing is an
     expensive operation.
+
     Args:
         shape (torch.Size): Input shape
         items (index): Index of the hypothetical tensor
