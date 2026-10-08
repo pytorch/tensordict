@@ -2883,8 +2883,11 @@ def _set(
                 self._non_tensordict[key] = value
                 return self
             if non_tensor:
+                # Read the metadata from the TensorDict: with shadow=True,
+                # self.batch_size and self.device can be fields.
+                td = self._tensordict
                 value = NonTensorData(
-                    data=value, batch_size=self.batch_size, device=self.device
+                    data=value, batch_size=td.batch_size, device=td.device
                 )
             if key in self._non_tensordict:
                 del self._non_tensordict[key]
