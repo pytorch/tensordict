@@ -127,6 +127,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: benchmark
     if: ${{ !inputs.skip-upload && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmarks/upload'))) }}
+    # Every job that pushes to gh-pages joins this group, so they push one at a
+    # time. With `queue: max`, later jobs wait instead of being cancelled.
+    concurrency:
+      group: gh-pages
+      queue: max
     steps:
       - name: Show upload trigger reason
         run: |
