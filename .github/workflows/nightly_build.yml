@@ -1,5 +1,6 @@
-# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
-# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+# Builds the tensordict-nightly wheel, smoke-tests it on each platform and
+# uploads it to PyPI. tensordict is pure Python, so one py3-none-any wheel serves
+# every platform and Python version.
 
 name: Push Binary Nightly
 
@@ -30,355 +31,85 @@ concurrency:
 
 
 jobs:
-  build-wheel-aarch64:
-    if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
-    uses: ./.github/workflows/build-wheels-aarch64-linux.yml
-    with:
-      nightly: true
-    permissions:
-      id-token: write
-      contents: read
-
-  upload-wheel-aarch64:
+  build-wheel:
     # Don't run on forked repos.
-    # !cancelled(): upload whatever built even if some matrix entries failed.
-    if: ${{ !cancelled() && github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
-    needs: build-wheel-aarch64
+    if: github.repository_owner == 'pytorch'
     runs-on: ubuntu-22.04
     steps:
-      - name: Download built wheels
+      - name: Checkout tensordict
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Build tensordict Nightly
+        run: |
+          python -m pip install --upgrade pip build
+          sed -i 's/name = "tensordict"/name = "tensordict-nightly"/' pyproject.toml
+          export SETUPTOOLS_SCM_PRETEND_VERSION=$(date +%Y.%m.%d)
+          python -m build --wheel
+      - name: Upload wheel for the test-wheel job
+        uses: actions/upload-artifact@v4
+        with:
+          name: tensordict-nightly-wheel
+          path: dist/*.whl
+
+  test-wheel:
+    # Don't run on forked repos.
+    if: github.repository_owner == 'pytorch'
+    needs: build-wheel
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04-arm, macos-latest, windows-latest]
+        python_version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_version }}
+      - name: Checkout tensordict
+        uses: actions/checkout@v4
+      - name: Install PyTorch nightly
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
+      - name: Download the wheel
         uses: actions/download-artifact@v4
         with:
-          # Artifacts uploaded by test-infra, named pytorch_tensordict__<python>_cpu_aarch64
-          pattern: pytorch_tensordict_*_aarch64
-          path: /tmp/wheels
-          merge-multiple: true
+          name: tensordict-nightly-wheel
+          path: wheels
+      - name: Install the wheel
+        shell: bash
+        run: python -m pip install wheels/*.whl pytest
+      - name: Run the smoke test
+        shell: bash
+        run: |
+          # Avoid ambiguity of "import tensordict" by deleting the source files.
+          rm -rf tensordict/
+          python -c "import tensordict; print(tensordict.__version__)"
+          python -m torch.utils.collect_env
+          python -m pytest test/smoke_test.py -v --durations 200
+
+  upload-wheel:
+    # Don't run on forked repos.
+    if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
+    needs: test-wheel
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download the wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: tensordict-nightly-wheel
+          path: wheels
       - name: Push tensordict Binary to PYPI
         env:
           PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
-          # Fail if no wheels were downloaded (e.g. test-infra renamed its artifacts).
-          ls /tmp/wheels/tensordict_nightly-*.whl
-          python3 -mpip install twine
-          python3 -m twine upload \
-              --username __token__ \
-              --password "$PYPI_TOKEN" \
-              --skip-existing \
-              /tmp/wheels/tensordict_nightly-*.whl \
-              --verbose
-
-  build-wheel-unix:
-    # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch'
-    continue-on-error: true
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-22.04, macos-latest]
-        python_version: [
-          ["3.10", "cp310-cp310"],
-          ["3.11", "cp311-cp311"],
-          ["3.12", "cp312-cp312"],
-          ["3.13", "cp313-cp313"],
-          ["3.14", "cp314-cp314"],
-        ]
-        cuda_support: [["", "cpu", "cpu"]]
-    steps:
-      - name: Checkout tensordict
-        uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python_version[0] }}
-      - name: Install PyTorch nightly
-        run: |
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-
-          python3 -c """import sys;print(sys.version)"""
-          python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
-      - name: Build tensordict Nightly
-        env:
-          # Tag macOS wheels for macOS >= 11 instead of the runner's OS
-          # version: macos-latest runners produce macosx_15_0 wheels that
-          # cannot be installed on older machines, and no sdist is published
-          # as fallback.
-          MACOSX_DEPLOYMENT_TARGET: "11.0"
-        run: |
-          rm -r dist || true
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          if [[ "$OSTYPE" == "darwin"* ]]; then
-            brew install cmake || true
-          else
-            sudo apt-get update
-            sudo apt-get install -y cmake
-          fi
-          python3 -mpip install "pybind11[global]" uv
-          sed -i.bak 's/name = "tensordict"/name = "tensordict-nightly"/' pyproject.toml
-          DATE_VERSION=$(date +%Y.%m.%d)
-          export SETUPTOOLS_SCM_PRETEND_VERSION=$DATE_VERSION
-          uv build --wheel
-          rm pyproject.toml.bak
-          find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
-      # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
-      # pretend that they're manylinux1 compliant so we do the same.
-      - name: Upload wheel for the test-wheel job
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.os == 'ubuntu-22.04' && format('tensordict-linux-{0}_{1}.whl', matrix.python_version[0], matrix.cuda_support[2]) || format('tensordict-macos-{0}.whl', matrix.python_version[0]) }}
-          path: dist/*.whl
-
-
-  test-wheel-unix:
-    # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch'
-    needs: build-wheel-unix
-    continue-on-error: true
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-22.04, macos-latest]
-        python_version: [
-          ["3.10", "cp310-cp310"],
-          ["3.11", "cp311-cp311"],
-          ["3.12", "cp312-cp312"],
-          ["3.13", "cp313-cp313"],
-          ["3.14", "cp314-cp314"],
-        ]
-        cuda_support: [["", "cpu", "cpu"]]
-    steps:
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python_version[0] }}
-      - name: Checkout tensordict
-        uses: actions/checkout@v4
-      - name: Install PyTorch Nightly
-        run: |
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
-      - name: Upgrade pip
-        run: |
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install --upgrade pip
-      - name: Install test dependencies
-        run: |
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install numpy pytest pillow>=4.1.1 scipy networkx expecttest pyyaml
-      - name: Download built wheels
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ matrix.os == 'ubuntu-22.04' && format('tensordict-linux-{0}_{1}.whl', matrix.python_version[0], matrix.cuda_support[2]) || format('tensordict-macos-{0}.whl', matrix.python_version[0]) }}
-          path: /tmp/wheels
-        env:
-          AGENT_TOOLSDIRECTORY: "/opt/hostedtoolcache"
-      - name: Install built wheels
-        run: |
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install /tmp/wheels/*
-      - name: Log version string
-        run: |
-          # Avoid ambiguity of "import tensordict" by deleting the source files.
-          rm -rf tensordict/
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -c "import tensordict; print(tensordict.__version__)"
-      - name: Run tests
-        run: |
-          set -e
-          export IN_CI=1
-          mkdir test-reports
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -m torch.utils.collect_env
-          python3 -c "import tensordict; print(tensordict.__version__);from tensordict.nn import TensorDictModule"
-          EXIT_STATUS=0
-          pytest test/smoke_test.py -v --durations 200
-          exit $EXIT_STATUS
-
-  upload-wheel-unix:
-    # Don't run on forked repos.
-    if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
-    needs: test-wheel-unix
-    runs-on: ${{ matrix.os }}
-    continue-on-error: true
-    strategy:
-      matrix:
-        os: [ubuntu-22.04, macos-latest]
-        python_version: [
-          ["3.10", "cp310-cp310"],
-          ["3.11", "cp311-cp311"],
-          ["3.12", "cp312-cp312"],
-          ["3.13", "cp313-cp313"],
-          ["3.14", "cp314-cp314"],
-        ]
-        cuda_support: [["", "cpu", "cpu"]]
-    steps:
-      - name: Checkout tensordict
-        uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python_version[0] }}
-      - name: Download built wheels
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ matrix.os == 'ubuntu-22.04' && format('tensordict-linux-{0}_{1}.whl', matrix.python_version[0], matrix.cuda_support[2]) || format('tensordict-macos-{0}.whl', matrix.python_version[0]) }}
-          path: /tmp/wheels
-      - name: Push tensordict Binary to PYPI
-        env:
-            PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: |
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install twine
-          python -m twine upload \
-              --username __token__ \
-              --password "$PYPI_TOKEN" \
-              --skip-existing \
-              /tmp/wheels/tensordict_nightly-*.whl \
-              --verbose
-
-
-
-  build-wheel-windows:
-    # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch'
-    runs-on: windows-latest
-    continue-on-error: true
-    strategy:
-      matrix:
-        python_version: [
-          ["3.10", "3.10.3"],
-          ["3.11", "3.11"],
-          ["3.12", "3.12"],
-          ["3.13", "3.13"],
-          ["3.14", "3.14"],
-        ]
-    steps:
-      - name: Setup Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python_version[1] }}
-      - name: Checkout tensordict
-        uses: actions/checkout@v4
-      - name: Install PyTorch nightly
-        shell: bash
-        run: |
-          python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
-      - name: Setup CMake
-        uses: jwlawson/actions-setup-cmake@v2
-        with:
-          cmake-version: 'latest'
-      - name: Build tensordict Nightly
-        shell: bash
-        run: |
-          # Remove the dist directory if it exists
-          rm -r dist || true
-          # Install necessary Python packages
-          python -m pip install --upgrade pip
-          python -m pip install "pybind11[global]" build
-          # Modify pyproject.toml to change the package name
-          sed -i.bak 's/name = "tensordict"/name = "tensordict-nightly"/' pyproject.toml
-          DATE_VERSION=$(date +%Y.%m.%d)
-          export SETUPTOOLS_SCM_PRETEND_VERSION=$DATE_VERSION
-          # Build the package with python -m build (more reliable than uv on Windows)
-          python -m build --wheel
-          # Clean up the backup file created by sed
-          rm pyproject.toml.bak
-          # Rename the wheel files to match the manylinux1 convention
-          find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
-      - name: Upload wheel for the test-wheel job
-        uses: actions/upload-artifact@v4
-        with:
-          name: tensordict-win-${{ matrix.python_version[0] }}.whl
-          path: dist/*.whl
-  test-wheel-windows:
-    # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch'
-    needs: build-wheel-windows
-    continue-on-error: true
-    runs-on: windows-latest
-    strategy:
-      matrix:
-        python_version: [
-          ["3.10", "3.10.3"],
-          ["3.11", "3.11"],
-          ["3.12", "3.12"],
-          ["3.13", "3.13"],
-          ["3.14", "3.14"],
-        ]
-    steps:
-      - name: Setup Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python_version[1] }}
-      - name: Checkout tensordict
-        uses: actions/checkout@v4
-      - name: Install PyTorch Nightly
-        shell: bash
-        run: |
-          python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
-      - name: Upgrade pip
-        shell: bash
-        run: |
-          python3 -mpip install --upgrade pip
-      - name: Install test dependencies
-        shell: bash
-        run: |
-          python3 -mpip install numpy pytest --no-cache-dir
-      - name: Download built wheels
-        uses: actions/download-artifact@v4
-        with:
-          name: tensordict-win-${{ matrix.python_version[0] }}.whl
-          path: wheels
-      - name: Install built wheels
-        shell: bash
-        run: |
-          python3 -mpip install wheels/*
-      - name: Log version string
-        shell: bash
-        run: |
-          # Avoid ambiguity of "import tensordict" by deleting the source files.
-          rm -rf tensordict/ || true
-          python3 -c "import tensordict; print(tensordict.__version__)"
-      - name: Run tests
-        shell: bash
-        run: |
-          set -e
-          export IN_CI=1
-          mkdir test-reports
-          python -m torch.utils.collect_env
-          python -c "import tensordict; print(tensordict.__version__);from tensordict.nn import TensorDictModule"
-          EXIT_STATUS=0
-          pytest test/smoke_test.py -v --durations 200
-          exit $EXIT_STATUS
-
-  upload-wheel-windows:
-    # Don't run on forked repos.
-    if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
-    needs: test-wheel-windows
-    continue-on-error: true
-    runs-on: windows-latest
-    strategy:
-      matrix:
-        python_version: [
-          ["3.10", "3.10.3"],
-          ["3.11", "3.11"],
-          ["3.12", "3.12"],
-          ["3.13", "3.13"],
-          ["3.14", "3.14"],
-        ]
-    steps:
-      - name: Checkout tensordict
-        uses: actions/checkout@v4
-      - name: Download built wheels
-        uses: actions/download-artifact@v4
-        with:
-          name: tensordict-win-${{ matrix.python_version[0] }}.whl
-          path: wheels
-      - name: Push tensordict Binary to PYPI
-        shell: bash
-        env:
-            PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: |
-          python3 -mpip install twine
+          python3 -m pip install twine
           python3 -m twine upload \
               --username __token__ \
               --password "$PYPI_TOKEN" \

@@ -1,4 +1,4 @@
-name: Build Linux Wheels
+name: Build Wheel
 
 on:
   pull_request:
@@ -19,11 +19,6 @@ on:
         required: false
         type: string
         default: 'main'
-      python-versions:
-        description: 'JSON-encoded list of Python versions to build; empty builds all supported versions'
-        required: false
-        type: string
-        default: '[]'
   workflow_dispatch:
 
 permissions:
@@ -39,9 +34,11 @@ jobs:
       runner-fleet: osdc
       with-cuda: disable
       with-rocm: disable
+      # tensordict is pure Python: one py3-none-any wheel serves every platform
+      # and Python version, so it is built once, with the oldest supported Python.
+      build-python-only: enable
       test-infra-repository: pytorch/test-infra
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
-      python-versions: ${{ inputs.python-versions || '[]' }}
   build:
     needs: generate-matrix
     strategy:
@@ -50,8 +47,6 @@ jobs:
         include:
           - repository: pytorch/tensordict
             smoke-test-script: test/smoke_test.py
-            pre-script: .github/scripts/linux-pre-script.sh
-            post-script: .github/scripts/linux-post-script.sh
             package-name: tensordict
     name: pytorch/tensordict
     uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
@@ -65,6 +60,39 @@ jobs:
       smoke-test-script: ${{ matrix.smoke-test-script }}
       trigger-event: ${{ github.event_name }}
       env-var-script: .github/scripts/version_script.sh
-      post-script: ${{ matrix.post-script }}
       build-command: pip wheel --no-deps . && mkdir -p dist && mv tensordict*.whl ./dist
       build-platform: python-build-package
+  smoke-test:
+    # The build job smoke-tests the wheel on Linux x86_64 with one Python.
+    # This job installs the same wheel on the other platforms.
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-24.04-arm]
+        python-version: ["3.10", "3.14"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Download the wheel
+        uses: actions/download-artifact@v4
+        with:
+          # test-infra names the artifact like pytorch_tensordict__3.10_cpu_x86_64
+          pattern: pytorch_tensordict__*
+          path: wheels
+          merge-multiple: true
+      - name: Install PyTorch and the wheel
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install wheels/tensordict-*-py3-none-any.whl pytest
+      - name: Run the smoke test
+        shell: bash
+        run: |
+          # Import the installed wheel, not the checked-out sources.
+          rm -rf tensordict
+          python -m pytest test/smoke_test.py -v

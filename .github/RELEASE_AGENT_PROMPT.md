@@ -125,14 +125,13 @@ Thanks to all contributors:
 
 ## Step 3: Update Version Files
 
-Update version in **all 4 required locations**:
+Update version in **all 3 required locations**:
 
 | File | Variable/Content | Example |
 |------|------------------|---------|
 | `version.txt` | Version string | `0.11.0` |
 | `.github/scripts/version.txt` | Version string | `0.11.0` |
 | `.github/scripts/version_script.sh` | `BASE_VERSION=` | `BASE_VERSION=0.11.0` |
-| `.github/scripts/version_script_windows.sh` | `BASE_VERSION=` | `BASE_VERSION=0.11.0` |
 
 ### Commands to update all files:
 
@@ -143,14 +142,12 @@ echo "{version_without_v}" > version.txt
 # 2. GitHub Scripts version.txt
 echo "{version_without_v}" > .github/scripts/version.txt
 
-# 3. version_script.sh (Linux/macOS builds)
+# 3. version_script.sh (wheel builds)
 sed -i 's/^BASE_VERSION=.*/BASE_VERSION={version_without_v}/' .github/scripts/version_script.sh
 
-# 4. version_script_windows.sh (Windows builds) - IMPORTANT: Don't forget this one!
-sed -i 's/^BASE_VERSION=.*/BASE_VERSION={version_without_v}/' .github/scripts/version_script_windows.sh
 ```
 
-**Note:** The release workflow includes sanity checks that verify all 4 files have matching versions. If any file is missed, the release will fail at the sanity check step.
+**Note:** The release workflow includes sanity checks that verify all 3 files have matching versions. If any file is missed, the release will fail at the sanity check step.
 
 ---
 
@@ -160,7 +157,7 @@ Check that the version hasn't been bumped yet!
 If not:
 ```bash
 git checkout -b bump-v{version} origin/main
-git add version.txt .github/scripts/version.txt .github/scripts/version_script.sh .github/scripts/version_script_windows.sh
+git add version.txt .github/scripts/version.txt .github/scripts/version_script.sh
 git commit -m "Bump version to {version_without_v}"
 gh pr create -t "Bump version to {version_without_v}" -b ""
 ```
@@ -265,7 +262,7 @@ the manual post-release step below.
 Watch the release workflow for:
 
 1. **Sanity checks** - Verify all version files match
-2. **Wheel builds** - All platforms should succeed
+2. **Wheel build** - The wheel build and its smoke tests on each platform should succeed
 3. **Docs update** - Stable symlink updated
 4. **Release creation** - In a real run, wheels are attached to the existing
    draft; in a dry-run, confirm the agent-created draft still exists even though
@@ -326,24 +323,19 @@ Consider announcing on:
 
 If sanity checks fail due to version mismatch:
 ```bash
-# Check all 4 version files
+# Check all 3 version files
 cat version.txt
 cat .github/scripts/version.txt
 grep "^BASE_VERSION=" .github/scripts/version_script.sh
-grep "^BASE_VERSION=" .github/scripts/version_script_windows.sh
 ```
 
-All 4 files must have the same version. If any is wrong, update it and re-run the release.
-
-**Common mistake:** Forgetting to update `version_script_windows.sh` causes Windows wheels to be built with the wrong version.
+All 3 files must have the same version. If any is wrong, update it and re-run the release.
 
 ### Wheel Build Failures
 
-Check the individual build workflow logs. Common issues:
+Check the build workflow logs. Common issues:
 - PyTorch version compatibility
 - Missing dependencies
-- Platform-specific compilation errors
-- **Wrong version in Windows builds**: Check `version_script_windows.sh` has correct `BASE_VERSION`
 
 ### Docs Update Failure
 
