@@ -5,8 +5,9 @@ if "%CONDA_RUN%"=="" (
     exit /b 1
 )
 
-:: Run the pip install command for pybind11
-%CONDA_RUN% conda install conda-forge::pybind11 -y
+:: Install pybind11. %CONDA_RUN% starts with conda, a batch file, and a batch
+:: file run without `call` ends this script when it finishes: hence `call`.
+call %CONDA_RUN% conda install conda-forge::pybind11 -y
 
 :: Check if the installation was successful
 if errorlevel 1 (
@@ -20,7 +21,7 @@ if errorlevel 1 (
 :: setuptools>=82 removed pkg_resources and no longer vendors `packaging`;
 :: PyTorch imports `from packaging.version import Version` at init time,
 :: so the standalone package must be present.
-%CONDA_RUN% pip install setuptools_scm packaging
+call %CONDA_RUN% pip install setuptools_scm packaging
 
 :: Check if the installation was successful
 if errorlevel 1 (
