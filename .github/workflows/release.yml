@@ -415,6 +415,11 @@ jobs:
     needs: [sanity-checks, collect-wheels]
     if: ${{ !cancelled() && needs.collect-wheels.result == 'success' && needs.sanity-checks.result != 'failure' }}
     runs-on: ubuntu-latest
+    # Every job that pushes to gh-pages joins this group, so they push one at a
+    # time. With `queue: max`, later jobs wait instead of being cancelled.
+    concurrency:
+      group: gh-pages
+      queue: max
     steps:
       - name: Get version info
         id: version
