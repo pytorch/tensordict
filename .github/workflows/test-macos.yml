@@ -39,6 +39,11 @@ jobs:
         export SYSTEM_VERSION_COMPAT=0
         export TORCH_VERSION=nightly
         export ARCH=arm64
+        # The macOS runners are reused between jobs, and inductor caches its
+        # precompiled headers under $TMPDIR. Once a later job reinstalls torch,
+        # clang rejects those headers because cpp_prefix.h has a new mtime.
+        # GitHub empties $RUNNER_TEMP at the start of every job.
+        export TMPDIR="$RUNNER_TEMP"
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
