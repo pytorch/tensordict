@@ -149,23 +149,6 @@ README Tutos
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Author: Nicolas Dufour, Vincent Moens">
-
-.. only:: html
-
-  .. image:: /tutorials/images/thumb/sphx_glr_tensordict_module_thumb.png
-    :alt:
-
-  :doc:`/tutorials/tensordict_module`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">TensorDictModule</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="In this tutorial you will learn how to manipulate the shape of a TensorDict and its contents.">
 
 .. only:: html
@@ -178,6 +161,23 @@ README Tutos
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Manipulating the shape of a TensorDict</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Nicolas Dufour, Vincent Moens">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_tensordict_module_thumb.png
+    :alt:
+
+  :doc:`/tutorials/tensordict_module`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">TensorDictModule</div>
     </div>
 
 
@@ -267,8 +267,8 @@ README Tutos
    /tutorials/zarr_storage
    /tutorials/tensordict_keys
    /tutorials/streamed_tensordict
-   /tutorials/tensordict_module
    /tutorials/tensordict_shapes
+   /tutorials/tensordict_module
    /tutorials/tensorclass_fashion
    /tutorials/data_fashion
    /tutorials/serialization_speed

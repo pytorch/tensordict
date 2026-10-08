@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4487+ga334473a9.d20261008)
+                  main (0.14.0.dev4489+g80b5f1165.d20261008)
                 </div>
               
             
@@ -821,7 +821,8 @@ calculation should the <a class="reference internal" href="reference/generated/t
 overhead. One can avoid this by simply calling tensordict.contiguous() after the execution of stack.</p>
 <p>Shape operations such as squeezing, unsqueezing, permuting batch dimensions and creating a view are executed eagerly
 and return a regular <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>. Their legacy lazy versions are only returned when
-<a class="reference internal" href="reference/generated/tensordict.set_lazy_legacy.html#tensordict.set_lazy_legacy" title="tensordict.set_lazy_legacy"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_lazy_legacy</span></code></a> is enabled (<code class="docutils literal notranslate"><span class="pre">set_lazy_legacy(True)</span></code>).</p>
+<a class="reference internal" href="reference/generated/tensordict.set_lazy_legacy.html#tensordict.set_lazy_legacy" title="tensordict.set_lazy_legacy"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_lazy_legacy</span></code></a> is enabled (<code class="docutils literal notranslate"><span class="pre">set_lazy_legacy(True)</span></code>). This legacy lazy mode is deprecated
+and will be removed in TensorDict 0.17.</p>
 </section>
 <section id="lazy-pre-allocation">
 <h2>Lazy pre-allocation<a class="headerlink" href="#lazy-pre-allocation" title="Permalink to this heading">¶</a></h2>

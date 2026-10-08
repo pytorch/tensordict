@@ -131,19 +131,10 @@ stacked_tensordict = LazyStackedTensorDict.lazy_stack(
 )
 print(stacked_tensordict)
 
-# Previously, torch.stack was always returning a lazy stack. For consistency with
-# the regular PyTorch API, torch.stack returns a dense tensordict by default.
-# The legacy lazy behaviour can still be enabled with
-# the :func:`~tensordict.utils.set_lazy_legacy` decorator/context manager:
+# For consistency with the regular PyTorch API, torch.stack returns a dense
+# tensordict:
 
-from tensordict.utils import set_lazy_legacy
-
-with set_lazy_legacy(True):  # old behaviour
-    lazy_stack = torch.stack([tensordict, cloned_tensordict])
-assert isinstance(lazy_stack, LazyStackedTensorDict)
-
-with set_lazy_legacy(False):  # new behaviour
-    dense_stack = torch.stack([tensordict, cloned_tensordict])
+dense_stack = torch.stack([tensordict, cloned_tensordict])
 assert isinstance(dense_stack, TensorDict)
 ##############################################################################
 # If we index a :class:`~.LazyStackedTensorDict` along the stacking dimension we recover
@@ -220,16 +211,11 @@ print(unsqueezed_tensordict)
 #    Operations like :meth:`~tensordict.TensorDictBase.unsqueeze`,
 #    :meth:`~tensordict.TensorDictBase.squeeze`, :meth:`~tensordict.TensorDictBase.view`,
 #    :meth:`~tensordict.TensorDictBase.permute`, :meth:`~tensordict.TensorDictBase.transpose`
-#    are applied eagerly and return a regular :class:`~.TensorDict`. The legacy lazy version
-#    of these operations (ie, a container where the original
-#    tensordict was stored and where the operations was applied every time a key was accessed)
-#    is only returned when enabled via the
-#    :func:`~tensordict.utils.set_lazy_legacy` function:
-#
-#       >>> with set_lazy_legacy(True):
-#       ...     lazy_unsqueeze = tensordict.unsqueeze(0)
-#       >>> with set_lazy_legacy(False):
-#       ...     dense_unsqueeze = tensordict.unsqueeze(0)
+#    are applied eagerly and return a regular :class:`~.TensorDict`. Their legacy lazy
+#    versions (a container that stores the original tensordict and applies the operation
+#    every time a key is accessed) are only returned in the legacy lazy mode of
+#    :func:`~tensordict.utils.set_lazy_legacy`, which is deprecated and will be removed in
+#    TensorDict 0.17.
 #
 # Bear in mind that as ever, these methods apply only to the batch dimensions. Any non
 # batch dimensions of the entries will be unaffected
