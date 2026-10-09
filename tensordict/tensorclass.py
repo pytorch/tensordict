@@ -45,7 +45,7 @@ from typing import (
 import numpy as np
 import tensordict as tensordict_lib
 import torch
-from tensordict._deprecation import deprecated
+from tensordict._deprecation import deprecated, warn_deprecated
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._pytree import _register_td_node
@@ -1429,23 +1429,19 @@ def _tc_broadcast(self, src, *, group=None, device=None):
     return result
 
 
+@deprecated(
+    "TensorClass.fields()", removal="0.17", replacement="dataclasses.fields(cls)"
+)
 def _fields(cls) -> tuple[dataclasses.Field, ...]:
-    warnings.warn(
-        "The fields classmethod of tensorclasses is deprecated and will be removed in "
-        "TensorDict 0.17. Use dataclasses.fields(cls) instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
     return dataclasses.fields(cls)
 
 
+@deprecated(
+    "TensorClass.extend()",
+    removal="0.17",
+    replacement="lazy_stack or torch.cat to build a new instance",
+)
 def _extend(self, tensordict: list[TensorDictBase] | TensorDictBase) -> None:
-    warnings.warn(
-        "The extend method of tensorclasses is deprecated and will be removed in "
-        "TensorDict 0.17. Build a new instance with lazy_stack or torch.cat instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
     self._tensordict.extend(tensordict)
 
 
@@ -1467,12 +1463,7 @@ def _public_from_tensordict(
     if safe is None:
         safe = True
     else:
-        warnings.warn(
-            "The safe argument of from_tensordict is deprecated and will be removed in "
-            "TensorDict 0.17.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
+        warn_deprecated("TensorClass.from_tensordict(safe=...)", removal="0.17")
     return _from_tensordict(cls, tensordict, non_tensordict, safe)
 
 

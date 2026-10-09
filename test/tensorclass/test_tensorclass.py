@@ -265,8 +265,9 @@ def test_tensorclass_stub_methods():
 
 # Names on which the TensorClass stub and runtime tensorclasses differ on purpose.
 _TENSORCLASS_STUB_EXCLUSIONS = {
-    # Forwards to LazyStackedTensorDict.extend, so it works only when the
-    # tensorclass wraps a lazy stack; TensorDictBase has no extend.
+    # Deprecated (removed in TensorDict 0.17). It forwards to
+    # LazyStackedTensorDict.extend, so it works only when the tensorclass wraps
+    # a lazy stack; TensorDictBase has no extend.
     "extend",
     # Iteration goes through __getitem__ at runtime; the stub declares
     # __iter__ so that type checkers know what a loop yields.
@@ -3875,9 +3876,10 @@ class TestDeprecations:
         c = MyClass(x=torch.zeros(3), batch_size=[3])
         for obj in (MyClass, c):
             with pytest.warns(
-                DeprecationWarning, match=r"fields .* removed in TensorDict 0\.17"
-            ):
+                DeprecationWarning, match=r"fields\(\) .* removed in TensorDict 0\.17"
+            ) as record:
                 assert obj.fields() == dataclasses.fields(MyClass)
+            assert record[0].filename == __file__
 
     def test_extend(self):
         @tensorclass
@@ -3887,9 +3889,10 @@ class TestDeprecations:
         c = MyClass(x=torch.zeros(3), batch_size=[3])
         stack = lazy_stack([c, c])
         with pytest.warns(
-            DeprecationWarning, match=r"extend .* removed in TensorDict 0\.17"
-        ):
+            DeprecationWarning, match=r"extend\(\) .* removed in TensorDict 0\.17"
+        ) as record:
             stack.extend(lazy_stack([c])._tensordict)
+        assert record[0].filename == __file__
         assert stack.batch_size == torch.Size([3, 3])
 
     @pytest.mark.parametrize(
@@ -3902,9 +3905,10 @@ class TestDeprecations:
 
         td = TensorDict(x=torch.zeros(3), batch_size=[3])
         with pytest.warns(
-            DeprecationWarning, match=r"safe .* removed in TensorDict 0\.17"
-        ):
+            DeprecationWarning, match=r"safe=\.\.\.\) .* removed in TensorDict 0\.17"
+        ) as record:
             c = MyClass.from_tensordict(td, *args, **kwargs)
+        assert record[0].filename == __file__
         assert c._tensordict is td
 
     # The library code that builds and converts tensorclasses does not call the

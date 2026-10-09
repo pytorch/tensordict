@@ -1423,16 +1423,42 @@ class TensorClass:
         non_tensordict: dict | None = None,
         safe: bool = True,
     ) -> Self: ...
+    @overload
     @classmethod
     def from_tensordict(
         cls,
         tensordict: TensorCollection,
         non_tensordict: dict | None = None,
     ) -> Self: ...
+    @overload
     @classmethod
     @deprecated(
-        "The fields classmethod of tensorclasses is deprecated and will be removed "
-        "in TensorDict 0.17. Use dataclasses.fields(cls) instead."
+        "TensorClass.from_tensordict(safe=...) is deprecated and will be removed "
+        "in TensorDict 0.17."
+    )
+    def from_tensordict(
+        cls,
+        tensordict: TensorCollection,
+        non_tensordict: dict | None = None,
+        *,
+        safe: bool,
+    ) -> Self: ...
+    @overload
+    @classmethod
+    @deprecated(
+        "TensorClass.from_tensordict(safe=...) is deprecated and will be removed "
+        "in TensorDict 0.17."
+    )
+    def from_tensordict(
+        cls,
+        tensordict: TensorCollection,
+        non_tensordict: dict | None,
+        safe: bool,
+    ) -> Self: ...
+    @classmethod
+    @deprecated(
+        "TensorClass.fields() is deprecated and will be removed in TensorDict 0.17. "
+        "Use dataclasses.fields(cls) instead."
     )
     def fields(cls) -> tuple[dataclasses.Field[Any], ...]: ...
     @classmethod
