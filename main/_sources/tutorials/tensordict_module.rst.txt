@@ -408,13 +408,13 @@ executed, as they need to read and write from a tensordict. However, we can grea
  .. code-block:: none
 
     Without compile
-    Regular:  208.1393 us
-    TDM:  245.9261 us
-    Sequential:  397.2565 us
+    Regular:  132.9057 us
+    TDM:  151.2598 us
+    Sequential:  233.5675 us
     Compiled versions
-    Compiled regular:  264.2560 us
-    Compiled TDM:  289.3670 us
-    Compiled sequential:  301.9420 us
+    Compiled regular:  189.2420 us
+    Compiled TDM:  206.6870 us
+    Compiled sequential:  216.9920 us
 
 
 
@@ -546,7 +546,7 @@ In the next tutorial, we will be seeing how ``torch.export`` can be used to isol
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 15.293 seconds)
+   **Total running time of the script:** (0 minutes 16.155 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensordict_module.py:
