@@ -51,6 +51,7 @@ from tensordict._pytree import _register_td_node
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._tensorcollection import TensorCollection
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
+from tensordict._utils_options import _set_capture_non_tensor_stack
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _GET_DEFAULTS_TO_NONE,
@@ -80,7 +81,6 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     KeyDependentDefaultDict,
     LinkedList,
     list_to_stack,
-    set_capture_non_tensor_stack,
 )
 from torch import multiprocessing as mp, Tensor
 
@@ -4866,7 +4866,7 @@ class NonTensorData(NonTensorDataBase):
             if out.batch_size != result.batch_size:
                 raise RuntimeError("out.batch_size and cat batch size must match.")
             if isinstance(out, NonTensorData) and isinstance(result, NonTensorStack):
-                with set_capture_non_tensor_stack(True):
+                with _set_capture_non_tensor_stack(True):
                     result = cls._stack_non_tensor(values, dim=dim)
             out.update_(result)
             return out
@@ -5714,7 +5714,7 @@ class NonTensorStack(LazyStackedTensorDict):
         Raises a ValueError if there is more than one unique value.
         """
         try:
-            with set_capture_non_tensor_stack(True):
+            with _set_capture_non_tensor_stack(True):
                 nt = NonTensorData._stack_non_tensor(
                     self.tensordicts, raise_if_non_unique=True
                 )

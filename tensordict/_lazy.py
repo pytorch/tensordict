@@ -1333,8 +1333,9 @@ class LazyStackedTensorDict(TensorDictBase):
                     Previously, if a key was not present in the tensordict and no default
                     was passed, a `KeyError` was raised. From v0.7, this behaviour has been changed
                     and a `None` value is returned instead (in accordance with the what dict.get behavior).
-                    To adopt the old behavior, set the environment variable `export TD_GET_DEFAULTS_TO_NONE='0'` or call
-                    :func`~tensordict.set_get_defaults_to_none(False)`.
+                    Use ``td[key]`` to raise a `KeyError` for a missing key. Restoring the old behavior with
+                    ``TD_GET_DEFAULTS_TO_NONE=0`` or ``set_get_defaults_to_none(False)`` is deprecated
+                    and will be removed in TensorDict 0.17.
 
         Keyword Args:
             as_list (bool, optional): if ``True``, ragged tensors will be returned as list.

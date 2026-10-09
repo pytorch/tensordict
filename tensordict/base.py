@@ -42,6 +42,7 @@ from warnings import warn
 import numpy as np
 import torch
 from tensordict._contextlib import LAST_OP_MAPS
+from tensordict._deprecation import deprecated, warn_deprecated
 from tensordict._indexing import _getitem_names, convert_ellipsis_to_idx
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
@@ -154,16 +155,45 @@ _SELF_NESTING_ERROR = (
 
 _HEURISTIC_EXCLUDED = (Tensor, tuple, list, set, dict, np.ndarray)
 
+_GET_DEFAULTS_TO_NONE_REPLACEMENT = "td[key] to raise a KeyError for a missing key"
+
 if "TD_GET_DEFAULTS_TO_NONE" in os.environ:
     _GET_DEFAULTS_TO_NONE = strtobool(os.environ["TD_GET_DEFAULTS_TO_NONE"])
+    if not _GET_DEFAULTS_TO_NONE:
+        warn_deprecated(
+            f"TD_GET_DEFAULTS_TO_NONE={os.environ['TD_GET_DEFAULTS_TO_NONE']}",
+            removal="0.17",
+            replacement=_GET_DEFAULTS_TO_NONE_REPLACEMENT,
+            stacklevel=1,
+        )
 else:
     _GET_DEFAULTS_TO_NONE = True
 
 
+def _set_get_defaults_to_none(set_to_none: bool = True) -> None:
+    global _GET_DEFAULTS_TO_NONE
+    _GET_DEFAULTS_TO_NONE = bool(set_to_none)
+
+
+def _get_defaults_to_none() -> bool:
+    return _GET_DEFAULTS_TO_NONE
+
+
+@deprecated(
+    "set_get_defaults_to_none()",
+    removal="0.17",
+    replacement=_GET_DEFAULTS_TO_NONE_REPLACEMENT,
+)
 def set_get_defaults_to_none(set_to_none: bool = True):
     """Sets the default of `get` to `None` and silences deprecation warnings during calls to `get` that result in a `KeyError`.
 
     This can also be controlled via the environment variable ``TD_GET_DEFAULTS_TO_NONE``.
+
+    .. deprecated:: 0.15
+        Since v0.7, :meth:`~tensordict.TensorDictBase.get` returns ``None`` for a
+        missing key by default. This function, and setting ``TD_GET_DEFAULTS_TO_NONE``
+        to a false value, are deprecated and will be removed in TensorDict 0.17.
+        Use ``td[key]`` to raise a ``KeyError`` for a missing key.
 
     Args:
         set_to_none (bool): whether the default of `get` should be `None`, or should `get` raise a `KeyError` if
@@ -171,13 +201,23 @@ def set_get_defaults_to_none(set_to_none: bool = True):
             Defaults to `True`.
 
     """
-    global _GET_DEFAULTS_TO_NONE
-    _GET_DEFAULTS_TO_NONE = bool(set_to_none)
+    _set_get_defaults_to_none(set_to_none)
 
 
+@deprecated(
+    "get_defaults_to_none()",
+    removal="0.17",
+    replacement=_GET_DEFAULTS_TO_NONE_REPLACEMENT,
+)
 def get_defaults_to_none(set_to_none: bool = True):
-    """Returns the status of `get` default value."""
-    return _GET_DEFAULTS_TO_NONE
+    """Returns the status of `get` default value.
+
+    .. deprecated:: 0.15
+        Since v0.7, :meth:`~tensordict.TensorDictBase.get` returns ``None`` for a
+        missing key by default. This function is deprecated and will be removed in
+        TensorDict 0.17. Use ``td[key]`` to raise a ``KeyError`` for a missing key.
+    """
+    return _get_defaults_to_none()
 
 
 class _RecorderState(local):
@@ -2591,8 +2631,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     Previously, if a key was not present in the tensordict and no default
                     was passed, a `KeyError` was raised. From v0.7, this behaviour has been changed
                     and a `None` value is returned instead (in accordance with the what dict.get behavior).
-                    To adopt the old behavior, set the environment variable `export TD_GET_DEFAULTS_TO_NONE='0'` or call
-                    :func`~tensordict.set_get_defaults_to_none(False)`.
+                    Use ``td[key]`` to raise a `KeyError` for a missing key. Restoring the old behavior with
+                    ``TD_GET_DEFAULTS_TO_NONE=0`` or ``set_get_defaults_to_none(False)`` is deprecated
+                    and will be removed in TensorDict 0.17.
 
         .. note:: Keyword arguments can be passed to :meth:`~.get` when dealing with ragged tensors.
             See :meth:`~tensordict.LazyStackedTensorDict.get` for a complete overview.
