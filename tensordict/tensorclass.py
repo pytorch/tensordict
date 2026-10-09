@@ -147,6 +147,7 @@ _TD_PASS_THROUGH = {
     torch.atleast_3d: True,
     torch.broadcast_to: True,
     torch.cat: True,
+    torch.chunk: True,
     torch.clone: True,
     torch.empty_like: True,
     torch.flatten: True,
@@ -162,6 +163,8 @@ _TD_PASS_THROUGH = {
     torch.permute: True,
     torch.rand_like: True,
     torch.randn_like: True,
+    torch.repeat_interleave: True,
+    torch.reshape: True,
     torch.roll: True,
     torch.rot90: True,
     torch.split: True,
@@ -169,10 +172,12 @@ _TD_PASS_THROUGH = {
     torch.stack: True,
     torch.swapaxes: True,
     torch.swapdims: True,
+    torch.tensor_split: True,
     torch.tile: True,
     torch.unbind: True,
     torch.unflatten: True,
     torch.unsqueeze: True,
+    torch.where: True,
     torch.zeros_like: True,
     torch.autograd.grad: True,
 }
@@ -1020,7 +1025,10 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             kwargs = {}
 
         # get the output type from the arguments / keyword arguments
-        if len(args) > 0:
+        if func is torch.where:
+            # torch.where(condition, input, other): the result has the type of input
+            tensorclass_instance = args[1] if len(args) > 1 else kwargs["input"]
+        elif len(args) > 0:
             tensorclass_instance = args[0]
         else:
             tensorclass_instance = kwargs.get("input", kwargs["tensors"])
@@ -4409,7 +4417,10 @@ class NonTensorDataBase(TensorClass):
             kwargs = {}
 
         # get the output type from the arguments / keyword arguments
-        if len(args) > 0:
+        if func is torch.where:
+            # torch.where(condition, input, other): the result has the type of input
+            tensorclass_instance = args[1] if len(args) > 1 else kwargs["input"]
+        elif len(args) > 0:
             tensorclass_instance = args[0]
         else:
             tensorclass_instance = kwargs.get("input", kwargs["tensors"])

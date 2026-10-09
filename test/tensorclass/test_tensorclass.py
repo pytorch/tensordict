@@ -1752,6 +1752,11 @@ class TestTensorClass:
         data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
         data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
         assert data.repeat_interleave(2, dim=1).shape == torch.Size((3, 8))
+        repeated = torch.repeat_interleave(data, 2, 1)
+        assert type(repeated) is type(data)
+        assert repeated.shape == torch.Size((3, 8))
+        assert repeated.y.shape == torch.Size((3, 8))
+        assert repeated.z == z
 
     def test_repeat_interleave_tensor(self):
         class MyDataNested(TensorClass):
@@ -1794,6 +1799,12 @@ class TestTensorClass:
         assert (stacked_tc.X == 1).all()
         assert isinstance(stacked_tc._tensordict, TensorDict)
         assert stacked_tc.z == stacked_tc.y.z == z
+
+        reshaped = torch.reshape(data, (4, 3))
+        assert type(reshaped) is type(data)
+        assert reshaped.shape == torch.Size([4, 3])
+        assert reshaped.y.shape == torch.Size([4, 3])
+        assert reshaped.z == reshaped.y.z == z
 
     def test_set(self):
         @tensorclass
@@ -2318,6 +2329,73 @@ class TestTensorClass:
         assert data_split[1].batch_size == torch.Size([3, 3])
         assert data_split[2].batch_size == torch.Size([3, 1])
         assert data_split[2].batch_size == torch.Size([3, 1])
+
+        torch_split = torch.tensor_split(data_out, (1, 4, 5), 1)
+        assert len(torch_split) == 4
+        for split, expected in zip(torch_split, data_split):
+            assert type(split) is type(data_out)
+            assert split.batch_size == expected.batch_size
+            assert split.y.batch_size == expected.batch_size
+            assert split.z == "test_tensorclass"
+
+    def test_torch_chunk(self):
+        @tensorclass
+        class MyDataNested:
+            X: torch.Tensor
+            z: str
+            y: "MyDataNested" = None
+
+        data_in = MyDataNested(
+            X=torch.ones(3, 6, 5), z="test_tensorclass", batch_size=[3, 6]
+        )
+        data_out = MyDataNested(
+            X=torch.ones(3, 6, 5), z="test_tensorclass", y=data_in, batch_size=[3, 6]
+        )
+        chunks = torch.chunk(data_out, 4, 1)
+        assert len(chunks) == len(data_out.chunk(4, 1)) == 3
+        for chunk in chunks:
+            assert type(chunk) is type(data_out)
+            assert chunk.batch_size == torch.Size([3, 2])
+            assert chunk.y.batch_size == torch.Size([3, 2])
+            assert chunk.z == "test_tensorclass"
+
+    def test_torch_where(self):
+        @tensorclass
+        class MyDataNested:
+            X: torch.Tensor
+            z: str
+            y: "MyDataNested" = None
+
+        def make(value):
+            data_in = MyDataNested(
+                X=torch.full((3, 4, 5), value), z="test_tensorclass", batch_size=[3, 4]
+            )
+            return MyDataNested(
+                X=torch.full((3, 4, 5), value),
+                z="test_tensorclass",
+                y=data_in,
+                batch_size=[3, 4],
+            )
+
+        data0, data1 = make(0.0), make(1.0)
+        mask = torch.zeros(3, 4, dtype=torch.bool)
+        mask[0] = True
+        for result in (
+            torch.where(mask, data1, data0),
+            torch.where(mask, input=data1, other=data0),
+            torch.where(mask, data1, 0.0),
+        ):
+            assert type(result) is type(data0)
+            assert result.batch_size == data0.batch_size
+            assert result.z == "test_tensorclass"
+            assert (result.X[mask] == 1).all()
+            assert (result.X[~mask] == 0).all()
+            assert (result.y.X[mask] == 1).all()
+            assert (result.y.X[~mask] == 0).all()
+        out = make(2.0)
+        result = torch.where(mask, data1, data0, out=out)
+        assert result._tensordict is out._tensordict
+        assert (out.X[~mask] == 0).all()
 
     def test_update(self):
         @tensorclass

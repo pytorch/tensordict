@@ -3955,6 +3955,30 @@ class TestTensorDicts(TestTensorDictsBase):
         td2 = td.to_tensordict(retain_none=True)
         assert (td2 == td).all()
 
+    @pytest.mark.parametrize(
+        "func,args",
+        [
+            (torch.chunk, (2, 1)),
+            (torch.repeat_interleave, (2, 1)),
+            (torch.reshape, ((-1,),)),
+            (torch.tensor_split, ((1, 3),)),
+        ],
+        ids=["chunk", "repeat_interleave", "reshape", "tensor_split"],
+    )
+    def test_torch_shape_functions(self, td_name, device, func, args):
+        td = getattr(self, td_name)(device)
+        result = func(td, *args)
+        expected = getattr(td, func.__name__)(*args)
+        if isinstance(expected, tuple):
+            assert isinstance(result, tuple)
+            assert len(result) == len(expected)
+        else:
+            result, expected = (result,), (expected,)
+        for r, e in zip(result, expected):
+            assert type(r) is type(e)
+            assert r.batch_size == e.batch_size
+            assert (r == e).all()
+
     @legacy_lazy_mode()
     def test_transpose_legacy(self, td_name, device):
         td = getattr(self, td_name)(device)

@@ -370,6 +370,19 @@ class TestTD:
         data_reshape_c = reshape_c(data)
         assert (data_reshape == data_reshape_c).all()
 
+    def test_torch_reshape_chunk(self, mode):
+        def reshape_chunk(td):
+            return torch.chunk(torch.reshape(td, (2, 2)), 2, 1)
+
+        reshape_chunk_c = torch.compile(reshape_chunk, fullgraph=True, mode=mode)
+        data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
+        chunks = reshape_chunk(data)
+        chunks_c = reshape_chunk_c(data)
+        assert len(chunks) == len(chunks_c) == 2
+        for chunk, chunk_c in zip(chunks, chunks_c):
+            assert chunk_c.batch_size == (2, 1)
+            assert (chunk == chunk_c).all()
+
     def test_view(self, mode):
         def view(td):
             out = td.view(2, 2).clear_refs_for_compile_()
@@ -1255,6 +1268,23 @@ class TestTC:
             a=MyClass(a=None, b=torch.arange(4), batch_size=[4]), batch_size=[4]
         )
         assert (reshape(data) == reshape_c(data)).all()
+
+    def test_tc_torch_where(self, mode):
+        def where(mask, td0, td1):
+            return torch.reshape(torch.where(mask, td0, td1), (2, 2))
+
+        where_c = torch.compile(where, fullgraph=True, mode=mode)
+        mask = torch.tensor([True, False, True, False])
+        data0 = MyClass(
+            a=MyClass(a=None, b=torch.arange(4), batch_size=[4]), batch_size=[4]
+        )
+        data1 = MyClass(
+            a=MyClass(a=None, b=torch.arange(4, 8), batch_size=[4]), batch_size=[4]
+        )
+        result_c = where_c(mask, data0, data1)
+        assert isinstance(result_c, MyClass)
+        assert result_c.batch_size == (2, 2)
+        assert (where(mask, data0, data1) == result_c).all()
 
     def test_tc_unbind(self, mode):
         def unbind(td):

@@ -215,6 +215,7 @@ class TestNonTensorData:
             lambda x: torch.tile(x, (2, 1)),
             lambda x: x.broadcast_to((2, 2, 3)),
             lambda x: x.reshape(3, 2),
+            lambda x: torch.reshape(x, (3, 2)),
         ],
         ids=[
             "flip",
@@ -225,6 +226,7 @@ class TestNonTensorData:
             "tile",
             "broadcast_to",
             "reshape",
+            "torch.reshape",
         ],
     )
     def test_shape_ops_preserve_non_tensor_values(self, op, container):
