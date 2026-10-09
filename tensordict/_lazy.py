@@ -983,6 +983,18 @@ class LazyStackedTensorDict(TensorDictBase):
             raise IndexError(
                 f"too many indices for a tensordict with batch size {self.batch_size}"
             )
+        # torch checks that a mask has the shape of the dims it indexes, which
+        # the members cannot do once the mask is read as indices
+        for kind, element, first in elements:
+            if kind != _MASK:
+                continue
+            for i, size in enumerate(element.shape):
+                if size != self.batch_size[first + i]:
+                    raise IndexError(
+                        f"The shape of the mask {list(element.shape)} at index {i} "
+                        "does not match the shape of the indexed tensor "
+                        f"{list(self.batch_size)} at index {first + i}"
+                    )
         if position is None:
             # the index does not reach the stack dim
             elements.extend(
