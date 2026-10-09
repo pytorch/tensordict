@@ -84,8 +84,8 @@ Another batch size
   The first call with a new batch size recompiles once with dynamic shapes
   (automatic dynamic shapes), and later sizes reuse that graph.
   ``torch.compile(fn, dynamic=True)`` avoids the second compilation.
-  Operations whose number of outputs depends on the batch size (``split``,
-  ``chunk``, ``unbind``, ``tolist``) recompile for each size.
+  ``split``, ``chunk``, ``unbind`` and ``tolist`` recompile for each batch
+  size, also after that.
 
 Lazy stacks of another length
   A :class:`~tensordict.LazyStackedTensorDict` is specialized on the number of
@@ -108,21 +108,17 @@ New tensorclasses and pytree flattening
   because PyTorch guards on the size of its pytree registry. Define the
   classes before the first call.
 
-With ``TORCH_LOGS="recompiles"``, the guard that failed names the cause. For
-the two most common ones it reads like this:
-
-.. code-block:: text
-
-    - 0/0: len(td._tensordict) == 1    # self._tensordict[key] = value  # .../tensordict/_td.py:... in _set_str
-    - 1/0: td._batch_size[0] == 4      # td = TensorDict(  # .../tensordict/_td.py:... in _new_unsafe
-
-The first one is a write into an input whose key set changed, the second a
-new batch size.
+With ``TORCH_LOGS="recompiles"``, the guard that failed names the cause. A
+guard on ``len(td._tensordict)`` means that the key set of a tensordict that
+the function writes into changed. A guard on ``td._batch_size[0]`` means a new
+batch size.
 
 Known limits
 ------------
 
 The following patterns break the graph (an error with ``fullgraph=True``).
+The error messages in the table are those of PyTorch 2.13, 2.14 and the 2.16
+nightly. Other versions can word them differently.
 
 .. list-table::
    :header-rows: 1
@@ -133,24 +129,26 @@ The following patterns break the graph (an error with ``fullgraph=True``).
      - Workaround
    * - ``td * t``, ``t * td``, ``td + t``, ``td -= t`` where ``t`` is a
        :class:`~torch.Tensor` (also with tensorclasses)
-     - ``Unsupported: All __torch_function__ overrides returned
-       NotImplemented``: Dynamo turns the operator into a ``Tensor`` method
-       and does not call ``TensorDict.__mul__``
-       (`pytorch/pytorch#200455 <https://github.com/pytorch/pytorch/issues/200455>`_).
-       Operators with a Python number or another tensordict work.
+     - Dynamo turns the operator into a ``Tensor`` method and does not call
+       ``TensorDict.__mul__``
+       (`pytorch/pytorch#200455 <https://github.com/pytorch/pytorch/issues/200455>`_):
+       ``Unsupported: All __torch_function__ overrides returned
+       NotImplemented``. Operators with a Python number or another tensordict
+       work.
      - Call the method: ``td.mul(t)``, ``td.add(t)``, ``td.sub_(t)``.
    * - ``td.all()``, ``td.any()`` without ``dim``, and
        ``if (td == other).all():``
      - These return a Python ``bool``, so the graph depends on tensor values:
        ``Unsupported: Data-dependent branching``.
      - Reduce in the graph:
-       ``torch.stack([v.all() for v in td.values(True, True)]).all()``,
+       ``torch.stack([v.all() for v in td.values(include_nested=True,
+       leaves_only=True)]).all()``,
        and select with :func:`torch.where` instead of ``if``. ``td.all(dim=0)``
        returns a tensordict and compiles.
    * - Boolean-mask indexing: ``td[mask]``, ``td[mask] = other[mask]``
-     - The result has a data-dependent shape: ``Could not guard on
-       data-dependent expression``, also with
-       ``torch._dynamo.config.capture_dynamic_output_shape_ops = True``.
+     - The result has a data-dependent shape, also with
+       ``torch._dynamo.config.capture_dynamic_output_shape_ops = True``:
+       ``Could not guard on data-dependent expression``.
      - Keep the shapes fixed: ``torch.where(mask, td, other)``,
        ``td.where(mask, other)`` or ``td.masked_fill(~mask, 0.0)``, or index
        outside the compiled function.
@@ -161,11 +159,13 @@ The following patterns break the graph (an error with ``fullgraph=True``).
      - Call them outside the compiled function.
    * - ``loss.backward()`` or ``torch.autograd.grad`` inside the compiled
        function
-     - ``Unsupported Tensor.backward() call``.
+     - Dynamo does not trace the backward pass:
+       ``Unsupported Tensor.backward() call``.
      - Return the loss and call ``loss.backward()`` outside.
    * - Building a :class:`~tensordict.nn.TensorDictSequential` inside the
        compiled function (``seq[:2](td)``, ``seq.select_subsequence(...)``)
-     - ``Unexpected type in sourceless builder``.
+     - Dynamo cannot build the new module inside the graph:
+       ``Unexpected type in sourceless builder``.
      - Build the subsequence once, outside, and call it inside.
 
 torch.func
@@ -174,7 +174,7 @@ torch.func
 :func:`torch.vmap` maps over the batch dimensions of tensordicts and
 tensorclasses: ``in_dims`` and ``out_dims`` refer to batch dimensions, and
 tensordict methods, arithmetic included, work on the per-sample tensordict.
-The same code compiles, with ``torch.compile(torch.vmap(fn))``.
+``torch.compile(torch.vmap(fn))`` compiles the same code.
 
   >>> td = TensorDict(a=torch.randn(5, 3), b=torch.randn(5, 3), batch_size=[5])
   >>> torch.vmap(lambda t: (t * 2 + 1).exp())(td).batch_size
@@ -182,9 +182,8 @@ The same code compiles, with ``torch.compile(torch.vmap(fn))``.
   >>> torch.vmap(lambda t, x: t["a"] @ x, (0, None))(td, torch.randn(3)).shape
   torch.Size([5])
 
-Inside a :mod:`torch.func` transform, pointwise methods run one operation per
-leaf instead of one fused ``torch._foreach_*`` kernel, because the
-``_foreach`` ops have no batching rule
+Under :mod:`torch.func` transforms, pointwise tensordict methods run one
+operation per entry, so they are slower than in eager mode
 (`pytorch/pytorch#200456 <https://github.com/pytorch/pytorch/issues/200456>`_).
 
 :func:`torch.func.grad`, :func:`~torch.func.grad_and_value`,
@@ -218,7 +217,9 @@ gradients:
 
 :func:`torch.func.functional_call` only accepts a ``dict``: pass
 ``params.flatten_keys(".").to_dict()`` instead of the tensordict. See the
-:doc:`tutorials/functional` tutorial for more.
+:doc:`tutorials/functional` tutorial for more. If the process also creates a
+:class:`~tensordict.nn.CudaGraphModule`, see the warning in
+:ref:`compile-cudagraphs`.
 
 torch.export
 ------------
@@ -226,7 +227,8 @@ torch.export
 :func:`torch.export.export` accepts tensordict and tensorclass inputs and
 outputs, in strict and non-strict mode (non-strict is the default). To keep
 the batch dimension dynamic, give ``dynamic_shapes`` one entry per entry of
-the tensordict, in key order, with a nested list for a nested tensordict:
+the tensordict, in the order of ``td.keys()`` (insertion order), with a nested
+list for a nested tensordict:
 
   >>> class Model(nn.Module):
   ...     def forward(self, td):
@@ -249,10 +251,20 @@ the exported program (``AssertionError: Guard failed``). Non-strict export
 does not support tensordicts with dimension names or non-tensor entries: use
 ``strict=True`` for them, and keep the non-tensor entries out of the output.
 To export a :class:`~tensordict.nn.TensorDictModule` so that it takes and
-returns plain tensors, see the :doc:`tutorials/export` tutorial.
+returns plain tensors, see the :doc:`tutorials/export` tutorial. If the process
+also creates a :class:`~tensordict.nn.CudaGraphModule`, see the warning in
+:ref:`compile-cudagraphs`.
+
+.. _compile-cudagraphs:
 
 CUDA graphs
 -----------
+
+Two tools record CUDA graphs. :class:`~tensordict.nn.CudaGraphModule` works
+with or without :func:`torch.compile`, records one graph, and checks the
+inputs of each call against it. ``torch.compile(..., mode="reduce-overhead")``
+needs compilation and manages its own graphs: it records a new graph for each
+new batch size.
 
 CudaGraphModule
 ~~~~~~~~~~~~~~~
@@ -260,10 +272,13 @@ CudaGraphModule
 :class:`~tensordict.nn.CudaGraphModule` captures a function, or a
 :class:`~tensordict.nn.TensorDictModule`, in a
 :class:`torch.cuda.CUDAGraph` and replays it. The function can be compiled.
-The first ``warmup - 1`` calls (``warmup=2`` by default) run the function in
-eager mode on a side stream. The next call runs it once more and captures the
-graph, and later calls copy their inputs into the graph's buffers and replay
-it.
+Give it enough ``warmup`` calls to finish compiling, for instance
+``CudaGraphModule(torch.compile(module), warmup=3)``. The first
+``warmup - 1`` calls (``warmup=2`` by default) run the function on a side
+stream. The next call runs it once more and captures the graph, and later
+calls copy their inputs into the graph's buffers and replay it. See
+:class:`~tensordict.nn.CudaGraphModule` for the other requirements: no
+data-dependent control flow, and inputs that do not require gradients.
 
   >>> from tensordict.nn import CudaGraphModule, TensorDictModule
   >>> module = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
@@ -277,10 +292,11 @@ it.
 
 The replay follows these rules:
 
-* The inputs keep the shapes and batch size of the capture. A tensordict
-  input without one of the ``in_keys`` raises a ``KeyError``, and another
-  batch size or tensor shape raises a ``ValueError``. Extra keys are ignored.
-  A CPU input is copied to the device.
+* The inputs must keep the shapes and batch size of the capture. A
+  tensordict input without one of the ``in_keys`` raises a ``KeyError``, and
+  a tensordict input with another batch size or entry shape raises a
+  ``ValueError``, as a tensor input of another shape does. Extra keys are
+  ignored. After the capture, a CPU input is copied to the device.
 * The outputs are new tensors: the values written into the input
   tensordict, and the outputs of a function that returns a new tensordict or
   tensors, are clones of the graph's buffers. A result kept from an earlier
@@ -293,16 +309,21 @@ The replay follows these rules:
   for instance with ``torch.cuda.current_stream().wait_stream(stream)``.
   Issue consecutive calls from one stream, or order them in the same way.
 * Arguments that are not tensors (a ``float``, a ``str``) must not change
-  after the capture. Next to a tensordict input, the replay runs with the
-  captured values. For a function that takes tensors, a changed value raises
-  a ``ValueError``.
+  after the capture. If the function takes a tensordict, the replay uses the
+  captured values and ignores the new ones without an error, and every tensor
+  must be an entry of the tensordict, not a separate argument. If the
+  function takes tensors, a changed value raises a ``ValueError``.
 
 .. warning::
 
-  Creating a :class:`~tensordict.nn.CudaGraphModule` removes the tensordict
-  classes from PyTorch's pytree registry for the rest of the process, with a
-  warning. After that, :func:`torch.export.export` and :func:`torch.func.grad`
-  no longer accept tensordict inputs.
+  Creating a :class:`~tensordict.nn.CudaGraphModule` removes
+  :class:`~tensordict.TensorDict`, :class:`~tensordict.LazyStackedTensorDict`
+  and :class:`~tensordict.PersistentTensorDict` from PyTorch's pytree registry
+  for the rest of the process, and warns about it (set
+  ``EXCLUDE_TD_FROM_PYTREE=1`` to silence the warning). After that,
+  :func:`torch.export.export` and :func:`torch.func.grad` no longer accept
+  these tensordicts. :func:`torch.vmap` still does, and tensorclasses stay
+  registered.
 
 ``mode="reduce-overhead"``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -318,9 +339,11 @@ and the PyTorch rules apply:
 * A function that writes in place into an input tensor (``td["x"].add_(1)``)
   runs without CUDA graphs (``skipping cudagraphs due to mutated inputs`` with
   ``TORCH_LOGS="cudagraphs"``).
-* For inference, call the function under :func:`torch.no_grad`. With
+* For inference, call the function under :class:`torch.no_grad`. With
   gradients enabled and no backward pass, the calls run without recording a
   CUDA graph (``Running eager function`` with ``TORCH_LOGS="cudagraphs"``).
+
+For example:
 
   >>> policy = torch.compile(
   ...     TensorDictModule(nn.Linear(3, 4).cuda(), in_keys=["obs"], out_keys=["action"]),
