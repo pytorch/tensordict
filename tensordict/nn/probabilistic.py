@@ -37,12 +37,9 @@ from tensordict.tensorclass import is_non_tensor
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import _ContextManager, _zip_strict, unravel_key
 from torch import distributions as D, Tensor
-from torch.utils._contextlib import _DecoratorContextManager
 
-try:
-    from torch.compiler import is_compiling
-except ImportError:
-    from torch._dynamo import is_compiling
+from torch.compiler import is_compiling
+from torch.utils._contextlib import _DecoratorContextManager
 
 try:
     from enum import StrEnum
@@ -216,7 +213,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
     the 'dist.rsample', 'dist.sample' method). The sampling step is skipped if the supplied
     TensorDict has all the desired key-value pairs already.
 
-    By default, `ProbabilisticTensorDictModule` distribution class is a :class:`~torchrl.modules.distributions.Delta`
+    By default, `ProbabilisticTensorDictModule` distribution class is a :class:`~tensordict.nn.distributions.Delta`
     distribution, making `ProbabilisticTensorDictModule` a simple wrapper around
     a deterministic mapping function.
 
@@ -235,20 +232,20 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
     Keyword Args:
         default_interaction_type (InteractionType, optional): keyword-only argument.
             Default method to be used to retrieve
-            the output value. Should be one of InteractionType: MODE, MEDIAN, MEAN or RANDOM
+            the output value. Should be one of InteractionType: DETERMINISTIC, MODE, MEDIAN, MEAN or RANDOM
             (in which case the value is sampled randomly from the distribution). Default
-            is MODE.
+            is DETERMINISTIC.
 
             .. note:: When a sample is drawn, the
                 :class:`ProbabilisticTensorDictModule` instance will
                 first look for the interaction mode dictated by the
-                :func:`~tensordict.nn.probabilistic.interaction_type`
+                ``interaction_type()``
                 global function. If this returns `None` (its default value), then the
                 `default_interaction_type` of the `ProbabilisticTDModule`
                 instance will be used. Note that
-                :class:`~torchrl.collectors.collectors.DataCollectorBase`
+                ``torchrl.collectors.DataCollectorBase``
                 instances will use `set_interaction_type` to
-                :class:`tensordict.nn.InteractionType.RANDOM` by default.
+                ``InteractionType.RANDOM`` by default.
 
             .. note::
                 In some cases, the mode, median or mean value may not be
@@ -274,7 +271,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
             .. note:: if your kwargs contain tensors that you would like to transfer to device with the module, or
                 tensors that should see their dtype modified when calling `module.to(dtype)`, you can wrap the kwargs
-                in a :class:`~tensordict.nn.TensorDictParams` to do this automatically.
+                in a :class:`~tensordict.TensorDictParams` to do this automatically.
 
         return_log_prob (bool, optional): keyword-only argument.
             If ``True``, the log-probability of the
@@ -283,13 +280,13 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         log_prob_keys (List[NestedKey], optional): keys where to write the log_prob if ``return_log_prob=True``.
             Defaults to `'<sample_key_name>_log_prob'`, where `<sample_key_name>` is each of the :attr:`out_keys`.
 
-            .. note:: This is only available when :func:`~tensordict.nn.probabilistic.composite_lp_aggregate` is set to ``False``.
+            .. note:: This is only available when :func:`~tensordict.nn.composite_lp_aggregate` is set to ``False``.
 
         log_prob_key (NestedKey, optional): key where to write the log_prob if ``return_log_prob=True``.
-            Defaults to `'sample_log_prob'` when :func:`~tensordict.nn.probabilistic.composite_lp_aggregate` is set to `True`
+            Defaults to `'sample_log_prob'` when :func:`~tensordict.nn.composite_lp_aggregate` is set to `True`
             or `'<sample_key_name>_log_prob'` otherwise.
 
-            .. note:: When there is more than one sample, this is only available when :func:`~tensordict.nn.probabilistic.composite_lp_aggregate` is set to ``True``.
+            .. note:: When there is more than one sample, this is only available when :func:`~tensordict.nn.composite_lp_aggregate` is set to ``True``.
 
         cache_dist (bool, optional): keyword-only argument.
             EXPERIMENTAL: if ``True``, the parameters of the
@@ -312,7 +309,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
               parameters.
             - :class:`int`: shorthand for ``torch.Generator().manual_seed(int)``; a CPU
               generator is created at construction time and used statefully thereafter.
-            - :class:`NestedKey` (``str`` or ``tuple``): the generator is fetched from the
+            - ``NestedKey`` (``str`` or ``tuple``): the generator is fetched from the
               input tensordict at this key on every call. The value may be a
               :class:`torch.Generator` (used in place, state mutates) or an integer scalar
               (read as a stream-key, then a fresh ``next_seed`` is written back to the
@@ -365,11 +362,11 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                action_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
                 hidden: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
                 input: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
                 loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
                 params: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                sample_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
                 scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([3]),
             device=None,
@@ -389,11 +386,11 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                action_log_prob: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False),
                 hidden: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
                 input: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
                 loc: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
                 params: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                sample_log_prob: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False),
                 scale: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([4, 3]),
             device=None,
@@ -587,13 +584,13 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         return list(self._out_keys)
 
     def get_dist(self, tensordict: TensorDictBase) -> D.Distribution:
-        """Creates a :class:`torch.distribution.Distribution` instance with the parameters provided in the input tensordict.
+        """Creates a :class:`torch.distributions.Distribution` instance with the parameters provided in the input tensordict.
 
         Args:
             tensordict (TensorDictBase): The input tensordict containing the distribution parameters.
 
         Returns:
-            A :class:`torch.distribution.Distribution` instance created from the input tensordict.
+            A :class:`torch.distributions.Distribution` instance created from the input tensordict.
 
         Raises:
             TypeError: If the input tensordict does not match the distribution keywords.
@@ -894,11 +891,10 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 )
 
         elif interaction_type is InteractionType.MEAN:
-            if hasattr(dist, "mean"):
-                try:
-                    return dist.mean
-                except NotImplementedError:
-                    pass
+            try:
+                return dist.mean
+            except (AttributeError, NotImplementedError):
+                pass
             with _use_generator(generator):
                 if dist.has_rsample:
                     return dist.rsample((self.n_empirical_estimate,)).mean(0)
@@ -919,7 +915,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
 
 class ProbabilisticTensorDictSequential(TensorDictSequential):
-    """A sequence of :class:`~tensordict.nn.TensorDictModules` containing at least one :class:`~tensordict.nn.ProbabilisticTensorDictModule`.
+    """A sequence of :class:`~tensordict.nn.TensorDictModule` instances containing at least one :class:`~tensordict.nn.ProbabilisticTensorDictModule`.
 
     This class extends :class:`~tensordict.nn.TensorDictSequential` and is typically configured with a sequence of
     modules where the final module is an instance of :class:`~tensordict.nn.ProbabilisticTensorDictModule`.
@@ -929,12 +925,12 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
     :class:`~tensordict.nn.ProbabilisticTensorDictModule` instances in the sequence.
 
     Multiple probabilistic modules can co-exist in a single ``ProbabilisticTensorDictSequential``.
-    If `return_composite` is ``False`` (default), only the last one will produce a distribution and the others
+    If `return_composite` is ``False``, only the last one will produce a distribution and the others
     will be executed as regular :class:`~tensordict.nn.TensorDictModule` instances.
-    However, if a `ProbabilisticTensorDictModule` is not the last module in the sequence and `return_composite=False`,
-    a `ValueError` will be raised when trying to query the module. If `return_composite=True`,
+    However, if the last module in the sequence is not a `ProbabilisticTensorDictModule` and `return_composite=False`,
+    a `TypeError` will be raised when the module is constructed. If `return_composite=True`,
     all intermediate `ProbabilisticTensorDictModule` instances will contribute to a single
-    :class:`~tensordict.nn.CompositeDistribution` instance.
+    :class:`~tensordict.nn.distributions.CompositeDistribution` instance.
 
     Resulting log-probabilities will be conditional probabilities if samples are interdependent:
     whenever
@@ -966,10 +962,10 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         return_composite (bool, optional): If `True` and multiple
             :class:`~tensordict.nn.ProbabilisticTensorDictModule` or
             :class:`~tensordict.nn.ProbabilisticTensorDictSequential` instances are found,
-            a :class:`~tensordict.nn.CompositeDistribution` instance will be used.
+            a :class:`~tensordict.nn.distributions.CompositeDistribution` instance will be used.
             Otherwise, only the last module will be used to build the distribution.
             Defaults to ``True`` whenever there are more than one probabilistic modules or the last module is not probabilistic.
-            Errors if `return_composite` is `False` and the neither of the above conditions are met.
+            Errors if `return_composite` is `False` and the last module is not probabilistic.
         selected_out_keys (iterable of NestedKeys, optional): the list of out-keys to select. If not provided, all
             ``out_keys`` will be written.
         inplace (bool, optional): if `True`, the input tensordict is modified in-place. If `False`, a new empty
@@ -978,7 +974,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
 
     Raises:
         ValueError: If the input sequence of modules is empty.
-        TypeError: If the final module is not an instance of
+        TypeError: If ``return_composite=False`` and the final module is not an instance of
             :obj:`ProbabilisticTensorDictModule` or
             :obj:`ProbabilisticTensorDictSequential`.
 
@@ -988,8 +984,11 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         >>> # Typical usage: a single distribution is computed last in the sequence
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from tensordict.nn import ProbabilisticTensorDictModule as Prob, ProbabilisticTensorDictSequential as Seq, \
-        ...     TensorDictModule as Mod
+        >>> from tensordict.nn import (
+        ...     ProbabilisticTensorDictModule as Prob,
+        ...     ProbabilisticTensorDictSequential as Seq,
+        ...     TensorDictModule as Mod,
+        ... )
         >>> torch.manual_seed(0)
         >>>
         >>> module = Seq(
@@ -1271,7 +1270,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             **kwargs: Additional keyword arguments passed to the deterministic part of the module.
 
         Returns:
-            tuple[D.Distribution, TensorDictBase]: A tuple containing the distribution object and the output tensordict.
+            TensorDictBase: the output tensordict containing the distribution parameters.
 
         .. note:: The interaction type is temporarily set to the specified value during the execution of this method.
         """
@@ -1333,9 +1332,9 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
     ) -> D.Distribution:
         """Returns the distribution resulting from passing the input tensordict through the sequence.
 
-        If `return_composite` is ``False`` (default), this method will only consider the last probabilistic module in the sequence.
+        If `return_composite` is ``False``, this method will only consider the last probabilistic module in the sequence.
 
-        Otherwise, it will return a :class:`~tensordict.nn.CompositeDistribution` instance containing the distributions of all probabilistic modules.
+        Otherwise, it will return a :class:`~tensordict.nn.distributions.CompositeDistribution` instance containing the distributions of all probabilistic modules.
 
         Args:
             tensordict (TensorDictBase): The input tensordict.
@@ -1434,7 +1433,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
     ) -> TensorDictBase | torch.Tensor:
         """Returns the log-probability of the input tensordict.
 
-        If `self.return_composite` is ``True`` and the distribution is a :class:`~tensordict.nn.CompositeDistribution`,
+        If `self.return_composite` is ``True`` and the distribution is a :class:`~tensordict.nn.distributions.CompositeDistribution`,
         this method will return the log-probability of the entire composite distribution.
 
         Otherwise, it will only consider the last probabilistic module in the sequence.

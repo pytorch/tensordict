@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import make_dataclass
 
 import pytest
 import torch
@@ -82,6 +83,54 @@ class ManyFieldsTC(TensorClass["tensor_only"]):
     f7: torch.Tensor
     f8: torch.Tensor
     f9: torch.Tensor
+
+
+@pytest.mark.parametrize("num_fields", [4, 16, 64, 256])
+@pytest.mark.parametrize("tensor_only", [False, True])
+@pytest.mark.parametrize("batch_size", [(), (32,)])
+@pytest.mark.parametrize("device", [None, "cpu"])
+def test_tc_init_tensor_schema(benchmark, num_fields, tensor_only, batch_size, device):
+    cls = tensorclass(tensor_only=tensor_only)(
+        make_dataclass(
+            "TensorSchema", [(f"f{i}", torch.Tensor) for i in range(num_fields)]
+        )
+    )
+    source = {f"f{i}": torch.empty(32, 8) for i in range(num_fields)}
+    benchmark(cls, **source, batch_size=batch_size, device=device)
+
+
+@pytest.mark.parametrize("num_children", [4, 64])
+@pytest.mark.parametrize("tensor_only", [False, True])
+@pytest.mark.parametrize("ready_children", [False, True])
+def test_tc_init_nested_tensor_schema(
+    benchmark, num_children, tensor_only, ready_children
+):
+    child_cls = tensorclass(tensor_only=tensor_only)(
+        make_dataclass("Child", [(f"f{i}", torch.Tensor) for i in range(4)])
+    )
+    parent_cls = tensorclass(tensor_only=tensor_only)(
+        make_dataclass("Parent", [(f"g{i}", child_cls) for i in range(num_children)])
+    )
+    source = {
+        f"g{i}": {f"f{j}": torch.empty(32, 8) for j in range(4)}
+        for i in range(num_children)
+    }
+    if ready_children:
+        source = {
+            key: child_cls(**value, batch_size=[32], device="cpu")
+            for key, value in source.items()
+        }
+        benchmark(parent_cls, **source, batch_size=[32], device="cpu")
+    else:
+
+        def build():
+            children = {
+                key: child_cls(**value, batch_size=[32], device="cpu")
+                for key, value in source.items()
+            }
+            return parent_cls(**children, batch_size=[32], device="cpu")
+
+        benchmark(build)
 
 
 def test_tc_init_many_fields(benchmark):

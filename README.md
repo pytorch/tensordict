@@ -7,7 +7,7 @@
 [![Conda (channel only)](https://img.shields.io/conda/vn/conda-forge/tensordict?logo=anaconda&style=flat&color=orange)][#conda-forge-package]
 
 [#docs-package]: https://docs.pytorch.org/tensordict/stable/
-[#docs-package-benchmark]: https://docs.pytorch.org/tensordict/stable/dev/bench/
+[#docs-package-benchmark]: https://docs.pytorch.org/tensordict/dev/bench/
 [#github-license]: https://github.com/pytorch/tensordict/blob/main/LICENSE
 [#pepy-package]: https://pepy.tech/project/tensordict
 [#conda-forge-package]: https://anaconda.org/conda-forge/tensordict
@@ -31,7 +31,7 @@ TensorDict(batch_size=[32])
 
 [**30-second demo**](#30-second-demo) |
 [**Why TensorDict**](#why-tensordict) |
-[**What is new in 0.13**](#what-is-new-in-013) |
+[**What is new in 0.14**](#what-is-new-in-014) |
 [**Patterns**](#patterns) |
 [**Installation**](#installation) |
 [**Ecosystem**](#ecosystem) |
@@ -110,22 +110,28 @@ for high-throughput PyTorch workloads:
 
 For deeper numbers, see the [benchmark notes][#docs-package-benchmark].
 
-## What is new in 0.13
+## What is new in 0.14
 
-TensorDict 0.13 focuses on making structured tensor programs more practical in
-large training systems:
+TensorDict 0.14 adds new storage formats and autograd on a whole structure, and
+changes how module state and pickled memmap data are handled:
 
-- **Tabular import/export** for pandas, CSV, Parquet and JSON workflows.
-- **More `inplace=True` shape operations**, including `gather`, `repeat`,
-  `repeat_interleave`, `roll`, `reshape`, `flatten`, `unflatten` and
-  `contiguous`.
-- **Improved `torch.compile` behavior** for TensorClass initialization,
-  dynamic-shape export, locking paths and shallow clones.
-- **Safer memmap filenames by default** through robust key encoding.
-- **A migration path for module state preservation** with
-  `to_module(..., preserve_module_state=...)`.
-- **CPU-only release wheels** for TensorDict, avoiding duplicate GPU wheel
-  artifacts for a package whose compiled extension is device-independent.
+- **Zarr-backed `PersistentTensorDict`** through `td.to_zarr()`,
+  `PersistentTensorDict.from_zarr()` and
+  `TensorDict.from_schema(..., storage="zarr")`.
+- **Portable single-file `.tdz` archives**: `td.save("x.tdz")` and
+  `TensorDict.load_memmap("x.tdz")`, plus `pack_memmap` / `unpack_memmap` to
+  convert between memmap directories and archives.
+- **`TensorDict.backward()`** backpropagates through all differentiable leaves
+  in a single autograd call.
+- **Group-relative peers** with `group_dst` / `group_src` for point-to-point
+  `send` / `recv`.
+- **Behavior changes**: `to_module()` preserves existing parameter and buffer
+  registrations by default (`preserve_module_state=True`; pass `False` for the
+  previous replacement behavior), and `copy_at_()` uses its fast path by
+  default (pass `fast=False` for the previous one).
+- **Deprecation**: calling `load_memmap()` without `allow_pickle` still loads
+  pickled non-tensor data, with a `FutureWarning`; the default becomes
+  `allow_pickle=False` in 0.15.
 
 ## Patterns
 
@@ -219,7 +225,8 @@ inter-process handoff and checkpointed intermediate state.
 - **Serialization and memory mapping** for efficient checkpointing and dataset
   storage. [[doc]](https://docs.pytorch.org/tensordict/stable/saving.html)
 
-For a longer tour, start with [GETTING_STARTED.md](GETTING_STARTED.md) or the
+For a longer tour, start with
+[GETTING_STARTED.md](https://github.com/pytorch/tensordict/blob/main/GETTING_STARTED.md) or the
 [online documentation][#docs-package].
 
 ## Installation
@@ -244,16 +251,26 @@ pip install tensordict-nightly
 
 **From source with an existing PyTorch install**:
 
+tensordict is pure Python, so building it from source needs no compiler. The
+build requirement `setuptools_scm` is installed by pip unless you pass
+`--no-build-isolation`. `--no-deps` also skips the runtime dependencies, so
+install them first:
+
 ```bash
+pip install numpy cloudpickle packaging orjson "pyvers>=0.2,<0.3"
 pip install -e . --no-deps
 ```
 
+(`orjson` is only listed as a dependency for Python < 3.13.)
+
 If you use `uv` with PyTorch nightlies, keep `torch` pinned to the PyTorch wheel
 index or install TensorDict with `--no-deps` so the resolver does not replace
-your existing PyTorch build:
+your existing PyTorch build. Use one of:
 
 ```bash
+# Option 1: skip dependency resolution (install the runtime dependencies first)
 uv pip install -e . --no-deps
+# Option 2: resolve against the PyTorch nightly index
 uv pip install -e . --prerelease=allow -f "https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html"
 ```
 
@@ -289,4 +306,4 @@ If you use TensorDict, please cite the TorchRL paper:
 
 ## License
 
-TensorDict is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+TensorDict is licensed under the MIT License. See [LICENSE][#github-license] for details.

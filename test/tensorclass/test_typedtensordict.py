@@ -14,11 +14,12 @@ except ImportError:
     from typing_extensions import NotRequired
 
 import tempfile
+import warnings
 
 import pytest
 import torch
 from tensordict import lazy_stack, TensorDict, TypedTensorDict
-from tensordict.base import TensorDictBase
+from tensordict.base import _default_is_leaf, TensorDictBase
 from torch import Tensor
 
 _has_mypy = importlib.util.find_spec("mypy") is not None
@@ -311,6 +312,21 @@ class TestFieldAccess:
             batch_size=[3],
         )
         assert set(state.keys()) == {"eta", "X", "beta"}
+
+    @pytest.mark.parametrize("backend", ["dense", "lazy", "memmap"])
+    def test_nested_keys_with_leaf_predicate(self, backend, tmp_path):
+        source = TensorDict(
+            {"eta": torch.ones(3), "X": torch.zeros(3), "beta": torch.ones(3)}, [3]
+        )
+        if backend == "lazy":
+            source = lazy_stack([source, source], 0)
+        elif backend == "memmap":
+            source = source.memmap(tmp_path)
+        state = PredictorState.from_tensordict(source)
+        outer = TensorDict({"state": state}, source.batch_size)
+        keys = set(outer.keys(True, True, is_leaf=_default_is_leaf))
+        assert keys == {("state", "eta"), ("state", "X"), ("state", "beta")}
+        assert all(torch.equal(outer.get(key), source.get(key[-1])) for key in keys)
 
 
 # ---------------------------------------------------------------------------
@@ -629,6 +645,36 @@ class TestClassOptions:
     def test_invalid_option(self):
         with pytest.raises(ValueError, match="Unknown TypedTensorDict option"):
             TypedTensorDict["invalid_option"]
+
+    @pytest.mark.parametrize("option", ["autocast", "nocast", "tensor_only"])
+    def test_ignored_option_deprecated(self, option):
+        match = rf"option '{option}' has no effect.*removed in TensorDict 0\.17"
+        with pytest.warns(DeprecationWarning, match=match) as record:
+            base = TypedTensorDict[option]
+        assert record[0].filename == __file__
+        with pytest.warns(DeprecationWarning, match=match) as record:
+
+            class Keyword(TypedTensorDict, **{option: True}):
+                x: Tensor
+
+        assert record[0].filename == __file__
+        # a subclass inherits the option without a new warning
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+
+            class Child(base):
+                x: Tensor
+
+        assert getattr(Child, f"_{option}") is True
+        assert getattr(Keyword, f"_{option}") is True
+
+    def test_supported_options_do_not_warn(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            TypedTensorDict["shadow", "frozen"]
+
+            class Frozen(TypedTensorDict, frozen=True):
+                x: Tensor
 
 
 # ---------------------------------------------------------------------------

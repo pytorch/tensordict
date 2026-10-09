@@ -247,6 +247,73 @@ def test_to_module_speed(benchmark, tdparams):
     benchmark(func)
 
 
+@pytest.fixture(params=[4, 64, "transformer"])
+def module_transfer_model(request):
+    if request.param == "transformer":
+        return nn.Transformer(
+            d_model=32,
+            nhead=4,
+            num_encoder_layers=2,
+            num_decoder_layers=2,
+            dim_feedforward=64,
+            dropout=0,
+            batch_first=True,
+        )
+    return nn.Sequential(
+        *[
+            nn.Sequential(nn.Linear(8, 8), nn.BatchNorm1d(8))
+            for _ in range(request.param)
+        ]
+    )
+
+
+@pytest.mark.parametrize("as_module", [False, True])
+def test_from_module_eager(benchmark, module_transfer_model, as_module):
+    benchmark(TensorDict.from_module, module_transfer_model, as_module=as_module)
+
+
+@pytest.mark.parametrize("mode", ["no_swap", "swap", "context"])
+def test_to_module_eager(benchmark, module_transfer_model, mode):
+    params = TensorDict.from_module(deepcopy(module_transfer_model))
+    if mode == "context":
+
+        def run():
+            with params.to_module(module_transfer_model):
+                pass
+
+        benchmark(run)
+    else:
+        benchmark(params.to_module, module_transfer_model, return_swap=mode == "swap")
+
+
+@pytest.mark.parametrize(
+    "num_fields,width",
+    [(16, 8), (256, 8), (16, 8192)],
+    ids=["small", "many_leaves", "16MiB"],
+)
+@pytest.mark.parametrize("return_swap", [False, True])
+def test_to_module_inplace_copy(benchmark, num_fields, width, return_swap):
+    module = nn.Module()
+    for i in range(num_fields // 4):
+        child = nn.Module()
+        for j in range(3):
+            child.register_parameter(f"p{j}", nn.Parameter(torch.zeros(32, width)))
+        child.register_buffer("b", torch.zeros(32, width))
+        module.add_module(f"g{i}", child)
+    # Use independent storage: capturing the destination itself would measure
+    # self-copies and miss the cost of moving the actual payload.
+    params = TensorDict.from_module(deepcopy(module))
+    params.data.add_(1)
+    storage = module.g0.p0.data_ptr()
+    swap = benchmark(params.to_module, module, inplace=True, return_swap=return_swap)
+    assert module.g0.p0.data_ptr() == storage != params["g0", "p0"].data_ptr()
+    torch.testing.assert_close(module.g0.p0, params["g0", "p0"])
+    if return_swap:
+        assert swap["g0", "p0"].data_ptr() != storage
+    else:
+        assert swap is None
+
+
 @pytest.mark.parametrize("preserve_module_state", [None, False, True])
 def test_to_module_plain_tensor_speed(benchmark, preserve_module_state):
     module = torch.nn.Transformer()

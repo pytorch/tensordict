@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import sys
+import warnings
 from collections.abc import Callable, Sequence
 from typing import Any, ClassVar
 
@@ -49,6 +50,8 @@ _META_FIELDS = frozenset(
 )
 
 _OPTIONS = ("shadow", "frozen", "autocast", "nocast", "tensor_only")
+# TensorClass options that TypedTensorDict accepts but ignores.
+_DEPRECATED_OPTIONS = ("autocast", "nocast", "tensor_only")
 
 _TD_DIR: frozenset[str] | None = None
 
@@ -58,6 +61,16 @@ def _get_td_dir() -> frozenset[str]:
     if _TD_DIR is None:
         _TD_DIR = frozenset(dir(TensorDictBase))
     return _TD_DIR
+
+
+def _warn_deprecated_option(option: str) -> None:
+    """Warn that ``option`` has no effect, at the caller of the metaclass method."""
+    warnings.warn(
+        f"The TypedTensorDict option {option!r} has no effect and is deprecated. "
+        "It will be removed in TensorDict 0.17. TensorClass supports this option.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
 
 
 def _is_not_required(tp: Any) -> bool:
@@ -323,6 +336,9 @@ class _TypedTensorDictMeta(type(TensorDictBase)):
         for opt, val in option_vals.items():
             if val is None:
                 val = getattr(cls, f"_{opt}", False)
+            elif opt in _DEPRECATED_OPTIONS and not name.startswith("TypedTensorDict_"):
+                # __getitem__ warns for the options of the classes it creates
+                _warn_deprecated_option(opt)
             setattr(cls, f"_{opt}", bool(val))
 
         if name == "TypedTensorDict":
@@ -390,6 +406,8 @@ class _TypedTensorDictMeta(type(TensorDictBase)):
                     f"Unknown TypedTensorDict option: {opt!r}. "
                     f"Valid options: {', '.join(_OPTIONS)}"
                 )
+            if opt in _DEPRECATED_OPTIONS:
+                _warn_deprecated_option(opt)
         suffix = "_".join(item)
         return _TypedTensorDictMeta(
             f"TypedTensorDict_{suffix}",
@@ -534,8 +552,8 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
         )
 
     def __setattr__(self, name: str, value: Any) -> None:
-        expected = type(self).__dict__.get("__expected_keys__", None)
-        if expected is not None and name in expected:
+        expected = type(self).__expected_keys__
+        if name in expected:
             self[name] = value
             return
         object.__setattr__(self, name, value)
@@ -819,6 +837,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
         *,
         robust_key,
         allow_pickle: bool | None = None,
+        mode: str | None = None,
     ):
         td = TensorDict._load_memmap(
             prefix,
@@ -827,6 +846,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
             out=out,
             robust_key=robust_key,
             allow_pickle=allow_pickle,
+            mode=mode,
         )
         return cls._wrap_td(td)
 

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 from typing import Any
 
 from torch.utils._contextlib import _DecoratorContextManager
@@ -95,19 +96,44 @@ def get_printoptions() -> dict:
     return dict(_REPR_OPTIONS)
 
 
+def _warn_lazy_legacy(stacklevel: int) -> None:
+    warnings.warn(
+        "The legacy lazy mode, turned on with set_lazy_legacy(True) or "
+        "LAZY_LEGACY_OP=1, is deprecated and will be removed in TensorDict 0.17. "
+        "Shape operations such as unsqueeze and permute will then always return "
+        "a tensordict, and torch.stack will stack densely: use lazy_stack to "
+        "build a lazy stack.",
+        DeprecationWarning,
+        stacklevel=stacklevel + 1,
+    )
+
+
 _DEFAULT_LAZY_OP = False
 _LAZY_OP = os.environ.get("LAZY_LEGACY_OP")
+if _LAZY_OP is not None and _LAZY_OP.lower() in ("y", "yes", "t", "true", "on", "1"):
+    _warn_lazy_legacy(stacklevel=1)
 
 
 class set_lazy_legacy(_DecoratorContextManager):
-    """Sets the behaviour of some methods to a lazy transform."""
+    """Sets the behaviour of some methods to a lazy transform.
+
+    .. deprecated:: 0.15
+        The legacy lazy mode (``set_lazy_legacy(True)``) is deprecated and will
+        be removed in TensorDict 0.17. ``set_lazy_legacy(False)`` will then do
+        nothing.
+    """
 
     def __init__(self, mode: bool) -> None:
         super().__init__()
+        if mode:
+            _warn_lazy_legacy(stacklevel=2)
         self.mode = mode
 
     def clone(self) -> set_lazy_legacy:
-        return type(self)(self.mode)
+        # used for each call of a decorated function: only the decorator warns
+        clone = type(self).__new__(type(self))
+        clone.mode = self.mode
+        return clone
 
     def __enter__(self) -> None:
         self.set()
@@ -125,7 +151,12 @@ class set_lazy_legacy(_DecoratorContextManager):
 
 
 def lazy_legacy(allow_none=False):
-    """Returns `True` if lazy representations will be used for selected methods."""
+    """Returns `True` if lazy representations will be used for selected methods.
+
+    .. deprecated:: 0.15
+        The legacy lazy mode is deprecated and will be removed in TensorDict 0.17,
+        see :class:`~tensordict.set_lazy_legacy`.
+    """
     if _LAZY_OP is None and allow_none:
         return None
     if _LAZY_OP is None:

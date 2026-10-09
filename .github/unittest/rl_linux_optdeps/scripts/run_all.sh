@@ -27,8 +27,6 @@ fi
 # ==================================================================================== #
 # ================================ Setup env ========================================= #
 
-this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
@@ -78,7 +76,6 @@ uv_pip_install \
   future \
   cloudpickle \
   pytest \
-  pytest-cov \
   pytest-mock \
   pytest-instafail \
   pytest-rerunfailures \
@@ -90,8 +87,7 @@ uv_pip_install \
   orjson \
   ninja \
   pyvers \
-  packaging \
-  importlib_metadata
+  packaging
 
 # ============================================================================================ #
 # ================================ PyTorch & TensorDict & TorchRL ============================ #
@@ -122,7 +118,7 @@ fi
 # smoke test
 python -c "import functorch"
 
-# Help CMake find pybind11 when building tensordict from source.
+# Help CMake find pybind11 when building TorchRL's C++ extension from source.
 pybind11_DIR="$(python -m pybind11 --cmakedir)"
 export pybind11_DIR
 
@@ -161,8 +157,3 @@ MUJOCO_GL=egl python -m pytest test --instafail -v --durations 20 \
   --deselect test/modules/test_dreamer_components.py::test_public_block_gru_triton_gradient_parity \
   --deselect test/modules/test_dreamer_components.py::test_public_block_gru_triton_compile_recurrent_loss \
   --timeout=120
-
-# ==================================================================================== #
-# ================================ Post-proc ========================================= #
-
-bash ${this_dir}/post_process.sh

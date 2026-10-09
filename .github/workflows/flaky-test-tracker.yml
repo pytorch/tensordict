@@ -24,6 +24,11 @@ env:
 jobs:
   analyze-flaky-tests:
     runs-on: ubuntu-latest
+    # Every job that pushes to gh-pages joins this group, so they push one at a
+    # time. With `queue: max`, later jobs wait instead of being cancelled.
+    concurrency:
+      group: gh-pages
+      queue: max
     outputs:
       flaky_count: ${{ steps.analyze.outputs.flaky_count }}
       new_flaky_count: ${{ steps.analyze.outputs.new_flaky_count }}

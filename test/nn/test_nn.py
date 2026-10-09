@@ -11,7 +11,6 @@ import importlib
 import os
 import pathlib
 import pickle
-import sys
 import unittest
 import warnings
 import weakref
@@ -22,6 +21,8 @@ import pytest
 import torch
 from _utils_internal import is_npu_available
 
+from functorch import make_functional_with_buffers as make_functional_functorch
+
 from tensordict import (
     is_tensor_collection,
     NonTensorData,
@@ -29,8 +30,8 @@ from tensordict import (
     set_list_to_stack,
     tensorclass,
     TensorDict,
+    unravel_key_list,
 )
-from tensordict._C import unravel_key_list
 from tensordict.nn import (
     as_tensordict_module,
     dispatch,
@@ -62,29 +63,10 @@ from tensordict.nn.utils import (
     skip_existing,
 )
 from tensordict.tensorclass import TensorClass
-
-from torch import distributions, nn
+from torch import distributions, nn, vmap
 from torch.distributions import Categorical, Normal
+from torch.nn.parameter import Buffer
 from torch.utils._pytree import tree_map
-
-try:
-    import functorch  # noqa
-    from functorch import make_functional_with_buffers as make_functional_functorch
-
-    try:
-        from torch import vmap
-    except ImportError:
-        from functorch import vmap  # noqa: TOR103
-
-    _has_functorch = True
-    FUNCTORCH_ERR = ""
-except ImportError as err:
-    _has_functorch = False
-    FUNCTORCH_ERR = str(err)
-try:
-    from torch.nn.parameter import Buffer
-except ImportError:
-    from tensordict.utils import Buffer
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
@@ -901,9 +883,6 @@ class TestTDModule:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-    )
     def test_functional_functorch(self):
         torch.manual_seed(0)
         param_multiplier = 1
@@ -967,6 +946,18 @@ class TestTDModule:
         # checks that things are back in place
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
         tdm(a=torch.zeros(1, 1))
+
+    def test_dispatch_deactivate_function(self):
+        @dispatch(source=["a"], dest=["b"])
+        def func(tensordict):
+            tensordict["b"] = tensordict["a"] + 1
+            return tensordict
+
+        assert (func(torch.zeros(1, 2)) == 1).all()
+        td = TensorDict(a=torch.zeros(1, 2))
+        with _set_dispatch_td_nn_modules(False):
+            assert func(td) is td
+        assert (td["b"] == 1).all()
 
     def test_dispatch(self):
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
@@ -1090,6 +1081,43 @@ class TestTDModule:
         module = MyModuleNest()
         (b,) = module(asepc=torch.zeros(1, 2))
         assert (b == 1).all()
+
+    @pytest.mark.parametrize(
+        "source,dest", [("in_keys", "out_keys"), (["a", "b"], ["c"])]
+    )
+    def test_dispatch_bound_method(self, source, dest):
+        # https://github.com/pytorch/tensordict/issues/1459
+        class MyModule(nn.Module):
+            in_keys = ["a", "b"]
+            out_keys = ["c"]
+
+            def inner_forward(self, tensordict):
+                tensordict["c"] = tensordict["a"] - tensordict["b"]
+                return tensordict
+
+            def forward(self, *args, **kwargs):
+                return dispatch(source=source, dest=dest)(self.inner_forward)(
+                    *args, **kwargs
+                )
+
+            def filler_forward(self, filler, tensordict):
+                return self.inner_forward(tensordict)
+
+        module = MyModule()
+        a, b = torch.ones(1, 2), torch.zeros(1, 2)
+        assert (module(a, b) == 1).all()
+        assert (module(a=a, b=b) == 1).all()
+        td = TensorDict(a=a, b=b)
+        assert module(td) is td
+        assert (td["c"] == 1).all()
+        dispatched = dispatch(source=source, dest=dest)(module.inner_forward)
+        td = TensorDict(a=a, b=b)
+        with _set_dispatch_td_nn_modules(False):
+            assert dispatched(td) is td
+        assert (td["c"] == 1).all()
+        # self is bound already: the first argument must be the tensordict
+        with pytest.raises(RuntimeError, match="Got filler instead"):
+            dispatch(source=source, dest=dest)(module.filler_forward)
 
     def test_dispatch_multi(self):
         tdm = TensorDictSequential(
@@ -1784,9 +1812,6 @@ class TestTDSequence:
         dist = tdmodule.get_dist(td)
         assert dist.rsample().shape[: td.ndimension()] == td.shape
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-    )
     def test_functional_functorch(self):
         torch.manual_seed(0)
         param_multiplier = 1
@@ -2471,9 +2496,6 @@ def test_module_buffer():
     ],
 )
 @pytest.mark.parametrize("tc", [True, False], ids=["tc", "td"])
-@pytest.mark.skipif(
-    sys.version_info < (3, 10), reason="Not working on python 3.9 and below"
-)
 def test_to_context(original_device, new_device, tc):
     if tc:
 
@@ -2848,6 +2870,43 @@ class TestProbabilisticTensorDictModule:
             mod.log_prob(mod(td.copy()))
             mod.log_prob_key
 
+    @pytest.mark.parametrize("error", [NotImplementedError, AttributeError])
+    def test_mean_falls_back_to_empirical_estimate(self, error):
+        class BrokenMeanNormal(Normal):
+            @property
+            def mean(self):
+                raise error
+
+        n_empirical_estimate = 8
+        module = ProbabilisticTensorDictModule(
+            in_keys=["loc", "scale"],
+            out_keys=["sample"],
+            distribution_class=BrokenMeanNormal,
+            default_interaction_type="mean",
+            n_empirical_estimate=n_empirical_estimate,
+        )
+        td = TensorDict(loc=torch.zeros(4), scale=torch.ones(4))
+        torch.manual_seed(0)
+        sample = module(td)["sample"]
+        torch.manual_seed(0)
+        dist = BrokenMeanNormal(td["loc"], td["scale"])
+        expected = dist.rsample((n_empirical_estimate,)).mean(0)
+        torch.testing.assert_close(sample, expected)
+
+    def test_mean_does_not_sample_when_implemented(self):
+        module = ProbabilisticTensorDictModule(
+            in_keys=["loc", "scale"],
+            out_keys=["sample"],
+            distribution_class=Normal,
+            default_interaction_type="mean",
+        )
+        td = TensorDict(loc=torch.tensor([1.0, 2.0, 3.0]), scale=torch.ones(3))
+        torch.manual_seed(0)
+        state_before = torch.get_rng_state()
+        sample = module(td)["sample"]
+        assert torch.equal(torch.get_rng_state(), state_before)
+        assert torch.equal(sample, td["loc"])
+
     # ------------------------------------------------------------------
     # generator argument: Generator object, int seed, and tensordict-key forms
     # ------------------------------------------------------------------
@@ -3159,6 +3218,41 @@ class TestEnsembleModule:
 
 
 class TestTensorDictParams:
+    @pytest.mark.parametrize("filter_empty", [False, True])
+    @pytest.mark.parametrize("lock", [False, True])
+    @pytest.mark.parametrize("nested_params", [False, True])
+    def test_capture_module_leaf_contracts(self, filter_empty, lock, nested_params):
+        leaf = torch.ones(3, requires_grad=True)
+        child = nn.Module()
+        child.register_parameter("p", nn.Parameter(torch.ones(3)))
+        child.register_buffer("b", torch.zeros(3))
+        child.register_buffer("grad", leaf * 2)
+        child.register_buffer("absent", None)
+        module = nn.Module()
+        module.left = module.right = child
+        module.empty = nn.Identity()
+        if nested_params:
+            module.params = TensorDictParams(p=nn.Parameter(torch.ones(3))).lock_()
+        captured = TensorDict.from_module(
+            module, as_module=True, filter_empty=filter_empty, lock=lock
+        )
+        assert captured["left", "p"] is captured["right", "p"] is child.p
+        if nested_params:
+            assert captured["params"] is module.params
+            assert module.params.is_locked is lock
+        assert captured["left", "b"].data_ptr() == child.b.data_ptr()
+        assert isinstance(captured["left", "b"], Buffer)
+        assert captured["left", "grad"].grad_fn is child.grad.grad_fn
+        captured["left", "grad"].sum().backward()
+        torch.testing.assert_close(leaf.grad, torch.full_like(leaf, 2))
+        assert ("empty" in captured.keys()) is (not filter_empty)
+        assert "absent" not in captured["left"].keys()
+        assert captured.is_locked is lock
+        if not lock:
+            captured["new_buffer"] = torch.ones(3)
+            assert isinstance(captured["new_buffer"], Buffer)
+            assert not isinstance(captured["new_buffer"], nn.Parameter)
+
     def _get_params(self):
         module = nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 4))
         params = TensorDict.from_module(module)
@@ -3873,6 +3967,9 @@ class TestCompositeDist:
         assert sample.get(("nested", "cont_cdf")).requires_grad
 
     def test_icdf(self):
+        # The cdf-icdf round trip loses float32 precision far in the tails, and
+        # about 1% of unseeded draws land there and fail assert_close.
+        torch.manual_seed(0)
         params = TensorDict(
             {
                 "cont": {
@@ -4516,10 +4613,13 @@ class TestToModule:
         torch.testing.assert_close(module.weight, params["weight"])
         torch.testing.assert_close(module.bias, params["bias"])
 
-    def test_plain_tensor_to_module_can_preserve_module_state(self, as_module):
+    @pytest.mark.parametrize("parameter_source", [False, True])
+    def test_to_module_can_preserve_module_state(self, as_module, parameter_source):
         module = nn.Linear(4, 2)
         module.weight.requires_grad_(False)
         params = TensorDict.from_module(module, as_module=as_module).data.detach()
+        if parameter_source:
+            params["weight"] = nn.Parameter(params["weight"], requires_grad=True)
         state_dict_keys = set(module.state_dict())
 
         with warnings.catch_warnings():
@@ -4534,6 +4634,37 @@ class TestToModule:
         torch.testing.assert_close(module.weight, params["weight"])
         torch.testing.assert_close(module.bias, params["bias"])
 
+    @pytest.mark.parametrize("source", ["computed", "leaf"])
+    @pytest.mark.parametrize("custom_setattr", [False, True])
+    def test_preserve_module_state_keeps_gradients(
+        self, as_module, source, custom_setattr
+    ):
+        class MyLinear(nn.Linear):
+            def __setattr__(self, key, value):
+                return super().__setattr__(key, value)
+
+        module = MyLinear(4, 2) if custom_setattr else nn.Linear(4, 2)
+        weight, bias = module.weight, module.bias
+        params = TensorDict.from_module(module, as_module=as_module)
+        if source == "computed":
+            params = params.apply(lambda p: p * 2)
+            grad_targets = [weight, bias]
+        else:
+            params = params.data.clone().requires_grad_()
+            grad_targets = [params["weight"], params["bias"]]
+        state_dict_keys = set(module.state_dict())
+
+        with params.to_module(module):
+            assert set(module.state_dict()) == state_dict_keys
+            assert set(dict(module.named_parameters())) == {"weight", "bias"}
+            y = module(torch.randn(3, 4))
+        y.sum().backward()
+
+        assert module.weight is weight
+        assert module.bias is bias
+        for target in grad_targets:
+            assert target.grad is not None
+
     def test_plain_tensor_to_module_can_keep_current_behavior(self, as_module):
         module = nn.Linear(4, 2)
         params = TensorDict.from_module(module, as_module=as_module).data.detach()
@@ -4547,9 +4678,11 @@ class TestToModule:
         assert not isinstance(module.weight, nn.Parameter)
         assert not isinstance(module.bias, nn.Parameter)
 
-    def test_plain_tensor_to_module_inplace_preserves_module_state(self, as_module):
+    @pytest.mark.parametrize("return_swap", [False, True])
+    def test_to_module_inplace_preserves_state(self, as_module, return_swap):
         module = nn.Linear(4, 2)
-        params = TensorDict.from_module(module, as_module=as_module).data.detach()
+        params = TensorDict.from_module(module, as_module=as_module)
+        params = params.data.clone()
         params.zero_()
         state_dict_keys = set(module.state_dict())
         weight = module.weight
@@ -4557,7 +4690,7 @@ class TestToModule:
 
         with warnings.catch_warnings():
             warnings.simplefilter("error", FutureWarning)
-            params.to_module(module, inplace=True)
+            params.to_module(module, inplace=True, return_swap=return_swap)
 
         assert set(module.state_dict()) == state_dict_keys
         assert module.weight is weight
@@ -4582,10 +4715,15 @@ class TestToModule:
         assert isinstance(module.weight, nn.Parameter)
         assert isinstance(module.bias, nn.Parameter)
 
-    def test_preserve_module_state_keeps_buffers(self, as_module):
+    @pytest.mark.parametrize("tagged_tensor", [False, True])
+    def test_preserve_module_state_keeps_buffers(self, as_module, tagged_tensor):
         module = nn.Module()
         module.register_buffer("buffer", torch.ones(3))
-        params = TensorDict({"buffer": nn.Parameter(torch.zeros(3))}, [])
+        value = nn.Parameter(torch.zeros(3))
+        if tagged_tensor:
+            value = torch.zeros(3)
+            value._is_param = True
+        params = TensorDict({"buffer": value}, [])
 
         with warnings.catch_warnings():
             warnings.simplefilter("error", FutureWarning)
@@ -4596,6 +4734,39 @@ class TestToModule:
         assert "buffer" not in dict(module.named_parameters())
         assert not isinstance(module.buffer, nn.Parameter)
         torch.testing.assert_close(module.buffer, torch.zeros(3))
+
+    @pytest.mark.parametrize("with_hook", [False, True])
+    def test_partial_swap_registration_order(self, with_hook, as_module):
+        module = nn.Module()
+        module.a = nn.Parameter(torch.zeros(3))
+        module.b = nn.Parameter(torch.zeros(3))
+        module.register_buffer("c", torch.zeros(3))
+        module.register_buffer("d", torch.zeros(3))
+        original, original_buffer = module.a, module.c
+        replacement = nn.Parameter(torch.ones(3))
+        params = TensorDict(a=replacement, c=torch.ones(3))
+        if as_module:
+            params = TensorDictParams(params, no_convert=True)
+        seen = []
+
+        def hook(module, name, value):
+            seen.append(value)
+
+        handle = (
+            torch.nn.modules.module.register_module_parameter_registration_hook(hook)
+            if with_hook
+            else contextlib.nullcontext()
+        )
+        with handle:
+            with params.to_module(module):
+                assert module.a is replacement
+                assert list(module._parameters) == ["b", "a"]
+                assert list(module._buffers) == ["d", "c"]
+                module.a.sum().backward()
+        assert module.a is original and module.c is original_buffer
+        torch.testing.assert_close(replacement.grad, torch.ones(3))
+        if with_hook:
+            assert len(seen) == 2 and seen[0] is replacement and seen[1] is original
 
     @pytest.mark.parametrize(
         "module_name,input_name",
@@ -4758,6 +4929,34 @@ class AddDiffModule(TensorClassModuleBase[InputTensorClass, AddDiffResult]):
         )
 
 
+# String annotations are what `from __future__ import annotations` produces.
+class StringAnnotationInput(TensorClass):
+    """Test input TensorClass with string and optional annotations."""
+
+    a: "torch.Tensor"
+    b: "torch.Tensor"
+    mask: torch.Tensor | None = None
+
+
+class StringAnnotationOutput(TensorClass):
+    """Test output TensorClass with string annotations for nested fields."""
+
+    input: "StringAnnotationInput"
+    result: "AddDiffResult"
+
+
+class StringAnnotationModule(
+    TensorClassModuleBase[StringAnnotationInput, StringAnnotationOutput]
+):
+    """Test module whose input and output TensorClasses use string annotations."""
+
+    def forward(self, x: StringAnnotationInput) -> StringAnnotationOutput:
+        result = AddDiffResult(
+            added=x.a + x.b, substracted=x.a - x.b, batch_size=x.batch_size
+        )
+        return StringAnnotationOutput(input=x, result=result, batch_size=x.batch_size)
+
+
 class TestTensorClassModule(TensorClassModuleBase[InputTensorClass, OutputTensorClass]):
     """Test module with nested TensorClass output."""
 
@@ -4802,6 +5001,22 @@ class TestTensorClassModuleForward:
             ("result", "added"),
             ("result", "substracted"),
         }
+
+    def test_wrapper_keys_from_string_and_optional_annotations(self) -> None:
+        """Test that wrapper keys are read from string and optional annotations."""
+        td_module = StringAnnotationModule().as_td_module()
+        assert set(td_module.in_keys) == {"a", "b", "mask"}
+        assert set(td_module.out_keys) == {
+            ("input", "a"),
+            ("input", "b"),
+            ("input", "mask"),
+            ("result", "added"),
+            ("result", "substracted"),
+        }
+        value = StringAnnotationInput(a=10, b=5, batch_size=[])
+        td_output = td_module(value.to_tensordict())
+        assert td_output["result", "added"] == 15
+        assert td_output["result", "substracted"] == 5
 
 
 @pytest.mark.skipif(not _has_onnx, reason="ONNX is not available")

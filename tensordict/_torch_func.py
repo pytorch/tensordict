@@ -33,32 +33,19 @@ from tensordict.utils import (
     is_non_tensor,
     is_tensorclass,
     lazy_legacy,
-    set_lazy_legacy,
 )
 from torch import Tensor
+from torch.compiler import is_compiling
 from torch.nn.parameter import (
     UninitializedBuffer,
     UninitializedParameter,
     UninitializedTensorMixin,
 )
-
-try:
-    from torch.compiler import is_compiling
-except ImportError:  # torch 2.0
-    from torch._dynamo import is_compiling
+from torch.utils._pytree import tree_leaves
 
 TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
 LAZY_TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
 T = TypeVar("T", bound="TensorDictBase")
-
-try:
-    from torch.utils._pytree import tree_leaves
-except ImportError:
-    from torch.utils._pytree import tree_flatten
-
-    def tree_leaves(pytree):
-        """Torch 2.0 compatible version of tree_leaves."""
-        return tree_flatten(pytree)[0]
 
 
 def implements_for_td(torch_function: Callable) -> Callable[[Callable], Callable]:
@@ -726,6 +713,14 @@ def _empty_lazystack_for_lazy_cat(
     )
 
 
+def _lazy_stack_result(list_of_tensordicts, dim, clz, is_tc):
+    """Return the lazy stack that torch.stack gives when it does not stack densely."""
+    out = LazyStackedTensorDict(*list_of_tensordicts, stack_dim=dim)
+    if is_tc and not is_tensorclass(out):
+        return clz._from_tensordict(out)
+    return out
+
+
 @implements_for_td(torch.stack)
 def _stack(
     list_of_tensordicts: Sequence[TensorDictBase],
@@ -800,12 +795,7 @@ def _stack(
             except KeyError:
                 if not _lazy_legacy and not contiguous:
                     if maybe_dense_stack:
-                        with set_lazy_legacy(True):
-                            return _stack(
-                                list_of_tensordicts_orig,
-                                dim=dim,
-                                maybe_dense_stack=maybe_dense_stack,
-                            )
+                        return _lazy_stack_result(list_of_tensordicts, dim, clz, is_tc)
                     else:
                         raise RuntimeError(
                             "The sets of keys in the tensordicts to stack are exclusive. "
@@ -877,12 +867,9 @@ def _stack(
                             ):
                                 # Nested tensors will require a lazy stack
                                 if maybe_dense_stack:
-                                    with set_lazy_legacy(True):
-                                        return _stack(
-                                            list_of_tensordicts_orig,
-                                            dim=dim,
-                                            maybe_dense_stack=maybe_dense_stack,
-                                        )
+                                    return _lazy_stack_result(
+                                        list_of_tensordicts, dim, clz, is_tc
+                                    )
                                 else:
                                     raise RuntimeError(
                                         f"The shapes of the tensors to stack is incompatible: {new_tensor_shape} vs {tensor_shape} for key {key}."
@@ -939,13 +926,7 @@ def _stack(
                 return clz._from_tensordict(result)
             return result
         else:
-            out = LazyStackedTensorDict(
-                *list_of_tensordicts,
-                stack_dim=dim,
-            )
-            if is_tc and not is_tensorclass(out):
-                return clz._from_tensordict(out)
-            return out
+            return _lazy_stack_result(list_of_tensordicts, dim, clz, is_tc)
     else:
         keys = _check_keys(list_of_tensordicts)
         batch_size = list(batch_size)

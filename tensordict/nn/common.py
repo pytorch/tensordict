@@ -25,6 +25,7 @@ from typing import (
 
 import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
+from functorch import FunctionalModule, FunctionalModuleWithBuffers
 from tensordict._td import TensorDict
 
 from tensordict.base import is_tensor_collection, NO_DEFAULT, TensorDictBase
@@ -37,25 +38,7 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch import nn, Tensor
-
-try:
-    from torch.compiler import is_compiling
-except ImportError:  # torch 2.0
-    from torch._dynamo import is_compiling
-
-try:
-    from functorch import FunctionalModule, FunctionalModuleWithBuffers
-
-    _has_functorch = True
-except ImportError:
-    _has_functorch = False
-
-    class FunctionalModule:
-        pass
-
-    class FunctionalModuleWithBuffers:
-        pass
-
+from torch.compiler import is_compiling
 
 __all__ = [
     "TensorDictModule",
@@ -137,7 +120,7 @@ class dispatch:
         >>> b = module(a=torch.zeros(1, 2))
         >>> assert (b == 1).all()
 
-    :func:`dispatch_kwargs` will also work with nested keys with the default
+    :func:`dispatch` will also work with nested keys with the default
     ``"_"`` separator.
 
     Examples:
@@ -215,8 +198,8 @@ class dispatch:
     def __new__(
         cls,
         separator=DEFAULT_SEPARATOR,
-        source=DEFAULT_SOURCE,
-        dest=DEFAULT_DEST,
+        source: str | Sequence[NestedKey] = DEFAULT_SOURCE,
+        dest: str | Sequence[NestedKey] = DEFAULT_DEST,
         auto_batch_size: bool = True,
     ):
         if callable(separator):
@@ -230,8 +213,8 @@ class dispatch:
     def __init__(
         self,
         separator=DEFAULT_SEPARATOR,
-        source=DEFAULT_SOURCE,
-        dest=DEFAULT_DEST,
+        source: str | Sequence[NestedKey] = DEFAULT_SOURCE,
+        dest: str | Sequence[NestedKey] = DEFAULT_DEST,
         auto_batch_size: bool = True,
     ):
         self.separator = separator
@@ -240,8 +223,10 @@ class dispatch:
         self.auto_batch_size = auto_batch_size
 
     def __call__(self, func: Callable) -> Callable:
-
-        is_method = inspect.ismethod(func) or (
+        # A bound method already carries its instance: string ``source`` and
+        # ``dest`` are read from it, and all positional arguments are inputs.
+        bound_self = func.__self__ if inspect.ismethod(func) else None
+        is_method = bound_self is None and (
             inspect.isfunction(func)
             and func.__code__.co_argcount > 0
             and func.__code__.co_varnames[0] == "self"
@@ -264,13 +249,13 @@ class dispatch:
 
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
+            if not _dispatch_td_nn_modules():
+                return func(*args, **kwargs)
             if is_method:
                 _self = args[0]
                 args = args[1:]
             else:
-                _self = None
-            if not _dispatch_td_nn_modules():
-                return func(_self, *args, **kwargs)
+                _self = bound_self
 
             source = self.source
             if isinstance(source, str):
@@ -315,7 +300,7 @@ class dispatch:
                     batch_size=batch_size,
                     auto_batch_size=self.auto_batch_size,
                 )
-                if _self is not None:
+                if is_method:
                     out = func(_self, tensordict, *args, **kwargs)
                 else:
                     out = func(tensordict, *args, **kwargs)
@@ -324,7 +309,7 @@ class dispatch:
                 out = tuple(out[key] for key in dest)
                 return out[0] if len(out) == 1 else out
 
-            if _self is not None:
+            if is_method:
                 return func(_self, tensordict, *args, **kwargs)
             return func(tensordict, *args, **kwargs)
 
@@ -507,7 +492,7 @@ class TensorDictModuleBase(nn.Module):
     writes tensordict (or related types) instances.
 
     The `in_keys` and `out_keys` should be properly specified. For example, `out_keys` can be dynamically reduced using
-    :meth:`~tensordict.nn.TensorDictBase.select_out_keys`.
+    :meth:`~tensordict.nn.TensorDictModuleBase.select_out_keys`.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -629,7 +614,7 @@ class TensorDictModuleBase(nn.Module):
         This feature will also work with dispatched arguments:
         Examples:
             >>> mod(torch.zeros(()), torch.ones(()))
-            tensor(2.)
+            tensor(3.)
 
         This change will occur in-place (ie the same module will be returned
         with an updated list of out_keys). It can be reverted using the
@@ -751,7 +736,7 @@ class TensorDictModuleBase(nn.Module):
             >>> net = nn.Sequential(nn.Linear(2,3), nn.ReLU())
             >>> old_param = net[0].weight.clone()
             >>> module = TensorDictModule(net, in_keys=['bork'], out_keys=['dork'])
-            >>> module.reset_parameters()
+            >>> module.reset_parameters_recursive()
             >>> (old_param == net[0].weight).any()
             tensor(False)
 
@@ -764,7 +749,7 @@ class TensorDictModuleBase(nn.Module):
             >>> module = TensorDictModule(net, in_keys=['bork'], out_keys=['dork'])
             >>> params = TensorDict.from_module(module)
             >>> old_params = params.clone(recurse=True)
-            >>> module.reset_parameters(params)
+            >>> _ = module.reset_parameters_recursive(params)
             >>> (old_params == params).any()
             False
         """
@@ -818,7 +803,7 @@ class TensorDictModuleBase(nn.Module):
 
 
 class TensorDictModule(TensorDictModuleBase):
-    """A TensorDictModule, is a python wrapper around a :obj:`nn.Module` that reads and writes to a TensorDict.
+    """A TensorDictModule, is a python wrapper around a :class:`torch.nn.Module` that reads and writes to a TensorDict.
 
     Args:
         module (Callable[[Any], Any]): a callable, typically a :class:`torch.nn.Module`,
@@ -872,9 +857,9 @@ class TensorDictModule(TensorDictModuleBase):
             Defaults to ``{}``.
 
     Embedding a neural network in a TensorDictModule only requires to specify the input
-    and output keys. TensorDictModule support functional and regular :obj:`nn.Module`
-    objects. In the functional case, the 'params' (and 'buffers') keyword argument must
-    be specified:
+    and output keys. TensorDictModule support functional and regular :class:`torch.nn.Module`
+    objects. In the functional case, parameters can be swapped in with
+    :meth:`~tensordict.TensorDictBase.to_module`:
 
     Examples:
         >>> from tensordict import TensorDict
@@ -949,7 +934,7 @@ class TensorDictModule(TensorDictModuleBase):
 
     Examples:
         >>> module = TensorDictModule(lambda x, *, y, z: x+y+z,
-        ...     in_keys={'x': '1', 'y': '2', z: '2'}, out_keys=['t'], out_to_in_map=True
+        ...     in_keys={'x': '1', 'y': '2', 'z': '2'}, out_keys=['t'], out_to_in_map=True
         ...     )
         >>> td = module(TensorDict({'1': torch.ones(()), '2': torch.ones(())*2}, []))
         >>> td['t']
@@ -1112,7 +1097,7 @@ class TensorDictModule(TensorDictModuleBase):
 
     @property
     def is_functional(self) -> bool:
-        return _has_functorch and isinstance(
+        return isinstance(
             self.module,
             (FunctionalModule, FunctionalModuleWithBuffers),
         )
@@ -1423,7 +1408,7 @@ class WrapModule(TensorDictModuleBase):
         ...     WrapModule(lambda td: td.reshape(-1)),
         ... )
         >>> td = TensorDict(x=torch.ones(3, 4, 5), batch_size=[3, 4])
-        >>> td = Seq(td)
+        >>> td = seq(td)
         >>> assert td.shape == (12,)
         >>> assert (td["y"] == 2).all()
         >>> assert td["y"].shape == (12, 5)
@@ -1459,9 +1444,9 @@ class WrapModule(TensorDictModuleBase):
 class as_tensordict_module:
     """A decorator that converts a function into a TensorDictModule.
 
-    Args:
-        in_keys (List[NestedKey] | NestedKey | None, optional): The input keys of the resulting TensorDictModule.
-        out_keys (List[NestedKey] | NestedKey | None, optional): The output keys of the resulting TensorDictModule.
+    Keyword Args:
+        in_keys (List[NestedKey] | NestedKey): The input keys of the resulting TensorDictModule.
+        out_keys (List[NestedKey] | NestedKey): The output keys of the resulting TensorDictModule.
 
     Returns:
         Callable: A decorator that can be applied to a function to convert it into a TensorDictModule.
@@ -1473,12 +1458,14 @@ class as_tensordict_module:
         ...         return c + 1
         >>> obj = MyClass()
         >>> result = obj.my_method(TensorDict(c=0))
-        >>> print(result["d"])  # prints: 1
+        >>> print(result["d"])
+        tensor(1)
         >>> @as_tensordict_module(in_keys="c", out_keys="d")
         ... def my_function(c):
         ...     return c + 1
         >>> result = my_function(TensorDict(c=0))
-        >>> print(result["d"])  # prints: 1
+        >>> print(result["d"])
+        tensor(1)
     """
 
     def __init__(

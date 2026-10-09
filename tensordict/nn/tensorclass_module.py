@@ -24,11 +24,14 @@ def _tensor_class_keys(tensorclass_type: type[TensorClass]) -> list[tuple[str, .
 
     """
     fields = cast("Iterable[Field[Any]]", tensorclass_type.fields())
+    # field.type is a string under postponed annotations: use the resolved hints
+    type_hints = getattr(tensorclass_type, "_type_hints", None) or {}
     keys: list[tuple[str, ...]] = []
     for field in fields:
         key = field.name
-        if issubclass(field.type, TensorClass):
-            subkeys = _tensor_class_keys(cast(type[TensorClass], field.type))
+        field_type = type_hints.get(key, field.type)
+        if isinstance(field_type, type) and issubclass(field_type, TensorClass):
+            subkeys = _tensor_class_keys(cast(type[TensorClass], field_type))
             for subkey in subkeys:
                 keys.append((key,) + subkey)
         else:

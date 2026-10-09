@@ -17,17 +17,26 @@ concurrency:
 jobs:
   benchmark:
     name: ${{ matrix.device }} Pytest benchmark
-    runs-on: linux.g5.4xlarge.nvidia.gpu
+    # The CPU benchmarks run on a runner without a GPU: they measure the CPU
+    # only, and the GPU runner stays free for the GPU benchmarks.
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
-        device: [CPU, GPU]
-        python-version: ['3.12']
+        include:
+          - device: CPU
+            runner: mt-l-x86iavx512-48-384
+            container-options: ""
+            python-version: '3.12'
+          - device: GPU
+            runner: mt-l-x86aavx2-11-41-a10g
+            container-options: --gpus all
+            python-version: '3.12'
     defaults:
       run:
         shell: bash -l {0}
     container:
       image: nvidia/cuda:12.8.0-runtime-ubuntu22.04
-      options: --gpus all
+      options: ${{ matrix.container-options }}
     steps:
       - name: Who triggered this?
         run: |
@@ -39,7 +48,7 @@ jobs:
           apt-get update -y
           apt-get update -y
           apt-get upgrade -y
-          apt-get -y install gcc curl g++ unzip wget sudo git cmake
+          apt-get -y install gcc curl g++ unzip wget sudo git
       - name: Check ldd --version
         run: ldd --version
       - name: Checkout
@@ -69,13 +78,12 @@ jobs:
           echo "=== uv version ==="
           uv --version
           uv pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128
-          uv pip install "pybind11[global]" "setuptools" "wheel" "ninja"
-          uv pip install pytest pytest-benchmark "zarr>=3.0"
+          uv pip install "setuptools" "wheel"
+          uv pip install pytest pytest-benchmark "zarr>=3.0" h5py
           # Do not resolve runtime dependencies here: we want to keep the PyTorch build (nightly)
           # that was explicitly installed above, and avoid any solver replacing it.
           uv pip install -e . --no-deps
           uv run --active python -c "import torch; print(torch.__version__)"
-          ${{ matrix.device == 'CPU' && 'export CUDA_VISIBLE_DEVICES=' || '' }}
       - name: check GPU presence
         if: matrix.device == 'GPU'
         run: |

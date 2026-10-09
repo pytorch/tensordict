@@ -3,34 +3,9 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Internal implementation modules for :mod:`tensordict.base`."""
+"""Internal implementation modules for :mod:`tensordict.base`.
 
-from tensordict._base.factories import (
-    from_any,
-    from_csv,
-    from_dict,
-    from_h5,
-    from_json,
-    from_list,
-    from_namedtuple,
-    from_pandas,
-    from_parquet,
-    from_struct_array,
-    from_tuple,
-    from_zarr,
-)
-
-__all__ = [
-    "from_any",
-    "from_csv",
-    "from_dict",
-    "from_h5",
-    "from_json",
-    "from_list",
-    "from_namedtuple",
-    "from_pandas",
-    "from_parquet",
-    "from_struct_array",
-    "from_tuple",
-    "from_zarr",
-]
+``tensordict.base`` imports the mixin modules of this package before it defines
+``TensorDictBase``. Importing the package must therefore not import a module
+that needs the class, such as :mod:`tensordict._base.factories`.
+"""

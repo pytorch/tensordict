@@ -10,16 +10,14 @@ dependencies:
     - cloudpickle
     - pytest
     - pytest-benchmark
-    - pytest-cov
     - pytest-mock
     - pytest-instafail
     - pytest-rerunfailures
     - pytest-timeout
+    - pytest-xdist
     - expecttest
-    - coverage
     - h5py
     - orjson
-    - ninja
     - numpy<2.0.0
     - mosaicml-streaming
     - mypy
