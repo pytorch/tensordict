@@ -2246,12 +2246,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """
         if item is self:
             raise ValueError(_SELF_NESTING_ERROR.format(key))
-        key = _unravel_key_to_tuple(key)
+        key_tuple = _unravel_key_to_tuple(key)
+        if not key_tuple:
+            raise KeyError(_GENERIC_NESTED_ERR.format(key))
         # inplace is loose here, but for set_ it is constraining. We translate it
         # to None to tell _set_str and others to drop it if the key isn't found
         inplace = BEST_ATTEMPT_INPLACE if inplace else False
         return self._set_tuple(
-            key, item, inplace=inplace, validated=False, non_blocking=non_blocking
+            key_tuple, item, inplace=inplace, validated=False, non_blocking=non_blocking
         )
 
     @abc.abstractmethod
@@ -2522,9 +2524,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> assert (x == 0).all()
 
         """
-        key = _unravel_key_to_tuple(key)
+        key_tuple = _unravel_key_to_tuple(key)
+        if not key_tuple:
+            raise KeyError(_GENERIC_NESTED_ERR.format(key))
         return self._set_tuple(
-            key, item, inplace=True, validated=False, non_blocking=non_blocking
+            key_tuple, item, inplace=True, validated=False, non_blocking=non_blocking
         )
 
     # Stack functionality
@@ -2600,8 +2604,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> td.get("y")
             None
         """
-        key = _unravel_key_to_tuple(key)
-        if not key:
+        key_tuple = _unravel_key_to_tuple(key)
+        if not key_tuple:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
         # Find what the default is
         if args:
@@ -2618,7 +2622,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             default = None
         else:
             default = NO_DEFAULT
-        return self._get_tuple(key, default=default, **kwargs)
+        return self._get_tuple(key_tuple, default=default, **kwargs)
 
     @abc.abstractmethod
     def _get_str(self, key, default, **kwargs):
@@ -2675,8 +2679,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         """
         # TODO: check that this works with masks, and add to docstring
-        key = _unravel_key_to_tuple(key)
-        if not key:
+        key_tuple = _unravel_key_to_tuple(key)
+        if not key_tuple:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
 
         try:
@@ -2700,7 +2704,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         else:
             default = NO_DEFAULT
 
-        return self._get_at_tuple(key, index, default, **kwargs)
+        return self._get_at_tuple(key_tuple, index, default, **kwargs)
 
     def _get_at_str(self, key, idx, default, **kwargs):
         out = self._get_str(key, default, **kwargs)
@@ -2883,8 +2887,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self.update(input_dict_or_td, update_batch_size=True)
             return self
 
-        for key, value in input_dict_or_td.items():
-            key = _unravel_key_to_tuple(key)
+        for input_key, value in input_dict_or_td.items():
+            key = _unravel_key_to_tuple(input_key)
+            if not key:
+                raise KeyError(_GENERIC_NESTED_ERR.format(input_key))
             firstkey, subkey = key[0], key[1:]
             if keys_to_update and not any(
                 firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
@@ -3793,21 +3799,21 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> none = td.pop("1", default=None)
             >>> assert none is None
         """
-        key = _unravel_key_to_tuple(key)
-        if not key:
+        key_tuple = _unravel_key_to_tuple(key)
+        if not key_tuple:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
         # Use _UNSET sentinel to detect if key exists without try/except (compile-friendly)
-        out = self.get(key, _UNSET)
+        out = self.get(key_tuple, _UNSET)
         if out is _UNSET:
             # Key not found
             if default is NO_DEFAULT:
                 raise KeyError(
-                    f"You are trying to pop key `{key}` which is not in dict "
+                    f"You are trying to pop key `{key_tuple}` which is not in dict "
                     f"without providing default value. "
-                    f"Keys={self.keys(include_nested=isinstance(key, tuple))}."
+                    f"Keys={self.keys(include_nested=isinstance(key_tuple, tuple))}."
                 )
             return default
-        self.del_(key)
+        self.del_(key_tuple)
         return out
 
     @property
