@@ -1535,6 +1535,40 @@ class TestLazyStackedTensorDict:
         assert "random_string" not in lstd
         assert "a" in lstd
 
+    @pytest.mark.parametrize("include_nested", [False, True])
+    @pytest.mark.parametrize(
+        "is_leaf", [None, lambda cls: True], ids=["default", "all_leaves"]
+    )
+    def test_lazy_stacked_contains_leaves_only(self, include_nested, is_leaf):
+        class MC(TensorClass):
+            x: torch.Tensor
+
+        td = TensorDict(
+            a=torch.zeros(3),
+            nested=TensorDict(
+                b=torch.zeros(3),
+                sub=TensorDict(c=torch.zeros(3), batch_size=[3]),
+                s="a string",
+                batch_size=[3],
+            ),
+            tc=MC(x=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        lstd = lazy_stack([td, td.clone()])
+        keys = lstd.keys(include_nested, leaves_only=True, is_leaf=is_leaf)
+        listed = list(keys)
+        for key in [
+            *lstd.keys(include_nested=True),
+            ("a", "x"),
+            ("nested", "x"),
+            ("nested", "s", "data"),
+        ]:
+            assert (key in keys) == (key in listed), key
+        if include_nested and is_leaf is None:
+            assert ("nested", "b") in keys
+            assert ("nested", "sub", "c") in keys
+            assert ("nested", "sub") not in keys
+
     def test_lazy_stack_keys_tc(self):
         class MC(TensorClass):
             a: torch.Tensor

@@ -145,7 +145,23 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
         item = _unravel_key_to_tuple(item)
         if item[0] in self.tensordict._iterate_over_keys():
             if self.leaves_only:
-                return not _is_tensor_collection(self.tensordict.entry_class(item[0]))
+                if len(item) == 1:
+                    return self.is_leaf(self.tensordict.entry_class(item[0]))
+                # keys(include_nested=False) has no nested key
+                if not self.include_nested:
+                    return False
+                # As in iteration: every member has the key, its path does not
+                # go through a tensor or non-tensor data, and is_leaf tests the
+                # class of the full key
+                for tensordict in self.tensordict.tensordicts:
+                    sub = tensordict
+                    for key in item[:-1]:
+                        sub = sub._get_str(key, None)
+                        if not _is_tensor_collection(type(sub)) or is_non_tensor(sub):
+                            return False
+                    if item[-1] not in sub.keys():
+                        return False
+                return self.is_leaf(self.tensordict.entry_class(item))
             has_first_key = True
         else:
             has_first_key = False
