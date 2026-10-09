@@ -1876,6 +1876,14 @@ class TestGeneric:
         ).is_empty()
         assert not TensorDict({"a": {"b": {}, "c": 1}}, []).is_empty()
 
+    @pytest.mark.parametrize("device", [None, "cpu", "meta"])
+    def test_is_meta(self, device):
+        td = TensorDict({"a": torch.zeros(3), ("b", "c"): torch.zeros(3)}, [3])
+        if device is not None:
+            td = td.to(device)
+        assert td.is_meta is (device == "meta")
+        assert td["b"].is_meta is (device == "meta")
+
     def test_is_in(self):
         td = TensorDict.fromkeys({"a", "b", "c", ("d", "e")}, 0)
         assert "a" in td
