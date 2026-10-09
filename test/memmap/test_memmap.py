@@ -749,6 +749,9 @@ class TestNestedTensor:
         assert tensor.is_nested
         assert tensor.dtype == torch.get_default_dtype()
         assert (tensor._nested_tensor_size() == self.shape).all()
+        if fn != "empty":
+            expected = 0 if fn == "zeros" else 1
+            assert all((t == expected).all() for t in tensor.unbind(0))
 
     @pytest.mark.parametrize("with_filename", [False, True])
     def test_from_storage(self, with_filename, tmpdir):
