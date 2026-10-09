@@ -6,12 +6,12 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Callable, Iterable
+from typing import Any, Callable
 
 import torch
 import torch.utils._pytree
+from tensordict._deprecation import deprecated
 from tensordict._pytree import PYTREE_REGISTERED_LAZY_TDS, PYTREE_REGISTERED_TDS
-from tensordict._td import TensorDict
 from tensordict.base import is_tensor_collection
 from tensordict.utils import _is_unbatched, _strtobool
 from torch import nn
@@ -32,8 +32,13 @@ def _register_params(self, name, param):
     self._parameters[name] = param
 
 
+@deprecated("tensordict.nn.functional_modules.set_tensor()", removal="0.17")
 def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> None:
-    """Simplified version of torch.nn.utils._named_member_accessor."""
+    """Simplified version of torch.nn.utils._named_member_accessor.
+
+    .. deprecated:: 0.15
+        This function will be removed in TensorDict 0.17. It has no replacement.
+    """
     if name in module._parameters:
         del module._parameters[name]  # type: ignore[assignment]
     was_buffer = name in module._buffers
@@ -49,8 +54,13 @@ def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> No
         module.__dict__[name] = tensor
 
 
+@deprecated("tensordict.nn.functional_modules.set_tensor_dict()", removal="0.17")
 def set_tensor_dict(module_dict, module, name: str, tensor: torch.Tensor) -> None:
-    """Simplified version of torch.nn.utils._named_member_accessor."""
+    """Simplified version of torch.nn.utils._named_member_accessor.
+
+    .. deprecated:: 0.15
+        This function will be removed in TensorDict 0.17. It has no replacement.
+    """
     if name in module_dict["_parameters"]:
         del module_dict["_parameters"][name]  # type: ignore[assignment]
     was_buffer = name in module_dict["_buffers"]
@@ -323,36 +333,6 @@ of dimensionality {_vmap_dim(arg)} so expected in_dim to satisfy
         return tree_unflatten(flat_outputs, output_spec)
 
     vmap_src._unwrap_batched = _unwrap_batched
-
-
-def extract_weights_and_buffers(
-    model: nn.Module,
-) -> TensorDict:  # noqa
-    raise RuntimeError("extract_weights_and_buffers has been removed from tensordict.")
-
-
-def is_functional(module: nn.Module):  # noqa
-    raise RuntimeError("is_functional has been removed from tensordict.")
-
-
-def make_functional(
-    module: nn.Module,
-    funs_to_decorate: Iterable[str] | None = None,
-    keep_params: bool = False,
-    return_params: bool = True,
-) -> TensorDict:  # noqa
-    raise RuntimeError("make_functional has been removed from tensordict.")
-
-
-def get_functional(
-    module: nn.Module,
-    funs_to_decorate: Iterable[str] | None = None,
-) -> nn.Module:  # noqa
-    raise RuntimeError("get_functional has been removed from tensordict.")
-
-
-def repopulate_module(model: nn.Module, tensordict: TensorDict) -> nn.Module:  # noqa
-    raise RuntimeError("repopulate_module has been removed from tensordict.")
 
 
 if _strtobool(os.environ.get("EXCLUDE_TD_FROM_PYTREE", "0")):

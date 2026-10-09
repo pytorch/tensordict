@@ -1883,15 +1883,6 @@ def _clone_value(value, recurse: bool):
         return value
 
 
-def _renamed_inplace_method(fn):
-    def wrapper(*args, **kwargs):
-        raise RuntimeError(
-            f"{fn.__name__.rstrip('_')} has been removed, use {fn.__name__} instead"
-        )
-
-    return wrapper
-
-
 def _get_shape_from_args(*args, kwarg_name="size", **kwargs):
     if not args and not kwargs:
         return ()

@@ -1167,29 +1167,61 @@ class TensorDict(TensorDictBase):
         )
 
     def _rename_subtds(self, names):
-        if names is None:
-            for item in self._tensordict.values():
-                if _is_tensor_collection(type(item)):
-                    item._erase_names()
+        """Propagates names to nested tensordicts.
+
+        A child may have more batch dims than self. Only the first
+        self.batch_dims are shared, so names beyond that are the child's own
+        and are left alone. ``names=None`` clears the shared dims.
+
+        Every new name list is computed before any is set, so a clash
+        anywhere in the tree leaves all names unchanged.
+        """
+        if not self._batch_size or not self._tensordict:
+            # no dim is shared, or no child to rename
             return
-        for item in self._tensordict.values():
+        renames = []
+        self._collect_subtd_names(names, (), renames)
+        for item, td_names in renames:
             if isinstance(item, TensorDict):
                 # For TensorDict items, we can directly set _td_dim_names
-                item_names = item._td_dim_names
-                if item_names is None:
-                    # Extend names with None for the remaining dimensions
-                    td_names = list(names) + [None] * (item.batch_dims - len(names))
-                else:
-                    td_names = list(names) + list(item_names)[len(names) :]
                 item._td_dim_names = td_names
-                # Recursively rename nested tensor collections
-                item._rename_subtds(td_names)
-            elif _is_tensor_collection(type(item)):
+            else:
                 # For other tensor collections (tensorclasses, NonTensorData, etc.),
                 # use the public API which handles the renaming correctly
-                item_names = item.names
-                td_names = list(names) + item_names[len(names) :]
                 item.rename_(*td_names)
+
+    def _collect_subtd_names(self, names, prefix, renames):
+        if names is None:
+            names = [None] * self.batch_dims
+        for key, item in self._tensordict.items():
+            is_td = isinstance(item, TensorDict)
+            if is_td:
+                item_names = item._td_dim_names
+            elif _is_tensor_collection(type(item)):
+                item_names = item.names
+            else:
+                continue
+            if item_names is None:
+                # Extend names with None for the remaining dimensions
+                td_names = list(names) + [None] * (item.batch_dims - len(names))
+            else:
+                td_names = list(names) + list(item_names)[len(names) :]
+                # the shared prefix must not reuse a name the child owns,
+                # mirroring the uniqueness check of _set_names
+                named = [name for name in td_names if name is not None]
+                if len(set(named)) != len(named):
+                    raise ValueError(
+                        f"Some dimension names are non-unique: {td_names} "
+                        f"for the nested tensordict at key {prefix + (key,)}."
+                    )
+            if is_td:
+                if all(name is None for name in td_names):
+                    td_names = None
+                renames.append((item, td_names))
+                # Recursively collect the names of nested tensor collections
+                item._collect_subtd_names(td_names, prefix + (key,), renames)
+            else:
+                renames.append((item, td_names))
 
     @property
     def device(self) -> torch.device | None:

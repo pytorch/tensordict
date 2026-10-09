@@ -12,16 +12,17 @@ from numbers import Number
 from typing import Sequence
 
 import torch
+from tensordict._deprecation import deprecated_attributes
 from torch.distributions import constraints, Distribution
 from torch.distributions.utils import broadcast_all
 
 __all__ = ["TruncatedNormal", "TruncatedStandardNormal"]
 
-CONST_SQRT_2 = math.sqrt(2)
-CONST_INV_SQRT_2PI = 1 / math.sqrt(2 * math.pi)
-CONST_INV_SQRT_2 = 1 / math.sqrt(2)
-CONST_LOG_INV_SQRT_2PI = math.log(CONST_INV_SQRT_2PI)
-CONST_LOG_SQRT_2PI_E = 0.5 * math.log(2 * math.pi * math.e)
+_CONST_SQRT_2 = math.sqrt(2)
+_CONST_INV_SQRT_2PI = 1 / math.sqrt(2 * math.pi)
+_CONST_INV_SQRT_2 = 1 / math.sqrt(2)
+_CONST_LOG_INV_SQRT_2PI = math.log(_CONST_INV_SQRT_2PI)
+_CONST_LOG_SQRT_2PI_E = 0.5 * math.log(2 * math.pi * math.e)
 
 
 class TruncatedStandardNormal(Distribution):
@@ -75,7 +76,9 @@ class TruncatedStandardNormal(Distribution):
             - self._lpbb_m_lpaa_d_Z
             - ((self._little_phi_b - self._little_phi_a) / self._Z) ** 2
         )
-        self._entropy = CONST_LOG_SQRT_2PI_E + self._log_Z - 0.5 * self._lpbb_m_lpaa_d_Z
+        self._entropy = (
+            _CONST_LOG_SQRT_2PI_E + self._log_Z - 0.5 * self._lpbb_m_lpaa_d_Z
+        )
 
     @constraints.dependent_property
     def support(self) -> constraints.Constraints:
@@ -99,15 +102,15 @@ class TruncatedStandardNormal(Distribution):
 
     @staticmethod
     def _little_phi(x: torch.Tensor) -> torch.Tensor:
-        return (-(x**2) * 0.5).exp() * CONST_INV_SQRT_2PI
+        return (-(x**2) * 0.5).exp() * _CONST_INV_SQRT_2PI
 
     def _big_phi(self, x: torch.Tensor) -> torch.Tensor:
-        phi = 0.5 * (1 + (x * CONST_INV_SQRT_2).erf())
+        phi = 0.5 * (1 + (x * _CONST_INV_SQRT_2).erf())
         return phi.clamp(self.eps, 1 - self.eps)
 
     @staticmethod
     def _inv_big_phi(x: torch.Tensor) -> torch.Tensor:
-        return CONST_SQRT_2 * (2 * x - 1).erfinv()
+        return _CONST_SQRT_2 * (2 * x - 1).erfinv()
 
     def cdf(self, value: torch.Tensor) -> torch.Tensor:
         if self._validate_args:
@@ -122,7 +125,7 @@ class TruncatedStandardNormal(Distribution):
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         if self._validate_args:
             self._validate_sample(value)
-        return CONST_LOG_INV_SQRT_2PI - self._log_Z - (value**2) * 0.5
+        return _CONST_LOG_INV_SQRT_2PI - self._log_Z - (value**2) * 0.5
 
     def rsample(
         self,
@@ -190,3 +193,16 @@ class TruncatedNormal(TruncatedStandardNormal):
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         value = self._to_std_rv(value)
         return super().log_prob(value) - self._log_scale
+
+
+__getattr__ = deprecated_attributes(
+    __name__,
+    {
+        "CONST_SQRT_2": (_CONST_SQRT_2, None),
+        "CONST_INV_SQRT_2PI": (_CONST_INV_SQRT_2PI, None),
+        "CONST_INV_SQRT_2": (_CONST_INV_SQRT_2, None),
+        "CONST_LOG_INV_SQRT_2PI": (_CONST_LOG_INV_SQRT_2PI, None),
+        "CONST_LOG_SQRT_2PI_E": (_CONST_LOG_SQRT_2PI_E, None),
+    },
+    removal="0.17",
+)

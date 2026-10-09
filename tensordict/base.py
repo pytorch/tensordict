@@ -1812,9 +1812,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     @abc.abstractmethod
     def _rename_subtds(self, value):
-        """Renames all the sub-tensordicts dimension according to value.
+        """Gives the sub-tensordicts the names in value for the dims they share with self.
 
-        If value has less dimensions than the TD, the rest is just assumed to be None.
+        The dims a sub-tensordict has beyond ``self.batch_dims`` keep their
+        names. ``value=None`` clears the names of the shared dims.
         """
         raise NotImplementedError
 
@@ -5575,7 +5576,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     value = value.clone(False).refine_names(*self.names)
             else:
                 if value._has_names():
-                    self._set_names(value.names[: self.batch_dims])
+                    names = value.names[: self.batch_dims]
+                    # an all-None prefix would re-walk every child for nothing
+                    if any(name is not None for name in names):
+                        self._set_names(names)
         return value
 
     def _validate_value_batchfree(
@@ -5672,7 +5676,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     )
             else:
                 if value._has_names():
-                    self._set_names(value.names[: self.batch_dims])
+                    names = value.names[: self.batch_dims]
+                    # an all-None prefix would re-walk every child for nothing
+                    if any(name is not None for name in names):
+                        self._set_names(names)
         return value
 
     def _validate_value_batchfree_devicefree(
@@ -7039,7 +7046,6 @@ from tensordict._base.factories import (  # noqa: F401
     from_dict,
     from_h5,
     from_json,
-    from_list,
     from_namedtuple,
     from_pandas,
     from_parquet,
