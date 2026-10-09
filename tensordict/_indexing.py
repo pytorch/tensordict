@@ -23,6 +23,7 @@ Torch reads the elements of an index from the first dim on:
   block takes the place of the first advanced index, unless a slice or
   ``None`` separates two advanced indices, in which case it goes first.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -242,6 +243,7 @@ def _getitem_batch_size(batch_size, index):
 
     This function is aimed to be used when indexing is an
     expensive operation.
+
     Args:
         shape (torch.Size): Input shape
         items (index): Index of the hypothetical tensor

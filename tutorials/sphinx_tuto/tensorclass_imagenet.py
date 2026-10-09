@@ -381,9 +381,10 @@ if __name__ == "__main__":
             t0 = time.time()
         if i >= 3:
             total += batch.shape[0]
-        image, target = batch.images.contiguous().to(
-            device
-        ), batch.targets.contiguous().to(device)
+        image, target = (
+            batch.images.contiguous().to(device),
+            batch.targets.contiguous().to(device),
+        )
     t = time.time() - t0
     print(
         f"One iteration over tensorclass val data done! Rate: {total / t:4.4f} fps, time: {t: 4.4f}s"

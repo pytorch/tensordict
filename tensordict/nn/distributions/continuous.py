@@ -9,9 +9,7 @@ from numbers import Number
 from typing import Sequence
 
 import numpy as np
-
 import torch
-
 from tensordict.nn.utils import mappings
 from torch import distributions as D, nn
 
@@ -170,7 +168,7 @@ class AddStateIndependentNormalScale(torch.nn.Module):
         """
         if self.scale_shape != loc.shape[-len(self.scale_shape) :]:
             raise RuntimeError(
-                f"Last dimensions of loc ({loc.shape[-len(self.scale_shape):]}) do not match the number of dimensions "
+                f"Last dimensions of loc ({loc.shape[-len(self.scale_shape) :]}) do not match the number of dimensions "
                 f"in scale ({self.state_independent_scale.shape})"
             )
 

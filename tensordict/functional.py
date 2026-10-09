@@ -8,7 +8,6 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, Mapping, Sequence
 
 import torch
-
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
 from tensordict.base import (
@@ -621,7 +620,7 @@ def merge_tensordicts(
     """
     if len(tensordicts) < 2:
         raise RuntimeError(
-            f"at least 2 tensordicts must be provided, got" f" {len(tensordicts)}"
+            f"at least 2 tensordicts must be provided, got {len(tensordicts)}"
         )
 
     out = tensordicts[0].empty(recurse=True)

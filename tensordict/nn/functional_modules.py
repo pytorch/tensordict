@@ -11,9 +11,7 @@ from typing import Any, Callable
 import torch
 import torch.utils._pytree
 from tensordict._pytree import PYTREE_REGISTERED_LAZY_TDS, PYTREE_REGISTERED_TDS
-
 from tensordict.base import is_tensor_collection
-
 from tensordict.utils import _is_unbatched, strtobool
 from torch import nn
 from torch.nn.modules.module import _global_parameter_registration_hooks
