@@ -3856,11 +3856,23 @@ class TestShadow:
 
     @pytest.mark.parametrize(
         "name",
-        ["from_tensordict", "extend", "_tensordict", "_non_tensordict", "_type_hints"],
+        [
+            "from_tensordict",
+            "extend",
+            "_tensordict",
+            "_non_tensordict",
+            "_type_hints",
+            "_set_dict_warn_msg",
+            "_get_non_tensor",
+            "_send",
+            "_transform_keys",
+        ],
     )
     @pytest.mark.parametrize("subclass", [False, True])
     def test_no_shadow_tensorclass_member_name(self, name, subclass):
-        # These members exist on tensorclasses but not on TensorDict.
+        # The first six exist on tensorclasses but not on TensorDict. The others
+        # are private TensorDict methods that TensorDict code calls on nested
+        # tensor collections, which a tensorclass forwards to its TensorDict.
         annotations = {name: torch.Tensor, "other": torch.Tensor}
         with pytest.raises(
             AttributeError,
@@ -3873,8 +3885,9 @@ class TestShadow:
 
     @pytest.mark.parametrize("tensor_only", [False, True])
     def test_private_tensordict_name_as_field(self, tensor_only):
-        # "_cache" is a private TensorDict attribute that tensorclasses do not
-        # have, so it is a valid field name.
+        # "_cache" is a private TensorDict attribute that only the cache decorator
+        # of TensorDict methods reads, on the TensorDict, so it is a valid field
+        # name.
         @tensorclass(tensor_only=tensor_only)
         class MyClass:
             x: torch.Tensor

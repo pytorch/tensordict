@@ -998,53 +998,39 @@ def _own_annotation_names(cls: type) -> list[str]:
 
 
 # The names of the members of a tensorclass and of the attributes that hold its
-# state. A tensorclass has the public members of TensorDict, the members of the
-# lists above and the ones that _tensorclass installs. The other private
-# TensorDict names (e.g. "_cache") are not in the set, except the few that
-# TensorDict code reads from a tensorclass.
-_TENSORCLASS_MEMBER_NAMES = frozenset(
-    name
-    for name in dir(TensorDict)
-    if not name.startswith("_") or name.startswith("__")
-).union(
-    _METHOD_FROM_TD,
-    _FALLBACK_METHOD_FROM_TD,
-    _FALLBACK_METHOD_FROM_TD_FORCE,
-    _FALLBACK_METHOD_FROM_TD_NOWRAP,
-    _FALLBACK_METHOD_FROM_TD_COPY,
+# state. A tensorclass has or forwards to its TensorDict every TensorDict
+# attribute, and library code calls private TensorDict methods on nested tensor
+# collections (e.g. _get_non_tensor, _send, _transform_keys), so the names of
+# TensorDict are in the set, except the two below. The tuple holds the names
+# that only tensorclasses have.
+_TENSORCLASS_MEMBER_NAMES = frozenset(dir(TensorDict)).union(
     (
+        "extend",
         "fields",
         "from_tensordict",
-        "_abc_impl",
         "_autocast",
-        "_from_dict_validated",
-        "_from_module",
         "_from_tensordict",
         "_frozen",
         "_is_tensorclass",
-        "_load_memmap",
-        "_memmap_",
-        "_new_unsafe",
         "_nocast",
-        "_set_at_str",
-        "_set_str",
+        "_set_dict_warn_msg",
         "_shadow",
         "_tensor_only",
         "_tensordict_fields",
         "_type_hints",
-        "_unbind",
         # instance attributes
         "_is_initialized",
         "_non_tensordict",
         "_tensordict",
-        # TensorDict attributes read from a tensorclass (by __enter__, the
-        # memmap methods and NonTensorData)
-        "_is_memmap",
-        "_is_shared",
+        # a TensorDict attribute that TensorDict.__enter__ reads from a tensorclass
         "_last_op_queue",
-        "_memmap_prefix",
-    ),
-)
+    )
+) - {
+    # a field of NonTensorData
+    "_is_non_tensor",
+    # read only by the cache decorator of TensorDict methods, on the TensorDict
+    "_cache",
+}
 
 
 def _is_reserved_field_name(name: str) -> bool:
