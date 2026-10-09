@@ -48,7 +48,6 @@ or ``cat``.
     from_tuple
     from_zarr
     fromkeys
-    is_batchedtensor
     is_leaf_nontensor
     is_memmap_archive
     lazy_stack
@@ -356,7 +355,6 @@ Utils
     utils.remove_duplicates
     capture_non_tensor_stack
     dense_stack_tds
-    is_batchedtensor
     is_tensor_collection
     lazy_legacy
     make_tensordict
