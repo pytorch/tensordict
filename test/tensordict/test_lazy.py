@@ -1137,6 +1137,37 @@ class TestLazyStackedTensorDict:
             dense.update_at_(value, index)
         assert (lazy.to_tensordict() == dense).all()
 
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2])
+    @pytest.mark.parametrize(
+        "index", [(..., 0), (0, ..., 1), (..., [1, 0]), (..., None)]
+    )
+    @pytest.mark.parametrize("op", ["set_at_", "set_at_ scalar", "update_at_"])
+    def test_lazy_set_at_ellipsis(self, stack_dim, index, op):
+        # set_at_ reads the index on the entry, as torch does: the Ellipsis
+        # also covers the dims of the entry after the batch dims
+        dense = TensorDict(
+            {
+                "b": torch.arange(48.0).view(3, 4, 2, 2),
+                "nested": {"c": torch.arange(48).view(3, 4, 2, 2)},
+            },
+            [3, 4, 2],
+        )
+        lazy = LazyStackedTensorDict.lazy_stack(
+            dense.clone().unbind(stack_dim), stack_dim
+        )
+        if op == "set_at_":
+            value = -1 - dense["b"][index]
+            lazy.set_at_("b", value, index)
+            dense.set_at_("b", value, index)
+        elif op == "set_at_ scalar":
+            lazy.set_at_(("nested", "c"), -7.5, index)
+            dense.set_at_(("nested", "c"), -7.5, index)
+        else:
+            value = TensorDict({"b": -1 - dense["b"][index]})
+            lazy.update_at_(value, index)
+            dense.update_at_(value, index)
+        assert (lazy.to_tensordict() == dense).all()
+
     def test_lazy_setitem_scalar_unbatched(self):
         # each member writes a scalar as it is, also into an entry that the
         # batch dims don't index
