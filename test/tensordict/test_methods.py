@@ -1486,6 +1486,15 @@ class TestTensorDicts(TestTensorDictsBase):
 
         assert (td == constructed_td2).all()
 
+    def test_iter(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        items = list(td)
+        assert len(items) == td.shape[0]
+        for i, item in enumerate(items):
+            assert (item == td[i]).all()
+        # A batch dimension of length 0 gives an empty iteration, not an error
+        assert list(td[:0]) == []
+
     def test_lock(self, td_name, device):
         td = getattr(self, td_name)(device)
         is_locked = td.is_locked
