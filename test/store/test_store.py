@@ -60,6 +60,15 @@ def store_kwargs(backend):
     return {"backend": name, "port": port, "db": 15}
 
 
+def _stored_batch_size(store, store_kwargs):
+    """Read the batch size of ``store`` from the server, with a new handle."""
+    reader = TensorDictStore.from_store(td_id=store._td_id, **store_kwargs)
+    try:
+        return reader.batch_size
+    finally:
+        reader.close()
+
+
 @pytest.mark.parametrize(
     "cls,what",
     [
@@ -158,6 +167,53 @@ class TestTensorDictStore:
     def test_batch_size(self, store_td):
         """Verify batch_size is correctly stored and accessible."""
         assert store_td.batch_size == torch.Size([10])
+
+    def test_batch_size_setter(self, store_td, store_kwargs):
+        """Setting batch_size checks the entries and persists the new size."""
+        store_td["obs"] = torch.zeros(10, 3)
+        store_td["nested", "x"] = torch.zeros(10, 3, 2)
+        store_td["text"] = "hello"
+
+        store_td.batch_size = [10, 3]
+        assert store_td.batch_size == torch.Size([10, 3])
+        assert _stored_batch_size(store_td, store_kwargs) == torch.Size([10, 3])
+        with pytest.raises(RuntimeError, match="incompatible with the batch-size"):
+            store_td.batch_size = [10, 2]
+        assert store_td.batch_size == torch.Size([10, 3])
+        assert _stored_batch_size(store_td, store_kwargs) == torch.Size([10, 3])
+        # the batch size of a nested view is not stored
+        store_td["nested"].batch_size = [10, 3, 2]
+        assert store_td["nested"].batch_size == torch.Size([10, 3, 2])
+        assert store_td.batch_size == torch.Size([10, 3])
+        assert _stored_batch_size(store_td, store_kwargs) == torch.Size([10, 3])
+
+    def test_batch_size_setter_copy(self, store_td, store_kwargs):
+        """A shallow copy of the store, such as the one a tensordict holds when
+        the store goes in with another batch size, sets its batch size in
+        memory only."""
+        store_td["obs"] = torch.zeros(10, 3, 2)
+        td = TensorDict({"s": store_td}, batch_size=[10, 3])
+        assert td["s"].batch_size == torch.Size([10, 3])
+        assert store_td.batch_size == torch.Size([10])
+        assert _stored_batch_size(store_td, store_kwargs) == torch.Size([10])
+        # an unpickled copy is still a copy
+        copy = pickle.loads(pickle.dumps(store_td.copy()))
+        try:
+            copy.batch_size = [10, 3, 2]
+            assert copy.batch_size == torch.Size([10, 3, 2])
+            assert _stored_batch_size(store_td, store_kwargs) == torch.Size([10])
+        finally:
+            copy.close()
+
+    def test_batch_size_setter_non_tensor(self, store_td):
+        """A non-tensor entry written per element holds one value per element
+        of the first batch dim, so it fixes that dim."""
+        store_td[0] = TensorDict(label="a", batch_size=[])
+        with pytest.raises(RuntimeError, match="label"):
+            store_td.batch_size = [5]
+        assert store_td.batch_size == torch.Size([10])
+        store_td.batch_size = []
+        assert store_td.batch_size == torch.Size([])
 
     def test_from_dict(self, store_kwargs):
         """Construct from a dict."""
