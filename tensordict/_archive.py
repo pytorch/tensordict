@@ -784,8 +784,9 @@ def _write_archive_from_td(
     (zero) staging bytes themselves are streamed, producing a preallocated
     writable archive.
 
-    Nested-tensor leaves are not supported by ``memmap_like``; tensordicts
-    containing them fall back to full staging via ``memmap``.
+    With ``like=False``, tensordicts containing nested-tensor leaves fall
+    back to full staging via ``memmap``: :func:`_tensor_chunks` cannot
+    stream a nested tensor's bytes, since it flattens with ``view(-1)``.
     """
     # circular import: base imports this module
     from tensordict.base import _NESTED_TENSORS_AS_LISTS
@@ -818,8 +819,8 @@ def _write_archive_from_td(
                     if filename is not None:
                         file_to_source[Path(filename).resolve()] = source
         else:
-            # nested tensors are not supported by memmap_like: fall back to
-            # writing the data to the staging directory
+            # nested tensors cannot be streamed by _tensor_chunks: fall back
+            # to writing the data to the staging directory
             td.memmap(
                 prefix=staging,
                 copy_existing=copy_existing,
