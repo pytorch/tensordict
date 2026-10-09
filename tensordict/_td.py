@@ -2633,7 +2633,7 @@ class TensorDict(TensorDictBase):
         is_leaf: Callable[[Type], bool] | None = None,
         *,
         sort: bool = False,
-    ) -> Iterator[tuple[str, CompatibleType]]:
+    ) -> Iterator[CompatibleType]:
         if not include_nested and not leaves_only:
             if not sort:
                 return self._tensordict.values()

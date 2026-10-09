@@ -838,6 +838,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             "key must be a NestedKey (a str or a possibly tuple of str)."
         )
 
+    @overload
+    def __getitem__(self, index: str | tuple[str, ...]) -> Any: ...
+
+    @overload
+    def __getitem__(self, index: IndexType) -> Self: ...
+
     def __getitem__(self, index: IndexType) -> Self | Tensor | TensorCollection | Any:
         """Indexes all tensors according to the provided index.
 

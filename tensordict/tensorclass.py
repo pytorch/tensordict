@@ -3871,10 +3871,10 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
         ... class Foo:
         ...     integer: int
 
-    The bracket form is usually the most readable when you stack several flags and it is the form
-    static type-checkers (mypy/pyright) understand via :meth:`~object.__class_getitem__`. The kwargs
-    form is convenient if the flag value is computed; the decorator form is best when migrating
-    plain ``@dataclass`` code.
+    The bracket form is usually the most readable when you stack several flags. Pyright understands
+    it via :meth:`~object.__class_getitem__`; mypy rejects it, so use the kwargs form in code checked
+    by mypy. The kwargs form is also convenient if the flag value is computed; the decorator form is
+    best when migrating plain ``@dataclass`` code.
 
     Several flags can be combined inside the brackets:
 
@@ -3943,10 +3943,13 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
         >>> class Sub(Base, shadow=True):   # autocast inherited, shadow added
         ...     y: float
 
-    **Type-checking.** ``TensorClass[...]`` is implemented via :meth:`~object.__class_getitem__`,
-    so mypy and pyright resolve it to the (parametrized) class itself rather than to a generic
-    parameter. Annotated fields propagate as expected and editors offer attribute completion on
-    instances.
+    **Type-checking.** Type checkers read the fields of a subclass as its constructor signature,
+    followed by the keyword-only ``batch_size``, ``device``, ``names`` and ``lock`` arguments.
+    ``TensorClass[...]`` is implemented via :meth:`~object.__class_getitem__`, so pyright resolves
+    it to the (parametrized) class itself rather than to a generic parameter. Mypy does not
+    evaluate ``__class_getitem__`` in a list of base classes and rejects the bracket form; use
+    ``class Foo(TensorClass, autocast=True)`` instead. Annotated fields propagate as expected and
+    editors offer attribute completion on instances.
 
     .. note:: ``TensorClass`` itself is *not* decorated as a tensorclass — the dataclass machinery
         only fires on subclasses. This is intentional: we cannot anticipate whether ``frozen`` will

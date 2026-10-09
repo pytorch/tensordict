@@ -512,55 +512,55 @@ class _PointwiseOps:
         )
 
     # point-wise arithmetic ops
-    def __add__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __add__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.add(other)
 
-    def __radd__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __radd__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.add(other)
 
-    def __iadd__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __iadd__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.add_(other)
 
-    def __truediv__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __truediv__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.div(other)
 
-    def __itruediv__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __itruediv__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.div_(other)
 
-    def __rtruediv__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __rtruediv__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.reciprocal() * other
 
-    def __mul__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __mul__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.mul(other)
 
-    def __mod__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __mod__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.mod(other)
 
-    def __rmul__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __rmul__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.mul(other)
 
-    def __imul__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __imul__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.mul_(other)
 
-    def __sub__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __sub__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.sub(other)
 
-    def __isub__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __isub__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.sub_(other)
 
-    def __rsub__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __rsub__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.rsub(other)
 
-    def __pow__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __pow__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.pow(other)
 
-    def __rpow__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __rpow__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         raise NotImplementedError(
             "rpow isn't implemented for tensordict yet. Make sure both elements are wrapped "
             "in a tensordict for this to work."
         )
 
-    def __ipow__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __ipow__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.pow_(other)
 
     def abs(self) -> Self:
