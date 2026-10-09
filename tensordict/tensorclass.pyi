@@ -59,6 +59,7 @@ from tensordict.utils import (
     unravel_key_list as unravel_key_list,
 )
 from torch import multiprocessing as mp, nn, Tensor
+from typing_extensions import deprecated
 
 if TYPE_CHECKING:
     from typing import Self
@@ -1427,9 +1428,12 @@ class TensorClass:
         cls,
         tensordict: TensorCollection,
         non_tensordict: dict | None = None,
-        safe: bool = True,
     ) -> Self: ...
     @classmethod
+    @deprecated(
+        "The fields classmethod of tensorclasses is deprecated and will be removed "
+        "in TensorDict 0.17. Use dataclasses.fields(cls) instead."
+    )
     def fields(cls) -> tuple[dataclasses.Field[Any], ...]: ...
     @classmethod
     def from_namedtuple(cls, named_tuple, *, auto_batch_size: bool = False) -> Self: ...
