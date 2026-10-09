@@ -2965,6 +2965,18 @@ class TestGeneric:
         assert out["z"].shape == (2, 3, 0)
         assert (out["nested", "b"] == b.view(6, 2).roll(1, 0).view(2, 3, 2)).all()
 
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_roll_flat_batch_keeps_nested_names(self, inplace):
+        # rolling the flattened batch reshapes each nested tensordict, which
+        # must not drop its dim names
+        nested = TensorDict(
+            {"b": torch.zeros(2, 3, 2)}, [2, 3, 2], names=["x", "y", "z"]
+        )
+        td = TensorDict({"nested": nested}, [2, 3], names=["x", "y"])
+        out = td.roll(1, inplace=inplace)
+        assert out.names == ["x", "y"]
+        assert out["nested"].names == ["x", "y", "z"]
+
     def test_roll_flat_batch_inplace_rebinds_nested(self):
         # like the other in-place paths, roll(inplace=True) replaces the nested
         # leaves instead of writing into them: a tensor the caller still holds

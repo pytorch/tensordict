@@ -1618,7 +1618,11 @@ class _ShapeOps:
 
             def _roll(tensor):
                 flat = tensor.reshape(numel, *tensor.shape[batch_dims:])
-                return flat.roll(shifts, 0).reshape(tensor.shape)
+                rolled = flat.roll(shifts, 0).reshape(tensor.shape)
+                if is_tensor_collection(tensor) and tensor._has_names():
+                    # reshape drops the dim names of a nested tensordict
+                    rolled.rename_(*tensor.names)
+                return rolled
 
         else:
             if isinstance(dims, int):
