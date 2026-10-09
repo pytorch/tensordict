@@ -15,7 +15,6 @@ import importlib.util
 # JSON backend is now handled by utils.json_dumps
 import json
 import os.path
-import sys
 import warnings
 import weakref
 from collections.abc import MutableMapping
@@ -180,14 +179,7 @@ class _BEST_ATTEMPT_INPLACE:
 
 BEST_ATTEMPT_INPLACE = _BEST_ATTEMPT_INPLACE()
 
-# some complex string used as separator to concatenate and split keys in
-# distributed frameworks -- make a python<3.10 specific version
-if sys.version_info < (3, 10):
-    from typing import Union
-
-    CompatibleType = Union[Tensor, TensorCollection]
-else:
-    CompatibleType = Tensor | TensorCollection
+CompatibleType = Tensor | TensorCollection
 
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
 
@@ -5573,12 +5565,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     f"the {type(tensor).__name__} {key} has shape {_shape(tensor)} which "
                     f"is incompatible with the batch-size {new_size}."
                 )
-
-    def _validate_key(self, key: NestedKey) -> NestedKey:
-        key = _unravel_key_to_tuple(key)
-        if not key:
-            raise KeyError(_GENERIC_NESTED_ERR.format(key))
-        return key
 
     @property
     def _validate_value(self):
