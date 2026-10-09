@@ -15,13 +15,15 @@ import os
 import pathlib
 import pickle
 import re
+import sys
+import textwrap
 import weakref
 from collections import UserDict
 from dataclasses import field
 from multiprocessing import Pool
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, ClassVar, Optional, Tuple, Union
+from typing import Any, ClassVar, Generic, get_origin, Optional, Tuple, TypeVar, Union
 
 import numpy as np
 import pytest
@@ -1552,6 +1554,51 @@ class TestTensorClass:
             assert (data2.X == data.X).all()
             assert data2.z == data.z
             assert data2.batch_size == data.batch_size
+
+    @pytest.mark.parametrize("frozen", [False, True])
+    def test_copy_deepcopy(self, frozen):
+        if frozen:
+            data = MyDataFrozen(X=torch.ones(3, 4, 5), z="z", batch_size=[3, 4])
+        else:
+            data = MyData(
+                X=torch.ones(3, 4, 5), y=torch.zeros(3, 4), z="z", batch_size=[3, 4]
+            )
+        shallow = copy.copy(data)
+        assert type(shallow) is type(data)
+        assert shallow._tensordict is not data._tensordict
+        assert shallow.X.data_ptr() == data.X.data_ptr()
+        deep = copy.deepcopy(data)
+        assert type(deep) is type(data)
+        assert deep is not data
+        assert deep._tensordict is not data._tensordict
+        assert deep.X.data_ptr() != data.X.data_ptr()
+        assert (deep.X == data.X).all()
+        assert deep.z == data.z
+        if not frozen:
+            shallow.z = "other"
+            shallow.batch_size = [3]
+            assert data.z == "z"
+            assert data.batch_size == torch.Size([3, 4])
+
+    def test_copy_deepcopy_user_defined(self):
+        @tensorclass
+        class MyDataCopy:
+            X: torch.Tensor
+
+            def __copy__(self):
+                return "copy"
+
+            def __deepcopy__(self, memo):
+                return "deepcopy"
+
+        @tensorclass
+        class MyDataCopyChild(MyDataCopy):
+            y: torch.Tensor = None
+
+        for cls in (MyDataCopy, MyDataCopyChild):
+            data = cls(X=torch.ones(3), batch_size=[3])
+            assert copy.copy(data) == "copy"
+            assert copy.deepcopy(data) == "deepcopy"
 
     @pytest.mark.parametrize("consolidate", [False, True])
     def test_pickle_consolidate(self, consolidate):
@@ -3522,6 +3569,29 @@ class TestShadow:
         c.batch_size = 1
         assert c.batch_size == 1
 
+    def test_shadow_non_tensor_values(self):
+        # Non-tensor values are wrapped in NonTensorData, which must take the
+        # batch size and device of the TensorDict, not the shadowed fields.
+        @tensorclass(shadow=True, nocast=True)
+        class MyClass:
+            x: torch.Tensor
+            batch_size: Any
+            device: Any
+            name: str
+
+        c = MyClass(
+            torch.zeros(10, 4), batch_size=4, device="not-a-device", name="graph"
+        )
+        assert c.batch_size == 4
+        assert c.device == "not-a-device"
+        assert c.name == "graph"
+        assert c._tensordict.batch_size == torch.Size([])
+        assert c._tensordict.device is None
+        c.batch_size = 5
+        c.device = "other"
+        assert c.batch_size == 5
+        assert c.device == "other"
+
     def test_shadow_values_dec_subcls(self):
         @tensorclass(shadow=True)
         class MyClass:
@@ -3908,6 +3978,75 @@ class TestSubClassing:
         assert is_called
         assert (s.a == 0).all()
         assert (s.b == 2).all()
+
+    # Regression test for GitHub issue #1469: the metaclass __getitem__ used to
+    # read every subscript as a list of flags, so a generic TensorClass could not
+    # be subscripted with types.
+    def test_subclassing_generic(self):
+        T = TypeVar("T")
+
+        class Base(TensorClass, Generic[T]):
+            x: torch.Tensor
+
+        class Child(Base[T]):
+            y: torch.Tensor
+
+        class Concrete(Base[int]):
+            y: torch.Tensor
+
+        class Quoted(Base["int"]):
+            y: torch.Tensor
+
+        assert get_origin(Base[int]) is Base
+        assert Child.__parameters__ == (T,)
+        assert Concrete.__orig_bases__ == (Base[int],)
+        for cls in (Child, Child[float], Concrete, Quoted):
+            obj = cls(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+            assert isinstance(obj, Base)
+            assert (obj[0].y == 1).all()
+
+        # flags still configure the class
+        class NoCast(Base["nocast"]):
+            z: int
+
+        assert isinstance(NoCast(x=torch.zeros(()), z=1).z, int)
+
+        # other subscripts of a non-generic class are rejected
+        with pytest.raises(TypeError, match="only accepts the flags"):
+            TensorClass["autocst"]
+        with pytest.raises(TypeError, match="only accepts the flags"):
+            TensorClass[int]
+
+    @pytest.mark.skipif(
+        sys.version_info < (3, 12), reason="PEP 695 syntax requires Python 3.12"
+    )
+    def test_subclassing_generic_pep695(self):
+        # exec keeps this file parseable on Python < 3.12
+        namespace = {"__name__": __name__, "TensorClass": TensorClass, "torch": torch}
+        exec(
+            textwrap.dedent(
+                """
+                class Base[T: int](TensorClass):
+                    x: torch.Tensor
+
+                class Child[T: int](Base[T]):
+                    y: torch.Tensor
+
+                class Concrete(Base[int]):
+                    y: torch.Tensor
+
+                class Quoted(Base["int"]):
+                    y: torch.Tensor
+                """
+            ),
+            namespace,
+        )
+        Base, Child = namespace["Base"], namespace["Child"]
+        assert Child.__parameters__ == Child.__type_params__
+        for cls in (Child, Child[int], namespace["Concrete"], namespace["Quoted"]):
+            obj = cls(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+            assert isinstance(obj, Base)
+            assert (obj[0].y == 1).all()
 
 
 class TestTensorOnly:
