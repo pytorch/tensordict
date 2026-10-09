@@ -92,6 +92,18 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
+__all__ = [
+    "MetaData",
+    "NonTensorData",
+    "NonTensorDataBase",
+    "NonTensorStack",
+    "TensorAttrs",
+    "TensorClass",
+    "from_dataclass",
+    "is_non_tensor",
+    "tensorclass",
+]
+
 
 def _identity(cls):
     return cls
