@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4592+g285ad5089.d20261009)
+                  main (0.14.0.dev4598+g6d2314e53.d20261009)
                 </div>
               
             
@@ -364,7 +364,7 @@
 <h1>TensorClassModuleBase<a class="headerlink" href="#tensorclassmodulebase" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.nn.TensorClassModuleBase">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">TensorClassModuleBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.TensorClassModuleBase" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">TensorClassModuleBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.TensorClassModuleBase" title="Permalink to this definition">¶</a></dt>
 <dd><p>A TensorClassModuleBase is a base class for modules that operate on TensorClass instances.</p>
 <p>TensorClassModuleBase subclasses provide a type-safe way to define modules that work with TensorClass
 inputs and outputs. The class automatically extracts input and output type information from the
@@ -379,8 +379,8 @@ OutputClass: The output type, must be a TensorClass or Tensor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Variables<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>input_type</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#type" title="(in Python v3.14)"><em>type</em></a><em>[</em><em>InputClass</em><em>]</em>) – The input type class.</p></li>
-<li><p><strong>output_type</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#type" title="(in Python v3.14)"><em>type</em></a><em>[</em><em>OutputClass</em><em>]</em>) – The output type class.</p></li>
+<li><p><strong>input_type</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#type" title="(in Python v3.15)"><em>type</em></a><em>[</em><em>InputClass</em><em>]</em>) – The input type class.</p></li>
+<li><p><strong>output_type</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#type" title="(in Python v3.15)"><em>type</em></a><em>[</em><em>OutputClass</em><em>]</em>) – The output type class.</p></li>
 </ul>
 </dd>
 </dl>
@@ -427,7 +427,7 @@ allowing it to be used with TensorDict inputs and outputs.</p>
 <dd class="field-even"><p><a class="reference internal" href="tensordict.nn.TensorClassModuleWrapper.html#tensordict.nn.TensorClassModuleWrapper" title="tensordict.nn.TensorClassModuleWrapper">TensorClassModuleWrapper</a></p>
 </dd>
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If either input_type or output_type is not a TensorClass.</p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If either input_type or output_type is not a TensorClass.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>

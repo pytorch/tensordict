@@ -47,9 +47,10 @@ Key learnings
 - Saving the model to a file;
 - Isolating the pytorch model;
 
-.. GENERATED FROM PYTHON SOURCE LINES 35-45
+.. GENERATED FROM PYTHON SOURCE LINES 35-46
 
 .. code-block:: Python
+
 
     import time
 
@@ -68,7 +69,7 @@ Key learnings
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 46-58
+.. GENERATED FROM PYTHON SOURCE LINES 47-59
 
 Designing the model
 -------------------
@@ -83,7 +84,7 @@ We will also include a :class:`tensordict.nn.NormalParamExtractor` to demonstrat
 multiple outputs from a single tensor.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 58-67
+.. GENERATED FROM PYTHON SOURCE LINES 59-68
 
 .. code-block:: Python
 
@@ -103,12 +104,12 @@ multiple outputs from a single tensor.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 68-70
+.. GENERATED FROM PYTHON SOURCE LINES 69-71
 
 Let us run this model and see what the output looks like:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 70-74
+.. GENERATED FROM PYTHON SOURCE LINES 71-75
 
 .. code-block:: Python
 
@@ -124,12 +125,12 @@ Let us run this model and see what the output looks like:
 
  .. code-block:: none
 
-    (tensor([[0.0404, 0.0000, 0.1100, 0.0000]], grad_fn=<ReluBackward0>), tensor([[ 0.0521, -0.3436, -0.0031,  0.0913]], grad_fn=<AddmmBackward0>), tensor([[ 0.0521, -0.3436]], grad_fn=<SplitBackward0>), tensor([[0.9981, 1.0583]], grad_fn=<ClampMinBackward0>))
+    (tensor([[0.2773, 0.0896, 0.0000, 0.6964]], grad_fn=<ReluBackward0>), tensor([[-0.2987, -0.0818, -0.0738, -0.0390]], grad_fn=<AddmmBackward0>), tensor([[-0.2987, -0.0818]], grad_fn=<SplitBackward0>), tensor([[0.9543, 0.9757]], grad_fn=<ClampMinBackward0>))
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 75-90
+.. GENERATED FROM PYTHON SOURCE LINES 76-91
 
 As expected, running the model with a tensor input returns as many tensors as the module's output keys! For large
 models, this can be quite annoying and wasteful. Later, we will see how we can limit the number of outputs of the
@@ -147,7 +148,7 @@ and finally a ``module()`` that returns a callable that can be used in-place of 
 
 Although our module accepts both args and kwargs, we will focus on its usage with kwargs as this is clearer.
 
-.. GENERATED FROM PYTHON SOURCE LINES 90-95
+.. GENERATED FROM PYTHON SOURCE LINES 91-96
 
 .. code-block:: Python
 
@@ -163,12 +164,12 @@ Although our module accepts both args and kwargs, we will focus on its usage wit
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 96-98
+.. GENERATED FROM PYTHON SOURCE LINES 97-99
 
 Let us look at the module:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 98-100
+.. GENERATED FROM PYTHON SOURCE LINES 99-101
 
 .. code-block:: Python
 
@@ -220,12 +221,12 @@ Let us look at the module:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 101-103
+.. GENERATED FROM PYTHON SOURCE LINES 102-104
 
 This module can be run exactly like our original module (with a lower overhead):
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 103-114
+.. GENERATED FROM PYTHON SOURCE LINES 104-115
 
 .. code-block:: Python
 
@@ -248,17 +249,17 @@ This module can be run exactly like our original module (with a lower overhead):
 
  .. code-block:: none
 
-    Time for TDModule:  328.06 micro-seconds
-    Time for exported module:  279.43 micro-seconds
+    Time for TDModule:  313.28 micro-seconds
+    Time for exported module:  285.39 micro-seconds
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 115-116
+.. GENERATED FROM PYTHON SOURCE LINES 116-117
 
 and the FX graph:
 
-.. GENERATED FROM PYTHON SOURCE LINES 116-118
+.. GENERATED FROM PYTHON SOURCE LINES 117-119
 
 .. code-block:: Python
 
@@ -283,17 +284,17 @@ and the FX graph:
             # File: /__w/tensordict/tensordict/env/lib/python3.12/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
             linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_module_2_module_weight, p_module_2_module_bias);  p_module_2_module_weight = p_module_2_module_bias = None
 
-            # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
+            # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:83 in forward, code: loc, scale = tensor.chunk(2, -1)
             chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
             getitem: "f32[1, 2]" = chunk[0]
             getitem_1: "f32[1, 2]" = chunk[1];  chunk = None
 
-            # File: /__w/tensordict/tensordict/tensordict/nn/utils.py:68 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
+            # File: /__w/tensordict/tensordict/tensordict/nn/utils.py:65 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
             add: "f32[1, 2]" = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
             softplus: "f32[1, 2]" = torch.ops.aten.softplus.default(add);  add = None
             add_1: "f32[1, 2]" = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
 
-            # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:86 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
+            # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:84 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
             clamp_min: "f32[1, 2]" = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
             return (relu, linear_1, getitem, clamp_min)
 
@@ -308,17 +309,17 @@ and the FX graph:
             # File: /__w/tensordict/tensordict/env/lib/python3.12/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
             linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_module_2_module_weight, p_module_2_module_bias);  p_module_2_module_weight = p_module_2_module_bias = None
 
-            # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
+            # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:83 in forward, code: loc, scale = tensor.chunk(2, -1)
             chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
             getitem: "f32[1, 2]" = chunk[0]
             getitem_1: "f32[1, 2]" = chunk[1];  chunk = None
 
-            # File: /__w/tensordict/tensordict/tensordict/nn/utils.py:68 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
+            # File: /__w/tensordict/tensordict/tensordict/nn/utils.py:65 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
             add: "f32[1, 2]" = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
             softplus: "f32[1, 2]" = torch.ops.aten.softplus.default(add);  add = None
             add_1: "f32[1, 2]" = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
 
-            # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:86 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
+            # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:84 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
             clamp_min: "f32[1, 2]" = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
             return (relu, linear_1, getitem, clamp_min)
 
@@ -326,7 +327,7 @@ and the FX graph:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 119-127
+.. GENERATED FROM PYTHON SOURCE LINES 120-128
 
 Working with nested keys
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -337,7 +338,7 @@ Because keyword arguments must be regular strings, it is not possible for :class
 directly with them. Instead, ``dispatch`` will unpack nested keys joined with a regular underscore (`"_"`), as the
 following example shows.
 
-.. GENERATED FROM PYTHON SOURCE LINES 127-137
+.. GENERATED FROM PYTHON SOURCE LINES 128-138
 
 .. code-block:: Python
 
@@ -377,7 +378,7 @@ following example shows.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 138-174
+.. GENERATED FROM PYTHON SOURCE LINES 139-175
 
 Note that the callable returned by `module()` is a pure python callable that can be in turn compiled using
 :func:`~torch.compile`.
@@ -416,7 +417,7 @@ To do this, we have several options:
 Let us test the model after selecting its output keys.
 When an `x` input is provided, we expect our model to output a single tensor corresponding to the `"loc"` output:
 
-.. GENERATED FROM PYTHON SOURCE LINES 174-178
+.. GENERATED FROM PYTHON SOURCE LINES 175-179
 
 .. code-block:: Python
 
@@ -432,17 +433,17 @@ When an `x` input is provided, we expect our model to output a single tensor cor
 
  .. code-block:: none
 
-    tensor([[ 0.0521, -0.3436]], grad_fn=<SplitBackward0>)
+    tensor([[-0.2987, -0.0818]], grad_fn=<SplitBackward0>)
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 179-181
+.. GENERATED FROM PYTHON SOURCE LINES 180-182
 
 We see that the output is now a single tensor.
 We can create a new exported graph from this. Its computational graph should be simplified:
 
-.. GENERATED FROM PYTHON SOURCE LINES 181-185
+.. GENERATED FROM PYTHON SOURCE LINES 182-186
 
 .. code-block:: Python
 
@@ -496,7 +497,7 @@ We can create a new exported graph from this. Its computational graph should be 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 186-198
+.. GENERATED FROM PYTHON SOURCE LINES 187-199
 
 This is all you need to know to use ``torch.export``. Please refer to the
 `official documentation <https://pytorch.org/docs/stable/export>`_ for more info.
@@ -514,7 +515,7 @@ Next steps and further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.287 seconds)
+   **Total running time of the script:** (0 minutes 0.284 seconds)
 
 
 .. _sphx_glr_download_tutorials_export.py:

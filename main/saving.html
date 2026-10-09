@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4592+g285ad5089.d20261009)
+                  main (0.14.0.dev4598+g6d2314e53.d20261009)
                 </div>
               
             
@@ -402,7 +402,7 @@ data in a regular <a class="reference internal" href="reference/generated/tensor
 <section id="pickled-non-tensor-data">
 <h2>Pickled non-tensor data<a class="headerlink" href="#pickled-non-tensor-data" title="Permalink to this heading">¶</a></h2>
 <p>In TensorDict 0.14, omitting <code class="docutils literal notranslate"><span class="pre">allow_pickle</span></code> preserves compatibility by
-loading pickled non-tensor fields with a <a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#FutureWarning" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">FutureWarning</span></code></a>. The default
+loading pickled non-tensor fields with a <a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#FutureWarning" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">FutureWarning</span></code></a>. The default
 will become <code class="docutils literal notranslate"><span class="pre">False</span></code> in 0.15. Applications handling less-trusted artifacts
 can enforce that boundary now:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">untrusted</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">allow_pickle</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>  
@@ -424,7 +424,7 @@ not need this option. The same policy can be passed to <code class="docutils lit
 trusted principals. Existing symbolic links are rejected when creating
 individual memory-map files, but a path-based API cannot protect against a
 process that can replace names in the parent directory concurrently. Prefer
-<a class="reference external" href="https://docs.python.org/3/library/tempfile.html#tempfile.TemporaryDirectory" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tempfile.TemporaryDirectory</span></code></a> or another private directory over
+<a class="reference external" href="https://docs.python.org/3/library/tempfile.html#tempfile.TemporaryDirectory" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tempfile.TemporaryDirectory</span></code></a> or another private directory over
 predictable names in a shared <code class="docutils literal notranslate"><span class="pre">/tmp</span></code> directory.</p>
 <p>Robust key encoding is enabled by default and keeps TensorDict keys within
 their save prefix. <code class="docutils literal notranslate"><span class="pre">robust_key=False</span></code> exists only to interoperate with
@@ -734,7 +734,7 @@ tensordict checkout) — it only needs <code class="docutils literal notranslate
 <p>TensorDict and tensorclass support <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.state_dict" title="tensordict.TensorDictBase.state_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code></a> and
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.load_state_dict" title="tensordict.TensorDictBase.load_state_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_state_dict()</span></code></a>, following the same conventions as
 <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.state_dict()</span></code></a>.</p>
-<p>By default, <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> returns a <strong>flat</strong> <a class="reference external" href="https://docs.python.org/3/library/collections.html#collections.OrderedDict" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">OrderedDict</span></code></a> with
+<p>By default, <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> returns a <strong>flat</strong> <a class="reference external" href="https://docs.python.org/3/library/collections.html#collections.OrderedDict" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">OrderedDict</span></code></a> with
 dot-separated keys, just like <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code>:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"c"</span><span class="p">:</span> <span class="mi">2</span><span class="p">}},</span> <span class="p">[])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">sd</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>

@@ -29,10 +29,9 @@ In this tutorial you will learn how to take advantage of memory pre-allocation i
 
 Suppose that we have a function that returns a :class:`~.TensorDict`
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-22
+.. GENERATED FROM PYTHON SOURCE LINES 12-21
 
 .. code-block:: Python
-
 
 
     import torch
@@ -50,12 +49,12 @@ Suppose that we have a function that returns a :class:`~.TensorDict`
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-30
+.. GENERATED FROM PYTHON SOURCE LINES 27-29
 
 Perhaps we want to call this function multiple times and use the results to populate
 a single :class:`~.TensorDict`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 30-39
+.. GENERATED FROM PYTHON SOURCE LINES 29-38
 
 .. code-block:: Python
 
@@ -87,7 +86,7 @@ a single :class:`~.TensorDict`.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 40-51
+.. GENERATED FROM PYTHON SOURCE LINES 39-50
 
 Because we have specified the ``batch_size`` of ``tensordict``, during the first
 iteration of the loop we populate ``tensordict`` with empty tensors whose first
@@ -101,7 +100,7 @@ value of zero.
 Let us demonstrate what is going on by stepping through the above loop. We first
 initialise an empty :class:`~.TensorDict`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 51-56
+.. GENERATED FROM PYTHON SOURCE LINES 50-55
 
 .. code-block:: Python
 
@@ -128,13 +127,13 @@ initialise an empty :class:`~.TensorDict`.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 57-60
+.. GENERATED FROM PYTHON SOURCE LINES 56-59
 
 After the first iteration, ``tensordict`` has been prepopulated with tensors for both
 ``"a"`` and ``"b"``. These tensors contain zeros except for the first row which we
 have assigned random values to.
 
-.. GENERATED FROM PYTHON SOURCE LINES 60-69
+.. GENERATED FROM PYTHON SOURCE LINES 59-68
 
 .. code-block:: Python
 
@@ -166,11 +165,11 @@ have assigned random values to.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 70-71
+.. GENERATED FROM PYTHON SOURCE LINES 69-70
 
 Subsequent iterations, we update the pre-allocated tensors in-place.
 
-.. GENERATED FROM PYTHON SOURCE LINES 71-79
+.. GENERATED FROM PYTHON SOURCE LINES 70-78
 
 .. code-block:: Python
 
