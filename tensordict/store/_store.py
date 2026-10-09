@@ -1529,7 +1529,7 @@ class TensorDictStore(TensorDictBase):
     ):
         inplace = self._convert_inplace(inplace, key)
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(value, check_shape=True, key=key)
         if self.is_locked and not ignore_lock:
             if not inplace:
                 raise RuntimeError(_LOCK_ERROR)
@@ -1592,7 +1592,7 @@ class TensorDictStore(TensorDictBase):
         # Direct set with full key path
         key_path = self._full_key_path(_KEY_SEP.join(key))
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(value, check_shape=True, key=key)
         if self.is_locked and not inplace:
             raise RuntimeError(_LOCK_ERROR)
 

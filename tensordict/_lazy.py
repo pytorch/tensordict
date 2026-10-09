@@ -809,6 +809,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 value,
                 non_blocking=non_blocking,
                 check_shape=not (isinstance(value, list) and list_to_stack()),
+                key=key,
             )
             validated = True
         if self._is_vmapped:
@@ -864,7 +865,7 @@ class LazyStackedTensorDict(TensorDictBase):
         #         )
         #     inplace = has_key
         if not validated:
-            value = self._validate_value(value, non_blocking=non_blocking)
+            value = self._validate_value(value, non_blocking=non_blocking, key=key)
             validated = True
         if self._is_vmapped:
             value = self.hook_in(value)

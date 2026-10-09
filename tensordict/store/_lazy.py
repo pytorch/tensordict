@@ -179,7 +179,7 @@ class _StoreStackElementView(TensorDictBase):
         non_blocking: bool = False,
     ):
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(value, check_shape=True, key=key)
         if self.is_locked and not ignore_lock and not inplace:
             raise RuntimeError(_LOCK_ERROR)
 
@@ -223,7 +223,7 @@ class _StoreStackElementView(TensorDictBase):
             )
         key_path = _KEY_SEP.join(key)
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(value, check_shape=True, key=key)
         if self.is_locked and not inplace:
             raise RuntimeError(_LOCK_ERROR)
         if isinstance(value, torch.Tensor):
@@ -1544,7 +1544,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
         non_blocking: bool = False,
     ):
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(value, check_shape=True, key=key)
         if self.is_locked and not ignore_lock and not inplace:
             raise RuntimeError(_LOCK_ERROR)
 
@@ -1601,7 +1601,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
             )
         key_path = _KEY_SEP.join(key)
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(value, check_shape=True, key=key)
         if self.is_locked and not inplace:
             raise RuntimeError(_LOCK_ERROR)
         if isinstance(value, torch.Tensor):

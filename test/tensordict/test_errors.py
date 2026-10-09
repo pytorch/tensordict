@@ -160,6 +160,17 @@ class TestErrorMessage:
             td["c"] = torch.zeros(4)
         with pytest.raises(RuntimeError, match="for key 'n'.*NonTensorData"):
             td["n"] = 1
+        td["x"] = TensorDict(a=torch.zeros(3), batch_size=[3])
+        with pytest.raises(RuntimeError, match="for key 'b'"):
+            td["x", "b"] = torch.zeros(2)
+        sub = TensorDict(a=torch.zeros(2, 3), batch_size=[2, 3])._get_sub_tensordict(0)
+        with pytest.raises(RuntimeError, match="for key 'c'"):
+            sub["c"] = torch.zeros(4)
+        lazy = LazyStackedTensorDict(td, td.clone())
+        with pytest.raises(RuntimeError, match="for key 'c'"):
+            lazy["c"] = torch.zeros(4)
+        with pytest.raises(RuntimeError, match=re.escape("for key ('x', 'b')")):
+            lazy["x", "b"] = torch.zeros(4)
 
     @staticmethod
     def test_cat_keys_mismatch():
