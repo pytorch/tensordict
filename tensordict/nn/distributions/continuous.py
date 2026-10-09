@@ -24,18 +24,6 @@ __all__ = [
 # D.Distribution.set_default_validate_args(False)
 
 
-class NormalParamWrapper(nn.Module):
-    def __init__(
-        self,
-        operator: nn.Module,
-        scale_mapping: str = "biased_softplus_1.0",
-        scale_lb: Number = 1e-4,
-    ) -> None:
-        raise RuntimeError(
-            "NormalParamWrapper has been deprecated in favor of `tensordict.nn.NormalParamExtractor`. Use this class instead."
-        )
-
-
 class NormalParamExtractor(nn.Module):
     """A non-parametric nn.Module that splits its input into loc and scale parameters.
 

@@ -31,9 +31,7 @@ from tensordict.utils import (
     _is_unbatched,
     _maybe_correct_neg_dim,
     _zip_strict,
-    infer_size_impl,
     lazy_legacy,
-    prod,
     unravel_key_list,
 )
 from torch import Tensor
@@ -1192,7 +1190,7 @@ class _ShapeOps:
         elif len(shape) == 1 and isinstance(shape[0], (list, tuple, torch.Size)):
             return self.view(*shape[0])
         elif not isinstance(shape, torch.Size):
-            shape = infer_size_impl(shape, self.numel())
+            shape = _infer_size_impl(shape, self.numel())
             shape = torch.Size(shape)
         if shape == self.shape:
             return self
@@ -2008,7 +2006,7 @@ class _ShapeOps:
         def flatten(tensor):
             return torch.flatten(tensor, start_dim, end_dim)
 
-        nelt = prod(self.batch_size[start_dim : end_dim + 1])
+        nelt = math.prod(self.batch_size[start_dim : end_dim + 1])
         if start_dim > 0:
             batch_size = (
                 list(self.batch_size)[:start_dim]

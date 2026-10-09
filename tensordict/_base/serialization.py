@@ -615,7 +615,7 @@ class _Serialization:
         else:
             # Convert the dict to json
             try:
-                from tensordict.utils import json_dumps
+                from tensordict._utils_key_json import json_dumps
 
                 metadata_dict_json = json_dumps(metadata_dict)
             except TypeError as e:
@@ -1543,10 +1543,26 @@ class _Serialization:
                 if str(other_cls) == type_name:
                     break
             else:
-                raise RuntimeError(
-                    f"Could not find name {type_name} in {tensordict.base._ACCEPTED_CLASSES}. "
-                    f"Did you call _register_tensor_class(cls) on {type_name}?"
-                )
+                # The saved name includes the module, which differs when the
+                # class was saved from __main__ (a script or a notebook): use
+                # the class load_memmap is called on if its qualname matches.
+                # The module and the qualname cannot be told apart in general,
+                # but __main__ is never a package and no module path contains
+                # "<locals>".
+                saved_name = type_name.removeprefix("<class '").removesuffix("'>")
+                saved_module = saved_name.removesuffix(f".{cls.__qualname__}")
+                if (
+                    saved_module == saved_name
+                    or saved_module.startswith("__main__.")
+                    or "<locals>" in saved_module
+                ):
+                    raise RuntimeError(
+                        f"Could not find the class {saved_name} saved in "
+                        f"{prefix}. Import the module that defines it, or call "
+                        f"{saved_name.rpartition('.')[2]}.load_memmap() instead "
+                        f"of {cls.__qualname__}.load_memmap()."
+                    )
+                other_cls = cls
         else:
             other_cls = cls
         load_kwargs = {
