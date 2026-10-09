@@ -539,7 +539,11 @@ def test_unravel_key_tuple_subclass():
 
 @pytest.mark.parametrize("keys", ["ab", iter(["a"]), {"a"}], ids=["str", "iter", "set"])
 def test_unravel_key_list_rejects_non_sequences(keys):
-    with pytest.raises(TypeError, match="list or a tuple of keys"):
+    # "incompatible function arguments" is the C++ binding's wording, which
+    # TorchRL's tests match.
+    with pytest.raises(
+        TypeError, match="incompatible function arguments.*list or a tuple of keys"
+    ):
         unravel_key_list(keys)
 
 

@@ -2712,8 +2712,11 @@ def unravel_keys(*keys):
 def unravel_key_list(keys):
     """Unravels a list of keys."""
     if not isinstance(keys, (list, tuple)):
+        # pybind11's wording when this was a C++ function, which TorchRL's
+        # tests match.
         raise TypeError(
-            f"unravel_key_list expects a list or a tuple of keys, got {type(keys)}."
+            "unravel_key_list(): incompatible function arguments. Expected a "
+            f"list or a tuple of keys, got {type(keys)}."
         )
     result = []
     for key in keys:

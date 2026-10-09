@@ -28,17 +28,30 @@ concurrency:
 jobs:
   benchmark:
     name: ${{ matrix.device }} Pytest benchmark
-    runs-on: mt-l-x86aavx2-11-41-a10g
+    # On pull requests, Continuous Benchmark (PR) benchmarks the head against
+    # its base. Run this workflow on a pull request only to upload its
+    # results, which needs the benchmarks/upload label.
+    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'benchmarks/upload') }}
+    # The CPU benchmarks run on a runner without a GPU: they measure the CPU
+    # only, and the GPU runner stays free for the GPU benchmarks.
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
-        device: [CPU, GPU]
-        python-version: ['3.12']
+        include:
+          - device: CPU
+            runner: mt-l-x86iavx512-48-384
+            container-options: ""
+            python-version: '3.12'
+          - device: GPU
+            runner: mt-l-x86aavx2-11-41-a10g
+            container-options: --gpus all
+            python-version: '3.12'
     defaults:
       run:
         shell: bash -l {0}
     container:
       image: nvidia/cuda:12.8.0-runtime-ubuntu22.04
-      options: --gpus all
+      options: ${{ matrix.container-options }}
     steps:
       - name: Who triggered this?
         run: |
@@ -89,7 +102,6 @@ jobs:
           # that was explicitly installed above, and avoid any solver replacing it.
           uv pip install -e . --no-deps
           uv run --active python -c "import torch; print(torch.__version__)"
-          ${{ matrix.device == 'CPU' && 'export CUDA_VISIBLE_DEVICES=' || '' }}
       - name: check GPU presence
         if: matrix.device == 'GPU'
         run: |
