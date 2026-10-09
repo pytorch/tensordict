@@ -10,9 +10,8 @@ from multiprocessing import reduction
 import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
-
 from tensordict.tensorclass import NonTensorData, NonTensorStack
-from tensordict.utils import _is_tensorclass, _STR_DTYPE_TO_DTYPE
+from tensordict.utils import _is_tensorclass, _LockedSchema, _STR_DTYPE_TO_DTYPE
 
 CLS_MAP = {
     "TensorDict": TensorDict,
@@ -186,3 +185,22 @@ copyreg.pickle(TensorDict, _reduce_td)
 reduction.register(LazyStackedTensorDict, _reduce_td)
 
 copyreg.pickle(LazyStackedTensorDict, _reduce_td)
+
+# torch.load(weights_only=True) only rebuilds allowlisted globals. Allowlist the
+# ones that the pickle of a tensordict references. None of them imports a module
+# named in the pickle, opens files or unpickles nested data. User tensorclasses,
+# MemoryMappedTensor and the types of other non-tensor values (e.g. NumPy arrays)
+# stay unlisted.
+torch.serialization.add_safe_globals(
+    [
+        _make_td,
+        _rebuild_tensordict_files_consolidated,
+        TensorDict,
+        LazyStackedTensorDict,
+        NonTensorData,
+        NonTensorStack,
+        _LockedSchema,
+        # Pickles from tensordict<=0.4, where this was a dict subclass
+        (dict, "tensordict.utils._StringOnlyDict"),
+    ]
+)

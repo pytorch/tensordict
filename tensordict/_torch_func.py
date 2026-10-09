@@ -8,7 +8,6 @@ from __future__ import annotations
 import contextlib
 import functools
 from functools import partial
-
 from typing import Any, Callable, Sequence, Tuple, TypeVar
 
 import torch
@@ -30,6 +29,7 @@ from tensordict.utils import (
     _shape,
     _zip_strict,
     DeviceType,
+    is_non_tensor,
     is_tensorclass,
     lazy_legacy,
 )
@@ -172,6 +172,10 @@ def _swapdims(td: T, dim0: int, dim1: int) -> T:
     return td.swapdims(dim0, dim1)
 
 
+def _is_non_tensor_stack(value) -> bool:
+    return isinstance(value, LazyStackedTensorDict) and is_non_tensor(value)
+
+
 @implements_for_td(torch.gather)
 def _gather(
     input: T,
@@ -210,10 +214,33 @@ def _gather(
         out = torch.gather(tensor, dim, index_expand, out=dest)
         return out
 
+    def _gather_non_tensor_stack(stack):
+        # A non-tensor stack has no tensor leaves to gather. Gather the position of
+        # each entry instead, then select the entries at those positions, which
+        # copies the values themselves. _gather_tensor expands the index to the
+        # leaf shape on every non-gather dim; only expand the trailing dims the
+        # index lacks, so that a bare stack follows torch.gather.
+        positions = stack._positions().to(index.device)
+        index_expand = index
+        while index_expand.ndim < positions.ndim:
+            index_expand = index_expand.unsqueeze(-1)
+        target_shape = list(index.shape) + list(positions.shape[index.ndim :])
+        index_expand = index_expand.expand(target_shape)
+        return stack._select_positions(torch.gather(positions, dim, index_expand))
+
     def _process_gather_value(value):
         if _is_unbatched(value):
             return value._with_batch_size(index.shape)
+        if _is_non_tensor_stack(value):
+            return _gather_non_tensor_stack(value)
         return _gather_tensor(value)
+
+    if _is_non_tensor_stack(input):
+        result = _gather_non_tensor_stack(input)
+        if out is None:
+            return result
+        out.update_(result)
+        return out
 
     if out is None:
         if len(index.shape) == input.ndim:
@@ -239,6 +266,21 @@ def _gather(
                 inplace=False,
                 non_blocking=False,
             )
+        elif is_non_tensor(value):
+            gathered = _process_gather_value(value)
+            dest = out._get_str(key, default=None)
+            if _is_non_tensor_stack(dest) and dest.batch_size == gathered.batch_size:
+                # write into the destination stack, as tensors are written into
+                # the destination storage
+                dest.update_(gathered)
+            else:
+                out._set_str(
+                    key,
+                    gathered,
+                    validated=True,
+                    inplace=False,
+                    non_blocking=False,
+                )
         else:
             _gather_tensor(value, out, key)
     return out

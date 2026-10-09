@@ -13,7 +13,6 @@ import pytest
 import torch
 from _pytest.fixtures import fixture
 from _utils_internal import is_npu_available
-
 from tensordict import LazyStackedTensorDict, MemoryMappedTensor, TensorDict
 from tensordict.utils import logger as tdlogger
 from torch import distributed as dist, multiprocessing as mp, nn
@@ -1487,7 +1486,7 @@ class TestGroupPeerValidation:
 # Tensorclass distributed tests
 # ========================================================================
 
-from tensordict.testing import MyDistData
+from tensordict._testing import MyDistData
 
 
 class TestTensorclassBroadcast:

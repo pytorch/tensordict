@@ -12,7 +12,6 @@ from pathlib import Path
 
 import pytest
 import torch
-
 from tensordict import MemoryMappedTensor, TensorDict
 from torch import nn
 

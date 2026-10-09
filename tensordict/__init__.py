@@ -3,12 +3,10 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import warnings as _warnings
-
 import tensordict._reductions
 
 # Registers the tensordict classes with torch's pytree.
-from tensordict import _pytree
+from tensordict import _deprecation, _pytree
 from tensordict._archive import (
     is_memmap_archive,
     pack_memmap,
@@ -76,8 +74,8 @@ from tensordict.tensorclass import (
     NonTensorDataBase,
     NonTensorStack,
     TensorAttrs,
-    tensorclass,
     TensorClass,
+    tensorclass,
 )
 from tensordict.typedtensordict import TypedTensorDict
 from tensordict.utils import (
@@ -85,7 +83,6 @@ from tensordict.utils import (
     assert_close,
     capture_non_tensor_stack,
     get_printoptions,
-    is_batchedtensor,
     is_non_tensor,
     is_tensorclass,
     lazy_legacy,
@@ -98,6 +95,7 @@ from tensordict.utils import (
     unravel_key,
     unravel_key_list,
 )
+from torch._C._functorch import is_batchedtensor as _is_batchedtensor
 
 __version__ = None  # type: ignore
 try:
@@ -166,7 +164,6 @@ __all__ = [
     "pad_sequence",
     # Utility functions
     "is_tensor_collection",
-    "is_batchedtensor",
     "is_non_tensor",
     "is_tensorclass",
     "assert_close",
@@ -217,19 +214,23 @@ _DEPRECATED_PYTREE_NAMES = {
     "cls": "tensordict.LazyStackedTensorDict",
     "defaultdict": "collections.defaultdict",
     "implement_for": "pyvers.implement_for",
-    "is_compiling": "tensordict.utils.is_compiling",
+    "is_compiling": "torch.compiler.is_compiling",
     "register_pytree_node": "torch.utils._pytree.register_pytree_node",
     "torch": "torch",
 }
 
 
-def __getattr__(name: str) -> object:
-    if name in _DEPRECATED_PYTREE_NAMES:
-        _warnings.warn(
-            f"tensordict.{name} is deprecated and will be removed in TensorDict 0.17. "
-            f"Use {_DEPRECATED_PYTREE_NAMES[name]} instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return getattr(_pytree, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+__getattr__ = _deprecation.deprecated_attributes(
+    __name__,
+    {
+        **{
+            name: (getattr(_pytree, name), replacement)
+            for name, replacement in _DEPRECATED_PYTREE_NAMES.items()
+        },
+        "is_batchedtensor": (
+            _is_batchedtensor,
+            "torch._C._functorch.is_batchedtensor",
+        ),
+    },
+    removal="0.17",
+)

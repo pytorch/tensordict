@@ -15,6 +15,7 @@ import torch
 from tensordict import is_tensor_collection, lazy_stack, NonTensorStack, TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.store import LazyStackedTensorDictStore, TensorDictStore
+from tensordict.store._lazy import _StoreStackElementView
 
 _has_redis = importlib.util.find_spec("redis", None) is not None
 
@@ -57,6 +58,28 @@ def store_kwargs(backend):
     """Common keyword arguments for constructing a store in tests."""
     name, port = backend
     return {"backend": name, "port": port, "db": 15}
+
+
+@pytest.mark.parametrize(
+    "cls,what",
+    [
+        (TensorDictStore, "TensorDictStore"),
+        (LazyStackedTensorDictStore, "LazyStackedTensorDictStore"),
+        (_StoreStackElementView, r"LazyStackedTensorDictStore\[i\]"),
+    ],
+)
+def test_to_local_is_deprecated(cls, what, monkeypatch):
+    # no server needed: to_local only forwards to to_tensordict
+    local = TensorDict({"a": torch.zeros(2)}, [2])
+    monkeypatch.setattr(cls, "to_tensordict", lambda self: local)
+    store = cls.__new__(cls)
+    with pytest.warns(
+        DeprecationWarning,
+        match=rf"^{what}\.to_local\(\) is deprecated and will be removed in "
+        r"TensorDict 0\.17\. Use to_tensordict\(\) instead\.$",
+    ) as record:
+        assert store.to_local() is local
+    assert record[0].filename == __file__
 
 
 class TestTensorDictStore:
@@ -171,14 +194,15 @@ class TestTensorDictStore:
         store_td["obs"] = obs
         store_td["action"] = action
 
-        local = store_td.to_local()
+        with pytest.warns(DeprecationWarning, match="to_local"):
+            local = store_td.to_local()
         assert isinstance(local, TensorDict)
         assert local.batch_size == torch.Size([10])
         assert torch.allclose(local["obs"], obs)
         assert torch.allclose(local["action"], action)
 
     def test_to_tensordict(self, store_td):
-        """to_tensordict should be equivalent to to_local."""
+        """to_tensordict materializes to a local TensorDict."""
         tensor = torch.randn(10, 3)
         store_td["x"] = tensor
 
@@ -369,7 +393,7 @@ class TestTensorDictStore:
         assert not store_td.is_contiguous()
 
     def test_shape_ops_raise(self, store_td):
-        """Shape ops raise on TensorDictStore but work after to_local()."""
+        """Shape ops raise on TensorDictStore but work after to_tensordict()."""
         store_td["obs"] = torch.randn(10, 3)
 
         with pytest.raises(RuntimeError):
@@ -382,7 +406,7 @@ class TestTensorDictStore:
             store_td.squeeze(0)
 
         # Escape hatch: materialize first, then shape ops work
-        local = store_td.to_local()
+        local = store_td.to_tensordict()
         assert local.view(2, 5).shape == torch.Size([2, 5])
         assert local.unsqueeze(0).shape == torch.Size([1, 10])
         assert local.squeeze(0).shape == torch.Size([10])
@@ -464,6 +488,22 @@ class TestTensorDictStore:
         td = TensorDictStore.from_tensordict(source, **store_kwargs)
         try:
             assert td.device == torch.device("cpu")
+        finally:
+            td.clear_redis()
+            td.close()
+
+    def test_names_setter_keeps_nested_trailing_name(self, store_kwargs):
+        """Setting or clearing the parent names keeps the child's own names."""
+        source = TensorDict(
+            {"agents": TensorDict({"obs": torch.zeros(2, 3, 4)}, [2, 3])}, [2]
+        )
+        td = TensorDictStore.from_tensordict(source, **store_kwargs)
+        try:
+            td["agents"].names = [None, "agent"]
+            td.names = ["batch"]
+            assert td["agents"].names == ["batch", "agent"]
+            td.names = None
+            assert td["agents"].names == [None, "agent"]
         finally:
             td.clear_redis()
             td.close()
@@ -1233,7 +1273,8 @@ class TestLazyStackedTensorDictStore:
 
     def test_to_local(self, store_stack):
         store_td, tds, lazy_td = store_stack
-        local = store_td.to_local()
+        with pytest.warns(DeprecationWarning, match="to_local"):
+            local = store_td.to_local()
         assert isinstance(local, TensorDict)
         assert local.batch_size == torch.Size([5, 4])
 
