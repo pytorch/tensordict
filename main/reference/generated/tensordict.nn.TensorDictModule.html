@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4649+ge8e95f9c5.d20261009)
+                  main (0.14.0.dev4651+g3b88ee70b.d20261009)
                 </div>
               
             
@@ -592,6 +592,17 @@ contain parameters and buffers on multiple devices.</p>
 <dt class="sig sig-object py" id="tensordict.nn.TensorDictModule.forward">
 <span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">args</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensordict_out</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">tensordict.base.TensorDictBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></span><a class="headerlink" href="#tensordict.nn.TensorDictModule.forward" title="Permalink to this definition">¶</a></dt>
 <dd><p>When the tensordict parameter is not set, kwargs are used to create an instance of TensorDict.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="tensordict.nn.TensorDictModule.is_functional">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_functional</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></em><a class="headerlink" href="#tensordict.nn.TensorDictModule.is_functional" title="Permalink to this definition">¶</a></dt>
+<dd><p>Whether the wrapped module is a legacy functorch functional module.</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>This property will be removed in TensorDict 0.17. It only checks
+for the <code class="docutils literal notranslate"><span class="pre">FunctionalModule</span></code> classes of the legacy
+<code class="docutils literal notranslate"><span class="pre">functorch.make_functional</span></code> API and has no replacement.</p>
+</div>
 </dd></dl>
 
 </dd></dl>

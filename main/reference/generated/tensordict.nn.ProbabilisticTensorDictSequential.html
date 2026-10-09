@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4649+ge8e95f9c5.d20261009)
+                  main (0.14.0.dev4651+g3b88ee70b.d20261009)
                 </div>
               
             
@@ -582,6 +582,16 @@ output preserves type, device and batch-size). Defaults to <cite>None</cite> (re
 <p>This property iterates over all modules in reverse order, attempting to retrieve the
 <cite>default_interaction_type</cite> attribute from any child module. The first non-None value
 encountered is returned. If no such value is found, a default <cite>interaction_type()</cite> is returned.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="tensordict.nn.ProbabilisticTensorDictSequential.det_part">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">det_part</span></span><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictSequential.det_part" title="Permalink to this definition">¶</a></dt>
+<dd><p>The modules that compute the distribution parameters.</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>This property will be removed in TensorDict 0.17. Use
+<a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictSequential.get_dist_params" title="tensordict.nn.ProbabilisticTensorDictSequential.get_dist_params"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_dist_params()</span></code></a> to compute the distribution parameters.</p>
+</div>
 </dd></dl>
 
 <dl class="py property">

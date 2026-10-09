@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4649+ge8e95f9c5.d20261009)
+                  main (0.14.0.dev4651+g3b88ee70b.d20261009)
                 </div>
               
             
@@ -473,13 +473,13 @@ or <cite>‘&lt;sample_key_name&gt;_log_prob’</cite> otherwise.</p>
 <p>When there is more than one sample, this is only available when <a class="reference internal" href="tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate" title="tensordict.nn.composite_lp_aggregate"><code class="xref py py-func docutils literal notranslate"><span class="pre">composite_lp_aggregate()</span></code></a> is set to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 </div>
 </p></li>
-<li><p><strong>cache_dist</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – keyword-only argument.
-EXPERIMENTAL: if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the parameters of the
-distribution (i.e. the output of the module) will be written to the
-tensordict along with the sample. Those parameters can be used to re-compute
-the original distribution later on (e.g. to compute the divergence between
-the distribution used to sample the action and the updated distribution in
-PPO). Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>cache_dist</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – <p>keyword-only argument. Has no effect.
+Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>Passing <code class="docutils literal notranslate"><span class="pre">cache_dist=True</span></code> warns, and the argument will be
+removed in TensorDict 0.17. Do not pass it.</p>
+</div>
+</p></li>
 <li><p><strong>n_empirical_estimate</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.int" title="tensordict.LazyStackedTensorDict.int"><em>int</em></a><em>, </em><em>optional</em>) – keyword-only argument.
 Number of samples to compute the empirical
 mean when it is not available. Defaults to 1000.</p></li>
@@ -523,7 +523,6 @@ approach portable across all distributions (including reparameterized
 <span class="gp">... </span>    <span class="n">TensorDictModule</span><span class="p">,</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="n">NormalParamExtractor</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn.functional_modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_functional</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="n">Normal</span><span class="p">,</span> <span class="n">Independent</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="p">{</span><span class="s2">"input"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="s2">"hidden"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">8</span><span class="p">)},</span> <span class="p">[</span><span class="mi">3</span><span class="p">]</span>
