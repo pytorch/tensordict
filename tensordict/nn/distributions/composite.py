@@ -276,13 +276,13 @@ class CompositeDistribution(d.Distribution, Mapping):
             if hasattr(dist, "deterministic_sample"):
                 return dist.deterministic_sample
             else:
-                from tensordict.nn.probabilistic import DETERMINISTIC_REGISTER
+                from tensordict.nn.probabilistic import _DETERMINISTIC_REGISTER
 
                 # Fallbacks
                 tdist = type(dist)
                 if issubclass(tdist, d.Independent):
                     tdist = type(dist.base_dist)
-                interaction_type = DETERMINISTIC_REGISTER.get(tdist)
+                interaction_type = _DETERMINISTIC_REGISTER.get(tdist)
                 if interaction_type == "mode":
                     return dist.mode
                 if interaction_type == "mean":

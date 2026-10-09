@@ -26,6 +26,7 @@ from typing import (
 
 import torch
 
+from tensordict._deprecation import deprecated_attributes
 from tensordict._lazy import _CustomOpTensorDict, LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._td import _SubTensorDict, TensorDict
@@ -498,7 +499,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     ) -> Callable:
         if kwargs is None:
             kwargs = {}
-        if func not in TDPARAM_HANDLED_FUNCTIONS or not all(
+        if func not in _TDPARAM_HANDLED_FUNCTIONS or not all(
             issubclass(t, (Tensor, ftdim.Tensor, TensorDictBase)) for t in types
         ):
             from torch._ops import HigherOrderOperator
@@ -507,7 +508,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 with torch._C.DisableTorchFunctionSubclass():
                     return func(*args, **kwargs)
             return NotImplemented
-        return TDPARAM_HANDLED_FUNCTIONS[func](*args, **kwargs)
+        return _TDPARAM_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
     @lock_blocked
     @_unlock_and_set
@@ -1343,21 +1344,21 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         return out
 
 
-TDPARAM_HANDLED_FUNCTIONS = copy(TD_HANDLED_FUNCTIONS)
+_TDPARAM_HANDLED_FUNCTIONS = copy(TD_HANDLED_FUNCTIONS)
 
 
-def implements_for_tdparam(torch_function: Callable) -> Callable[[Callable], Callable]:
+def _implements_for_tdparam(torch_function: Callable) -> Callable[[Callable], Callable]:
     """Register a torch function override for TensorDictParams."""
 
     @functools.wraps(torch_function)
     def decorator(func: Callable) -> Callable:
-        TDPARAM_HANDLED_FUNCTIONS[torch_function] = func
+        _TDPARAM_HANDLED_FUNCTIONS[torch_function] = func
         return func
 
     return decorator
 
 
-@implements_for_tdparam(torch.empty_like)
+@_implements_for_tdparam(torch.empty_like)
 def _empty_like(td: TensorDictBase, *args, **kwargs) -> TensorDictBase:
     return td.apply(
         lambda x: torch.empty_like(x, *args, **kwargs),
@@ -1366,3 +1367,13 @@ def _empty_like(td: TensorDictBase, *args, **kwargs) -> TensorDictBase:
 
 
 _register_tensor_class(TensorDictParams)
+
+
+__getattr__ = deprecated_attributes(
+    __name__,
+    {
+        "TDPARAM_HANDLED_FUNCTIONS": (_TDPARAM_HANDLED_FUNCTIONS, None),
+        "implements_for_tdparam": (_implements_for_tdparam, None),
+    },
+    removal="0.17",
+)

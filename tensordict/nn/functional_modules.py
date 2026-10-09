@@ -10,6 +10,7 @@ from typing import Any, Callable, Iterable
 
 import torch
 import torch.utils._pytree
+from tensordict._deprecation import deprecated
 from tensordict._pytree import PYTREE_REGISTERED_LAZY_TDS, PYTREE_REGISTERED_TDS
 
 from tensordict._td import TensorDict
@@ -32,8 +33,13 @@ def _register_params(self, name, param):
     self._parameters[name] = param
 
 
+@deprecated("tensordict.nn.functional_modules.set_tensor()", removal="0.17")
 def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> None:
-    """Simplified version of torch.nn.utils._named_member_accessor."""
+    """Simplified version of torch.nn.utils._named_member_accessor.
+
+    .. deprecated:: 0.15
+        This function will be removed in TensorDict 0.17. It has no replacement.
+    """
     if name in module._parameters:
         del module._parameters[name]  # type: ignore[assignment]
     was_buffer = name in module._buffers
@@ -49,8 +55,13 @@ def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> No
         module.__dict__[name] = tensor
 
 
+@deprecated("tensordict.nn.functional_modules.set_tensor_dict()", removal="0.17")
 def set_tensor_dict(module_dict, module, name: str, tensor: torch.Tensor) -> None:
-    """Simplified version of torch.nn.utils._named_member_accessor."""
+    """Simplified version of torch.nn.utils._named_member_accessor.
+
+    .. deprecated:: 0.15
+        This function will be removed in TensorDict 0.17. It has no replacement.
+    """
     if name in module_dict["_parameters"]:
         del module_dict["_parameters"][name]  # type: ignore[assignment]
     was_buffer = name in module_dict["_buffers"]
