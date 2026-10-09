@@ -178,15 +178,16 @@ _GET_DEFAULTS_TO_NONE_REPLACEMENT = "td[key] to raise a KeyError for a missing k
 
 if "TD_GET_DEFAULTS_TO_NONE" in os.environ:
     _GET_DEFAULTS_TO_NONE = strtobool(os.environ["TD_GET_DEFAULTS_TO_NONE"])
-    if not _GET_DEFAULTS_TO_NONE:
-        warn_deprecated(
-            f"TD_GET_DEFAULTS_TO_NONE={os.environ['TD_GET_DEFAULTS_TO_NONE']}",
-            removal="0.17",
-            replacement=_GET_DEFAULTS_TO_NONE_REPLACEMENT,
-            stacklevel=1,
-        )
 else:
     _GET_DEFAULTS_TO_NONE = True
+
+if not _GET_DEFAULTS_TO_NONE:
+    warn_deprecated(
+        f"TD_GET_DEFAULTS_TO_NONE={os.environ['TD_GET_DEFAULTS_TO_NONE']}",
+        removal="0.17",
+        replacement=_GET_DEFAULTS_TO_NONE_REPLACEMENT,
+        stacklevel=1,
+    )
 
 
 def _set_get_defaults_to_none(set_to_none: bool = True) -> None:
