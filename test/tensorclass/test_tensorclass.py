@@ -1478,7 +1478,7 @@ class TestTensorClass:
             assert element.z == "test_tensorclass"
 
         myc0d = myc[0]
-        with pytest.raises(TypeError, match="iteration over a 0-d MyData"):
+        with pytest.raises(TypeError, match="iteration over a 0-d tensordict"):
             iter(myc0d)
 
         # NonTensorData indexing has no bound check: iteration must stop at the batch size

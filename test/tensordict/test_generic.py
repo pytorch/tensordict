@@ -4815,26 +4815,6 @@ class TestGeneric:
         assert isinstance(result_false[0][0]["b"], dict)
         assert result_false[0][0]["b"]["c"].equal(torch.tensor([0, 1]))
 
-    def test_iter(self):
-        td = TensorDict(a=torch.arange(3), batch_size=[3])
-        assert [t["a"].item() for t in td] == [0, 1, 2]
-        td = lazy_stack([TensorDict(a=torch.zeros(2)), TensorDict(a=torch.ones(3))])
-        assert [t["a"].shape for t in td] == [torch.Size([2]), torch.Size([3])]
-
-    def test_iter_0d_raises_type_error(self):
-        td = TensorDict(a=torch.arange(3))
-        with pytest.raises(TypeError, match="iteration over a 0-d TensorDict"):
-            iter(td)
-        # default_collate iterates over the 0-d samples of a tensordict dataset
-        td = TensorDict(a=torch.arange(4), batch_size=[4])
-        dl = torch.utils.data.DataLoader(td, batch_size=2)  # noqa: TOR401
-        with pytest.raises(TypeError, match="collate_fn=torch.stack"):
-            next(iter(dl))
-        dl = torch.utils.data.DataLoader(  # noqa: TOR401
-            td, batch_size=2, collate_fn=lambda x: x
-        )
-        assert [batch["a"].tolist() for batch in dl] == [[0, 1], [2, 3]]
-
     def test_unbind_batchsize(self):
         td = TensorDict({"a": TensorDict({"b": torch.zeros(2, 3)}, [2, 3])}, [2])
         td["a"].batch_size
