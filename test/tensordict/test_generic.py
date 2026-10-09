@@ -4036,6 +4036,15 @@ class TestGeneric:
             td0 = td0.squeeze(0)
             assert_shared(td0)
 
+            # Indexing propagates the shared status if it gives a view
+            td0 = td[0]
+            assert_shared(td0)
+
+            # torch reads a bool as a 0-d mask, which copies
+            for index in (True, False, (0, True), torch.tensor(True)):
+                td0 = td[index]
+                assert_not_shared(td0)
+
     def test_sorted_keys(self):
         td = TensorDict(
             {
