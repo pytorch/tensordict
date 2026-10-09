@@ -902,26 +902,6 @@ class MemoryMappedTensor(torch.Tensor):
         return out
 
     @property
-    @deprecated("MemoryMappedTensor.index", removal="0.17")
-    def index(self) -> Any:
-        """The index of this tensor in the tensor that it was built from.
-
-        .. deprecated:: 0.15
-            This is internal to pickling and has no replacement.
-        """
-        return self._index
-
-    @property
-    @deprecated("MemoryMappedTensor.parent_shape", removal="0.17")
-    def parent_shape(self) -> torch.Size:
-        """The shape of the tensor that this tensor was built from.
-
-        .. deprecated:: 0.15
-            This is internal to pickling and has no replacement.
-        """
-        return self._parent_shape
-
-    @property
     def _tensor(self):
         raise RuntimeError(
             "_tensor property has been removed. MemoryMappedTensor is now a tensor subclass "
@@ -972,6 +952,26 @@ class MemoryMappedTensor(torch.Tensor):
             return type(self).from_filename, args
         else:
             raise RuntimeError("Could not find handler or filename.")
+
+    @property
+    @deprecated("MemoryMappedTensor.index", removal="0.17")
+    def index(self) -> Any:
+        """The index of this tensor in the tensor that it was built from.
+
+        .. deprecated:: 0.15
+            This is internal to pickling and has no replacement.
+        """
+        return self._index
+
+    @property
+    @deprecated("MemoryMappedTensor.parent_shape", removal="0.17")
+    def parent_shape(self) -> torch.Size:
+        """The shape of the tensor that this tensor was built from.
+
+        .. deprecated:: 0.15
+            This is internal to pickling and has no replacement.
+        """
+        return self._parent_shape
 
     def __getitem__(self, item: IndexType) -> Self | torch.Tensor:
         try:
