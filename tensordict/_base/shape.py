@@ -28,9 +28,11 @@ from tensordict.utils import (
     _create_segments_from_list,
     _get_shape_from_args,
     _infer_size_impl,
+    _is_tensorclass,
     _is_unbatched,
     _maybe_correct_neg_dim,
     _zip_strict,
+    is_non_tensor,
     lazy_legacy,
     unravel_key_list,
 )
@@ -1607,10 +1609,15 @@ class _ShapeOps:
         # size, and roll the flattened batch (not the whole leaf) by default,
         # so that the feature dims of the leaves are left in place.
         batch_dims = self.batch_dims
+        if dims is not None and not isinstance(dims, int) and not len(dims):
+            # torch rolls the flattened tensor for empty dims too
+            dims = None
         if dims is None:
+            # -1 would be ambiguous for a leaf with an empty feature dim
+            numel = self.batch_size.numel()
 
             def _roll(tensor):
-                flat = tensor.reshape(-1, *tensor.shape[batch_dims:])
+                flat = tensor.reshape(numel, *tensor.shape[batch_dims:])
                 return flat.roll(shifts, 0).reshape(tensor.shape)
 
         else:
@@ -1625,10 +1632,17 @@ class _ShapeOps:
         if inplace:
 
             def nested_fn(nested):
-                if dims is None:
+                if dims is not None:
+                    nested.roll(shifts, dims, inplace=True)
+                elif is_non_tensor(nested):
+                    # non-tensor entries have no tensor leaves to rebind
                     nested.update_(_roll(nested))
                 else:
-                    nested.roll(shifts, dims, inplace=True)
+                    # the nested batch dims may extend the batch dims that
+                    # _roll flattens, so rebind the nested leaves with it
+                    if _is_tensorclass(type(nested)):
+                        nested = nested._tensordict
+                    nested._inplace_rebind_leaves(_roll, nested_fn, None)
 
             return self._inplace_rebind_leaves(_roll, nested_fn, None)
 
