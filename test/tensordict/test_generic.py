@@ -1804,6 +1804,29 @@ class TestGeneric:
         assert (sub["n", "b"] == expected).all()
         assert (td_written["a"] == written).all()
 
+    @pytest.mark.parametrize(
+        "index",
+        [
+            (0, 0, 0),
+            (slice(None),) * 3,
+            5,
+            (slice(None), -5),
+            torch.ones(5, dtype=torch.bool),
+            torch.ones(3, 5, dtype=torch.bool),
+            ([0, 1], [0, 1, 2]),
+        ],
+    )
+    def test_getitem_invalid_index_without_entries(self, index):
+        # torch finds an invalid index when it indexes the entries, so a
+        # tensordict checks the index against its batch size when it has none
+        with pytest.raises(IndexError):
+            torch.zeros(3, 4)[index]
+        td = TensorDict(batch_size=[3, 4])
+        with pytest.raises(IndexError):
+            td[index]
+        with pytest.raises(IndexError):
+            td[index] = TensorDict()
+
     def test_getitem_scalar_bool_0d(self):
         td = TensorDict({"a": torch.tensor(1.0)}, [])
         assert td[True].batch_size == torch.Size([1])

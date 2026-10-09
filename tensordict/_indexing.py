@@ -205,8 +205,13 @@ def _expand_ellipsis(index: tuple, ndim: int) -> tuple:
     return index[:position] + (slice(None),) * ellipsis_length + index[position + 1 :]
 
 
-def _read_index(index, ndim):
+def _read_index(index, ndim, sizes=None):
     """Read ``index`` as torch does for a tensor with ``ndim`` dims.
+
+    If the ``sizes`` of the dims are given, the index is checked against them
+    as torch checks it: too many indices, ints out of range and masks of
+    another shape raise an ``IndexError``. Index tensors are not read, so the
+    values out of range that they may hold are not found.
 
     Returns ``(dims, advanced, position, rest)``:
 
@@ -229,6 +234,14 @@ def _read_index(index, ndim):
     dim = 0
     for element in index:
         kind, num_dims, element = _read_element(element)
+        if sizes is not None:
+            if kind == _INT:
+                if isinstance(element, (int, np.integer)) and not (
+                    dim < ndim and -sizes[dim] <= element < sizes[dim]
+                ):
+                    _check_element(kind, element, dim, num_dims, sizes)
+            elif kind == _MASK and element.shape != sizes[dim : dim + num_dims]:
+                _check_element(kind, element, dim, num_dims, sizes)
         if kind == _INT:
             dim += 1
         elif kind == _SLICE:
@@ -247,7 +260,26 @@ def _read_index(index, ndim):
             dim += num_dims
     if separated:
         position = 0
+    if sizes is not None and dim > ndim:
+        raise IndexError(f"too many indices for tensor of dimension {ndim}")
     return dims, advanced, position, dim
+
+
+def _check_element(kind, element, dim, num_dims, sizes):
+    """Raise the ``IndexError`` that torch raises for an element of an index that uses the dims from ``dim`` on."""
+    if dim + num_dims > len(sizes):
+        raise IndexError(f"too many indices for tensor of dimension {len(sizes)}")
+    if kind == _INT and isinstance(element, (int, np.integer)):
+        size = sizes[dim]
+        if not -size <= element < size:
+            raise IndexError(
+                f"index {element} is out of bounds for dimension {dim} with size {size}"
+            )
+    elif kind == _MASK and tuple(element.shape) != tuple(sizes[dim : dim + num_dims]):
+        raise IndexError(
+            f"The shape of the mask {list(element.shape)} at index {dim} does not "
+            f"match the shape of the indexed tensor {list(sizes)} at index {dim}"
+        )
 
 
 def _getitem_batch_size(batch_size, index):
@@ -272,10 +304,12 @@ def _getitem_batch_size(batch_size, index):
     """
     if not isinstance(index, tuple):
         if isinstance(index, int) and not isinstance(index, bool):
+            if not batch_size or not -batch_size[0] <= index < batch_size[0]:
+                _check_element(_INT, index, 0, 1, batch_size)
             return batch_size[1:]
         if isinstance(index, slice) and index == slice(None):
             return batch_size
-    dims, advanced, position, rest = _read_index(index, len(batch_size))
+    dims, advanced, position, rest = _read_index(index, len(batch_size), batch_size)
     out = [
         1 if dim is None else _slice_length(element, batch_size[dim])
         for dim, element in dims
@@ -283,9 +317,17 @@ def _getitem_batch_size(batch_size, index):
     out.extend(batch_size[rest:])
     if advanced:
         shapes = [_advanced_shape(kind, element) for kind, element, _, _ in advanced]
-        out[position:position] = (
-            shapes[0] if len(shapes) == 1 else torch.broadcast_shapes(*shapes)
-        )
+        if len(shapes) == 1:
+            shape = shapes[0]
+        else:
+            try:
+                shape = torch.broadcast_shapes(*shapes)
+            except RuntimeError:
+                raise IndexError(
+                    "shape mismatch: indexing tensors could not be broadcast "
+                    f"together with shapes {', '.join(str(list(s)) for s in shapes)}"
+                ) from None
+        out[position:position] = shape
     return torch.Size(out)
 
 
