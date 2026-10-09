@@ -36,6 +36,7 @@ from tensordict.nn import (
     InteractionType,
     ProbabilisticTensorDictModule as Prob,
     set_composite_lp_aggregate,
+    set_interaction_type,
     TensorDictModule,
     TensorDictModule as Mod,
     TensorDictSequential as Seq,
@@ -1581,6 +1582,26 @@ class TestNN:
         assert sample.shape == td["loc"].shape
         if not mean_raises:
             torch.testing.assert_close(sample, td["loc"])
+
+    def test_prob_module_interaction_type_change(self, mode):
+        # The interaction type is read from a global mode object: the compiled
+        # module must follow a change of that mode between calls.
+        prob_mod = Prob(
+            in_keys=["loc", "scale"],
+            out_keys=["sample"],
+            distribution_class=torch.distributions.Normal,
+        )
+        td = TensorDict(loc=torch.zeros(1000), scale=torch.ones(1000))
+        prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
+        with set_interaction_type(InteractionType.MEAN):
+            sample = prob_mod_c(td.copy())["sample"]
+        torch.testing.assert_close(sample, td["loc"])
+        with set_interaction_type(InteractionType.RANDOM):
+            sample = prob_mod_c(td.copy())["sample"]
+        assert (sample != td["loc"]).all()
+        with set_interaction_type(InteractionType.MEAN):
+            sample = prob_mod_c(td.copy())["sample"]
+        torch.testing.assert_close(sample, td["loc"])
 
 
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])

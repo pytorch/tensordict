@@ -359,29 +359,28 @@ class _set_skip_existing_None(set_skip_existing):
 
         @functools.wraps(func)
         def wrapper(_self, tensordict, *args: Any, **kwargs: Any) -> Any:
-            if skip_existing() and is_compiling():
-                raise RuntimeError(
-                    "skip_existing is not compatible with torch.compile."
-                )
-            in_keys = getattr(_self, self.in_key_attr)
-            out_keys = getattr(_self, self.out_key_attr)
             # we use skip_existing to allow users to override the mode internally
-            skip_mode = skip_existing()
-            if (
-                skip_mode
-                and (skip_mode is True or all(key in skip_mode for key in out_keys))
-                and all(key in tensordict.keys(True) for key in out_keys)
-                and not any(key in out_keys for key in in_keys)
-            ):
-                return tensordict
-            if is_compiling():
+            skip_mode = _skip_existing.get_mode()
+            compiling = is_compiling()
+            if skip_mode:
+                if compiling:
+                    raise RuntimeError(
+                        "skip_existing is not compatible with torch.compile."
+                    )
+                in_keys = getattr(_self, self.in_key_attr)
+                out_keys = getattr(_self, self.out_key_attr)
+                if (
+                    (skip_mode is True or all(key in skip_mode for key in out_keys))
+                    and all(key in tensordict.keys(True) for key in out_keys)
+                    and not any(key in out_keys for key in in_keys)
+                ):
+                    return tensordict
+            if compiling:
                 return func(_self, tensordict, *args, **kwargs)
-            self.prev = _skip_existing.get_mode()
             try:
-                result = func(_self, tensordict, *args, **kwargs)
+                return func(_self, tensordict, *args, **kwargs)
             finally:
-                _skip_existing.set_mode(self.prev)
-            return result
+                _skip_existing.set_mode(skip_mode)
 
         return wrapper
 

@@ -2136,6 +2136,29 @@ class TestSkipExisting:
         assert td["value"].item() == 10
         assert td["next", "memory"].item() == 1
 
+    def test_nested_sequence_restores_mode(self):
+        # The inner and outer sequences share the decorator of
+        # TensorDictSequential.forward: the inner call must not change the
+        # mode that the outer call restores.
+        class Inner(TensorDictModuleBase):
+            in_keys = ["in"]
+            out_keys = ["out"]
+
+            def __init__(self):
+                super().__init__()
+                self.seq = TensorDictSequential(
+                    TensorDictModule(lambda x: x + 1, in_keys=["in"], out_keys=["out"])
+                )
+
+            @set_skip_existing(True)
+            def forward(self, tensordict):
+                return self.seq(tensordict)
+
+        module = TensorDictSequential(Inner())
+        td = module(TensorDict({"in": torch.zeros(())}, []))
+        assert (td["out"] == 1).all()
+        assert skip_existing() is False
+
 
 @pytest.mark.parametrize("out_d_key", [("d", "e"), ["d"], ["d", "e"]])
 @pytest.mark.parametrize("unpack", [True, False])
