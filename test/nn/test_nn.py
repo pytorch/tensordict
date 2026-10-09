@@ -5097,6 +5097,22 @@ class TestEdgeCases:
         ):
             module.as_td_module()
 
+    def test_field_named_fields(self) -> None:
+        """Test that a field named ``fields`` is read as a key."""
+
+        class FieldsInput(TensorClass):
+            fields: torch.Tensor
+
+        class FieldsModule(TensorClassModuleBase[FieldsInput, AddDiffResult]):
+            def forward(self, x: FieldsInput) -> AddDiffResult:
+                return AddDiffResult(
+                    added=x.fields + 1, substracted=x.fields - 1, batch_size=[]
+                )
+
+        td_module = FieldsModule().as_td_module()
+        assert td_module.in_keys == ["fields"]
+        assert td_module(TensorDict(fields=torch.ones(())))["added"] == 2
+
     def test_batch_size_preservation(self) -> None:
         """Test that batch size is correctly preserved through forward pass."""
         module = AddDiffModule()

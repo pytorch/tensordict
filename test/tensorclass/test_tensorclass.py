@@ -3730,6 +3730,97 @@ class TestShadow:
                     sum: torch.Tensor
                     other: torch.Tensor
 
+    # Every member of a tensorclass is a reserved field name, except "data" and
+    # "fields", which a field replaces, and the "_is_non_tensor" field of
+    # NonTensorData.
+    @pytest.mark.parametrize(
+        "make_cls",
+        [
+            lambda ann: tensorclass(type("MyClass", (), {"__annotations__": ann})),
+            lambda ann: tensorclass(tensor_only=True)(
+                type("MyClass", (), {"__annotations__": ann})
+            ),
+            lambda ann: type("MyClass", (TensorClass,), {"__annotations__": ann}),
+            lambda ann: type(
+                "MyClass", (TensorClass["frozen"],), {"__annotations__": ann}
+            ),
+            lambda ann: type(
+                "MyClass", (TensorClass["tensor_only"],), {"__annotations__": ann}
+            ),
+        ],
+        ids=["decorator", "decorator-tensor_only", "subclass", "frozen", "tensor_only"],
+    )
+    def test_reserved_field_names_cover_members(self, make_cls):
+        from tensordict.tensorclass import _is_reserved_field_name
+
+        MyClass = make_cls({"x": torch.Tensor})
+        c = MyClass(x=torch.zeros(3), batch_size=[3])
+        names = {
+            name
+            for name in set(dir(MyClass)).union(vars(c))
+            if not (name.startswith("__") and name.endswith("__"))
+        }
+        names -= {"x", "data", "fields", "_is_non_tensor"}
+        assert {name for name in names if not _is_reserved_field_name(name)} == set()
+
+    @pytest.mark.parametrize(
+        "name",
+        ["from_tensordict", "extend", "_tensordict", "_non_tensordict", "_type_hints"],
+    )
+    @pytest.mark.parametrize("subclass", [False, True])
+    def test_no_shadow_tensorclass_member_name(self, name, subclass):
+        # These members exist on tensorclasses but not on TensorDict.
+        annotations = {name: torch.Tensor, "other": torch.Tensor}
+        with pytest.raises(
+            AttributeError,
+            match=rf"Attribute name {name} can't be used .* pass shadow=True",
+        ):
+            if subclass:
+                type("MyClass", (TensorClass,), {"__annotations__": annotations})
+            else:
+                tensorclass(type("MyClass", (), {"__annotations__": annotations}))
+
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_private_tensordict_name_as_field(self, tensor_only):
+        # "_cache" is a private TensorDict attribute that tensorclasses do not
+        # have, so it is a valid field name.
+        @tensorclass(tensor_only=tensor_only)
+        class MyClass:
+            x: torch.Tensor
+            _cache: torch.Tensor
+
+        c = MyClass(x=torch.zeros(3), _cache=torch.ones(3), batch_size=[3])
+        assert (c._cache == 1).all()
+        assert (torch.stack([c, c])[1, 0]._cache == 1).all()
+        c._cache = torch.full((3,), 2.0)
+        assert (c.get("_cache") == 2).all()
+
+    @pytest.mark.parametrize("name", ["data", "fields"])
+    @pytest.mark.parametrize(
+        "base",
+        [
+            None,
+            "tensor_only",
+            TensorClass,
+            TensorClass["frozen"],
+            TensorClass["shadow"],
+        ],
+        ids=["decorator", "decorator-tensor_only", "subclass", "frozen", "shadow"],
+    )
+    def test_field_replaces_member(self, name, base):
+        annotations = {name: torch.Tensor, "other": torch.Tensor}
+        if base is None or base == "tensor_only":
+            MyClass = tensorclass(tensor_only=base == "tensor_only")(
+                type("MyClass", (), {"__annotations__": annotations})
+            )
+        else:
+            MyClass = type("MyClass", (base,), {"__annotations__": annotations})
+        assert [f.name for f in dataclasses.fields(MyClass)] == [name, "other"]
+        c = MyClass(**{name: torch.ones(3), "other": torch.zeros(3)}, batch_size=[3])
+        assert (getattr(c, name) == 1).all()
+        assert getattr(c[0], name) == 1
+        assert (getattr(torch.stack([c, c]), name) == 1).all()
+
     @pytest.mark.parametrize("subclass", [False, True])
     @pytest.mark.parametrize("frozen", [False, True])
     def test_shadow_method_name(self, subclass, frozen):
