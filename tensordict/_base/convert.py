@@ -53,12 +53,12 @@ from tensordict.utils import (
     _as_context_manager,
     _is_dataclass as is_dataclass,
     _is_list_tensor_compatible,
+    _is_namedtuple,
+    _is_namedtuple_class,
     _is_non_tensor,
     _is_unbatched,
     _maybe_correct_neg_dim,
     _set_max_batch_size,
-    is_namedtuple,
-    is_namedtuple_class,
     is_non_tensor,
     LinkedList,
     set_lazy_legacy,
@@ -307,7 +307,7 @@ class _Conversion:
         from tensordict._td import TensorDict
 
         result = None
-        if is_namedtuple(pytree):
+        if _is_namedtuple(pytree):
             result = TensorDict.from_namedtuple(named_tuple=pytree)
             if batch_dims is not None:
                 result.batch_size = batch_size
@@ -367,7 +367,7 @@ class _Conversion:
                 )
             )
             return items
-        if is_namedtuple_class(_pytree_type):
+        if _is_namedtuple_class(_pytree_type):
             from tensordict._td import TensorDict
 
             return TensorDict(items).to_namedtuple(dest_cls=_pytree_type)
@@ -1518,7 +1518,7 @@ class _Conversion:
                 batch_size=batch_size,
             )
         if isinstance(obj, tuple):
-            if is_namedtuple(obj):
+            if _is_namedtuple(obj):
                 return cls.from_namedtuple(
                     obj,
                     auto_batch_size=auto_batch_size,
@@ -1760,7 +1760,7 @@ class _Conversion:
         from tensordict import TensorDict
 
         def namedtuple_to_dict(namedtuple_obj):
-            if is_namedtuple(namedtuple_obj):
+            if _is_namedtuple(namedtuple_obj):
                 namedtuple_obj = namedtuple_obj._asdict()
 
             else:
@@ -1878,7 +1878,7 @@ class _Conversion:
             [(1, 4.) (2, 5.) (3, 6.)]
 
         """
-        from tensordict.utils import TORCH_TO_NUMPY_DTYPE_DICT
+        from tensordict.utils import _TORCH_TO_NUMPY_DTYPE_DICT
 
         keys, vals = zip(*self.items())
         _vals = []
@@ -1927,7 +1927,7 @@ class _Conversion:
                     return (val.dtype, extra_shape)
                 return val.dtype
             elif isinstance(val, torch.Tensor):
-                return TORCH_TO_NUMPY_DTYPE_DICT.get(val.dtype, val.dtype)
+                return _TORCH_TO_NUMPY_DTYPE_DICT.get(val.dtype, val.dtype)
             else:
                 return "U10"
 

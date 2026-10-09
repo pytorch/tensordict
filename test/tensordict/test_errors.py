@@ -22,7 +22,7 @@ from tensordict import (
     TensorDict,
 )
 from tensordict.nn import TensorDictParams
-from tensordict.utils import _LOCK_ERROR
+from tensordict.utils import _GENERIC_NESTED_ERR, _LOCK_ERROR
 from torch import nn
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
@@ -105,6 +105,30 @@ class TestErrorMessage:
             td.set_("a", torch.randn(2))
 
     @staticmethod
+    @pytest.mark.parametrize("key", [1, None, (1, "a")])
+    def test_non_str_key(key):
+        err = re.escape(_GENERIC_NESTED_ERR.format(key))
+        value = torch.zeros(2)
+        td = TensorDict({"a": value}, [2])
+        with pytest.raises(KeyError, match=err):
+            TensorDict({key: value}, [2])
+        with pytest.raises(KeyError, match=err):
+            TensorDict.from_dict({key: value})
+        with pytest.raises(KeyError, match=err):
+            td.set(key, value)
+        with pytest.raises(KeyError, match=err):
+            td.set_(key, value)
+        with pytest.raises(KeyError, match=err):
+            td.update({key: value})
+        with pytest.raises(KeyError, match=err):
+            td.get(key)
+        with pytest.raises(KeyError, match=err):
+            td.get_at(key, 0)
+        with pytest.raises(KeyError, match=err):
+            td.pop(key)
+        assert list(td.keys()) == ["a"]
+
+    @staticmethod
     @pytest.mark.parametrize("td_type", ["td", "lazy_stack", "sub_td"])
     def test_set_self_error(td_type):
         td = TensorDict({"a": torch.zeros(3, 2)}, [3, 2])
@@ -117,6 +141,24 @@ class TestErrorMessage:
         with pytest.raises(ValueError, match="Cannot set a tensordict inside itself"):
             td.set(("nested", "self"), td)
         assert set(td.keys()) == {"a"}
+
+    @staticmethod
+    @pytest.mark.parametrize("td_type", ["td", "sub_td", "params"])
+    def test_iter_0d(td_type):
+        td = TensorDict({"a": torch.zeros(2, 3)}, [2])
+        if td_type == "sub_td":
+            td = td._get_sub_tensordict(0)
+        else:
+            td = td[0]
+            if td_type == "params":
+                td = TensorDictParams(td)
+        assert td.batch_dims == 0
+        err = "iteration over a 0-d tensordict"
+        # iter() raises at once, as it does for a 0-d tensor
+        with pytest.raises(TypeError, match=err):
+            iter(td)
+        with pytest.raises(TypeError, match=err):
+            list(td)
 
 
 class TestErrors:
