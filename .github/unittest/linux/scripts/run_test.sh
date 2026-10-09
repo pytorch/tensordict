@@ -95,7 +95,9 @@ if [ "$test_status" -ne 0 ]; then
     exit "$test_status"
 fi
 
-python -m pytest ./benchmarks --instafail -v --durations 20 --junitxml="$JUNIT_DIR/junit-benchmarks.xml"
+# The benchmark workflows time the benchmarks. Here, run each one once, to
+# check that it still works.
+python -m pytest ./benchmarks --benchmark-disable --instafail -v --durations 20 --junitxml="$JUNIT_DIR/junit-benchmarks.xml"
 
 if [ -n "$RUNNER_TEST_RESULTS_DIR" ]; then
     cp "$JUNIT_DIR"/junit-*.xml "$RUNNER_TEST_RESULTS_DIR/" 2>/dev/null || true
