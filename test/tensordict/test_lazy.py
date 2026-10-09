@@ -928,6 +928,113 @@ class TestLazyStackedTensorDict:
         assert tdmask["a"].shape == td["a"][index].shape
         assert (tdmask["a"] == td["a"][index]).all()
 
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2, 3])
+    @pytest.mark.parametrize(
+        "pattern",
+        [
+            "ts t",
+            "t st",
+            "ts ts",
+            "st st",
+            "ts s t",
+            "t s s t",
+            "t is t",
+            "t s i t",
+            "s t s t",
+        ],
+    )
+    def test_lazy_separated_tensor_indices(self, stack_dim, pattern):
+        # tensor indices separated by a slice put the broadcast dim first,
+        # as in the dense tensordict (#1838)
+        shape = (3, 4, 2)
+        tds = [TensorDict({"x": torch.randn(*shape)}, list(shape)) for _ in range(5)]
+        lazy = lazy_stack(tds, stack_dim)
+        dense = lazy.to_tensordict()
+        index = []
+        for code, size in zip(pattern.replace(" ", ""), lazy.batch_size):
+            if code == "t":
+                index.append(torch.randint(0, size, (2,)))
+            elif code == "s":
+                index.append(slice(None))
+            else:
+                index.append(0)
+        index = tuple(index)
+        expected = dense[index]
+        result = lazy[index]
+        assert result.batch_size == expected.batch_size
+        assert (result["x"] == expected["x"]).all()
+
+    def test_lazy_separated_tensor_indices_slice_bounds(self):
+        tds = [TensorDict({"x": torch.randn(3, 4)}, [3, 4]) for _ in range(5)]
+        lazy = lazy_stack(tds, 2)
+        dense = lazy.to_tensordict()
+        index = (torch.tensor([0, 2]), slice(1, 3), torch.tensor([4, 1]))
+        result = lazy[index]
+        expected = dense[index]
+        assert result.batch_size == expected.batch_size
+        assert (result["x"] == expected["x"]).all()
+
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2])
+    @pytest.mark.parametrize(
+        "index",
+        [
+            (slice(None), 0),
+            # scalar bools inside a tuple are advanced indices that use no dim
+            (True, slice(None), [0, 1]),
+            (slice(None), torch.tensor(True), [1, 0]),
+            (0, False),
+            (False, slice(None)),
+            # None between advanced indices puts their block first
+            ([0, 1], None, [1, 0]),
+            # N-D index tensors that broadcast together
+            (torch.tensor([[0], [2]]), torch.tensor([1, 3])),
+            # the same position twice
+            (torch.tensor([1, 0, 1]), torch.tensor([1, 0, 1])),
+            # a 2-D mask
+            (
+                slice(None),
+                torch.tensor(
+                    [[True, False], [False, True], [True, True], [False, False]]
+                ),
+            ),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "op", ["getitem", "setitem", "setitem_scalar", "set_at_", "update_at_"]
+    )
+    def test_lazy_index_matches_dense(self, stack_dim, index, op):
+        dense = TensorDict(
+            {
+                "a": torch.arange(24.0).view(3, 4, 2),
+                "nested": {"b": torch.arange(48.0).view(3, 4, 2, 2)},
+            },
+            [3, 4, 2],
+        )
+        lazy = LazyStackedTensorDict.lazy_stack(
+            dense.clone().unbind(stack_dim), stack_dim
+        )
+        if op == "getitem":
+            result, expected = lazy[index], dense[index]
+            assert result.batch_size == expected.batch_size
+            assert (result.to_tensordict() == expected).all()
+            return
+        if op == "setitem":
+            value = dense[index].apply(lambda x: -1 - x)
+            lazy[index] = value
+            dense[index] = value
+        elif op == "setitem_scalar":
+            lazy[index] = -1.0
+            dense[index] = -1.0
+        elif op == "set_at_":
+            value = -1 - dense["nested", "b"][index]
+            lazy.set_at_(("nested", "b"), value, index)
+            dense.set_at_(("nested", "b"), value, index)
+        else:
+            value = dense[index].apply(lambda x: -1 - x)
+            lazy.update_at_(value, index)
+            dense.update_at_(value, index)
+        assert (lazy.to_tensordict() == dense).all()
+
     def test_lazy_mask_indexing_single(self):
         td = LazyStackedTensorDict(
             TensorDict({"a": torch.ones(())}),
@@ -1862,8 +1969,12 @@ class TestLazyStackedTensorDict:
         indexed = lst[(torch.tensor(True),)]
         assert indexed.batch_size == torch.Size([1, 2])
         assert indexed["a"].tolist() == [[0.0, 1.0]]
-        with pytest.raises(NotImplementedError, match="scalar False"):
-            lst[(torch.tensor(False),)]
+        # scalar False inside a tuple index adds a size-0 dim
+        assert lst[(torch.tensor(False),)].batch_size == torch.Size([0, 2])
+        assert lst[(0, False)].batch_size == torch.Size([0])
+        # None and scalar bools next to each other
+        assert lst[(None, True)].batch_size == torch.Size([1, 1, 2])
+        assert lst[(True, None, 1)].batch_size == torch.Size([1, 1])
         # scalar False assignment is a no-op
         before = lst["a"].tolist()
         lst[torch.tensor(False)] = TensorDict({"a": torch.full((1, 2), 5.0)}, [1, 2])

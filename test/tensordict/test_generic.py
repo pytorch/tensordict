@@ -1805,6 +1805,9 @@ class TestGeneric:
         td = TensorDict({"a": torch.tensor(1.0)}, [])
         assert td[True].batch_size == torch.Size([1])
         assert td[False].batch_size == torch.Size([0])
+        # None and scalar bools use no dim, as in torch
+        for index in ((True, True), (None, True), (torch.tensor(True), None)):
+            assert td[index].batch_size == torch.zeros(())[index].shape
 
     @pytest.mark.parametrize(
         "index", [np.True_, np.False_, (slice(None), np.True_), (np.False_, ...)]

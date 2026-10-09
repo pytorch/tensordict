@@ -786,7 +786,8 @@ class TensorDict(TensorDictBase):
             if isinstance(index, tuple):
                 if len(index) == 1:
                     return _check_for_invalid_index(index[0])
-                elif all(idx is None for idx in index):
+                # None and the scalar bools use no dim
+                elif all(_read_element(idx)[1] == 0 for idx in index):
                     return
             raise RuntimeError(
                 f"indexing a tensordict with td.batch_dims==0 is not permitted. Got index {index}."
