@@ -11,6 +11,7 @@ import copy
 import dataclasses
 import importlib.util
 import inspect
+import itertools
 import os
 import pathlib
 import pickle
@@ -267,9 +268,6 @@ _TENSORCLASS_STUB_EXCLUSIONS = {
     # Forwards to LazyStackedTensorDict.extend, so it works only when the
     # tensorclass wraps a lazy stack; TensorDictBase has no extend.
     "extend",
-    # Iteration goes through __getitem__ at runtime; the stub declares
-    # __iter__ so that type checkers know what a loop yields.
-    "__iter__",
 }
 
 
@@ -1459,6 +1457,29 @@ class TestTensorClass:
             batch_size=[],
         )
         assert len(myc2) == 0
+
+    def test_iter(self):
+        myc = MyData(
+            X=torch.arange(6).view(3, 2),
+            y=torch.rand(3, 2, 4),
+            z="test_tensorclass",
+            batch_size=[3],
+        )
+        elements = list(myc)
+        assert len(elements) == 3
+        for i, element in enumerate(elements):
+            assert type(element) is MyData
+            assert element.batch_size == torch.Size([])
+            assert (element.X == myc.X[i]).all()
+            assert element.z == "test_tensorclass"
+
+        myc0d = myc[0]
+        with pytest.raises(TypeError, match="iteration over a 0-d MyData"):
+            iter(myc0d)
+
+        # NonTensorData indexing has no bound check: iteration must stop at the batch size
+        ntd = NonTensorData("a string", batch_size=[3])
+        assert len(list(itertools.islice(ntd, 4))) == 3
 
     def test_multiprocessing(self):
         with Pool(os.cpu_count()) as p:

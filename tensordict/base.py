@@ -27,7 +27,6 @@ from typing import (
     Any,
     Callable,
     Dict,
-    Generator,
     Iterator,
     List,
     overload,
@@ -806,11 +805,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             string = "..."
         return f"{type(self).__name__}(\n{string})"
 
-    def __iter__(self) -> Generator:
-        """Iterates over the first shape-dimension of the tensordict."""
+    def __iter__(self) -> Iterator[TensorDictBase]:
+        """Iterates over the first shape-dimension of the tensordict.
+
+        Like iterating over a 0-d tensor, iterating over a tensordict with an
+        empty batch size raises a ``TypeError``.
+        """
         if not self.batch_dims:
-            raise StopIteration
-        yield from self.unbind(0)
+            raise TypeError(
+                f"iteration over a 0-d {type(self).__name__}. Use .keys() to iterate "
+                "over its keys. In a DataLoader, pass collate_fn=torch.stack, or "
+                "collate_fn=lambda x: x if the dataset is a tensordict."
+            )
+        return iter(self.unbind(0))
 
     def __len__(self) -> int:
         """Returns the length of first dimension, if there is, otherwise 0."""

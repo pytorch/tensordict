@@ -180,6 +180,7 @@ _TD_PASS_THROUGH = {
 _METHOD_FROM_TD = [
     "__enter__",
     "__exit__",
+    "__iter__",
     "dumps",
     "load_",
     "memmap",
