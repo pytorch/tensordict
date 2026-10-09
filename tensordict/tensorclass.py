@@ -1119,7 +1119,7 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         cls.__init__, cls, frozen, shadow, tensor_only, _has_custom_setattr
     )
     cls._from_tensordict = classmethod(_from_tensordict)
-    cls.from_tensordict = cls._from_tensordict
+    cls.from_tensordict = classmethod(_from_tensordict_public)
     if not hasattr(cls, "__torch_function__"):
         cls.__torch_function__ = classmethod(__torch_function__)
     cls.__getstate__ = _getstate
@@ -1703,6 +1703,7 @@ def _get_type_hints(cls, with_locals=False, tensor_only=False):
     globalns = None
 
     cls._tensordict_fields = frozenset()
+    cls._tensorclass_fields = {}
     try:
         type_hints = get_type_hints(
             cls,
@@ -1794,13 +1795,33 @@ def _is_tensordict_annotation(type_hint: Any) -> bool:
     return isinstance(type_hint, type) and issubclass(type_hint, TensorDictBase)
 
 
+def _tensorclass_annotation(type_hint: Any) -> type | None:
+    """Return the tensorclass of a ``T`` or ``Optional[T]`` annotation, else ``None``."""
+    if get_origin(type_hint) in (Union, UnionType):
+        args = [arg for arg in get_args(type_hint) if arg is not NoneType]
+        if len(args) != 1:
+            return None
+        type_hint = args[0]
+    if isinstance(type_hint, type) and _is_tensorclass(type_hint):
+        return type_hint
+    return None
+
+
 def _set_tensorclass_type_hints(cls: type, type_hints: dict[str, Any]) -> None:
-    """Store resolved hints and cache fields with TensorDict-like annotations."""
+    """Store resolved hints and cache the TensorDict- and tensorclass-annotated fields."""
     cls._tensordict_fields = frozenset(
         key
         for key, val in type_hints.items()
         if key in cls.__expected_keys__ and _is_tensordict_annotation(val)
     )
+    tensorclass_fields = {}
+    for key, val in type_hints.items():
+        if key not in cls.__expected_keys__:
+            continue
+        tensorclass_type = _tensorclass_annotation(val)
+        if tensorclass_type is not None:
+            tensorclass_fields[key] = tensorclass_type
+    cls._tensorclass_fields = tensorclass_fields
     cls._type_hints = type_hints
 
 
@@ -1910,6 +1931,48 @@ def _from_tensordict(
     if hasattr(cls, "__post_init__"):
         tc.__post_init__()
     return tc
+
+
+def _from_tensordict_public(
+    cls,
+    tensordict: TensorDictBase,
+    non_tensordict: dict | None = None,
+    safe: bool = True,
+) -> Self:
+    """``from_tensordict``: ``_from_tensordict`` that also builds the tensorclass fields.
+
+    In a :class:`~tensordict.TensorDict`, an entry for a field annotated with a
+    tensorclass (or ``Optional`` of one) that is a tensordict becomes an instance of
+    that tensorclass, recursively. Other backends are wrapped as they are: setting a
+    tensorclass in them would write to their storage (e.g. an H5 file). The
+    tensorclass ops rebuild their results with ``_from_tensordict``: their nested
+    entries are already tensorclasses.
+    """
+    tensorclass_fields = cls._tensorclass_fields
+    if tensorclass_fields and isinstance(tensordict, TensorDict):
+        keys = [
+            key
+            for key in tensorclass_fields
+            if isinstance(tensordict._get_str(key, None), TensorDictBase)
+        ]
+        if keys:
+            # Set the tensorclasses in a shallow copy: the caller's tensordict
+            # keeps its tensordict entries.
+            is_locked = tensordict.is_locked
+            tensordict = tensordict.copy()
+            for key in keys:
+                tensordict._set_str(
+                    key,
+                    tensorclass_fields[key].from_tensordict(
+                        tensordict._get_str(key, None)
+                    ),
+                    validated=True,
+                    inplace=False,
+                    non_blocking=False,
+                )
+            if is_locked:
+                tensordict.lock_()
+    return cls._from_tensordict(tensordict, non_tensordict, safe)
 
 
 def _memmap_(
@@ -2948,6 +3011,8 @@ def _set(
                     return self
                 elif type_hints is None:
                     warnings.warn(type(self)._set_dict_warn_msg)
+            elif isinstance(value, TensorDictBase) and _is_tensorclass(target_cls):
+                return set_tensor(value=target_cls.from_tensordict(value))
             elif value is not None and issubclass(
                 target_cls, tuple(tensordict_lib.base._ACCEPTED_CLASSES)
             ):

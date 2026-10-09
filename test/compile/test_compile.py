@@ -1168,6 +1168,19 @@ class TestTC:
         assert compiled.a.b == 2
         assert add_self_c(data) is not data
 
+    def test_tc_from_tensordict_nested(self, mode):
+        def from_td(td):
+            return MyClass.from_tensordict(td)
+
+        from_td_c = torch.compile(from_td, fullgraph=True, mode=mode)
+        td = MyClass(
+            a=MyClass(a=None, b=torch.zeros(())), b=torch.ones(())
+        ).to_tensordict()
+        compiled = from_td_c(td)
+        assert isinstance(compiled.a, MyClass)
+        assert compiled.a.b == 0
+        assert isinstance(td["a"], TensorDict)
+
     @pytest.mark.parametrize("index_type", ["slice", "tensor", "int"])
     def test_tc_index(self, index_type, mode):
         if index_type == "slice":
