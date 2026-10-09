@@ -16,11 +16,8 @@ from tensordict._deprecation import deprecated_attributes
 from tensordict._nestedkey import NestedKey
 from tensordict.utils import _ContextManager, strtobool, unravel_key_list
 from torch import nn
-
 from torch.compiler import is_compiling
-
 from torch.utils._contextlib import _DecoratorContextManager
-
 
 _dispatch_tdnn_modules = _ContextManager(
     default=strtobool(os.environ.get("DISPATCH_TDNN_MODULES", "True"))

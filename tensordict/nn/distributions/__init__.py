@@ -5,7 +5,6 @@
 
 from tensordict._deprecation import deprecated_attributes
 from tensordict.nn.distributions import continuous, discrete
-
 from tensordict.nn.distributions.composite import CompositeDistribution
 from tensordict.nn.distributions.continuous import (
     AddStateIndependentNormalScale,

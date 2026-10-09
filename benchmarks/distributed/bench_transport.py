@@ -33,7 +33,6 @@ os.environ["UCX_WARN_UNUSED_ENV_VARS"] = "n"
 
 import torch
 import torch.distributed as dist
-
 from tensordict import TensorDict
 
 # ---------------------------------------------------------------------------
@@ -387,9 +386,7 @@ def main():
     os.environ["WORLD_SIZE"] = str(world_size)
 
     backend = "cpu:gloo,cuda:nccl" if torch.cuda.is_available() else "gloo"
-    print(
-        f"[rank {rank}] Initializing process group ({backend})...", flush=True
-    )  # noqa: T201
+    print(f"[rank {rank}] Initializing process group ({backend})...", flush=True)  # noqa: T201
     dist.init_process_group(
         backend=backend,
         rank=rank,

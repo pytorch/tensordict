@@ -19,6 +19,7 @@ Each test compares its failing cases with that list: a failure that is not
 listed is a regression, and a listed case that passes must be removed from the
 list. Run with ``TENSORDICT_UPDATE_KNOWN_FAILURES=1`` to rewrite the list.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -31,9 +32,7 @@ import pathlib
 import numpy as np
 import pytest
 import torch
-
 from _utils_internal import TestTensorDictsBase
-
 from tensordict import lazy_stack, TensorDict, UnbatchedTensor
 from tensordict.store import LazyStackedTensorDictStore, TensorDictStore
 from tensordict.store._store import _has_redis
