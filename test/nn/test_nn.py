@@ -21,6 +21,8 @@ import pytest
 import torch
 from _utils_internal import is_npu_available
 
+from functorch import make_functional_with_buffers as make_functional_functorch
+
 from tensordict import (
     is_tensor_collection,
     NonTensorData,
@@ -61,29 +63,10 @@ from tensordict.nn.utils import (
     skip_existing,
 )
 from tensordict.tensorclass import TensorClass
-
-from torch import distributions, nn
+from torch import distributions, nn, vmap
 from torch.distributions import Categorical, Normal
+from torch.nn.parameter import Buffer
 from torch.utils._pytree import tree_map
-
-try:
-    import functorch  # noqa
-    from functorch import make_functional_with_buffers as make_functional_functorch
-
-    try:
-        from torch import vmap
-    except ImportError:
-        from functorch import vmap  # noqa: TOR103
-
-    _has_functorch = True
-    FUNCTORCH_ERR = ""
-except ImportError as err:
-    _has_functorch = False
-    FUNCTORCH_ERR = str(err)
-try:
-    from torch.nn.parameter import Buffer
-except ImportError:
-    from tensordict.utils import Buffer
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
@@ -900,9 +883,6 @@ class TestTDModule:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-    )
     def test_functional_functorch(self):
         torch.manual_seed(0)
         param_multiplier = 1
@@ -1832,9 +1812,6 @@ class TestTDSequence:
         dist = tdmodule.get_dist(td)
         assert dist.rsample().shape[: td.ndimension()] == td.shape
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-    )
     def test_functional_functorch(self):
         torch.manual_seed(0)
         param_multiplier = 1

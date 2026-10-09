@@ -13,34 +13,18 @@ import torch
 
 from _utils_internal import expand_list, get_available_devices, TestTensorDictsBase
 
+from functorch import (
+    make_functional_with_buffers as functorch_make_functional_with_buffers,
+)
+
 from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
-from tensordict.utils import implement_for
-from torch import nn
+from torch import nn, vmap
 from torch.utils._pytree import tree_map
-
-try:
-    from functorch import (
-        make_functional_with_buffers as functorch_make_functional_with_buffers,
-    )
-
-    try:
-        from torch import vmap
-    except ImportError:
-        from functorch import vmap  # noqa: TOR103
-
-    _has_functorch = True
-    FUNCTORCH_ERR = ""
-except ImportError as err:
-    _has_functorch = False
-    FUNCTORCH_ERR = str(err)
 
 
 class TestVmap:
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-    )
     @pytest.mark.parametrize(
         "moduletype,batch_params",
         [
@@ -83,9 +67,6 @@ class TestVmap:
             y = td["y"]
             assert y.shape == torch.Size([10, 2, 3])
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-    )
     @pytest.mark.parametrize(
         "moduletype,batch_params",
         [
@@ -196,9 +177,6 @@ class TestVmap:
             assert out.shape[out_dim] == x.shape[in_dim]
 
 
-@pytest.mark.skipif(
-    not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-)
 class TestNativeFunctorch:
     def test_vamp_basic(self):
         class MyModule(torch.nn.Module):
@@ -300,7 +278,6 @@ class TestPyTree(TestTensorDictsBase):
             # recursively checks the shape, including for the nested tensordicts
             assert v1.shape == v2.shape
 
-    @implement_for("torch", "2.3")
     def test_map_with_path(self):
         def assert_path(path, tensor):
             assert path[0].key == "a"
@@ -310,10 +287,6 @@ class TestPyTree(TestTensorDictsBase):
 
         td = TensorDict({"a": {"b": {"c": [1]}}}, [1])
         torch.utils._pytree.tree_map_with_path(assert_path, td)
-
-    @implement_for("torch", None, "2.3")
-    def test_map_with_path(self):  # noqa: F811
-        pytest.skip(reason="tree_map_with_path not implemented")
 
     @pytest.mark.parametrize("dest", get_available_devices())
     def test_device_map(self, dest):

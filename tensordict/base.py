@@ -23,7 +23,6 @@ from functools import wraps
 from pathlib import Path
 from textwrap import indent
 from threading import local
-from types import ModuleType
 from typing import (
     Any,
     Callable,
@@ -76,7 +75,6 @@ from tensordict.utils import (
     DeviceType,
     erase_cache,
     expand_as_right,
-    implement_for,
     IndexType,
     is_batchedtensor,
     is_non_tensor,
@@ -88,48 +86,14 @@ from tensordict.utils import (
     unravel_key,
     unravel_key_list,
 )
-from torch import multiprocessing as mp, nn, Tensor
-from torch.nn.parameter import UninitializedTensorMixin
+from torch import _foreach_copy_, multiprocessing as mp, nn, Tensor
+from torch.compiler import allow_in_graph, is_compiling
+from torch.nn.parameter import Buffer, UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
-try:
-    from torch.compiler import is_compiling
-except ImportError:  # torch 2.0
-    from torch._dynamo import is_compiling
-
-try:
-    from torch import _foreach_copy_
-except ImportError:
-    _foreach_copy_ = None
-
-try:
-    from torch.compiler import allow_in_graph as _allow_in_graph
-except (ImportError, AttributeError):
-    _allow_in_graph = None
-
-if _foreach_copy_ is not None and _allow_in_graph is not None:
-    _foreach_copy_compiled = _allow_in_graph(_foreach_copy_)
-else:
-    _foreach_copy_compiled = _foreach_copy_
-
-try:
-    from torch.nn.parameter import Buffer
-except ImportError:
-    from tensordict.utils import Buffer
+_foreach_copy_compiled = allow_in_graph(_foreach_copy_)
 
 _has_h5 = importlib.util.find_spec("h5py") is not None
-
-try:
-    from torch._utils import _get_device_module
-except ImportError:
-
-    def _get_device_module(device_type: str) -> ModuleType | None:
-        device_module = getattr(torch, device_type, None)
-        if device_module is None:
-            raise RuntimeError(
-                f"Device '{device_type}' does not have a corresponding module registered as 'torch.{device_type}'."
-            )
-        return device_module
 
 
 def _sync_cuda_transfer(stream=None):
@@ -3143,7 +3107,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             new_keys, other_val = input_dict_or_td._items_list(
                 True, True, sorting_keys=keys, default="intersection"
             )
-            if len(new_keys) and _foreach_copy_ is not None:
+            if len(new_keys):
                 if len(other_val) != len(vals):
                     vals = dict(zip(keys, vals))
                     vals = [vals[k] for k in new_keys]
@@ -5331,7 +5295,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Copies the tensordict without cloning its tensors."""
         return self.copy()
 
-    @implement_for("torch", None, "2.4")
     def norm(
         self,
         *,
@@ -5343,47 +5306,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         Keyword Args:
             out (TensorDict, optional): the output tensordict.
-            dtype (torch.dtype, optional): the output dtype (torch>=2.4).
-            key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
-                If provided, all keys in the result will be transformed using this function.
-                For string keys, the function receives a string. For tuple keys, it receives a tuple.
-                Default: ``None``.
-
-        """
-        keys, vals = self._items_list(True, True, collapse=True)
-        if dtype is not None:
-            raise RuntimeError("dtype must be None for torch <= 2.3")
-        vals = torch._foreach_norm(vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        result = self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            batch_size=[],
-            propagate_lock=True,
-            out=out,
-        )
-        if key_transform is not None:
-            result = result._transform_keys(key_transform)
-        return result
-
-    @implement_for("torch", "2.4")
-    def norm(  # noqa: F811
-        self,
-        *,
-        out=None,
-        dtype: torch.dtype | None = None,
-        key_transform: Callable[[NestedKey], NestedKey] | None = None,
-    ) -> Self:
-        """Computes the norm of each tensor in the tensordict.
-
-        Keyword Args:
-            out (TensorDict, optional): the output tensordict.
-            dtype (torch.dtype, optional): the output dtype (torch>=2.4).
+            dtype (torch.dtype, optional): the output dtype.
             key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
                 If provided, all keys in the result will be transformed using this function.
                 For string keys, the function receives a string. For tuple keys, it receives a tuple.
@@ -5409,34 +5332,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             result = result._transform_keys(key_transform)
         return result
 
-    @implement_for("torch", None, "2.5")
     def _clone_recurse(self) -> Self:  # noqa: D417
-        keys, vals = self._items_list(True, True)
-        items = dict(
-            _zip_strict(
-                keys,
-                (val.clone() if hasattr(val, "clone") else val for val in vals),
-            )
-        )
-
-        def pop(name, val):
-            return items.pop(name, None)
-
-        result = self._fast_apply(
-            pop,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=False,
-            filter_empty=False,
-            default=None,
-        )
-        if items:
-            result.update(items)
-        return result
-
-    @implement_for("torch", "2.5")
-    def _clone_recurse(self) -> Self:  # noqa: F811, D417
         keys, vals = self._items_list(True, True)
         foreach_vals = {}
         iter_vals = {}

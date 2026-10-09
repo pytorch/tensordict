@@ -16,12 +16,9 @@ from tensordict._nestedkey import NestedKey
 from tensordict.utils import _ContextManager, strtobool, unravel_key_list
 from torch import nn
 
-from torch.utils._contextlib import _DecoratorContextManager
+from torch.compiler import is_compiling
 
-try:
-    from torch.compiler import is_compiling
-except ImportError:  # torch 2.0
-    from torch._dynamo import is_compiling
+from torch.utils._contextlib import _DecoratorContextManager
 
 
 _dispatch_tdnn_modules = _ContextManager(
@@ -404,10 +401,7 @@ def skip_existing() -> bool | list[NestedKey]:
 
 
 # For backward compatibility in imports
-try:
-    from torch.nn.parameter import Buffer  # noqa
-except ImportError:
-    from tensordict.utils import Buffer  # noqa
+from torch.nn.parameter import Buffer  # noqa
 
 
 def _dispatch_td_nn_modules():

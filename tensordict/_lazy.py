@@ -66,6 +66,7 @@ from tensordict.utils import (
     _check_is_flatten,
     _check_is_unflatten,
     _get_shape_from_args,
+    _import_and_wrap_functorch,
     _infer_size_impl,
     _is_number,
     _is_unbatched,
@@ -103,20 +104,10 @@ except ImportError:
 
     _has_funcdim = False
 
-try:
-    from tensordict.utils import _import_and_wrap_functorch
-
-    _add_batch_dim, _remove_batch_dim = _import_and_wrap_functorch(
-        "_add_batch_dim",
-        "_remove_batch_dim",
-    )
-except ImportError:
-
-    def _add_batch_dim(*args, **kwargs) -> Tensor:
-        raise NotImplementedError
-
-    def _remove_batch_dim(*args, **kwargs) -> Tensor:
-        raise NotImplementedError
+_add_batch_dim, _remove_batch_dim = _import_and_wrap_functorch(
+    "_add_batch_dim",
+    "_remove_batch_dim",
+)
 
 
 if TYPE_CHECKING:

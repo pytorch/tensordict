@@ -32,7 +32,7 @@ classifiers = [
     "Development Status :: 4 - Beta"
 ]
 dependencies = [
-    "torch",
+    "torch>=2.13.0a0",
     "numpy",
     "cloudpickle",
     "packaging",

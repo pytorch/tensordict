@@ -20,7 +20,6 @@ from typing import Callable, overload, TYPE_CHECKING
 
 import torch
 from tensordict.base import (
-    _get_device_module,
     _is_tensor_collection,
     _NESTED_TENSORS_AS_LISTS,
     _sync_cuda_transfer,
@@ -41,7 +40,7 @@ from tensordict.utils import (
     cache,
 )
 from torch import Tensor
-from torch._utils import _get_available_device_type
+from torch._utils import _get_available_device_type, _get_device_module
 from torch.nn.parameter import Parameter
 
 if TYPE_CHECKING:

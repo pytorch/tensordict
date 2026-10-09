@@ -23,11 +23,7 @@ from tensordict.nn.utils import _set_skip_existing_None
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import _zip_strict, unravel_key_list
 from torch import nn
-
-try:
-    from torch.compiler import is_compiling
-except ImportError:
-    from torch._dynamo import is_compiling
+from torch.compiler import is_compiling
 
 _has_py311_or_greater = sys.version_info >= (3, 11)
 

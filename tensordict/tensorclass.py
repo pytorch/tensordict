@@ -83,13 +83,10 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     set_capture_non_tensor_stack,
 )
 from torch import multiprocessing as mp, Tensor
+
+from torch.compiler import is_compiling
 from torch.multiprocessing import Manager
 from torch.utils._pytree import tree_map
-
-try:
-    from torch.compiler import is_compiling
-except ImportError:  # torch 2.0
-    from torch._dynamo import is_compiling
 
 if TYPE_CHECKING:
     from typing import Self
