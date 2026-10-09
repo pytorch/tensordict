@@ -98,32 +98,6 @@ a few characters (notice that indexing the nth leading dimensions with tree_map 
 One can also use the set method with ``inplace=True`` or the :meth:`~tensordict.TensorDict.set_` method to do inplace updates of the contents.
 The former is a fault-tolerant version of the latter: if no matching key is found, it will write a new one.
 
-In-place conventions
-~~~~~~~~~~~~~~~~~~~~
-
-Throughout the library, two related-but-distinct flavors of in-place
-operation are used:
-
-- A trailing-underscore method (``method_``, for example
-  :meth:`~tensordict.TensorDict.add_`, :meth:`~tensordict.TensorDict.mul_`,
-  :meth:`~tensordict.TensorDict.masked_fill_`) writes into the **same
-  underlying tensor storage** for every leaf. Each leaf's ``data_ptr`` is
-  preserved. This mirrors PyTorch's own convention and is only available
-  when the operation can be performed without changing a tensor's shape,
-  dtype, or layout.
-- An ``inplace=True`` keyword (for example
-  :meth:`~tensordict.TensorDict.pad`, :meth:`~tensordict.TensorDict.update`,
-  :meth:`~tensordict.TensorDict.apply`) preserves the **tensordict's
-  object identity and key set**, but individual leaf storages may be
-  replaced with freshly allocated tensors. The guarantee is "no extra
-  tensordict-shaped allocation", and the implementation will release each
-  old leaf storage as soon as its replacement is written so that peak
-  memory stays close to ``1x`` rather than ``2x``. This is the only
-  meaningful flavor of in-place for shape-changing operations.
-
-In short: ``method_`` keeps the bytes; ``inplace=True`` keeps the
-container.
-
 The contents of the TensorDict can now be manipulated collectively.
 For example, to place all of the contents onto a particular device one can simply do
 
@@ -155,6 +129,39 @@ The class supports many other operations, including :func:`~torch.squeeze`, :fun
 
 If an operation is not present, the :meth:`~tensordict.TensorDict.apply` method will usually provide the solution
 that was needed.
+
+In-place conventions
+~~~~~~~~~~~~~~~~~~~~
+
+Throughout the library, two related-but-distinct flavors of in-place
+operation are used:
+
+- A trailing-underscore method (``method_``, for example
+  :meth:`~tensordict.TensorDict.add_`, :meth:`~tensordict.TensorDict.mul_`,
+  :meth:`~tensordict.TensorDict.masked_fill_`) writes into the **same
+  underlying tensor storage** for every leaf. Each leaf's ``data_ptr`` is
+  preserved. This mirrors PyTorch's own convention and is only available
+  when the operation can be performed without changing a tensor's shape,
+  dtype, or layout.
+- An ``inplace=True`` keyword on a shape-changing operation (for example
+  :meth:`~tensordict.TensorDict.pad`, :meth:`~tensordict.TensorDict.repeat`,
+  :meth:`~tensordict.TensorDict.gather`,
+  :meth:`~tensordict.TensorDict.repeat_interleave`) preserves the
+  **tensordict's object identity and key set**, but individual leaf storages
+  may be replaced with freshly allocated tensors. The guarantee is "no extra
+  tensordict-shaped allocation", and the implementation will release each
+  old leaf storage as soon as its replacement is written so that peak
+  memory stays close to ``1x`` rather than ``2x``. This is the only
+  meaningful flavor of in-place for shape-changing operations.
+
+In short: ``method_`` keeps the bytes; ``inplace=True`` on a shape-changing
+operation keeps the container.
+
+For :meth:`~tensordict.TensorDict.set`, :meth:`~tensordict.TensorDict.update`
+and :meth:`~tensordict.TensorDict.apply`, ``inplace=True`` means that values
+are written into the existing leaves when the key exists, so each leaf's
+``data_ptr`` is preserved. ``set()`` and ``update()`` add the key when it is
+missing.
 
 Escaping shape operations: UnbatchedTensor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -245,7 +252,9 @@ For :class:`~tensordict.tensorclass` instances, both attribute access and ``get(
 Limitations
 ^^^^^^^^^^^
 
-- **Memory-mapped serialization** is not currently supported for ``UnbatchedTensor``.
+- **Memory-mapped serialization and consolidation** are not supported yet for ``UnbatchedTensor``:
+  :meth:`~tensordict.TensorDictBase.memmap` and :meth:`~tensordict.TensorDictBase.consolidate`
+  raise an error when the tensordict contains one. :func:`torch.save` keeps them.
 - **Stacking with different data**: when stacking TensorDicts that contain ``UnbatchedTensor`` entries with
   different underlying data, only the first element's data is kept. A warning is emitted when this is detected.
 
@@ -283,7 +292,7 @@ the tensordict batch-size.
 Accessing Non-Tensor Data
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-You can access the non-tensor data using the key or the get method. Regular `getattr` calls will return the content of
+You can access the non-tensor data using the key or the get method. Indexing with a key (``td["a"]``) will return the content of
 the :class:`~tensordict.NonTensorData` object whereas :meth:`~tensordict.TensorDict.get` will return the
 :class:`~tensordict.NonTensorData` object itself.
 
@@ -449,10 +458,10 @@ Accessing or setting nested keys can be done with tuples of strings
 Lazy evaluation
 ---------------
 
-Some operations on :class:`~tensordict.TensorDict` defer execution until items are accessed. For example lazy stacking,
-squeezing, unsqueezing, permuting batch dimensions and creating a view are not executed immediately on all the contents
-of the :class:`~tensordict.TensorDict`. Instead they are performed lazily when values in the :class:`~tensordict.TensorDict`
-are accessed. This can save a lot of unnecessary calculation should the :class:`~tensordict.TensorDict` contain many values.
+Some operations on :class:`~tensordict.TensorDict` defer execution until items are accessed. For example, lazy stacking
+with :func:`~tensordict.lazy_stack` is not executed immediately on all the contents of the stacked tensordicts.
+Instead it is performed lazily when values in the resulting tensordict are accessed. This can save a lot of unnecessary
+calculation should the :class:`~tensordict.TensorDict` contain many values.
 
 >>> from tensordict import lazy_stack
 >>> tensordicts = [TensorDict({
@@ -468,9 +477,12 @@ It also has the advantage that we can manipulate the original tensordicts in a s
 >>> assert (tensordicts[0]["a"] == 0).all()
 
 The caveat is that the get method has now become an expensive operation and, if repeated many times, may cause some
-overhead. One can avoid this by simply calling tensordict.contiguous() after the execution of stack. To further mitigate
-this, TensorDict comes with its own meta-data class (MetaTensor) that keeps track of the type, shape, dtype and device
-of each entry of the dict, without performing the expensive operation.
+overhead. One can avoid this by simply calling tensordict.contiguous() after the execution of stack.
+
+Shape operations such as squeezing, unsqueezing, permuting batch dimensions and creating a view are executed eagerly
+and return a regular :class:`~tensordict.TensorDict`. Their legacy lazy versions are only returned when
+:class:`~tensordict.set_lazy_legacy` is enabled (``set_lazy_legacy(True)``). This legacy lazy mode is deprecated
+and will be removed in TensorDict 0.17.
 
 Lazy pre-allocation
 -------------------
@@ -481,7 +493,7 @@ Suppose we have some function foo() -> TensorDict and that we do something like 
 >>> for i in range(N):
 ...     tensordict[i] = foo()
 
-When ``i == 0`` the empty :class:`~tensordict.TensorDict` will automatically be populated with empty tensors with batch
+When ``i == 0`` the empty :class:`~tensordict.TensorDict` will automatically be populated with zero-filled tensors with batch
 size N. In subsequent iterations of the loop the updates will all be written in-place.
 
 Per-leaf device and dtype casting
@@ -601,7 +613,7 @@ predecessors, or take additional input from the tensordict as necessary. Here's 
 >>> intermediate_x = tensordict["intermediate", "x"]
 >>> probabilities = tensordict["output", "probabilities"]
 
-In this example, the second module combines the output of the first with the mask stored under ("inputs", "mask") in the
+In this example, the second module combines the output of the first with the mask stored under ("input", "mask") in the
 :class:`~tensordict.TensorDict`.
 
 :class:`~tensordict.nn.TensorDictSequential` offers a bunch of other features: one can access the list of input and

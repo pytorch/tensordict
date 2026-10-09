@@ -1,8 +1,11 @@
 # TensorDict Release Workflow
 #
+# Run it from the release/X.Y.Z branch. The full procedure, including how to
+# choose the inputs, is in .github/RELEASE_AGENT_PROMPT.md.
+#
 # This workflow automates the release process for tensordict:
-# 1. Sanity checks (version matching, branch/tag validation)
-# 2. Triggers wheel builds across all platforms
+# 1. Sanity checks (version files, branch, tag, PyPI)
+# 2. Builds the wheel (one py3-none-any wheel) and smoke-tests it on each platform
 # 3. Collects wheels into a single artifact
 # 4. Updates gh-pages docs (stable symlink)
 # 5. Creates draft GitHub release with wheels attached
@@ -23,13 +26,16 @@ on:
         description: 'Release tag (e.g., v0.11.0)'
         required: true
         type: string
-      pytorch_release:
-        description: 'PyTorch release branch (e.g., release/2.8)'
-        required: false
+      python_versions:
+        description: 'JSON list of the Python versions to smoke-test the wheel on, e.g. ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]. Use the set of the previous release unless it changes.'
+        required: true
         type: string
-        default: 'main'
+      pytorch_release:
+        description: 'pytorch/test-infra branch for the build, e.g. release/2.14. It sets the torch version that the build and its Linux smoke test install.'
+        required: true
+        type: string
       skip_sanity_checks:
-        description: 'Skip sanity checks'
+        description: 'Skip sanity checks (dry runs only; real runs always run them)'
         required: false
         type: boolean
         default: false
@@ -48,11 +54,12 @@ on:
           - all
         default: 'cpu'
 
-# Ensure only one release workflow runs at a time
-# cancel-in-progress: true means new runs cancel previous ones
+# One release run per branch at a time. A new run waits for the current one
+# instead of cancelling it, so that a second dispatch cannot interrupt a
+# publish. Use `gh run cancel` to stop a run.
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -61,8 +68,8 @@ permissions:
 env:
   # Release tag from manual input
   RELEASE_TAG: ${{ inputs.tag }}
-  # Determine the test-infra ref: from manual input or default to main
-  TEST_INFRA_REF: ${{ inputs.pytorch_release || 'main' }}
+  # The test-infra ref for the builds
+  TEST_INFRA_REF: ${{ inputs.pytorch_release }}
   # Dry run mode from input
   DRY_RUN: ${{ inputs.dry_run }}
 
@@ -73,7 +80,7 @@ jobs:
   sanity-checks:
     name: Sanity Checks
     runs-on: ubuntu-latest
-    if: ${{ !inputs.skip_sanity_checks }}
+    if: ${{ !inputs.skip_sanity_checks || !inputs.dry_run }}
     outputs:
       version: ${{ steps.parse-version.outputs.version }}
       version_major_minor: ${{ steps.parse-version.outputs.version_major_minor }}
@@ -106,41 +113,66 @@ jobs:
           echo "Parsed version: $VERSION"
           echo "Major.minor: $VERSION_MAJOR_MINOR"
 
-      - name: Check branch name matches tag
+      - name: Check the branch, the tag and PyPI
+        env:
+          VERSION: ${{ steps.parse-version.outputs.version }}
+          PYTHON_VERSIONS: ${{ inputs.python_versions }}
         run: |
           TAG="${{ env.RELEASE_TAG }}"
-          VERSION="${{ steps.parse-version.outputs.version }}"
 
-          # Get the branch that contains this tag
-          BRANCHES=$(git branch -r --contains "$TAG" 2>/dev/null || echo "")
+          if ! python3 -c 'import json, sys; v = json.loads(sys.argv[1]); assert isinstance(v, list) and all(isinstance(x, str) for x in v)' "$PYTHON_VERSIONS"; then
+            echo "::error::python_versions must be a JSON list of strings, got: $PYTHON_VERSIONS"
+            exit 1
+          fi
 
-          if [[ -z "$BRANCHES" ]]; then
-            echo "::warning::Tag $TAG is not on any remote branch yet (may be a new tag)"
-          else
-            echo "Tag $TAG is on branches: $BRANCHES"
+          # version_script.sh sets the release version only on release/*
+          # branches. Wheels built from any other ref get a dev version.
+          if [[ "$GITHUB_REF" != "refs/heads/release/$VERSION" ]]; then
+            echo "::error::Run this workflow from the release/$VERSION branch, not from $GITHUB_REF."
+            exit 1
+          fi
 
-            # Check if it's on a release branch matching the version
-            EXPECTED_BRANCH="release/${VERSION%.*}"
-            if echo "$BRANCHES" | grep -q "origin/$EXPECTED_BRANCH"; then
-              echo "Tag is on expected release branch: $EXPECTED_BRANCH"
+          # A real run must build the tagged commit. Pushing the tag publishes
+          # the docs and starts the conda-forge update, so the tag cannot move
+          # afterwards to match a later commit.
+          TAG_SHA=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}" || true)
+          if [[ "$DRY_RUN" == "true" ]]; then
+            if [[ -n "$TAG_SHA" && "$TAG_SHA" != "$GITHUB_SHA" ]]; then
+              echo "::warning::Tag $TAG points to $TAG_SHA, not to the commit being built ($GITHUB_SHA)."
+            fi
+          elif [[ -z "$TAG_SHA" ]]; then
+            echo "::error::Tag $TAG does not exist. Push it at $GITHUB_SHA before the real run."
+            exit 1
+          elif [[ "$TAG_SHA" != "$GITHUB_SHA" ]]; then
+            echo "::error::Tag $TAG points to $TAG_SHA, but this run builds $GITHUB_SHA."
+            exit 1
+          fi
+
+          # PyPI does not accept the same file twice.
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/tensordict/$VERSION/json" || echo "000")
+          if [[ "$HTTP_STATUS" == "200" ]]; then
+            if [[ "$DRY_RUN" == "true" ]]; then
+              echo "::warning::tensordict $VERSION is already on PyPI."
             else
-              echo "::warning::Tag $TAG is not on expected branch $EXPECTED_BRANCH"
+              echo "::error::tensordict $VERSION is already on PyPI."
+              exit 1
             fi
           fi
+
+          echo "Building $GITHUB_SHA from $GITHUB_REF for $TAG"
 
       - name: Check all version files match tag
         run: |
           VERSION="${{ steps.parse-version.outputs.version }}"
 
           echo "=============================================="
-          echo "Checking all 4 version files match tag: $VERSION"
+          echo "Checking all 3 version files match tag: $VERSION"
           echo "=============================================="
 
-          # Read all 4 version files
+          # Read all 3 version files
           ROOT_VERSION=$(cat version.txt | tr -d '[:space:]')
           SCRIPTS_VERSION=$(cat .github/scripts/version.txt | tr -d '[:space:]')
           SCRIPT_SH_VERSION=$(grep "^BASE_VERSION=" .github/scripts/version_script.sh | cut -d'=' -f2)
-          SCRIPT_WIN_VERSION=$(grep "^BASE_VERSION=" .github/scripts/version_script_windows.sh | cut -d'=' -f2)
 
           echo ""
           echo "Version file contents:"
@@ -148,7 +180,6 @@ jobs:
           echo "  version.txt:                              $ROOT_VERSION"
           echo "  .github/scripts/version.txt:              $SCRIPTS_VERSION"
           echo "  .github/scripts/version_script.sh:        $SCRIPT_SH_VERSION"
-          echo "  .github/scripts/version_script_windows.sh: $SCRIPT_WIN_VERSION"
           echo ""
 
           # Check all files match each other first
@@ -164,16 +195,10 @@ jobs:
             MISMATCH=1
           fi
 
-          if [[ "$ROOT_VERSION" != "$SCRIPT_WIN_VERSION" ]]; then
-            echo "::error::version.txt ($ROOT_VERSION) != version_script_windows.sh ($SCRIPT_WIN_VERSION)"
-            echo "::error::Windows wheels will be built with wrong version!"
-            MISMATCH=1
-          fi
-
           if [[ "$MISMATCH" == "1" ]]; then
             echo ""
-            echo "::error::Version files are inconsistent! All 4 files must have the same version."
-            echo "::error::Please update all files listed in Step 3 of RELEASE_AGENT_PROMPT.md"
+            echo "::error::Version files are inconsistent! All 3 files must have the same version."
+            echo "::error::Please update all files listed under 'Bump the version' in RELEASE_AGENT_PROMPT.md"
             exit 1
           fi
 
@@ -219,7 +244,7 @@ jobs:
           VERSION_MAJOR_MINOR="${{ steps.parse-version.outputs.version_major_minor }}"
 
           # Fetch the stable docs index page
-          DOCS_URL="https://pytorch.org/tensordict/stable/index.html"
+          DOCS_URL="https://docs.pytorch.org/tensordict/stable/index.html"
 
           # Try to check if the page exists and contains version info
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$DOCS_URL" || echo "000")
@@ -234,79 +259,41 @@ jobs:
           fi
 
   # =============================================================================
-  # BUILD WHEELS - All Platforms (Sequential to avoid concurrency conflicts)
+  # BUILD THE WHEEL
   # =============================================================================
-  # NOTE: Builds run sequentially because pytorch/test-infra workflows use a
-  # shared concurrency group that causes parallel builds to cancel each other.
-  # See: https://github.com/pytorch/tensordict/issues/XXX for tracking.
+  # tensordict is pure Python, so one py3-none-any wheel serves every platform
+  # and Python version.
 
-  build-linux:
-    name: Build Linux Wheels
+  build:
+    name: Build Wheel
     needs: [sanity-checks]
-    if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
-    uses: ./.github/workflows/build-wheels-linux.yml
+    if: ${{ !cancelled() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped') }}
+    uses: ./.github/workflows/build-wheel.yml
     with:
-      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
-      python-versions: ${{ inputs.tag == 'v0.14.1' && '["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]' || '[]' }}
-
-  build-windows:
-    name: Build Windows Wheels
-    needs: [sanity-checks, build-linux]
-    # Run after Linux build completes (success or failure) to avoid concurrency conflicts
-    if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
-    uses: ./.github/workflows/build-wheels-windows.yml
-    with:
-      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
-      python-versions: ${{ inputs.tag == 'v0.14.1' && '["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]' || '[]' }}
-
-  build-macos:
-    name: Build macOS Wheels
-    needs: [sanity-checks, build-windows]
-    # Run after Windows build completes (success or failure) to avoid concurrency conflicts
-    if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
-    uses: ./.github/workflows/build-wheels-m1.yml
-    with:
-      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
-      python-versions: ${{ inputs.tag == 'v0.14.1' && '["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]' || '[]' }}
-
-  build-aarch64:
-    name: Build Aarch64 Linux Wheels
-    needs: [sanity-checks, build-macos]
-    # Run after macOS build completes (success or failure) to avoid concurrency conflicts
-    if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
-    uses: ./.github/workflows/build-wheels-aarch64-linux.yml
-    with:
-      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
-      python-versions: ${{ inputs.tag == 'v0.14.1' && '["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]' || '[]' }}
+      test-infra-ref: ${{ inputs.pytorch_release }}
+      # The wheel is built once; the smoke tests install it on these versions.
+      python-versions: ${{ inputs.python_versions }}
 
   # =============================================================================
   # COLLECT WHEELS
   # =============================================================================
   collect-wheels:
     name: Collect Wheels
-    needs: [sanity-checks, build-linux, build-windows, build-macos, build-aarch64]
-    # Only run when ALL build jobs succeed. This ensures:
-    # 1. Incomplete wheel sets are never collected
-    # 2. If a build fails, this job is "skipped" (not "failed")
+    needs: [sanity-checks, build]
+    # Only run when the build succeeds. This ensures:
+    # 1. A wheel that failed its smoke tests is never collected
+    # 2. If the build fails, this job is "skipped" (not "failed")
     # 3. Re-running the failed build job will also trigger this job
     if: |
       always() && !cancelled() &&
-      needs.build-linux.result == 'success' &&
-      needs.build-windows.result == 'success' &&
-      needs.build-macos.result == 'success' &&
-      needs.build-aarch64.result == 'success' &&
+      needs.build.result == 'success' &&
       (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Check build results
         run: |
-          echo "Build results:"
-          echo "  Linux: ${{ needs.build-linux.result }}"
-          echo "  Windows: ${{ needs.build-windows.result }}"
-          echo "  macOS: ${{ needs.build-macos.result }}"
-          echo "  Aarch64: ${{ needs.build-aarch64.result }}"
-          echo ""
-          echo "All builds succeeded - proceeding with wheel collection"
+          echo "Build result: ${{ needs.build.result }}"
+          echo "The build succeeded - proceeding with wheel collection"
 
       - name: Download wheel artifacts
         uses: actions/download-artifact@v4
@@ -366,6 +353,13 @@ jobs:
           ls -la wheels/*.whl | sort
           echo ""
           echo "Total wheels: $(ls wheels/*.whl 2>/dev/null | wc -l)"
+          # tensordict is pure Python: expect exactly one py3-none-any wheel
+          WHEEL_COUNT=$(find wheels -name "*.whl" -type f | wc -l)
+          PURE_COUNT=$(find wheels -name "*-py3-none-any.whl" -type f | wc -l)
+          if [[ "$WHEEL_COUNT" -ne 1 || "$PURE_COUNT" -ne 1 ]]; then
+            echo "::error::Expected exactly one py3-none-any wheel"
+            exit 1
+          fi
 
       - name: Upload combined wheels artifact
         uses: actions/upload-artifact@v4
@@ -380,8 +374,13 @@ jobs:
   update-docs:
     name: Update Stable Docs
     needs: [sanity-checks, collect-wheels]
-    if: always() && needs.collect-wheels.result == 'success' && needs.sanity-checks.result != 'failure'
+    if: ${{ !cancelled() && needs.collect-wheels.result == 'success' && needs.sanity-checks.result != 'failure' }}
     runs-on: ubuntu-latest
+    # Every job that pushes to gh-pages joins this group, so they push one at a
+    # time. With `queue: max`, later jobs wait instead of being cancelled.
+    concurrency:
+      group: gh-pages
+      queue: max
     steps:
       - name: Get version info
         id: version
@@ -409,6 +408,13 @@ jobs:
           if [[ ! -d "$VERSION_MAJOR_MINOR" ]]; then
             echo "::error::Docs folder for $VERSION_MAJOR_MINOR does not exist. Run docs workflow first."
             exit 1
+          fi
+
+          # A release of an older line must not move stable back.
+          CURRENT=$(readlink stable || true)
+          if [[ -n "$CURRENT" && "$(printf '%s\n' "$CURRENT" "$VERSION_MAJOR_MINOR" | sort -V | tail -n 1)" != "$VERSION_MAJOR_MINOR" ]]; then
+            echo "::notice::stable points to $CURRENT, which is newer than $VERSION_MAJOR_MINOR. Leaving it unchanged."
+            exit 0
           fi
 
           # Update stable symlink
@@ -458,7 +464,7 @@ jobs:
   create-release:
     name: Create GitHub Release
     needs: [sanity-checks, collect-wheels, update-docs]
-    if: always() && needs.collect-wheels.result == 'success' && needs.sanity-checks.result != 'failure'
+    if: ${{ !cancelled() && needs.collect-wheels.result == 'success' && needs.sanity-checks.result != 'failure' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -492,6 +498,7 @@ jobs:
             # Create draft release without auto-generated notes
             gh release create "$TAG" \
               --draft \
+              --target "$GITHUB_SHA" \
               --title "TensorDict $TAG" \
               --notes "Release notes for TensorDict $TAG
 
@@ -529,7 +536,7 @@ jobs:
   publish-pypi:
     name: Publish to PyPI
     needs: [sanity-checks, collect-wheels, create-release]
-    if: always() && needs.collect-wheels.result == 'success' && needs.sanity-checks.result != 'failure'
+    if: ${{ !cancelled() && needs.collect-wheels.result == 'success' && needs.sanity-checks.result != 'failure' }}
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -559,6 +566,9 @@ jobs:
           # Repository must be configured in PyPI to trust this workflow
           verbose: true
           print-hash: true
+          # Lets a re-run of this job finish a partial upload. The sanity
+          # checks stop a new run for a version that is already on PyPI.
+          skip-existing: true
 
       - name: Dry run - show what would be published
         if: ${{ env.DRY_RUN == 'true' }}
@@ -573,7 +583,7 @@ jobs:
   # =============================================================================
   release-summary:
     name: Release Summary
-    needs: [sanity-checks, build-linux, build-windows, build-macos, build-aarch64, collect-wheels, update-docs, create-release, publish-pypi]
+    needs: [sanity-checks, build, collect-wheels, update-docs, create-release, publish-pypi]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -584,10 +594,7 @@ jobs:
           echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Sanity Checks | ${{ needs.sanity-checks.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build Linux | ${{ needs.build-linux.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build Windows | ${{ needs.build-windows.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build macOS | ${{ needs.build-macos.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build Aarch64 | ${{ needs.build-aarch64.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Wheel | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Collect Wheels | ${{ needs.collect-wheels.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Update Docs | ${{ needs.update-docs.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Create Release | ${{ needs.create-release.result }} |" >> $GITHUB_STEP_SUMMARY

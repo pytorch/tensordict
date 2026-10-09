@@ -106,7 +106,7 @@ When a tensordict has a device, all write operations will cast the tensor to the
 TensorDict device:
 ```python
 >>> data["key 3"] = torch.randn(3, 4, device="cpu")
->>> assert data["key 3"].device is torch.device("cuda:0")
+>>> assert data["key 3"].device == torch.device("cuda:0")
 ```
 Once the device is set, it can be cleared with the
 [``clear_device_``](https://pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.clear_device_)
@@ -179,7 +179,7 @@ It is possible to nest tensordict. The only requirement is that the sub-tensordi
 under the parent tensordict, i.e. its batch size should match (but could be longer than) the parent
 batch size.
 
-We can switch easily between hierarchical and flat representations thansk to `flatten_keys` and `unflatten_keys`.
+We can switch easily between hierarchical and flat representations thanks to `flatten_keys` and `unflatten_keys`.
 For instance, the following code will result in a single-level tensordict with keys `"key 1"` and `"key 2.sub-key"`:
 ```python
 >>> data = TensorDict({
@@ -236,11 +236,11 @@ TensorDict instances can also be reshaped, viewed, squeezed and unsqueezed:
 ...     "key 1": torch.ones(3, 4, 5),
 ...     "key 2": torch.zeros(3, 4, 5, dtype=torch.bool),
 ... }, batch_size=[3, 4])
->>> print(data.view(-1))
+>>> print(data.view(-1).shape)
 torch.Size([12])
->>> print(data.reshape(-1))
+>>> print(data.reshape(-1).shape)
 torch.Size([12])
->>> print(data.unsqueeze(-1))
+>>> print(data.unsqueeze(-1).shape)
 torch.Size([3, 4, 1])
 ```
 
@@ -249,7 +249,7 @@ clone them, update them in-place or not, split them, unbind them, expand them et
 
 If a functionality is missing, it is easy to call it using `apply()` or `apply_()`:
 ```python
-tensordict_uniform = data.apply(lambda tensor: tensor.uniform_())
+tensordict_uniform = data.apply(lambda tensor: torch.rand_like(tensor, dtype=torch.float32))
 ```
 
 ``apply()`` can also be great to filter a tensordict, for instance:
@@ -291,7 +291,7 @@ counterparts:
 ```
 
 When nodes share a common scratch space, the
-[`MemmapTensor` backend](https://pytorch.github.io/tensordict/tutorials/tensordict_memory.html)
+[`MemoryMappedTensor` backend](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_memory.html)
 can be used
 to seamlessly send, receive and read a huge amount of data.
 
@@ -356,8 +356,11 @@ is also simple:
 
 ## TensorDict for parameter serialization and building datasets
 
-TensorDict offers an API for parameter serialization that can be >3x faster than
-regular calls to `torch.save(state_dict)`. Moreover, because tensors will be saved
+TensorDict offers an API for parameter serialization based on memory-mapped tensors:
+each leaf is written to its own file, saving can use several threads (`num_threads`)
+and loading is lazy through memory mapping. See the
+[serialization speed tutorial](https://docs.pytorch.org/tensordict/stable/tutorials/serialization_speed.html)
+for a comparison with `torch.save` and other formats. Moreover, because tensors will be saved
 independently on disk, you can deserialize your checkpoint on an arbitrary slice
 of the model.
 
@@ -375,7 +378,7 @@ of the model.
 ```
 
 The same functionality can be used to access data in a dataset stored on disk.
-Soring a single contiguous tensor on disk accessed through the `tensordict.MemoryMappedTensor`
+Storing a single contiguous tensor on disk accessed through the `tensordict.MemoryMappedTensor`
 primitive and reading slices of it is not only **much** faster than loading
 single files one at a time but it's also easier and safer (because there is no pickling
 or third-party library involved):
@@ -414,7 +417,7 @@ if __name__ == "__main__":
     data_preproc = data.map(process_data, num_workers=4, chunksize=0, pbar=True)  # process 1 images at a time
 ```
 
-The `TensorDict.map_iter` function can also be used to iterate (optinally randomly) over a large tensordict
+The `TensorDict.map_iter` function can also be used to iterate (optionally randomly) over a large tensordict
 in a dataloader-like fashion.
 
 ## Lazy preallocation
@@ -444,10 +447,10 @@ which also results in a tensordict (when `N = 10`)
 ```
 TensorDict(
     fields={
-        a: Tensor(torch.Size([10, 3]), dtype=torch.float32),
+        a: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
         b: TensorDict(
             fields={
-                c: Tensor(torch.Size([10, 2]), dtype=torch.float32)},
+                c: Tensor(shape=torch.Size([10, 2]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([10]),
             device=None,
             is_shared=False)},
@@ -455,7 +458,7 @@ TensorDict(
     device=None,
     is_shared=False)
 ```
-When `i==0`, your empty tensordict will automatically be populated with empty tensors
+When `i==0`, your empty tensordict will automatically be populated with zero-filled tensors
 of batch-size `N`. After that, updates will be written in-place.
 Note that this would also work with a shuffled series of indices (pre-allocation does
 not require you to go through the tensordict in an ordered fashion).
@@ -468,7 +471,7 @@ In some cases, developers may be looking for data structure with a more explicit
 `tensordict` provides a `dataclass`-like decorator that allows for the creation of custom dataclasses that support
 the tensordict operations:
 ```python
->>> from tensordict.prototype import tensorclass
+>>> from tensordict import tensorclass
 >>> import torch
 >>>
 >>> @tensorclass
@@ -491,9 +494,9 @@ the tensordict operations:
 >>>
 >>> print(data.select_label(1))
 MyData(
-    image=Tensor(torch.Size([11, 3, 64, 64]), dtype=torch.float32),
-    label=Tensor(torch.Size([11]), dtype=torch.int64),
-    mask=Tensor(torch.Size([11, 1, 64, 64]), dtype=torch.bool),
+    image=Tensor(shape=torch.Size([11, 3, 64, 64]), device=cpu, dtype=torch.float32, is_shared=False),
+    label=Tensor(shape=torch.Size([11]), device=cpu, dtype=torch.int64, is_shared=False),
+    mask=Tensor(shape=torch.Size([11, 1, 64, 64]), device=cpu, dtype=torch.bool, is_shared=False),
     batch_size=torch.Size([11]),
     device=None,
     is_shared=False)
@@ -501,9 +504,9 @@ MyData(
 torch.Size([100, 6117])
 >>> print(data.reshape(10, 10))
 MyData(
-    image=Tensor(torch.Size([10, 10, 3, 64, 64]), dtype=torch.float32),
-    label=Tensor(torch.Size([10, 10]), dtype=torch.int64),
-    mask=Tensor(torch.Size([10, 10, 1, 64, 64]), dtype=torch.bool),
+    image=Tensor(shape=torch.Size([10, 10, 3, 64, 64]), device=cpu, dtype=torch.float32, is_shared=False),
+    label=Tensor(shape=torch.Size([10, 10]), device=cpu, dtype=torch.int64, is_shared=False),
+    mask=Tensor(shape=torch.Size([10, 10, 1, 64, 64]), device=cpu, dtype=torch.bool, is_shared=False),
     batch_size=torch.Size([10, 10]),
     device=None,
     is_shared=False)

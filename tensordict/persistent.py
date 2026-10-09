@@ -87,10 +87,6 @@ class _Visitor:
 
 class _PersistentTDKeysView(_TensorDictKeysView):
     def __iter__(self):
-        # For consistency with tensordict where currently a non-tensor is stored in a
-        # tensorclass and hence can be seen as a nested tensordict
-        # that situation should be clarified
-        read_non_tensor = self.is_leaf is _is_leaf_nontensor or not self.leaves_only
         td = self.tensordict
         if self.include_nested:
             visitor = (
@@ -100,22 +96,35 @@ class _PersistentTDKeysView(_TensorDictKeysView):
         else:
             visitor = td._backend.keys(td.file)
         for key in visitor:
-            metadata = self.tensordict._get_metadata(key)
-            if metadata.get("non_tensor"):
-                if read_non_tensor:
-                    yield key
-                else:
-                    continue
-            elif metadata.get("array"):
+            if self._accepts(key, td._get_metadata(key)):
                 yield key
-            elif not self.leaves_only and (
-                not isinstance(key, tuple) or self.include_nested
-            ):
-                yield key
+
+    def _accepts(self, key, metadata) -> bool:
+        if metadata.get("non_tensor"):
+            # For consistency with tensordict where currently a non-tensor is stored in a
+            # tensorclass and hence can be seen as a nested tensordict
+            # that situation should be clarified
+            return self.is_leaf is _is_leaf_nontensor or not self.leaves_only
+        if metadata.get("array"):
+            return True
+        return not self.leaves_only and (
+            not isinstance(key, tuple) or self.include_nested
+        )
 
     def __contains__(self, key):
         key = unravel_key(key)
-        return key in list(self)
+        key_tuple = _unravel_key_to_tuple(key)
+        if len(key_tuple) > 1 and not self.include_nested:
+            return False
+        # "/" is the storage path separator and "", "." and ".." are resolved as
+        # paths by the storage library: such keys cannot be stored entries
+        if any("/" in subkey or subkey in ("", ".", "..") for subkey in key_tuple):
+            return False
+        try:
+            metadata = self.tensordict._get_metadata(key)
+        except (KeyError, ValueError):
+            return False
+        return self._accepts(key, metadata)
 
 
 class _PersistentBackend:
@@ -787,9 +796,20 @@ class PersistentTensorDict(TensorDictBase):
     Examples:
         >>> import tempfile
         >>> with tempfile.NamedTemporaryFile() as f:
-        ...     data = PersistentTensorDict(file=f, batch_size=[3], mode="w")
+        ...     data = PersistentTensorDict(filename=f.name, batch_size=[3], mode="w")
         ...     data["a", "b"] = torch.randn(3, 4)
         ...     print(data)
+        PersistentTensorDict(
+            fields={
+                a: PersistentTensorDict(
+                    fields={
+                        b: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([3]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=None,
+            is_shared=False)
 
     """
 
@@ -1105,26 +1125,62 @@ class PersistentTensorDict(TensorDictBase):
     def get_at(
         self, key: NestedKey, idx: IndexType, default: CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
-        array = self._get_array(key, default)
-        if self._backend.is_array(array):
-            if self.device is not None:
-                device = self.device
-            else:
-                device = torch.device("cpu")
-            # indexing must be done before converting to tensor.
-            idx = self._process_index(idx, array)
-            # `get_at` is there to save us.
-            out = self._backend.read_at(array, idx, device)
-            if self._pin_mem:
-                return out.pin_memory()
-            return out
-        elif array is not default:
-            out = self._nested_tensordicts.get(key)
-            if out is None:
-                out = self._make_nested(key, array)
-            return out._get_sub_tensordict(idx)
+        """Gets the value of the entry ``key`` at the index ``idx``.
+
+        Args:
+            key (str, tuple of str): key to be retrieved.
+            idx (int, slice, torch.Tensor, iterable): index of the entry.
+            default (torch.Tensor, optional): default value to return if the key is
+                not present in the tensordict. If not provided, a missing key
+                raises a ``KeyError``.
+
+        See :meth:`~tensordict.TensorDictBase.get_at`.
+        """
+        # Unlike TensorDictBase.get_at, a missing key raises unless a default is given
+        return self._get_at_tuple(key, idx, default)
+
+    def _read_array_at(self, array, idx):
+        """Reads ``array[idx]``, loading only the required part of the array when possible.
+
+        Only indices that the storage library reads with the same semantics as
+        torch, and efficiently, are delegated to it. Other indices are read in
+        full and indexed in memory.
+        """
+        if self.device is not None:
+            device = self.device
         else:
+            device = torch.device("cpu")
+        out = None
+        if _is_basic_index(idx):
+            try:
+                out = self._backend.read_at(array, idx, device)
+            except (TypeError, ValueError, IndexError, OSError):
+                # e.g. out of bounds: torch raises the error below
+                pass
+        elif len(array.shape):
+            span = _index_span(idx, array.shape[0])
+            if span is not None:
+                # Read the rows between the first and last selected ones as a
+                # slice: point selection is slow in h5py and requires sorted,
+                # unique indices.
+                start, stop, local_idx = span
+                out = self._backend.read_at(array, slice(start, stop), device)
+                out = out[local_idx.to(out.device)]
+        if out is None:
+            out = torch.as_tensor(self._backend.read_full(array), device=device)[idx]
+        if self._pin_mem:
+            return out.pin_memory()
+        return out
+
+    def _get_at_str(self, key, idx, default, **kwargs):
+        array = self._get_array(key, default)
+        if array is default:
             return default
+        if self._backend.is_array(array) and not self._backend.is_non_tensor(array):
+            return self._read_array_at(array, idx)
+        return super()._get_at_str(key, idx, default, **kwargs)
+
+    _get_at_tuple = _get_at_str
 
     def _get_metadata(self, key):
         """Gets the metadata for an entry.
@@ -1211,15 +1267,6 @@ class PersistentTensorDict(TensorDictBase):
                 ) from err
         sub_td.update(value, inplace=True)
 
-    @cache  # noqa: B019
-    def _valid_keys(self):
-        keys = []
-        for key in self._backend.keys(self.file):
-            metadata = self._get_metadata(key)
-            if not metadata.get("non_tensor"):
-                keys.append(key)
-        return keys
-
     # @cache  # noqa: B019
     def keys(
         self,
@@ -1245,11 +1292,6 @@ class PersistentTensorDict(TensorDictBase):
         """Iterates over the metadata of the PersistentTensorDict."""
         for key in self.keys(include_nested, leaves_only):
             yield (key, self._get_metadata(key))
-
-    def _values_metadata(self, include_nested=False, leaves_only=False):
-        """Iterates over the metadata of the PersistentTensorDict."""
-        for key in self.keys(include_nested, leaves_only):
-            yield self._get_metadata(key)
 
     def _change_batch_size(self, value):
         raise NotImplementedError
@@ -1277,11 +1319,6 @@ class PersistentTensorDict(TensorDictBase):
             self._check_batch_size(self._batch_size)
         except ValueError:
             self._batch_size = _batch_size
-
-    _erase_names = TensorDict._erase_names
-    _has_names = TensorDict._has_names
-    _set_names = TensorDict._set_names
-    names = TensorDict.names
 
     def _rename_subtds(self, names):
         if names is None:
@@ -1384,14 +1421,15 @@ class PersistentTensorDict(TensorDictBase):
         return self
 
     def entry_class(self, key: NestedKey) -> type:
-        entry_class = self._get_metadata(key)
-        is_array = entry_class.get("array")
-        if is_array:
-            return torch.Tensor
-        elif is_array is False:
+        # Inspects the node only: no data is read from storage.
+        array = self._get_array(key)
+        if not self._backend.is_array(array):
             return PersistentTensorDict
-        else:
-            raise RuntimeError(f"Encountered a non-numeric data {key}.")
+        if self._backend.is_non_tensor(array):
+            from tensordict.tensorclass import NonTensorData
+
+            return NonTensorData
+        return torch.Tensor
 
     def is_contiguous(self):
         return False
@@ -1470,6 +1508,17 @@ class PersistentTensorDict(TensorDictBase):
         copy_existing: bool = False,
         num_threads: int = 0,
     ) -> PersistentTensorDict:
+        """Raises a ``RuntimeError``: a PersistentTensorDict cannot be memory-mapped in-place.
+
+        Use :meth:`~tensordict.TensorDictBase.memmap` to build a memory-mapped copy instead.
+
+        Args:
+            prefix (str, optional): unused.
+            copy_existing (bool, optional): unused.
+            num_threads (int, optional): unused.
+
+        See :meth:`~tensordict.TensorDictBase.memmap_`.
+        """
         raise RuntimeError(
             "Cannot build a memmap TensorDict in-place from a PersistentTensorDict. Use `td.memmap()` instead."
         )
@@ -1787,6 +1836,17 @@ class PersistentTensorDict(TensorDictBase):
 
     @_as_context_manager()
     def flatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
+        """Returns an in-memory copy where the nested keys are joined by ``separator``.
+
+        The content is first loaded with :meth:`~tensordict.TensorDictBase.to_tensordict`.
+
+        Args:
+            separator (str, optional): the separator between the nested items. Defaults to ``"."``.
+            inplace (bool, optional): must be ``False``; ``True`` raises a ``ValueError``.
+                Defaults to ``False``.
+
+        See :meth:`~tensordict.TensorDictBase.flatten_keys`.
+        """
         if inplace:
             raise ValueError(
                 "Cannot call flatten_keys in_place with a PersistentTensorDict."
@@ -2141,36 +2201,7 @@ class PersistentTensorDict(TensorDictBase):
         splits = -(self.batch_size[dim] // -chunks)
         return self.split(splits, dim)
 
-    __eq__ = TensorDict.__eq__
-    __ne__ = TensorDict.__ne__
-    __xor__ = TensorDict.__xor__
-    __or__ = TensorDict.__or__
-    __ge__ = TensorDict.__ge__
-    __gt__ = TensorDict.__gt__
-    __le__ = TensorDict.__le__
-    __lt__ = TensorDict.__lt__
-
-    _apply_nest = TensorDict._apply_nest
-    _cast_reduction = TensorDict._cast_reduction
-    _check_device = TensorDict._check_device
-    _check_is_shared = TensorDict._check_is_shared
-    _convert_to_tensordict = TensorDict._convert_to_tensordict
-    _get_names_idx = TensorDict._get_names_idx
     _index_tensordict = TensorDict._index_tensordict
-    _multithread_apply_flat = TensorDict._multithread_apply_flat
-    _multithread_rebuild = TensorDict._multithread_rebuild
-    _to_module = TensorDict._to_module
-    _unbind = TensorDict._unbind
-    all = TensorDict.all
-    any = TensorDict.any
-    expand = TensorDict.expand
-    from_dict_instance = TensorDict.from_dict_instance
-    masked_select = TensorDict.masked_select
-    _repeat = TensorDict._repeat
-    _repeat = TensorDict._repeat
-    repeat_interleave = TensorDict.repeat_interleave
-    reshape = TensorDict.reshape
-    split = TensorDict.split
 
 
 _register_tensor_class(PersistentTensorDict)
@@ -2220,3 +2251,68 @@ def _is_non_tensor_h5(val):
     ):
         return True
     return False
+
+
+def _is_int(value) -> bool:
+    return isinstance(value, (int, np.integer)) and not isinstance(value, bool)
+
+
+def _is_basic_index(idx) -> bool:
+    """Whether ``idx`` only holds integers, positive-step slices and at most one Ellipsis.
+
+    Storage libraries read such indices as hyperslabs, with the same result as torch.
+    """
+    items = idx if isinstance(idx, tuple) else (idx,)
+    num_ellipsis = 0
+    for item in items:
+        if item is Ellipsis:
+            num_ellipsis += 1
+        elif isinstance(item, slice):
+            if not all(
+                bound is None or _is_int(bound)
+                for bound in (item.start, item.stop, item.step)
+            ):
+                return False
+            if item.step is not None and item.step <= 0:
+                return False
+        elif not _is_int(item):
+            return False
+    return num_ellipsis <= 1
+
+
+def _index_span(idx, size: int) -> tuple[int, int, Tensor] | None:
+    """Returns ``(start, stop, local_idx)`` such that ``array[start:stop][local_idx]`` equals ``array[idx]``.
+
+    Only 1-D integer indices and 1-D boolean masks along the first dimension are
+    supported; ``None`` is returned for any other index, or an out-of-bounds one.
+    """
+    if isinstance(idx, tuple) and len(idx) == 1:
+        # sub-tensordicts store their index as a tuple
+        idx = idx[0]
+    if isinstance(idx, (list, range)):
+        try:
+            idx = torch.as_tensor(idx)
+        except (TypeError, ValueError, RuntimeError):
+            return None
+    elif isinstance(idx, np.ndarray):
+        idx = torch.from_numpy(idx)
+    elif not isinstance(idx, Tensor):
+        return None
+    if idx.ndim != 1 or not idx.numel():
+        return None
+    if idx.dtype is torch.bool:
+        if idx.shape[0] != size:
+            return None
+        idx = idx.nonzero().squeeze(-1)
+        if not idx.numel():
+            return None
+    elif idx.is_floating_point() or idx.is_complex() or idx.dtype is torch.uint8:
+        # uint8 tensors are masks for torch
+        return None
+    idx = idx.to(device="cpu", dtype=torch.long)
+    if idx.min() < -size or idx.max() >= size:
+        return None
+    idx = torch.where(idx < 0, idx + size, idx)
+    start = int(idx.min())
+    stop = int(idx.max()) + 1
+    return start, stop, idx - start

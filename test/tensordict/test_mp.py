@@ -16,7 +16,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from packaging import version
 from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict._td import is_tensor_collection
 from tensordict.memmap import MemoryMappedTensor
@@ -51,20 +50,15 @@ try:
     _has_h5py = True
 except ImportError:
     _has_h5py = False
-TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
-_v2_5 = TORCH_VERSION >= version.parse("2.5.0")
 PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
 
 _IS_OSX = platform.system() == "Darwin"
 _IS_WINDOWS = sys.platform == "win32"
 
 TD_BATCH_SIZE = 4
-HAS_NESTED_TENSOR = (
-    getattr(torch, "_nested_compute_contiguous_strides_offsets", None) is not None
-)
 
 # Capture all warnings
 pytestmark = [
@@ -321,7 +315,7 @@ class TestTensorDictMP(TestTensorDictsBase):
         if chunksize is not None and num_chunks is not None:
             with pytest.raises(ValueError, match="but not both"):
                 td.map(
-                    self.write_pid,
+                    self.write_chunk_id,
                     dim=dim,
                     chunksize=chunksize,
                     num_chunks=num_chunks,
@@ -329,17 +323,17 @@ class TestTensorDictMP(TestTensorDictsBase):
                 )
             return
         mapped = td.map(
-            self.write_pid,
+            self.write_chunk_id,
             dim=dim,
             chunksize=chunksize,
             num_chunks=num_chunks,
             pool=_pool_fixt,
         )
-        pids = mapped.get("pid").unique()
+        chunk_ids = mapped.get("chunk_id").unique()
         if chunksize is not None:
-            assert pids.numel() == -(td.shape[0] // -chunksize)
+            assert chunk_ids.numel() == -(td.shape[0] // -chunksize)
         elif num_chunks is not None:
-            assert pids.numel() == num_chunks
+            assert chunk_ids.numel() == num_chunks
 
     @pytest.mark.parametrize("dim", [-2, -1, 0, 1, 2, 3])
     def test_map(self, td_name, device, dim, _pool_fixt):
@@ -396,8 +390,11 @@ class TestTensorDictMP(TestTensorDictsBase):
         q.put("succeeded")
 
     @staticmethod
-    def write_pid(x):
-        return TensorDict({"pid": os.getpid()}, []).expand(x.shape)
+    def write_chunk_id(x):
+        # A random id for each call, so that the test counts chunks, not
+        # workers: one worker can take several chunks.
+        chunk_id = int.from_bytes(os.urandom(7), "little")
+        return TensorDict({"chunk_id": chunk_id}, []).expand(x.shape)
 
 
 @pytest.fixture(scope="class")
@@ -759,6 +756,9 @@ class TestMap:
         )
         return td
 
+    # The tests below pass num_workers explicitly. The default, mp.cpu_count(),
+    # counts the host's CPUs rather than the container's, so on a large CI host
+    # the pool spawns more processes than the container has memory for.
     def test_map_non_tensor(self):
         gc.collect()
         # with NonTensorStack
@@ -766,14 +766,14 @@ class TestMap:
             {"tensor": torch.arange(10), "non_tensor": "a string!"}, batch_size=[10]
         )
         td[1::2] = TensorDict({"non_tensor": "another string!"}, [5])
-        td = td.map(self.nontensor_check, chunksize=0)
+        td = td.map(self.nontensor_check, chunksize=0, num_workers=2)
         assert td["check"].all()
         # with NonTensorData
         td = TensorDict(
             {"tensor": torch.zeros(10, dtype=torch.int), "non_tensor": "a string!"},
             batch_size=[10],
         )
-        td = td.map(self.nontensor_check, chunksize=0)
+        td = td.map(self.nontensor_check, chunksize=0, num_workers=2)
         assert td["check"].all()
 
     @staticmethod
@@ -803,6 +803,7 @@ class TestMap:
         data_prev = None
         for data in td.map_iter(
             self._return_identical,
+            num_workers=2,
             shuffle=shuffle,
             num_chunks=num_chunks,
             chunksize=chunksize,
@@ -849,6 +850,7 @@ class TestMap:
         )
         for _ in td.map_iter(
             self._return_identical,
+            num_workers=2,
             shuffle=shuffle,
             num_chunks=num_chunks,
             chunksize=chunksize,

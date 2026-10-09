@@ -90,13 +90,6 @@ except ImportError:
 if not _has_zarr:
     sphinx_gallery_conf["ignore_pattern"] = r"zarr_storage\.py"
 
-# sphinx_gallery_conf = {
-#     "examples_dirs": "../../gallery/",  # path to your example scripts
-#     "gallery_dirs": "auto_examples",  # path to where to save gallery generated output
-#     "backreferences_dir": "gen_modules/backreferences",
-#     "doc_module": ("tensordict",),
-# }
-
 napoleon_use_ivar = True
 napoleon_numpy_docstring = False
 napoleon_google_docstring = True
@@ -155,7 +148,7 @@ latex_elements = {}
 
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
-man_pages = [(master_doc, "torchvision", "tensordict Documentation", [author], 1)]
+man_pages = [(master_doc, "tensordict", "tensordict Documentation", [author], 1)]
 
 
 # -- Options for Texinfo output -------------------------------------------
@@ -179,9 +172,10 @@ texinfo_documents = [
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3/", None),
-    "torch": ("https://pytorch.org/docs/stable/", None),
+    "torch": ("https://docs.pytorch.org/docs/stable/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
     "pytorch_tutorials": ("https://docs.pytorch.org/tutorials/", None),
+    "zarr": ("https://zarr.readthedocs.io/en/stable/", None),
 }
 
 

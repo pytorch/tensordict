@@ -34,11 +34,15 @@ or ``cat``.
     default_is_leaf
     from_any
     from_consolidated
+    from_csv
     from_dict
     from_h5
+    from_json
     from_module
     from_modules
     from_namedtuple
+    from_pandas
+    from_parquet
     from_pytree
     from_struct_array
     from_tuple
@@ -68,7 +72,7 @@ locking/unlocking a tensordict
     >>> data.lock_()  # data.set will result in an exception
     >>> with data.unlock_():
     ...     data.set("key", value)
-    >>> assert data.is_locked()
+    >>> assert data.is_locked
 
 or to execute functional calls with a TensorDict instance containing the
 parameters and buffers of a model:
@@ -87,7 +91,7 @@ Memory-mapped tensors
 ---------------------
 
 `tensordict` offers the :class:`~tensordict.MemoryMappedTensor` primitive which
-allows you to work with tensors stored in physical memory in a handy way.
+allows you to work with tensors stored in files on disk in a handy way.
 The main advantages of :class:`~tensordict.MemoryMappedTensor`
 are its ease of construction (no need to handle the storage of a tensor),
 the possibility to work with big contiguous data that would not fit in memory,
@@ -103,18 +107,43 @@ one.
 
 Indexing memory-mapped tensors is much faster than loading several independent files from
 the disk and does not require to load the full content of the array in memory.
-However, physical storage of PyTorch tensors should not be any different:
+Apart from the file that backs it, a memory-mapped tensor is created and indexed like a regular
+PyTorch tensor:
 
 .. code-block:: Python
 
-  >>> my_images = MemoryMappedTensor.empty((1_000_000, 3, 480, 480), dtype=torch.unint8)
-  >>> mini_batch = my_images[:10]  # just reads the first 10 images of the dataset
+  >>> my_images = MemoryMappedTensor.empty(
+  ...     (100, 3, 64, 64), dtype=torch.uint8, filename="images.memmap"
+  ... )
+  >>> mini_batch = my_images[:10]  # a MemoryMappedTensor view on the first 10 images
+  >>> # the file can be opened again later, or from another process
+  >>> my_images = MemoryMappedTensor.from_filename(
+  ...     "images.memmap", dtype=torch.uint8, shape=(100, 3, 64, 64)
+  ... )
 
 .. autosummary::
     :toctree: generated/
     :template: td_template_noinherit.rst
 
     MemoryMappedTensor
+
+Key-value stores
+----------------
+
+.. currentmodule:: tensordict.store
+
+:class:`~tensordict.store.TensorDictStore` and :class:`~tensordict.store.LazyStackedTensorDictStore`
+are tensordicts whose entries are kept in a Redis-compatible key-value store (Redis, Dragonfly, KeyDB, ...).
+See :ref:`storage` for their usage.
+
+.. autosummary::
+    :toctree: generated/
+    :template: td_template.rst
+
+    TensorDictStore
+    LazyStackedTensorDictStore
+
+.. currentmodule:: tensordict
 
 Pointwise Operations
 --------------------
@@ -175,7 +204,7 @@ Example 2: Tensordict-Tensor Operation
     >>> tensor = torch.randn(4)
     >>> result = td * tensor
 
-ere, the * operator is applied element-wise to each tensor in td and the provided tensor. The tensor is broadcasted to match the shape of each tensor in the Tensordict.
+Here, the * operator is applied element-wise to each tensor in td and the provided tensor. The tensor is broadcasted to match the shape of each tensor in the Tensordict.
 
 Example 3: Tensordict-Scalar Operation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -223,12 +252,13 @@ Some operations, like :meth:`~tensordict.TensorDict.add`, have a ``default`` key
 to operate with tensordict with exclusive entries.
 If ``default=None`` (the default), the two Tensordicts must have exactly matching key sets.
 If ``default="intersection"``, only the intersecting key sets will be considered, and other keys will be ignored.
-In all other cases, ``default`` will be used for all missing entries on both sides of the operation.
+In all other cases, ``default`` must be a tensor (e.g. ``default=torch.tensor(0.0)``, not ``default=0``), which
+will be used for all missing entries on both sides of the operation.
 
 Gradient computation with ``torch.autograd.grad``
 -------------------------------------------------
 
-Tensordict extends :pyfunc:`torch.autograd.grad` so that gradients can be
+Tensordict extends :func:`torch.autograd.grad` so that gradients can be
 computed directly on (nested) ``TensorDict`` structures.  All tensors are
 extracted into tuples, the underlying PyTorch op is executed and the
 result is packed back into a new ``TensorDict`` with the same key structure.
@@ -293,6 +323,24 @@ whose entries match the differentiable leaves by nested key:
     ...     critic_loss=torch.tensor(1.0),
     ... )
     >>> loss_td.backward(weights)
+
+UCXX transport
+--------------
+
+.. currentmodule:: tensordict._ucxx
+
+:class:`~tensordict._ucxx.TensorDictPipe` and :class:`~tensordict._ucxx.TensorDictServer` stream tensordicts
+over UCXX. They are imported from ``tensordict._ucxx`` and need the optional ``ucxx`` package.
+See :ref:`distributed` for their usage.
+
+.. autosummary::
+    :toctree: generated/
+    :template: td_template.rst
+
+    TensorDictPipe
+    TensorDictServer
+
+.. currentmodule:: tensordict
 
 Utils
 -----

@@ -16,7 +16,6 @@ import warnings
 
 import pytest
 import torch
-from packaging import version
 from tensordict import (
     LazyStackedTensorDict,
     make_tensordict,
@@ -43,10 +42,15 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.tensordict.test._utils_internal import (
         get_available_devices,
         is_npu_available,
+        legacy_lazy_mode,
     )
 else:
     IS_FB = False
-    from _utils_internal import get_available_devices, is_npu_available
+    from _utils_internal import (
+        get_available_devices,
+        is_npu_available,
+        legacy_lazy_mode,
+    )
 
 
 _has_streaming = importlib.util.find_spec("streaming", None) is not None
@@ -57,20 +61,15 @@ try:
     _has_h5py = True
 except ImportError:
     _has_h5py = False
-TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
-_v2_5 = TORCH_VERSION >= version.parse("2.5.0")
 PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
 
 _IS_OSX = platform.system() == "Darwin"
 _IS_WINDOWS = sys.platform == "win32"
 
 TD_BATCH_SIZE = 4
-HAS_NESTED_TENSOR = (
-    getattr(torch, "_nested_compute_contiguous_strides_offsets", None) is not None
-)
 
 # Capture all warnings
 pytestmark = [
@@ -994,7 +993,7 @@ class TestTensorDictsRequiresGrad:
         td.batch_size = torch.Size([3, 1])
         return td
 
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def unsqueezed_td(self, device):
         return self.td(device).unsqueeze(0)
 

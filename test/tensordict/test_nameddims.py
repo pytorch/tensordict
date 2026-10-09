@@ -12,7 +12,6 @@ import sys
 
 import pytest
 import torch
-from packaging import version
 from tensordict import LazyStackedTensorDict, TensorAttrs, TensorDict
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
@@ -39,20 +38,15 @@ try:
     _has_h5py = True
 except ImportError:
     _has_h5py = False
-TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
-_v2_5 = TORCH_VERSION >= version.parse("2.5.0")
 PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
 
 _IS_OSX = platform.system() == "Darwin"
 _IS_WINDOWS = sys.platform == "win32"
 
 TD_BATCH_SIZE = 4
-HAS_NESTED_TENSOR = (
-    getattr(torch, "_nested_compute_contiguous_strides_offsets", None) is not None
-)
 
 # Capture all warnings
 pytestmark = [
@@ -239,12 +233,62 @@ class TestNamedDims(TestTensorDictsBase):
         assert td[0, ..., torch.tensor(-1)].names == ["b", "c"]
         assert td[0, ..., :-1].names == ["b", "c", "d"]
         assert td[:1, ..., :-1].names == ["a", "b", "c", "d"]
+        # a 1-D mask keeps the name of its dim, an N-D mask gives one unnamed dim
         tdbool = td[torch.ones(3, dtype=torch.bool)]
-        assert tdbool.names == [None, "b", "c", "d"]
+        assert tdbool.names == ["a", "b", "c", "d"]
         assert tdbool.ndim == 4
         tdbool = td[torch.ones(3, 4, dtype=torch.bool)]
         assert tdbool.names == [None, "c", "d"]
         assert tdbool.ndim == 3
+
+    def test_index_scalar_bool_and_nd_mask(self):
+        td = TensorDict(batch_size=[3, 4, 5, 6], names=["a", "b", "c", "d"])
+        # a scalar bool or a 0-d mask adds an unnamed dim
+        assert td[True].names == [None, "a", "b", "c", "d"]
+        assert td[True, 0, 0, 0].names == [None, "d"]
+        assert td[:, False].names == ["a", None, "b", "c", "d"]
+        assert td[torch.tensor(True)].names == [None, "a", "b", "c", "d"]
+        # an N-D mask merges the dims it consumes into an unnamed dim
+        mask = torch.ones(4, 5, dtype=torch.bool)
+        assert td[:, mask].names == ["a", None, "d"]
+        assert td[..., mask, :].names == ["a", None, "d"]
+        assert td[[[True] * 4] * 3].names == [None, "c", "d"]
+
+    def test_index_advanced_names(self):
+        td = TensorDict(batch_size=[3, 4, 5, 6], names=["a", "b", "c", "d"])
+        rows, cols = torch.tensor([0, 2]), torch.tensor([1, 3])
+        # advanced indices that broadcast together give unnamed dims
+        assert td[rows, cols].names == [None, "c", "d"]
+        assert td[rows, :, cols].names == [None, "b", "d"]
+        assert td[:, rows, None, cols].names == [None, "a", None, "d"]
+        # unless only one of them varies along a dim
+        assert td[rows[:, None], cols].names == ["a", "b", "c", "d"]
+        assert td[rows, :, [1]].names == ["a", "b", "d"]
+        assert td[rows, True].names == ["a", "b", "c", "d"]
+        assert td[True, :, rows].names == ["b", "a", "c", "d"]
+
+    @pytest.mark.parametrize("stack_dim", [None, 0, 1, 2])
+    @pytest.mark.parametrize(
+        "index,names",
+        [
+            (torch.tensor([True, False, True]), ["a", "b", "c"]),
+            ([True, False, True], ["a", "b", "c"]),
+            ((slice(None), torch.tensor([True, False, True, False])), ["a", "b", "c"]),
+            ((..., torch.tensor([True, False, True, True, False])), ["a", "b", "c"]),
+            ((0, torch.tensor([True, False, True, False])), ["b", "c"]),
+            (torch.tensor([[True, False, True, False]] * 3), [None, "c"]),
+            ((slice(None), torch.ones(4, 5, dtype=torch.bool)), ["a", None]),
+        ],
+    )
+    def test_index_mask_names(self, stack_dim, index, names):
+        # a 1-D mask keeps the name of its dim and an N-D mask gives one unnamed
+        # dim, for tensordicts and lazy stacks alike
+        td = TensorDict({"x": torch.zeros(3, 4, 5)}, [3, 4, 5], names=["a", "b", "c"])
+        if stack_dim is not None:
+            td = LazyStackedTensorDict.lazy_stack(
+                list(td.unbind(stack_dim)), stack_dim
+            ).refine_names("a", "b", "c")
+        assert td[index].names == names
 
     def test_masked_fill(self):
         td = TensorDict(batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
@@ -593,7 +637,7 @@ class TestNamedDims(TestTensorDictsBase):
             "d",
         ]
         tdbool = td._get_sub_tensordict(torch.ones(3, dtype=torch.bool))
-        assert tdbool.names == [None, "b", "c", "d"]
+        assert tdbool.names == ["a", "b", "c", "d"]
         assert tdbool.ndim == 4
         tdbool = td._get_sub_tensordict(torch.ones(3, 4, dtype=torch.bool))
         assert tdbool.names == [None, "c", "d"]

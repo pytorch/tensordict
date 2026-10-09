@@ -3,20 +3,22 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import sys
 from collections.abc import Sequence
-from typing import Any, dataclass_transform, Literal, overload, Type, TYPE_CHECKING
+from dataclasses import InitVar
+from typing import Any, ClassVar, Literal, overload, Type
+
+if sys.version_info >= (3, 11):
+    from typing import dataclass_transform, Self
+else:
+    from typing_extensions import dataclass_transform, Self
 
 import torch
 from tensordict._td import TensorDict
 from tensordict.utils import DeviceType
 
-if TYPE_CHECKING:
-    from typing import Self
-else:
-    Self = Any
-
-@dataclass_transform()
-class _TypedTensorDictMeta(type(TensorDict)):
+@dataclass_transform(kw_only_default=True)
+class _TypedTensorDictMeta(type):
     def __new__(
         mcs,
         name: str,
@@ -46,18 +48,24 @@ class _TypedTensorDictMeta(type(TensorDict)):
             Literal["shadow", "frozen", "autocast", "nocast", "tensor_only"], ...
         ],
     ) -> Type["TypedTensorDict"]: ...
-    def __getitem__(cls, item: Any) -> Type["TypedTensorDict"]: ...
 
 class TypedTensorDict(TensorDict, metaclass=_TypedTensorDictMeta):
-    _shadow: bool
-    _frozen: bool
-    _autocast: bool
-    _nocast: bool
-    _tensor_only: bool
+    batch_size: InitVar[Sequence[int] | torch.Size | int | None] = None
+    device: InitVar[DeviceType | None] = None
+    names: InitVar[Sequence[str] | None] = None
+    non_blocking: InitVar[bool | None] = None
+    lock: InitVar[bool] = False
 
-    __expected_keys__: frozenset[str]
-    __required_keys__: frozenset[str]
-    __optional_keys__: frozenset[str]
+    _shadow: ClassVar[bool]
+    _frozen: ClassVar[bool]
+    _autocast: ClassVar[bool]
+    _nocast: ClassVar[bool]
+    _tensor_only: ClassVar[bool]
+
+    __expected_keys__: ClassVar[frozenset[str]]
+    __required_keys__: ClassVar[frozenset[str]]
+    __optional_keys__: ClassVar[frozenset[str]]
+    __field_defaults__: ClassVar[dict[str, Any]]
 
     def __init__(
         self,

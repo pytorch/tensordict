@@ -16,12 +16,9 @@ from tensordict._nestedkey import NestedKey
 from tensordict.utils import _ContextManager, strtobool, unravel_key_list
 from torch import nn
 
-from torch.utils._contextlib import _DecoratorContextManager
+from torch.compiler import is_compiling
 
-try:
-    from torch.compiler import is_compiling
-except ImportError:  # torch 2.0
-    from torch._dynamo import is_compiling
+from torch.utils._contextlib import _DecoratorContextManager
 
 
 _dispatch_tdnn_modules = _ContextManager(
@@ -403,21 +400,8 @@ def skip_existing() -> bool | list[NestedKey]:
     return _skip_existing.get_mode()
 
 
-def _rebuild_buffer(data, requires_grad, backward_hooks):
-    buffer = Buffer(data, requires_grad)
-    # NB: This line exists only for backwards compatibility; the
-    # general expectation is that backward_hooks is an empty
-    # OrderedDict.  See Note [Don't serialize hooks]
-    buffer._backward_hooks = backward_hooks
-
-    return buffer
-
-
 # For backward compatibility in imports
-try:
-    from torch.nn.parameter import Buffer  # noqa
-except ImportError:
-    from tensordict.utils import Buffer  # noqa
+from torch.nn.parameter import Buffer  # noqa
 
 
 def _dispatch_td_nn_modules():
@@ -485,7 +469,7 @@ _composite_lp_aggregate = _ContextManager(
 
 
 def composite_lp_aggregate(nowarn: bool = False) -> bool | None:
-    """Returns whether a :class:`~tensordict.nn.CompositeDistribution` log-probabilities and entropies will be aggregated in a single tensor.
+    """Returns whether a :class:`~tensordict.nn.distributions.CompositeDistribution` log-probabilities and entropies will be aggregated in a single tensor.
 
     Args:
         nowarn (bool, optional): whether to ignore warnings. Defaults to False.
@@ -498,9 +482,9 @@ def composite_lp_aggregate(nowarn: bool = False) -> bool | None:
 
 
 class set_composite_lp_aggregate(_DecoratorContextManager):
-    """Controls whether :class:`~tensordict.nn.CompositeDistribution` log-probabilities and entropies will be aggregated in a single tensor.
+    """Controls whether :class:`~tensordict.nn.distributions.CompositeDistribution` log-probabilities and entropies will be aggregated in a single tensor.
 
-    When :func:`~tensordict.nn.composite_lp_aggregate` returns ``True``, the log-probs / entropies of :class:`~tensordict.nn.CompositeDistribution`
+    When :func:`~tensordict.nn.composite_lp_aggregate` returns ``True``, the log-probs / entropies of :class:`~tensordict.nn.distributions.CompositeDistribution`
     will be summed into a single tensor with the shape of the root tensordict. This behaviour is being deprecated in favor of
     non-aggregated log-probs, which offer more flexibility and a somewhat more natural API (tensordict samples, tensordict log-probs, tensordict entropies).
 

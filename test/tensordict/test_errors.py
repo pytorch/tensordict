@@ -15,7 +15,6 @@ import warnings
 
 import pytest
 import torch
-from packaging import version
 from tensordict import (
     get_defaults_to_none,
     LazyStackedTensorDict,
@@ -42,20 +41,15 @@ try:
     _has_h5py = True
 except ImportError:
     _has_h5py = False
-TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
-_v2_5 = TORCH_VERSION >= version.parse("2.5.0")
 PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
 
 _IS_OSX = platform.system() == "Darwin"
 _IS_WINDOWS = sys.platform == "win32"
 
 TD_BATCH_SIZE = 4
-HAS_NESTED_TENSOR = (
-    getattr(torch, "_nested_compute_contiguous_strides_offsets", None) is not None
-)
 
 # Capture all warnings
 pytestmark = [
@@ -109,6 +103,20 @@ class TestErrorMessage:
         td = TensorDict({"a": torch.rand(())}, [])
         with pytest.raises(ValueError, match="Failed to update 'a'"):
             td.set_("a", torch.randn(2))
+
+    @staticmethod
+    @pytest.mark.parametrize("td_type", ["td", "lazy_stack", "sub_td"])
+    def test_set_self_error(td_type):
+        td = TensorDict({"a": torch.zeros(3, 2)}, [3, 2])
+        if td_type == "lazy_stack":
+            td = LazyStackedTensorDict(*td.unbind(0), stack_dim=0)
+        elif td_type == "sub_td":
+            td = td._get_sub_tensordict(0)
+        with pytest.raises(ValueError, match="Cannot set a tensordict inside itself"):
+            td["self"] = td
+        with pytest.raises(ValueError, match="Cannot set a tensordict inside itself"):
+            td.set(("nested", "self"), td)
+        assert set(td.keys()) == {"a"}
 
 
 class TestErrors:

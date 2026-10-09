@@ -10,6 +10,7 @@ import pytest
 import torch
 
 from tensordict import is_tensor_collection, TensorDict
+from tensordict.utils import _unravel_key_to_tuple, unravel_key
 
 
 @pytest.fixture
@@ -30,6 +31,51 @@ def c():
 @pytest.fixture
 def td(a, b):
     return TensorDict({"a": a, "b": {"b1": b}}, [3, 4])
+
+
+@pytest.mark.parametrize("num_fields", [4, 16, 64, 256])
+@pytest.mark.parametrize("batch_size", [(), (32,)])
+@pytest.mark.parametrize("device", [None, "cpu"])
+def test_construct_tensor_leaves(benchmark, num_fields, batch_size, device):
+    source = {f"f{i}": torch.empty(32, 8) for i in range(num_fields)}
+    benchmark(TensorDict, source, batch_size=batch_size, device=device)
+
+
+@pytest.mark.parametrize("num_fields", [16, 256])
+@pytest.mark.parametrize("source_type", ["dict", "tuple_keys", "ready_children"])
+@pytest.mark.parametrize("method", ["constructor", "set", "update"])
+def test_build_nested_tensor_leaves(benchmark, num_fields, source_type, method):
+    leaves = {f"f{i}": torch.empty(32, 8) for i in range(num_fields)}
+    if source_type == "tuple_keys":
+        source = {
+            (f"g{i // 4}", key): value for i, (key, value) in enumerate(leaves.items())
+        }
+    else:
+        items = list(leaves.items())
+        source = {f"g{i // 4}": dict(items[i : i + 4]) for i in range(0, num_fields, 4)}
+        if source_type == "ready_children":
+            source = {
+                key: TensorDict(value, [32], device="cpu")
+                for key, value in source.items()
+            }
+
+    if method == "constructor":
+        result = benchmark(TensorDict, source, batch_size=[32], device="cpu")
+    else:
+
+        def build():
+            # Construct an empty destination each time so warmup cannot turn
+            # this into a benchmark of updating an already populated tree.
+            result = TensorDict({}, [32], device="cpu")
+            if method == "set":
+                for key, value in source.items():
+                    result.set(key, value)
+            else:
+                result.update(source)
+            return result
+
+        result = benchmark(build)
+    assert result["g0", "f0"] is leaves["f0"]
 
 
 def big_td():
@@ -460,7 +506,21 @@ def test_clone(benchmark, td):
     benchmark(td.clone)
 
 
-@pytest.mark.parametrize("index", ["int", "slice_int", "range", "tuple", "list"])
+@pytest.mark.parametrize(
+    "index",
+    [
+        "int",
+        "slice_int",
+        "range",
+        "tuple",
+        "list",
+        "tensor",
+        "mask",
+        "ellipsis",
+        "none",
+        "separated_tensors",
+    ],
+)
 def test_getitem(benchmark, td, c, index):
     if index == "int":
         index = 1
@@ -472,6 +532,16 @@ def test_getitem(benchmark, td, c, index):
         index = (2, 1)
     elif index == "list":
         index = [0, 1]
+    elif index == "tensor":
+        index = torch.tensor([0, 2])
+    elif index == "mask":
+        index = torch.tensor([True, False, True])
+    elif index == "ellipsis":
+        index = (..., 1)
+    elif index == "none":
+        index = (None, slice(None), 1)
+    elif index == "separated_tensors":
+        index = (torch.tensor([0, 2]), None, torch.tensor([1, 0]))
     else:
         raise NotImplementedError
 
@@ -559,6 +629,60 @@ def test_update__nested(benchmark, td):
     benchmark(exec_update__nested)
 
 
+@pytest.mark.parametrize("n", [16, 256, 1024])
+@pytest.mark.parametrize("as_dict", [False, True])
+@pytest.mark.parametrize("nested", [False, True])
+def test_update_many_leaves(benchmark, n, as_dict, nested):
+    source = TensorDict({str(i): torch.ones(32, 8) for i in range(n)}, [32])
+    if nested:
+        source = TensorDict({"nested": source}, [32])
+    dest = source.clone()
+    benchmark(dest.update_, source.to_dict() if as_dict else source)
+
+
+@pytest.mark.parametrize("n", [16, 256])
+@pytest.mark.parametrize("source_type", ["dict", "td", "kwargs"])
+@pytest.mark.parametrize("nested", [False, True])
+def test_update_tensor_leaves(benchmark, n, source_type, nested):
+    source = {f"f{i}": torch.ones(32, 8) for i in range(n)}
+    if nested:
+        items = list(source.items())
+        source = {f"g{i}": dict(items[i : i + 4]) for i in range(0, n, 4)}
+    td = TensorDict(source, [32], device="cpu").clone()
+    if source_type == "kwargs":
+        benchmark(td.update, **source)
+    else:
+        if source_type == "td":
+            source = TensorDict(source, [32], device="cpu")
+        benchmark(td.update, source)
+
+
+@pytest.mark.parametrize("batch_size", [(), (32,)])
+@pytest.mark.parametrize("device", [None, "cpu"])
+@pytest.mark.parametrize("nested", [False, True])
+def test_set_tensor_leaf(benchmark, batch_size, device, nested):
+    value = torch.ones(32, 8)
+    td = TensorDict({}, batch_size=batch_size, device=device)
+    key = ("child", "x") if nested else "x"
+    td.set(key, value)
+    benchmark(td.set, key, value)
+
+
+@pytest.mark.parametrize("batch_size", [(), (32,)])
+@pytest.mark.parametrize("device", [None, "cpu"])
+@pytest.mark.parametrize("nested", [False, True])
+def test_set_tensor_leaf_inplace(benchmark, batch_size, device, nested):
+    value = torch.ones(32, 8)
+    key = ("child", "x") if nested else "x"
+    td = TensorDict(
+        {key: torch.zeros_like(value)}, batch_size=batch_size, device=device
+    )
+    storage = td[key].data_ptr()
+    benchmark(td.set_, key, value)
+    assert td[key].data_ptr() == storage != value.data_ptr()
+    torch.testing.assert_close(td[key], value)
+
+
 def test_set_nested(benchmark, td, b):
     def exec_set_nested():
         tdc = td.clone()
@@ -573,6 +697,37 @@ def test_set_nested_new(benchmark, td, c):
         tdc["c", "c", "c"] = c
 
     benchmark(exec_set_nested_new)
+
+
+_KEYS = {
+    "str": "x",
+    "tuple": ("a", "b", "c"),
+    "nested_tuple": ("next", ("agents", "reward")),
+}
+
+
+@pytest.mark.parametrize("kind", list(_KEYS))
+def test_unravel_key(benchmark, kind):
+    benchmark(unravel_key, _KEYS[kind])
+
+
+@pytest.mark.parametrize("kind", list(_KEYS))
+def test_unravel_key_to_tuple(benchmark, kind):
+    benchmark(_unravel_key_to_tuple, _KEYS[kind])
+
+
+@pytest.mark.parametrize("kind", list(_KEYS))
+def test_get_by_key(benchmark, kind):
+    value = torch.zeros(3)
+    td = TensorDict(
+        {
+            "x": value,
+            ("a", "b", "c"): value,
+            ("next", "agents", "reward"): value,
+        },
+        batch_size=[3],
+    )
+    benchmark(td.get, _KEYS[kind])
 
 
 def test_select(benchmark, td, c):

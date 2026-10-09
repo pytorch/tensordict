@@ -60,7 +60,9 @@ class _UnbatchedTensorMixin:
         self._batch_size = torch.Size(batch_size)
 
     def copy(self):
-        out = type(self)(self._base_tensor())
+        # Alias the payload without converting to a plain Tensor, which Dynamo
+        # cannot trace for the __torch_function__ fallback inside vmap.
+        out = torch.ops.aten.alias.default(self)
         batch_size = getattr(self, "_batch_size", None)
         if batch_size is not None:
             out.batch_size = batch_size
@@ -405,6 +407,10 @@ else:
             batch_size = cls._batch_size_from_args(args, kwargs)
             with torch._C.DisableTorchFunctionSubclass():
                 result = func(*args, **kwargs)
+                # Rewrapping a view's base creates an endless chain of views.
+                # Gradients are rewrapped below, so they stay unbatched.
+                if func == torch.Tensor._base.__get__:
+                    return result
                 if isinstance(result, torch.Tensor):
                     out = result.as_subclass(cls)
                     if batch_size is not None:

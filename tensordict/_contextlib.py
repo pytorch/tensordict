@@ -18,10 +18,7 @@ from typing import Any, Callable, cast, TypeVar
 
 import numpy as np
 
-try:
-    from torch.compiler import is_compiling
-except ImportError:  # torch 2.0
-    from torch._dynamo import is_compiling
+from torch.compiler import is_compiling
 
 
 # Used for annotating the decorator usage of _DecoratorContextManager (e.g.,

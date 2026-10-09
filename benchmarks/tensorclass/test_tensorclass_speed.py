@@ -5,11 +5,12 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import make_dataclass
 
 import pytest
 import torch
 
-from tensordict import tensorclass, TensorClass
+from tensordict import tensorclass, TensorClass, TensorDict, TypedTensorDict
 
 
 @tensorclass
@@ -26,6 +27,11 @@ class MyDataTensorOnly(TensorClass["tensor_only"]):
     c: torch.Tensor | None
 
 
+class MyTypedTensorDict(TypedTensorDict):
+    a: torch.Tensor
+    b: torch.Tensor
+
+
 def test_tc_init(benchmark):
     z = torch.zeros(())
     o = torch.ones(())
@@ -36,6 +42,26 @@ def test_tc_init_tensor_only(benchmark):
     z = torch.zeros(())
     o = torch.ones(())
     benchmark(lambda: MyDataTensorOnly(a=z, b=o, c=None))
+
+
+def test_ttd_init(benchmark):
+    z = torch.zeros(())
+    o = torch.ones(())
+
+    def make_ttd():
+        return MyTypedTensorDict(a=z, b=o, batch_size=[])
+
+    benchmark(make_ttd)
+
+
+def test_td_init_reference(benchmark):
+    z = torch.zeros(())
+    o = torch.ones(())
+
+    def make_td():
+        return TensorDict({"a": z, "b": o}, batch_size=[])
+
+    benchmark(make_td)
 
 
 def test_tc_init_nested(benchmark):
@@ -57,6 +83,54 @@ class ManyFieldsTC(TensorClass["tensor_only"]):
     f7: torch.Tensor
     f8: torch.Tensor
     f9: torch.Tensor
+
+
+@pytest.mark.parametrize("num_fields", [4, 16, 64, 256])
+@pytest.mark.parametrize("tensor_only", [False, True])
+@pytest.mark.parametrize("batch_size", [(), (32,)])
+@pytest.mark.parametrize("device", [None, "cpu"])
+def test_tc_init_tensor_schema(benchmark, num_fields, tensor_only, batch_size, device):
+    cls = tensorclass(tensor_only=tensor_only)(
+        make_dataclass(
+            "TensorSchema", [(f"f{i}", torch.Tensor) for i in range(num_fields)]
+        )
+    )
+    source = {f"f{i}": torch.empty(32, 8) for i in range(num_fields)}
+    benchmark(cls, **source, batch_size=batch_size, device=device)
+
+
+@pytest.mark.parametrize("num_children", [4, 64])
+@pytest.mark.parametrize("tensor_only", [False, True])
+@pytest.mark.parametrize("ready_children", [False, True])
+def test_tc_init_nested_tensor_schema(
+    benchmark, num_children, tensor_only, ready_children
+):
+    child_cls = tensorclass(tensor_only=tensor_only)(
+        make_dataclass("Child", [(f"f{i}", torch.Tensor) for i in range(4)])
+    )
+    parent_cls = tensorclass(tensor_only=tensor_only)(
+        make_dataclass("Parent", [(f"g{i}", child_cls) for i in range(num_children)])
+    )
+    source = {
+        f"g{i}": {f"f{j}": torch.empty(32, 8) for j in range(4)}
+        for i in range(num_children)
+    }
+    if ready_children:
+        source = {
+            key: child_cls(**value, batch_size=[32], device="cpu")
+            for key, value in source.items()
+        }
+        benchmark(parent_cls, **source, batch_size=[32], device="cpu")
+    else:
+
+        def build():
+            children = {
+                key: child_cls(**value, batch_size=[32], device="cpu")
+                for key, value in source.items()
+            }
+            return parent_cls(**children, batch_size=[32], device="cpu")
+
+        benchmark(build)
 
 
 def test_tc_init_many_fields(benchmark):
@@ -81,6 +155,24 @@ def test_tc_first_layer_tensor_only(benchmark):
 
     def get():
         return d.a
+
+    benchmark(get)
+
+
+def test_ttd_first_layer_tensor(benchmark):
+    d = MyTypedTensorDict(a=torch.zeros(()), b=torch.ones(()), batch_size=[])
+
+    def get():
+        return d.a
+
+    benchmark(get)
+
+
+def test_td_first_layer_tensor_reference(benchmark):
+    d = TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, batch_size=[])
+
+    def get():
+        return d["a"]
 
     benchmark(get)
 

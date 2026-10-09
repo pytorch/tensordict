@@ -8,8 +8,8 @@ import dataclasses
 import importlib.util
 import inspect
 import platform
-import sys
 import warnings
+import weakref
 from pathlib import Path
 from typing import Any, Callable
 
@@ -22,9 +22,8 @@ from packaging import version
 
 from tensordict import (
     assert_close,
+    from_dataclass,
     NonTensorData,
-    PYTREE_REGISTERED_LAZY_TDS,
-    PYTREE_REGISTERED_TDS,
     tensorclass,
     TensorDict,
     TensorDictParams,
@@ -41,10 +40,20 @@ from tensordict.nn import (
     TensorDictModule as Mod,
     TensorDictSequential as Seq,
 )
-from tensordict.nn.functional_modules import _exclude_td_from_pytree
+from tensordict.nn.functional_modules import (
+    _exclude_td_from_pytree,
+    PYTREE_REGISTERED_LAZY_TDS,
+    PYTREE_REGISTERED_TDS,
+)
+from tensordict.store._utils import _prepare_indexed_value
 
 from tensordict.tensorclass import TensorClass
-from tensordict.utils import unravel_keys
+from tensordict.utils import (
+    _unravel_key_to_tuple,
+    unravel_key,
+    unravel_key_list,
+    unravel_keys,
+)
 
 from torch._dynamo.testing import CompileCounterWithBackend
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
@@ -53,9 +62,6 @@ TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
-_v2_5 = TORCH_VERSION >= version.parse("2.5.0")
-_v2_6 = TORCH_VERSION >= version.parse("2.6.0")
-_v2_7 = TORCH_VERSION >= version.parse("2.7.0")
 
 _IS_OSX = platform.system() == "Darwin"
 
@@ -66,10 +72,27 @@ elif is_npu_available():
     cur_device = "npu"
     npu_device_count = torch.npu.device_count()
 
-pytestmark = pytest.mark.skipif(
-    sys.version_info >= (3, 14),
-    reason="torch.compile is not supported on python 3.14+ ",
-)
+
+@pytest.mark.parametrize("is_tensordict_module", [False, True])
+def test_cudagraph_module_is_released_without_gc(is_tensordict_module):
+    if is_tensordict_module:
+        module = TensorDictModule(lambda x: x, in_keys=["x"], out_keys=["y"])
+    else:
+
+        def module(x):
+            return x
+
+    with _exclude_td_from_pytree():
+        with (
+            pytest.warns(UserWarning)
+            if not torch.cuda.is_available()
+            else contextlib.nullcontext()
+        ):
+            wrapper = CudaGraphModule(module)
+
+        wrapper_ref = weakref.ref(wrapper)
+        del wrapper
+        assert wrapper_ref() is None
 
 
 @pytest.fixture(autouse=True)
@@ -78,6 +101,19 @@ def _reset_dynamo_code_caches():
     # between tests keeps recompile/guard-count assertions reliable and prevents
     # one test's frame from leaking into the next.
     torch._dynamo.reset_code_caches()
+
+
+@pytest.mark.parametrize("value_shape", [(), (3,)])
+def test_store_indexed_value_compile(value_shape):
+    idx = torch.tensor([[0, 2], [1, 3]])
+    value = torch.full(value_shape, 7.0, requires_grad=True)
+    compiled = torch.compile(_prepare_indexed_value, fullgraph=True)
+    actual = compiled(value, [5, 3], torch.float32, idx)
+    torch.testing.assert_close(actual, torch.full((2, 2, 3), 7.0))
+    actual.sum().backward()
+    torch.testing.assert_close(
+        value.grad, torch.full_like(value, actual.numel() / value.numel())
+    )
 
 
 def test_vmap_compile():
@@ -108,9 +144,90 @@ def test_unravel_keys_compile(key):
     ), f"unravel_keys mismatch for {key!r}: eager={eager!r}, compiled={compiled!r}"
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+_UNRAVEL_VALID_KEYS = [
+    "a",
+    ("a",),
+    ("a", "b"),
+    (("a", "b"), "c"),
+    ("a", ("b", ("c",))),
+    ((("a",),),),
+]
+# These unravel to () in both modes.
+_UNRAVEL_INVALID_TUPLE_KEYS = [
+    ("a", 1),
+    (("a", 1), "b"),
+    ("a", ()),
+    (),
+    ((),),
+    (slice(None), 0),
+    (0, Ellipsis),
+]
+
+
+@pytest.mark.parametrize(
+    "fn", [_unravel_key_to_tuple, unravel_key], ids=lambda fn: fn.__name__
 )
+@pytest.mark.parametrize(
+    "key", _UNRAVEL_VALID_KEYS + _UNRAVEL_INVALID_TUPLE_KEYS, ids=repr
+)
+def test_unravel_key_fullgraph(fn, key):
+    eager = fn(key)
+    torch._dynamo.reset()
+
+    def f(x):
+        return x + 1, fn(key)
+
+    compiled = torch.compile(f, fullgraph=True, backend="eager")(torch.zeros(()))[1]
+    assert compiled == eager
+
+
+def test_unravel_key_list_fullgraph():
+    eager = unravel_key_list(_UNRAVEL_VALID_KEYS)
+    eager_keys = unravel_keys(*_UNRAVEL_VALID_KEYS)
+    torch._dynamo.reset()
+
+    def f(x):
+        return (
+            x + 1,
+            unravel_key_list(_UNRAVEL_VALID_KEYS),
+            unravel_keys(*_UNRAVEL_VALID_KEYS),
+        )
+
+    _, compiled, compiled_keys = torch.compile(f, fullgraph=True, backend="eager")(
+        torch.zeros(())
+    )
+    assert compiled == eager
+    assert compiled_keys == eager_keys
+
+
+@pytest.mark.parametrize(
+    "fn,key",
+    [
+        (unravel_key, 1),
+        (unravel_key, None),
+        (unravel_key_list, ["a", 1]),
+        (unravel_key_list, ["a", ("a", 1)]),
+        (unravel_key_list, ["a", ()]),
+    ],
+    ids=["unravel_key-int", "unravel_key-None", "list-int", "list-mixed", "list-empty"],
+)
+def test_unravel_key_invalid_fullgraph(fn, key):
+    msg = "key should be a Sequence<NestedKey>"
+    with pytest.raises(RuntimeError, match=msg):
+        fn(key)
+    torch._dynamo.reset()
+
+    def f(x):
+        try:
+            fn(key)
+        except RuntimeError as err:
+            return x + 1, str(err)
+        return x, None
+
+    _, compiled_msg = torch.compile(f, fullgraph=True, backend="eager")(torch.zeros(()))
+    assert compiled_msg == msg
+
+
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
     def test_tensor_output(self, mode):
@@ -184,6 +301,27 @@ class TestTD:
             assert (add_one(data)["a", "b"] == torch.arange(1, 3)).all()
             assert (add_one_c(data)["a", "b"] == torch.arange(1, 3)).all()
             assert add_one_c(data).shape == torch.Size([2])
+
+    def test_td_index_empty_slice(self, mode):
+        def index(td):
+            return td[:0]
+
+        index_c = torch.compile(index, fullgraph=True, mode=mode)
+        data = TensorDict({"a": {"b": torch.arange(3)}}, [3])
+        result = index_c(data)
+        assert result.shape == torch.Size([0])
+        assert result["a", "b"].shape == torch.Size([0])
+
+    def test_td_index_bool_mask(self, mode):
+        # the masked size depends on the data, so this graph-breaks
+        def add_one(td, mask):
+            return td[mask] + 1
+
+        add_one_c = torch.compile(add_one, mode=mode)
+        data = TensorDict({"a": {"b": torch.arange(3)}}, [3])
+        result = add_one_c(data, torch.tensor([True, False, True]))
+        assert result.shape == torch.Size([2])
+        assert (result["a", "b"] == torch.tensor([1, 3])).all()
 
     def test_stack(self, mode):
         def stack_tds(td0, td1):
@@ -557,9 +695,11 @@ class _TTDState(TypedTensorDict):
     b: torch.Tensor
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
+class _TTDOptionalState(TypedTensorDict):
+    a: torch.Tensor
+    b: torch.Tensor | None = None
+
+
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTTD:
     def test_tensor_output(self, mode):
@@ -590,6 +730,16 @@ class TestTTD:
         a = torch.randn(3)
         b = torch.randn(3)
         torch.testing.assert_close(fn(a, b), fn_c(a, b))
+
+    def test_optional_default(self, mode):
+        def add_optional(td):
+            if td.b is None:
+                return td.a
+            return td.a + td.b
+
+        add_optional_c = torch.compile(add_optional, fullgraph=True, mode=mode)
+        data = _TTDOptionalState(a=torch.ones(3), batch_size=[3])
+        torch.testing.assert_close(add_optional(data), add_optional_c(data))
 
     def test_td_output(self, mode):
         def add_one(td):
@@ -646,15 +796,19 @@ class TestTTD:
         d1 = _TTDState(a=torch.arange(3), b=torch.arange(3), batch_size=[3])
         assert (cat_tds(d0, d1) == cat_tds_c(d0, d1)).all()
 
-    def test_reshape(self, mode):
+    @pytest.mark.parametrize("mutate", [False, True])
+    def test_reshape(self, mode, mutate):
         def reshape(td):
+            if mutate:
+                td["a"] = td["a"] + 1
             return td.reshape(2, 2)
 
         reshape_c = torch.compile(reshape, fullgraph=True, mode=mode)
         data = _TTDState(a=torch.arange(4), b=torch.arange(4), batch_size=[4])
-        data_reshape = reshape(data)
-        _ = reshape_c(data)
-        data_reshape_c = reshape_c(data)
+        data_reshape = reshape(data.clone())
+        _ = reshape_c(data.clone())
+        data_reshape_c = reshape_c(data.clone())
+        assert isinstance(data_reshape_c, _TTDState)
         assert (data_reshape == data_reshape_c).all()
 
     def test_view(self, mode):
@@ -878,9 +1032,6 @@ class TestTTD:
         assert (eager["b"] == compiled["b"]).all()
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 class TestTTDDynamoCompatibility:
     """Tests that probe known Dynamo limitations we work around.
 
@@ -940,9 +1091,6 @@ class MyClass:
     c: Any = None
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTC:
     def test_tc_tensor_output(self, mode):
@@ -1257,10 +1405,6 @@ class TestTC:
         compiled_result = step_c(s)
         assert_close(eager_result, compiled_result)
 
-    @pytest.mark.skipif(
-        TORCH_VERSION < version.parse("2.6.0"),
-        reason="while_loop requires torch>=2.6",
-    )
     @pytest.mark.xfail(
         reason="Dynamo cannot symbolically trace TensorClass._tensordict "
         "access inside while_loop's pytree flatten (gh-1547). "
@@ -1322,9 +1466,6 @@ class TestTC:
         assert type(func_mytd()) is type(func_c_mytd())
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestNN:
     def test_func(self, mode):
@@ -1372,7 +1513,6 @@ class TestNN:
         assert_close(module(td), module_compile(td))
         assert module_compile(td) is not td
 
-    @pytest.mark.skipif(not _v2_5, reason="requires torch 2.5 or higher")
     def test_dispatch_nontensor(self, mode):
         # Non tensor
         x = torch.randn(3)
@@ -1382,10 +1522,9 @@ class TestNN:
             Mod(lambda x, z: z * x, in_keys=["x", "_z"], out_keys=["out"]),
         )
         assert mod(x=x, y=y)[-1].shape == torch.Size((1, 3))
-        mod_compile = torch.compile(mod, fullgraph=_v2_5, mode=mode)
+        mod_compile = torch.compile(mod, fullgraph=True, mode=mode)
         torch.testing.assert_close(mod(x=x, y=y), mod_compile(x=x, y=y))
 
-    @pytest.mark.skipif(not _v2_5, reason="requires torch 2.5 or higher")
     def test_dispatch_tensor(self, mode):
         x = torch.randn(3)
         y = torch.randn(3)
@@ -1394,7 +1533,7 @@ class TestNN:
             Mod(lambda x, z: z * x, in_keys=["x", "z"], out_keys=["out"]),
         )
         mod(x=x, y=y)
-        mod_compile = torch.compile(mod, fullgraph=_v2_5, mode=mode)
+        mod_compile = torch.compile(mod, fullgraph=True, mode=mode)
         torch.testing.assert_close(mod(x=x, y=y), mod_compile(x=x, y=y))
 
     @set_composite_lp_aggregate(False)
@@ -1421,10 +1560,29 @@ class TestNN:
         prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
         prob_mod_c(TensorDict(inp=torch.randn(3)))
 
+    @pytest.mark.parametrize("mean_raises", [False, True])
+    def test_prob_module_mean(self, mode, mean_raises):
+        class NoMeanNormal(torch.distributions.Normal):
+            @property
+            def mean(self):
+                raise NotImplementedError
 
-@pytest.mark.skipif(
-    TORCH_VERSION <= version.parse("2.4.0"), reason="requires torch>2.4"
-)
+        dist_cls = NoMeanNormal if mean_raises else torch.distributions.Normal
+        prob_mod = Prob(
+            in_keys=["loc", "scale"],
+            out_keys=["sample"],
+            distribution_class=dist_cls,
+            default_interaction_type=InteractionType.MEAN,
+            n_empirical_estimate=8,
+        )
+        td = TensorDict(loc=torch.randn(3), scale=torch.ones(3))
+        prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
+        sample = prob_mod_c(td.copy())["sample"]
+        assert sample.shape == td["loc"].shape
+        if not mean_raises:
+            torch.testing.assert_close(sample, td["loc"])
+
+
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestFunctional:
     def test_functional_error(self, mode):
@@ -1462,9 +1620,6 @@ class TestFunctional:
 
     # in-place modif raises an error even if fullgraph=False
     @pytest.mark.parametrize("modif_param", [False])
-    @pytest.mark.skipif(
-        TORCH_VERSION <= version.parse("2.5.0"), reason="requires torch>2.5"
-    )
     def test_functional(self, modif_param, mode):
 
         # TODO: UNTESTED
@@ -1528,10 +1683,8 @@ class TestFunctional:
             assert (td_zero == 0).all()
 
     # in-place modif raises an error even if fullgraph=False
-    @pytest.mark.skipif(
-        TORCH_VERSION <= version.parse("2.5.0"), reason="requires torch>2.5"
-    )
-    def test_vmap_functional(self, mode):
+    @pytest.mark.parametrize("preserve_module_state", [False, True])
+    def test_vmap_functional(self, mode, preserve_module_state):
         module = torch.nn.Sequential(
             torch.nn.Linear(3, 4),
             torch.nn.ReLU(),
@@ -1542,7 +1695,7 @@ class TestFunctional:
         td_zero = TensorDictParams(td.data.expand(10).clone().zero_())
 
         def call(x, td):
-            with td.to_module(module, preserve_module_state=False):
+            with td.to_module(module, preserve_module_state=preserve_module_state):
                 result = module(x)
             return result
 
@@ -1561,11 +1714,6 @@ class TestFunctional:
         assert (td_zero == 0).all()
 
 
-@pytest.mark.skipif(not _v2_5, reason="Requires PT>=2.5")
-@pytest.mark.skipif(
-    sys.version_info >= (3, 14),
-    reason="torch.export has compatibility issues with Python 3.14 (networkx/dataclasses)",
-)
 class TestExport:
     def test_export_module(self):
         tdm = Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"])
@@ -1646,7 +1794,6 @@ class TestExport:
         torch.testing.assert_close(out["y"], out["x"] * 2)
 
     @pytest.mark.parametrize("strict", [False])  # , True])
-    @pytest.mark.skipif(not _v2_7, reason="Requires PT>=2.7")
     def test_export_with_td_params(self, strict):
         module = torch.nn.Sequential(
             torch.nn.Linear(3, 4),
@@ -1763,13 +1910,6 @@ class TestONNXExport:
         )
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION <= version.parse("2.4.1"), reason="requires torch>=2.5"
-)
-@pytest.mark.skipif(
-    (TORCH_VERSION <= version.parse("2.7.0")) and _IS_OSX,
-    reason="requires torch>=2.7 ons OSX",
-)
 @pytest.mark.parametrize("compiled", [False, True])
 class TestCudaGraphs:
     @pytest.fixture(scope="class", autouse=True)
@@ -1812,6 +1952,33 @@ class TestCudaGraphs:
         y1 = func(x + 1)
         with pytest.raises(AssertionError):
             torch.testing.assert_close(y0, y1 + 1)
+
+    def test_cudagraphs_module_rewriting_its_input_key(self, compiled):
+        """A module that writes an output under one of its input keys.
+
+        The set() rebinds that entry of the captured input during capture, so
+        the replay must copy new inputs into the leaves the graph reads, not
+        into the rebound entry.
+        """
+
+        class Recurrent(torch.nn.Module):
+            def forward(self, x, h):
+                h = torch.tanh(h + x)
+                return h.sum(-1, keepdim=True), h
+
+        module = TensorDictModule(Recurrent(), in_keys=["x", "h"], out_keys=["y", "h"])
+        graphed = self._make_cudagraph(module, compiled, warmup=2)
+
+        def make(h):
+            return TensorDict({"x": torch.ones(4, 3), "h": torch.full((4, 3), h)}, [4])
+
+        for _ in range(3):
+            graphed(make(0.0))
+        for h in (1.0, -1.0):
+            expected = module(make(h))
+            result = graphed(make(h))
+            torch.testing.assert_close(result["y"], expected["y"])
+            torch.testing.assert_close(result["h"], expected["h"])
 
     @staticmethod
     def _make_cudagraph(
@@ -2090,6 +2257,14 @@ class _FactoryDefaultTC:
     cache: torch.Tensor = dataclasses.field(default_factory=lambda: torch.zeros(3))
 
 
+@dataclasses.dataclass
+class _FactoryDefaultDataClass:
+    cache: torch.Tensor = dataclasses.field(default_factory=lambda: torch.zeros(3))
+
+
+_FactoryDefaultFromDataclassTC = from_dataclass(_FactoryDefaultDataClass)
+
+
 @tensorclass
 class _NoneDefaultTC:
     x: torch.Tensor
@@ -2137,6 +2312,16 @@ class TestTCDefaultsCompile:
         torch.testing.assert_close(_FactoryDefaultTC().cache, torch.zeros(3))
         torch.testing.assert_close(fn(), torch.zeros(3))
 
+    def test_from_dataclass_default_factory_under_compile(self):
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn():
+            return _FactoryDefaultFromDataclassTC().cache
+
+        torch.testing.assert_close(
+            _FactoryDefaultFromDataclassTC().cache, torch.zeros(3)
+        )
+        torch.testing.assert_close(fn(), torch.zeros(3))
+
     def test_omitted_none_default_under_compile(self):
         @torch.compile(backend="eager", fullgraph=True)
         def fn(x):
@@ -2162,10 +2347,29 @@ def _count_compiles(fn, *args):
     return first, second
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 class TestGuardCount:
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_tc_construction_eager_and_compiled(self, tensor_only):
+        @tensorclass(tensor_only=tensor_only)
+        class Data:
+            x: torch.Tensor
+            y: torch.Tensor
+
+        def build(x, y):
+            return Data(x=x, y=y, batch_size=[3], device="cpu")
+
+        def use(data):
+            return data.x + data.y
+
+        x, y = torch.randn(3), torch.randn(3)
+        eager = build(x, y)
+        compiled = torch.compile(build, backend="eager", fullgraph=True)(x, y)
+        counter = CompileCounterWithBackend("eager")
+        compiled_use = torch.compile(use, backend=counter, fullgraph=True)
+        torch.testing.assert_close(compiled_use(eager), x + y)
+        torch.testing.assert_close(compiled_use(compiled), x + y)
+        assert counter.frame_count == 1
+
     """Tests that verify compile guard/recompile counts for optimized paths."""
 
     def test_clone_recurse_false_no_recompile(self):
@@ -2226,9 +2430,16 @@ class TestGuardCount:
         assert first == 1, f"Expected 1 compile frame, got {first}"
         assert second == 1, f"Recompilation detected: {second} frames"
 
-    def test_update_inplace_no_recompile(self):
+    @pytest.mark.parametrize("method", ["update_", "update", "set"])
+    def test_update_inplace_no_recompile(self, method):
         def fn(td, src):
-            td.update_(src)
+            # Replacement must not change aliasing between the two inputs.
+            src = src + 1
+            if method == "set":
+                td.set("a", src["a"])
+                td.set("b", src["b"])
+            else:
+                getattr(td, method)(src)
             return td["a"] + 0
 
         td = TensorDict(
@@ -2259,8 +2470,8 @@ class TestGuardCount:
         assert first == 1, f"Expected 1 compile frame, got {first}"
         assert second == 1, f"Recompilation detected: {second} frames"
 
-    def test_unbatched_clone_preserves_semantics(self):
-        """Cloning an UnbatchedTensor must produce independent data."""
+    def test_unbatched_vmap_clone_preserves_semantics(self):
+        """Compiled vmap preserves unbatched metadata and clones the payload."""
 
         def fn(td):
             cloned = td.clone()
@@ -2273,10 +2484,13 @@ class TestGuardCount:
             },
             batch_size=[4],
         )
-        fn_c = torch.compile(fn, fullgraph=True)
+        fn_c = torch.compile(torch.vmap(fn), fullgraph=True)
         result = fn_c(td)
         ut_orig = td.get("unbatched")
         ut_clone = result.get("unbatched")
+        torch.testing.assert_close(result["a"], td["a"])
+        torch.testing.assert_close(ut_clone, ut_orig)
+        assert ut_clone.batch_size == td.batch_size
         assert (
             ut_clone.data_ptr() != ut_orig.data_ptr()
         ), "clone() must produce independent data"

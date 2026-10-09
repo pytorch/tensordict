@@ -8,6 +8,7 @@ import contextlib
 import functools
 import os
 import warnings
+import weakref
 from functools import partial
 from textwrap import indent
 from typing import Any, Callable, List
@@ -25,16 +26,13 @@ from tensordict.nn.functional_modules import (
 from tensordict.utils import _zip_strict, logger as tensordict_logger, strtobool
 from torch import Tensor
 
-from torch.utils._pytree import SUPPORTED_NODES, tree_map
-
-try:
-    from torch.utils._pytree import tree_flatten, tree_leaves, tree_unflatten
-except ImportError:
-    from torch.utils._pytree import tree_flatten, tree_unflatten
-
-    def tree_leaves(pytree):
-        """Torch 2.0 compatible version of tree_leaves."""
-        return tree_flatten(pytree)[0]
+from torch.utils._pytree import (
+    SUPPORTED_NODES,
+    tree_flatten,
+    tree_leaves,
+    tree_map,
+    tree_unflatten,
+)
 
 
 class CudaGraphModule:
@@ -206,6 +204,7 @@ class CudaGraphModule:
             self.out_keys = out_keys
         self._is_tensordict_module = self.in_keys is not None
         self._out_matches_in = None
+        self_ref = weakref.proxy(self)
         for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
             if tdtype in SUPPORTED_NODES:
                 if not strtobool(os.environ.get("EXCLUDE_TD_FROM_PYTREE", "0")):
@@ -226,8 +225,15 @@ class CudaGraphModule:
                 tensordict_out: TensorDictBase | None = None,
                 **kwargs: Any,
             ) -> Any:
+                self = self_ref
                 if self.counter >= self._warmup:
-                    self._tensordict.update_(tensordict, non_blocking=True)  # type: ignore[attr-defined]
+                    # Copy into the leaves the captured kernels read. The module may
+                    # have rebound entries of ``self._tensordict`` to its outputs
+                    # during capture (an output written under an input key), so
+                    # ``self._tensordict`` is not a safe update target. Only the
+                    # capture-time input keys live in ``self._graph_inputs``, so
+                    # ``update_`` copies exactly those and ignores extra keys.
+                    self._graph_inputs.update_(tensordict, non_blocking=True)  # type: ignore[attr-defined]
                     torch.cuda.synchronize(self.device)
                     self.graph.replay()
                     if self._out_matches_in:
@@ -274,6 +280,10 @@ class CudaGraphModule:
                     with self._warmup_stream_cm():
                         tensordict.apply(self._clone, out=tensordict)
                         self._tensordict = tensordict.copy()
+                        # References to the input leaves as the graph will read
+                        # them, kept apart from ``self._tensordict`` whose entries
+                        # the module may rebind while it runs under capture.
+                        self._graph_inputs = self._tensordict.copy()
                         if tensordict_out is not None:
                             td_out_save = tensordict_out.copy()
                             kwargs["tensordict_out"] = tensordict_out
@@ -319,6 +329,7 @@ class CudaGraphModule:
         else:
 
             def _call(*args: torch.Tensor, **kwargs: torch.Tensor):
+                self = self_ref
                 if self.counter >= self._warmup:
                     srcs, dests = [], []
                     for arg_src, arg_dest in _zip_strict(

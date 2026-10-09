@@ -39,9 +39,6 @@ else
     export SETUPTOOLS_SCM_PRETEND_VERSION=$DEV_VERSION
 fi
 
-# TODO: consider lower this
-export MACOSX_DEPLOYMENT_TARGET=14.0
-
 # Set CONDA_RUN if not set
 if [[ -z "${CONDA_RUN:-}" ]]; then
 
@@ -49,8 +46,6 @@ if [[ -z "${CONDA_RUN:-}" ]]; then
 
     # for orjson
     export UNSAFE_PYO3_BUILD_FREE_THREADED=1
-
-    pip install "pybind11[global]"
 
     # Install setuptools_scm which is required for building with --no-isolation
     # This is done here (not in pre-script) to avoid cache issues
@@ -62,13 +57,6 @@ else
 
     # for orjson
     export UNSAFE_PYO3_BUILD_FREE_THREADED=1
-
-    ${CONDA_RUN} conda install -c conda-forge pybind11 -y
-
-    # Python 3.15 beta packages on Linux split the static library from the interpreter.
-    if [[ "${OSTYPE:-}" == linux* && "${PYTHON_VERSION:-}" == 3.15* ]]; then
-        ${CONDA_RUN} conda install -c conda-forge/label/python_dev -c conda-forge libpython-static -y
-    fi
 
     # Install setuptools_scm which is required for building with --no-isolation
     # This is done here (not in pre-script) to avoid cache issues
