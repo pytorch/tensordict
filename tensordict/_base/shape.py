@@ -475,7 +475,7 @@ class _ShapeOps:
         if inplace:
 
             def nested_fn(nested):
-                nested.reshape(shape, inplace=True)
+                nested.reshape((*shape, *nested.batch_size[batch_dims:]), inplace=True)
 
             return self._inplace_rebind_leaves(_reshape, nested_fn, torch.Size(shape))
         return self._fast_apply(
@@ -687,7 +687,9 @@ class _ShapeOps:
                 return leaf.repeat(*repeats, *((1,) * (leaf.ndim - ndim)))
 
             def nested_fn(nested):
-                nested.repeat(*repeats, inplace=True)
+                nested.repeat(
+                    *repeats, *((1,) * (nested.batch_dims - ndim)), inplace=True
+                )
 
             return self._inplace_rebind_leaves(leaf_fn, nested_fn, new_batch_size)
         return self._repeat(*repeats)
@@ -1117,7 +1119,13 @@ class _ShapeOps:
                 return torch.gather(leaf, dim_corrected, index_expand)
 
             def nested_fn(nested):
-                nested.gather(dim_corrected, index, inplace=True)
+                index_expand = index
+                while index_expand.ndim < nested.batch_dims:
+                    index_expand = index_expand.unsqueeze(-1)
+                target_shape = list(nested.batch_size)
+                target_shape[dim_corrected] = index_expand.shape[dim_corrected]
+                index_expand = index_expand.expand(target_shape)
+                nested.gather(dim_corrected, index_expand, inplace=True)
 
             return self._inplace_rebind_leaves(leaf_fn, nested_fn, new_batch_size)
         return torch.gather(self, dim, index, out=out)

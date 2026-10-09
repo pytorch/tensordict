@@ -2904,6 +2904,45 @@ class TestGeneric:
         with pytest.raises(NotImplementedError, match="gather"):
             lst.gather(dim=0, index=torch.zeros(3, 4, dtype=torch.long), inplace=True)
 
+    @pytest.mark.parametrize(
+        "op", ["reshape", "repeat", "gather", "gather_negative_dim"]
+    )
+    @pytest.mark.parametrize("nested_type", ["tensordict", "tensorclass"])
+    def test_inplace_shape_op_nested_extra_batch_dims(self, op, nested_type):
+        # The nested entry has more batch dims than its parent and comes after
+        # a tensor leaf in key order, so a failure on it would leave the
+        # parent half rewritten.
+        @tensorclass
+        class Sub:
+            y: torch.Tensor
+
+        def make():
+            y = torch.arange(24.0).view(2, 3, 4)
+            if nested_type == "tensordict":
+                sub = TensorDict(y=y, batch_size=[2, 3, 4])
+            else:
+                sub = Sub(y=y, batch_size=[2, 3, 4])
+            return TensorDict(
+                x=torch.arange(6.0).view(2, 3), sub=sub, batch_size=[2, 3]
+            )
+
+        index = torch.tensor([[0, 2], [1, 0]])
+        ops = {
+            "reshape": lambda td, **kwargs: td.reshape(3, 2, **kwargs),
+            "repeat": lambda td, **kwargs: td.repeat(2, 1, **kwargs),
+            "gather": lambda td, **kwargs: td.gather(1, index, **kwargs),
+            "gather_negative_dim": lambda td, **kwargs: td.gather(-1, index, **kwargs),
+        }
+        ref = ops[op](make())
+        td = make()
+        sub = td["sub"]
+        out = ops[op](td, inplace=True)
+        assert out is td
+        assert td["sub"] is sub
+        assert td.batch_size == ref.batch_size
+        assert sub.batch_size == ref["sub"].batch_size
+        assert (td == ref).all()
+
     @pytest.mark.parametrize("inplace", [True, False])
     def test_reshape_inplace(self, inplace):
         td = self._build_nested_td(batch_size=(3, 4))
