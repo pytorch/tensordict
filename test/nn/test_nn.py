@@ -2159,6 +2159,20 @@ class TestSkipExisting:
         assert (td["out"] == 1).all()
         assert skip_existing() is False
 
+    def test_exception_restores_mode(self):
+        # The forward changes the mode without restoring it, then raises: the
+        # decorator of TensorDictModule.forward must restore the mode it saw.
+        def fail(x):
+            set_skip_existing(True).__enter__()
+            raise ValueError("fail")
+
+        module = TensorDictModule(fail, in_keys=["in"], out_keys=["out"])
+        with set_skip_existing(["other"]):
+            with pytest.raises(ValueError, match="fail"):
+                module(TensorDict({"in": torch.zeros(())}, []))
+            assert skip_existing() == ["other"]
+        assert skip_existing() is False
+
 
 @pytest.mark.parametrize("out_d_key", [("d", "e"), ["d"], ["d", "e"]])
 @pytest.mark.parametrize("unpack", [True, False])
