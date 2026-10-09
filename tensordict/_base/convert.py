@@ -25,6 +25,17 @@ import numpy as np
 import torch
 from tensordict._datasets import to_mds
 from tensordict._nestedkey import NestedKey
+from tensordict._tabular import (
+    _columns_to_tensordict,
+    _dataframe_to_tensordict,
+    _read_csv,
+    _read_json,
+    _read_parquet,
+    _tensordict_to_dataframe,
+    _write_csv,
+    _write_json,
+    _write_parquet,
+)
 from tensordict.base import (
     __base__setattr__,
     _has_h5,
@@ -37,17 +48,6 @@ from tensordict.base import (
     is_tensor_collection,
     NO_DEFAULT,
     Self,
-)
-from tensordict.tabular import (
-    _columns_to_tensordict,
-    _dataframe_to_tensordict,
-    _read_csv,
-    _read_json,
-    _read_parquet,
-    _tensordict_to_dataframe,
-    _write_csv,
-    _write_json,
-    _write_parquet,
 )
 from tensordict.utils import (
     _as_context_manager,
