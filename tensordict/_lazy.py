@@ -3571,16 +3571,23 @@ class LazyStackedTensorDict(TensorDictBase):
         if condition.ndim < self.ndim:
             condition = expand_right(condition, self.batch_size)
         condition = condition.unbind(self.stack_dim)
+        # A 0-dim tensor goes whole to each member, as a scalar does
         if _is_tensor_collection(type(other)) or (
             isinstance(other, Tensor)
+            and other.ndim > 0
             and other.shape[: self.stack_dim] == self.shape[: self.stack_dim]
         ):
             other = other.unbind(self.stack_dim)
 
             def where(td, cond, other, pad):
-                if cond.numel() > 1:
+                if cond.numel() > 1 or isinstance(other, Tensor):
                     return td.where(cond, other, pad=pad)
-                return other if not cond else td
+                # The condition selects a whole member. Copy its tensors so the
+                # result shares no memory with the inputs (clone would also
+                # deep-copy non-tensor data)
+                return (other if not cond else td).apply(
+                    torch.clone, filter_empty=False
+                )
 
             result = lazy_stack(
                 [

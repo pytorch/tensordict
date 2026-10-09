@@ -2186,6 +2186,44 @@ class TestLazyStackedTensorDict:
         assert td.batch_size == (2, 4)
         assert td.batch_size == td2.batch_size
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_where_scalar_tensor(self, stack_dim):
+        # A 0-dim tensor goes whole to each member, as a scalar does
+        lazy = lazy_stack(
+            [
+                TensorDict(a=torch.arange(3.0) + 10 * i, batch_size=[3])
+                for i in range(2)
+            ],
+            stack_dim,
+        )
+        cond = torch.arange(6).reshape(lazy.shape) % 2 == 0
+        other = torch.tensor(-1.0)
+        expected = lazy.to_tensordict().where(cond, other)
+        assert (lazy.where(cond, other) == expected).all()
+        assert (torch.where(cond, lazy, other) == expected).all()
+
+    @pytest.mark.parametrize("other_type", ["lazy", "dense", "tensor", "scalar"])
+    def test_where_whole_members(self, other_type):
+        # With 0-dim members, the condition selects whole members: the result
+        # matches TensorDict.where, in tensors that are not those of the inputs
+        lazy = lazy_stack([TensorDict(a=torch.tensor(float(i))) for i in range(3)])
+        dense_other = TensorDict(a=-torch.arange(1.0, 4.0), batch_size=[3])
+        other = {
+            "lazy": lazy_stack(list(dense_other.unbind(0))),
+            "dense": dense_other,
+            "tensor": dense_other["a"],
+            "scalar": torch.tensor(-1.0),
+        }[other_type]
+        cond = torch.tensor([True, False, True])
+        expected = lazy.to_tensordict().where(
+            cond, other.to_tensordict() if other_type == "lazy" else other
+        )
+        result = lazy.where(cond, other)
+        assert (result == expected).all()
+        result["a"] = torch.full((3,), 100.0)
+        assert (lazy["a"] == torch.arange(3.0)).all()
+        assert (dense_other["a"] == -torch.arange(1.0, 4.0)).all()
+
     def test_lazy_mask_nested_stack(self):
         # Boolean-masking a lazy stack whose constituents are themselves lazy
         # stacks: the per-constituent scalar masks must behave like new-axis
