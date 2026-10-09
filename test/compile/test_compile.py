@@ -401,13 +401,21 @@ class TestTD:
         def permute(td):
             return td.permute(*dims)["a", "b"]
 
+        def permute_twice(td):
+            # In legacy mode, the second permute is applied to a permuted td.
+            return td.permute(*dims).permute(*dims)["a", "b"]
+
         permute_c = torch.compile(permute, fullgraph=True, mode=mode)
+        permute_twice_c = torch.compile(permute_twice, fullgraph=True, mode=mode)
         data = TensorDict({"a": {"b": torch.arange(6).view(2, 3)}}, [2, 3])
         with legacy_lazy_mode() if legacy else contextlib.nullcontext():
             data_permute = permute(data)
             _ = permute_c(data)
             data_permute_c = permute_c(data)
+            data_permute_twice = permute_twice(data)
+            data_permute_twice_c = permute_twice_c(data)
         torch.testing.assert_close(data_permute_c, data_permute)
+        torch.testing.assert_close(data_permute_twice_c, data_permute_twice)
 
     def test_lazy_stack_contains_is_empty(self, mode):
         def contains_is_empty(td):
@@ -422,6 +430,22 @@ class TestTD:
         assert not has_c
         assert not is_empty
         torch.testing.assert_close(a, data["a"] + 1)
+
+    def test_lazy_stack_set_inplace_pop(self, mode):
+        def set_inplace_pop(td):
+            td.set_("b", td["b"] + 1)
+            return td.pop("a")
+
+        set_inplace_pop_c = torch.compile(set_inplace_pop, fullgraph=True, mode=mode)
+        data = lazy_stack(
+            [TensorDict(a=torch.randn(3), b=torch.randn(3)) for _ in range(2)]
+        )
+        data_c = data.clone()
+        a = set_inplace_pop(data)
+        a_c = set_inplace_pop_c(data_c)
+        torch.testing.assert_close(a_c, a)
+        assert "a" not in data_c.keys()
+        assert (data_c == data).all()
 
     def test_unbind(self, mode):
         def unbind(td):
@@ -661,6 +685,19 @@ class TestTD:
         td_cpu_c = to_cpu_c(td)
         assert td_cpu_c.device == torch.device("cpu")
         torch.testing.assert_close(td_cpu_c["a"], td["a"])
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="cuda required")
+    def test_to_cpu_from_cuda(self, mode):
+        def to_cpu(td):
+            return (td + 1).to("cpu")
+
+        td = TensorDict({"a": torch.randn(1, 2, 3)}, batch_size=[1, 2], device="cuda")
+        to_cpu_c = torch.compile(to_cpu, fullgraph=True, mode=mode)
+        td_cpu = to_cpu(td)
+        td_cpu_c = to_cpu_c(td)
+        assert td_cpu_c.device == torch.device("cpu")
+        assert td_cpu_c["a"].device == torch.device("cpu")
+        torch.testing.assert_close(td_cpu_c["a"], td_cpu["a"])
 
     def test_to_dtype(self, mode):
         def to_dtype(td):

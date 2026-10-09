@@ -940,7 +940,7 @@ class TensorDict(TensorDictBase):
             )
         if not len(dims_list) and not self.batch_dims:
             return self
-        if list(dims_list) == list(range(len(dims_list))):
+        if dims_list == list(range(len(dims_list))):
             return self
 
         def _permute(tensor):

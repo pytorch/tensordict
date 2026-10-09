@@ -2167,10 +2167,6 @@ class LazyStackedTensorDict(TensorDictBase):
             for (key, val0) in items
         )
 
-    def _iterate_over_keys(self) -> None:
-        # this is about 20x faster than the version above
-        yield from self._key_list()
-
     @cache  # noqa: B019
     def _key_list(self):
         if not self.tensordicts:
@@ -4914,9 +4910,11 @@ class _PermutedTensorDict(_CustomOpTensorDict):
             )
         if not len(dims_list) and not self.batch_dims:
             return self
-        if np.array_equal(dims_list, range(self.batch_dims)):
+        if list(dims_list) == list(range(self.batch_dims)):
             return self
-        if np.array_equal(np.argsort(dims_list), self.inv_op_kwargs.get("dims")):
+        if sorted(range(len(dims_list)), key=dims_list.__getitem__) == list(
+            self.inv_op_kwargs.get("dims")
+        ):
             return self._source
         return super()._legacy_permute(*dims_list)
 
