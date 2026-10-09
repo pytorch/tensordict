@@ -107,6 +107,10 @@ class CudaGraphModule:
         - In-place writes to the input tensors inside the function (e.g. ``x.add_(1)``) do not reach the caller's
           inputs once the graph is captured: the graph reads and writes its own copies of the inputs.
 
+        - The inputs are copied into the graph's buffers, and the graph is replayed, on the current stream. As for any
+          CUDA operation, inputs written on another stream must be ordered before the call by the caller, e.g. with
+          ``torch.cuda.current_stream().wait_stream(producer_stream)``.
+
     .. warning::
         ``CudaGraphModule`` is not an :class:`~torch.nn.Module` by design, to discourage gathering parameters
         of the input module and passing them to an optimizer.
@@ -261,9 +265,12 @@ class CudaGraphModule:
                             )
                         graph_inputs = dict(zip(self._graph_input_keys, dest_vals))
                         dest_vals = [graph_inputs[key] for key in src_keys]
+                    # The copies and the replay run on the current stream, so the
+                    # replay reads the new inputs without a host synchronization. The
+                    # copy is blocking so that the caller may overwrite a (pinned) CPU
+                    # input as soon as the call returns.
                     if src_vals:
-                        torch._foreach_copy_(dest_vals, src_vals, non_blocking=True)
-                    torch.cuda.synchronize(self.device)
+                        torch._foreach_copy_(dest_vals, src_vals)
                     self.graph.replay()
                     if self._out_matches_in:
                         # Clone: the graph overwrites ``self._out`` on the next replay.
@@ -375,7 +382,6 @@ class CudaGraphModule:
                         self._maybe_copy_onto_(arg_src, arg_dest, srcs, dests)
                     if dests:
                         torch._foreach_copy_(dests, srcs)
-                    torch.cuda.synchronize(self.device)
                     self.graph.replay()
                     if self._return_unchanged:
                         result = self._out

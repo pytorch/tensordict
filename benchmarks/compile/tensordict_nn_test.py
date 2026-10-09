@@ -13,7 +13,11 @@ import torch
 
 from tensordict import TensorDict, TensorDictParams
 
-from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
+from tensordict.nn import (
+    CudaGraphModule,
+    TensorDictModule as Mod,
+    TensorDictSequential as Seq,
+)
 
 
 sys.setrecursionlimit(10000)
@@ -88,6 +92,24 @@ def test_mod_wrap(mode, benchmark):
     module(td)
     module(td)
     benchmark(module, td)
+
+
+@pytest.mark.skipif(
+    not torch.cuda.is_available(), reason="CudaGraphModule replays graphs on CUDA only"
+)
+@pytest.mark.parametrize("compiled", [False, True])
+def test_cudagraph_mod_wrap(compiled, benchmark):
+    device = torch.device("cuda")
+    net = mlp(device)
+    td = TensorDict({"a": torch.zeros(32, 3, device=device)}, [32], device=device)
+    module = Mod(net, in_keys=["a"], out_keys=[("c", "d")])
+    if compiled:
+        module = compile(module)
+    module = CudaGraphModule(module, warmup=2)
+    with torch.no_grad():
+        for _ in range(3):
+            module(td)
+        benchmark(module, td)
 
 
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
