@@ -119,19 +119,10 @@ Multiple flags can be combined in the brackets:
   >>> class Foo(TensorClass["nocast", "frozen"]):
   ...     x: int
 
-Static type-checkers read the fields of a :class:`~tensordict.TensorClass`
-subclass as its constructor signature, as they do for a ``@dataclass``: a
-missing field, an unknown keyword argument or a value of the wrong type is an
-error. ``batch_size``, ``device``, ``names`` and ``lock`` are keyword-only
-arguments after the fields. The constructor casts lists, NumPy arrays and
-Python numbers passed to a ``torch.Tensor`` field, but a type-checker expects a
-tensor there: pass ``torch.as_tensor(value)``.
-
 Pyright accepts the bracket and the kwargs forms. Mypy does not evaluate
 :meth:`~object.__class_getitem__` in a list of base classes and rejects the
 bracket form, so use the kwargs form (``class Foo(TensorClass, autocast=True)``)
-in code checked by mypy. Mypy also reports ``frozen=True`` as "Frozen dataclass
-cannot inherit from a non-frozen dataclass".
+in code checked by mypy.
 
 Type-checkers do not understand the decorator form: they know the fields of a
 ``@tensorclass`` class but neither its TensorDict methods nor its

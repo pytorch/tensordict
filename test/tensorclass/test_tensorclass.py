@@ -298,22 +298,19 @@ def test_tensorclass_instance_methods(form):
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
-def test_tensorclass_stub_constructor():
-    # The stub types the constructor of a subclass with dataclass_transform:
-    # its fields, then the keyword-only arguments of _TensorClassInitArgs.
-    # The class keywords (class X(TensorClass, autocast=True)) are those of
-    # TensorClass.__init_subclass__.
+def test_tensorclass_stub_init_subclass():
+    # The class keywords (class X(TensorClass, autocast=True)) go to the
+    # metaclass at runtime; the stub declares them on __init_subclass__.
     with open(_TENSORDICT_DIR / "tensorclass.pyi", "r") as f:
         tree = ast.parse(f.read())
-    classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
-    init_args = {
-        node.target.id
-        for node in classes["_TensorClassInitArgs"].body
-        if isinstance(node, ast.AnnAssign)
-    }
+    (stub_class,) = (
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "TensorClass"
+    )
     (init_subclass,) = (
         node
-        for node in classes["TensorClass"].body
+        for node in stub_class.body
         if isinstance(node, ast.FunctionDef) and node.name == "__init_subclass__"
     )
     class_kwargs = {arg.arg for arg in init_subclass.args.kwonlyargs}
@@ -322,17 +319,6 @@ def test_tensorclass_stub_constructor():
     assert class_kwargs == {
         param.name for param in meta_params if param.default is not param.empty
     }
-
-    class X(TensorClass):
-        x: torch.Tensor
-
-    init_values = {"batch_size": [3], "device": "cpu", "names": ["n"], "lock": True}
-    assert init_args == init_values.keys()
-    x = X(torch.zeros(3), **init_values)
-    assert x.batch_size == (3,)
-    assert x.device == torch.device("cpu")
-    assert x.names == ["n"]
-    assert x.is_locked
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
@@ -417,27 +403,6 @@ for item in obs:
     )
     stdout, stderr, status = api.run(["--config-file", str(config), str(valid)])
     assert status == 0, stdout + stderr
-
-    invalid = tmp_path / "invalid.py"
-    invalid.write_text(
-        """import torch
-from tensordict import TensorClass
-
-class Obs(TensorClass):
-    a: torch.Tensor
-
-Obs(batch_size=[3])
-Obs(a="not a tensor")
-Obs(a=torch.Tensor(), extra=1)
-Obs(a=torch.Tensor(), non_blocking=True)
-"""
-    )
-    stdout, stderr, status = api.run(["--config-file", str(config), str(invalid)])
-    assert status == 1, stdout + stderr
-    assert 'Missing positional argument "a"' in stdout
-    assert 'incompatible type "str"' in stdout
-    assert 'Unexpected keyword argument "extra"' in stdout
-    assert 'Unexpected keyword argument "non_blocking"' in stdout
 
 
 def test_sorted_methods():

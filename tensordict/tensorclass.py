@@ -3943,13 +3943,11 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
         >>> class Sub(Base, shadow=True):   # autocast inherited, shadow added
         ...     y: float
 
-    **Type-checking.** Type checkers read the fields of a subclass as its constructor signature,
-    followed by the keyword-only ``batch_size``, ``device``, ``names`` and ``lock`` arguments.
-    ``TensorClass[...]`` is implemented via :meth:`~object.__class_getitem__`, so pyright resolves
-    it to the (parametrized) class itself rather than to a generic parameter. Mypy does not
-    evaluate ``__class_getitem__`` in a list of base classes and rejects the bracket form; use
-    ``class Foo(TensorClass, autocast=True)`` instead. Annotated fields propagate as expected and
-    editors offer attribute completion on instances.
+    **Type-checking.** ``TensorClass[...]`` is implemented via :meth:`~object.__class_getitem__`,
+    so pyright resolves it to the (parametrized) class itself rather than to a generic parameter.
+    Mypy does not evaluate ``__class_getitem__`` in a list of base classes and rejects the bracket
+    form; use ``class Foo(TensorClass, autocast=True)`` instead. Annotated fields propagate as
+    expected and editors offer attribute completion on instances.
 
     .. note:: ``TensorClass`` itself is *not* decorated as a tensorclass — the dataclass machinery
         only fires on subclasses. This is intentional: we cannot anticipate whether ``frozen`` will
