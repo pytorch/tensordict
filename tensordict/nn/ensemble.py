@@ -12,6 +12,8 @@ from tensordict.base import TensorDictBase
 from tensordict.nn.common import TensorDictModuleBase
 from tensordict.nn.params import TensorDictParams
 
+__all__ = ["EnsembleModule"]
+
 
 class EnsembleModule(TensorDictModuleBase):
     """Module that wraps a module and repeats it to form an ensemble.

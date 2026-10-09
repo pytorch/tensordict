@@ -34,6 +34,8 @@ try:
 except ImportError:
     from typing_extensions import NotRequired  # noqa: F401
 
+__all__ = ["TypedTensorDict"]
+
 # Annotation names that are class-level metadata, not user fields.
 _META_FIELDS = frozenset(
     {

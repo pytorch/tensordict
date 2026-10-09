@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
+__all__ = ["CompositeDistribution"]
+
 
 class CompositeDistribution(d.Distribution, Mapping):
     """A composite distribution that groups multiple distributions together using the TensorDict interface.

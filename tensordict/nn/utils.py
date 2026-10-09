@@ -22,7 +22,17 @@ _dispatch_tdnn_modules = _ContextManager(
     default=_strtobool(os.environ.get("DISPATCH_TDNN_MODULES", "True"))
 )
 
-__all__ = ["mappings", "inv_softplus", "biased_softplus"]
+__all__ = [
+    "mappings",
+    "inv_softplus",
+    "biased_softplus",
+    "expln",
+    "add_custom_mapping",
+    "set_skip_existing",
+    "skip_existing",
+    "composite_lp_aggregate",
+    "set_composite_lp_aggregate",
+]
 
 _skip_existing = _ContextManager(default=False)
 

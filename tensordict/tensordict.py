@@ -36,6 +36,25 @@ from tensordict.utils import (  # noqa: F401
     NestedKey,
 )
 
+__all__ = [
+    "LazyStackedTensorDict",
+    "MemoryMappedTensor",
+    "NO_DEFAULT",
+    "NestedKey",
+    "TensorDict",
+    "TensorDictBase",
+    "assert_allclose_td",
+    "dense_stack_tds",
+    "expand_as_right",
+    "expand_right",
+    "is_tensor_collection",
+    "is_tensorclass",
+    "make_tensordict",
+    "merge_tensordicts",
+    "pad",
+    "pad_sequence",
+]
+
 __getattr__ = deprecated_attributes(
     __name__,
     {
