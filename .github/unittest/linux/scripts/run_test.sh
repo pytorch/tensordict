@@ -82,10 +82,16 @@ mkdir -p "$JUNIT_DIR"
 
 python -m pytest test/smoke_test.py -v --durations 20 --junitxml="$JUNIT_DIR/junit-smoke.xml"
 test_status=0
-python -m pytest --runslow --instafail -v --durations 20 --timeout 120 --junitxml="$JUNIT_DIR/junit-tests.xml" || test_status=$?
+# Run the tests in TD_TEST_WORKERS pytest-xdist workers (4 unless the job sets
+# it). --dist loadgroup keeps each xdist_group in one worker; see
+# test/distributed/test_distributed.py.
+python -m pytest --runslow -n "${TD_TEST_WORKERS:-4}" --dist loadgroup \
+    --instafail -v --durations 20 --timeout 120 \
+    --junitxml="$JUNIT_DIR/junit-tests.xml" || test_status=$?
 
 if [ "$test_status" -ne 0 ]; then
     # Record same-commit evidence without hiding the original CI failure.
+    # The rerun is serial, so a failure that only shows under xdist passes here.
     python -m pytest --runslow --last-failed --last-failed-no-failures none \
         --instafail -v --durations 20 --timeout 120 \
         --junitxml="$JUNIT_DIR/junit-tests-rerun.xml" || true

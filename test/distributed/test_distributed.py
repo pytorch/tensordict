@@ -35,6 +35,12 @@ from torch.distributed.fsdp import (
 
 TIMEOUT = 100
 
+# The process groups below listen on fixed ports (10017, 29501, ...). Under
+# pytest-xdist with --dist loadgroup, this keeps the tests of this file in
+# one worker, one after the other, so that two of them never use a port at
+# the same time.
+pytestmark = pytest.mark.xdist_group("distributed")
+
 
 @fixture
 def set_context():
