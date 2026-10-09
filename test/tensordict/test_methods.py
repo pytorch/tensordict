@@ -3806,6 +3806,33 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_split[0].batch_size == torch.Size([4, 3, 1, *td.shape[3:]])
         assert td_split[1].batch_size == torch.Size([4, 3, 1, *td.shape[3:]])
 
+    @pytest.mark.parametrize(
+        "indices_or_sections",
+        [
+            torch.tensor(3),
+            torch.tensor([1, 3]),
+            [-1],
+            [-6],
+            [6],
+            [3, 1],
+            [2, 2, 1, 5],
+        ],
+        ids=["0d", "1d", "neg", "neg-out-of-range", "out-of-range", "desc", "mixed"],
+    )
+    @pytest.mark.parametrize("dim", [0, -3])
+    def test_tensor_split_indices(self, td_name, device, indices_or_sections, dim):
+        # Same sections as torch.tensor_split on a tensor of the batch shape
+        td = getattr(self, td_name)(device)
+        expected = torch.tensor_split(torch.zeros(td.shape), indices_or_sections, dim)
+        td_split = td.tensor_split(indices_or_sections, dim)
+        assert [t.batch_size for t in td_split] == [e.shape for e in expected]
+        expected_a = torch.tensor_split(
+            td.get("a"), indices_or_sections, dim % td.batch_dims
+        )
+        for t, e in zip(td_split, expected_a):
+            if e.numel():
+                assert (t.get("a") == e).all()
+
     def test_tensordict_set(self, td_name, device):
         torch.manual_seed(1)
         np.random.seed(1)

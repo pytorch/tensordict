@@ -4059,6 +4059,24 @@ class TestGeneric:
         with pytest.raises(ValueError, match="split_size must be positive, got -1."):
             td.split(-1, -1)
 
+    def test_tensor_split_invalid_tensor(self):
+        td = TensorDict({"a": torch.zeros(5)}, [5])
+        for indices in (
+            torch.tensor([1.0]),
+            torch.tensor([1], dtype=torch.int32),
+            torch.tensor([[1]]),
+        ):
+            with pytest.raises(ValueError, match="long tensor on the CPU"):
+                td.tensor_split(indices)
+
+    @pytest.mark.parametrize("indices", [[2], [3, 1]], ids=["asc", "desc"])
+    def test_tensor_split_locked_views(self, indices):
+        td = TensorDict({"a": torch.arange(5)}, [5]).lock_()
+        chunks = td.tensor_split(indices)
+        assert all(chunk.is_locked for chunk in chunks)
+        chunks[-1]["a"].zero_()
+        assert (td["a"][indices[-1] :] == 0).all()
+
     def test_split_with_negative_dim(self):
         td = TensorDict(
             {"a": torch.zeros(5, 4, 2, 1), "b": torch.zeros(5, 4, 1)}, [5, 4]
