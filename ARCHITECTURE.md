@@ -47,8 +47,11 @@ containers:
 Lazy stacks and views:
 
 - `_lazy.py`: `LazyStackedTensorDict`, which stacks tensordicts without
-  copying them. An index selects members along the stack dim and indexes
-  each member along the other dims. The file also holds
+  copying them. `_split_index` reads an index, with the model of
+  `_indexing.py`, as one index per member that it reaches: an int along the
+  stack dim selects one member, a slice selects members whose results are
+  stacked, and an advanced index gathers the elements of its block from the
+  members. Reads and writes use this split. The file also holds
   `_CustomOpTensorDict` and its subclasses (`_UnsqueezedTensorDict`,
   `_SqueezedTensorDict`, `_ViewedTensorDict`, `_TransposedTensorDict`,
   `_PermutedTensorDict`), which belong to the legacy lazy mode
