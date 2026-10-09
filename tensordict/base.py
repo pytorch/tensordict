@@ -42,7 +42,7 @@ import numpy as np
 import torch
 from tensordict._contextlib import LAST_OP_MAPS
 from tensordict._indexing import (
-    _as_tuple,
+    _entry_index,
     _getitem_batch_size,
     _getitem_names,
     _is_new_dim_index,
@@ -1040,10 +1040,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         subtd = self._get_sub_tensordict(index)
                     subtd.set(value_key, item, inplace=True, non_blocking=False)
         else:
-            # torch indexes the entries, and would read a NumPy bool as an int
-            # before NumPy 2.3: _read_element rejects it, as getitem does
-            for element in _as_tuple(index):
-                _read_element(element)
+            # read the index as getitem does, also if there is no key to write
+            index = _entry_index(index)
             for key in self.keys():
                 self.set_at_(key, value, index)
 
@@ -1921,9 +1919,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     @abc.abstractmethod
     def _rename_subtds(self, value):
-        """Renames all the sub-tensordicts dimension according to value.
+        """Gives the sub-tensordicts the names in value for the dims they share with self.
 
-        If value has less dimensions than the TD, the rest is just assumed to be None.
+        The dims a sub-tensordict has beyond ``self.batch_dims`` keep their
+        names. ``value=None`` clears the names of the shared dims.
         """
         raise NotImplementedError
 
@@ -2620,7 +2619,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """
         key = _unravel_key_to_tuple(key)
         return self._set_at_tuple(
-            key, value, index, validated=False, non_blocking=non_blocking
+            key, value, _entry_index(index), validated=False, non_blocking=non_blocking
         )
 
     @abc.abstractmethod
@@ -2841,7 +2840,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         else:
             default = NO_DEFAULT
 
-        return self._get_at_tuple(key_tuple, index, default, **kwargs)
+        return self._get_at_tuple(key_tuple, _entry_index(index), default, **kwargs)
 
     def _get_at_str(self, key, idx, default, **kwargs):
         out = self._get_str(key, default, **kwargs)
@@ -5684,7 +5683,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     value = value.clone(False).refine_names(*self.names)
             else:
                 if value._has_names():
-                    self._set_names(value.names[: self.batch_dims])
+                    names = value.names[: self.batch_dims]
+                    # an all-None prefix would re-walk every child for nothing
+                    if any(name is not None for name in names):
+                        self._set_names(names)
         return value
 
     def _validate_value_batchfree(
@@ -5781,7 +5783,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     )
             else:
                 if value._has_names():
-                    self._set_names(value.names[: self.batch_dims])
+                    names = value.names[: self.batch_dims]
+                    # an all-None prefix would re-walk every child for nothing
+                    if any(name is not None for name in names):
+                        self._set_names(names)
         return value
 
     def _validate_value_batchfree_devicefree(
@@ -7208,7 +7213,6 @@ from tensordict._base.factories import (  # noqa: F401
     from_dict,
     from_h5,
     from_json,
-    from_list,
     from_namedtuple,
     from_pandas,
     from_parquet,

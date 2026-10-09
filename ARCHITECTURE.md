@@ -203,7 +203,7 @@ An operation that a backend cannot support raises. For example,
   decorators in `_torch_func.py` fill. A function that is not in the table
   returns `NotImplemented`. `LazyStackedTensorDict` first checks
   `LAZY_TD_HANDLED_FUNCTIONS` (`@implements_for_lazy_td`).
-  `TensorDictParams` uses a copy of the table, `TDPARAM_HANDLED_FUNCTIONS`.
+  `TensorDictParams` uses a copy of the table, `_TDPARAM_HANDLED_FUNCTIONS`.
   A tensorclass passes the torch functions listed in `_TD_PASS_THROUGH`
   (`tensorclass.py`) to its tensordict.
 - Pytree: `_pytree.py` registers `TensorDict`, `_SubTensorDict`,

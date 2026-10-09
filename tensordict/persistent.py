@@ -20,6 +20,7 @@ from typing import Any, Callable, Tuple, Type, TYPE_CHECKING
 
 import numpy as np
 import torch
+from tensordict._indexing import _entry_index
 from tensordict._td import (
     _TensorDictKeysView,
     _unravel_key_to_tuple,
@@ -1137,7 +1138,7 @@ class PersistentTensorDict(TensorDictBase):
         See :meth:`~tensordict.TensorDictBase.get_at`.
         """
         # Unlike TensorDictBase.get_at, a missing key raises unless a default is given
-        return self._get_at_tuple(key, idx, default)
+        return self._get_at_tuple(key, _entry_index(idx), default)
 
     def _read_array_at(self, array, idx):
         """Reads ``array[idx]``, loading only the required part of the array when possible.
@@ -1325,7 +1326,7 @@ class PersistentTensorDict(TensorDictBase):
             names = [None] * self.ndim
         for item in self._nested_tensordicts.values():
             if is_tensor_collection(item):
-                td_names = list(names) + [None] * (item.ndim - self.ndim)
+                td_names = list(names) + list(item.names)[self.ndim :]
                 item.rename_(*td_names)
 
     def contiguous(self, *, canonical: bool = False):
