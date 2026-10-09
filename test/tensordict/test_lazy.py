@@ -1525,6 +1525,22 @@ class TestLazyStackedTensorDict:
         assert "e" in td.keys()  # now all tds have the key c
         td.get("e")
 
+    def test_stack_keys_order(self):
+        # The keys follow the insertion order of the first tensordict, as for a
+        # dense tensordict, whatever the order in the other tensordicts.
+        td0 = TensorDict(x=0.0, R=1.0, n=TensorDict(b=2.0, a=3.0))
+        td1 = TensorDict(R=1.0, x=0.0, n=TensorDict(a=3.0, b=2.0))
+        td = lazy_stack([td0, td1])
+        for args in ((), (False, True), (True,), (True, True)):
+            assert list(td.keys(*args)) == list(td0.keys(*args))
+            assert [key for key, _ in td.items(*args)] == [
+                key for key, _ in td0.items(*args)
+            ]
+        assert list(td.flatten_keys().keys()) == ["x", "R", "n.b", "n.a"]
+        # values() follows the same order, so it can be zipped with keys()
+        for key, value in zip(td.keys(True, True), td.values(True, True)):
+            assert (value == td.get(key)).all()
+
     @pytest.mark.parametrize("unsqueeze_dim", [0, 1, -1, -2])
     def test_stack_unsqueeze(self, unsqueeze_dim):
         td = TensorDict({("a", "b"): torch.ones(3, 4, 5)}, [3, 4])

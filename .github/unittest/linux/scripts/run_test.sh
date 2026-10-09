@@ -82,10 +82,25 @@ mkdir -p "$JUNIT_DIR"
 
 python -m pytest test/smoke_test.py -v --durations 20 --junitxml="$JUNIT_DIR/junit-smoke.xml"
 test_status=0
-python -m pytest --runslow --instafail -v --durations 20 --timeout 120 --junitxml="$JUNIT_DIR/junit-tests.xml" || test_status=$?
+# Run the tests in TD_TEST_WORKERS pytest-xdist workers (4 unless the job sets
+# it), except two files that run on their own afterwards.
+python -m pytest --runslow -n "${TD_TEST_WORKERS:-4}" \
+    --ignore test/distributed/test_distributed.py \
+    --ignore test/utils/test_setup.py \
+    --instafail -v --durations 20 --timeout 120 \
+    --junitxml="$JUNIT_DIR/junit-tests.xml" || test_status=$?
+# test_distributed.py starts its process groups on fixed ports, and its
+# worker processes can hang at exit when the machine is busy. test_setup.py
+# reinstalls tensordict from this checkout, and its editable installs rewrite
+# tensordict/_C.so while other test processes may import it. So these two run
+# alone, one test at a time.
+python -m pytest --runslow test/distributed/test_distributed.py test/utils/test_setup.py \
+    --instafail -v --durations 20 --timeout 120 \
+    --junitxml="$JUNIT_DIR/junit-tests-serial.xml" || test_status=$?
 
 if [ "$test_status" -ne 0 ]; then
     # Record same-commit evidence without hiding the original CI failure.
+    # The rerun is serial, so a failure that only shows under xdist passes here.
     python -m pytest --runslow --last-failed --last-failed-no-failures none \
         --instafail -v --durations 20 --timeout 120 \
         --junitxml="$JUNIT_DIR/junit-tests-rerun.xml" || true

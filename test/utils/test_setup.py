@@ -6,6 +6,7 @@ import subprocess
 import sys
 import sysconfig
 import venv
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -100,8 +101,6 @@ def _uninstall(python: Path, pkg: str) -> None:
 def test_install_strategies_version(
     isolated_venv, editable: bool, no_build_isolation: bool
 ):
-    if shutil.which("cmake") is None:
-        pytest.skip("cmake not available")
     if no_build_isolation and sysconfig.get_config_var("Py_GIL_DISABLED"):
         pytest.skip(
             "no-build-isolation installs are unreliable on free-threaded Python"
@@ -130,7 +129,6 @@ def test_install_strategies_version(
             "-U",
             "setuptools",
             "wheel",
-            "pybind11",
         ],
         cwd=_ROOT,
         timeout=20 * 60,
@@ -221,14 +219,32 @@ print(json.dumps(out))
         assert "dist_version" in info
 
 
-def test_pybind11_version_pin():
-    """Ensure pyproject.toml pins pybind11>=2.13 for Python 3.13 compatibility."""
-    pyproject = _ROOT / "pyproject.toml"
-    text = pyproject.read_text()
-    assert "pybind11" in text, "pybind11 not found in pyproject.toml"
-    assert "pybind11[global]>=2.13" in text or "pybind11>=2.13" in text, (
-        "pybind11 build requirement must pin >=2.13 for Python 3.13 support"
+@pytest.mark.slow
+def test_wheel_is_pure_python(tmp_path):
+    """tensordict compiles nothing, so one wheel serves every platform."""
+    _run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "wheel",
+            "--no-deps",
+            "--wheel-dir",
+            str(tmp_path),
+            str(_ROOT),
+        ],
+        cwd=_ROOT,
+        timeout=20 * 60,
     )
+    (wheel,) = tmp_path.glob("tensordict-*.whl")
+    assert wheel.name.endswith("-py3-none-any.whl"), wheel.name
+    with zipfile.ZipFile(wheel) as archive:
+        binaries = [
+            name
+            for name in archive.namelist()
+            if name.endswith((".so", ".pyd", ".dll", ".dylib"))
+        ]
+    assert not binaries, binaries
 
 
 if __name__ == "__main__":

@@ -2223,6 +2223,10 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         td1 = getattr(self, td_name)(device).unlock_()
         td2 = getattr(self, td_name)(device).unlock_()
+        if td_name == "td_with_unbatched":
+            # Stacking two different UnbatchedTensors warns: share it so that
+            # only the heterogeneous entry fails.
+            td2.set("unbatched", td1.get("unbatched"))
 
         td1[key] = torch.randn(*td1.shape, 2)
         td2[key] = torch.randn(*td1.shape, 3)

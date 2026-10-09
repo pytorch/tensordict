@@ -46,6 +46,7 @@ from tensordict.base import (
     _is_tensor_collection,
     _load_metadata,
     _register_tensor_class,
+    _SELF_NESTING_ERROR,
     _UNSET,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
@@ -583,6 +584,8 @@ class TensorDict(TensorDictBase):
             # try:
             index_unravel = _unravel_key_to_tuple(index)
             if index_unravel:
+                if value is self:
+                    raise ValueError(_SELF_NESTING_ERROR.format(index))
                 self._set_tuple(
                     index_unravel,
                     value,

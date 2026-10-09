@@ -57,6 +57,7 @@ from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
     _register_tensor_class,
+    _TENSORDICTBASE_MIXINS,
     _UNSET,
     CompatibleType,
 )
@@ -1056,6 +1057,17 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     for name in inherited_reserved_fields:
         setattr(cls, name, dataclasses.field())
 
+    # If cls is already a dataclass, its first dataclass() pass removed the Field
+    # declarations (default factories, init/repr/compare/kw_only flags, metadata)
+    # from the class namespace, from which the call below rebuilds the fields.
+    # Put copies back, except for the fields reset above, whose first-pass
+    # default can be the inherited attribute.
+    if "__dataclass_fields__" in cls.__dict__:
+        own_names = set(_own_annotation_names(cls)) - set(inherited_reserved_fields)
+        for field in dataclasses.fields(cls):
+            if field.name in own_names:
+                setattr(cls, field.name, copy(field))
+
     # Breaks some tests, don't do that:
     # if not dataclasses.is_dataclass(cls):
     cls = dataclass(cls, frozen=frozen)
@@ -1243,7 +1255,10 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     ):
         cls.from_dict_instance = _from_dict_instance
 
-    for attr in set(TensorDict.__dict__.keys()).union(TensorDictBase.__dict__.keys()):
+    td_attrs = set(TensorDict.__dict__).union(
+        TensorDictBase.__dict__, *(mixin.__dict__ for mixin in _TENSORDICTBASE_MIXINS)
+    )
+    for attr in td_attrs:
         if attr in ("__torch_function__",):
             continue
         func = getattr(TensorDict, attr)
@@ -1512,10 +1527,13 @@ def _init_wrapper(
         _missing_type = getattr(dataclasses, "_MISSING_TYPE", type(dataclasses.MISSING))
         for key, field in type(self).__dataclass_fields__.items():
             # Only process fields that are in __expected_keys__ (excludes ClassVar fields)
-            if key in self.__expected_keys__:
+            if key in self.__expected_keys__ and key not in kwargs:
                 if field.default_factory is not dataclasses.MISSING and not isinstance(
                     field.default_factory, _missing_type
                 ):
+                    if _has_custom_setattr and not field.init:
+                        # The dataclass __init__ calls this factory itself.
+                        continue
                     default = field.default_factory()
                 else:
                     default = field.default
