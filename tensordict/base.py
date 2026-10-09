@@ -1786,9 +1786,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     @abc.abstractmethod
     def _rename_subtds(self, value):
-        """Renames all the sub-tensordicts dimension according to value.
+        """Gives the sub-tensordicts the names in value for the dims they share with self.
 
-        If value has less dimensions than the TD, the rest is just assumed to be None.
+        The dims a sub-tensordict has beyond ``self.batch_dims`` keep their
+        names. ``value=None`` clears the names of the shared dims.
         """
         raise NotImplementedError
 
