@@ -1,7 +1,0 @@
-﻿.. currentmodule:: tensordict
-
-
-is_batchedtensor
-================
-
-.. autofunction:: is_batchedtensor

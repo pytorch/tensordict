@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4672+g3c3b210aa.d20261009)
+                  main (0.14.0.dev4673+g676259c4d.d20261009)
                 </div>
               
             
@@ -4183,6 +4183,9 @@ the shapes of <code class="xref py py-attr docutils literal notranslate"><span c
 <span class="sig-name descname"><span class="pre">load_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">pathlib.Path</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.load_" title="Permalink to this definition">¶</a></dt>
 <dd><p>Loads a tensordict from disk within the current tensordict.</p>
 <p>This class method is a proxy to <a class="reference internal" href="#tensordict.TensorDictBase.load_memmap_" title="tensordict.TensorDictBase.load_memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap_()</span></code></a>.</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>Use <a class="reference internal" href="#tensordict.TensorDictBase.load_memmap_" title="tensordict.TensorDictBase.load_memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap_()</span></code></a> instead.</p>
+</div>
 </dd></dl>
 
 <dl class="py method">
@@ -6430,6 +6433,13 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.pin_memory_">
 <span class="sig-name descname"><span class="pre">pin_memory_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_threads</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.pin_memory_" title="Permalink to this definition">¶</a></dt>
 <dd><p>Calls <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.pin_memory.html#torch.Tensor.pin_memory" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pin_memory()</span></code></a> on the stored tensors and returns the TensorDict modifies in-place.</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>Use <code class="docutils literal notranslate"><span class="pre">pin_memory(inplace=True)</span></code> instead. Pinning allocates new
+storage, so it does not fit the trailing-underscore convention.
+<code class="docutils literal notranslate"><span class="pre">pin_memory_()</span></code> pins on the main thread by default
+(<code class="docutils literal notranslate"><span class="pre">num_threads=0</span></code>); pass <code class="docutils literal notranslate"><span class="pre">num_threads=0</span></code> to
+<a class="reference internal" href="#tensordict.TensorDictBase.pin_memory" title="tensordict.TensorDictBase.pin_memory"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pin_memory()</span></code></a> to keep that behavior.</p>
+</div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>num_threads</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – if provided, the number of threads to use

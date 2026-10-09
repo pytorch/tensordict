@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4672+g3c3b210aa.d20261009)
+                  main (0.14.0.dev4673+g676259c4d.d20261009)
                 </div>
               
             
@@ -377,8 +377,18 @@ that will affect the original tensordicts.</p>
 same batch size.</p></li>
 <li><p><strong>stack_dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – a dimension (between <cite>-td.ndimension()</cite> and
 <cite>td.ndimension()-1</cite> along which the stack should be performed.</p></li>
-<li><p><strong>hook_out</strong> (<em>callable</em><em>, </em><em>optional</em>) – a callable to execute after <a class="reference internal" href="#tensordict.LazyStackedTensorDict.get" title="tensordict.LazyStackedTensorDict.get"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get()</span></code></a>.</p></li>
-<li><p><strong>hook_in</strong> (<em>callable</em><em>, </em><em>optional</em>) – a callable to execute before <a class="reference internal" href="#tensordict.LazyStackedTensorDict.set" title="tensordict.LazyStackedTensorDict.set"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set()</span></code></a>.</p></li>
+<li><p><strong>hook_out</strong> (<em>callable</em><em>, </em><em>optional</em>) – <p>a callable to execute after <a class="reference internal" href="#tensordict.LazyStackedTensorDict.get" title="tensordict.LazyStackedTensorDict.get"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get()</span></code></a>.</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.15: </span><code class="docutils literal notranslate"><span class="pre">hook_out</span></code> belongs to the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a> support of lazy
+stacks and has no replacement.</p>
+</div>
+</p></li>
+<li><p><strong>hook_in</strong> (<em>callable</em><em>, </em><em>optional</em>) – <p>a callable to execute before <a class="reference internal" href="#tensordict.LazyStackedTensorDict.set" title="tensordict.LazyStackedTensorDict.set"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set()</span></code></a>.</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.15: </span><code class="docutils literal notranslate"><span class="pre">hook_in</span></code> belongs to the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a> support of lazy
+stacks and has no replacement.</p>
+</div>
+</p></li>
 <li><p><strong>stack_dim_name</strong> – the name of the stack dimension.
 Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 </ul>
@@ -3663,6 +3673,17 @@ to compute their shape, and should only be used for printing.</p>
 <dt class="sig sig-object py" id="tensordict.LazyStackedTensorDict.get_nestedtensor">
 <span class="sig-name descname"><span class="pre">get_nestedtensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_NoDefault.ZERO</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout" title="(in PyTorch v2.14)"><span class="pre">torch.layout</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">torch.Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tensordict._tensorcollection.TensorCollection</span></span></span><a class="headerlink" href="#tensordict.LazyStackedTensorDict.get_nestedtensor" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns a nested tensor when stacking cannot be achieved.</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>Use <code class="docutils literal notranslate"><span class="pre">get(key,</span> <span class="pre">as_nested_tensor=True)</span></code> instead. It differs in three
+ways: it builds a <code class="docutils literal notranslate"><span class="pre">torch.jagged</span></code> nested tensor unless you pass
+<code class="docutils literal notranslate"><span class="pre">layout=torch.strided</span></code>, whereas this method builds a
+<code class="docutils literal notranslate"><span class="pre">torch.strided</span></code> one by default; when a tensor <code class="docutils literal notranslate"><span class="pre">default</span></code> is
+given and some tensordicts lack <code class="docutils literal notranslate"><span class="pre">key</span></code>, it returns <code class="docutils literal notranslate"><span class="pre">default</span></code>
+itself, whereas this method uses <code class="docutils literal notranslate"><span class="pre">default</span></code> as the value of the
+tensordicts that lack <code class="docutils literal notranslate"><span class="pre">key</span></code>; and when the stack dim is not 0, it
+nests the tensors along the stack dim and puts that dim first,
+whereas this method raises.</p>
+</div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -3743,6 +3764,26 @@ entry cannot be found).</p>
 <dt class="sig sig-object py" id="tensordict.LazyStackedTensorDict.half">
 <span class="sig-name descname"><span class="pre">half</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></span><a class="headerlink" href="#tensordict.LazyStackedTensorDict.half" title="Permalink to this definition">¶</a></dt>
 <dd><p>Casts all tensors to <code class="docutils literal notranslate"><span class="pre">torch.half</span></code>.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="tensordict.LazyStackedTensorDict.hook_in">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">hook_in</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.15)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Callable" title="(in Python v3.15)"><span class="pre">Callable</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#tensordict.LazyStackedTensorDict.hook_in" title="Permalink to this definition">¶</a></dt>
+<dd><p>The callable that the lazy stack applies to the values it writes.</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.15: </span><code class="docutils literal notranslate"><span class="pre">hook_in</span></code> belongs to the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a> support of lazy
+stacks and has no replacement.</p>
+</div>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="tensordict.LazyStackedTensorDict.hook_out">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">hook_out</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.15)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Callable" title="(in Python v3.15)"><span class="pre">Callable</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#tensordict.LazyStackedTensorDict.hook_out" title="Permalink to this definition">¶</a></dt>
+<dd><p>The callable that the lazy stack applies to the values it returns.</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.15: </span><code class="docutils literal notranslate"><span class="pre">hook_out</span></code> belongs to the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a> support of lazy
+stacks and has no replacement.</p>
+</div>
 </dd></dl>
 
 <dl class="py method">
@@ -4362,6 +4403,9 @@ the shapes of <code class="xref py py-attr docutils literal notranslate"><span c
 <span class="sig-name descname"><span class="pre">load_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">pathlib.Path</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.LazyStackedTensorDict.load_" title="Permalink to this definition">¶</a></dt>
 <dd><p>Loads a tensordict from disk within the current tensordict.</p>
 <p>This class method is a proxy to <a class="reference internal" href="#tensordict.LazyStackedTensorDict.load_memmap_" title="tensordict.LazyStackedTensorDict.load_memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap_()</span></code></a>.</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>Use <a class="reference internal" href="#tensordict.LazyStackedTensorDict.load_memmap_" title="tensordict.LazyStackedTensorDict.load_memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap_()</span></code></a> instead.</p>
+</div>
 </dd></dl>
 
 <dl class="py method">
@@ -6618,6 +6662,13 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <dt class="sig sig-object py" id="tensordict.LazyStackedTensorDict.pin_memory_">
 <span class="sig-name descname"><span class="pre">pin_memory_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_threads</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></span><a class="headerlink" href="#tensordict.LazyStackedTensorDict.pin_memory_" title="Permalink to this definition">¶</a></dt>
 <dd><p>Calls <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.pin_memory.html#torch.Tensor.pin_memory" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pin_memory()</span></code></a> on the stored tensors and returns the TensorDict modifies in-place.</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>Use <code class="docutils literal notranslate"><span class="pre">pin_memory(inplace=True)</span></code> instead. Pinning allocates new
+storage, so it does not fit the trailing-underscore convention.
+<code class="docutils literal notranslate"><span class="pre">pin_memory_()</span></code> pins on the main thread by default
+(<code class="docutils literal notranslate"><span class="pre">num_threads=0</span></code>); pass <code class="docutils literal notranslate"><span class="pre">num_threads=0</span></code> to
+<a class="reference internal" href="#tensordict.LazyStackedTensorDict.pin_memory" title="tensordict.LazyStackedTensorDict.pin_memory"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pin_memory()</span></code></a> to keep that behavior.</p>
+</div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>num_threads</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – if provided, the number of threads to use
@@ -9689,59 +9740,9 @@ to the host.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.LazyStackedTensorDict.valid_keys">
 <span class="sig-name descname"><span class="pre">valid_keys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">include_nested</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">leaves_only</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_leaf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.15)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Callable" title="(in Python v3.15)"><span class="pre">Callable</span></a><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Type" title="(in Python v3.15)"><span class="pre">Type</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sort</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">_LazyStackedTensorDictKeysView</span></span></span><a class="headerlink" href="#tensordict.LazyStackedTensorDict.valid_keys" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns a generator of tensordict keys.</p>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>TensorDict <code class="docutils literal notranslate"><span class="pre">keys()</span></code> method returns a lazy view of the keys. If the <code class="docutils literal notranslate"><span class="pre">keys</span></code>
-are queried but not iterated over and then the tensordict is modified, iterating over
-the keys later will return the new configuration of the keys.</p>
-</div>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>include_nested</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, nested values will be returned.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>leaves_only</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, only leaves will be
-returned. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>is_leaf</strong> (<em>callable</em><em>, </em><em>optional</em>) – <p>a callable over a class type returning
-a bool indicating if this class has to be considered as a leaf.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>The purpose of <cite>is_leaf</cite> is not to prevent recursive calls into nested tensordicts, but
-rather to mark certain types as “leaves” for the purpose of filtering when <cite>leaves_only=True</cite>.
-Even if <cite>is_leaf(cls)</cite> returns <cite>True</cite>, the nested structure of the tensordict will still be
-traversed if <cite>include_nested=True</cite>.
-In other words, <cite>is_leaf</cite> does not control the recursion depth, but rather provides a way to filter
-out certain types from the result when <cite>leaves_only=True</cite>. This means that a node in the tree can
-be both a leaf and a node with children.
-In practice, the default value of <code class="docutils literal notranslate"><span class="pre">is_leaf</span></code> does exclude tensordict and tensorclass instances
-from the leaf set.</p>
-</div>
-<div class="admonition seealso">
-<p class="admonition-title">See also</p>
-<p><a class="reference internal" href="tensordict.is_leaf_nontensor.html#tensordict.is_leaf_nontensor" title="tensordict.is_leaf_nontensor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">is_leaf_nontensor()</span></code></a> and <a class="reference internal" href="tensordict.default_is_leaf.html#tensordict.default_is_leaf" title="tensordict.default_is_leaf"><code class="xref py py-meth docutils literal notranslate"><span class="pre">default_is_leaf()</span></code></a>.</p>
-</div>
-</p></li>
-</ul>
-</dd>
-<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>sort</strong> (<a class="reference internal" href="#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – whether the keys shoulbe sorted. For nested keys,
-the keys are sorted according to their joined name (ie, <code class="docutils literal notranslate"><span class="pre">(&quot;a&quot;,</span> <span class="pre">&quot;key&quot;)</span></code> will
-be counted as <code class="docutils literal notranslate"><span class="pre">&quot;a.key&quot;</span></code> for sorting). Be mindful that sorting may incur
-significant overhead when dealing with large tensordicts.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
-</dd>
-</dl>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"0"</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">"1"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"2"</span><span class="p">:</span> <span class="mi">2</span><span class="p">}},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
-<span class="go">['0', '1']</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
-<span class="go">['0']</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
-<span class="go">['0', ('1', '2')]</span>
-</pre></div>
+<dd><p>Returns the keys of the lazy stack, like <a class="reference internal" href="#tensordict.LazyStackedTensorDict.keys" title="tensordict.LazyStackedTensorDict.keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">keys()</span></code></a>.</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>Use <a class="reference internal" href="#tensordict.LazyStackedTensorDict.keys" title="tensordict.LazyStackedTensorDict.keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">keys()</span></code></a> instead.</p>
 </div>
 </dd></dl>
 

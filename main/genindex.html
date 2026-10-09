@@ -224,7 +224,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4672+g3c3b210aa.d20261009)
+                  main (0.14.0.dev4673+g676259c4d.d20261009)
                 </div>
               
             
@@ -3574,6 +3574,8 @@
         <li><a href="reference/generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict.from_namedtuple">(tensordict.TypedTensorDict class method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack.from_nontensordata">from_nontensordata() (tensordict.NonTensorStack class method)</a>
+</li>
       <li><a href="reference/generated/tensordict.from_pandas.html#tensordict.from_pandas">from_pandas() (in module tensordict)</a>
 
       <ul>
@@ -4108,6 +4110,18 @@
 </li>
       <li><a href="reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor.histogram">histogram() (tensordict.UnbatchedTensor method)</a>
 </li>
+      <li><a href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.hook_in">hook_in (tensordict.LazyStackedTensorDict property)</a>
+
+      <ul>
+        <li><a href="reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack.hook_in">(tensordict.NonTensorStack property)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.hook_out">hook_out (tensordict.LazyStackedTensorDict property)</a>
+
+      <ul>
+        <li><a href="reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack.hook_out">(tensordict.NonTensorStack property)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor.hsplit">hsplit() (tensordict.UnbatchedTensor method)</a>
 </li>
       <li><a href="reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor.hypot">hypot() (tensordict.UnbatchedTensor method)</a>
@@ -4139,6 +4153,8 @@
       <li><a href="reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor.igammac_">igammac_() (tensordict.UnbatchedTensor method)</a>
 </li>
       <li><a href="reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor.imag">imag (tensordict.UnbatchedTensor attribute)</a>
+</li>
+      <li><a href="reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor.index">index (tensordict.MemoryMappedTensor property)</a>
 </li>
       <li><a href="reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor.index">index() (tensordict.UnbatchedTensor method)</a>
 </li>
@@ -4328,8 +4344,6 @@
         <li><a href="reference/generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict.irecv">(tensordict.TypedTensorDict method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/tensordict.is_batchedtensor.html#tensordict.is_batchedtensor">is_batchedtensor() (in module tensordict)</a>
-</li>
       <li><a href="reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor.is_coalesced">is_coalesced() (tensordict.UnbatchedTensor method)</a>
 </li>
       <li><a href="reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor.is_complex">is_complex() (tensordict.UnbatchedTensor method)</a>
@@ -4719,6 +4733,8 @@
       <li><a href="reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor.kron">kron() (tensordict.UnbatchedTensor method)</a>
 </li>
       <li><a href="reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor.kthvalue">kthvalue() (tensordict.UnbatchedTensor method)</a>
+</li>
+      <li><a href="reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict.kwargs">kwargs (tensordict.PersistentTensorDict property)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -6498,6 +6514,8 @@
 </li>
       </ul></li>
       <li><a href="reference/generated/tensordict.TensorDictParams.html#tensordict.TensorDictParams.parameters">parameters() (tensordict.TensorDictParams method)</a>
+</li>
+      <li><a href="reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor.parent_shape">parent_shape (tensordict.MemoryMappedTensor property)</a>
 </li>
       <li><a href="reference/generated/tensordict.parse_tensor_dict_string.html#tensordict.parse_tensor_dict_string">parse_tensor_dict_string() (in module tensordict)</a>
 </li>
@@ -8622,8 +8640,12 @@
         <li><a href="reference/generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict.to_lazystack">(tensordict.TypedTensorDict method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore.to_local">to_local() (tensordict.store.TensorDictStore method)</a>
+      <li><a href="reference/generated/tensordict.store.LazyStackedTensorDictStore.html#tensordict.store.LazyStackedTensorDictStore.to_local">to_local() (tensordict.store.LazyStackedTensorDictStore method)</a>
+
+      <ul>
+        <li><a href="reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore.to_local">(tensordict.store.TensorDictStore method)</a>
 </li>
+      </ul></li>
       <li><a href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.to_mds">to_mds() (tensordict.LazyStackedTensorDict method)</a>
 
       <ul>

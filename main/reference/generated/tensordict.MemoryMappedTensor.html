@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4672+g3c3b210aa.d20261009)
+                  main (0.14.0.dev4673+g676259c4d.d20261009)
                 </div>
               
             
@@ -489,6 +489,9 @@ otherwise.</p></li>
 <dt class="sig sig-object py" id="tensordict.MemoryMappedTensor.from_handler">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_handler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handler</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.MemoryMappedTensor.from_handler" title="Permalink to this definition">¶</a></dt>
 <dd><p>Loads a MemoryMappedTensor from a given handler.</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>The handler is private, and this method has no replacement.</p>
+</div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -581,6 +584,15 @@ is provided, a handler is used.</p>
 </dl>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="tensordict.MemoryMappedTensor.index">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">index</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></em><a class="headerlink" href="#tensordict.MemoryMappedTensor.index" title="Permalink to this definition">¶</a></dt>
+<dd><p>The index of this tensor in the tensor that it was built from.</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>This is internal to pickling and has no replacement.</p>
+</div>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.MemoryMappedTensor.ones">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">ones</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.MemoryMappedTensor.ones" title="Permalink to this definition">¶</a></dt>
@@ -618,6 +630,15 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 is provided, a handler is used.</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="tensordict.MemoryMappedTensor.parent_shape">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">parent_shape</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><span class="pre">Size</span></a></em><a class="headerlink" href="#tensordict.MemoryMappedTensor.parent_shape" title="Permalink to this definition">¶</a></dt>
+<dd><p>The shape of the tensor that this tensor was built from.</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>This is internal to pickling and has no replacement.</p>
+</div>
 </dd></dl>
 
 <dl class="py method">
