@@ -118,15 +118,17 @@ class _StoreTDKeysView(_TensorDictKeysView):
         prefix_dot = prefix + _KEY_SEP if prefix else ""
 
         seen = set()
-        for full_key in all_keys:
-            # Filter keys belonging to this prefix level
-            if prefix:
-                if not full_key.startswith(prefix_dot):
-                    continue
-                relative = full_key[len(prefix_dot) :]
-            else:
-                relative = full_key
-
+        # The registry is a set: sort the paths of this level, as
+        # to_tensordict() does, so that the keys come in one order. The paths
+        # of a nested tensordict are contiguous once sorted, so values() and
+        # items(), which recurse into each nested tensordict, follow this
+        # order too.
+        if prefix:
+            start = len(prefix_dot)
+            paths = sorted(k[start:] for k in all_keys if k.startswith(prefix_dot))
+        else:
+            paths = sorted(all_keys)
+        for relative in paths:
             parts = relative.split(_KEY_SEP)
 
             if self.include_nested:

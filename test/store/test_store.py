@@ -250,6 +250,29 @@ class TestTensorDictStore:
         # "nested" should not appear since it is not a leaf
         assert "nested" not in leaf_keys
 
+    def test_keys_values_items_order(self, store_td):
+        """keys(), values() and items() follow the sorted order of the key paths."""
+        td = TensorDict(
+            {
+                "x": torch.zeros(10),
+                "R": torch.ones(10),
+                "n": {"b": torch.full((10,), 2.0), "a": torch.full((10,), 3.0)},
+                "n-x": torch.full((10,), 4.0),
+            },
+            batch_size=[10],
+        )
+        for key in td.keys(True, True):
+            store_td[key] = td[key]
+        # "n-x" sorts before "n.a"
+        keys = ["R", "n-x", ("n", "a"), ("n", "b"), "x"]
+        assert list(store_td.keys(True, True)) == keys
+        assert [key for key, _ in store_td.items(True, True)] == keys
+        for key, value in zip(keys, store_td.values(True, True), strict=True):
+            assert (value == td[key]).all()
+        assert list(store_td.keys()) == ["R", "n-x", "n", "x"]
+        assert list(store_td["n"].keys()) == ["a", "b"]
+        assert list(store_td.to_tensordict().keys(True, True)) == keys
+
     def test_contains(self, store_td):
         """Test __contains__ via 'in' operator."""
         store_td["obs"] = torch.randn(10, 3)
@@ -1075,6 +1098,36 @@ class TestLazyStackedTensorDictStore:
     def test_from_lazy_stack_keys(self, store_stack):
         store_td, tds, lazy_td = store_stack
         assert set(store_td.keys()) == {"a", "b"}
+
+    def test_keys_values_items_order(self, store_kwargs):
+        """keys(), values() and items() follow the sorted order of the key paths."""
+        td = TensorDict(
+            {
+                "x": torch.zeros(3, 2),
+                "R": torch.ones(3, 2),
+                "n": {"b": torch.full((3, 2), 2.0), "a": torch.full((3, 2), 3.0)},
+                "n-x": torch.full((3, 2), 4.0),
+            },
+            batch_size=[3, 2],
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(list(td.unbind(0))), **store_kwargs
+        )
+        try:
+            # "n-x" sorts before "n.a"
+            keys = ["R", "n-x", ("n", "a"), ("n", "b"), "x"]
+            # the store and the view of one of its elements
+            for store, expected in ((store_td, td), (store_td[0], td[0])):
+                assert list(store.keys(True, True)) == keys
+                assert [key for key, _ in store.items(True, True)] == keys
+                for key, value in zip(keys, store.values(True, True), strict=True):
+                    assert (value == expected[key]).all()
+                assert list(store.keys()) == ["R", "n-x", "n", "x"]
+                assert list(store["n"].keys()) == ["a", "b"]
+                assert list(store.to_tensordict().keys(True, True)) == keys
+        finally:
+            store_td.clear_redis()
+            store_td.close()
 
     def test_repr(self, store_stack):
         store_td, _, _ = store_stack
