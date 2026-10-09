@@ -21,6 +21,10 @@ class TensorCollection:
 
         This is an abstract base class and should not be instantiated directly.
         """
+        if not (args or kwargs) and "_tensordict" in self.__dict__:
+            # super().__init__() from the __init__ of a TensorClass subclass,
+            # once the tensorclass constructor has built the instance.
+            return
         raise NotImplementedError(
             "TensorCollection is an abstract base class and cannot be instantiated directly."
         )
