@@ -8,7 +8,6 @@ import dataclasses
 import importlib.util
 import inspect
 import platform
-import sys
 import warnings
 import weakref
 from pathlib import Path
@@ -74,11 +73,6 @@ if torch.cuda.is_available():
 elif is_npu_available():
     cur_device = "npu"
     npu_device_count = torch.npu.device_count()
-
-pytestmark = pytest.mark.skipif(
-    sys.version_info >= (3, 14),
-    reason="torch.compile is not supported on python 3.14+ ",
-)
 
 
 @pytest.mark.parametrize("is_tensordict_module", [False, True])
@@ -1753,10 +1747,6 @@ class TestFunctional:
 
 
 @pytest.mark.skipif(not _v2_5, reason="Requires PT>=2.5")
-@pytest.mark.skipif(
-    sys.version_info >= (3, 14),
-    reason="torch.export has compatibility issues with Python 3.14 (networkx/dataclasses)",
-)
 class TestExport:
     def test_export_module(self):
         tdm = Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"])
