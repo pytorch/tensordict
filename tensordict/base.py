@@ -819,9 +819,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             return 0
         return batch_size[0]
 
-    def __deepcopy__(
-        self, memo: Dict[Any, Any]
-    ) -> "tensordict.TensorDict":  # noqa  # type: ignore
+    def __deepcopy__(self, memo: Dict[Any, Any]) -> "tensordict.TensorDict":  # noqa  # type: ignore
         return self.clone()
 
     def __contains__(self, key: NestedKey) -> bool:  # type: ignore
@@ -1879,8 +1877,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             )
         elif not rename_map and not names:
             raise ValueError(
-                "Neither a name map nor a name list was passed. "
-                "Only one is accepted."
+                "Neither a name map nor a name list was passed. Only one is accepted."
             )
         elif rename_map:
             cnames = list(clone.names)
@@ -1911,12 +1908,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self._set_names(None)
         if rename_map and names:
             raise ValueError(
-                "Passed both a name map and a name list. " "Only one is accepted."
+                "Passed both a name map and a name list. Only one is accepted."
             )
         elif not rename_map and not names and self.batch_dims:
             raise ValueError(
-                "Neither a name map nor a name list was passed. "
-                "Only one is accepted."
+                "Neither a name map nor a name list was passed. Only one is accepted."
             )
         elif rename_map:
             cnames = list(self.names)
@@ -2092,7 +2088,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 exception is raised.
             shape (torch.Size or equivalent, torch.Tensor for nested tensors): the shape of the tensor to write.
 
-        Keyword arguments:
+        Keyword Arguments:
             dtype (torch.dtype, optional): the dtype of the new tensor.
             robust_key (bool, optional): if ``True`` (default), uses robust key encoding that safely
                 handles keys with path separators and special characters. If ``False``,
@@ -2133,7 +2129,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 storage.
             shape (torch.Size or equivalent, torch.Tensor for nested tensors): the shape of the tensor to write.
 
-        Keyword arguments:
+        Keyword Arguments:
             dtype (torch.dtype, optional): the dtype of the new tensor.
             robust_key (bool, optional): if ``True`` (default), uses robust key encoding that safely
                 handles keys with path separators and special characters. If ``False``,
@@ -2168,7 +2164,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 exception is raised.
             tensor (torch.Tensor): the tensor to replicate on physical memory.
 
-        Keyword arguments:
+        Keyword Arguments:
             copy_data (bool, optionaL): if ``False``, the new tensor will share the metadata of the input such as
                 shape and dtype, but the content will be empty. Defaults to ``True``.
             robust_key (bool, optional): if ``True`` (default), uses robust key encoding that safely
@@ -3491,7 +3487,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 key=keyfunc,
             )
         else:
-
             if is_leaf is None:
                 is_leaf = _default_is_leaf
 
@@ -3574,7 +3569,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             for _, value in self.items(include_nested, leaves_only, is_leaf, sort=sort):
                 yield value
         else:
-
             if is_leaf is None:
                 is_leaf = _default_is_leaf
 
@@ -4269,8 +4263,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             is_leaf = _default_is_leaf
         for key, item in self.items():
             if (
-                not call_on_nested
-                and not is_leaf(type(item))
+                not call_on_nested and not is_leaf(type(item))
                 # and not is_non_tensor(item)
             ):
                 if default is not NO_DEFAULT:
@@ -4393,7 +4386,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 result._tensordict[key] = item_trsf
 
         else:
-
             local_inplace = BEST_ATTEMPT_INPLACE if inplace else False
 
             def setter(
@@ -4418,7 +4410,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         for i, (key, local_future) in enumerate(
             _zip_strict(self.keys(), local_futures)
         ):
-
             if isinstance(local_future, list):
                 # We can't make this a future as it could cause deadlocks:
                 #  If we put a future over the root and this triggers another
@@ -4628,8 +4619,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         for key, item in self.items():
             if (
-                not call_on_nested
-                and not is_leaf(type(item))
+                not call_on_nested and not is_leaf(type(item))
                 # and not is_non_tensor(item)
             ):
                 if default is not NO_DEFAULT:
