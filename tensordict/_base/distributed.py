@@ -25,7 +25,7 @@ from tensordict.base import (
     Self,
     T,
 )
-from tensordict.utils import int_generator
+from tensordict.utils import _int_generator
 from torch import Tensor
 
 if TYPE_CHECKING:
@@ -273,7 +273,7 @@ class _Distributed:
             if not pseudo_rand:
                 _tag += 1
             else:
-                _tag = int_generator(_tag + 1)
+                _tag = _int_generator(_tag + 1)
             if group_dst is not None:
                 # Direct backend call: works for raw (unregistered) groups,
                 # which the functional API rejects.
@@ -423,7 +423,7 @@ class _Distributed:
             if not pseudo_rand:
                 _tag += 1
             else:
-                _tag = int_generator(_tag + 1)
+                _tag = _int_generator(_tag + 1)
             if group_src is not None:
                 # Direct backend call: works for raw (unregistered) groups,
                 # which the functional API rejects.
@@ -771,7 +771,7 @@ class _Distributed:
             if not pseudo_rand:
                 _tag += 1
             else:
-                _tag = int_generator(_tag + 1)
+                _tag = _int_generator(_tag + 1)
             if group_dst is not None:
                 # Direct backend call: works for raw (unregistered) groups,
                 # which the functional API rejects.
@@ -881,7 +881,7 @@ class _Distributed:
             if not pseudo_rand:
                 _tag += 1
             else:
-                _tag = int_generator(_tag + 1)
+                _tag = _int_generator(_tag + 1)
             if group_src is not None:
                 # Direct backend call: works for raw (unregistered) groups,
                 # which the functional API rejects.

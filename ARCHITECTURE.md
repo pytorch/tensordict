@@ -67,7 +67,7 @@ Persistence and serialization:
   h5py) and a zarr backend (`_ZarrBackend`).
 - `_utils_key_json.py`: encodes keys into file names, and selects the JSON
   backend (`json` or `orjson`).
-- `tabular.py`: pandas, CSV, Parquet and JSON import and export.
+- `_tabular.py`: pandas, CSV, Parquet and JSON import and export.
 - `_datasets.py`: `to_mds`, which writes a MosaicML streaming dataset.
 
 Typed containers:
@@ -122,7 +122,7 @@ Options and utilities:
   name, and `test_deprecation_deadlines` fails once `version.txt` reaches it.
 - `_ucxx.py`: `TensorDictPipe` and `TensorDictServer`, transport over UCXX.
 - `prototype/fx.py`: `symbolic_trace` for tensordict modules.
-- `testing.py`: tensorclasses that the distributed tests import by name.
+- `_testing.py`: tensorclasses that the distributed tests import by name.
 
 `tensordict` is pure Python. `_C/` keeps the module path `tensordict._C`,
 which was a C++ extension, as a deprecated re-export of the nested-key

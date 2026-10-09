@@ -40,6 +40,7 @@ from tensordict import (
     unpack_memmap,
 )
 from tensordict._archive import _ArchiveReader
+from tensordict._indexing import convert_ellipsis_to_idx
 from tensordict._lazy import _CustomOpTensorDict
 from tensordict._td import _str_to_index, _SubTensorDict, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
@@ -52,7 +53,6 @@ from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
     assert_allclose_td,
-    convert_ellipsis_to_idx,
     is_non_tensor,
     set_lazy_legacy,
 )
@@ -2260,18 +2260,17 @@ class TestTensorDicts(TestTensorDictsBase):
             td_stack[key]
         if dim in (0, -5):
             # this will work if stack_dim is 0 (or equivalently -self.batch_dims)
-            # it is the proper way to get that entry
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                td_stack.get_nestedtensor(key)
+                td_stack._get_nestedtensor(key)
         else:
-            # if the stack_dim is not zero, then calling get_nestedtensor is disallowed
+            # if the stack_dim is not zero, then calling _get_nestedtensor is disallowed
             with pytest.raises(
                 RuntimeError,
                 match="LazyStackedTensorDict.get_nestedtensor can only be called "
                 "when the stack_dim is 0.",
             ):
-                td_stack.get_nestedtensor(key)
+                td_stack._get_nestedtensor(key)
         with pytest.raises(
             RuntimeError, match="Failed to stack tensors within a tensordict"
         ):

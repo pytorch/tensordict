@@ -9,6 +9,7 @@ import os
 import warnings
 from typing import Any
 
+from tensordict._deprecation import warn_deprecated
 from torch.utils._contextlib import _DecoratorContextManager
 
 __all__ = [
@@ -173,18 +174,38 @@ def _legacy_lazy(func):
     return func
 
 
+def _warn_capture_non_tensor_stack(what: str, stacklevel: int) -> None:
+    warn_deprecated(
+        what,
+        removal="0.17",
+        replacement="NonTensorStack.data to get the single value of a stack of identical values",
+        stacklevel=stacklevel + 1,
+    )
+
+
 _DEFAULT_CAPTURE_NONTENSOR_STACK = False
 _CAPTURE_NONTENSOR_STACK = os.environ.get("CAPTURE_NONTENSOR_STACK")
+if _CAPTURE_NONTENSOR_STACK is not None and _CAPTURE_NONTENSOR_STACK.lower() in (
+    "y",
+    "yes",
+    "t",
+    "true",
+    "on",
+    "1",
+):
+    _warn_capture_non_tensor_stack(
+        f"CAPTURE_NONTENSOR_STACK={_CAPTURE_NONTENSOR_STACK}", stacklevel=1
+    )
 
 
-class set_capture_non_tensor_stack(_DecoratorContextManager):
-    """Controls whether identical non-tensor data should be captured when stacked."""
+class _set_capture_non_tensor_stack(_DecoratorContextManager):
+    # Sets the capture mode without warning: tensordict uses it internally.
 
     def __init__(self, mode: bool) -> None:
         super().__init__()
         self.mode = mode
 
-    def clone(self) -> set_capture_non_tensor_stack:
+    def clone(self) -> _set_capture_non_tensor_stack:
         return type(self)(self.mode)
 
     def __enter__(self) -> None:
@@ -200,6 +221,31 @@ class set_capture_non_tensor_stack(_DecoratorContextManager):
         global _CAPTURE_NONTENSOR_STACK
         _CAPTURE_NONTENSOR_STACK = self._old_mode
         os.environ["CAPTURE_NONTENSOR_STACK"] = str(_CAPTURE_NONTENSOR_STACK)
+
+
+class set_capture_non_tensor_stack(_set_capture_non_tensor_stack):
+    """Controls whether identical non-tensor data should be captured when stacked.
+
+    .. deprecated:: 0.15
+        Capturing identical non-tensor data (``set_capture_non_tensor_stack(True)``
+        or ``CAPTURE_NONTENSOR_STACK=1``) is deprecated and will be removed in
+        TensorDict 0.17. Use :attr:`NonTensorStack.data <tensordict.NonTensorStack.data>`
+        to get the single value of a stack of identical values.
+        ``set_capture_non_tensor_stack(False)``, the default, does not warn.
+    """
+
+    def __init__(self, mode: bool) -> None:
+        super().__init__(mode)
+        if mode:
+            _warn_capture_non_tensor_stack(
+                "set_capture_non_tensor_stack(True)", stacklevel=2
+            )
+
+    def clone(self) -> set_capture_non_tensor_stack:
+        # used for each call of a decorated function: only the decorator warns
+        clone = type(self).__new__(type(self))
+        clone.mode = self.mode
+        return clone
 
 
 def capture_non_tensor_stack(allow_none=False):
@@ -220,18 +266,36 @@ def capture_non_tensor_stack(allow_none=False):
     )
 
 
+def _warn_list_to_stack(what: str, stacklevel: int) -> None:
+    warn_deprecated(
+        what,
+        removal="0.17",
+        replacement="td.set_non_tensor(key, value) to store a list as one value",
+        stacklevel=stacklevel + 1,
+    )
+
+
 _DEFAULT_LIST_TO_STACK = "1"
 _LIST_TO_STACK = os.environ.get("LIST_TO_STACK")
+if _LIST_TO_STACK is not None and _LIST_TO_STACK.lower() in (
+    "n",
+    "no",
+    "f",
+    "false",
+    "off",
+    "0",
+):
+    _warn_list_to_stack(f"LIST_TO_STACK={_LIST_TO_STACK}", stacklevel=1)
 
 
-class set_list_to_stack(_DecoratorContextManager):
-    """Context manager and decorator to control list handling in TensorDict."""
+class _set_list_to_stack(_DecoratorContextManager):
+    # Sets the list-to-stack mode without warning.
 
     def __init__(self, mode: bool) -> None:
         super().__init__()
         self.mode = mode
 
-    def clone(self) -> set_list_to_stack:
+    def clone(self) -> _set_list_to_stack:
         return type(self)(self.mode)
 
     def __enter__(self) -> None:
@@ -247,6 +311,29 @@ class set_list_to_stack(_DecoratorContextManager):
         global _LIST_TO_STACK
         _LIST_TO_STACK = self._old_mode
         os.environ["LIST_TO_STACK"] = str(_LIST_TO_STACK)
+
+
+class set_list_to_stack(_set_list_to_stack):
+    """Context manager and decorator to control list handling in TensorDict.
+
+    .. deprecated:: 0.15
+        Turning list-to-stack conversion off (``set_list_to_stack(False)`` or
+        ``LIST_TO_STACK=0``) is deprecated and will be removed in TensorDict 0.17.
+        Use :meth:`td.set_non_tensor(key, value) <tensordict.TensorDictBase.set_non_tensor>`
+        to store a list as one value. ``set_list_to_stack(True)``, the default,
+        does not warn.
+    """
+
+    def __init__(self, mode: bool) -> None:
+        super().__init__(mode)
+        if not mode:
+            _warn_list_to_stack("set_list_to_stack(False)", stacklevel=2)
+
+    def clone(self) -> set_list_to_stack:
+        # used for each call of a decorated function: only the decorator warns
+        clone = type(self).__new__(type(self))
+        clone.mode = self.mode
+        return clone
 
 
 def list_to_stack(allow_none=False):

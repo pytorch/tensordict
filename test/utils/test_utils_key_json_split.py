@@ -5,14 +5,20 @@
 
 import importlib
 
+import pytest
+
 
 def test_utils_key_json_import_paths_are_preserved():
     utils_module = importlib.import_module("tensordict.utils")
     helper_module = importlib.import_module("tensordict._utils_key_json")
 
     for name in helper_module.__all__:
-        assert getattr(utils_module, name) is getattr(helper_module, name)
-        assert getattr(utils_module, name).__module__ == "tensordict.utils"
+        if name.startswith("_"):
+            assert getattr(utils_module, name) is getattr(helper_module, name)
+        else:
+            # The JSON backend helpers are deprecated in tensordict.utils.
+            with pytest.warns(DeprecationWarning, match=f"tensordict.utils.{name}"):
+                assert getattr(utils_module, name) is getattr(helper_module, name)
 
 
 def test_filesystem_key_roundtrip_and_default():
@@ -32,11 +38,11 @@ def test_filesystem_key_roundtrip_and_default():
 
 
 def test_json_backend_roundtrip():
-    utils_module = importlib.import_module("tensordict.utils")
-    utils_module.set_json_backend("json")
-    assert utils_module.get_json_backend().__name__ == "json"
+    helper_module = importlib.import_module("tensordict._utils_key_json")
+    helper_module.set_json_backend("json")
+    assert helper_module.get_json_backend().__name__ == "json"
 
-    data = utils_module.json_dumps({"a": [1, 2]}, separators=(",", ":"))
+    data = helper_module.json_dumps({"a": [1, 2]}, separators=(",", ":"))
     if isinstance(data, bytes):
         data = data.decode()
     assert data == '{"a":[1,2]}'

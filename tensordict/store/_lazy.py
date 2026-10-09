@@ -19,6 +19,7 @@ import weakref
 from typing import Any, Callable, Sequence, Tuple, Type
 
 import torch
+from tensordict._deprecation import deprecated
 from tensordict._indexing import _as_tuple, _getitem_batch_size, convert_ellipsis_to_idx
 from tensordict._td import (
     _TensorDictKeysView,
@@ -52,10 +53,10 @@ from tensordict.store._utils import (
 )
 from tensordict.utils import (
     _as_context_manager,
+    _erase_cache_first,
     _KEY_ERROR,
+    _lock_blocked,
     _LOCK_ERROR,
-    erase_cache,
-    lock_blocked,
     NestedKey,
     unravel_key,
 )
@@ -326,7 +327,7 @@ class _StoreStackElementView(TensorDictBase):
             sort=sort,
         )
 
-    @lock_blocked
+    @_lock_blocked
     def del_(self, key: NestedKey) -> _StoreStackElementView:
         raise RuntimeError(
             "Cannot delete keys from a stack element view. "
@@ -347,7 +348,7 @@ class _StoreStackElementView(TensorDictBase):
     def _propagate_lock(self, lock_parents_weakrefs=None, *, is_compiling):
         self._is_locked = True
 
-    @erase_cache
+    @_erase_cache_first
     def _propagate_unlock(self):
         self._is_locked = False
         self._is_shared = False
@@ -367,6 +368,11 @@ class _StoreStackElementView(TensorDictBase):
             d[parts[-1]] = tensor
         return TensorDict(source, batch_size=self._batch_size, device=self._device)
 
+    @deprecated(
+        "LazyStackedTensorDictStore[i].to_local()",
+        removal="0.17",
+        replacement="to_tensordict()",
+    )
     def to_local(self) -> TensorDict:
         return self.to_tensordict()
 
@@ -382,7 +388,7 @@ class _StoreStackElementView(TensorDictBase):
     def detach_(self) -> Self:
         return self
 
-    @lock_blocked
+    @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         raise RuntimeError("Cannot popitem from a stack element view.")
 
@@ -1682,7 +1688,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
             sort=sort,
         )
 
-    @lock_blocked
+    @_lock_blocked
     def del_(self, key: NestedKey) -> LazyStackedTensorDictStore:
         if isinstance(key, str):
             key_path = key
@@ -1769,7 +1775,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
             lock_parents_weakrefs = list(lock_parents_weakrefs)
             lock_parents_weakrefs.append(weakref.ref(self))
 
-    @erase_cache
+    @_erase_cache_first
     def _propagate_unlock(self):
         self._is_locked = False
         self._is_shared = False
@@ -1778,7 +1784,17 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     # ---- Materialization ----
 
+    @deprecated(
+        "LazyStackedTensorDictStore.to_local()",
+        removal="0.17",
+        replacement="to_tensordict()",
+    )
     def to_local(self) -> TensorDict:
+        """Pulls the whole store into a local ``TensorDict``.
+
+        .. deprecated:: 0.15
+            Use :meth:`to_tensordict` instead.
+        """
         return self.to_tensordict()
 
     def contiguous(self, *, canonical: bool = False) -> TensorDict:
@@ -1978,7 +1994,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
     def detach_(self) -> Self:
         return self
 
-    @lock_blocked
+    @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         keys_list = list(self.keys())
         if not keys_list:
@@ -2175,31 +2191,31 @@ class LazyStackedTensorDictStore(TensorDictBase):
     def _view(self, *args, **kwargs):
         raise RuntimeError(
             f"Cannot call `view` on a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
     def _transpose(self, dim0, dim1):
         raise RuntimeError(
             f"Cannot call `transpose` on a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
     def _permute(self, *args, **kwargs):
         raise RuntimeError(
             f"Cannot call `permute` on a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
     def _squeeze(self, dim=None):
         raise RuntimeError(
             f"Cannot call `squeeze` on a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
     def _unsqueeze(self, dim: int):
         raise RuntimeError(
             f"Cannot call `unsqueeze` on a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
