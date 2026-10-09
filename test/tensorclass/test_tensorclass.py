@@ -33,6 +33,7 @@ from _utils_internal import is_npu_available
 
 from tensordict import (
     assert_allclose_td,
+    get_defaults_to_none,
     is_tensorclass,
     lazy_legacy,
     LazyStackedTensorDict,
@@ -40,6 +41,7 @@ from tensordict import (
     MetaData,
     NonTensorData,
     set_capture_non_tensor_stack,
+    set_get_defaults_to_none,
     set_list_to_stack,
     tensorclass,
     TensorClass,
@@ -477,6 +479,27 @@ class TestTensorClass:
 
         assert data.get_at(("td", "missing"), 0, "else") == "else"
         assert data.get_at(("td", "missing"), 0) is None
+
+    @pytest.mark.parametrize("defaults_to_none", [True, False])
+    def test_get_default_set_get_defaults_to_none(self, defaults_to_none):
+        @tensorclass
+        class Data:
+            a: torch.Tensor
+
+        data = Data(a=torch.zeros(3), batch_size=[3])
+        set_back = get_defaults_to_none()
+        try:
+            set_get_defaults_to_none(defaults_to_none)
+            if defaults_to_none:
+                assert data.get("b") is None
+                assert data.get_at("b", 0) is None
+            else:
+                with pytest.raises(AttributeError):
+                    data.get("b")
+                with pytest.raises(AttributeError):
+                    data.get_at("b", 0)
+        finally:
+            set_get_defaults_to_none(set_back)
 
     def test_backward(self):
         @tensorclass
