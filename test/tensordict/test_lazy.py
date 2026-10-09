@@ -396,6 +396,27 @@ class TestLazyStackedTensorDict:
         assert len(keys) == len(list(keys))
         assert len(keys) == len(td.keys(include_nested, leaves_only))
 
+    @pytest.mark.parametrize("include_nested", [False, True])
+    @pytest.mark.parametrize("leaves_only", [False, True])
+    def test_keys_heterogeneous_nested(self, include_nested, leaves_only):
+        # A sub-tensordict that only one member has is not a key of the stack
+        td0 = TensorDict(
+            a=torch.zeros(3),
+            nested0=TensorDict(b=torch.zeros(3, 1), batch_size=[3]),
+            batch_size=[3],
+        )
+        td1 = TensorDict(
+            a=torch.zeros(3),
+            nested1=TensorDict(c=torch.zeros(3, 2), batch_size=[3]),
+            batch_size=[3],
+        )
+        stack = lazy_stack([td0, td1])
+        keys = stack.keys(include_nested, leaves_only)
+        assert list(keys) == ["a"]
+        assert len(keys) == 1
+        assert len(list(stack.values(include_nested, leaves_only))) == 1
+        assert [key for key, _ in stack.items(include_nested, leaves_only)] == ["a"]
+
     @pytest.mark.parametrize("ragged", [False, True])
     def test_arithmetic_ops(self, ragged):
         td0 = LazyStackedTensorDict(
