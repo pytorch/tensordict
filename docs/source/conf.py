@@ -89,13 +89,6 @@ except ImportError:
 if not _has_zarr:
     sphinx_gallery_conf["ignore_pattern"] = r"zarr_storage\.py"
 
-# sphinx_gallery_conf = {
-#     "examples_dirs": "../../gallery/",  # path to your example scripts
-#     "gallery_dirs": "auto_examples",  # path to where to save gallery generated output
-#     "backreferences_dir": "gen_modules/backreferences",
-#     "doc_module": ("tensordict",),
-# }
-
 napoleon_use_ivar = True
 napoleon_numpy_docstring = False
 napoleon_google_docstring = True

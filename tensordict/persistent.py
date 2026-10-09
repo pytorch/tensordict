@@ -1265,15 +1265,6 @@ class PersistentTensorDict(TensorDictBase):
                 ) from err
         sub_td.update(value, inplace=True)
 
-    @cache  # noqa: B019
-    def _valid_keys(self):
-        keys = []
-        for key in self._backend.keys(self.file):
-            metadata = self._get_metadata(key)
-            if not metadata.get("non_tensor"):
-                keys.append(key)
-        return keys
-
     # @cache  # noqa: B019
     def keys(
         self,
@@ -1299,11 +1290,6 @@ class PersistentTensorDict(TensorDictBase):
         """Iterates over the metadata of the PersistentTensorDict."""
         for key in self.keys(include_nested, leaves_only):
             yield (key, self._get_metadata(key))
-
-    def _values_metadata(self, include_nested=False, leaves_only=False):
-        """Iterates over the metadata of the PersistentTensorDict."""
-        for key in self.keys(include_nested, leaves_only):
-            yield self._get_metadata(key)
 
     def _change_batch_size(self, value):
         raise NotImplementedError

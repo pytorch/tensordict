@@ -27,6 +27,8 @@ repos:
       - id: flake8
         name: torchfix
         args: [--select=TOR, "--per-file-ignores=test_*.py:TOR101"]
+        types: [file]
+        types_or: [python, pyi]
         additional_dependencies:
           - torchfix==0.5.0
 

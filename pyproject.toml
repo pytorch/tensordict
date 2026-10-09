@@ -55,8 +55,9 @@ ignore = [
 "tensordict/nn/functional_modules.py" = ["D103"]
 # pydocstyle checked the .py files of tensordict/ only
 "!tensordict/**" = ["D"]
-# flake8 and pydocstyle did not check the stubs (black formatted them)
-"*.pyi" = ["ALL"]
+# Stubs: pydocstyle and usort did not check them, and `from x import y`
+# re-exports names that pyflakes sees as unused.
+"*.pyi" = ["D", "I", "F401"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -91,7 +92,6 @@ dependencies = [
     "numpy",
     "cloudpickle",
     "packaging",
-    "importlib_metadata",
     # orjson fails to be installed in python 3.13t
     'orjson ; python_version < "3.13"',
     "pyvers (>=0.2.0,<0.3.0)",
@@ -124,7 +124,7 @@ onnx = ["onnx", "onnxscript", "onnxruntime"]
 include-package-data = false
 
 [tool.setuptools.packages.find]
-exclude = ["test*", "tutorials*", "packaging*", "gallery*", "docs*", "benchmarks*"]
+exclude = ["test*", "tutorials*", "packaging*", "docs*", "benchmarks*"]
 
 #[tool.setuptools.extension]
 #my_extension = { sources = ["tensordict/csrc/pybind.cpp", "tensordict/csrc/utils.cpp"] }

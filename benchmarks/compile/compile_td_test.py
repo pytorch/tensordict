@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
-import sys
 
 import pytest
 import torch
@@ -13,11 +12,6 @@ from torch.utils._pytree import tree_map
 from packaging import version
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
-
-pytestmark = pytest.mark.skipif(
-    sys.version_info >= (3, 14),
-    reason="torch.compile is not supported on python 3.14+ ",
-)
 
 
 @tensorclass

@@ -3434,10 +3434,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
     def _get_all_keys(self) -> set[str]:
         return self._run_sync(self._aget_all_keys())
 
-    async def _aget_key_meta(self, key_path: str) -> dict[str, str]:
-        raw = await self._client.hgetall(self._meta_key(key_path))
-        return _decode_meta(raw)
-
     async def _aget_metadata_batch(
         self, key_paths: list[str]
     ) -> dict[str, tuple[list[int], torch.dtype]]:
@@ -3601,40 +3597,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
             self._meta_cache[key_path] = (full_shape, dtype)
 
     # ---- element access (reads) ----
-
-    async def _aget_element_tensor(
-        self, key_path: str, element_idx: int
-    ) -> torch.Tensor:
-        """Fetch a single stack element's tensor for one key."""
-        meta = await self._aget_key_meta(key_path)
-        dtype = _str_to_dtype(meta["dtype"])
-        homogeneous = self._is_key_homogeneous(meta)
-
-        if homogeneous:
-            full_shape = json.loads(meta["shape"])
-            elem_shape = full_shape[1:]
-            row_bytes = self._row_bytes(elem_shape, dtype)
-            pos = _normalize_index(element_idx, self._count)
-            offset = pos * row_bytes
-            data = await self._client.getrange(
-                self._data_key(key_path), offset, offset + row_bytes - 1
-            )
-            tensor = _bytes_to_tensor(data, elem_shape, dtype)
-        else:
-            # Read offsets
-            pos = _normalize_index(element_idx, self._count)
-            off_data = await self._client.getrange(
-                self._idx_key(key_path), pos * 8, (pos + 2) * 8 - 1
-            )
-            start, end = struct.unpack("<2q", off_data)
-            data = await self._client.getrange(self._data_key(key_path), start, end - 1)
-            shapes = json.loads(meta["shapes"])
-            elem_shape = shapes[pos]
-            tensor = _bytes_to_tensor(data, elem_shape, dtype)
-
-        if self._device is not None:
-            tensor = tensor.to(self._device)
-        return tensor
 
     async def _abatch_get_element(self, element_idx: int) -> dict[str, torch.Tensor]:
         """Pipelined fetch of all keys for a single stack element."""
