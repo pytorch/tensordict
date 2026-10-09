@@ -377,7 +377,7 @@ class TestNonTensorData:
         else:
             index = torch.tensor([[2, 0, 1], [1, 1, 0]])
         expected = torch.gather(torch.tensor(values), dim, index)
-        with set_capture_non_tensor_stack(capture):
+        with _set_capture_non_tensor_stack(capture):
             if layout == "lazy":
                 td = lazy_stack(
                     [
