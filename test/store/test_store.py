@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import functools
 import importlib
 import pickle
 
@@ -20,6 +21,9 @@ _has_redis = importlib.util.find_spec("redis", None) is not None
 _BACKEND_PORTS = {"redis": 6379, "dragonfly": 6380}
 
 
+# Probe each server once: redis-py retries a refused connection for about
+# 5 s, and the backend fixture runs for every store test.
+@functools.cache
 def _server_available(host: str, port: int) -> bool:
     """Check if a Redis-protocol server is reachable at *host*:*port*."""
     if not _has_redis:
