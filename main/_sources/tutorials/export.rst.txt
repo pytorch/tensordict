@@ -125,7 +125,7 @@ Let us run this model and see what the output looks like:
 
  .. code-block:: none
 
-    (tensor([[0.0000, 0.4245, 0.5363, 0.0000]], grad_fn=<ReluBackward0>), tensor([[-0.8639,  0.3866,  0.0618, -0.6701]], grad_fn=<AddmmBackward0>), tensor([[-0.8639,  0.3866]], grad_fn=<SplitBackward0>), tensor([[1.0393, 0.6335]], grad_fn=<ClampMinBackward0>))
+    (tensor([[0.0000, 1.2107, 0.6680, 0.3857]], grad_fn=<ReluBackward0>), tensor([[ 0.0739, -0.0431, -0.1584,  0.3624]], grad_fn=<AddmmBackward0>), tensor([[ 0.0739, -0.0431]], grad_fn=<SplitBackward0>), tensor([[0.9034, 1.2425]], grad_fn=<ClampMinBackward0>))
 
 
 
@@ -249,8 +249,8 @@ This module can be run exactly like our original module (with a lower overhead):
 
  .. code-block:: none
 
-    Time for TDModule:  344.28 micro-seconds
-    Time for exported module:  299.93 micro-seconds
+    Time for TDModule:  320.91 micro-seconds
+    Time for exported module:  291.11 micro-seconds
 
 
 
@@ -284,7 +284,7 @@ and the FX graph:
             # File: /__w/tensordict/tensordict/env/lib/python3.12/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
             linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_module_2_module_weight, p_module_2_module_bias);  p_module_2_module_weight = p_module_2_module_bias = None
 
-            # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:83 in forward, code: loc, scale = tensor.chunk(2, -1)
+            # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:71 in forward, code: loc, scale = tensor.chunk(2, -1)
             chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
             getitem: "f32[1, 2]" = chunk[0]
             getitem_1: "f32[1, 2]" = chunk[1];  chunk = None
@@ -294,7 +294,7 @@ and the FX graph:
             softplus: "f32[1, 2]" = torch.ops.aten.softplus.default(add);  add = None
             add_1: "f32[1, 2]" = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
 
-            # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:84 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
+            # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:72 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
             clamp_min: "f32[1, 2]" = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
             return (relu, linear_1, getitem, clamp_min)
 
@@ -309,7 +309,7 @@ and the FX graph:
             # File: /__w/tensordict/tensordict/env/lib/python3.12/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
             linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_module_2_module_weight, p_module_2_module_bias);  p_module_2_module_weight = p_module_2_module_bias = None
 
-            # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:83 in forward, code: loc, scale = tensor.chunk(2, -1)
+            # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:71 in forward, code: loc, scale = tensor.chunk(2, -1)
             chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
             getitem: "f32[1, 2]" = chunk[0]
             getitem_1: "f32[1, 2]" = chunk[1];  chunk = None
@@ -319,7 +319,7 @@ and the FX graph:
             softplus: "f32[1, 2]" = torch.ops.aten.softplus.default(add);  add = None
             add_1: "f32[1, 2]" = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
 
-            # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:84 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
+            # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:72 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
             clamp_min: "f32[1, 2]" = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
             return (relu, linear_1, getitem, clamp_min)
 
@@ -433,7 +433,7 @@ When an `x` input is provided, we expect our model to output a single tensor cor
 
  .. code-block:: none
 
-    tensor([[-0.8639,  0.3866]], grad_fn=<SplitBackward0>)
+    tensor([[ 0.0739, -0.0431]], grad_fn=<SplitBackward0>)
 
 
 
@@ -515,7 +515,7 @@ Next steps and further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.296 seconds)
+   **Total running time of the script:** (0 minutes 0.290 seconds)
 
 
 .. _sphx_glr_download_tutorials_export.py:
