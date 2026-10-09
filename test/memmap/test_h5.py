@@ -163,6 +163,38 @@ def test_kwargs_passthrough_nested(tmpdir):
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_kwargs_is_deprecated(tmpdir):
+    filename = Path(tmpdir) / "file.h5"
+    td = PersistentTensorDict(
+        filename=filename, batch_size=[3], mode="w", compression="gzip"
+    )
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"^PersistentTensorDict\.kwargs is deprecated and will be removed in "
+        r"TensorDict 0\.17\.$",
+    ) as record:
+        assert td.kwargs == {"compression": "gzip"}
+    assert record[0].filename == __file__
+    td["a"] = torch.zeros(3)
+    td["b", "c"] = torch.zeros(3, 2)
+    assert td.file["b/c"].compression == "gzip"
+    td.close()
+    td = PersistentTensorDict(
+        filename=filename, batch_size=[3], mode="r", compression="gzip"
+    )
+    # pickles made with TensorDict 0.14 store the dataset options under "kwargs"
+    state = td.__getstate__()
+    state["kwargs"] = state.pop("_dataset_kwargs")
+    loaded = PersistentTensorDict.__new__(PersistentTensorDict)
+    loaded.__setstate__(state)
+    assert "kwargs" not in vars(loaded)
+    assert loaded._dataset_kwargs == {"compression": "gzip"}
+    assert (loaded["b", "c"] == 0).all()
+    td.close()
+    loaded.close()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 class TestH5Indexing:
     @pytest.fixture
     def data(self, tmp_path):

@@ -467,6 +467,13 @@ def _get_item(tensor: Tensor, index: IndexType) -> Tensor:
         raise err
 
 
+def _cast_scalar(value, tensor):
+    """Return a Python scalar ``value`` as torch writes it into ``tensor``: in its dtype and on its device."""
+    if isinstance(value, Number) and isinstance(tensor, Tensor):
+        return torch.tensor(value, dtype=tensor.dtype, device=tensor.device)
+    return value
+
+
 def _set_item(
     tensor: Tensor, index: IndexType, value: Tensor, *, validated, non_blocking
 ) -> Tensor:
@@ -486,7 +493,7 @@ def _set_item(
         ):
             return tensor
         elif isinstance(tensor, NonTensorData):
-            tensor = NonTensorStack.from_nontensordata(tensor)
+            tensor = NonTensorStack._from_nontensordata(tensor)
         if tensor.stack_dim != 0:
             tensor = NonTensorStack(*tensor.unbind(0), stack_dim=0)
         tensor[index] = value
