@@ -3522,6 +3522,29 @@ class TestShadow:
         c.batch_size = 1
         assert c.batch_size == 1
 
+    def test_shadow_non_tensor_values(self):
+        # Non-tensor values are wrapped in NonTensorData, which must take the
+        # batch size and device of the TensorDict, not the shadowed fields.
+        @tensorclass(shadow=True, nocast=True)
+        class MyClass:
+            x: torch.Tensor
+            batch_size: Any
+            device: Any
+            name: str
+
+        c = MyClass(
+            torch.zeros(10, 4), batch_size=4, device="not-a-device", name="graph"
+        )
+        assert c.batch_size == 4
+        assert c.device == "not-a-device"
+        assert c.name == "graph"
+        assert c._tensordict.batch_size == torch.Size([])
+        assert c._tensordict.device is None
+        c.batch_size = 5
+        c.device = "other"
+        assert c.batch_size == 5
+        assert c.device == "other"
+
     def test_shadow_values_dec_subcls(self):
         @tensorclass(shadow=True)
         class MyClass:
