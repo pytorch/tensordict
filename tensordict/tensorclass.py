@@ -1447,6 +1447,7 @@ def _init_wrapper(
     can_init_non_tensor = (
         _is_non_tensor
         and not shadow
+        and not tensor_only
         and not _has_custom_setattr
         and all(
             field.init and field.default_factory is dataclasses.MISSING
@@ -2286,19 +2287,16 @@ def _getattr(self, item: str, **kwargs) -> Any:
     raise AttributeError(item)
 
 
+# Reads a field of a tensorclass instance, as the field branch of _getattr does.
+# Tensorclasses that are neither tensor_only nor shadow have one per field, so
+# that x.field does not first fail the normal attribute lookup and then go
+# through __getattr__. It defines no __set__, so an entry of the instance
+# __dict__ (which a custom __setattr__ can write with object.__setattr__) still
+# comes first. On the class it raises AttributeError, as the field had no class
+# attribute before: otherwise dataclass() would take it as the default of a
+# field that a subclass declares again. It has no docstring, so that Sphinx and
+# help() do not show one for every field.
 class _FieldGetter:
-    """Reads a field of a tensorclass instance, as the field branch of _getattr does.
-
-    Tensorclasses that are neither ``tensor_only`` nor ``shadow`` have one per
-    field, so that ``x.field`` does not first fail the normal attribute lookup
-    and then go through ``__getattr__``. It defines no ``__set__``, so an entry
-    of the instance ``__dict__`` (which a custom ``__setattr__`` can write with
-    ``object.__setattr__``) still comes first. On the class it raises
-    AttributeError, as the field had no class attribute before: otherwise
-    ``dataclass()`` would take it as the default of a field that a subclass
-    declares again.
-    """
-
     __slots__ = ("_check_shared", "_name")
 
     def __init__(self, name: str, check_shared: bool):
@@ -2309,7 +2307,9 @@ class _FieldGetter:
     def __get__(self, obj, objtype=None):
         name = self._name
         if obj is None:
-            raise AttributeError(name)
+            raise AttributeError(
+                f"type object {objtype.__name__!r} has no attribute {name!r}"
+            )
         _non_tensordict = obj._non_tensordict
         td = obj._tensordict
         if _non_tensordict and name in _non_tensordict and name not in td.keys():
