@@ -17,6 +17,7 @@ import weakref
 from typing import Any, Callable, Literal, Sequence, Tuple, Type, TYPE_CHECKING
 
 import torch
+from tensordict._deprecation import deprecated
 from tensordict._indexing import _as_tuple, _getitem_batch_size
 from tensordict._td import (
     _TensorDictKeysView,
@@ -225,7 +226,7 @@ class TensorDictStore(TensorDictBase):
         >>> td = TensorDictStore(batch_size=[100])
         >>> td["obs"] = torch.randn(100, 84)
         >>> td["obs"]  # fetched from the store
-        >>> local_td = td.to_local()
+        >>> local_td = td.to_tensordict()
         >>>
         >>> # Dragonfly backend (same wire protocol, up to 25x faster)
         >>> td = TensorDictStore(backend="dragonfly", host="dragonfly-host", batch_size=[100])
@@ -1831,10 +1832,16 @@ class TensorDictStore(TensorDictBase):
             names=self._maybe_names(),
         )
 
+    @deprecated(
+        "TensorDictStore.to_local()", removal="0.17", replacement="to_tensordict()"
+    )
     def to_local(self) -> TensorDict:
         """Pull the entire Redis-backed dict into local RAM.
 
         Alias for :meth:`to_tensordict`.
+
+        .. deprecated:: 0.15
+            Use :meth:`to_tensordict` instead.
         """
         return self.to_tensordict()
 
@@ -2494,31 +2501,31 @@ class TensorDictStore(TensorDictBase):
     def _view(self, *args, **kwargs):
         raise RuntimeError(
             f"Cannot call `view` on a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
     def _transpose(self, dim0, dim1):
         raise RuntimeError(
             f"Cannot call `transpose` on a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
     def _permute(self, *args, **kwargs):
         raise RuntimeError(
             f"Cannot call `permute` on a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
     def _squeeze(self, dim=None):
         raise RuntimeError(
             f"Cannot call `squeeze` on a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
     def _unsqueeze(self, dim: int):
         raise RuntimeError(
             f"Cannot call `unsqueeze` on a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
@@ -2530,7 +2537,7 @@ class TensorDictStore(TensorDictBase):
     def share_memory_(self):
         raise NotImplementedError(
             f"Cannot call share_memory_ on a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
     def _memmap_(
@@ -2548,7 +2555,7 @@ class TensorDictStore(TensorDictBase):
     ):
         raise RuntimeError(
             f"Cannot call memmap on a {type(self).__name__} in-place. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
     def make_memmap(self, key, shape, *, dtype=None, robust_key=True):
@@ -2588,7 +2595,7 @@ class TensorDictStore(TensorDictBase):
     def pin_memory(self, *args, **kwargs):
         raise RuntimeError(
             f"Cannot pin memory of a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` before making this call."
+            "Call `to_tensordict()` before making this call."
         )
 
     def _add_batch_dim(self, *, in_dim, vmap_level):
@@ -2601,13 +2608,13 @@ class TensorDictStore(TensorDictBase):
     def _select(self, *keys, inplace=False, strict=True, set_shared=True):
         raise NotImplementedError(
             f"Cannot call select on a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
     def _exclude(self, *keys, inplace=False, set_shared=True):
         raise NotImplementedError(
             f"Cannot call exclude on a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
     @_as_context_manager()
@@ -2647,7 +2654,7 @@ class TensorDictStore(TensorDictBase):
     def _stack_onto_(self, list_item, dim):
         raise RuntimeError(
             f"Cannot call _stack_onto_ on a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
 
