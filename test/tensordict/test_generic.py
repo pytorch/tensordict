@@ -2949,6 +2949,54 @@ class TestGeneric:
         with pytest.raises(NotImplementedError, match="unflatten"):
             lst.unflatten(0, (3, 1), inplace=True)
 
+    @pytest.mark.parametrize(
+        "op,call",
+        [
+            ("reshape", lambda td: td.reshape(3, 2, inplace=True)),
+            ("flatten", lambda td: td.flatten(inplace=True)),
+            ("unflatten", lambda td: td.unflatten(1, (3, 1), inplace=True)),
+            ("repeat", lambda td: td.repeat(2, 1, inplace=True)),
+            (
+                "repeat_interleave",
+                lambda td: td.repeat_interleave(2, dim=0, inplace=True),
+            ),
+            (
+                "gather",
+                lambda td: td.gather(
+                    1, torch.tensor([[2, 1, 0], [0, 2, 1]]), inplace=True
+                ),
+            ),
+        ],
+    )
+    @pytest.mark.parametrize("stack_type", ["non_tensor_stack", "lazy_stack"])
+    def test_inplace_shape_op_nested_lazy_stack_unchanged(self, op, call, stack_type):
+        # The tensor leaf "x" comes before the lazy entry "s" in key order, so
+        # a check that runs only when "s" is reached would rewrite "x" first.
+        if stack_type == "non_tensor_stack":
+            s = NonTensorStack.from_list([["a", "b", "c"], ["d", "e", "f"]])
+        else:
+            s = lazy_stack(
+                [
+                    TensorDict(y=torch.arange(3) + 10 * i, batch_size=[3])
+                    for i in range(2)
+                ]
+            )
+        td = TensorDict(x=torch.arange(6).view(2, 3), s=s, batch_size=[2, 3])
+        assert list(td.keys()) == ["x", "s"]
+        ref = td.clone()
+        with pytest.raises(NotImplementedError, match=rf"{op}\(inplace=True\)") as err:
+            call(td)
+        assert td.batch_size == torch.Size([2, 3])
+        assert torch.equal(td["x"], ref["x"])
+        assert td.get("s") is s
+        assert s.batch_size == torch.Size([2, 3])
+        if stack_type == "non_tensor_stack":
+            assert s.tolist() == ref.get("s").tolist()
+        else:
+            assert torch.equal(s["y"], ref["s", "y"])
+        assert "key 's'" in str(err.value)
+        assert "inplace=False" in str(err.value)
+
     @pytest.mark.parametrize("inplace", [True, False])
     def test_contiguous_inplace(self, inplace):
         # Build a TD whose leaf is a non-contiguous view of a larger tensor.

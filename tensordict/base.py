@@ -4841,6 +4841,38 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self._change_batch_size(torch.Size(new_batch_size))
         return self
 
+    def _raise_if_holds_lazy_stack(
+        self, op_name: str, prefix: tuple[str, ...] = ()
+    ) -> None:
+        """Raise if any nested entry is a lazy stack, before an in-place shape op.
+
+        ``_inplace_rebind_leaves`` rewrites the leaves in key order, and the
+        ``LazyStackedTensorDict`` (and ``NonTensorStack``) versions of
+        ``reshape``, ``flatten``, ``unflatten``, ``repeat``,
+        ``repeat_interleave`` and ``gather`` refuse ``inplace=True``. Finding a
+        lazy stack halfway through would leave the earlier leaves rewritten
+        while ``batch_size`` is unchanged, so the whole tree is checked first.
+        """
+        for key in self.keys():
+            value = self._get_str(key, default=None)
+            cls = type(value)
+            if not _is_tensor_collection(cls):
+                continue
+            if _is_tensorclass(cls):
+                if _is_non_tensor(cls):
+                    continue
+                value = value._tensordict
+            nested_key = prefix + (key,)
+            if value._lazy:
+                raise NotImplementedError(
+                    f"{op_name}(inplace=True) is not supported on a tensordict "
+                    f"that holds a lazy stack (LazyStackedTensorDict or "
+                    f"NonTensorStack); found one at key "
+                    f"{nested_key[0] if len(nested_key) == 1 else nested_key!r}. "
+                    f"Use inplace=False instead."
+                )
+            value._raise_if_holds_lazy_stack(op_name, nested_key)
+
     def map(
         self,
         fn: Callable[[TensorCollection], TensorCollection | None],
