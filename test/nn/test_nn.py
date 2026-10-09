@@ -3945,6 +3945,9 @@ class TestCompositeDist:
         assert sample.get(("nested", "cont_cdf")).requires_grad
 
     def test_icdf(self):
+        # The cdf-icdf round trip loses float32 precision far in the tails, and
+        # about 1% of unseeded draws land there and fail assert_close.
+        torch.manual_seed(0)
         params = TensorDict(
             {
                 "cont": {
