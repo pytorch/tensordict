@@ -62,6 +62,7 @@ from tensordict.nn.probabilistic import (
     set_interaction_type,
 )
 from tensordict.nn.utils import (
+    _dispatch_td_nn_modules,
     _set_dispatch_td_nn_modules,
     composite_lp_aggregate,
     set_composite_lp_aggregate,
@@ -1018,6 +1019,35 @@ class TestTDModule:
         # checks that things are back in place
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
         tdm(a=torch.zeros(1, 1))
+
+    def test_dispatch_deactivate_restores_mode(self):
+        # Leaving the block restores the previous mode, not the global
+        # _ContextManager object (#1948).
+        mode = _dispatch_td_nn_modules()
+        with _set_dispatch_td_nn_modules(not mode):
+            assert _dispatch_td_nn_modules() == (not mode)
+        assert _dispatch_td_nn_modules() == mode
+
+        tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
+        with _set_dispatch_td_nn_modules(True):
+            with _set_dispatch_td_nn_modules(False):
+                with _set_dispatch_td_nn_modules(True):
+                    assert _dispatch_td_nn_modules()
+                assert not _dispatch_td_nn_modules()
+                with pytest.raises(
+                    TypeError, match="missing 1 required positional argument"
+                ):
+                    tdm(a=torch.zeros(1, 1))
+
+            # A reused instance that changes nothing on entry restores nothing.
+            set_dispatch_off = _set_dispatch_td_nn_modules(False)
+            with set_dispatch_off:
+                assert not _dispatch_td_nn_modules()
+            with _set_dispatch_td_nn_modules(False):
+                with set_dispatch_off:
+                    pass
+                assert not _dispatch_td_nn_modules()
+        assert _dispatch_td_nn_modules() == mode
 
     def test_dispatch_deactivate_function(self):
         @dispatch(source=["a"], dest=["b"])

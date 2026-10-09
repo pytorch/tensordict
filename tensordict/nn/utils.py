@@ -429,8 +429,9 @@ class _set_dispatch_td_nn_modules(_DecoratorContextManager):
 
     def __enter__(self):
         # We want to avoid changing global variables because compile puts guards on them
+        self._saved_mode = None
         if _dispatch_tdnn_modules.get_mode() != self.mode:
-            self._saved_mode = _dispatch_tdnn_modules
+            self._saved_mode = _dispatch_tdnn_modules.get_mode()
             _dispatch_tdnn_modules.set_mode(self.mode)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
