@@ -10,7 +10,6 @@ In this tutorial you will learn how to take advantage of memory pre-allocation i
 ##############################################################################
 # Suppose that we have a function that returns a :class:`~.TensorDict`
 
-
 # sphinx_gallery_start_ignore
 import warnings
 

@@ -52,10 +52,10 @@ from tensordict.store._utils import (
 )
 from tensordict.utils import (
     _as_context_manager,
+    _erase_cache_first,
     _KEY_ERROR,
+    _lock_blocked,
     _LOCK_ERROR,
-    erase_cache,
-    lock_blocked,
     NestedKey,
     unravel_key,
 )
@@ -207,8 +207,7 @@ class _StoreStackElementView(TensorDictBase):
             )
         except (ValueError, TypeError):
             raise TypeError(
-                f"{type(self).__name__} only supports tensor values, "
-                f"got {type(value)}"
+                f"{type(self).__name__} only supports tensor values, got {type(value)}"
             )
         return self
 
@@ -327,7 +326,7 @@ class _StoreStackElementView(TensorDictBase):
             sort=sort,
         )
 
-    @lock_blocked
+    @_lock_blocked
     def del_(self, key: NestedKey) -> _StoreStackElementView:
         raise RuntimeError(
             "Cannot delete keys from a stack element view. "
@@ -348,7 +347,7 @@ class _StoreStackElementView(TensorDictBase):
     def _propagate_lock(self, lock_parents_weakrefs=None, *, is_compiling):
         self._is_locked = True
 
-    @erase_cache
+    @_erase_cache_first
     def _propagate_unlock(self):
         self._is_locked = False
         self._is_shared = False
@@ -383,7 +382,7 @@ class _StoreStackElementView(TensorDictBase):
     def detach_(self) -> Self:
         return self
 
-    @lock_blocked
+    @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         raise RuntimeError("Cannot popitem from a stack element view.")
 
@@ -1683,7 +1682,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
             sort=sort,
         )
 
-    @lock_blocked
+    @_lock_blocked
     def del_(self, key: NestedKey) -> LazyStackedTensorDictStore:
         if isinstance(key, str):
             key_path = key
@@ -1770,7 +1769,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
             lock_parents_weakrefs = list(lock_parents_weakrefs)
             lock_parents_weakrefs.append(weakref.ref(self))
 
-    @erase_cache
+    @_erase_cache_first
     def _propagate_unlock(self):
         self._is_locked = False
         self._is_shared = False
@@ -1979,7 +1978,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
     def detach_(self) -> Self:
         return self
 
-    @lock_blocked
+    @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         keys_list = list(self.keys())
         if not keys_list:

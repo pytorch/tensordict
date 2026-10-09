@@ -12,39 +12,25 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
 
-  - repo: https://github.com/omnilib/ufmt
-    rev: v2.7.0
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.10
     hooks:
-      - id: ufmt
-        additional_dependencies:
-          - black == 24.4.2
-          - usort == 1.0.3
-          - libcst == 0.4.7
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+        types_or: [python, pyi]
 
-  - repo: https://github.com/psf/black
-    rev: 24.4.2
-    hooks:
-      - id: black
-
+  # torchfix's PyTorch rules only run as a flake8 plugin
   - repo: https://github.com/pycqa/flake8
     rev: 7.1.0
     hooks:
       - id: flake8
-        args: [--config=setup.cfg]
+        name: torchfix
+        args: [--select=TOR, "--per-file-ignores=test_*.py:TOR101"]
         types: [file]
         types_or: [python, pyi]
         additional_dependencies:
-          - flake8-bugbear==22.10.27
-          - flake8-comprehensions==3.10.1
           - torchfix==0.5.0
-          - flake8-print==5.0.0
-#          - flake8-unused-arguments==0.0.13
-
-  - repo: https://github.com/PyCQA/pydocstyle
-    rev: 6.3.0
-    hooks:
-      - id: pydocstyle
-        files: ^tensordict/
 
   - repo: local
     hooks:
