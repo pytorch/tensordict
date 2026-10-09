@@ -68,6 +68,23 @@ def _as_tuple(index) -> tuple:
     return index if isinstance(index, tuple) else (index,)
 
 
+def _entry_index(index):
+    """Return ``index`` as tensordict reads it, for an entry indexed with it.
+
+    tensordict reads a bare index as a 1-tuple, where torch reads a bare list
+    as a tuple of indices (deprecated). It also rejects NumPy bool scalars, see
+    :func:`_read_element`.
+    """
+    if isinstance(index, (int, slice, torch.Tensor)):
+        # the most common indices, which need no change
+        return index
+    if isinstance(index, list):
+        return (index,)
+    for element in _as_tuple(index):
+        _read_element(element)
+    return index
+
+
 def _read_element(element):
     """Read an element of an index as torch does.
 

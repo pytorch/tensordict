@@ -42,7 +42,7 @@ from warnings import warn
 import numpy as np
 import torch
 from tensordict._contextlib import LAST_OP_MAPS
-from tensordict._indexing import _getitem_names, convert_ellipsis_to_idx
+from tensordict._indexing import _entry_index, _getitem_names, convert_ellipsis_to_idx
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
 from tensordict.memmap import MemoryMappedTensor
@@ -2485,7 +2485,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """
         key = _unravel_key_to_tuple(key)
         return self._set_at_tuple(
-            key, value, index, validated=False, non_blocking=non_blocking
+            key, value, _entry_index(index), validated=False, non_blocking=non_blocking
         )
 
     @abc.abstractmethod
@@ -2704,7 +2704,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         else:
             default = NO_DEFAULT
 
-        return self._get_at_tuple(key, index, default, **kwargs)
+        return self._get_at_tuple(key, _entry_index(index), default, **kwargs)
 
     def _get_at_str(self, key, idx, default, **kwargs):
         out = self._get_str(key, default, **kwargs)
