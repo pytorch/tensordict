@@ -248,6 +248,11 @@ CompatibleType = Tensor | TensorCollection
 
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
 
+_SELF_NESTING_ERROR = (
+    "Cannot set a tensordict inside itself (key {!r}): tensordicts that "
+    "contain themselves are not supported."
+)
+
 _HEURISTIC_EXCLUDED = (Tensor, tuple, list, set, dict, np.ndarray)
 
 if "TD_GET_DEFAULTS_TO_NONE" in os.environ:
@@ -9252,6 +9257,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> td.set("y", torch.ones(5), inplace=True) # raises an exception as shapes mismatch
 
         """
+        if item is self:
+            raise ValueError(_SELF_NESTING_ERROR.format(key))
         key = _unravel_key_to_tuple(key)
         # inplace is loose here, but for set_ it is constraining. We translate it
         # to None to tell _set_str and others to drop it if the key isn't found
