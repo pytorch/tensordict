@@ -1689,6 +1689,58 @@ class TestLazyStackedTensorDict:
         tensor = getattr(td, reduction)(dim="feature", reduce=True)
         assert tensor.shape == td.shape
 
+    @pytest.mark.parametrize("safe", [False, True])
+    @pytest.mark.parametrize("key,new_key", [("a", "c"), (("n", "x"), ("n", "y"))])
+    def test_rename_key_repeated_member(self, key, new_key, safe):
+        # A tensordict that is in the stack more than once is renamed once.
+        def make():
+            return TensorDict(
+                a=torch.zeros(3),
+                n=TensorDict(x=torch.zeros(3), batch_size=[3]),
+                batch_size=[3],
+            )
+
+        t, u = make(), make()
+        td = lazy_stack([t, t, u])
+        assert td.rename_key_(key, new_key, safe=safe) is td
+        for member in (td, t, u):
+            assert key not in member.keys(True)
+            assert new_key in member.keys(True)
+
+        # also when a nested lazy stack repeats it, or is repeated
+        t = make()
+        inner = lazy_stack([t, make()])
+        others = [t, make()]
+        td = lazy_stack([inner, inner, lazy_stack(others)])
+        td.rename_key_(key, new_key, safe=safe)
+        for member in (td, inner, *inner.tensordicts, *others):
+            assert key not in member.keys(True)
+            assert new_key in member.keys(True)
+
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize("error", ["safe", "missing", "locked"])
+    def test_rename_key_error_leaves_stack_unchanged(self, error, nested):
+        # A rename that raises renames the key in no member.
+        tds = [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(4)]
+        if error == "safe":
+            tds[-1]["c"] = torch.ones(3)
+            raises = pytest.raises(KeyError, match="key c already present")
+        elif error == "missing":
+            tds[-1] = TensorDict(b=torch.zeros(3), batch_size=[3])
+            raises = pytest.raises(KeyError, match='key "a" not found')
+        else:
+            tds[-1].lock_()
+            raises = pytest.raises(RuntimeError, match="Cannot modify locked")
+        if nested:
+            td = lazy_stack([lazy_stack(tds[:2]), lazy_stack(tds[2:])])
+        else:
+            td = lazy_stack(tds)
+        assert not td.is_locked
+        with raises:
+            td.rename_key_("a", "c", safe=error == "safe")
+        for member in tds[:-1]:
+            assert list(member.keys()) == ["a"]
+
     @set_list_to_stack(True)
     def test_set_list_stack(self):
         td = LazyStackedTensorDict(TensorDict(), TensorDict())
