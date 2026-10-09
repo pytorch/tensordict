@@ -505,7 +505,21 @@ def test_clone(benchmark, td):
     benchmark(td.clone)
 
 
-@pytest.mark.parametrize("index", ["int", "slice_int", "range", "tuple", "list"])
+@pytest.mark.parametrize(
+    "index",
+    [
+        "int",
+        "slice_int",
+        "range",
+        "tuple",
+        "list",
+        "tensor",
+        "mask",
+        "ellipsis",
+        "none",
+        "separated_tensors",
+    ],
+)
 def test_getitem(benchmark, td, c, index):
     if index == "int":
         index = 1
@@ -517,6 +531,16 @@ def test_getitem(benchmark, td, c, index):
         index = (2, 1)
     elif index == "list":
         index = [0, 1]
+    elif index == "tensor":
+        index = torch.tensor([0, 2])
+    elif index == "mask":
+        index = torch.tensor([True, False, True])
+    elif index == "ellipsis":
+        index = (..., 1)
+    elif index == "none":
+        index = (None, slice(None), 1)
+    elif index == "separated_tensors":
+        index = (torch.tensor([0, 2]), None, torch.tensor([1, 0]))
     else:
         raise NotImplementedError
 

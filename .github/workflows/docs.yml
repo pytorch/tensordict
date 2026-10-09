@@ -26,12 +26,12 @@ jobs:
         # The zarr tutorial needs zarr>=3, which requires Python>=3.11.
         python_version: ["3.12"]
         cuda_arch_version: ["12.8"]
-    runs-on: "mt-l-x86aavx2-11-41-a10g"
+    # The docs build uses the CPU build of torch and no GPU.
+    runs-on: "mt-l-x86iavx512-48-384"
     container:
       image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
     timeout-minutes: 120
     permissions:
-      id-token: write
       contents: read
     # setup_env.sh bootstraps and sources conda, so a login shell.
     defaults:
@@ -39,7 +39,6 @@ jobs:
         shell: bash -l {0}
     env:
       RUNNER_ARTIFACT_DIR: ${{ github.workspace }}/artifacts
-      RUNNER_DOCS_DIR: ${{ github.workspace }}/docs-preview
     steps:
       # Before checkout on purpose: actions/checkout needs git in the
       # container, and this image has none -- without it the checkout
@@ -55,7 +54,7 @@ jobs:
 
       - name: Build docs
         run: |
-          mkdir -p "${RUNNER_ARTIFACT_DIR}" "${RUNNER_DOCS_DIR}"
+          mkdir -p "${RUNNER_ARTIFACT_DIR}"
           set -e
           set -v
 
@@ -81,7 +80,7 @@ jobs:
           # Install tensordict runtime deps explicitly (except torch which is handled above),
           # then install tensordict without resolving dependencies to avoid any solver changing the
           # PyTorch build (stable vs nightly).
-          python -m pip install -U packaging pyvers importlib_metadata --quiet --root-user-action=ignore
+          python -m pip install -U packaging pyvers --quiet --root-user-action=ignore
 
           # Set up versioning environment (conditional on release branch/tag)
           export GITHUB_REF_TYPE=${{ github.ref_type }}
@@ -122,8 +121,12 @@ jobs:
           # Copy artifacts
           cp -r docs/build/html/* "${RUNNER_ARTIFACT_DIR}"
           echo $(ls "${RUNNER_ARTIFACT_DIR}")
-          if [[ ${{ github.event_name == 'pull_request' }} ]]; then
-            cp -r docs/build/html/* "${RUNNER_DOCS_DIR}"
+
+          # On pull requests, upload-docs-preview.yml reads this file and
+          # publishes the artifact to S3 as the docs preview. This job cannot:
+          # pull requests from forks get no OIDC token, so no AWS credentials.
+          if [[ ${{ github.event_name }} == pull_request ]]; then
+            echo "PR_NUMBER=${{ github.event.pull_request.number }}" > "${RUNNER_ARTIFACT_DIR}/pr-metadata.txt"
           fi
 
       - name: Upload docs artifact
@@ -132,32 +135,17 @@ jobs:
           name: docs
           path: ${{ github.workspace }}/artifacts
 
-      # Was linux_job_v3's "Upload documentation to S3" step, which is what
-      # puts a rendered preview on the pull request.
-      - name: Configure AWS credentials
-        if: ${{ github.event.pull_request.number != '' }}
-        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
-        with:
-          role-to-assume: arn:aws:iam::308535385114:role/arc
-          aws-region: us-east-1
-
-      - name: Upload docs preview to S3
-        if: ${{ github.event.pull_request.number != '' }}
-        uses: pytorch/test-infra/.github/actions/upload-artifact-s3@main
-        with:
-          retention-days: 14
-          s3-bucket: doc-previews
-          if-no-files-found: error
-          path: ${{ env.RUNNER_DOCS_DIR }}
-          s3-prefix: ${{ github.repository }}/${{ github.event.pull_request.number }}
-          overwrite: true
-
   upload:
     needs: build-docs
     if: github.repository == 'pytorch/tensordict' && github.event_name == 'push' &&
         ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
     permissions:
       contents: write
+    # Every job that pushes to gh-pages joins this group, so they push one at a
+    # time. With `queue: max`, later jobs wait instead of being cancelled.
+    concurrency:
+      group: gh-pages
+      queue: max
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/tensordict

@@ -60,6 +60,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         decompose,
         get_available_devices,
         is_npu_available,
+        legacy_lazy_mode,
         TestTensorDictsBase,
     )
 else:
@@ -68,6 +69,7 @@ else:
         decompose,
         get_available_devices,
         is_npu_available,
+        legacy_lazy_mode,
         TestTensorDictsBase,
     )
 
@@ -221,7 +223,7 @@ class TestGeneric:
         subtd.to_tensordict(retain_none=True).batch_size = [3, 2]
 
         td = TensorDict({"a": torch.randn(3, 4)}, [3, 4])
-        with set_lazy_legacy(True):
+        with legacy_lazy_mode():
             td_u = td.unsqueeze(0)
             with pytest.raises(
                 RuntimeError,
@@ -1108,7 +1110,7 @@ class TestGeneric:
     # getting values from lazy tensordicts in non-lazy contexts messes things up
     # so we set it to True. When we'll deprecate lazy tensordicts, we will just
     # remove this decorator
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_filling_empty_tensordict(self, device, td_type, update):
         if td_type == "tensordict":
             td = TensorDict(batch_size=[16], device=device)
@@ -1717,6 +1719,27 @@ class TestGeneric:
         assert td["new"].shape == torch.Size(batch_size)
         assert (td["new"] == expected).all()
 
+    @pytest.mark.parametrize("index", [None, True, torch.tensor(True), (None,)])
+    @pytest.mark.parametrize("container", ["sub", "lazy"])
+    def test_setitem_new_dim_index(self, index, container):
+        # None and True add a dim of size 1, so the value is written to every
+        # element, as td.unsqueeze(0)[:] = value would
+        if container == "sub":
+            td = TensorDict({"a": torch.zeros(2, 3, 4)}, [2, 3, 4])
+            td = td._get_sub_tensordict(1)
+        else:
+            td = lazy_stack([TensorDict({"a": torch.zeros(4)}, [4]) for _ in range(3)])
+        td[index] = TensorDict(
+            {"a": torch.ones(1, 3, 4), "new": torch.ones(1, 3, 4)}, [1, 3, 4]
+        )
+        assert (td["a"] == 1).all()
+        assert (td["new"] == 1).all()
+        td[index] = {"a": torch.full((1, 3, 4), 2.0)}
+        assert (td["a"] == 2).all()
+        # the value is broadcast to the batch size with the new dim
+        td[index] = TensorDict({"a": torch.full((3, 4), 3.0)}, [3, 4])
+        assert (td["a"] == 3).all()
+
     @pytest.mark.parametrize(
         "index",
         [
@@ -1783,6 +1806,23 @@ class TestGeneric:
         assert td[True].batch_size == torch.Size([1])
         assert td[False].batch_size == torch.Size([0])
 
+    @pytest.mark.parametrize(
+        "index", [np.True_, np.False_, (slice(None), np.True_), (np.False_, ...)]
+    )
+    def test_index_numpy_bool_scalar(self, index):
+        # torch rejects a NumPy bool scalar from NumPy 2.3 on (and reads it as
+        # an int before); tensordict rejects it with any NumPy
+        td = TensorDict({"a": torch.zeros(3, 4)}, [3, 4], names=["x", "y"])
+        with pytest.raises(IndexError, match="NumPy bool"):
+            td[index]
+        with pytest.raises(IndexError, match="NumPy bool"):
+            td[index] = 1.0
+        with pytest.raises(IndexError, match="NumPy bool"):
+            td[index] = TensorDict({"a": torch.ones(4)}, [4])
+        assert (td["a"] == 0).all()
+        # a list of NumPy bools is a mask, as in torch
+        assert td[[np.True_, np.False_, np.True_]].batch_size == torch.Size([2, 4])
+
     def test_getitem_nested(self):
         tensor = torch.randn(4, 5, 6, 7)
         sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])
@@ -1807,7 +1847,7 @@ class TestGeneric:
         assert sub_tensordict.shape == torch.Size([4, 5])
         assert sub_sub_tensordict.shape == torch.Size([4, 5, 6])
 
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_inferred_view_size(self):
         td = TensorDict({"a": torch.randn(3, 4)}, [3, 4])
         assert td.view(-1).view(-1, 4) is td
@@ -3021,7 +3061,7 @@ class TestGeneric:
         assert td2["a"].shape == torch.Size((4, 5, 6, 9))
 
     @pytest.mark.parametrize("device", get_available_devices())
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_permute_applied_twice(self, device):
         torch.manual_seed(1)
         d = {
@@ -3039,7 +3079,7 @@ class TestGeneric:
         assert td3 is not td1
 
     @pytest.mark.parametrize("device", get_available_devices())
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_permute_exceptions_legacy(self, device):
         torch.manual_seed(1)
         d = {
@@ -3757,7 +3797,7 @@ class TestGeneric:
     @pytest.mark.parametrize("lazy_leg", [True, False])
     @pytest.mark.parametrize("shared", [True, False])
     def test_shared_inheritance(self, shared, lazy_leg):
-        with set_lazy_legacy(lazy_leg):
+        with legacy_lazy_mode() if lazy_leg else set_lazy_legacy(False):
             if shared:
 
                 def assert_not_shared(td0):
@@ -4511,10 +4551,6 @@ class TestGeneric:
         assert td_new["a"].device.type == "cpu"
         assert td_new["b"].device.type == "cpu"
 
-    # Not working on python 3.9 and below
-    @pytest.mark.skipif(
-        sys.version_info < (3, 10), reason="Not working on python 3.9 and below"
-    )
     @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
     def test_to_mds(self, tmpdir):
         td = TensorDict(

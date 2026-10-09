@@ -7,7 +7,6 @@ from __future__ import annotations
 import collections
 import functools
 import inspect
-import re
 import weakref
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import nullcontext
@@ -509,23 +508,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                     return func(*args, **kwargs)
             return NotImplemented
         return TDPARAM_HANDLED_FUNCTIONS[func](*args, **kwargs)
-
-    @classmethod
-    def _flatten_key(cls, key):
-        def make_valid_identifier(s):
-            # Replace invalid characters with underscores
-            s = re.sub(r"\W|^(?=\d)", "_", s)
-
-            # Ensure the string starts with a letter or underscore
-            if not s[0].isalpha() and s[0] != "_":
-                s = "_" + s
-
-            return s
-
-        key_flat = "_".join(key)
-        if not key_flat.isidentifier():
-            key_flat = make_valid_identifier(key_flat)
-        return key_flat
 
     @lock_blocked
     @_unlock_and_set
@@ -1037,9 +1019,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             return self._param_td._propagate_unlock()
         return []
 
-    unlock_ = TensorDict.unlock_
-    lock_ = TensorDict.lock_
-
     @property
     def data(self) -> Self:
         return self._param_td._data()
@@ -1116,9 +1095,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
     @_carry_over
     def _legacy_unsqueeze(self, dim: int) -> TensorDictBase: ...
-
-    _check_device = TensorDict._check_device
-    _check_is_shared = TensorDict._check_is_shared
 
     @_fallback
     def _cast_reduction(self, **kwargs): ...

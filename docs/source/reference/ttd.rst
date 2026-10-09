@@ -199,7 +199,8 @@ no transition function needs updating.
 Class options
 -------------
 
-``TypedTensorDict`` supports the same bracket-syntax options as ``TensorClass``:
+``TypedTensorDict`` supports the ``"shadow"`` and ``"frozen"`` bracket-syntax
+options of ``TensorClass``:
 
 .. code-block:: python
 
@@ -220,11 +221,12 @@ Class options
   ``set_()`` or ``state.x.add_(1)`` still succeed, so the instance is not
   read-only. This differs from ``TensorClass["frozen"]``, where attribute
   assignment raises ``dataclasses.FrozenInstanceError``.
-- ``"autocast"``, ``"nocast"``, ``"tensor_only"`` -- Accepted with the same
-  syntax as ``TensorClass`` and inherited by subclasses, but they currently have
-  no effect on ``TypedTensorDict``: values are stored as a regular
-  ``TensorDict`` would store them (for example, ``x=1`` is stored as a tensor
-  even with ``"nocast"``).
+- ``"autocast"``, ``"nocast"``, ``"tensor_only"`` -- Deprecated in 0.15, to be
+  removed in 0.17. They are accepted with the same syntax as ``TensorClass``
+  and inherited by subclasses, but they have no effect on ``TypedTensorDict``:
+  values are stored as a regular ``TensorDict`` would store them (for example,
+  ``x=1`` is stored as a tensor even with ``"nocast"``). Using one of them
+  emits a ``DeprecationWarning``. Use ``TensorClass`` if you need them.
 
 Options propagate through inheritance: a subclass of a ``"frozen"`` class is
 also frozen.

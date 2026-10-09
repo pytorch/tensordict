@@ -10,7 +10,6 @@ import sys
 from copy import deepcopy
 from typing import Any, Callable, Iterable, List, OrderedDict, overload, TYPE_CHECKING
 
-import functorch
 from tensordict._nestedkey import NestedKey
 from tensordict._td import TensorDict
 
@@ -307,20 +306,6 @@ class TensorDictSequential(TensorDictModule):
             if out_key not in out_keys[i + 1 :]
         ]
         return in_keys, out_keys
-
-    @staticmethod
-    def _find_functional_module(module: TensorDictModuleBase) -> nn.Module:
-        fmodule = module
-        while not isinstance(
-            fmodule, (functorch.FunctionalModule, functorch.FunctionalModuleWithBuffers)
-        ):
-            try:
-                fmodule = fmodule.module
-            except AttributeError:
-                raise AttributeError(
-                    f"couldn't find a functional module in module of type {type(module)}"
-                )
-        return fmodule
 
     def select_out_keys(self, *selected_out_keys) -> TensorDictSequential:
         """Selects the keys within the ``out_keys`` that will be found in the output tensordict.

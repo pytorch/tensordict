@@ -18,6 +18,7 @@ import weakref
 from typing import Any, Callable, Literal, Sequence, Tuple, Type, TYPE_CHECKING
 
 import torch
+from tensordict._indexing import _as_tuple, _getitem_batch_size, convert_ellipsis_to_idx
 from tensordict._td import (
     _TensorDictKeysView,
     _unravel_key_to_tuple,
@@ -33,12 +34,9 @@ from tensordict.base import (
 )
 from tensordict.utils import (
     _as_context_manager,
-    _bool_lists_to_masks,
-    _getitem_batch_size,
     _is_tensorclass,
     _KEY_ERROR,
     _LOCK_ERROR,
-    convert_ellipsis_to_idx,
     erase_cache,
     is_non_tensor,
     lock_blocked,
@@ -854,7 +852,7 @@ class TensorDictStore(TensorDictBase):
         if fallback_kps:
             tensors = await self._aget_batch_tensors(fallback_kps)
             for kp, tensor in tensors.items():
-                result[kp] = tensor[idx]
+                result[kp] = tensor[_as_tuple(idx)]
 
         return result
 
@@ -1004,7 +1002,7 @@ class TensorDictStore(TensorDictBase):
             tensor = _bytes_to_tensor(data, shape, dtype)
             if self._device is not None:
                 tensor = tensor.to(self._device)
-            result[kp] = tensor[idx]
+            result[kp] = tensor[_as_tuple(idx)]
 
         # Non-tensor results — index into json_array when applicable
         for kp in non_tensor_kps:
@@ -1054,7 +1052,7 @@ class TensorDictStore(TensorDictBase):
                 value, idx = items[kp]
                 # For int index value is one element (shape = elem_shape);
                 # for slice/tensor/list the first dim is the indexed dim.
-                if isinstance(idx, int):
+                if isinstance(idx, int) and not isinstance(idx, bool):
                     elem_shape = list(value.shape)
                 else:
                     elem_shape = list(value.shape[1:]) if value.ndim > 0 else []
@@ -1209,7 +1207,7 @@ class TensorDictStore(TensorDictBase):
             dtype = _str_to_dtype(meta["dtype"])
             existing = _bytes_to_tensor(data, shape, dtype)
             value, idx = items[kp]
-            existing[idx] = value
+            existing[_as_tuple(idx)] = value
             pipe.set(self._data_key(kp), _tensor_to_bytes(existing))
         await pipe.execute()
 
@@ -1288,11 +1286,6 @@ class TensorDictStore(TensorDictBase):
         self._device = torch.device(value) if value is not None else None
         self._run_sync(self._apersist_metadata())
 
-    _erase_names = TensorDict._erase_names
-    _has_names = TensorDict._has_names
-    _set_names = TensorDict._set_names
-    names = TensorDict.names
-
     def _rename_subtds(self, names):
         if names is None:
             names = [None] * self.ndim
@@ -1323,12 +1316,8 @@ class TensorDictStore(TensorDictBase):
         prefix = (self._prefix + _KEY_SEP) if self._prefix else ""
         leaf_kps = sorted(k for k in all_keys if k.startswith(prefix) or not prefix)
 
-        # Single batched pipeline for all keys. The byte-range planner reads a
-        # list as integer positions, so a list of bools is passed as a mask
-        # to match new_batch_size.
-        result_map = self._run_sync(
-            self._abatch_index(leaf_kps, _bool_lists_to_masks(index))
-        )
+        # Single batched pipeline for all keys.
+        result_map = self._run_sync(self._abatch_index(leaf_kps, index))
 
         # Build nested source dict from flat key paths
         prefix_len = len(prefix)
@@ -2243,8 +2232,6 @@ class TensorDictStore(TensorDictBase):
             return tc_type._from_tensordict(store)
         return store
 
-    from_dict_instance = TensorDict.from_dict_instance
-
     # ---- Cloning ----
 
     def _clone(self, recurse: bool = True) -> TensorDictStore:
@@ -2501,33 +2488,6 @@ class TensorDictStore(TensorDictBase):
 
     # ---- Delegated to TensorDict (same pattern as PersistentTensorDict) ----
 
-    __eq__ = TensorDict.__eq__
-    __ne__ = TensorDict.__ne__
-    __xor__ = TensorDict.__xor__
-    __or__ = TensorDict.__or__
-    __ge__ = TensorDict.__ge__
-    __gt__ = TensorDict.__gt__
-    __le__ = TensorDict.__le__
-    __lt__ = TensorDict.__lt__
-
-    _apply_nest = TensorDict._apply_nest
-    _cast_reduction = TensorDict._cast_reduction
-    _check_device = TensorDict._check_device
-    _check_is_shared = TensorDict._check_is_shared
-    _convert_to_tensordict = TensorDict._convert_to_tensordict
-    _get_names_idx = TensorDict._get_names_idx
-    _multithread_apply_flat = TensorDict._multithread_apply_flat
-    _multithread_rebuild = TensorDict._multithread_rebuild
-    _to_module = TensorDict._to_module
-    _unbind = TensorDict._unbind
-    all = TensorDict.all
-    any = TensorDict.any
-    expand = TensorDict.expand
-    _repeat = TensorDict._repeat
-    repeat_interleave = TensorDict.repeat_interleave
-    reshape = TensorDict.reshape
-    split = TensorDict.split
-
     # ---- Shape ops: raise NotImplementedError ----
 
     def _view(self, *args, **kwargs):
@@ -2746,11 +2706,6 @@ class _StoreStackElementView(TensorDictBase):
     def device(self, value):
         self._device = torch.device(value) if value is not None else None
 
-    _erase_names = TensorDict._erase_names
-    _has_names = TensorDict._has_names
-    _set_names = TensorDict._set_names
-    names = TensorDict.names
-
     def _rename_subtds(self, names):
         pass
 
@@ -2788,8 +2743,6 @@ class _StoreStackElementView(TensorDictBase):
         if default is not NO_DEFAULT:
             return default
         raise KeyError(f"key {key} not found in {type(self).__name__}")
-
-    _get_tuple = TensorDict._get_tuple
 
     def _get_at_str(self, key, idx, default=NO_DEFAULT, **kwargs):
         tensor = self._get_str(key, default=default, **kwargs)
@@ -3098,35 +3051,6 @@ class _StoreStackElementView(TensorDictBase):
     @classmethod
     def from_dict(cls, *args, **kwargs):
         raise NotImplementedError(f"{cls.__name__} cannot be created from a dict.")
-
-    from_dict_instance = TensorDict.from_dict_instance
-
-    __eq__ = TensorDict.__eq__
-    __ne__ = TensorDict.__ne__
-    __xor__ = TensorDict.__xor__
-    __or__ = TensorDict.__or__
-    __ge__ = TensorDict.__ge__
-    __gt__ = TensorDict.__gt__
-    __le__ = TensorDict.__le__
-    __lt__ = TensorDict.__lt__
-
-    _apply_nest = TensorDict._apply_nest
-    _cast_reduction = TensorDict._cast_reduction
-    _check_device = TensorDict._check_device
-    _check_is_shared = TensorDict._check_is_shared
-    _convert_to_tensordict = TensorDict._convert_to_tensordict
-    _get_names_idx = TensorDict._get_names_idx
-    _multithread_apply_flat = TensorDict._multithread_apply_flat
-    _multithread_rebuild = TensorDict._multithread_rebuild
-    _to_module = TensorDict._to_module
-    _unbind = TensorDict._unbind
-    all = TensorDict.all
-    any = TensorDict.any
-    expand = TensorDict.expand
-    _repeat = TensorDict._repeat
-    repeat_interleave = TensorDict.repeat_interleave
-    reshape = TensorDict.reshape
-    split = TensorDict.split
 
     def _clone(self, recurse=True):
         return self.to_tensordict()
@@ -3441,10 +3365,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
     def _get_all_keys(self) -> set[str]:
         return self._run_sync(self._aget_all_keys())
 
-    async def _aget_key_meta(self, key_path: str) -> dict[str, str]:
-        raw = await self._client.hgetall(self._meta_key(key_path))
-        return _decode_meta(raw)
-
     async def _aget_metadata_batch(
         self, key_paths: list[str]
     ) -> dict[str, tuple[list[int], torch.dtype]]:
@@ -3608,40 +3528,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
             self._meta_cache[key_path] = (full_shape, dtype)
 
     # ---- element access (reads) ----
-
-    async def _aget_element_tensor(
-        self, key_path: str, element_idx: int
-    ) -> torch.Tensor:
-        """Fetch a single stack element's tensor for one key."""
-        meta = await self._aget_key_meta(key_path)
-        dtype = _str_to_dtype(meta["dtype"])
-        homogeneous = self._is_key_homogeneous(meta)
-
-        if homogeneous:
-            full_shape = json.loads(meta["shape"])
-            elem_shape = full_shape[1:]
-            row_bytes = self._row_bytes(elem_shape, dtype)
-            pos = _normalize_index(element_idx, self._count)
-            offset = pos * row_bytes
-            data = await self._client.getrange(
-                self._data_key(key_path), offset, offset + row_bytes - 1
-            )
-            tensor = _bytes_to_tensor(data, elem_shape, dtype)
-        else:
-            # Read offsets
-            pos = _normalize_index(element_idx, self._count)
-            off_data = await self._client.getrange(
-                self._idx_key(key_path), pos * 8, (pos + 2) * 8 - 1
-            )
-            start, end = struct.unpack("<2q", off_data)
-            data = await self._client.getrange(self._data_key(key_path), start, end - 1)
-            shapes = json.loads(meta["shapes"])
-            elem_shape = shapes[pos]
-            tensor = _bytes_to_tensor(data, elem_shape, dtype)
-
-        if self._device is not None:
-            tensor = tensor.to(self._device)
-        return tensor
 
     async def _abatch_get_element(self, element_idx: int) -> dict[str, torch.Tensor]:
         """Pipelined fetch of all keys for a single stack element."""
@@ -3924,7 +3810,9 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
         for kp in fallback_kps:
             full_shape, dtype = meta_map[kp]
-            tensor = _bytes_to_tensor(raw_results[ri], full_shape, dtype)[idx]
+            tensor = _bytes_to_tensor(raw_results[ri], full_shape, dtype)[
+                _as_tuple(idx)
+            ]
             ri += 1
             if self._device is not None:
                 tensor = tensor.to(self._device)
@@ -4069,7 +3957,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
                     data = await self._client.get(self._data_key(kp))
                     tensor = _bytes_to_tensor(data, shape, dtype)
                     value, idx = items[kp]
-                    tensor[idx] = value
+                    tensor[_as_tuple(idx)] = value
                     await self._client.set(self._data_key(kp), _tensor_to_bytes(tensor))
                     continue
                 byte_offset, byte_length = cr
@@ -4121,11 +4009,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
     def device(self, value):
         self._device = torch.device(value) if value is not None else None
 
-    _erase_names = TensorDict._erase_names
-    _has_names = TensorDict._has_names
-    _set_names = TensorDict._set_names
-    names = TensorDict.names
-
     def _rename_subtds(self, names):
         pass
 
@@ -4140,10 +4023,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
             names = self._get_names_idx(index)
 
         all_keys = sorted(self._get_all_keys())
-        # As in TensorDictStore._index_tensordict: a list of bools is a mask.
-        result_map = self._run_sync(
-            self._abatch_get_at(all_keys, _bool_lists_to_masks(index))
-        )
+        result_map = self._run_sync(self._abatch_get_at(all_keys, index))
 
         source: dict = {}
         for kp, value in result_map.items():
@@ -4172,7 +4052,11 @@ class LazyStackedTensorDictStore(TensorDictBase):
             return self._get_tuple(index_unravel, NO_DEFAULT)
 
         # Integer index on the stack dim: return write-through view
-        if isinstance(index, int) and self._stack_dim == 0:
+        if (
+            isinstance(index, int)
+            and not isinstance(index, bool)
+            and self._stack_dim == 0
+        ):
             return _StoreStackElementView(self, index)
 
         # As in TensorDictBase.__getitem__, an Ellipsis stands for the
@@ -4192,7 +4076,11 @@ class LazyStackedTensorDictStore(TensorDictBase):
             index = torch.tensor(index)
 
         # Integer assignment on stack dim: write element
-        if isinstance(index, int) and self._stack_dim == 0:
+        if (
+            isinstance(index, int)
+            and not isinstance(index, bool)
+            and self._stack_dim == 0
+        ):
             if not isinstance(value, TensorDictBase):
                 value = TensorDict.from_dict(value, batch_size=[])
             self._run_sync(self._aset_element(index, value))
@@ -4238,8 +4126,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
         if default is not NO_DEFAULT:
             return default
         raise KeyError(f"key {key} not found in {type(self).__name__}")
-
-    _get_tuple = TensorDict._get_tuple
 
     def _set_str(
         self,
@@ -4647,8 +4533,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
             "Use LazyStackedTensorDictStore.from_lazy_stack(lazy_td, ...) instead."
         )
 
-    from_dict_instance = TensorDict.from_dict_instance
-
     # ---- Cloning ----
 
     def _clone(self, recurse: bool = True) -> LazyStackedTensorDictStore:
@@ -4879,33 +4763,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
         )
 
     # ---- Delegated ops ----
-
-    __eq__ = TensorDict.__eq__
-    __ne__ = TensorDict.__ne__
-    __xor__ = TensorDict.__xor__
-    __or__ = TensorDict.__or__
-    __ge__ = TensorDict.__ge__
-    __gt__ = TensorDict.__gt__
-    __le__ = TensorDict.__le__
-    __lt__ = TensorDict.__lt__
-
-    _apply_nest = TensorDict._apply_nest
-    _cast_reduction = TensorDict._cast_reduction
-    _check_device = TensorDict._check_device
-    _check_is_shared = TensorDict._check_is_shared
-    _convert_to_tensordict = TensorDict._convert_to_tensordict
-    _get_names_idx = TensorDict._get_names_idx
-    _multithread_apply_flat = TensorDict._multithread_apply_flat
-    _multithread_rebuild = TensorDict._multithread_rebuild
-    _to_module = TensorDict._to_module
-    _unbind = TensorDict._unbind
-    all = TensorDict.all
-    any = TensorDict.any
-    expand = TensorDict.expand
-    _repeat = TensorDict._repeat
-    repeat_interleave = TensorDict.repeat_interleave
-    reshape = TensorDict.reshape
-    split = TensorDict.split
 
     # ---- Shape ops: not supported ----
 

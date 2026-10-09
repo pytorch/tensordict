@@ -520,37 +520,36 @@ class TestIndexing:
             assert (_t == t[i]).all()
 
     @staticmethod
-    def _test_copy_onto_subproc(queue):
+    def _test_copy_onto_subproc(queue_out, queue_in):
         t = MemoryMappedTensor.from_tensor(torch.rand(10, 5))
         idx = torch.tensor([1, 2])
         t_indexed1 = t[idx]
-        queue.put(t_indexed1, block=True)
-        while queue.full():
-            continue
+        queue_out.put(t_indexed1, block=True)
 
         idx = torch.tensor([3, 4])
         t_indexed2 = t[idx]
-        queue.put(t_indexed2, block=True)
-        while queue.full():
-            continue
-        msg = queue.get(timeout=TIMEOUT)
+        queue_out.put(t_indexed2, block=True)
+        msg = queue_in.get(timeout=TIMEOUT)
         assert msg == "done"
         assert (t_indexed1 == t_indexed2).all()
-        del queue
+        del queue_out, queue_in
 
     def test_copy_onto(self):
-        queue = mp.Queue(1)
-        p = mp.Process(target=TestIndexing._test_copy_onto_subproc, args=(queue,))
+        queue_in = mp.Queue(1)
+        queue_out = mp.Queue(1)
+        p = mp.Process(
+            target=TestIndexing._test_copy_onto_subproc, args=(queue_in, queue_out)
+        )
         p.start()
         try:
-            t_indexed1 = queue.get(timeout=TIMEOUT)
+            t_indexed1 = queue_in.get(timeout=TIMEOUT)
 
             # receive 2nd copy
-            t_indexed2 = queue.get(timeout=TIMEOUT)
+            t_indexed2 = queue_in.get(timeout=TIMEOUT)
             t_indexed1.copy_(t_indexed2)
             _ = t_indexed2 + 1
-            queue.put("done", block=True)
-            queue.close()
+            queue_out.put("done", block=True)
+            queue_out.close()
         finally:
             p.join()
 

@@ -11,7 +11,6 @@ import importlib
 import os
 import pathlib
 import pickle
-import sys
 import unittest
 import warnings
 import weakref
@@ -948,6 +947,18 @@ class TestTDModule:
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
         tdm(a=torch.zeros(1, 1))
 
+    def test_dispatch_deactivate_function(self):
+        @dispatch(source=["a"], dest=["b"])
+        def func(tensordict):
+            tensordict["b"] = tensordict["a"] + 1
+            return tensordict
+
+        assert (func(torch.zeros(1, 2)) == 1).all()
+        td = TensorDict(a=torch.zeros(1, 2))
+        with _set_dispatch_td_nn_modules(False):
+            assert func(td) is td
+        assert (td["b"] == 1).all()
+
     def test_dispatch(self):
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
         td = TensorDict({"a": torch.zeros(1, 1)}, 1)
@@ -1070,6 +1081,43 @@ class TestTDModule:
         module = MyModuleNest()
         (b,) = module(asepc=torch.zeros(1, 2))
         assert (b == 1).all()
+
+    @pytest.mark.parametrize(
+        "source,dest", [("in_keys", "out_keys"), (["a", "b"], ["c"])]
+    )
+    def test_dispatch_bound_method(self, source, dest):
+        # https://github.com/pytorch/tensordict/issues/1459
+        class MyModule(nn.Module):
+            in_keys = ["a", "b"]
+            out_keys = ["c"]
+
+            def inner_forward(self, tensordict):
+                tensordict["c"] = tensordict["a"] - tensordict["b"]
+                return tensordict
+
+            def forward(self, *args, **kwargs):
+                return dispatch(source=source, dest=dest)(self.inner_forward)(
+                    *args, **kwargs
+                )
+
+            def filler_forward(self, filler, tensordict):
+                return self.inner_forward(tensordict)
+
+        module = MyModule()
+        a, b = torch.ones(1, 2), torch.zeros(1, 2)
+        assert (module(a, b) == 1).all()
+        assert (module(a=a, b=b) == 1).all()
+        td = TensorDict(a=a, b=b)
+        assert module(td) is td
+        assert (td["c"] == 1).all()
+        dispatched = dispatch(source=source, dest=dest)(module.inner_forward)
+        td = TensorDict(a=a, b=b)
+        with _set_dispatch_td_nn_modules(False):
+            assert dispatched(td) is td
+        assert (td["c"] == 1).all()
+        # self is bound already: the first argument must be the tensordict
+        with pytest.raises(RuntimeError, match="Got filler instead"):
+            dispatch(source=source, dest=dest)(module.filler_forward)
 
     def test_dispatch_multi(self):
         tdm = TensorDictSequential(
@@ -2448,9 +2496,6 @@ def test_module_buffer():
     ],
 )
 @pytest.mark.parametrize("tc", [True, False], ids=["tc", "td"])
-@pytest.mark.skipif(
-    sys.version_info < (3, 10), reason="Not working on python 3.9 and below"
-)
 def test_to_context(original_device, new_device, tc):
     if tc:
 

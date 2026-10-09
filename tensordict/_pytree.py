@@ -21,60 +21,6 @@ PYTREE_REGISTERED_TDS = (
 PYTREE_REGISTERED_LAZY_TDS = (LazyStackedTensorDict,)
 
 
-def _str_to_dict(str_spec: str) -> Tuple[List[str], str]:
-    if str_spec[1] != "(" or str_spec[-1] != ")":
-        raise ValueError(
-            f"string must have '(' as a second character and ')' in last position. Got {str_spec}."
-        )
-    context_and_child_strings = str_spec[2:-1]
-
-    child_strings = []
-    context_strings = []
-    nested_parentheses = 0
-    start_index = 0
-    for i, char in enumerate(context_and_child_strings):
-        if char == ":":
-            if nested_parentheses == 0:
-                context_strings.append(context_and_child_strings[start_index:i])
-                start_index = i + 1
-        elif char == "(":
-            nested_parentheses += 1
-        elif char == ")":
-            nested_parentheses -= 1
-
-        if nested_parentheses == 0 and char == ",":
-            child_strings.append(context_and_child_strings[start_index:i])
-            start_index = i + 1
-
-    child_strings.append(context_and_child_strings[start_index:])
-    return context_strings, ",".join(child_strings)
-
-
-def _str_to_tensordictdict(str_spec: str) -> Tuple[List[str], str]:
-    context_and_child_strings = str_spec[2:-1]
-
-    child_strings = []
-    context_strings = []
-    nested_parentheses = 0
-    start_index = 0
-    for i, char in enumerate(context_and_child_strings):
-        if char == ":":
-            if nested_parentheses == 0:
-                context_strings.append(context_and_child_strings[start_index:i])
-                start_index = i + 1
-        elif char == "(":
-            nested_parentheses += 1
-        elif char == ")":
-            nested_parentheses -= 1
-
-        if nested_parentheses == 0 and char == ",":
-            child_strings.append(context_and_child_strings[start_index:i])
-            start_index = i + 1
-
-    child_strings.append(context_and_child_strings[start_index:])
-    return context_strings, ",".join(child_strings)
-
-
 def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
     items = tuple(d.items())
     if items:

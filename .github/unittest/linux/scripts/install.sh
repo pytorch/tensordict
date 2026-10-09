@@ -59,7 +59,7 @@ printf "* Installing tensordict\n"
 # Install runtime deps explicitly (except torch/torchvision which are handled above),
 # then install tensordict without resolving dependencies to avoid any solver changing
 # the PyTorch build (stable vs nightly).
-python -m pip install -U packaging pyvers importlib_metadata
+python -m pip install -U packaging pyvers
 python -m pip install redis pandas pyarrow
 python -m pip install -e . --no-deps
 

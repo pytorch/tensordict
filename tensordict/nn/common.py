@@ -198,8 +198,8 @@ class dispatch:
     def __new__(
         cls,
         separator=DEFAULT_SEPARATOR,
-        source=DEFAULT_SOURCE,
-        dest=DEFAULT_DEST,
+        source: str | Sequence[NestedKey] = DEFAULT_SOURCE,
+        dest: str | Sequence[NestedKey] = DEFAULT_DEST,
         auto_batch_size: bool = True,
     ):
         if callable(separator):
@@ -213,8 +213,8 @@ class dispatch:
     def __init__(
         self,
         separator=DEFAULT_SEPARATOR,
-        source=DEFAULT_SOURCE,
-        dest=DEFAULT_DEST,
+        source: str | Sequence[NestedKey] = DEFAULT_SOURCE,
+        dest: str | Sequence[NestedKey] = DEFAULT_DEST,
         auto_batch_size: bool = True,
     ):
         self.separator = separator
@@ -223,8 +223,10 @@ class dispatch:
         self.auto_batch_size = auto_batch_size
 
     def __call__(self, func: Callable) -> Callable:
-
-        is_method = inspect.ismethod(func) or (
+        # A bound method already carries its instance: string ``source`` and
+        # ``dest`` are read from it, and all positional arguments are inputs.
+        bound_self = func.__self__ if inspect.ismethod(func) else None
+        is_method = bound_self is None and (
             inspect.isfunction(func)
             and func.__code__.co_argcount > 0
             and func.__code__.co_varnames[0] == "self"
@@ -247,13 +249,13 @@ class dispatch:
 
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
+            if not _dispatch_td_nn_modules():
+                return func(*args, **kwargs)
             if is_method:
                 _self = args[0]
                 args = args[1:]
             else:
-                _self = None
-            if not _dispatch_td_nn_modules():
-                return func(_self, *args, **kwargs)
+                _self = bound_self
 
             source = self.source
             if isinstance(source, str):
@@ -298,7 +300,7 @@ class dispatch:
                     batch_size=batch_size,
                     auto_batch_size=self.auto_batch_size,
                 )
-                if _self is not None:
+                if is_method:
                     out = func(_self, tensordict, *args, **kwargs)
                 else:
                     out = func(tensordict, *args, **kwargs)
@@ -307,7 +309,7 @@ class dispatch:
                 out = tuple(out[key] for key in dest)
                 return out[0] if len(out) == 1 else out
 
-            if _self is not None:
+            if is_method:
                 return func(_self, tensordict, *args, **kwargs)
             return func(tensordict, *args, **kwargs)
 

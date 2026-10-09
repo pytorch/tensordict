@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import argparse
-import sys
 import time
 from typing import Any
 
@@ -94,9 +93,6 @@ class TestConsolidate:
     def test_consolidate(
         self, benchmark, td, compile_mode, num_threads, default_device
     ):
-        if compile_mode and sys.version_info >= (3, 14):
-            pytest.skip("torch.compile is not supported on python 3.14+")
-
         tensordict_logger.info(f"td size {td.bytes() / 1024 / 1024:.2f} Mb")
 
         # td = td.to(default_device)
@@ -153,9 +149,6 @@ class TestTo:
     def test_to(
         self, benchmark, consolidated, td, default_device, compile_mode, num_threads
     ):
-        if compile_mode and sys.version_info >= (3, 14):
-            pytest.skip("torch.compile is not supported on python 3.14+")
-
         tensordict_logger.info(f"td size {td.bytes() / 1024 / 1024:.2f} Mb")
         pin_mem = default_device.type == "cuda"
         if consolidated is True:

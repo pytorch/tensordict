@@ -315,7 +315,7 @@ class TestTensorDictMP(TestTensorDictsBase):
         if chunksize is not None and num_chunks is not None:
             with pytest.raises(ValueError, match="but not both"):
                 td.map(
-                    self.write_pid,
+                    self.write_chunk_id,
                     dim=dim,
                     chunksize=chunksize,
                     num_chunks=num_chunks,
@@ -323,17 +323,17 @@ class TestTensorDictMP(TestTensorDictsBase):
                 )
             return
         mapped = td.map(
-            self.write_pid,
+            self.write_chunk_id,
             dim=dim,
             chunksize=chunksize,
             num_chunks=num_chunks,
             pool=_pool_fixt,
         )
-        pids = mapped.get("pid").unique()
+        chunk_ids = mapped.get("chunk_id").unique()
         if chunksize is not None:
-            assert pids.numel() == -(td.shape[0] // -chunksize)
+            assert chunk_ids.numel() == -(td.shape[0] // -chunksize)
         elif num_chunks is not None:
-            assert pids.numel() == num_chunks
+            assert chunk_ids.numel() == num_chunks
 
     @pytest.mark.parametrize("dim", [-2, -1, 0, 1, 2, 3])
     def test_map(self, td_name, device, dim, _pool_fixt):
@@ -390,8 +390,11 @@ class TestTensorDictMP(TestTensorDictsBase):
         q.put("succeeded")
 
     @staticmethod
-    def write_pid(x):
-        return TensorDict({"pid": os.getpid()}, []).expand(x.shape)
+    def write_chunk_id(x):
+        # A random id for each call, so that the test counts chunks, not
+        # workers: one worker can take several chunks.
+        chunk_id = int.from_bytes(os.urandom(7), "little")
+        return TensorDict({"chunk_id": chunk_id}, []).expand(x.shape)
 
 
 @pytest.fixture(scope="class")

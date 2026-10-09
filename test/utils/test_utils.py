@@ -19,6 +19,7 @@ from tensordict import (
     unravel_key_list,
 )
 from tensordict._C import _unravel_key_to_tuple
+from tensordict._indexing import _traceable_slice_length
 from tensordict.utils import (
     _check_recursive_properties,
     _get_shared_executor,
@@ -29,6 +30,7 @@ from tensordict.utils import (
     isin,
     parse_tensor_dict_string,
     remove_duplicates,
+    unravel_keys,
 )
 
 
@@ -164,6 +166,40 @@ def test_getitem_batch_size_index_types(index):
     expected = tensor[index].shape
     index = convert_ellipsis_to_idx(index, tensor.shape)
     assert _getitem_batch_size(tensor.shape, index) == expected
+
+
+@pytest.mark.parametrize("index", [np.True_, (slice(None), np.False_)])
+def test_getitem_batch_size_numpy_bool_scalar(index):
+    with pytest.raises(IndexError, match="NumPy bool"):
+        _getitem_batch_size(torch.Size([3, 4]), index)
+
+
+@pytest.mark.parametrize(
+    "index",
+    [
+        Ellipsis,
+        (Ellipsis, 0),
+        (None, Ellipsis, None),
+        (torch.ones(3, 4, dtype=torch.bool), Ellipsis),
+        ([0, 1], Ellipsis, [0, 1]),
+    ],
+)
+def test_getitem_batch_size_ellipsis(index):
+    # the Ellipsis does not need to be converted first
+    tensor = torch.zeros(3, 4, 5)
+    assert _getitem_batch_size(tensor.shape, index) == tensor[index].shape
+
+
+def test_traceable_slice_length():
+    # what torch.compile uses instead of slice.indices
+    for size in range(5):
+        for start in (None, *range(-6, 7)):
+            for stop in (None, *range(-6, 7)):
+                for step in (None, -2, -1, 1, 2, 3):
+                    index = slice(start, stop, step)
+                    assert _traceable_slice_length(index, size) == len(
+                        range(size)[index]
+                    ), (index, size)
 
 
 @pytest.fixture
@@ -364,6 +400,32 @@ def test_check_recursive_properties_lazy_stack_unbatched_metadata():
     assert _check_recursive_properties(result)
 
 
+# (key, unravel_key(key))
+_VALID_KEYS = [
+    ("a", "a"),
+    (("a",), "a"),
+    (("a", "b"), ("a", "b")),
+    ((("a", "b"), "c"), ("a", "b", "c")),
+    (("a", ("b", ("c",))), ("a", "b", "c")),
+    ((("a",),), "a"),
+]
+# Tuples with a part that is neither a str nor a tuple of str unravel to ().
+# TorchRL's Composite.__getitem__ relies on index tuples such as
+# (slice(None), 0) unravelling to ().
+_INVALID_TUPLE_KEYS = [
+    ("a", 1),
+    (("a", 1), "b"),
+    ("a", ()),
+    (),
+    ((),),
+    ("a", (1,), ("b",)),
+    ("a", (slice(None),), ("b",)),
+    (slice(None), 0),
+    (0, Ellipsis),
+]
+_NON_TUPLE_INVALID_KEYS = [1, None, ["a"]]
+
+
 @pytest.mark.parametrize("listtype", (list, tuple))
 def test_unravel_key_list(listtype):
     keys_in = listtype(["a0", ("b0",), ("c0", ("d",))])
@@ -371,18 +433,42 @@ def test_unravel_key_list(listtype):
     assert keys_out == ["a0", "b0", ("c0", "d")]
 
 
-def test_unravel_key():
-    keys_in = ["a0", ("b0",), ("c0", ("d",))]
-    keys_out = [unravel_key(key_in) for key_in in keys_in]
-    assert keys_out == ["a0", "b0", ("c0", "d")]
+@pytest.mark.parametrize("key", _INVALID_TUPLE_KEYS + _NON_TUPLE_INVALID_KEYS)
+def test_unravel_key_list_invalid(key):
+    with pytest.raises(RuntimeError, match="key should be a Sequence<NestedKey>"):
+        unravel_key_list(["a", key])
 
 
-def test_unravel_key_to_tuple():
-    keys_in = ["a", ("b",), ("c", ("d",))]
-    keys_out = [_unravel_key_to_tuple(key_in) for key_in in keys_in]
-    assert keys_out == [("a",), ("b",), ("c", "d")]
-    assert not _unravel_key_to_tuple(("a", (1,), ("b",)))
-    assert not _unravel_key_to_tuple(("a", (slice(None),), ("b",)))
+@pytest.mark.parametrize("key,expected", _VALID_KEYS)
+def test_unravel_key(key, expected):
+    assert unravel_key(key) == expected
+
+
+@pytest.mark.parametrize("key", _INVALID_TUPLE_KEYS)
+def test_unravel_key_invalid_tuple(key):
+    assert unravel_key(key) == ()
+
+
+@pytest.mark.parametrize("key", _NON_TUPLE_INVALID_KEYS)
+def test_unravel_key_invalid(key):
+    with pytest.raises(RuntimeError, match="key should be a Sequence<NestedKey>"):
+        unravel_key(key)
+
+
+def test_unravel_keys():
+    assert unravel_keys(("a",)) == "a"
+    assert unravel_keys("a", ("b", ("c",)), ("d",)) == ("a", ("b", "c"), "d")
+
+
+@pytest.mark.parametrize("key,expected", _VALID_KEYS)
+def test_unravel_key_to_tuple(key, expected):
+    expected = (expected,) if isinstance(expected, str) else expected
+    assert _unravel_key_to_tuple(key) == expected
+
+
+@pytest.mark.parametrize("key", _INVALID_TUPLE_KEYS + _NON_TUPLE_INVALID_KEYS)
+def test_unravel_key_to_tuple_invalid(key):
+    assert _unravel_key_to_tuple(key) == ()
 
 
 @pytest.mark.parametrize("key", ("tensor1", "tensor3"))

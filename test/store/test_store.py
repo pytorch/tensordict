@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import functools
 import importlib
 import pickle
 
@@ -20,6 +21,9 @@ _has_redis = importlib.util.find_spec("redis", None) is not None
 _BACKEND_PORTS = {"redis": 6379, "dragonfly": 6380}
 
 
+# Probe each server once: redis-py retries a refused connection for about
+# 5 s, and the backend fixture runs for every store test.
+@functools.cache
 def _server_available(host: str, port: int) -> bool:
     """Check if a Redis-protocol server is reachable at *host*:*port*."""
     if not _has_redis:
@@ -644,6 +648,22 @@ class TestTensorDictStore:
             td.set_at_("x", value, mask)
             store[~mask] = TensorDict({"x": torch.zeros(6, 5)}, [6])
             td[~mask] = TensorDict({"x": torch.zeros(6, 5)}, [6])
+            torch.testing.assert_close(store["x"], td["x"])
+        finally:
+            store.clear_redis()
+            store.close()
+
+    @pytest.mark.filterwarnings("ignore:indexing with dtype torch.uint8")
+    def test_uint8_mask(self, store_kwargs):
+        """A uint8 tensor is a mask (deprecated in torch), not a list of rows."""
+        td = TensorDict({"x": torch.arange(5.0)}, [5])
+        store = TensorDictStore.from_tensordict(td, **store_kwargs)
+        try:
+            mask = torch.tensor([1, 0, 1, 0, 2], dtype=torch.uint8)
+            torch.testing.assert_close(store[mask]["x"], td[mask]["x"])
+            torch.testing.assert_close(store.get_at("x", mask), td["x"][mask])
+            store[mask] = TensorDict({"x": -torch.ones(3)}, [3])
+            td[mask] = TensorDict({"x": -torch.ones(3)}, [3])
             torch.testing.assert_close(store["x"], td["x"])
         finally:
             store.clear_redis()
