@@ -1238,11 +1238,13 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     # if not hasattr(cls, "batch_size") and "batch_size" not in expected_keys:
     #     cls.batch_size = property(_batch_size, _batch_size_setter)
 
-    # Memmap
+    # Memmap. load and load_memmap are bound to cls (here and in the loop
+    # below): load_memmap falls back on the class it is called on when the
+    # saved class cannot be found by name.
     if not hasattr(cls, "load_memmap") and "load_memmap" not in expected_keys:
-        cls.load_memmap = TensorDictBase.load_memmap
+        cls.load_memmap = classmethod(TensorDictBase.load_memmap.__func__)
     if not hasattr(cls, "load") and "load" not in expected_keys:
-        cls.load = TensorDictBase.load
+        cls.load = classmethod(TensorDictBase.load.__func__)
     if not hasattr(cls, "load_memmap_") and "load_memmap_" not in expected_keys:
         cls.load_memmap_ = _load_memmap_
     if not hasattr(cls, "_load_memmap"):
@@ -1286,6 +1288,11 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
                 continue
             tdcls = func.__self__
             if issubclass(tdcls, TensorDictBase):  # detects classmethods
+                if attr in ("load", "load_memmap"):
+                    # Bound to cls rather than TensorDict (see "Memmap" above).
+                    # Rebind func too: on some Python versions, func.__get__
+                    # does not rebind a bound method.
+                    tdcls, func = cls, func.__func__.__get__(cls)
                 setattr(cls, attr, _wrap_classmethod(tdcls, cls, func))
 
     if not hasattr(cls, "select") and "select" not in expected_keys:

@@ -11,6 +11,7 @@ import copy
 import dataclasses
 import importlib.util
 import inspect
+import json
 import os
 import pathlib
 import pickle
@@ -3083,9 +3084,10 @@ class TestMemmap:
             assert dest.string == "newer"
 
     def test_load_memmap_redefined_class(self, tmp_path, monkeypatch):
-        # The saved class is looked up by name, so the lookup can return
-        # another class with the same name, e.g. one that is redefined in a
-        # notebook. An instance of the redefined class is still loaded in place.
+        # TensorDict.load_memmap looks the saved class up by name, so the
+        # lookup can return another class with the same name, e.g. one that is
+        # redefined in a notebook. An instance of the redefined class passed as
+        # out is still loaded in place.
         def make_class():
             @tensorclass
             class MyClass:
@@ -3103,7 +3105,7 @@ class TestMemmap:
             (saved_cls,) + tensordict.base._ACCEPTED_CLASSES,
         )
         dest = dest_cls(x=torch.zeros(3), string="old", batch_size=[3])
-        assert dest.load_memmap_(tmp_path) is dest
+        assert TensorDict.load_memmap(tmp_path, out=dest) is dest
         assert (dest.x == 1).all()
         assert dest.string == "new"
 
@@ -3121,6 +3123,80 @@ class TestMemmap:
         with pytest.raises(ValueError, match="Cannot load a saved MyClass in place"):
             dest.load_memmap_(tmp_path)
         assert (dest.x == 0).all()
+
+    @pytest.mark.parametrize("form", ["decorator", "subclass"])
+    def test_load_memmap_class_saved_from_main(self, tmp_path, form):
+        # A class saved from __main__ (a script or a notebook) is recorded as
+        # __main__.<qualname>, which another program cannot find by name. The
+        # class load_memmap is called on is used if its qualname matches.
+        if form == "decorator":
+
+            @tensorclass
+            class MyClass:
+                x: torch.Tensor
+                string: str
+
+            @tensorclass
+            class OtherClass:
+                x: torch.Tensor
+                string: str
+
+        else:
+
+            class MyClass(TensorClass):
+                x: torch.Tensor
+                string: str
+
+            class OtherClass(TensorClass):
+                x: torch.Tensor
+                string: str
+
+        MyClass(x=torch.ones(3), string="saved", batch_size=[3]).memmap(tmp_path)
+        saved_name = f"__main__.{MyClass.__qualname__}"
+        meta_path = tmp_path / "meta.json"
+        metadata = json.loads(meta_path.read_text())
+        metadata["_type"] = f"<class '{saved_name}'>"
+        meta_path.write_text(json.dumps(metadata))
+
+        loaded = MyClass.load_memmap(tmp_path)
+        assert type(loaded) is MyClass
+        assert (loaded.x == 1).all()
+        assert loaded.string == "saved"
+        assert type(MyClass.load(tmp_path)) is MyClass
+        dest = MyClass(x=torch.zeros(3), string="old", batch_size=[3])
+        assert dest.load_memmap_(tmp_path) is dest
+        assert (dest.x == 1).all()
+        assert dest.string == "saved"
+
+        # TensorDict.load_memmap does not guess the class, and a class with
+        # another name is not used.
+        for other_cls in (TensorDict, OtherClass):
+            msg = (
+                f"Could not find the class {saved_name} saved in {tmp_path}. "
+                "Import the module that defines it, or call MyClass.load_memmap() "
+                f"instead of {other_cls.__qualname__}.load_memmap()."
+            )
+            with pytest.raises(RuntimeError, match=re.escape(msg)):
+                other_cls.load_memmap(tmp_path)
+
+        # The qualname must match: a class nested in another class of
+        # __main__ is not MyClass.
+        metadata["_type"] = f"<class '__main__.Outer.{MyClass.__qualname__}'>"
+        meta_path.write_text(json.dumps(metadata))
+        with pytest.raises(
+            RuntimeError, match=re.escape("Could not find the class __main__.Outer.")
+        ):
+            MyClass.load_memmap(tmp_path)
+
+    def test_load_memmap_tensordict_as_subclass(self, tmp_path):
+        # A TensorClass subclass wraps a loaded plain TensorDict in the class.
+        class MyClass(TensorClass):
+            x: torch.Tensor
+
+        TensorDict(x=torch.ones(3), batch_size=[3]).memmap(tmp_path)
+        for loaded in (MyClass.load_memmap(tmp_path), MyClass.load(tmp_path)):
+            assert type(loaded) is MyClass
+            assert (loaded.x == 1).all()
 
     def test_memmap_overwrite_removes_stale_pickle(self, tmp_path):
         @tensorclass
