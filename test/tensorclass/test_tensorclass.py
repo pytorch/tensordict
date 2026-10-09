@@ -2649,6 +2649,99 @@ class TestTensorClass:
         assert torch.allclose(tc2.x, tc.x)
         assert torch.allclose(tc2.y.x, tc.y.x)
 
+    @pytest.mark.parametrize("nocast", [False, True])
+    @pytest.mark.parametrize("assign", [False, True])
+    @pytest.mark.parametrize("flatten", [False, True])
+    def test_statedict_shadow_roundtrip(self, nocast, assign, flatten, tmp_path):
+        @tensorclass(shadow=True, nocast=nocast)
+        class Shadow:
+            x: torch.Tensor
+            batch_size: Any
+            device: Any
+            label: str
+
+        @tensorclass
+        class Parent:
+            child: Shadow
+
+        source = Shadow(torch.arange(4), batch_size=4, device=0, label="source")
+        target = Shadow(
+            torch.zeros(4, dtype=torch.long), batch_size=1, device=1, label="target"
+        )
+        state = source.state_dict(flatten=flatten)
+        assert state._metadata[""]["batch_size"] == torch.Size([])
+        assert state._metadata[""]["device"] is None
+        checkpoint = tmp_path / "state.pt"
+        torch.save(state, checkpoint)
+        state = torch.load(checkpoint, weights_only=True)
+        target_x = target.x
+        assert target.load_state_dict(state, assign=assign) is target
+        torch.testing.assert_close(target.x, source.x)
+        assert target.batch_size == 4
+        assert target.device == 0
+        assert target.label == "source"
+        assert target._tensordict.batch_size == torch.Size([])
+        assert target._tensordict.device is None
+        assert target.x is (state["x"] if assign else target_x)
+
+        parent = Parent(child=source, batch_size=[])
+        restored = Parent(
+            child=Shadow(
+                torch.zeros(4, dtype=torch.long), batch_size=2, device=2, label="other"
+            ),
+            batch_size=[],
+        )
+        restored.load_state_dict(parent.state_dict(flatten=flatten), assign=assign)
+        torch.testing.assert_close(restored.child.x, source.x)
+        assert restored.child.batch_size == 4
+        assert restored.child.device == 0
+        assert restored.child.label == "source"
+        assert restored.child._tensordict.batch_size == torch.Size([])
+
+    @pytest.mark.parametrize("assign", [False, True])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_statedict_shadow_batched(self, assign, device):
+        @tensorclass(shadow=True, nocast=True)
+        class Shadow:
+            x: torch.Tensor
+            batch_size: Any
+            device: Any
+
+        source = Shadow.from_tensordict(
+            TensorDict(
+                {
+                    "x": torch.arange(6).reshape(2, 3),
+                    "batch_size": "field",
+                    "device": "field-device",
+                },
+                batch_size=[2],
+                device=device,
+            )
+        )
+        target = Shadow.from_tensordict(
+            TensorDict(
+                {
+                    "x": torch.zeros(2, 3, dtype=torch.long),
+                    "batch_size": "other",
+                    "device": "other-device",
+                },
+                batch_size=[2],
+                device=device,
+            )
+        )
+        state = source.state_dict()
+        assert state._metadata[""]["batch_size"] == torch.Size([2])
+        assert state._metadata[""]["device"] == torch.device(device)
+        target.load_state_dict(state, assign=assign)
+        torch.testing.assert_close(target.x, source.x)
+        assert target.batch_size == "field"
+        assert target.device == "field-device"
+        assert target._tensordict.batch_size == torch.Size([2])
+        assert target._tensordict.device == torch.device(device)
+        for key in ("batch_size", "device"):
+            assert target._tensordict.get(key).batch_size == torch.Size([2])
+            assert target._tensordict.get(key).device == torch.device(device)
+
     def test_statedict_legacy_compat(self):
         import collections
 

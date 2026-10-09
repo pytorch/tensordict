@@ -3237,8 +3237,8 @@ def _state_dict(
 
     metadata_key = prefix[:-1] if prefix.endswith(".") else prefix
     destination._metadata[metadata_key] = {
-        "batch_size": self.batch_size,
-        "device": self.device,
+        "batch_size": td.batch_size,
+        "device": td.device,
         "_type": type(self).__qualname__,
         "_non_tensor": non_tensor,
     }
@@ -3294,7 +3294,9 @@ def _load_state_dict(
             else:
                 td.set(
                     key,
-                    NonTensorData(data=value, batch_size=self.batch_size),
+                    NonTensorData(
+                        data=value, batch_size=td.batch_size, device=td.device
+                    ),
                     inplace=not assign,
                 )
 
