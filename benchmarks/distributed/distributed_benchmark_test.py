@@ -9,7 +9,6 @@ import time
 
 import pytest
 import torch
-
 from tensordict import TensorDict
 from torch.distributed import rpc
 

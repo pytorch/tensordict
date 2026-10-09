@@ -17,12 +17,17 @@ import weakref
 from collections import OrderedDict
 from collections.abc import MutableSequence
 
+import functorch
 import pytest
+import tensordict.nn.common
+import tensordict.nn.distributions
+import tensordict.nn.distributions.truncated_normal
+import tensordict.nn.params
+import tensordict.nn.probabilistic
+import tensordict.nn.utils
 import torch
 from _utils_internal import is_npu_available
-
 from functorch import make_functional_with_buffers as make_functional_functorch
-
 from tensordict import (
     is_tensor_collection,
     NonTensorData,
@@ -47,6 +52,7 @@ from tensordict.nn.distributions import (
     AddStateIndependentNormalScale,
     Delta,
     NormalParamExtractor,
+    OneHotCategorical,
 )
 from tensordict.nn.distributions.composite import CompositeDistribution
 from tensordict.nn.ensemble import EnsembleModule
@@ -173,6 +179,26 @@ class TestInteractionType:
     def test_from_str_correct_raise(self, unsupported_type_str):
         with pytest.raises(ValueError, match=" is not a valid InteractionType"):
             InteractionType.from_str(unsupported_type_str)
+
+    def test_str_enum(self):
+        # InteractionType derives from enum.StrEnum, or from the backport
+        # tensordict.nn.utils._StrEnum before Python 3.11.
+        assert InteractionType.MODE == "mode"
+        assert InteractionType("MODE") is InteractionType.MODE
+        assert pickle.loads(pickle.dumps(InteractionType.MODE)) is InteractionType.MODE
+
+        class Backported(tensordict.nn.utils._StrEnum):
+            MODE = "mode"
+
+        assert Backported.MODE == "mode"
+        assert isinstance(Backported.MODE, str)
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^tensordict\.nn\.utils\.StrEnum is deprecated and will be "
+            r"removed in TensorDict 0\.17\.$",
+        ) as record:
+            assert tensordict.nn.utils.StrEnum is tensordict.nn.utils._StrEnum
+        assert record[0].filename == __file__
 
     dist_partials = {
         "Bernoulli": functools.partial(
@@ -380,6 +406,52 @@ class TestTDModule:
         mod = TensorDictModule(nn.Linear(3, 4), in_keys=["a"], out_keys=["b"])
         with pytest.warns(DeprecationWarning, match=r"removed in TensorDict 0\.17"):
             assert mod.device == torch.device("cpu")
+
+    def test_is_functional_deprecation(self):
+        mod = TensorDictModule(nn.Linear(3, 4), in_keys=["a"], out_keys=["b"])
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^TensorDictModule\.is_functional is deprecated and will be "
+            r"removed in TensorDict 0\.17\.$",
+        ) as record:
+            assert mod.is_functional is False
+        assert record[0].filename == __file__
+
+        with pytest.warns(FutureWarning, match="integrated functorch"):
+            fmodule, _, _ = make_functional_functorch(nn.Linear(3, 4))
+        mod = TensorDictModule(fmodule, in_keys=["a"], out_keys=["b"])
+        with pytest.warns(DeprecationWarning, match="is_functional"):
+            assert mod.is_functional is True
+        seq = TensorDictSequential(mod)
+        with pytest.warns(DeprecationWarning, match="is_functional"):
+            assert seq.is_functional is False
+
+    @pytest.mark.parametrize(
+        "name", ["FunctionalModule", "FunctionalModuleWithBuffers"]
+    )
+    def test_functional_module_classes_deprecation(self, name):
+        with pytest.warns(
+            DeprecationWarning,
+            match=rf"^tensordict\.nn\.common\.{name} is deprecated and will be "
+            rf"removed in TensorDict 0\.17\. Use functorch\.{name} instead\.$",
+        ) as record:
+            cls = getattr(tensordict.nn.common, name)
+        assert record[0].filename == __file__
+        assert cls is getattr(functorch, name)
+
+    def test_dispatch_get_source_deprecation(self):
+        class Module(nn.Module):
+            in_keys = ["a"]
+
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^dispatch\.get_source\(\) is deprecated and will be removed "
+            r"in TensorDict 0\.17\.$",
+        ) as record:
+            assert dispatch().get_source(None, Module()) == ["a"]
+        assert record[0].filename == __file__
+        with pytest.warns(DeprecationWarning, match="get_source"):
+            assert dispatch(source=["b"]).get_source(None, Module()) == ["b"]
 
     def test_mutable_sequence(self):
         in_keys = self.MyMutableSequence(["a", "b", "c"])
@@ -634,9 +706,9 @@ class TestTDModule:
         for p in returned_params_eq_inplace_updated_params.values(
             include_nested=True, leaves_only=True
         ):
-            assert (
-                p.all()
-            ), f"Discrepancy between returned weights and those in-place updated {p}"
+            assert p.all(), (
+                f"Discrepancy between returned weights and those in-place updated {p}"
+            )
 
     def test_reset_functional_called_once(self):
         import unittest.mock
@@ -1438,6 +1510,26 @@ class TestTDSequence:
         assert "key2" in out
         assert "key3" in out
         assert "foo1" not in out
+
+    def test_prob_seq_det_part_deprecation(self):
+        seq = ProbabilisticTensorDictSequential(
+            TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["loc"]),
+            ProbabilisticTensorDictModule(
+                in_keys=["loc"], out_keys=["sample"], distribution_class=Delta
+            ),
+        )
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^ProbabilisticTensorDictSequential\.det_part is deprecated and "
+            r"will be removed in TensorDict 0\.17\. Use "
+            r"ProbabilisticTensorDictSequential\.get_dist_params\(\) instead\.$",
+        ) as record:
+            det_part = seq.det_part
+        assert record[0].filename == __file__
+        assert det_part is seq._det_part
+        assert isinstance(det_part, TensorDictSequential)
+        params = seq.get_dist_params(TensorDict(x=torch.zeros(3)))
+        assert (params["loc"] == 1).all()
 
     def test_prob_seq_no_prob_modules(self):
         """Test ProbabilisticTensorDictSequential with no probabilistic modules.
@@ -2527,6 +2619,83 @@ def test_to_context(original_device, new_device, tc):
 
 
 class TestProbabilisticTensorDictModule:
+    def test_cache_dist_deprecation(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            ProbabilisticTensorDictModule(
+                in_keys=["loc"], out_keys=["sample"], cache_dist=False
+            )
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^ProbabilisticTensorDictModule\(cache_dist=True\) is deprecated "
+            r"and will be removed in TensorDict 0\.17\.$",
+        ) as record:
+            module = ProbabilisticTensorDictModule(
+                in_keys=["loc"], out_keys=["sample"], cache_dist=True
+            )
+        assert record[0].filename == __file__
+        assert module.cache_dist is hasattr(Delta, "update")
+
+    def test_distribution_class_str(self):
+        module = ProbabilisticTensorDictModule(
+            in_keys=["param"], out_keys=["sample"], distribution_class="Delta"
+        )
+        assert module.distribution_class is Delta
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^tensordict\.nn\.distributions\.distributions_maps is "
+            r"deprecated and will be removed in TensorDict 0\.17\.$",
+        ) as record:
+            distributions_maps = tensordict.nn.distributions.distributions_maps
+        assert record[0].filename == __file__
+        assert distributions_maps is tensordict.nn.distributions._distributions_maps
+        assert distributions_maps == {
+            "normalparamextractor": NormalParamExtractor,
+            "addstateindependentnormalscale": AddStateIndependentNormalScale,
+            "delta": Delta,
+            "onehotcategorical": OneHotCategorical,
+        }
+        assert "distributions_maps" not in tensordict.nn.distributions.__all__
+
+    def test_deterministic_register_deprecation(self):
+        probabilistic = tensordict.nn.probabilistic
+        for name in ("dist_name", "dist_cls", "dist_has_enum_support"):
+            assert not hasattr(probabilistic, name)
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^tensordict\.nn\.probabilistic\.DETERMINISTIC_REGISTER is "
+            r"deprecated and will be removed in TensorDict 0\.17\. Use a "
+            r"deterministic_sample attribute on the distribution instead\.$",
+        ) as record:
+            register = probabilistic.DETERMINISTIC_REGISTER
+        assert record[0].filename == __file__
+        assert register is probabilistic._DETERMINISTIC_REGISTER
+        assert register[Normal] is InteractionType.MEAN
+        assert register[Categorical] is InteractionType.MODE
+        assert register[distributions.LogisticNormal] is InteractionType.DETERMINISTIC
+        assert register[Delta] is InteractionType.DETERMINISTIC
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "CONST_SQRT_2",
+            "CONST_INV_SQRT_2PI",
+            "CONST_INV_SQRT_2",
+            "CONST_LOG_INV_SQRT_2PI",
+            "CONST_LOG_SQRT_2PI_E",
+        ],
+    )
+    def test_truncated_normal_constants_deprecation(self, name):
+        truncated_normal = tensordict.nn.distributions.truncated_normal
+        with pytest.warns(
+            DeprecationWarning,
+            match=rf"^tensordict\.nn\.distributions\.truncated_normal\.{name} is "
+            rf"deprecated and will be removed in TensorDict 0\.17\.$",
+        ) as record:
+            value = getattr(truncated_normal, name)
+        assert record[0].filename == __file__
+        assert value == getattr(truncated_normal, f"_{name}")
+
     @set_composite_lp_aggregate(False)
     @pytest.mark.parametrize("inplace", [True, False, None])
     @pytest.mark.parametrize("module_inplace", [True, False])
@@ -3138,9 +3307,9 @@ class TestEnsembleModule:
         mod = EnsembleModule(module, num_copies=2)
         for param in mod.params_td.values(True, True):
             p0, p1 = param.unbind(0)
-            assert not torch.allclose(
-                p0, p1
-            ), f"Ensemble params were not initialized correctly {p0}, {p1}"
+            assert not torch.allclose(p0, p1), (
+                f"Ensemble params were not initialized correctly {p0}, {p1}"
+            )
 
     @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
     @pytest.mark.parametrize(
@@ -3162,9 +3331,9 @@ class TestEnsembleModule:
         td = TensorDict({"bork": torch.randn(5, 1)}, batch_size=[5])
         out = mod(td)
         assert "dork" in out.keys(), "Ensemble forward failed to write keys"
-        assert out["dork"].shape == torch.Size(
-            [2, 5, 1]
-        ), "Ensemble forward failed to expand input"
+        assert out["dork"].shape == torch.Size([2, 5, 1]), (
+            "Ensemble forward failed to expand input"
+        )
         outs = out["dork"].unbind(0)
         assert not torch.allclose(outs[0], outs[1]), "Outputs should be different"
 
@@ -3191,16 +3360,16 @@ class TestEnsembleModule:
 
         for out_key in ["dork", "spork"]:
             assert out_key in out.keys(), f"Ensemble forward failed to write {out_key}"
-            assert out[out_key].shape == torch.Size(
-                [4, 5, 1]
-            ), f"Ensemble forward failed to expand input for {out_key}"
+            assert out[out_key].shape == torch.Size([4, 5, 1]), (
+                f"Ensemble forward failed to expand input for {out_key}"
+            )
             same_outputs = torch.isclose(
                 out[out_key].repeat(4, 1, 1), out[out_key].repeat_interleave(4, dim=0)
             ).reshape(4, 4, 5, 1)
             mask_out_diags = torch.eye(4).logical_not()
-            assert not torch.any(
-                same_outputs[mask_out_diags]
-            ), f"Module ensemble outputs should be different for {out_key}"
+            assert not torch.any(same_outputs[mask_out_diags]), (
+                f"Module ensemble outputs should be different for {out_key}"
+            )
 
     def test_reset_once(self):
         """Ensure we only call reset_parameters() once per ensemble member"""
@@ -3212,12 +3381,26 @@ class TestEnsembleModule:
             out_keys=["b"],
         )
         EnsembleModule(module, num_copies=2)
-        assert (
-            lin.reset_parameters.call_count == 2
-        ), f"Reset parameters called {lin.reset_parameters.call_count} times should be 2"
+        assert lin.reset_parameters.call_count == 2, (
+            f"Reset parameters called {lin.reset_parameters.call_count} times should be 2"
+        )
 
 
 class TestTensorDictParams:
+    @pytest.mark.parametrize(
+        "name", ["TDPARAM_HANDLED_FUNCTIONS", "implements_for_tdparam"]
+    )
+    def test_deprecated_module_attributes(self, name):
+        with pytest.warns(
+            DeprecationWarning,
+            match=rf"^tensordict\.nn\.params\.{name} is deprecated and will be "
+            rf"removed in TensorDict 0\.17\.$",
+        ) as record:
+            value = getattr(tensordict.nn.params, name)
+        assert record[0].filename == __file__
+        assert value is getattr(tensordict.nn.params, f"_{name}")
+        assert torch.empty_like in tensordict.nn.params._TDPARAM_HANDLED_FUNCTIONS
+
     @pytest.mark.parametrize("filter_empty", [False, True])
     @pytest.mark.parametrize("lock", [False, True])
     @pytest.mark.parametrize("nested_params", [False, True])

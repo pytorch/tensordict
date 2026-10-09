@@ -33,7 +33,7 @@ def _save_metadata(data: TensorCollection, prefix: Path, metadata=None) -> None:
         }
     )
     with open(filepath, "wb") as json_metadata:
-        from tensordict.utils import json_dumps
+        from tensordict._utils_key_json import json_dumps
 
         json_str = json_dumps(metadata)
         # Ensure we write bytes to the binary file.

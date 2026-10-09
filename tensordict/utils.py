@@ -9,7 +9,6 @@ import concurrent.futures
 import functools
 import itertools
 import logging
-
 import math
 import os
 import re
@@ -39,13 +38,10 @@ from typing import (
 import numpy as np
 import torch
 from pyvers import implement_for  # noqa: F401
-
-from tensordict._indexing import (  # noqa: F401
-    _getitem_batch_size,
-    convert_ellipsis_to_idx,
-)
+from tensordict import _indexing, _utils_key_json
+from tensordict._deprecation import deprecated_attributes
+from tensordict._indexing import _getitem_batch_size  # noqa: F401
 from tensordict._nestedkey import NestedKey
-
 from torch import Tensor
 from torch._C._functorch import (  # noqa: F401  # @manual=fbcode//caffe2:torch
     is_batchedtensor,
@@ -68,6 +64,42 @@ except ImportError:
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
     from tensordict.tensorclass import NonTensorStack
+
+__all__ = [
+    # Types
+    "DeviceType",
+    "IndexType",
+    "NestedKey",
+    # Classes
+    "Buffer",
+    "LinkedList",
+    "TensorDictFuture",
+    "timeit",
+    # Functions
+    "assert_allclose_td",
+    "assert_close",
+    "expand_as_right",
+    "expand_right",
+    "is_non_tensor",
+    "is_tensorclass",
+    "isin",
+    "parse_tensor_dict_string",
+    "print_directory_tree",
+    "remove_duplicates",
+    "unravel_key",
+    "unravel_key_list",
+    # Configuration
+    "capture_non_tensor_stack",
+    "get_printoptions",
+    "lazy_legacy",
+    "list_to_stack",
+    "set_capture_non_tensor_stack",
+    "set_lazy_legacy",
+    "set_list_to_stack",
+    "set_printoptions",
+    # Logging
+    "logger",
+]
 
 
 # Utility function to wrap C++ functorch functions for torch.compile support
@@ -196,7 +228,7 @@ IndexType = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 DeviceType = Union[torch.device, str, int]
 
 
-_KEY_ERROR = 'key "{}" not found in {} with ' "keys {}"
+_KEY_ERROR = 'key "{}" not found in {} with keys {}'
 _LOCK_ERROR = (
     "Cannot modify locked TensorDict. For in-place modification, consider "
     "using the `set_()` method and make sure the key is present."
@@ -216,22 +248,6 @@ console_handler.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s [%(name)s][%(levelname)s] %(message)s")
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
-
-
-def strtobool(val):
-    """Convert a string representation of truth to true (1) or false (0).
-
-    True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values
-    are 'n', 'no', 'f', 'false', 'off', and '0'.  Raises ValueError if
-    'val' is anything else.
-    """
-    val = val.lower()
-    if val in ("y", "yes", "t", "true", "on", "1"):
-        return 1
-    elif val in ("n", "no", "f", "false", "off", "0"):
-        return 0
-    else:
-        raise ValueError(f"invalid truth value {val!r}")
 
 
 def _sub_index(tensor: Tensor, idx: IndexType) -> Tensor:
@@ -257,55 +273,9 @@ def _copy(self: list[int]) -> list[int]:
     return list(self)
 
 
-def infer_size_impl(shape: list[int], numel: int) -> list[int]:
-    """Infers the shape of an expanded tensor whose number of elements is indicated by :obj:`numel`.
-
-    Copied from pytorch for compatibility issues (See #386).
-    See https://github.com/pytorch/pytorch/blob/35d4fa444b67cbcbe34a862782ddf2d92f5b1ce7/torch/jit/_shape_functions.py
-    for the original copy.
-
-    """
-    newsize = 1
-    infer_dim: int | None = None
-    for dim in range(len(shape)):
-        if shape[dim] == -1:
-            if infer_dim is not None:
-                raise AssertionError("only one dimension can be inferred")
-            infer_dim = dim
-        elif shape[dim] >= 0:
-            newsize *= shape[dim]
-        else:
-            raise AssertionError("invalid shape dimensions")
-    if not (
-        numel == newsize
-        or (infer_dim is not None and newsize > 0 and numel % newsize == 0)
-    ):
-        raise AssertionError("invalid shape")
-    out = _copy(shape)
-    if infer_dim is not None:
-        out[infer_dim] = numel // newsize
-    return out
-
-
-if hasattr(math, "prod"):  # Python 3.8+
-
-    def prod(sequence):
-        """General prod function, that generalised usage across math and np.
-
-        Created for multiple python versions compatibility.
-
-        """
-        return math.prod(sequence)
-
-else:
-
-    def prod(sequence):
-        """General prod function, that generalised usage across math and np.
-
-        Created for multiple python versions compatibility.
-
-        """
-        return int(np.prod(sequence))
+# The deprecated tensordict.utils.prod, which, unlike math.prod, takes no start.
+def _prod(sequence):
+    return math.prod(sequence)
 
 
 def expand_as_right(
@@ -383,14 +353,14 @@ def _populate_np_dtypes():
     return d
 
 
-NUMPY_TO_TORCH_DTYPE_DICT = _populate_np_dtypes()
+_NUMPY_TO_TORCH_DTYPE_DICT = _populate_np_dtypes()
 
-TORCH_TO_NUMPY_DTYPE_DICT = {
-    value: key for key, value in NUMPY_TO_TORCH_DTYPE_DICT.items()
+_TORCH_TO_NUMPY_DTYPE_DICT = {
+    value: key for key, value in _NUMPY_TO_TORCH_DTYPE_DICT.items()
 }
 
 
-def is_nested_key(key: NestedKey) -> bool:
+def _is_nested_key(key: NestedKey) -> bool:
     """Returns True if key is a NestedKey."""
     if isinstance(key, str):
         return True
@@ -399,10 +369,10 @@ def is_nested_key(key: NestedKey) -> bool:
     return False
 
 
-def is_seq_of_nested_key(seq: Sequence[NestedKey]) -> bool:
+def _is_seq_of_nested_key(seq: Sequence[NestedKey]) -> bool:
     """Returns True if seq is a Sequence[NestedKey]."""
     if seq and isinstance(seq, Sequence):
-        return all(is_nested_key(k) for k in seq)
+        return all(_is_nested_key(k) for k in seq)
     elif isinstance(seq, Sequence):
         # we allow empty inputs
         return True
@@ -498,6 +468,13 @@ def _get_item(tensor: Tensor, index: IndexType) -> Tensor:
         raise err
 
 
+def _cast_scalar(value, tensor):
+    """Return a Python scalar ``value`` as torch writes it into ``tensor``: in its dtype and on its device."""
+    if isinstance(value, Number) and isinstance(tensor, Tensor):
+        return torch.tensor(value, dtype=tensor.dtype, device=tensor.device)
+    return value
+
+
 def _set_item(
     tensor: Tensor, index: IndexType, value: Tensor, *, validated, non_blocking
 ) -> Tensor:
@@ -517,7 +494,7 @@ def _set_item(
         ):
             return tensor
         elif isinstance(tensor, NonTensorData):
-            tensor = NonTensorStack.from_nontensordata(tensor)
+            tensor = NonTensorStack._from_nontensordata(tensor)
         if tensor.stack_dim != 0:
             tensor = NonTensorStack(*tensor.unbind(0), stack_dim=0)
         tensor[index] = value
@@ -576,7 +553,7 @@ class timeit:
             timeit._REG[k] = [0.0, 0.0, 0]
 
 
-def int_generator(seed):
+def _int_generator(seed):
     """A pseudo-random chain generator.
 
     To be used to produce deterministic integer sequences
@@ -585,7 +562,7 @@ def int_generator(seed):
         >>> for _ in range(2):
         ...     init_int = 10
         ...     for _ in range(10):
-        ...        init_int = int_generator(init_int)
+        ...        init_int = _int_generator(init_int)
         ...        print(init_int, end=", ")
         ...     print("")
         6756, 1717, 4410, 9740, 9611, 9716, 5397, 7745, 4521, 7523,
@@ -660,7 +637,7 @@ def _make_cache_key(args, kwargs):
         )
 
 
-def cache(fun):
+def _cache_while_locked(fun):
     """A cache for TensorDictBase subclasses.
 
     This decorator will cache the values returned by a method as long as the
@@ -673,7 +650,7 @@ def cache(fun):
         >>> import timeit
         >>> from tensordict import TensorDict
         >>> class SomeOtherTd(TensorDict):
-        ...     @cache
+        ...     @_cache_while_locked
         ...     def all_keys(self):
         ...         return set(self.keys(include_nested=True))
         >>> td = SomeOtherTd({("a", "b", "c", "d", "e", "f", "g"): 1.0}, [])
@@ -706,7 +683,7 @@ def cache(fun):
     return newfun
 
 
-def erase_cache(fun):
+def _erase_cache_first(fun):
     """A decorator to erase the cache at each call."""
 
     @wraps(fun)
@@ -719,7 +696,7 @@ def erase_cache(fun):
 
 _NON_STR_KEY_TUPLE_ERR = "Nested membership checks with tuples of strings is only supported when setting `include_nested=True`."
 _NON_STR_KEY_ERR = "TensorDict keys are always strings. Membership checks are only supported for strings or non-empty tuples of strings (for nested TensorDicts)"
-_GENERIC_NESTED_ERR = "Only NestedKeys are supported. Got key {}."
+_GENERIC_NESTED_ERR = "Only NestedKeys are supported: a key must be a string or a non-empty, possibly nested tuple of strings. Got key {!r}."
 
 
 class _StringKeys(KeysView):
@@ -782,7 +759,7 @@ class _LockedSchema(NamedTuple):
     keys: tuple
 
 
-def lock_blocked(func):
+def _lock_blocked(func):
     """Checks that the tensordict is unlocked before executing a function."""
 
     @wraps(func)
@@ -1056,7 +1033,7 @@ class _ErrorInteceptor:
 
     def _add_key_to_error_msg(self, msg: str) -> str:
         if msg.startswith(self.prefix):
-            return f'{self.prefix} "{self.key}" /{msg[len(self.prefix):]}'
+            return f'{self.prefix} "{self.key}" /{msg[len(self.prefix) :]}'
         return f'{self.prefix} "{self.key}". {msg}'
 
     def __enter__(self):
@@ -1913,15 +1890,6 @@ def _clone_value(value, recurse: bool):
         return value
 
 
-def _renamed_inplace_method(fn):
-    def wrapper(*args, **kwargs):
-        raise RuntimeError(
-            f"{fn.__name__.rstrip('_')} has been removed, use {fn.__name__} instead"
-        )
-
-    return wrapper
-
-
 def _get_shape_from_args(*args, kwarg_name="size", **kwargs):
     if not args and not kwargs:
         return ()
@@ -1949,7 +1917,7 @@ class Buffer:  # noqa: D101
     ...
 
 
-class BufferLegacy(torch.nn.Buffer):
+class _BufferLegacy(torch.nn.Buffer):
     """A buffer subclass that keeps the grad fn history."""
 
     def __new__(cls, data=None, *, persistent=True):
@@ -1965,6 +1933,7 @@ class BufferLegacy(torch.nn.Buffer):
 from tensordict._utils_options import (  # noqa: F401
     _legacy_lazy,
     _REPR_OPTIONS,
+    _strtobool,
     capture_non_tensor_stack,
     get_printoptions,
     lazy_legacy,
@@ -2425,7 +2394,7 @@ def _is_unbatched(data) -> bool:
 
 # Set the TD_CHECK_INVARIANTS environment variable (as the CI does) to check the
 # tensordicts that are built without validation, see _check_invariants.
-_CHECK_INVARIANTS = bool(strtobool(os.environ.get("TD_CHECK_INVARIANTS", "0")))
+_CHECK_INVARIANTS = bool(_strtobool(os.environ.get("TD_CHECK_INVARIANTS", "0")))
 
 
 def _check_invariants(td) -> None:
@@ -2499,11 +2468,11 @@ def _pass_through_cls(cls: type):
     return out
 
 
-class KeyDependentDefaultDict(collections.defaultdict):
+class _KeyDependentDefaultDict(collections.defaultdict):
     """A key-dependent default dict.
 
     Examples:
-        >>> my_dict = KeyDependentDefaultDict(lambda key: "foo_" + key)
+        >>> my_dict = _KeyDependentDefaultDict(lambda key: "foo_" + key)
         >>> print(my_dict["bar"])
         foo_bar
     """
@@ -2518,12 +2487,12 @@ class KeyDependentDefaultDict(collections.defaultdict):
         return value
 
 
-def is_namedtuple(obj):
+def _is_namedtuple(obj):
     """Check if obj is a namedtuple."""
     return isinstance(obj, tuple) and hasattr(obj, "_fields")
 
 
-def is_namedtuple_class(cls):
+def _is_namedtuple_class(cls):
     """Check if a class is a namedtuple class."""
     base_attrs = {"_fields", "_replace", "_asdict"}
     return all(hasattr(cls, attr) for attr in base_attrs)
@@ -2605,7 +2574,7 @@ def unravel_key(key):
     return key
 
 
-def unravel_keys(*keys):
+def _unravel_keys(*keys):
     """Unravels a sequence of keys."""
     if len(keys) == 1:
         return unravel_key(keys[0])
@@ -2638,7 +2607,6 @@ from tensordict._utils_key_json import (  # noqa: F401
     _is_safe_legacy_key,
 )
 
-
 assert_allclose_td = assert_close
 
 
@@ -2650,13 +2618,13 @@ def _prefix_last_key(key, prefix):
     return key[:-1] + (_prefix_last_key(key[-1], prefix),)
 
 
-NESTED_TENSOR_ERR = (
+_NESTED_TENSOR_ERR = (
     "The PyTorch version isn't compatible with "
     "nested tensors. Please upgrade to a more recent "
     "version."
 )
 
-_DEVICE2STRDEVICE = KeyDependentDefaultDict(str)
+_DEVICE2STRDEVICE = _KeyDependentDefaultDict(str)
 
 
 def _lock_warn():
@@ -3019,12 +2987,7 @@ def _create_segments_from_list(
     return splits
 
 
-from tensordict._utils_key_json import (  # noqa: F401
-    _json_dumps,
-    get_json_backend,
-    json_dumps,
-    set_json_backend,
-)
+from tensordict._utils_key_json import _json_dumps  # noqa: F401
 
 
 class LinkedList(list):
@@ -3100,4 +3063,41 @@ torch.utils._pytree.register_pytree_node(
     torch.utils._pytree._list_unflatten,
     serialized_type_name="builtins.list",
     flatten_with_keys_fn=torch.utils._pytree._list_flatten_with_keys,
+)
+
+
+__getattr__ = deprecated_attributes(
+    __name__,
+    {
+        "BufferLegacy": (_BufferLegacy, None),
+        "KeyDependentDefaultDict": (_KeyDependentDefaultDict, None),
+        "NESTED_TENSOR_ERR": (_NESTED_TENSOR_ERR, None),
+        "NUMPY_TO_TORCH_DTYPE_DICT": (_NUMPY_TO_TORCH_DTYPE_DICT, None),
+        "TORCH_TO_NUMPY_DTYPE_DICT": (_TORCH_TO_NUMPY_DTYPE_DICT, None),
+        "cache": (_cache_while_locked, None),
+        "convert_ellipsis_to_idx": (_indexing.convert_ellipsis_to_idx, None),
+        "erase_cache": (_erase_cache_first, None),
+        "get_json_backend": (_utils_key_json.get_json_backend, None),
+        "infer_size_impl": (_infer_size_impl, None),
+        "int_generator": (_int_generator, None),
+        "is_nested_key": (
+            _is_nested_key,
+            "isinstance(key, tensordict.NestedKey) (which rejects lists and "
+            "accepts nested tuples)",
+        ),
+        "is_namedtuple": (_is_namedtuple, None),
+        "is_namedtuple_class": (_is_namedtuple_class, None),
+        "is_seq_of_nested_key": (
+            _is_seq_of_nested_key,
+            "isinstance(key, tensordict.NestedKey) on each key (which rejects "
+            "lists and accepts nested tuples)",
+        ),
+        "json_dumps": (_utils_key_json.json_dumps, "json.dumps or orjson.dumps"),
+        "lock_blocked": (_lock_blocked, None),
+        "prod": (_prod, "math.prod"),
+        "set_json_backend": (_utils_key_json.set_json_backend, None),
+        "strtobool": (_strtobool, None),
+        "unravel_keys": (_unravel_keys, "unravel_key or unravel_key_list"),
+    },
+    removal="0.17",
 )

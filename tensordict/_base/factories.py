@@ -5,11 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Type
-
 import torch
-from tensordict._tensorcollection import TensorCollection
 from tensordict.base import TensorDictBase
 
 __all__ = [
@@ -18,7 +14,6 @@ __all__ = [
     "from_dict",
     "from_h5",
     "from_json",
-    "from_list",
     "from_namedtuple",
     "from_pandas",
     "from_parquet",
@@ -125,33 +120,6 @@ def from_struct_array(
         batch_dims=batch_dims,
         device=device,
         batch_size=batch_size,
-    )
-
-
-def from_list(
-    input: list[TensorCollection | Mapping],
-    *,
-    auto_batch_size: bool = False,
-    batch_dims: int | None = None,
-    device: torch.device | None = None,
-    batch_size: torch.Size | None = None,
-    cls: Type | None = None,
-    lazy_stack: bool = None,
-) -> TensorCollection:
-    """Converts a list of dictionaries or TensorDicts to a TensorDict.
-
-    .. seealso:: :meth:`TensorDictBase.from_dict` for more information.
-    """
-    if cls is not None:
-        cls = TensorDictBase
-    return cls.from_list(
-        input,
-        auto_batch_size=auto_batch_size,
-        batch_dims=batch_dims,
-        device=device,
-        batch_size=batch_size,
-        type=type,
-        lazy_stack=lazy_stack,
     )
 
 

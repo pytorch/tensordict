@@ -206,6 +206,18 @@ class TestNamedDims(TestTensorDictsBase):
         td.rename_(c="g")
         assert td.names == list("abgd")
 
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not installed")
+    def test_h5_names_setter_keeps_nested_trailing_name(self, tmpdir):
+        td = TensorDict(
+            {"agents": TensorDict({"obs": torch.zeros(2, 3, 4)}, [2, 3])}, [2]
+        )
+        tdh5 = td.to_h5(filename=tmpdir / "file.h5")
+        tdh5["agents"].names = [None, "agent"]
+        tdh5.names = ["batch"]
+        assert tdh5["agents"].names == ["batch", "agent"]
+        tdh5.names = None
+        assert tdh5["agents"].names == [None, "agent"]
+
     def test_index(self):
         td = TensorDict(batch_size=[3, 4, 5, 6], names=["a", "b", "c", "d"])
         assert td[0].names == ["b", "c", "d"]
@@ -500,6 +512,89 @@ class TestNamedDims(TestTensorDictsBase):
         td["a"] = TensorDict({}, [3, 4], names=["a", "b"])
         assert td.names == ["a"]
         assert td["a"].names == ["a", "b"]
+
+    def test_init_keeps_nested_trailing_name(self):
+        sub = TensorDict({"obs": torch.zeros(2, 3, 4)}, [2, 3], names=[None, "agent"])
+        td = TensorDict({"agents": sub}, [2])
+        assert td["agents"].names == [None, "agent"]
+        assert sub.names == [None, "agent"]
+
+    def test_names_setter_none_keeps_nested_trailing_name(self):
+        sub = TensorDict({"obs": torch.zeros(2, 3, 4)}, [2, 3], names=[None, "agent"])
+        td = TensorDict({"agents": sub}, [2], names=["batch"])
+        assert td["agents"].names == ["batch", "agent"]
+        td.names = None
+        assert td.names == [None]
+        assert td["agents"].names == [None, "agent"]
+
+    def test_names_setter_none_erases_unnamed_nested(self):
+        td = TensorDict({"sub": TensorDict({}, [2, 3])}, [2], names=["batch"])
+        assert td["sub"].names == ["batch", None]
+        td.names = None
+        assert not td["sub"]._has_names()
+
+    def test_names_setter_rejects_nested_trailing_name_clash(self):
+        # the trailing name now survives, so a parent name equal to it would
+        # leave the child with duplicate names
+        sub = TensorDict({"obs": torch.zeros(2, 3, 4)}, [2, 3], names=[None, "batch"])
+        td = TensorDict({"agents": sub}, [2])
+        with pytest.raises(ValueError, match="non-unique"):
+            td.names = ["batch"]
+        td.names = ["time"]
+        assert td["agents"].names == ["time", "batch"]
+
+    def test_names_setter_none_keeps_lazy_stack_names(self):
+        # the members disagree on names, so the stack has no names of its own
+        stack = LazyStackedTensorDict(
+            TensorDict({}, [3], names=["x"]), TensorDict({}, [3], names=["y"])
+        )
+        td = TensorDict({"s": stack}, [])
+        td.names = None
+        assert [member.names for member in td["s"].tensordicts] == [["x"], ["y"]]
+
+    def test_names_setter_clash_leaves_names_unchanged(self):
+        td = TensorDict(
+            {
+                "a": TensorDict({}, [2, 3], names=[None, "x"]),
+                "b": TensorDict({}, [2, 3], names=[None, "batch"]),
+            },
+            [2],
+        )
+        with pytest.raises(ValueError, match=r"at key \('b',\)"):
+            td.names = ["batch"]
+        assert td.names == [None]
+        assert td["a"].names == [None, "x"]
+        assert td["b"].names == [None, "batch"]
+
+        # a clash in a grandchild leaves the child unchanged too
+        gc = TensorDict({}, [2, 3, 4], names=[None, None, "batch"])
+        child = TensorDict({"gc": gc}, [2, 3], names=["time", "agent"])
+        td = TensorDict({"c": child}, [2], names=["time"])
+        with pytest.raises(ValueError, match=r"at key \('c', 'gc'\)"):
+            td.names = ["batch"]
+        assert td.names == ["time"]
+        assert td["c"].names == ["time", "agent"]
+        assert td["c", "gc"].names == ["time", "agent", "batch"]
+
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    def test_init_unnamed_parent_skips_rename(self, device, monkeypatch):
+        # children whose shared dims are unnamed must not make the parent
+        # re-walk every child once per child
+        source = {
+            f"k{i}": TensorDict({}, [2, 3], names=[None, "agent"]) for i in range(10)
+        }
+        rename_calls = [0]
+        orig_rename_subtds = TensorDict._rename_subtds
+
+        def _spy(self, names):
+            rename_calls[0] += 1
+            return orig_rename_subtds(self, names)
+
+        monkeypatch.setattr(TensorDict, "_rename_subtds", _spy)
+        td = TensorDict(source, [2], device=device)
+        # only the constructor's own _set_names(None)
+        assert rename_calls[0] <= 1
+        assert td["k0"].names == [None, "agent"]
 
     def test_split(self):
         td = TensorDict(

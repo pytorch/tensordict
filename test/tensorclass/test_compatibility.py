@@ -90,8 +90,9 @@ def test_legacy_import_paths_are_preserved():
         assert getattr(td_module, name) is getattr(base_module, name)
         assert getattr(base_module, name).__module__ == "tensordict.base"
 
-    assert base_module.from_list is base_factories.from_list
-    assert base_module.from_list.__module__ == "tensordict.base"
+    # The module-level from_list was removed: use the TensorDict.from_list classmethod.
+    assert not hasattr(base_module, "from_list")
+    assert not hasattr(base_factories, "from_list")
 
 
 def test_public_class_modules_are_preserved():
