@@ -19,6 +19,7 @@ import weakref
 from typing import Any, Callable, Sequence, Tuple, Type
 
 import torch
+from tensordict._deprecation import deprecated
 from tensordict._indexing import _as_tuple, _getitem_batch_size, convert_ellipsis_to_idx
 from tensordict._td import (
     _TensorDictKeysView,
@@ -367,6 +368,11 @@ class _StoreStackElementView(TensorDictBase):
             d[parts[-1]] = tensor
         return TensorDict(source, batch_size=self._batch_size, device=self._device)
 
+    @deprecated(
+        "LazyStackedTensorDictStore[i].to_local()",
+        removal="0.17",
+        replacement="to_tensordict()",
+    )
     def to_local(self) -> TensorDict:
         return self.to_tensordict()
 
@@ -1778,7 +1784,17 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     # ---- Materialization ----
 
+    @deprecated(
+        "LazyStackedTensorDictStore.to_local()",
+        removal="0.17",
+        replacement="to_tensordict()",
+    )
     def to_local(self) -> TensorDict:
+        """Pulls the whole store into a local ``TensorDict``.
+
+        .. deprecated:: 0.15
+            Use :meth:`to_tensordict` instead.
+        """
         return self.to_tensordict()
 
     def contiguous(self, *, canonical: bool = False) -> TensorDict:
@@ -2175,31 +2191,31 @@ class LazyStackedTensorDictStore(TensorDictBase):
     def _view(self, *args, **kwargs):
         raise RuntimeError(
             f"Cannot call `view` on a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
     def _transpose(self, dim0, dim1):
         raise RuntimeError(
             f"Cannot call `transpose` on a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
     def _permute(self, *args, **kwargs):
         raise RuntimeError(
             f"Cannot call `permute` on a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
     def _squeeze(self, dim=None):
         raise RuntimeError(
             f"Cannot call `squeeze` on a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
     def _unsqueeze(self, dim: int):
         raise RuntimeError(
             f"Cannot call `unsqueeze` on a {type(self).__name__}. "
-            "Call `to_tensordict()` or `to_local()` first."
+            "Call `to_tensordict()` first."
         )
 
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
