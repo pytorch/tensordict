@@ -33,7 +33,6 @@ import torch
 from _utils_internal import is_npu_available
 from tensordict import (
     assert_allclose_td,
-    get_defaults_to_none,
     is_tensorclass,
     lazy_legacy,
     LazyStackedTensorDict,
@@ -51,7 +50,11 @@ from tensordict import (
 from tensordict._lazy import _PermutedTensorDict, _ViewedTensorDict
 from tensordict._td import lazy_stack
 from tensordict._utils_options import _set_capture_non_tensor_stack, _set_list_to_stack
-from tensordict.base import _GENERIC_NESTED_ERR
+from tensordict.base import (
+    _GENERIC_NESTED_ERR,
+    _get_defaults_to_none,
+    _set_get_defaults_to_none,
+)
 from tensordict.tensorclass import from_dataclass
 from tensordict.utils import _check_recursive_properties
 from torch import Tensor
@@ -492,9 +495,12 @@ class TestTensorClass:
             a: torch.Tensor
 
         data = Data(a=torch.zeros(3), batch_size=[3])
-        set_back = get_defaults_to_none()
+        set_back = _get_defaults_to_none()
         try:
-            set_get_defaults_to_none(defaults_to_none)
+            with pytest.warns(
+                DeprecationWarning, match="set_get_defaults_to_none.*0.17"
+            ):
+                set_get_defaults_to_none(defaults_to_none)
             if defaults_to_none:
                 assert data.get("b") is None
                 assert data.get_at("b", 0) is None
@@ -504,7 +510,7 @@ class TestTensorClass:
                 with pytest.raises(AttributeError):
                     data.get_at("b", 0)
         finally:
-            set_get_defaults_to_none(set_back)
+            _set_get_defaults_to_none(set_back)
 
     def test_backward(self):
         @tensorclass

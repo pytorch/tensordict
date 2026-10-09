@@ -20,15 +20,14 @@ from packaging import version
 from tensordict import (
     assert_close,
     from_dataclass,
-    get_defaults_to_none,
     NonTensorData,
-    set_get_defaults_to_none,
     tensorclass,
     TensorDict,
     TensorDictParams,
     TypedTensorDict,
 )
 from tensordict._unbatched import UnbatchedTensor
+from tensordict.base import _get_defaults_to_none, _set_get_defaults_to_none
 from tensordict.nn import (
     CudaGraphModule,
     InteractionType,
@@ -1263,14 +1262,14 @@ class TestTC:
 
         get_missing_c = torch.compile(get_missing, fullgraph=True, mode=mode)
         data = MyClass(a=None, b=torch.zeros(()))
-        set_back = get_defaults_to_none()
+        set_back = _get_defaults_to_none()
         try:
-            set_get_defaults_to_none(True)
+            _set_get_defaults_to_none(True)
             assert get_missing_c(data) is None
-            set_get_defaults_to_none(False)
+            _set_get_defaults_to_none(False)
             assert get_missing_c(data) == "AttributeError"
         finally:
-            set_get_defaults_to_none(set_back)
+            _set_get_defaults_to_none(set_back)
 
     def test_tc_unbind(self, mode):
         def unbind(td):
