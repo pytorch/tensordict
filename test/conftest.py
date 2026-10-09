@@ -21,10 +21,6 @@ def pytest_addoption(parser):
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "slow: mark test as slow to run")
-    # Registered by pytest-xdist too; registered here for runs without it.
-    config.addinivalue_line(
-        "markers", "xdist_group(name): run these tests in one pytest-xdist worker"
-    )
 
 
 def pytest_collection_modifyitems(config, items):

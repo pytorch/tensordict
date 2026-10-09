@@ -83,41 +83,27 @@ mkdir -p "$JUNIT_DIR"
 python -m pytest test/smoke_test.py -v --durations 20 --junitxml="$JUNIT_DIR/junit-smoke.xml"
 test_status=0
 # Run the tests in TD_TEST_WORKERS pytest-xdist workers (4 unless the job sets
-# it). --dist loadgroup keeps each xdist_group in one worker; see
-# test/distributed/test_distributed.py.
-python -m pytest --runslow -n "${TD_TEST_WORKERS:-4}" --dist loadgroup \
+# it), except two files that run on their own afterwards.
+python -m pytest --runslow -n "${TD_TEST_WORKERS:-4}" \
+    --ignore test/distributed/test_distributed.py \
     --ignore test/utils/test_setup.py \
     --instafail -v --durations 20 --timeout 120 \
     --junitxml="$JUNIT_DIR/junit-tests.xml" || test_status=$?
-# test_setup.py reinstalls tensordict from this checkout, and its editable
-# installs rewrite tensordict/_C.so. Run it alone, so that no other test
-# imports tensordict while that file is half written.
-python -m pytest --runslow test/utils/test_setup.py \
+# test_distributed.py starts its process groups on fixed ports, and its
+# worker processes can hang at exit when the machine is busy. test_setup.py
+# reinstalls tensordict from this checkout, and its editable installs rewrite
+# tensordict/_C.so while other test processes may import it. So these two run
+# alone, one test at a time.
+python -m pytest --runslow test/distributed/test_distributed.py test/utils/test_setup.py \
     --instafail -v --durations 20 --timeout 120 \
-    --junitxml="$JUNIT_DIR/junit-tests-setup.xml" || test_status=$?
+    --junitxml="$JUNIT_DIR/junit-tests-serial.xml" || test_status=$?
 
 if [ "$test_status" -ne 0 ]; then
-    # Record same-commit evidence without hiding the original CI failure:
-    # rerun the failed tests, one at a time. Under --dist loadgroup the IDs of
-    # grouped tests end in @<group>, which --last-failed cannot match, so pass
-    # the IDs without that suffix.
-    python - "$root_dir/.pytest_cache/v/cache/lastfailed" \
-        > "$JUNIT_DIR/failed-tests.txt" <<'EOF'
-import json
-import pathlib
-import re
-import sys
-
-path = pathlib.Path(sys.argv[1])
-failed = json.loads(path.read_text()) if path.exists() else {}
-for nodeid in sorted({re.sub(r"@[\w.-]+$", "", nodeid) for nodeid in failed}):
-    print(nodeid)
-EOF
-    if [ -s "$JUNIT_DIR/failed-tests.txt" ]; then
-        python -m pytest --runslow @"$JUNIT_DIR/failed-tests.txt" \
-            --instafail -v --durations 20 --timeout 120 \
-            --junitxml="$JUNIT_DIR/junit-tests-rerun.xml" || true
-    fi
+    # Record same-commit evidence without hiding the original CI failure.
+    # The rerun is serial, so a failure that only shows under xdist passes here.
+    python -m pytest --runslow --last-failed --last-failed-no-failures none \
+        --instafail -v --durations 20 --timeout 120 \
+        --junitxml="$JUNIT_DIR/junit-tests-rerun.xml" || true
     if [ -n "$RUNNER_TEST_RESULTS_DIR" ]; then
         cp "$JUNIT_DIR"/junit-*.xml "$RUNNER_TEST_RESULTS_DIR/" 2>/dev/null || true
     fi
