@@ -70,9 +70,10 @@ abis = {re.search(r"-cp\d+t?-cp(\d)(\d+)(t?)-", u["filename"]).groups() for u in
 print(json.dumps([f"{a}.{b}{t}" for a, b, t in sorted(abis, key=lambda x: (int(x[0]), int(x[1]), x[2]))]))')
 echo "$PYTHON_VERSIONS"   # ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"] for 0.14.3
 
-# Since 0.15: the classifiers of the commit to release ($PREV for a patch
-# release, upstream/main for X.Y.0)
-PYTHON_VERSIONS=$(git show "$PREV:pyproject.toml" | python3 -c '
+# Since 0.15: the classifiers of the commit to release. For a patch release,
+# that is $PREV; for X.Y.0, the main commit that step 2 starts the branch from.
+START=$PREV   # for X.Y.0: upstream/main, or the commit that the maintainer names
+PYTHON_VERSIONS=$(git show "$START:pyproject.toml" | python3 -c '
 import json, re, sys
 print(json.dumps(re.findall(r"Programming Language :: Python :: (3\.\d+)", sys.stdin.read())))')
 ```
@@ -175,9 +176,20 @@ git commit -am "[Versioning] Prepare TensorDict $VERSION"
 
 ## 3. Test the branch
 
-**Lint** the changed files with the versions that `.pre-commit-config.yaml`
-pins. `pre-commit` can pick a Python on which the pinned libcst crashes
-(exit code -11); these commands avoid that.
+**Lint** the changed files with the tools and versions that the branch's
+`.pre-commit-config.yaml` pins. `pre-commit` can pick a Python on which libcst
+crashes (exit code -11): ufmt and torchfix use it. These commands avoid that.
+On a branch whose hooks run ruff (TensorDict 0.15 and later):
+
+```bash
+files=$(git diff --name-only "$PREV..HEAD" -- '*.py')
+uvx ruff@0.16.10 check $files
+uvx ruff@0.16.10 format --check $files
+uvx --python 3.12 --with torchfix==0.5.0 flake8==7.1.0 --select=TOR \
+  --per-file-ignores='test_*.py:TOR101' $files
+```
+
+On a branch whose hooks run ufmt and flake8 (the 0.14 line):
 
 ```bash
 files=$(git diff --name-only "$PREV..HEAD" -- '*.py')

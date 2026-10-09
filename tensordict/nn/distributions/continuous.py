@@ -9,9 +9,7 @@ from numbers import Number
 from typing import Sequence
 
 import numpy as np
-
 import torch
-
 from tensordict.nn.utils import mappings
 from torch import distributions as D, nn
 
@@ -24,18 +22,6 @@ __all__ = [
 
 # speeds up distribution construction
 # D.Distribution.set_default_validate_args(False)
-
-
-class NormalParamWrapper(nn.Module):
-    def __init__(
-        self,
-        operator: nn.Module,
-        scale_mapping: str = "biased_softplus_1.0",
-        scale_lb: Number = 1e-4,
-    ) -> None:
-        raise RuntimeError(
-            "NormalParamWrapper has been deprecated in favor of `tensordict.nn.NormalParamExtractor`. Use this class instead."
-        )
 
 
 class NormalParamExtractor(nn.Module):
@@ -182,7 +168,7 @@ class AddStateIndependentNormalScale(torch.nn.Module):
         """
         if self.scale_shape != loc.shape[-len(self.scale_shape) :]:
             raise RuntimeError(
-                f"Last dimensions of loc ({loc.shape[-len(self.scale_shape):]}) do not match the number of dimensions "
+                f"Last dimensions of loc ({loc.shape[-len(self.scale_shape) :]}) do not match the number of dimensions "
                 f"in scale ({self.state_independent_scale.shape})"
             )
 

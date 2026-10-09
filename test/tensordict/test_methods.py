@@ -40,6 +40,7 @@ from tensordict import (
     unpack_memmap,
 )
 from tensordict._archive import _ArchiveReader
+from tensordict._indexing import convert_ellipsis_to_idx
 from tensordict._lazy import _CustomOpTensorDict
 from tensordict._td import _str_to_index, _SubTensorDict, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
@@ -52,7 +53,6 @@ from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
     assert_allclose_td,
-    convert_ellipsis_to_idx,
     is_non_tensor,
     set_lazy_legacy,
 )
@@ -571,7 +571,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert item.device == device_cast
 
         assert td_device.device == device_cast, (
-            f"td_device first tensor device is " f"{next(td_device.items())[1].device}"
+            f"td_device first tensor device is {next(td_device.items())[1].device}"
         )
         assert td_device.clone().device == device_cast
         if device_cast != td.device:
@@ -1303,6 +1303,22 @@ class TestTensorDicts(TestTensorDictsBase):
             assert result.batch_size == expected.batch_size
             assert_allclose_td(result, expected)
 
+    @pytest.mark.parametrize(
+        "index", [[[0], [1]], [0, 2], (slice(None), [[0], [1]]), [True, False] * 2]
+    )
+    def test_get_at_set_at_index_like_getitem(self, td_name, device, index):
+        # get_at and set_at_ read the index as getitem does: a bare nested list
+        # is one index, where torch reads it as a tuple of indices
+        td = getattr(self, td_name)(device)
+        expected = td[index]["a"]
+        assert (td.get_at("a", index) == expected).all()
+        if td_name == "td_h5":
+            # h5py does not take every selection that torch takes
+            return
+        with torch.no_grad():
+            td.set_at_("a", torch.zeros_like(expected), index)
+        assert (td[index]["a"] == 0).all()
+
     def test_getitem_string(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -1469,6 +1485,15 @@ class TestTensorDicts(TestTensorDictsBase):
             constructed_td2.set(key, value)
 
         assert (td == constructed_td2).all()
+
+    def test_iter(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        items = list(td)
+        assert len(items) == td.shape[0]
+        for i, item in enumerate(items):
+            assert (item == td[i]).all()
+        # A batch dimension of length 0 gives an empty iteration, not an error
+        assert list(td[:0]) == []
 
     def test_lock(self, td_name, device):
         td = getattr(self, td_name)(device)
@@ -3799,6 +3824,33 @@ class TestTensorDicts(TestTensorDictsBase):
         assert len(td_split) == 2, td_split
         assert td_split[0].batch_size == torch.Size([4, 3, 1, *td.shape[3:]])
         assert td_split[1].batch_size == torch.Size([4, 3, 1, *td.shape[3:]])
+
+    @pytest.mark.parametrize(
+        "indices_or_sections",
+        [
+            torch.tensor(3),
+            torch.tensor([1, 3]),
+            [-1],
+            [-6],
+            [6],
+            [3, 1],
+            [2, 2, 1, 5],
+        ],
+        ids=["0d", "1d", "neg", "neg-out-of-range", "out-of-range", "desc", "mixed"],
+    )
+    @pytest.mark.parametrize("dim", [0, -3])
+    def test_tensor_split_indices(self, td_name, device, indices_or_sections, dim):
+        # Same sections as torch.tensor_split on a tensor of the batch shape
+        td = getattr(self, td_name)(device)
+        expected = torch.tensor_split(torch.zeros(td.shape), indices_or_sections, dim)
+        td_split = td.tensor_split(indices_or_sections, dim)
+        assert [t.batch_size for t in td_split] == [e.shape for e in expected]
+        expected_a = torch.tensor_split(
+            td.get("a"), indices_or_sections, dim % td.batch_dims
+        )
+        for t, e in zip(td_split, expected_a):
+            if e.numel():
+                assert (t.get("a") == e).all()
 
     def test_tensordict_set(self, td_name, device):
         torch.manual_seed(1)

@@ -3,8 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from tensordict._deprecation import deprecated_attributes
 from tensordict.nn.distributions import continuous, discrete
-
 from tensordict.nn.distributions.composite import CompositeDistribution
 from tensordict.nn.distributions.continuous import (
     AddStateIndependentNormalScale,
@@ -16,7 +16,7 @@ from tensordict.nn.distributions.truncated_normal import TruncatedNormal
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.nn.utils import add_custom_mapping, mappings
 
-distributions_maps = {
+_distributions_maps = {
     distribution_class.lower(): eval(distribution_class)
     for distribution_class in (*continuous.__all__, *discrete.__all__)
 }
@@ -37,7 +37,10 @@ __all__ = [
     "continuous",
     "discrete",
     # Utilities
-    "distributions_maps",
     "add_custom_mapping",
     "mappings",
 ]
+
+__getattr__ = deprecated_attributes(
+    __name__, {"distributions_maps": (_distributions_maps, None)}, removal="0.17"
+)
