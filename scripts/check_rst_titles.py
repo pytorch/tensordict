@@ -2,7 +2,6 @@
 """Check that RST title underlines (and overlines) have the same length as the title text."""
 
 import argparse
-
 from logging import getLogger
 from pathlib import Path
 

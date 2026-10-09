@@ -4,13 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 
 """Persistent tensordicts (H5, zarr and others)."""
+
 from __future__ import annotations
 
 import importlib
 import json
 import os
 import pickle
-
 import tempfile
 import warnings
 import weakref
@@ -20,7 +20,6 @@ from typing import Any, Callable, Tuple, Type, TYPE_CHECKING
 
 import numpy as np
 import torch
-
 from tensordict._td import (
     _TensorDictKeysView,
     _unravel_key_to_tuple,
@@ -58,7 +57,6 @@ from tensordict.utils import (
     unravel_key,
 )
 from torch import multiprocessing as mp, Tensor
-
 
 _has_h5 = importlib.util.find_spec("h5py", None) is not None
 _has_zarr = importlib.util.find_spec("zarr", None) is not None
