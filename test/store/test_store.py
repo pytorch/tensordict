@@ -5,6 +5,7 @@
 
 import argparse
 import importlib
+import io
 import pickle
 
 import numpy as np
@@ -1902,12 +1903,13 @@ class TestNonTensorIndexing:
 def test_lazy_store_pickle_path():
     # LazyStackedTensorDictStore moved from tensordict.store._store to
     # tensordict.store._lazy. Pickles made before the move name the old module,
-    # so it must still resolve to the same class.
+    # and unpickling looks the classes up there.
     import tensordict.store._lazy as lazy_module
-    import tensordict.store._store as store_module
 
+    unpickler = pickle.Unpickler(io.BytesIO())
     for name in ("LazyStackedTensorDictStore", "_StoreStackElementView"):
-        assert getattr(store_module, name) is getattr(lazy_module, name)
+        cls = unpickler.find_class("tensordict.store._store", name)
+        assert cls is getattr(lazy_module, name)
 
 
 if __name__ == "__main__":

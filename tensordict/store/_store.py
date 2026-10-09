@@ -2654,8 +2654,10 @@ class TensorDictStore(TensorDictBase):
 _register_tensor_class(TensorDictStore)
 
 
-# The lazily stacked store lives in tensordict.store._lazy. Re-export it so
-# that imports and pickles naming this module keep working.
+# The lazily stacked store lives in tensordict.store._lazy, which imports
+# from this module, so it is imported at the end. TensorDictStore uses
+# LazyStackedTensorDictStore to store a lazy stack, and imports and
+# pickles that name this module must keep working.
 from tensordict.store._lazy import (  # noqa: E402, F401
     _LazyStackedStoreKeysView,
     _StoreStackElementView,
