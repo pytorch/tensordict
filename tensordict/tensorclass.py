@@ -1112,6 +1112,10 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         cls.__torch_function__ = classmethod(__torch_function__)
     cls.__getstate__ = _getstate
     cls.__setstate__ = _setstate
+    if not hasattr(cls, "__copy__"):
+        cls.__copy__ = _copy
+    if not hasattr(cls, "__deepcopy__"):
+        cls.__deepcopy__ = _deepcopy
 
     if tensor_only:
         cls.__getattr__ = _getattr_tensor_only
@@ -2116,6 +2120,16 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
     else:
         self._tensordict = state.get("tensordict")
         self._non_tensordict = state.get("non_tensordict")
+
+
+def _copy(self) -> Any:
+    """Copies the tensorclass without cloning its tensors, like ``self.copy()``."""
+    return self.copy()
+
+
+def _deepcopy(self, memo: dict[int, Any]) -> Any:
+    """Copies the tensorclass and clones its tensors, like ``self.clone()``."""
+    return self.clone()
 
 
 def _getattr_tensor_only(self, item: str, **kwargs) -> Any:
