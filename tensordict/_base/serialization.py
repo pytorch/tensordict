@@ -32,7 +32,6 @@ from tensordict._archive import (
 )
 from tensordict._nestedkey import NestedKey
 from tensordict.base import (
-    _get_device_module,
     _is_tensor_collection,
     _load_metadata,
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
@@ -59,7 +58,7 @@ from tensordict.utils import (
     TensorDictFuture,
     unravel_key,
 )
-from torch._utils import _get_available_device_type
+from torch._utils import _get_available_device_type, _get_device_module
 
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
@@ -1504,8 +1503,7 @@ class _Serialization:
                 subpath = _unravel_key_to_tuple(subpath)
                 if not subpath:
                     raise ValueError(
-                        "subpath must be a string path or a (nested) tuple of "
-                        "strings."
+                        "subpath must be a string path or a (nested) tuple of strings."
                     )
             for part in subpath:
                 effective_robust_key = _get_robust_key_setting_with_warning(

@@ -17,14 +17,13 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 import torch
-from packaging import version
 from tensordict import (
     capture_non_tensor_stack,
     lazy_stack,
     LazyStackedTensorDict,
     set_capture_non_tensor_stack,
-    tensorclass,
     TensorClass,
+    tensorclass,
     TensorDict,
     UnbatchedTensor,
 )
@@ -62,20 +61,15 @@ try:
     _has_h5py = True
 except ImportError:
     _has_h5py = False
-TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
-_v2_5 = TORCH_VERSION >= version.parse("2.5.0")
 PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
 
 _IS_OSX = platform.system() == "Darwin"
 _IS_WINDOWS = sys.platform == "win32"
 
 TD_BATCH_SIZE = 4
-HAS_NESTED_TENSOR = (
-    getattr(torch, "_nested_compute_contiguous_strides_offsets", None) is not None
-)
 
 _PICKLE_LOAD_EXECUTED = False
 
@@ -1064,15 +1058,15 @@ class TestNonTensorData:
 
         data[0, 0] = NonTensorData(data=99)
         assert data.tolist() == [[99, 7], [7, 7], [7, 7]]
-        assert (
-            data.tolist() == TensorDict.load_memmap(tmpdir).tolist()
-        ), TensorDict.load_memmap(tmpdir).tolist()
+        assert data.tolist() == TensorDict.load_memmap(tmpdir).tolist(), (
+            TensorDict.load_memmap(tmpdir).tolist()
+        )
 
         data.update_at_(NonTensorData(data=99), (0, 1))
         assert data.tolist() == [[99, 99], [7, 7], [7, 7]], data.tolist()
-        assert (
-            data.tolist() == TensorDict.load_memmap(tmpdir).tolist()
-        ), TensorDict.load_memmap(tmpdir).tolist()
+        assert data.tolist() == TensorDict.load_memmap(tmpdir).tolist(), (
+            TensorDict.load_memmap(tmpdir).tolist()
+        )
 
     def test_shared_limitations(self):
         # Sharing a special type works but it's locked for writing

@@ -8,7 +8,6 @@ from __future__ import annotations
 import contextlib
 import functools
 from functools import partial
-
 from typing import Any, Callable, Sequence, Tuple, TypeVar
 
 import torch
@@ -34,29 +33,17 @@ from tensordict.utils import (
     lazy_legacy,
 )
 from torch import Tensor
+from torch.compiler import is_compiling
 from torch.nn.parameter import (
     UninitializedBuffer,
     UninitializedParameter,
     UninitializedTensorMixin,
 )
-
-try:
-    from torch.compiler import is_compiling
-except ImportError:  # torch 2.0
-    from torch._dynamo import is_compiling
+from torch.utils._pytree import tree_leaves
 
 TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
 LAZY_TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
 T = TypeVar("T", bound="TensorDictBase")
-
-try:
-    from torch.utils._pytree import tree_leaves
-except ImportError:
-    from torch.utils._pytree import tree_flatten
-
-    def tree_leaves(pytree):
-        """Torch 2.0 compatible version of tree_leaves."""
-        return tree_flatten(pytree)[0]
 
 
 def implements_for_td(torch_function: Callable) -> Callable[[Callable], Callable]:

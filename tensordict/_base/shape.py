@@ -14,6 +14,7 @@ mixin imports in ``tensordict/base.py`` gives the other rules.
 from __future__ import annotations
 
 import math
+import operator
 from typing import List, overload, Sequence, TYPE_CHECKING
 
 import numpy as np
@@ -186,6 +187,8 @@ class _ShapeOps:
                 If `indices_or_sections` is a list or tuple of ints, or a one-dimensional long tensor, then input is split
                 along dimension `dim` at each of the indices in the list, tuple or tensor.
                 For instance, `indices_or_sections=[2, 3]` and `dim=0` would result in the tensors `input[:2]`, `input[2:3]`, and `input[3:]`.
+                As with :func:`torch.tensor_split`, negative indices count from the end, indices past the end are clamped,
+                and an index smaller than the one before it gives an empty or an overlapping section.
                 If `indices_or_sections` is a tensor, it must be a zero-dimensional or one-dimensional long tensor on the CPU.
             dim (int, optional): dimension along which to split the tensor. Default: 0
 
@@ -207,6 +210,20 @@ class _ShapeOps:
             raise ValueError(
                 "indices_or_sections must be an integer, a list of integers, or a 1D tensor of integers"
             )
+        if isinstance(indices_or_sections, torch.Tensor):
+            if (
+                indices_or_sections.dtype != torch.long
+                or indices_or_sections.device.type != "cpu"
+                or indices_or_sections.ndim > 1
+            ):
+                raise ValueError(
+                    "tensor_split: a tensor indices_or_sections must be a zero-dimensional or "
+                    "one-dimensional long tensor on the CPU, but got a "
+                    f"{indices_or_sections.ndim}-dimensional {indices_or_sections.dtype} tensor "
+                    f"on {indices_or_sections.device}."
+                )
+            # A 0-d tensor gives an int (a number of sections), a 1-d one a list of indices.
+            indices_or_sections = indices_or_sections.tolist()
 
         batch_size = self.batch_size
         dim = _maybe_correct_neg_dim(dim, batch_size)
@@ -239,10 +256,25 @@ class _ShapeOps:
             return tuple(self.split(split_sizes, dim=dim))
         # Case 1 -- indices_or_sections is a sequence of integers or a 1D tensor describing the splits
         else:
-            indices = indices_or_sections
-            indices = [0] + list(indices) + [self.shape[dim]]
-            split_sizes = [indices[i + 1] - indices[i] for i in range(len(indices) - 1)]
-            return tuple(self.split(split_sizes, dim=dim))
+            dim_size = self.shape[dim]
+            # Read each index as a slice bound: negative indices count from the end,
+            # and indices out of range are clamped, as in torch.tensor_split.
+            bounds = [0]
+            for index in indices_or_sections:
+                index = operator.index(index)
+                if index < 0:
+                    index += dim_size
+                bounds.append(min(max(index, 0), dim_size))
+            bounds.append(dim_size)
+            split_sizes = [stop - start for start, stop in zip(bounds[:-1], bounds[1:])]
+            if all(size >= 0 for size in split_sizes):
+                return tuple(self.split(split_sizes, dim=dim))
+            # A decreasing index gives an empty section followed by one that overlaps
+            # the previous one, which split cannot express.
+            return tuple(
+                self.narrow(dim, start, max(stop - start, 0))
+                for start, stop in zip(bounds[:-1], bounds[1:])
+            )
 
     @overload
     def unsqueeze(self, dim: int) -> Self: ...

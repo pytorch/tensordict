@@ -15,7 +15,6 @@ import warnings
 
 import pytest
 import torch
-from packaging import version
 from tensordict import (
     get_defaults_to_none,
     LazyStackedTensorDict,
@@ -23,7 +22,7 @@ from tensordict import (
     TensorDict,
 )
 from tensordict.nn import TensorDictParams
-from tensordict.utils import _LOCK_ERROR
+from tensordict.utils import _GENERIC_NESTED_ERR, _LOCK_ERROR
 from torch import nn
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
@@ -42,20 +41,15 @@ try:
     _has_h5py = True
 except ImportError:
     _has_h5py = False
-TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
-_v2_5 = TORCH_VERSION >= version.parse("2.5.0")
 PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
 
 _IS_OSX = platform.system() == "Darwin"
 _IS_WINDOWS = sys.platform == "win32"
 
 TD_BATCH_SIZE = 4
-HAS_NESTED_TENSOR = (
-    getattr(torch, "_nested_compute_contiguous_strides_offsets", None) is not None
-)
 
 # Capture all warnings
 pytestmark = [
@@ -109,6 +103,30 @@ class TestErrorMessage:
         td = TensorDict({"a": torch.rand(())}, [])
         with pytest.raises(ValueError, match="Failed to update 'a'"):
             td.set_("a", torch.randn(2))
+
+    @staticmethod
+    @pytest.mark.parametrize("key", [1, None, (1, "a")])
+    def test_non_str_key(key):
+        err = re.escape(_GENERIC_NESTED_ERR.format(key))
+        value = torch.zeros(2)
+        td = TensorDict({"a": value}, [2])
+        with pytest.raises(KeyError, match=err):
+            TensorDict({key: value}, [2])
+        with pytest.raises(KeyError, match=err):
+            TensorDict.from_dict({key: value})
+        with pytest.raises(KeyError, match=err):
+            td.set(key, value)
+        with pytest.raises(KeyError, match=err):
+            td.set_(key, value)
+        with pytest.raises(KeyError, match=err):
+            td.update({key: value})
+        with pytest.raises(KeyError, match=err):
+            td.get(key)
+        with pytest.raises(KeyError, match=err):
+            td.get_at(key, 0)
+        with pytest.raises(KeyError, match=err):
+            td.pop(key)
+        assert list(td.keys()) == ["a"]
 
     @staticmethod
     @pytest.mark.parametrize("td_type", ["td", "lazy_stack", "sub_td"])

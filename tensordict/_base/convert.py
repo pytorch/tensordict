@@ -925,9 +925,7 @@ class _Conversion:
         """
         if memo is not None:
             raise RuntimeError("memo cannot be passed to the public to_module anymore.")
-        hooks = getattr(
-            torch.nn.modules.module, "_global_parameter_registration_hooks", {}
-        )
+        hooks = torch.nn.modules.module._global_parameter_registration_hooks
         memo = {"hooks": tuple(hooks.values())}
         return self._to_module(
             module=module,

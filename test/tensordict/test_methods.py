@@ -27,7 +27,6 @@ import pytest
 import tensordict._archive as tensordict_archive
 import tensordict.base as tensordict_base
 import torch
-from packaging import version
 from tensordict import (
     is_memmap_archive,
     lazy_legacy,
@@ -91,20 +90,15 @@ try:
     _has_h5py = True
 except ImportError:
     _has_h5py = False
-TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
-_v2_5 = TORCH_VERSION >= version.parse("2.5.0")
 PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
 
 _IS_OSX = platform.system() == "Darwin"
 _IS_WINDOWS = sys.platform == "win32"
 
 TD_BATCH_SIZE = 4
-HAS_NESTED_TENSOR = (
-    getattr(torch, "_nested_compute_contiguous_strides_offsets", None) is not None
-)
 
 # Capture all warnings
 pytestmark = [
@@ -577,7 +571,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert item.device == device_cast
 
         assert td_device.device == device_cast, (
-            f"td_device first tensor device is " f"{next(td_device.items())[1].device}"
+            f"td_device first tensor device is {next(td_device.items())[1].device}"
         )
         assert td_device.clone().device == device_cast
         if device_cast != td.device:
@@ -3805,6 +3799,33 @@ class TestTensorDicts(TestTensorDictsBase):
         assert len(td_split) == 2, td_split
         assert td_split[0].batch_size == torch.Size([4, 3, 1, *td.shape[3:]])
         assert td_split[1].batch_size == torch.Size([4, 3, 1, *td.shape[3:]])
+
+    @pytest.mark.parametrize(
+        "indices_or_sections",
+        [
+            torch.tensor(3),
+            torch.tensor([1, 3]),
+            [-1],
+            [-6],
+            [6],
+            [3, 1],
+            [2, 2, 1, 5],
+        ],
+        ids=["0d", "1d", "neg", "neg-out-of-range", "out-of-range", "desc", "mixed"],
+    )
+    @pytest.mark.parametrize("dim", [0, -3])
+    def test_tensor_split_indices(self, td_name, device, indices_or_sections, dim):
+        # Same sections as torch.tensor_split on a tensor of the batch shape
+        td = getattr(self, td_name)(device)
+        expected = torch.tensor_split(torch.zeros(td.shape), indices_or_sections, dim)
+        td_split = td.tensor_split(indices_or_sections, dim)
+        assert [t.batch_size for t in td_split] == [e.shape for e in expected]
+        expected_a = torch.tensor_split(
+            td.get("a"), indices_or_sections, dim % td.batch_dims
+        )
+        for t, e in zip(td_split, expected_a):
+            if e.numel():
+                assert (t.get("a") == e).all()
 
     def test_tensordict_set(self, td_name, device):
         torch.manual_seed(1)

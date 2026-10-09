@@ -47,8 +47,11 @@ containers:
 Lazy stacks and views:
 
 - `_lazy.py`: `LazyStackedTensorDict`, which stacks tensordicts without
-  copying them. An index selects members along the stack dim and indexes
-  each member along the other dims. The file also holds
+  copying them. `_split_index` reads an index, with the model of
+  `_indexing.py`, as one index per member that it reaches: an int along the
+  stack dim selects one member, a slice selects members whose results are
+  stacked, and an advanced index gathers the elements of its block from the
+  members. Reads and writes use this split. The file also holds
   `_CustomOpTensorDict` and its subclasses (`_UnsqueezedTensorDict`,
   `_SqueezedTensorDict`, `_ViewedTensorDict`, `_TransposedTensorDict`,
   `_PermutedTensorDict`), which belong to the legacy lazy mode
@@ -114,6 +117,9 @@ Options and utilities:
 - `_contextlib.py`: decorator context managers, and `LAST_OP_MAPS`, the
   functions that undo an operation at the end of a `with` block, as in
   `with td.permute(1, 0) as tdp:`.
+- `_deprecation.py`: the helpers that deprecate a function, a method, a
+  property or a module attribute. Each takes the release that removes the
+  name, and `test_deprecation_deadlines` fails once `version.txt` reaches it.
 - `_ucxx.py`: `TensorDictPipe` and `TensorDictServer`, transport over UCXX.
 - `prototype/fx.py`: `symbolic_trace` for tensordict modules.
 - `testing.py`: tensorclasses that the distributed tests import by name.

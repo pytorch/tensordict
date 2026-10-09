@@ -9,7 +9,6 @@ import concurrent.futures
 import functools
 import itertools
 import logging
-
 import math
 import os
 import re
@@ -38,16 +37,17 @@ from typing import (
 
 import numpy as np
 import torch
-from pyvers import implement_for
-
+from pyvers import implement_for  # noqa: F401
 from tensordict._indexing import (  # noqa: F401
     _getitem_batch_size,
     convert_ellipsis_to_idx,
 )
 from tensordict._nestedkey import NestedKey
-
 from torch import Tensor
-from torch._C import _disabled_torch_function_impl
+from torch._C._functorch import (  # noqa: F401  # @manual=fbcode//caffe2:torch
+    is_batchedtensor,
+)
+from torch.compiler import allow_in_graph, assume_constant_result, is_compiling
 from torch.nn.parameter import (
     UninitializedBuffer,
     UninitializedParameter,
@@ -61,25 +61,46 @@ try:
     _has_funcdim = True
 except ImportError:
     _has_funcdim = False
-try:
-    from torch.compiler import assume_constant_result, is_compiling
-except ImportError:  # torch 2.0
-    from torch._dynamo import assume_constant_result, is_compiling
 
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
     from tensordict.tensorclass import NonTensorStack
 
-
-try:
-    try:
-        from torch._C._functorch import is_batchedtensor  # @manual=fbcode//caffe2:torch
-    except ImportError:
-        from functorch._C import (  # noqa: F401
-            is_batchedtensor,
-        )  # @manual=fbcode//caffe2/functorch:_C
-except ImportError:
-    pass
+__all__ = [
+    # Types
+    "DeviceType",
+    "IndexType",
+    "NestedKey",
+    # Classes
+    "Buffer",
+    "LinkedList",
+    "TensorDictFuture",
+    "timeit",
+    # Functions
+    "assert_allclose_td",
+    "assert_close",
+    "expand_as_right",
+    "expand_right",
+    "is_non_tensor",
+    "is_tensorclass",
+    "isin",
+    "parse_tensor_dict_string",
+    "print_directory_tree",
+    "remove_duplicates",
+    "unravel_key",
+    "unravel_key_list",
+    # Configuration
+    "capture_non_tensor_stack",
+    "get_printoptions",
+    "lazy_legacy",
+    "list_to_stack",
+    "set_capture_non_tensor_stack",
+    "set_lazy_legacy",
+    "set_list_to_stack",
+    "set_printoptions",
+    # Logging
+    "logger",
+]
 
 
 # Utility function to wrap C++ functorch functions for torch.compile support
@@ -88,21 +109,15 @@ def _wrap_functorch_function(func):
 
     PyTorch's Dynamo compiler cannot trace C++ functions from torch._C._functorch.
     This wrapper uses torch.compiler.allow_in_graph to allow compilation through
-    these functions, with a fallback for older PyTorch versions.
+    these functions.
 
     Args:
         func: The C++ function to wrap
 
     Returns:
-        The wrapped function, or the original if wrapping is not available
+        The wrapped function
     """
-    try:
-        from torch.compiler import allow_in_graph
-
-        return allow_in_graph(func)
-    except (ImportError, AttributeError):
-        # Fallback for older PyTorch versions without allow_in_graph
-        return func
+    return allow_in_graph(func)
 
 
 def _import_and_wrap_functorch(*names, wrap_names=None):
@@ -161,11 +176,7 @@ def _import_and_wrap_functorch(*names, wrap_names=None):
 
 
 # Import and wrap _add_batch_dim for compilation support
-_add_batch_dim_c = None
-try:
-    _add_batch_dim_c = _import_and_wrap_functorch("_add_batch_dim")
-except ImportError:
-    pass
+_add_batch_dim_c = _import_and_wrap_functorch("_add_batch_dim")
 
 
 if not _has_funcdim:
@@ -203,13 +214,10 @@ _TORCH_DTYPES = (
     torch.quint4x2,
     torch.quint8,
     torch.uint8,
+    torch.uint16,
+    torch.uint32,
+    torch.uint64,
 )
-if hasattr(torch, "uint16"):
-    _TORCH_DTYPES = _TORCH_DTYPES + (torch.uint16,)
-if hasattr(torch, "uint32"):
-    _TORCH_DTYPES = _TORCH_DTYPES + (torch.uint32,)
-if hasattr(torch, "uint64"):
-    _TORCH_DTYPES = _TORCH_DTYPES + (torch.uint64,)
 _STR_DTYPE_TO_DTYPE = {str(dtype): dtype for dtype in _TORCH_DTYPES}
 _STRDTYPE2DTYPE = _STR_DTYPE_TO_DTYPE
 _DTYPE_TO_STR_DTYPE = {
@@ -221,7 +229,7 @@ IndexType = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 DeviceType = Union[torch.device, str, int]
 
 
-_KEY_ERROR = 'key "{}" not found in {} with ' "keys {}"
+_KEY_ERROR = 'key "{}" not found in {} with keys {}'
 _LOCK_ERROR = (
     "Cannot modify locked TensorDict. For in-place modification, consider "
     "using the `set_()` method and make sure the key is present."
@@ -744,7 +752,7 @@ def erase_cache(fun):
 
 _NON_STR_KEY_TUPLE_ERR = "Nested membership checks with tuples of strings is only supported when setting `include_nested=True`."
 _NON_STR_KEY_ERR = "TensorDict keys are always strings. Membership checks are only supported for strings or non-empty tuples of strings (for nested TensorDicts)"
-_GENERIC_NESTED_ERR = "Only NestedKeys are supported. Got key {}."
+_GENERIC_NESTED_ERR = "Only NestedKeys are supported: a key must be a string or a non-empty, possibly nested tuple of strings. Got key {!r}."
 
 
 class _StringKeys(KeysView):
@@ -907,9 +915,6 @@ def _as_context_manager(attr=None):
 
 
 def _find_smallest_uint(N):
-    if not hasattr(torch, "uint32"):
-        # Fallback
-        return torch.int64
     if N < 0:
         raise ValueError("N must be a non-negative integer")
 
@@ -1084,7 +1089,7 @@ class _ErrorInteceptor:
 
     def _add_key_to_error_msg(self, msg: str) -> str:
         if msg.startswith(self.prefix):
-            return f'{self.prefix} "{self.key}" /{msg[len(self.prefix):]}'
+            return f'{self.prefix} "{self.key}" /{msg[len(self.prefix) :]}'
         return f'{self.prefix} "{self.key}". {msg}'
 
     def __enter__(self):
@@ -1941,16 +1946,6 @@ def _clone_value(value, recurse: bool):
         return value
 
 
-def _is_number(item):
-    if isinstance(item, (Number, ftdim.Dim)):
-        return True
-    if isinstance(item, Tensor) and item.ndim == 0:
-        return True
-    if isinstance(item, np.ndarray) and item.ndim == 0:
-        return True
-    return False
-
-
 def _renamed_inplace_method(fn):
     def wrapper(*args, **kwargs):
         raise RuntimeError(
@@ -1958,22 +1953,6 @@ def _renamed_inplace_method(fn):
         )
 
     return wrapper
-
-
-def _broadcast_tensors(index):
-    # tensors and range need to be broadcast
-    tensors = {
-        i: torch.as_tensor(tensor)
-        for i, tensor in enumerate(index)
-        if isinstance(tensor, (range, list, np.ndarray, Tensor))
-    }
-    if tensors:
-        shape = torch.broadcast_shapes(*[tensor.shape for tensor in tensors.values()])
-        tensors = {i: tensor.expand(shape) for i, tensor in tensors.items()}
-        index = tuple(
-            idx if i not in tensors else tensors[i] for i, idx in enumerate(index)
-        )
-    return index
 
 
 def _get_shape_from_args(*args, kwarg_name="size", **kwargs):
@@ -1997,44 +1976,13 @@ def _get_shape_from_args(*args, kwarg_name="size", **kwargs):
     return size
 
 
-if hasattr(torch.nn, "Buffer"):
-    _parent_buffer_cls = torch.nn.Buffer
-
-    class Buffer:  # noqa: D101
-        ...
-
-    class _BufferMeta: ...
-
-else:
-
-    class _BufferMeta(torch._C._TensorMeta):
-        # Make `isinstance(t, Buffer)` return True for custom tensor instances that have the _is_buffer flag.
-        def __instancecheck__(self, instance):
-            if self is Buffer:
-                if isinstance(instance, torch.Tensor) and getattr(
-                    instance, "_is_buffer", False
-                ):
-                    return True
-            return super().__instancecheck__(instance)
-
-    class Buffer(torch.Tensor, metaclass=_BufferMeta):
-        """A replicate of torch.nn.Buffer if not available (prior to torch v2.5)."""
-
-        def __new__(cls, data=None, *, persistent=True):
-            if data is None:
-                data = torch.empty(0)
-
-            t = data.detach().requires_grad_(data.requires_grad)
-            t.persistent = persistent
-            t._is_buffer = True
-            return t
-
-        __torch_function__ = _disabled_torch_function_impl
-
-    _parent_buffer_cls = Buffer
+# Imports of ``tensordict.utils.Buffer`` resolve to this empty placeholder,
+# as they have since torch.nn.Buffer was added (torch 2.5).
+class Buffer:  # noqa: D101
+    ...
 
 
-class BufferLegacy(_parent_buffer_cls):
+class BufferLegacy(torch.nn.Buffer):
     """A buffer subclass that keeps the grad fn history."""
 
     def __new__(cls, data=None, *, persistent=True):
@@ -2467,14 +2415,7 @@ class _add_batch_dim_pre_hook:
     def __call__(self, mod: torch.nn.Module, args, kwargs):
         for name, param in list(mod.named_parameters(recurse=False)):
             if hasattr(param, "in_dim") and hasattr(param, "vmap_level"):
-                if _add_batch_dim_c is None:
-                    from torch._C._functorch import (
-                        _add_batch_dim,
-                    )  # @manual=//caffe2:_C
-                else:
-                    _add_batch_dim = _add_batch_dim_c
-
-                param = _add_batch_dim(param, param.in_dim, param.vmap_level)
+                param = _add_batch_dim_c(param, param.in_dim, param.vmap_level)
                 delattr(mod, name)
                 setattr(mod, name, param)
         for key, val in list(mod._forward_pre_hooks.items()):
@@ -2622,15 +2563,10 @@ def is_namedtuple_class(cls):
 
 
 def _make_dtype_promotion(func):
-    dtype = getattr(torch, func.__name__, None)
+    dtype = getattr(torch, func.__name__)
 
     @wraps(func)
     def new_func(self):
-        if dtype is None:
-            raise NotImplementedError(
-                f"Your pytorch version {torch.__version__} does not support {dtype}."
-            )
-
         def todtype(x):
             return x.to(dtype)
 
@@ -2734,7 +2670,6 @@ from tensordict._utils_key_json import (  # noqa: F401
     _get_robust_key_setting_with_warning,
     _is_safe_legacy_key,
 )
-
 
 assert_allclose_td = assert_close
 
@@ -3191,20 +3126,10 @@ class LinkedList(list):
 
 
 # register LinkedList in PyTree
-@implement_for("torch", "2.3", None)
-def _register_pytree_node():
-    torch.utils._pytree.register_pytree_node(
-        LinkedList,
-        torch.utils._pytree._list_flatten,
-        torch.utils._pytree._list_unflatten,
-        serialized_type_name="builtins.list",
-        flatten_with_keys_fn=torch.utils._pytree._list_flatten_with_keys,
-    )
-
-
-@implement_for("torch", None, "2.3")
-def _register_pytree_node():  # noqa: F811 # type: ignore
-    pass
-
-
-_register_pytree_node()
+torch.utils._pytree.register_pytree_node(
+    LinkedList,
+    torch.utils._pytree._list_flatten,
+    torch.utils._pytree._list_unflatten,
+    serialized_type_name="builtins.list",
+    flatten_with_keys_fn=torch.utils._pytree._list_flatten_with_keys,
+)

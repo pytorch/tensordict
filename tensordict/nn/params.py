@@ -25,13 +25,11 @@ from typing import (
 )
 
 import torch
-
 from tensordict._lazy import _CustomOpTensorDict, LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._td import _SubTensorDict, TensorDict
 from tensordict._tensorcollection import TensorCollection
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
-
 from tensordict.base import (
     _default_is_leaf,
     _is_tensor_collection,
@@ -41,19 +39,19 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
-
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _LOCK_ERROR,
     _zip_strict,
     BufferLegacy,
     erase_cache,
-    implement_for,
     IndexType,
     is_batchedtensor,
     lock_blocked,
 )
 from torch import multiprocessing as mp, nn, Tensor
+from torch.compiler import is_compiling
+from torch.nn.parameter import Buffer
 from torch.utils._pytree import tree_map
 
 try:
@@ -65,21 +63,12 @@ except ImportError:
 
     _has_funcdim = False
 
-try:
-    from torch.nn.parameter import Buffer
-except ImportError:
-    from tensordict.utils import Buffer
-
-
-try:
-    from torch.compiler import is_compiling
-except ImportError:
-    from torch._dynamo import is_compiling
-
 if TYPE_CHECKING:
     from typing import Self
 else:
     Self = Any
+
+__all__ = ["TensorDictParams"]
 
 
 def _apply_leaves(data, fn):
@@ -299,7 +288,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     - Automatic Conversion: Any tensor set in the tensordict is automatically converted to a :class:`torch.nn.Parameter`,
       unless specified otherwise through the :attr:`no_convert` keyword argument.
 
-    Args
+    Args:
         parameters (TensorDictBase or dict): The tensordict to represent as parameters. Values are converted to
             parameters unless `no_convert=True`. If a `dict` is provided, it is wrapped in a `TensorDict` instance.
             Keyword arguments can also be used.
@@ -320,7 +309,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
         **kwargs: Key-value pairs to populate the `TensorDictParams`. Exclusive with the `parameters` input.
 
-    Examples
+    Examples:
         >>> from torch import nn
         >>> from tensordict import TensorDict
         >>> module = nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 4))
@@ -1333,7 +1322,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_apply_on_data
     def apply_(self, fn: Callable, *others, **kwargs) -> Self: ...
 
-    @implement_for("torch", "2.1")
     def _apply(self, fn, recurse=True):
         self._param_td._erase_cache()
         param_td = self._param_td
@@ -1341,26 +1329,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         # Keep a list of buffers to update .data only
         bufs = dict(self._buffers)
         out: TensorDictBase = super()._apply(fn, recurse=recurse)
-        for key, val in bufs.items():
-            val.data = self._buffers[key].data
-            self._buffers[key] = val
-        # Check device and shape
-        cbs = out._check_batch_size(raise_exception=False)
-        if not cbs:
-            out.auto_batch_size_()
-        cd = out._check_device(raise_exception=False)
-        if not cd:
-            out.auto_device_()
-        return out
-
-    @implement_for("torch", None, "2.1")
-    def _apply(self, fn):  # noqa: F811
-        self._param_td._erase_cache()
-        param_td = self._param_td
-        self._param_td = param_td.copy()
-        # Keep a list of buffers to update .data only
-        bufs = dict(self._buffers)
-        out: TensorDictBase = super()._apply(fn)
         for key, val in bufs.items():
             val.data = self._buffers[key].data
             self._buffers[key] = val

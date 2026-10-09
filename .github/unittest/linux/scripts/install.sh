@@ -43,6 +43,13 @@ elif [[ "$TORCH_VERSION" == "stable" ]]; then
   else
       python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
   fi
+elif [[ "$TORCH_VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
+  # a release series, such as 2.13, with the torchvision release built for it
+  if [ "${CU_VERSION:-}" == cpu ] ; then
+      python -m pip install "torch==${TORCH_VERSION}.*" torchvision --index-url https://download.pytorch.org/whl/cpu
+  else
+      python -m pip install "torch==${TORCH_VERSION}.*" torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
+  fi
 else
   printf "Failed to install pytorch"
   exit 1

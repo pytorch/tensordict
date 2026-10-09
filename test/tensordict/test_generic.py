@@ -25,13 +25,12 @@ import numpy as np
 import pytest
 import tensordict.base as tensordict_base
 import torch
-from packaging import version
 from tensordict import (
     lazy_stack,
     LazyStackedTensorDict,
     set_capture_non_tensor_stack,
-    tensorclass,
     TensorClass,
+    tensorclass,
     TensorDict,
 )
 from tensordict._td import is_tensor_collection
@@ -83,20 +82,15 @@ try:
     _has_h5py = True
 except ImportError:
     _has_h5py = False
-TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
-_v2_5 = TORCH_VERSION >= version.parse("2.5.0")
 PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
 
 _IS_OSX = platform.system() == "Darwin"
 _IS_WINDOWS = sys.platform == "win32"
 
 TD_BATCH_SIZE = 4
-HAS_NESTED_TENSOR = (
-    getattr(torch, "_nested_compute_contiguous_strides_offsets", None) is not None
-)
 
 # Capture all warnings
 pytestmark = [
@@ -361,11 +355,7 @@ class TestGeneric:
     @pytest.mark.parametrize("use_file", [False, True])
     @pytest.mark.parametrize(
         "nested,hetdtype",
-        (
-            [[False, False], [False, True]]
-            if torch.__version__ < "2.4"
-            else [[False, False], [False, True], ["NJT", True]]
-        ),
+        [[False, False], [False, True], ["NJT", True]],
     )
     def test_consolidate(self, device, use_file, tmpdir, num_threads, nested, hetdtype):
         if not nested:
@@ -464,9 +454,9 @@ class TestGeneric:
         filename = Path(tmpdir) / "file.pkl"
         if not nested:
             torch.save(td, filename)
-            assert (
-                td == torch.load(filename, weights_only=False)
-            ).all(), td_c.to_dict()
+            assert (td == torch.load(filename, weights_only=False)).all(), (
+                td_c.to_dict()
+            )
         else:
             pass
             # wait for https://github.com/pytorch/pytorch/issues/129366 to be resolved
@@ -478,9 +468,9 @@ class TestGeneric:
         td_c = td.consolidate()
         torch.save(td_c, filename)
         if not nested:
-            assert (
-                td == torch.load(filename, weights_only=False)
-            ).all(), td_c.to_dict()
+            assert (td == torch.load(filename, weights_only=False)).all(), (
+                td_c.to_dict()
+            )
         else:
             assert all(
                 (_td == _td_c).all()
@@ -1815,6 +1805,9 @@ class TestGeneric:
         td = TensorDict({"a": torch.tensor(1.0)}, [])
         assert td[True].batch_size == torch.Size([1])
         assert td[False].batch_size == torch.Size([0])
+        # None and scalar bools use no dim, as in torch
+        for index in ((True, True), (None, True), (torch.tensor(True), None)):
+            assert td[index].batch_size == torch.zeros(())[index].shape
 
     @pytest.mark.parametrize(
         "index", [np.True_, np.False_, (slice(None), np.True_), (np.False_, ...)]
@@ -2073,11 +2066,10 @@ class TestGeneric:
         ):
             td.make_memmap(("b", "c"), shape=[5, 6], dtype=torch.float32)
 
-        if HAS_NESTED_TENSOR:
-            # test update
-            mmap = td.make_memmap(("e", "f"), shape=torch.tensor([[1, 2], [1, 3]]))
-            td_load.memmap_refresh_()
-            assert td_load["e", "f"].is_nested
+        # test update
+        mmap = td.make_memmap(("e", "f"), shape=torch.tensor([[1, 2], [1, 3]]))
+        td_load.memmap_refresh_()
+        assert td_load["e", "f"].is_nested
 
     def test_make_memmap_from_storage(self, tmpdir):
         td_base = TensorDict(
@@ -2147,18 +2139,15 @@ class TestGeneric:
         assert d_copy.untyped_storage().data_ptr() != d.untyped_storage().data_ptr()
         assert (d_copy == 1).all()
 
-        if HAS_NESTED_TENSOR:
-            # test update
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                td.make_memmap_from_tensor(
-                    ("e", "f"),
-                    torch.nested.nested_tensor(
-                        [torch.zeros((1, 2)), torch.zeros((1, 3))]
-                    ),
-                )
-            td_load.memmap_refresh_()
-            assert td_load["e", "f"].is_nested
+        # test update
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            td.make_memmap_from_tensor(
+                ("e", "f"),
+                torch.nested.nested_tensor([torch.zeros((1, 2)), torch.zeros((1, 3))]),
+            )
+        td_load.memmap_refresh_()
+        assert td_load["e", "f"].is_nested
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_mask_td(self, device):
@@ -4094,6 +4083,24 @@ class TestGeneric:
         with pytest.raises(ValueError, match="split_size must be positive, got -1."):
             td.split(-1, -1)
 
+    def test_tensor_split_invalid_tensor(self):
+        td = TensorDict({"a": torch.zeros(5)}, [5])
+        for indices in (
+            torch.tensor([1.0]),
+            torch.tensor([1], dtype=torch.int32),
+            torch.tensor([[1]]),
+        ):
+            with pytest.raises(ValueError, match="long tensor on the CPU"):
+                td.tensor_split(indices)
+
+    @pytest.mark.parametrize("indices", [[2], [3, 1]], ids=["asc", "desc"])
+    def test_tensor_split_locked_views(self, indices):
+        td = TensorDict({"a": torch.arange(5)}, [5]).lock_()
+        chunks = td.tensor_split(indices)
+        assert all(chunk.is_locked for chunk in chunks)
+        chunks[-1]["a"].zero_()
+        assert (td["a"][indices[-1] :] == 0).all()
+
     def test_split_with_negative_dim(self):
         td = TensorDict(
             {"a": torch.zeros(5, 4, 2, 1), "b": torch.zeros(5, 4, 1)}, [5, 4]
@@ -4452,15 +4459,15 @@ class TestGeneric:
         td_select._check_batch_size()
 
         td_reconstruct = stack_td(list(td), 0, contiguous=False)
-        assert (
-            td_reconstruct == td
-        ).all(), f"td and td_reconstruct differ, got {td} and {td_reconstruct}"
+        assert (td_reconstruct == td).all(), (
+            f"td and td_reconstruct differ, got {td} and {td_reconstruct}"
+        )
 
         superlist = [stack_td(list(_td), 0, contiguous=False) for _td in td]
         td_reconstruct = stack_td(superlist, 0, contiguous=False)
-        assert (
-            td_reconstruct == td
-        ).all(), f"td and td_reconstruct differ, got {td == td_reconstruct}"
+        assert (td_reconstruct == td).all(), (
+            f"td and td_reconstruct differ, got {td == td_reconstruct}"
+        )
 
         x = torch.randn(4, 5, device=device)
         td = TensorDict(
@@ -4785,9 +4792,9 @@ class TestGeneric:
         }
         td = TensorDict(batch_size=(4, 5), source=d)
         td_unbind = torch.unbind(td, dim=1)
-        assert (
-            td_unbind[0].batch_size == td[:, 0].batch_size
-        ), f"got {td_unbind[0].batch_size} and {td[:, 0].batch_size}"
+        assert td_unbind[0].batch_size == td[:, 0].batch_size, (
+            f"got {td_unbind[0].batch_size} and {td[:, 0].batch_size}"
+        )
 
     @pytest.mark.parametrize("stack", [True, False])
     @pytest.mark.parametrize("todict", [True, False])

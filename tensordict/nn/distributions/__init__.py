@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 from tensordict.nn.distributions import continuous, discrete
-
 from tensordict.nn.distributions.composite import CompositeDistribution
 from tensordict.nn.distributions.continuous import (
     AddStateIndependentNormalScale,
