@@ -15,6 +15,7 @@ import importlib.util
 # JSON backend is now handled by _utils_key_json.json_dumps
 import json
 import os.path
+import sys
 import warnings
 import weakref
 from collections.abc import MutableMapping
@@ -791,8 +792,12 @@ def _expand_to_match_shape(
 # tensordict/_base/. Those modules import the helpers above from this module,
 # so they are imported here, after the helpers and before the class. Hence:
 # - A helper that a mixin imports must be defined above this point.
-# - In a mixin, TensorDictBase is imported for type checking only. A method
-#   that uses it at run time imports it locally.
+# - In a mixin, TensorDictBase is imported for type checking only. Once the
+#   class exists, this module binds it into each mixin module, so that
+#   annotations that name it resolve. Code that runs at import time, such as
+#   decorators and default values, cannot use it. A method that uses it at
+#   run time imports it locally (ruff's TC004 flags a run-time use of the
+#   TYPE_CHECKING import).
 # - Globals that this module rebinds at run time, such as
 #   _GET_DEFAULTS_TO_NONE and _ACCEPTED_CLASSES, must be read as
 #   tensordict.base.<name>: a mixin that imports one keeps its first value.
@@ -1038,7 +1043,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             if isinstance(value, (TensorDictBase, dict)):
                 # torch reads the other values with None and True itself
                 value = _value_at_new_dim(self, value)
-                index = (slice(None),) * self.batch_dims
+                # a single slice, as an UnbatchedTensor entry may have fewer
+                # dims than the batch dims
+                index = slice(None)
         if isinstance(index, list):
             # Index with (list,), as __getitem__ does: torch reads a bare nested
             # list, and _SubTensorDict any bare list, as per-dim indices
@@ -7242,6 +7249,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
+
+# The mixin modules import TensorDictBase for type checking only, so their
+# string annotations that name it (e.g. ``other: TensorDictBase | torch.Tensor``)
+# cannot be resolved at run time. Binding the class in each module lets
+# typing.get_type_hints and inspect.signature(eval_str=True) resolve them.
+for _mixin in _TENSORDICTBASE_MIXINS:
+    sys.modules[_mixin.__module__].TensorDictBase = TensorDictBase
+del _mixin
 
 _ACCEPTED_CLASSES = (
     Tensor,
