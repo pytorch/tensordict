@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4667+g5034ec899.d20261009)
+                  main (0.14.0.dev4672+g3c3b210aa.d20261009)
                 </div>
               
             
@@ -366,6 +366,13 @@
 <dt class="sig sig-object py" id="tensordict.set_capture_non_tensor_stack">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">set_capture_non_tensor_stack</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.set_capture_non_tensor_stack" title="Permalink to this definition">¶</a></dt>
 <dd><p>Controls whether identical non-tensor data should be captured when stacked.</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>Capturing identical non-tensor data (<code class="docutils literal notranslate"><span class="pre">set_capture_non_tensor_stack(True)</span></code>
+or <code class="docutils literal notranslate"><span class="pre">CAPTURE_NONTENSOR_STACK=1</span></code>) is deprecated and will be removed in
+TensorDict 0.17. Use <a class="reference internal" href="tensordict.NonTensorStack.html#tensordict.NonTensorStack.data" title="tensordict.NonTensorStack.data"><code class="xref py py-attr docutils literal notranslate"><span class="pre">NonTensorStack.data</span></code></a>
+to get the single value of a stack of identical values.
+<code class="docutils literal notranslate"><span class="pre">set_capture_non_tensor_stack(False)</span></code>, the default, does not warn.</p>
+</div>
 </dd></dl>
 
 </section>

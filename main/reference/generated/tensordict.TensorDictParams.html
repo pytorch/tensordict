@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4667+g5034ec899.d20261009)
+                  main (0.14.0.dev4672+g3c3b210aa.d20261009)
                 </div>
               
             
@@ -3690,8 +3690,9 @@ equivalent to chained calls of getattr.</p></li>
 <p>Previously, if a key was not present in the tensordict and no default
 was passed, a <cite>KeyError</cite> was raised. From v0.7, this behaviour has been changed
 and a <cite>None</cite> value is returned instead (in accordance with the what dict.get behavior).
-To adopt the old behavior, set the environment variable <cite>export TD_GET_DEFAULTS_TO_NONE=’0’</cite> or call
-:func`~tensordict.set_get_defaults_to_none(False)`.</p>
+Use <code class="docutils literal notranslate"><span class="pre">td[key]</span></code> to raise a <cite>KeyError</cite> for a missing key. Restoring the old behavior with
+<code class="docutils literal notranslate"><span class="pre">TD_GET_DEFAULTS_TO_NONE=0</span></code> or <code class="docutils literal notranslate"><span class="pre">set_get_defaults_to_none(False)</span></code> is deprecated
+and will be removed in TensorDict 0.17.</p>
 </div>
 </p></li>
 </ul>
