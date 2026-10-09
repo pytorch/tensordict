@@ -1123,7 +1123,7 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
                 pass
 
     if not tensor_only and not shadow:
-        for field in cls.fields():
+        for field in dataclasses.fields(cls):
             setattr(
                 cls,
                 field.name,
