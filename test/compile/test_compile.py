@@ -14,12 +14,9 @@ from pathlib import Path
 from typing import Any, Callable
 
 import pytest
-
 import torch
-
 from _utils_internal import is_npu_available
 from packaging import version
-
 from tensordict import (
     assert_close,
     from_dataclass,
@@ -29,7 +26,6 @@ from tensordict import (
     TensorDictParams,
     TypedTensorDict,
 )
-
 from tensordict._unbatched import UnbatchedTensor
 from tensordict.nn import (
     CudaGraphModule,
@@ -46,7 +42,6 @@ from tensordict.nn.functional_modules import (
     PYTREE_REGISTERED_TDS,
 )
 from tensordict.store._utils import _prepare_indexed_value
-
 from tensordict.tensorclass import TensorClass
 from tensordict.utils import (
     _unravel_key_to_tuple,
@@ -54,7 +49,6 @@ from tensordict.utils import (
     unravel_key_list,
     unravel_keys,
 )
-
 from torch._dynamo.testing import CompileCounterWithBackend
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
 
@@ -139,9 +133,9 @@ def test_unravel_keys_compile(key):
     eager = unravel_keys(key)
     torch._dynamo.reset()
     compiled = torch.compile(unravel_keys, backend="eager")(key)
-    assert (
-        eager == compiled
-    ), f"unravel_keys mismatch for {key!r}: eager={eager!r}, compiled={compiled!r}"
+    assert eager == compiled, (
+        f"unravel_keys mismatch for {key!r}: eager={eager!r}, compiled={compiled!r}"
+    )
 
 
 _UNRAVEL_VALID_KEYS = [
@@ -2491,9 +2485,9 @@ class TestGuardCount:
         torch.testing.assert_close(result["a"], td["a"])
         torch.testing.assert_close(ut_clone, ut_orig)
         assert ut_clone.batch_size == td.batch_size
-        assert (
-            ut_clone.data_ptr() != ut_orig.data_ptr()
-        ), "clone() must produce independent data"
+        assert ut_clone.data_ptr() != ut_orig.data_ptr(), (
+            "clone() must produce independent data"
+        )
 
     def test_lock_inside_compile_no_weakref_leftover(self):
         """``lock_()`` called inside a compiled region must not leave a
@@ -2529,12 +2523,12 @@ class TestGuardCount:
         last_op = out.__dict__.get("_last_op")
         if last_op is not None:
             _, (_, _, ref) = last_op
-            assert not isinstance(
-                ref, _wref.ref
-            ), f"weakref leaked into _last_op under compile: {ref}"
-            assert (
-                callable(ref) and ref() is out
-            ), "strong-ref closure must still resolve to the locked TD"
+            assert not isinstance(ref, _wref.ref), (
+                f"weakref leaked into _last_op under compile: {ref}"
+            )
+            assert callable(ref) and ref() is out, (
+                "strong-ref closure must still resolve to the locked TD"
+            )
 
     def test_locked_td_no_recompile(self):
         """A TD locked in eager mode that flows through compile must
@@ -2643,9 +2637,9 @@ class TestGuardCount:
             {"a": seed + 1, "b": seed + 2},
             batch_size=seed.shape[:1],
         )
-        assert (
-            "_td_dim_names" in td_from_compile.__dict__
-        ), "_td_dim_names must live on instance dict (got from compile-time __init__)"
+        assert "_td_dim_names" in td_from_compile.__dict__, (
+            "_td_dim_names must live on instance dict (got from compile-time __init__)"
+        )
         assert "_td_dim_names" in td_from_eager.__dict__
 
         # And then feeding that compile-built TD back into a compiled
@@ -2662,7 +2656,7 @@ class TestGuardCount:
         second = cnt.frame_count
         assert first == 1, f"Expected 1 compile frame, got {first}"
         assert second == 1, (
-            "Mixing eager-built and compile-built TDs recompiled: " f"{second} frames"
+            f"Mixing eager-built and compile-built TDs recompiled: {second} frames"
         )
 
 

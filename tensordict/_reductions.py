@@ -10,7 +10,6 @@ from multiprocessing import reduction
 import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
-
 from tensordict.tensorclass import NonTensorData, NonTensorStack
 from tensordict.utils import _is_tensorclass, _LockedSchema, _STR_DTYPE_TO_DTYPE
 

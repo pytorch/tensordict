@@ -116,9 +116,9 @@ class TestMPInplace:
             elif cmd == "send":
                 a = torch.ones(2) * val
                 tensordict.set_("a", a)
-                assert (
-                    tensordict.get("a") == a
-                ).all(), f'found {a} and {tensordict.get("a")}'
+                assert (tensordict.get("a") == a).all(), (
+                    f"found {a} and {tensordict.get('a')}"
+                )
                 command_pipe_child.send("done")
             elif cmd == "set_done":
                 tensordict.set_("done", torch.ones(1, dtype=torch.bool))
