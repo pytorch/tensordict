@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4554+g669412b2e.d20261009)
+                  main (0.14.0.dev4550+ge5227deff.d20261009)
                 </div>
               
             
@@ -663,22 +663,22 @@ like <a class="reference external" href="https://docs.pytorch.org/docs/stable/ge
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>index:
- tensor([[1, 2, 1, 1],
-        [2, 3, 2, 3],
-        [2, 3, 0, 0]])
+ tensor([[1, 2, 0, 1],
+        [0, 2, 1, 1],
+        [1, 2, 3, 3]])
 
 tensordict['a']:
- tensor([[0.1128, 0.7199, 0.5234, 0.5305],
-        [0.8952, 0.8053, 0.7209, 0.1680],
-        [0.1206, 0.7190, 0.9467, 0.6336]])
+ tensor([[0.5848, 0.0165, 0.1599, 0.1839],
+        [0.2597, 0.2890, 0.4574, 0.8897],
+        [0.0657, 0.8384, 0.4884, 0.7491]])
 
 gathered_tensordict['a']:
- tensor([[0.7199, 0.5234, 0.7199, 0.7199],
-        [0.7209, 0.1680, 0.7209, 0.1680],
-        [0.9467, 0.6336, 0.1206, 0.1206]])
+ tensor([[0.0165, 0.1599, 0.5848, 0.0165],
+        [0.2597, 0.4574, 0.2890, 0.2890],
+        [0.8384, 0.4884, 0.7491, 0.7491]])
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.006 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.008 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensordict-shapes-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/11a23e1bafc489334eaf020bf977a5bb/tensordict_shapes.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">tensordict_shapes.ipynb</span></code></a></p>

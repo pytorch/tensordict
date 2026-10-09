@@ -547,19 +547,19 @@ like :func:`torch.gather`.
  .. code-block:: none
 
     index:
-     tensor([[1, 2, 1, 1],
-            [2, 3, 2, 3],
-            [2, 3, 0, 0]])
+     tensor([[1, 2, 0, 1],
+            [0, 2, 1, 1],
+            [1, 2, 3, 3]])
 
     tensordict['a']:
-     tensor([[0.1128, 0.7199, 0.5234, 0.5305],
-            [0.8952, 0.8053, 0.7209, 0.1680],
-            [0.1206, 0.7190, 0.9467, 0.6336]])
+     tensor([[0.5848, 0.0165, 0.1599, 0.1839],
+            [0.2597, 0.2890, 0.4574, 0.8897],
+            [0.0657, 0.8384, 0.4884, 0.7491]])
 
     gathered_tensordict['a']:
-     tensor([[0.7199, 0.5234, 0.7199, 0.7199],
-            [0.7209, 0.1680, 0.7209, 0.1680],
-            [0.9467, 0.6336, 0.1206, 0.1206]])
+     tensor([[0.0165, 0.1599, 0.5848, 0.0165],
+            [0.2597, 0.4574, 0.2890, 0.2890],
+            [0.8384, 0.4884, 0.7491, 0.7491]])
 
 
 
@@ -568,7 +568,7 @@ like :func:`torch.gather`.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.006 seconds)
+   **Total running time of the script:** (0 minutes 0.008 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensordict_shapes.py:
