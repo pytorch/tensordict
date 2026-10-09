@@ -27,7 +27,9 @@ tensordict is not strongly-typed, i.e. we do not enforce type hints, neither do 
 
 **Linting**
 
-Before your PR is ready, you'll probably want your code to be checked. This can be done easily by installing
+Before your PR is ready, you'll probably want your code to be checked. The
+checks are [ruff](https://docs.astral.sh/ruff/) (formatting, linting and import
+sorting, configured in `pyproject.toml`) and torchfix. They can be run easily by installing
 ```
 pip install pre-commit
 ```
