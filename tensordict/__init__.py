@@ -118,6 +118,7 @@ __all__ = [
     "LazyStackedTensorDict",
     "UnbatchedTensor",
     "TensorClass",
+    "TypedTensorDict",
     "MemoryMappedTensor",
     "PersistentTensorDict",
     "TensorDictStore",
@@ -184,6 +185,7 @@ __all__ = [
     "list_to_stack",
     "set_list_to_stack",
     "get_printoptions",
+    "set_printoptions",
     # TensorClass components
     "tensorclass",
     "MetaData",
