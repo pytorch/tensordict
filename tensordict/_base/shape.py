@@ -148,7 +148,7 @@ class _ShapeOps:
             return self.apply(expand_as, other, batch_size=other.batch_size)
         return self.expand(other.shape)
 
-    def unbind(self, dim: int) -> tuple[Self, ...]:
+    def unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
         """Returns a tuple of indexed tensordicts, unbound along the indicated dimension.
 
         Examples:

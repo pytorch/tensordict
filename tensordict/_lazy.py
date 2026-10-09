@@ -27,6 +27,7 @@ from typing import (
     Mapping,
     NamedTuple,
     OrderedDict,
+    overload,
     Sequence,
     Tuple,
     Type,
@@ -2684,6 +2685,12 @@ class LazyStackedTensorDict(TensorDictBase):
         if isinstance(item, TensorDictBase):
             return any(item is td for td in self.tensordicts)
         return super().__contains__(item)
+
+    @overload
+    def __getitem__(self, index: str | tuple[str, ...]) -> Any: ...
+
+    @overload
+    def __getitem__(self, index: IndexType) -> TensorDictBase: ...
 
     def __getitem__(self, index: IndexType) -> Self | Tensor | TensorCollection | Any:
         if isinstance(index, (tuple, str)):

@@ -2257,8 +2257,8 @@ class _PointwiseOps:
     @_maybe_broadcast_other("clamp", 2)
     def clamp(
         self,
-        min: TensorDictBase | torch.Tensor = None,
-        max: TensorDictBase | torch.Tensor = None,
+        min: TensorDictBase | torch.Tensor | float | None = None,
+        max: TensorDictBase | torch.Tensor | float | None = None,
         *,
         out=None,
     ) -> Self:  # noqa: D417, W605

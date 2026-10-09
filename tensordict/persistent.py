@@ -16,7 +16,7 @@ import warnings
 import weakref
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Tuple, Type, TYPE_CHECKING
+from typing import Any, Callable, overload, Tuple, Type, TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -1231,6 +1231,12 @@ class PersistentTensorDict(TensorDictBase):
         if isinstance(idx, (range, list)):
             return np.asarray(idx)
         return idx
+
+    @overload
+    def __getitem__(self, item: str | tuple[str, ...]) -> Any: ...
+
+    @overload
+    def __getitem__(self, item: IndexType) -> TensorDictBase: ...
 
     def __getitem__(self, item: IndexType) -> Self | Tensor | TensorCollection | Any:
         if isinstance(item, str) or (

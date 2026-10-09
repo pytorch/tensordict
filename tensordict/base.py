@@ -865,7 +865,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             string = "..."
         return f"{type(self).__name__}(\n{string})"
 
-    def __iter__(self) -> Iterator:
+    def __iter__(self) -> Iterator[TensorDictBase]:
         """Iterates over the first batch dimension of the tensordict.
 
         Raises:
