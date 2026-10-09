@@ -1815,6 +1815,22 @@ class TestExport:
         assert out.batch_size == torch.Size([5])
         torch.testing.assert_close(out["c"], td["a"] * 2 + td["b"])
 
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_export_td_input_empty_nested(self, strict):
+        # The nested td has no tensor: its batch size comes from the spec.
+        class Mod(torch.nn.Module):
+            def forward(self, td):
+                return td["a"] * 2, td.batch_size, td["nested"].batch_size
+
+        td = TensorDict(
+            nested=TensorDict(batch_size=[4]), a=torch.randn(4, 3), batch_size=[4]
+        )
+        ep = torch.export.export(Mod(), (td,), strict=strict)
+        out, batch_size, nested_batch_size = ep.module()(td)
+        torch.testing.assert_close(out, td["a"] * 2)
+        assert tuple(batch_size) == (4,)
+        assert tuple(nested_batch_size) == (4,)
+
     @pytest.mark.parametrize("strict", [False])  # , True])
     def test_export_with_td_params(self, strict):
         module = torch.nn.Sequential(

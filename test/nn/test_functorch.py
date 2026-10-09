@@ -369,6 +369,15 @@ class TestPyTree(TestTensorDictsBase):
         td = tree_map(lambda x: x, TensorDict(batch_size=[3]))
         assert td.batch_size == torch.Size([3])
 
+    def test_pytree_map_different_batch_sizes(self):
+        # The specs of td4 and td6 are equal; the batch size of the result is
+        # read from its tensors.
+        td4 = TensorDict(x=torch.zeros(4, 3), batch_size=[4])
+        td6 = TensorDict(x=torch.zeros(6, 3), batch_size=[6])
+        assert tree_map(lambda a, b: b, td4, td6).batch_size == torch.Size([6])
+        out = tree_map(lambda a, b: torch.cat([a, b]), td4, td6)
+        assert out.batch_size == torch.Size([10])
+
     def test_pytree_lazy(self):
         td0 = TensorDict(
             {

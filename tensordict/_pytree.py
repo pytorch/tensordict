@@ -121,13 +121,14 @@ def _tensordict_unflatten(values: List[Any], context: Context) -> Dict[Any, Any]
     else:
         batch_dims = context["batch_size"].batch_dims
         batch_size = context["batch_size"].batch_size
-    if (
+    if not shapes:
+        # No tensor to read the batch size from: keep the stored one.
+        if batch_size is None:
+            batch_size = torch.Size([0] * batch_dims)
+    elif (
         batch_size is None
         or is_dynamo_compiling()
-        or (
-            shapes
-            and any(isinstance(dim, torch.SymInt) for dim in shapes[0][:batch_dims])
-        )
+        or any(isinstance(dim, torch.SymInt) for dim in shapes[0][:batch_dims])
     ):
         # Compilation path (torch.export): batch_size was not stored because it
         # may contain SymInts which torch.export cannot serialize. Or the values
@@ -136,22 +137,26 @@ def _tensordict_unflatten(values: List[Any], context: Context) -> Dict[Any, Any]
         # with its batch_size would specialize them (Dynamo shows SymInts as
         # ints, hence the is_dynamo_compiling() check). Reconstruct from the
         # leading batch_dims dimensions of the actual tensor shapes.
-        batch_size = shapes[0][:batch_dims] if shapes else torch.Size([0] * batch_dims)
+        batch_size = shapes[0][:batch_dims]
     else:
         if shapes and any(s[:batch_dims] != batch_size for s in shapes):
             # Values have different leading dims than the original batch_size.
             # This happens when torch.func transforms (jacrev, jacfwd, hessian)
             # create basis vectors with extra leading dimensions. We infer a new
             # batch_size from the common prefix of all value shapes, capped at
-            # batch_dims + 1 to include at most one extra (basis) dimension.
+            # batch_dims + 1 to include at most one extra (basis) dimension, and
+            # at batch_dims when the values do not have the original batch_size
+            # after their first dim (e.g. tree_map over tensordicts with different
+            # batch sizes).
             #
             # NOTE: when tensors have no feature dimensions (ndim == batch_dims),
             # the basis leading dim can coincidentally equal a batch dim, making
             # it impossible to detect the mismatch here. In that case, the
             # TensorDict should be created with batch_size=[] or the tensors
             # should be given at least one feature dimension (e.g. via unsqueeze).
+            has_basis_dim = all(s[1 : batch_dims + 1] == batch_size for s in shapes)
             min_dims = min(len(s) for s in shapes)
-            max_prefix_len = min(min_dims, batch_dims + 1)
+            max_prefix_len = min(min_dims, batch_dims + has_basis_dim)
             common_dims = 0
             for i in range(max_prefix_len):
                 if all(s[i] == shapes[0][i] for s in shapes):
