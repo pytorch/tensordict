@@ -207,9 +207,7 @@ class TestNamedDims(TestTensorDictsBase):
         assert td.names == list("abgd")
 
     @pytest.mark.skipif(not _has_h5py, reason="h5py not installed")
-    def test__PersistentTensorDict__names_setter__keeps_nested_trailing_name(
-        self, tmpdir
-    ):
+    def test_h5_names_setter_keeps_nested_trailing_name(self, tmpdir):
         td = TensorDict(
             {"agents": TensorDict({"obs": torch.zeros(2, 3, 4)}, [2, 3])}, [2]
         )
@@ -515,13 +513,13 @@ class TestNamedDims(TestTensorDictsBase):
         assert td.names == ["a"]
         assert td["a"].names == ["a", "b"]
 
-    def test__TensorDict__init__nested_trailing_name_survives(self):
+    def test_init_keeps_nested_trailing_name(self):
         sub = TensorDict({"obs": torch.zeros(2, 3, 4)}, [2, 3], names=[None, "agent"])
         td = TensorDict({"agents": sub}, [2])
         assert td["agents"].names == [None, "agent"]
         assert sub.names == [None, "agent"]
 
-    def test__TensorDict__names_setter__none_keeps_nested_trailing_name(self):
+    def test_names_setter_none_keeps_nested_trailing_name(self):
         sub = TensorDict({"obs": torch.zeros(2, 3, 4)}, [2, 3], names=[None, "agent"])
         td = TensorDict({"agents": sub}, [2], names=["batch"])
         assert td["agents"].names == ["batch", "agent"]
@@ -529,13 +527,13 @@ class TestNamedDims(TestTensorDictsBase):
         assert td.names == [None]
         assert td["agents"].names == [None, "agent"]
 
-    def test__TensorDict__names_setter__none_erases_unnamed_nested(self):
+    def test_names_setter_none_erases_unnamed_nested(self):
         td = TensorDict({"sub": TensorDict({}, [2, 3])}, [2], names=["batch"])
         assert td["sub"].names == ["batch", None]
         td.names = None
         assert not td["sub"]._has_names()
 
-    def test__TensorDict__names_setter__rejects_nested_trailing_name_clash(self):
+    def test_names_setter_rejects_nested_trailing_name_clash(self):
         # the trailing name now survives, so a parent name equal to it would
         # leave the child with duplicate names
         sub = TensorDict({"obs": torch.zeros(2, 3, 4)}, [2, 3], names=[None, "batch"])
