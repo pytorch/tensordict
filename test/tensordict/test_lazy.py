@@ -13,6 +13,7 @@ import platform
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 import torch
 from tensordict import (
@@ -1034,6 +1035,80 @@ class TestLazyStackedTensorDict:
             lazy.update_at_(value, index)
             dense.update_at_(value, index)
         assert (lazy.to_tensordict() == dense).all()
+
+    @pytest.mark.parametrize(
+        "stack_dim,member_shape,index,source_index",
+        [
+            (0, (), torch.tensor([1, 0]), torch.tensor([0, 1])),
+            (0, (), [1, 0], [0, 1]),
+            (0, (), np.array([1, 0]), np.array([0, 1])),
+            (0, (), [3, 2, 1, 0], [0, 1, 2, 3]),
+            (0, (), [1, 2, 3], [0, 1, 2]),
+            (0, (), torch.tensor([[1], [0]]), torch.tensor([[0], [1]])),
+            (
+                0,
+                (),
+                torch.tensor([False, True, True, True]),
+                torch.tensor([True, True, True, False]),
+            ),
+            (0, (), slice(None), [3, 2, 1, 0]),
+            (0, (3,), torch.tensor([1, 0]), torch.tensor([0, 1])),
+            (
+                0,
+                (3,),
+                torch.tensor([False, True, True, True]),
+                torch.tensor([True, True, True, False]),
+            ),
+            (0, (3,), ([1, 0], slice(0, 2)), ([0, 1], slice(0, 2))),
+            (0, (3,), ([1, 0], slice(None)), ([0, 1], slice(None))),
+            (1, (3,), (slice(None), [1, 0]), (slice(None), [0, 1])),
+            (
+                1,
+                (3,),
+                (slice(None), torch.tensor([False, True, True, True])),
+                (slice(None), torch.tensor([True, True, True, False])),
+            ),
+        ],
+    )
+    @pytest.mark.parametrize("op", ["setitem", "setitem_copy", "update_at_"])
+    def test_lazy_setitem_overlapping_value(
+        self, stack_dim, member_shape, index, source_index, op
+    ):
+        # the value is a read of the same stack, so its members share memory
+        # with the members that the write changes
+        if op == "update_at_" and isinstance(index, np.ndarray):
+            pytest.skip("TensorDict.update_at_ does not accept an ndarray index")
+        lazy = LazyStackedTensorDict.lazy_stack(
+            [
+                TensorDict(
+                    {
+                        "a": torch.arange(2.0 * torch.Size(member_shape).numel())
+                        .view(*member_shape, 2)
+                        .add(100 * i),
+                        "nested": {"b": torch.full(member_shape, float(i))},
+                    },
+                    member_shape,
+                )
+                for i in range(4)
+            ],
+            stack_dim,
+        )
+        dense = lazy.to_tensordict()
+        for td in (lazy, dense):
+            value = td[source_index]
+            if op == "setitem":
+                td[index] = value
+            elif op == "setitem_copy":
+                # new tensordicts that share the tensors of the members
+                td[index] = value.copy()
+            else:
+                td.update_at_(value, index)
+        assert (lazy.to_tensordict() == dense).all()
+
+    def test_lazy_setitem_overlapping_value_non_tensor(self):
+        stack = NonTensorStack("a", "b", "c", "d")
+        stack[1:] = stack[:3]
+        assert stack.tolist() == ["a", "a", "b", "c"]
 
     def test_lazy_mask_indexing_single(self):
         td = LazyStackedTensorDict(

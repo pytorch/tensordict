@@ -97,6 +97,7 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch import Tensor
+from torch.compiler import is_compiling
 from torch.nn.utils.rnn import pad_sequence
 
 try:
@@ -212,6 +213,30 @@ def _stack_block(items: list, shape: torch.Size, dim: int, names: list):
             for i in range(shape[0])
         ]
     return LazyStackedTensorDict.lazy_stack(items, dim, stack_dim_name=names[0])
+
+
+def _collect_memory(data, memory: set) -> None:
+    """Add to ``memory`` the memory that the tensor collection ``data`` reads and writes.
+
+    That is the storage of each strided tensor, read through the members of
+    lazy stacks, and the object itself for anything else (non-tensor data,
+    other layouts and backends). Empty storages are left out.
+    """
+    if isinstance(data, TensorDict):
+        for value in data._tensordict.values():
+            if isinstance(value, Tensor) and value.layout is torch.strided:
+                ptr = value.untyped_storage().data_ptr()
+                if ptr:
+                    memory.add(ptr)
+            else:
+                _collect_memory(value, memory)
+    elif isinstance(data, LazyStackedTensorDict):
+        for td in data.tensordicts:
+            _collect_memory(td, memory)
+    elif is_tensorclass(data) and not is_non_tensor(data):
+        _collect_memory(data._tensordict, memory)
+    else:
+        memory.add(id(data))
 
 
 def _fails_exclusive_keys(func):
@@ -1054,6 +1079,19 @@ class LazyStackedTensorDict(TensorDictBase):
         :meth:`_split_index`.
         """
         split = self._split_index(index)
+        if len(split.parts) > 1 and is_tensor_collection(value) and not is_compiling():
+            # The pieces are written one member after another. If the value
+            # shares memory with these members, as a read of this stack does,
+            # a later piece would be read after an earlier one overwrote it.
+            # torch.compile cannot trace the storage of a tensor, so the check
+            # is left out of compiled code.
+            destination = set()
+            for member, _, _ in split.parts:
+                _collect_memory(self.tensordicts[member], destination)
+            source = set()
+            _collect_memory(value, source)
+            if not destination.isdisjoint(source):
+                value = value.clone()
         if split.kind == _MEMBER:
             ((member, member_index, _),) = split.parts
             yield self.tensordicts[member], member_index, value
