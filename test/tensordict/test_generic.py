@@ -35,6 +35,7 @@ from tensordict import (
     tensorclass,
     TensorDict,
 )
+from tensordict._indexing import convert_ellipsis_to_idx
 from tensordict._td import is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _NESTED_TENSORS_AS_LISTS, TensorDictBase
@@ -45,7 +46,6 @@ from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
     assert_allclose_td,
-    convert_ellipsis_to_idx,
     is_non_tensor,
     is_tensorclass,
     set_lazy_legacy,
@@ -1826,6 +1826,12 @@ class TestGeneric:
             td[index] = 1.0
         with pytest.raises(IndexError, match="NumPy bool"):
             td[index] = TensorDict({"a": torch.ones(4)}, [4])
+        with pytest.raises(IndexError, match="NumPy bool"):
+            td.get_at("a", index)
+        with pytest.raises(IndexError, match="NumPy bool"):
+            td.set_at_("a", 1.0, index)
+        with pytest.raises(IndexError, match="NumPy bool"):
+            td.copy_at_(TensorDict({"a": torch.ones(4)}, [4]), index)
         assert (td["a"] == 0).all()
         # a list of NumPy bools is a mask, as in torch
         assert td[[np.True_, np.False_, np.True_]].batch_size == torch.Size([2, 4])

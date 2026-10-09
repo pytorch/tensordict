@@ -13,7 +13,7 @@ import torch.utils._pytree
 from tensordict._deprecation import deprecated
 from tensordict._pytree import PYTREE_REGISTERED_LAZY_TDS, PYTREE_REGISTERED_TDS
 from tensordict.base import is_tensor_collection
-from tensordict.utils import _is_unbatched, strtobool
+from tensordict.utils import _is_unbatched, _strtobool
 from torch import nn
 from torch.nn.modules.module import _global_parameter_registration_hooks
 from torch.utils._pytree import SUPPORTED_NODES
@@ -115,7 +115,7 @@ class _exclude_td_from_pytree:
         self.__exit__(None, None, None)
 
 
-if not strtobool(os.getenv("PYTORCH_TENSORDICT_IMPORT_VMAP", "False")):
+if not _strtobool(os.getenv("PYTORCH_TENSORDICT_IMPORT_VMAP", "False")):
     # Monkey-patches
 
     def _is_tensordict_vmap_leaf(arg: Any) -> bool:
@@ -335,5 +335,5 @@ of dimensionality {_vmap_dim(arg)} so expected in_dim to satisfy
     vmap_src._unwrap_batched = _unwrap_batched
 
 
-if strtobool(os.environ.get("EXCLUDE_TD_FROM_PYTREE", "0")):
+if _strtobool(os.environ.get("EXCLUDE_TD_FROM_PYTREE", "0")):
     _exclude_td_from_pytree().set()

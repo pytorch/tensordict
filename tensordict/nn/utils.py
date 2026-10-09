@@ -14,13 +14,13 @@ from typing import Any, Callable
 import torch
 from tensordict._deprecation import deprecated_attributes
 from tensordict._nestedkey import NestedKey
-from tensordict.utils import _ContextManager, strtobool, unravel_key_list
+from tensordict.utils import _ContextManager, _strtobool, unravel_key_list
 from torch import nn
 from torch.compiler import is_compiling
 from torch.utils._contextlib import _DecoratorContextManager
 
 _dispatch_tdnn_modules = _ContextManager(
-    default=strtobool(os.environ.get("DISPATCH_TDNN_MODULES", "True"))
+    default=_strtobool(os.environ.get("DISPATCH_TDNN_MODULES", "True"))
 )
 
 __all__ = [
@@ -469,7 +469,7 @@ class _StrEnum(str, Enum):  # noqa
 
 _composite_lp_aggregate = _ContextManager(
     default=(
-        strtobool(os.getenv("COMPOSITE_LP_AGGREGATE"))
+        _strtobool(os.getenv("COMPOSITE_LP_AGGREGATE"))
         if os.getenv("COMPOSITE_LP_AGGREGATE") is not None
         else None
     )

@@ -40,6 +40,7 @@ from tensordict import (
     unpack_memmap,
 )
 from tensordict._archive import _ArchiveReader
+from tensordict._indexing import convert_ellipsis_to_idx
 from tensordict._lazy import _CustomOpTensorDict
 from tensordict._td import _str_to_index, _SubTensorDict, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
@@ -52,7 +53,6 @@ from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
     assert_allclose_td,
-    convert_ellipsis_to_idx,
     is_non_tensor,
     set_lazy_legacy,
 )
@@ -1302,6 +1302,22 @@ class TestTensorDicts(TestTensorDictsBase):
             # assert_allclose_td does not compare batch sizes
             assert result.batch_size == expected.batch_size
             assert_allclose_td(result, expected)
+
+    @pytest.mark.parametrize(
+        "index", [[[0], [1]], [0, 2], (slice(None), [[0], [1]]), [True, False] * 2]
+    )
+    def test_get_at_set_at_index_like_getitem(self, td_name, device, index):
+        # get_at and set_at_ read the index as getitem does: a bare nested list
+        # is one index, where torch reads it as a tuple of indices
+        td = getattr(self, td_name)(device)
+        expected = td[index]["a"]
+        assert (td.get_at("a", index) == expected).all()
+        if td_name == "td_h5":
+            # h5py does not take every selection that torch takes
+            return
+        with torch.no_grad():
+            td.set_at_("a", torch.zeros_like(expected), index)
+        assert (td[index]["a"] == 0).all()
 
     def test_getitem_string(self, td_name, device):
         torch.manual_seed(1)

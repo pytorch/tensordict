@@ -27,7 +27,7 @@ import numpy as np
 import torch
 from tensordict._archive import _memmap_tensor_from_path
 from tensordict._indexing import (
-    _as_tuple,
+    _entry_index,
     _getitem_batch_size,
     _is_new_dim_index,
     _read_element,
@@ -60,6 +60,7 @@ from tensordict.utils import (
     _as_context_manager,
     _BatchedUninitializedBuffer,
     _BatchedUninitializedParameter,
+    _cache_while_locked,
     _canonicalize_tensor,
     _CHECK_INVARIANTS,
     _check_invariants,
@@ -76,6 +77,7 @@ from tensordict.utils import (
     _is_safe_legacy_key,
     _is_unbatched,
     _KEY_ERROR,
+    _lock_blocked,
     _LOCK_ERROR,
     _LockedSchema,
     _maybe_correct_neg_dim,
@@ -93,13 +95,11 @@ from tensordict.utils import (
     _sub_index,
     _unravel_key_to_tuple,
     _zip_strict,
-    cache,
     DeviceType,
     expand_as_right,
     IndexType,
     is_non_tensor,
     is_tensorclass,
-    lock_blocked,
     unravel_key,
     unravel_key_list,
 )
@@ -649,15 +649,13 @@ class TensorDict(TensorDictBase):
                         subtd = self._get_sub_tensordict(index)
                     subtd.set(value_key, item, inplace=True, non_blocking=False)
         else:
-            # torch indexes the entries, and would read a NumPy bool as an int
-            # before NumPy 2.3: _read_element rejects it, as getitem does
-            for element in _as_tuple(index):
-                _read_element(element)
+            # read the index as getitem does, also if there is no key to write
+            index = _entry_index(index)
             for key in self.keys():
                 self.set_at_(key, value, index)
 
     # Functorch compatibility
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _add_batch_dim(self, *, in_dim: int, vmap_level: int) -> Self:
         td = self
 
@@ -691,7 +689,7 @@ class TensorDict(TensorDictBase):
         )
         return out
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _remove_batch_dim(self, vmap_level: int, batch_size: int, out_dim: int) -> Self:
         new_batch_size = list(self.batch_size)
         new_batch_size.insert(out_dim, batch_size)
@@ -721,7 +719,7 @@ class TensorDict(TensorDictBase):
         )
         return out
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _maybe_remove_batch_dim(
         self, funcname: str, vmap_level: int, batch_size: int, out_dim: int
     ) -> Self:
@@ -1254,7 +1252,7 @@ class TensorDict(TensorDictBase):
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._batch_size = new_size
 
-    @lock_blocked
+    @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         return self._tensordict.popitem()
 
@@ -1569,6 +1567,7 @@ class TensorDict(TensorDictBase):
                     return NotImplemented
                 dest = dest._tensordict[subkey]
             dest_values.append(dest)
+        idx = _entry_index(idx)
         if not isinstance(idx, tuple):
             idx = (idx,)
         idx = convert_ellipsis_to_idx(idx, self.batch_size)
@@ -1592,7 +1591,7 @@ class TensorDict(TensorDictBase):
         copy_fn(indexed_dest_values, source_values, non_blocking=non_blocking)
         return self
 
-    @lock_blocked
+    @_lock_blocked
     def del_(self, key: NestedKey) -> Self:
         key = _unravel_key_to_tuple(key)
         if len(key) > 1:
@@ -1603,7 +1602,7 @@ class TensorDict(TensorDictBase):
         del self._tensordict[key[0]]
         return self
 
-    @lock_blocked
+    @_lock_blocked
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> Self:
@@ -2560,7 +2559,7 @@ class TensorDict(TensorDictBase):
         #     self._maybe_set_shared_attributes(result)
         return result
 
-    # @cache
+    # @_cache_while_locked
     def keys(
         self,
         include_nested: bool = False,
@@ -2589,7 +2588,7 @@ class TensorDict(TensorDictBase):
                 sort=sort,
             )
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _nested_keys(
         self,
         include_nested: bool = False,
@@ -2948,7 +2947,7 @@ class _SubTensorDict(TensorDictBase):
         )
         return self
 
-    # @cache  # noqa: B019
+    # @_cache_while_locked  # noqa: B019
     def keys(
         self,
         include_nested: bool = False,
@@ -3021,7 +3020,7 @@ class _SubTensorDict(TensorDictBase):
     def _get_tuple(self, key, default, **kwargs):
         return self._source._get_at_tuple(key, self.idx, default=default, **kwargs)
 
-    @lock_blocked
+    @_lock_blocked
     def update(
         self,
         input_dict_or_td: dict[str, CompatibleType] | TensorCollection | None = None,
@@ -3218,12 +3217,12 @@ class _SubTensorDict(TensorDictBase):
             )
         return self._source
 
-    @lock_blocked
+    @_lock_blocked
     def del_(self, key: NestedKey) -> Self:
         self._source = self._source.del_(key)
         return self
 
-    @lock_blocked
+    @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         raise NotImplementedError(
             f"popitem not implemented for class {type(self).__name__}."
@@ -3432,7 +3431,7 @@ class _SubTensorDict(TensorDictBase):
                 if not prefix.exists():
                     os.makedirs(prefix, exist_ok=True)
                 with open(prefix / "meta.json", "wb") as f:
-                    from tensordict.utils import json_dumps
+                    from tensordict._utils_key_json import json_dumps
 
                     metadata_json = json_dumps(
                         {
