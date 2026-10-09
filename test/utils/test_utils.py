@@ -4,16 +4,22 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import ast
 import collections
 import random
+import re
 import sys
+import types
+from pathlib import Path
 
 import numpy as np
 import pytest
+import tensordict
 import tensordict._td
 import torch
 from _utils_internal import get_available_devices
 from tensordict import (
+    _deprecation,
     lazy_stack,
     tensorclass,
     TensorDict,
@@ -556,6 +562,91 @@ def test_C_module_is_deprecated():
     assert _C._unravel_key_to_tuple is _unravel_key_to_tuple
     # the C++ binding took a single key
     assert _C.unravel_keys(("a", ("b",))) == ("a", "b")
+
+
+class TestDeprecationHelpers:
+    def test_warn_deprecated(self):
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^old\(\) is deprecated and will be removed in TensorDict 0\.17\. "
+            r"Use new\(\) instead\.$",
+        ) as record:
+            _deprecation.warn_deprecated(
+                "old()", removal="0.17", replacement="new()", stacklevel=1
+            )
+        assert record[0].filename == __file__
+
+    def test_deprecated(self):
+        @_deprecation.deprecated("old()", removal="0.17")
+        def old(x):
+            """Adds one."""
+            return x + 1
+
+        assert old.__name__ == "old"
+        assert old.__doc__ == "Adds one."
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^old\(\) is deprecated and will be removed in TensorDict 0\.17\.$",
+        ) as record:
+            assert old(1) == 2
+        # The warning points to the caller of the deprecated function.
+        assert record[0].filename == __file__
+
+    def test_deprecated_attributes(self):
+        module = types.ModuleType("mod")
+        module.__getattr__ = _deprecation.deprecated_attributes(
+            "mod", {"old": (1, "mod.new")}, removal="0.17"
+        )
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^mod\.old is deprecated and will be removed in TensorDict 0\.17\. "
+            r"Use mod\.new instead\.$",
+        ) as record:
+            assert module.old == 1
+        assert record[0].filename == __file__
+        with pytest.raises(
+            AttributeError, match="module 'mod' has no attribute 'other'"
+        ):
+            module.other
+
+
+def _version_tuple(version):
+    return tuple(int(part) for part in version.split(".")[:2])
+
+
+def test_deprecation_deadlines():
+    # Every deprecation names the release that removes it, either as the
+    # removal= argument of a tensordict._deprecation helper or as "removed in
+    # TensorDict X.Y" in a message or docstring. Once version.txt reaches that
+    # release, the deprecated code has to go.
+    package = Path(tensordict.__file__).parent
+    version_file = package.parent / "version.txt"
+    if not version_file.exists():
+        pytest.skip("version.txt is only available in a source checkout")
+    current = _version_tuple(version_file.read_text().strip())
+    overdue = []
+    for path in sorted(package.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if (
+                isinstance(node, ast.keyword)
+                and node.arg == "removal"
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            ):
+                versions = [node.value.value]
+            elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+                versions = re.findall(r"removed in TensorDict (\d+\.\d+)", node.value)
+            else:
+                continue
+            overdue.extend(
+                f"{path.relative_to(package.parent)}:{node.lineno}: {version}"
+                for version in versions
+                if _version_tuple(version) <= current
+            )
+    assert not overdue, (
+        f"version.txt is {'.'.join(map(str, current))}; remove these deprecations:\n"
+        + "\n".join(overdue)
+    )
 
 
 @pytest.mark.parametrize("key", ("tensor1", "tensor3"))
