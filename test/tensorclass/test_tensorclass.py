@@ -4111,6 +4111,312 @@ class TestSubClassing:
             assert (obj[0].y == 1).all()
 
 
+class TestCustomInit:
+    """A user-defined __init__ runs, with its own signature (gh-1822)."""
+
+    @staticmethod
+    def make_class(api, init, **flags):
+        if api == "inheritance":
+
+            class Data(TensorClass, **flags):
+                x: torch.Tensor
+                __init__ = init
+
+            return Data
+
+        class Data:
+            x: torch.Tensor
+            __init__ = init
+
+        if api == "dataclass":
+            Data = dataclasses.dataclass(Data)
+        return tensorclass(Data, **flags)
+
+    @pytest.mark.parametrize("api", ["decorator", "dataclass", "inheritance"])
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_custom_init(self, api, tensor_only):
+        def init(self, x, scale=2.0):
+            # The container exists when __init__ runs.
+            assert self.batch_size == torch.Size([2])
+            self.x = x * scale
+
+        Data = self.make_class(api, init, tensor_only=tensor_only)
+        x = torch.ones(2, 3)
+        data = Data(x, batch_size=[2], device="cpu", names=["n"])
+        torch.testing.assert_close(data.x, x * 2)
+        assert data.device == torch.device("cpu")
+        assert data.names == ["n"]
+        torch.testing.assert_close(Data(x=x, scale=3.0, batch_size=[2]).x, x * 3)
+        assert list(inspect.signature(Data).parameters) == [
+            "x",
+            "scale",
+            "batch_size",
+            "device",
+            "names",
+        ]
+
+    @pytest.mark.parametrize("api", ["decorator", "inheritance"])
+    def test_custom_init_var_kwargs(self, api):
+        def init(self, x, **options):
+            self.x = x * options.pop("scale")
+            assert not options
+
+        # Defining the class used to fail: the signature put the keyword-only
+        # batch_size, device and names after **options.
+        Data = self.make_class(api, init)
+        x = torch.ones(2)
+        data = Data(x=x, scale=3.0, batch_size=[2], names=["n"])
+        torch.testing.assert_close(data.x, x * 3)
+        assert data.names == ["n"]
+        assert list(inspect.signature(Data).parameters) == [
+            "x",
+            "batch_size",
+            "device",
+            "names",
+            "options",
+        ]
+
+    def test_custom_init_super(self):
+        class Base(TensorClass):
+            x: torch.Tensor
+
+        class Forward(Base):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+
+        x = torch.ones(3)
+        data = Forward(x=x, batch_size=[3], device="cpu", names=["n"], lock=True)
+        torch.testing.assert_close(data.x, x)
+        assert data.batch_size == torch.Size([3])
+        assert data.device == torch.device("cpu")
+        assert data.names == ["n"]
+        assert data.is_locked
+
+        class Child(Base):
+            y: torch.Tensor
+
+            def __init__(self, x):
+                # y is kept, and the batch_size and names passed to
+                # super().__init__() apply.
+                self.y = x + 1
+                super().__init__(x=x, batch_size=x.shape[:1], names=["n"])
+
+        data = Child(x)
+        torch.testing.assert_close(data.x, x)
+        torch.testing.assert_close(data.y, x + 1)
+        assert data.batch_size == torch.Size([3])
+        assert data.names == ["n"]
+
+    @pytest.mark.parametrize("api", ["decorator", "inheritance"])
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_custom_init_frozen(self, api, tensor_only):
+        def init(self, x):
+            object.__setattr__(self, "x", x * 2)
+
+        Data = self.make_class(api, init, frozen=True, tensor_only=tensor_only)
+        x = torch.ones(2)
+        data = Data(x, batch_size=[2])
+        torch.testing.assert_close(data.x, x * 2)
+        torch.testing.assert_close(data.to_tensordict()["x"], x * 2)
+        assert "x" not in data.__dict__
+        assert data.is_locked
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            data.x = x
+
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_custom_init_super_frozen(self, tensor_only):
+        class Base(TensorClass, frozen=True, tensor_only=tensor_only):
+            x: torch.Tensor
+
+        class Child(Base):
+            y: torch.Tensor
+
+            def __init__(self, x):
+                super().__init__(x=x)
+                object.__setattr__(self, "y", self.x + 1)
+
+        x = torch.ones(2)
+        data = Child(x, batch_size=[2])
+        torch.testing.assert_close(data.x, x)
+        torch.testing.assert_close(data.y, x + 1)
+        assert not set(data.__dict__) & {"x", "y"}
+        assert data.is_locked
+
+    def test_custom_init_super_no_args(self):
+        class Data(TensorClass):
+            x: torch.Tensor
+
+            def __init__(self, x):
+                super().__init__()
+                self.x = x * 2
+
+        torch.testing.assert_close(Data(torch.ones(2)).x, torch.full((2,), 2.0))
+        with pytest.raises(NotImplementedError):
+            TensorClass()
+
+    @pytest.mark.parametrize("frozen", [False, True])
+    def test_custom_init_super_lock(self, frozen):
+        class Base(TensorClass, frozen=frozen):
+            x: torch.Tensor
+
+        class Child(Base):
+            y: torch.Tensor = None
+
+            def __init__(self, x):
+                super().__init__(x=x * 2, lock=True)
+
+        data = Child(torch.ones(2))
+        torch.testing.assert_close(data.x, torch.full((2,), 2.0))
+        assert data.y is None
+        assert data.is_locked
+
+    def test_custom_init_declared_metadata(self):
+        received = []
+
+        class Data(TensorClass):
+            x: torch.Tensor
+
+            def __init__(self, x, batch_size=None, device=None):
+                received.append((batch_size, device))
+                self.x = x
+
+        data = Data(torch.ones(2), batch_size=[2], device="cpu")
+        assert received == [([2], "cpu")]
+        assert data.batch_size == torch.Size([2])
+        assert data.device == torch.device("cpu")
+
+        # With shadow=True, a field can have such a name: it is not metadata.
+        class Shadow(TensorClass, shadow=True):
+            batch_size: torch.Tensor
+
+            def __init__(self, batch_size):
+                self.batch_size = batch_size
+
+        data = Shadow(batch_size=torch.ones(2))
+        torch.testing.assert_close(data.batch_size, torch.ones(2))
+        assert data.to_tensordict().batch_size == torch.Size([])
+
+    @pytest.mark.parametrize("api", ["decorator", "inheritance"])
+    def test_custom_init_inherited(self, api):
+        def init(self, x):
+            self.x = x * 2
+
+        Parent = self.make_class(api, init)
+
+        # Without an __init__ of their own, subclasses run Parent's. Fields it
+        # does not set get their default.
+        class Child(Parent):
+            y: torch.Tensor = None
+            z: torch.Tensor = dataclasses.field(default_factory=lambda: torch.zeros(2))
+
+        class GrandChild(Child):
+            pass
+
+        if api == "decorator":
+            Child = tensorclass(Child)
+            GrandChild = tensorclass(GrandChild)
+        x = torch.ones(2)
+        for cls in (Child, GrandChild):
+            data = cls(x, batch_size=[2])
+            torch.testing.assert_close(data.x, x * 2)
+            assert data.y is None
+            torch.testing.assert_close(data.z, torch.zeros(2))
+            assert list(inspect.signature(cls).parameters) == [
+                "x",
+                "batch_size",
+                "device",
+                "names",
+            ]
+
+    def test_custom_init_unset_field(self):
+        class Data(TensorClass):
+            x: torch.Tensor
+            y: torch.Tensor
+            z: torch.Tensor = dataclasses.field(init=False)
+
+            def __init__(self, x):
+                self.x = x
+
+        with pytest.raises(TypeError, match="did not set the required field 'y'"):
+            Data(torch.ones(2))
+
+        class Parent(TensorClass):
+            x: torch.Tensor
+
+            def __init__(self, x):
+                self.x = x
+
+        class Child(Parent):
+            y: torch.Tensor
+            z: torch.Tensor = dataclasses.field(init=False)
+
+        with pytest.raises(TypeError, match="did not set the required field 'y'"):
+            Child(torch.ones(2))
+
+        # init=False fields without a default get None, as with a generated
+        # __init__.
+        class Full(Data):
+            def __init__(self, x):
+                self.x = self.y = x
+
+        assert Full(torch.ones(2)).z is None
+
+    def test_custom_init_post_init(self):
+        calls = []
+
+        class Base(TensorClass):
+            x: torch.Tensor
+
+            def __post_init__(self):
+                calls.append(type(self).__name__)
+
+        class Custom(Base):
+            def __init__(self, x):
+                self.x = x
+
+        class Calls(Base):
+            def __init__(self, x):
+                self.x = x
+                self.__post_init__()
+
+        class Super(Base):
+            def __init__(self, x):
+                super().__init__(x=x)
+
+        # As with dataclasses, a custom __init__ does not call __post_init__
+        # but the generated one, reached through super().__init__(), does.
+        for cls in (Custom, Calls, Super):
+            cls(torch.ones(2))
+        assert calls == ["Calls", "Super"]
+
+    def test_double_decoration(self):
+        @tensorclass
+        class Generated(TensorClass):
+            x: torch.Tensor
+
+        @tensorclass
+        class Custom(TensorClass):
+            x: torch.Tensor
+
+            def __init__(self, x):
+                self.x = x * 2
+
+        @tensorclass
+        class Decorated:
+            x: torch.Tensor
+
+        x = torch.ones(2)
+        for cls, expected in (
+            (Generated, x),
+            (Custom, x * 2),
+            (tensorclass(Decorated), x),
+        ):
+            data = cls(x=x, batch_size=[2], device="cpu", names=["n"])
+            torch.testing.assert_close(data.x, expected)
+            assert data.device == torch.device("cpu")
+            assert data.names == ["n"]
+
+
 class TestTensorOnly:
     class TensorOnly(TensorClass["tensor_only"]):
         a: torch.Tensor
