@@ -57,6 +57,7 @@ from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
     _register_tensor_class,
+    _TENSORDICTBASE_MIXINS,
     _UNSET,
     CompatibleType,
 )
@@ -1254,7 +1255,10 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     ):
         cls.from_dict_instance = _from_dict_instance
 
-    for attr in set(TensorDict.__dict__.keys()).union(TensorDictBase.__dict__.keys()):
+    td_attrs = set(TensorDict.__dict__).union(
+        TensorDictBase.__dict__, *(mixin.__dict__ for mixin in _TENSORDICTBASE_MIXINS)
+    )
+    for attr in td_attrs:
         if attr in ("__torch_function__",):
             continue
         func = getattr(TensorDict, attr)
