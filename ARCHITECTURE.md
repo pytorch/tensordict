@@ -117,6 +117,9 @@ Options and utilities:
 - `_contextlib.py`: decorator context managers, and `LAST_OP_MAPS`, the
   functions that undo an operation at the end of a `with` block, as in
   `with td.permute(1, 0) as tdp:`.
+- `_deprecation.py`: the helpers that deprecate a function, a method, a
+  property or a module attribute. Each takes the release that removes the
+  name, and `test_deprecation_deadlines` fails once `version.txt` reaches it.
 - `_ucxx.py`: `TensorDictPipe` and `TensorDictServer`, transport over UCXX.
 - `prototype/fx.py`: `symbolic_trace` for tensordict modules.
 - `testing.py`: tensorclasses that the distributed tests import by name.
@@ -199,7 +202,7 @@ An operation that a backend cannot support raises. For example,
   decorators in `_torch_func.py` fill. A function that is not in the table
   returns `NotImplemented`. `LazyStackedTensorDict` first checks
   `LAZY_TD_HANDLED_FUNCTIONS` (`@implements_for_lazy_td`).
-  `TensorDictParams` uses a copy of the table, `TDPARAM_HANDLED_FUNCTIONS`.
+  `TensorDictParams` uses a copy of the table, `_TDPARAM_HANDLED_FUNCTIONS`.
   A tensorclass passes the torch functions listed in `_TD_PASS_THROUGH`
   (`tensorclass.py`) to its tensordict.
 - Pytree: `_pytree.py` registers `TensorDict`, `_SubTensorDict`,

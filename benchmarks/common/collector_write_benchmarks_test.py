@@ -8,7 +8,6 @@ import argparse
 
 import pytest
 import torch
-
 from tensordict import TensorDict
 
 MODES = ["stack_out", "set_at_loop", "copy_at", "manual_leaf_copy"]

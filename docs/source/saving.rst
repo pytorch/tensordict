@@ -398,6 +398,34 @@ To measure your own hardware, download the script from the
 (or run ``python tutorials/sphinx_tuto/serialization_speed.py`` from a
 tensordict checkout) — it only needs ``matplotlib`` on top of tensordict.
 
+torch.save / torch.load
+-----------------------
+
+A tensordict saved with :func:`torch.save` can be loaded with
+:func:`torch.load` and ``weights_only=True``, the default since PyTorch 2.6.
+Importing tensordict allowlists the classes and functions that these files
+reference with :func:`torch.serialization.add_safe_globals`. This covers
+:class:`~tensordict.TensorDict`, :class:`~tensordict.LazyStackedTensorDict`,
+consolidated tensordicts, and non-tensor values made of Python builtins such
+as strings, numbers, lists and dicts:
+
+  >>> td = TensorDict(a=torch.zeros(3), b={"c": "text"}, batch_size=[3])
+  >>> torch.save(td, "td.pt")
+  >>> td = torch.load("td.pt", weights_only=True)
+
+Other classes are not allowlisted. This includes tensorclasses and the
+types of other non-tensor values, such as NumPy arrays: loading stops with
+an ``Unsupported global`` error that names the missing class or function.
+If the file comes from a trusted source, allowlist it yourself:
+
+  >>> with torch.serialization.safe_globals([MyClass]):
+  ...     tc = torch.load("tc.pt", weights_only=True)
+
+A tensordict with :class:`~tensordict.MemoryMappedTensor` leaves cannot be
+loaded with ``weights_only=True``. Save it with
+:meth:`~tensordict.TensorDictBase.memmap` and load it with
+:meth:`~tensordict.TensorDictBase.load_memmap` instead.
+
 state_dict / load_state_dict
 ----------------------------
 
