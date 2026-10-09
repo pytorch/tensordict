@@ -45,12 +45,13 @@ from tensordict.utils import (
     _zip_strict,
     BufferLegacy,
     erase_cache,
-    implement_for,
     IndexType,
     is_batchedtensor,
     lock_blocked,
 )
 from torch import multiprocessing as mp, nn, Tensor
+from torch.compiler import is_compiling
+from torch.nn.parameter import Buffer
 from torch.utils._pytree import tree_map
 
 try:
@@ -61,17 +62,6 @@ except ImportError:
     from tensordict.utils import _ftdim_mock as ftdim
 
     _has_funcdim = False
-
-try:
-    from torch.nn.parameter import Buffer
-except ImportError:
-    from tensordict.utils import Buffer
-
-
-try:
-    from torch.compiler import is_compiling
-except ImportError:
-    from torch._dynamo import is_compiling
 
 if TYPE_CHECKING:
     from typing import Self
@@ -1330,7 +1320,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_apply_on_data
     def apply_(self, fn: Callable, *others, **kwargs) -> Self: ...
 
-    @implement_for("torch", "2.1")
     def _apply(self, fn, recurse=True):
         self._param_td._erase_cache()
         param_td = self._param_td
@@ -1338,26 +1327,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         # Keep a list of buffers to update .data only
         bufs = dict(self._buffers)
         out: TensorDictBase = super()._apply(fn, recurse=recurse)
-        for key, val in bufs.items():
-            val.data = self._buffers[key].data
-            self._buffers[key] = val
-        # Check device and shape
-        cbs = out._check_batch_size(raise_exception=False)
-        if not cbs:
-            out.auto_batch_size_()
-        cd = out._check_device(raise_exception=False)
-        if not cd:
-            out.auto_device_()
-        return out
-
-    @implement_for("torch", None, "2.1")
-    def _apply(self, fn):  # noqa: F811
-        self._param_td._erase_cache()
-        param_td = self._param_td
-        self._param_td = param_td.copy()
-        # Keep a list of buffers to update .data only
-        bufs = dict(self._buffers)
-        out: TensorDictBase = super()._apply(fn)
         for key, val in bufs.items():
             val.data = self._buffers[key].data
             self._buffers[key] = val

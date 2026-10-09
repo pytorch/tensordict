@@ -13,10 +13,6 @@ import torch
 from tensordict import TensorDict, TensorDictParams
 from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 
-from packaging import version
-
-TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
-
 sys.setrecursionlimit(10000)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -62,9 +58,6 @@ def mlp(device, depth=2, num_cells=32, feature_dim=3):
     )
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_mod_add(mode, benchmark):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -79,9 +72,6 @@ def test_mod_add(mode, benchmark):
     benchmark(module, td)
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_mod_wrap(mode, benchmark):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -97,9 +87,6 @@ def test_mod_wrap(mode, benchmark):
     benchmark(module, td)
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_mod_wrap_and_backward(mode, benchmark):
     if mode != "eager" and IS_MACOS_ARM64:
@@ -126,9 +113,6 @@ def test_mod_wrap_and_backward(mode, benchmark):
     benchmark(module_exec, td)
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_seq_add(mode, benchmark):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -153,9 +137,6 @@ def test_seq_add(mode, benchmark):
     benchmark(module, td)
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_seq_wrap(mode, benchmark):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -187,9 +168,6 @@ def test_seq_wrap(mode, benchmark):
     benchmark(module, td)
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.slow
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_seq_wrap_and_backward(mode, benchmark):
@@ -232,9 +210,6 @@ def test_seq_wrap_and_backward(mode, benchmark):
     benchmark(module_exec, td)
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 @pytest.mark.parametrize("functional", [False, True])
 def test_func_call_runtime(mode, functional, benchmark):
@@ -305,9 +280,6 @@ def test_func_call_cm_runtime(mode, functional, benchmark):
         benchmark(call, x)
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.slow
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 @pytest.mark.parametrize(
@@ -392,9 +364,6 @@ def test_vmap_func_call_cm_runtime(mode, benchmark):
     benchmark(call_vmap, x, td)
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
 @pytest.mark.slow
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 @pytest.mark.parametrize("plain_decorator", [None, False, True])

@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import os
-from inspect import signature
 from typing import Any, Callable, Iterable
 
 import torch
@@ -14,22 +13,14 @@ import torch.utils._pytree
 from tensordict._pytree import PYTREE_REGISTERED_LAZY_TDS, PYTREE_REGISTERED_TDS
 from tensordict._td import TensorDict
 from tensordict.base import is_tensor_collection
-from tensordict.utils import _is_unbatched, implement_for, strtobool
+from tensordict.utils import _is_unbatched, strtobool
 from torch import nn
+from torch.nn.modules.module import _global_parameter_registration_hooks
 from torch.utils._pytree import SUPPORTED_NODES
-
-try:
-    from torch.nn.modules.module import _global_parameter_registration_hooks
-except ImportError:
-    # old torch version, passing
-    pass
 
 __base__setattr__ = nn.Module.__setattr__
 
-PYTREE_HAS_ISLEAF = "is_leaf" in signature(torch.utils._pytree.tree_map).parameters
 
-
-@implement_for("torch", "2.0", None)
 def _register_params(self, name, param):
     """A simplified version of register_param where checks are skipped."""
     for hook in _global_parameter_registration_hooks.values():
@@ -37,11 +28,6 @@ def _register_params(self, name, param):
         if output is not None:
             param = output
     self._parameters[name] = param
-
-
-@implement_for("torch", None, "2.0")
-def _register_params(self, name, param):  # noqa: F811
-    self.register_parameter(name, param)
 
 
 def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> None:
@@ -61,10 +47,7 @@ def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> No
         module.__dict__[name] = tensor
 
 
-@implement_for("torch", "2.0", None)
-def set_tensor_dict(  # noqa: F811
-    module_dict, module, name: str, tensor: torch.Tensor
-) -> None:
+def set_tensor_dict(module_dict, module, name: str, tensor: torch.Tensor) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
     if name in module_dict["_parameters"]:
         del module_dict["_parameters"][name]  # type: ignore[assignment]
@@ -79,25 +62,6 @@ def set_tensor_dict(  # noqa: F811
             if output is not None:
                 tensor = output
         module_dict["_parameters"][name] = tensor
-    elif was_buffer and isinstance(tensor, Tensor):
-        module_dict["_buffers"][name] = tensor
-    else:
-        module_dict[name] = tensor
-
-
-@implement_for("torch", None, "2.0")
-def set_tensor_dict(  # noqa: F811
-    module_dict, module, name: str, tensor: torch.Tensor
-) -> None:
-    """Simplified version of torch.nn.utils._named_member_accessor."""
-    if name in module_dict["_parameters"]:
-        del module_dict["_parameters"][name]  # type: ignore[assignment]
-    was_buffer = name in module_dict["_buffers"]
-    if was_buffer:
-        del module_dict["_buffers"][name]
-    if isinstance(tensor, nn.Parameter):
-        module_dict.pop(name, None)
-        module.register_parameter(name, tensor)
     elif was_buffer and isinstance(tensor, Tensor):
         module_dict["_buffers"][name] = tensor
     else:
@@ -189,27 +153,15 @@ The latter is unsupported."""
             )
 
         # we want to escape TensorDicts as they take care of adding the batch dimension
-        if PYTREE_HAS_ISLEAF:
-            flat_args, args_spec = tree_flatten(args, is_leaf=_is_tensordict_vmap_leaf)
-            flat_in_dims = _broadcast_to_and_flatten(in_dims, args_spec)
-            if flat_in_dims is None:
-                raise ValueError(
-                    f"""vmap({_get_name(func)}, in_dims={in_dims}, ...)(<inputs>):
+        flat_args, args_spec = tree_flatten(args, is_leaf=_is_tensordict_vmap_leaf)
+        flat_in_dims = _broadcast_to_and_flatten(in_dims, args_spec)
+        if flat_in_dims is None:
+            raise ValueError(
+                f"""vmap({_get_name(func)}, in_dims={in_dims}, ...)(<inputs>):
     in_dims is not compatible with the structure of `inputs`.
     in_dims has structure {tree_flatten(in_dims)[1]} but inputs
     has structure {args_spec}."""
-                )
-        else:
-            with _exclude_td_from_pytree():
-                flat_args, args_spec = tree_flatten(args)
-                flat_in_dims = _broadcast_to_and_flatten(in_dims, args_spec)
-                if flat_in_dims is None:
-                    raise ValueError(
-                        f"""vmap({_get_name(func)}, in_dims={in_dims}, ...)(<inputs>):
-            in_dims is not compatible with the structure of `inputs`.
-            in_dims has structure {tree_flatten(in_dims)[1]} but inputs
-            has structure {args_spec}."""
-                    )
+            )
 
         for i, (arg, in_dim) in enumerate(zip(flat_args, flat_in_dims)):
             if not isinstance(in_dim, int) and in_dim is not None:
@@ -314,13 +266,9 @@ of dimensionality {_vmap_dim(arg)} so expected in_dim to satisfy
         batch_size: int,
         func: Callable,
     ) -> Any:
-        if PYTREE_HAS_ISLEAF:
-            flat_batched_outputs, output_spec = tree_flatten(
-                batched_outputs, is_leaf=_is_tensordict_vmap_leaf
-            )
-        else:
-            with _exclude_td_from_pytree():
-                flat_batched_outputs, output_spec = tree_flatten(batched_outputs)
+        flat_batched_outputs, output_spec = tree_flatten(
+            batched_outputs, is_leaf=_is_tensordict_vmap_leaf
+        )
 
         def incompatible_error():
             raise ValueError(

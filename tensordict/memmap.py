@@ -21,7 +21,6 @@ from tensordict.utils import (
     _maybe_correct_neg_dim,
     _shape,
     _zip_strict,
-    implement_for,
     IndexType,
     NESTED_TENSOR_ERR,
 )
@@ -942,7 +941,6 @@ class MemoryMappedTensor(torch.Tensor):
         else:
             raise RuntimeError("Could not find handler or filename.")
 
-    @implement_for("torch", "2.0", None)
     def __getitem__(self, item: IndexType) -> Self | torch.Tensor:
         try:
             out = super().__getitem__(item)
@@ -963,34 +961,6 @@ class MemoryMappedTensor(torch.Tensor):
                 ) from err
             raise
         if out_storage.data_ptr() == self.untyped_storage().data_ptr():
-            out = self._index_wrap(out, item)
-        return out
-
-    @implement_for("torch", None, "2.0")
-    def __getitem__(self, item: IndexType) -> Self | torch.Tensor:  # noqa: F811
-        try:
-            out = super().__getitem__(item)
-        except ValueError as err:
-            if "is unbound" in str(err):
-                raise ValueError(
-                    "Using first class dimension indices with MemoryMappedTensor "
-                    "isn't supported at the moment."
-                ) from err
-            raise
-        # Check if result is a batched tensor (from functorch/ftdim operations)
-        # In PyTorch nightlies, ftdim indexing no longer raises ValueError but creates
-        # BatchedTensorImpl which cannot have its storage accessed
-        try:
-            from torch._C._functorch import is_batchedtensor
-
-            if is_batchedtensor(out):
-                raise ValueError(
-                    "Using first class dimension indices with MemoryMappedTensor "
-                    "isn't supported at the moment."
-                )
-        except ImportError:
-            pass
-        if out.storage().data_ptr() == self.storage().data_ptr():
             out = self._index_wrap(out, item)
         return out
 

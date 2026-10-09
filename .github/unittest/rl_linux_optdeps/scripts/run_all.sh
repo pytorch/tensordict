@@ -118,7 +118,7 @@ fi
 # smoke test
 python -c "import functorch"
 
-# Help CMake find pybind11 when building tensordict from source.
+# Help CMake find pybind11 when building TorchRL's C++ extension from source.
 pybind11_DIR="$(python -m pybind11 --cmakedir)"
 export pybind11_DIR
 

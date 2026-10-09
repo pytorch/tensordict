@@ -5,7 +5,7 @@
 #
 # This workflow automates the release process for tensordict:
 # 1. Sanity checks (version files, branch, tag, PyPI)
-# 2. Triggers wheel builds across all platforms
+# 2. Builds the wheel (one py3-none-any wheel) and smoke-tests it on each platform
 # 3. Collects wheels into a single artifact
 # 4. Updates gh-pages docs (stable symlink)
 # 5. Creates draft GitHub release with wheels attached
@@ -27,11 +27,11 @@ on:
         required: true
         type: string
       python_versions:
-        description: 'JSON list of the Python versions to build, e.g. ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]. Use the set of the previous release unless it changes.'
+        description: 'JSON list of the Python versions to smoke-test the wheel on, e.g. ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]. Use the set of the previous release unless it changes.'
         required: true
         type: string
       pytorch_release:
-        description: 'pytorch/test-infra branch for the builds, e.g. release/2.14. It sets the torch version that the builds install, which needs wheels for every version in python_versions.'
+        description: 'pytorch/test-infra branch for the build, e.g. release/2.14. It sets the torch version that the build and its Linux smoke test install.'
         required: true
         type: string
       skip_sanity_checks:
@@ -166,14 +166,13 @@ jobs:
           VERSION="${{ steps.parse-version.outputs.version }}"
 
           echo "=============================================="
-          echo "Checking all 4 version files match tag: $VERSION"
+          echo "Checking all 3 version files match tag: $VERSION"
           echo "=============================================="
 
-          # Read all 4 version files
+          # Read all 3 version files
           ROOT_VERSION=$(cat version.txt | tr -d '[:space:]')
           SCRIPTS_VERSION=$(cat .github/scripts/version.txt | tr -d '[:space:]')
           SCRIPT_SH_VERSION=$(grep "^BASE_VERSION=" .github/scripts/version_script.sh | cut -d'=' -f2)
-          SCRIPT_WIN_VERSION=$(grep "^BASE_VERSION=" .github/scripts/version_script_windows.sh | cut -d'=' -f2)
 
           echo ""
           echo "Version file contents:"
@@ -181,7 +180,6 @@ jobs:
           echo "  version.txt:                              $ROOT_VERSION"
           echo "  .github/scripts/version.txt:              $SCRIPTS_VERSION"
           echo "  .github/scripts/version_script.sh:        $SCRIPT_SH_VERSION"
-          echo "  .github/scripts/version_script_windows.sh: $SCRIPT_WIN_VERSION"
           echo ""
 
           # Check all files match each other first
@@ -197,15 +195,9 @@ jobs:
             MISMATCH=1
           fi
 
-          if [[ "$ROOT_VERSION" != "$SCRIPT_WIN_VERSION" ]]; then
-            echo "::error::version.txt ($ROOT_VERSION) != version_script_windows.sh ($SCRIPT_WIN_VERSION)"
-            echo "::error::Windows wheels will be built with wrong version!"
-            MISMATCH=1
-          fi
-
           if [[ "$MISMATCH" == "1" ]]; then
             echo ""
-            echo "::error::Version files are inconsistent! All 4 files must have the same version."
+            echo "::error::Version files are inconsistent! All 3 files must have the same version."
             echo "::error::Please update all files listed under 'Bump the version' in RELEASE_AGENT_PROMPT.md"
             exit 1
           fi
@@ -267,49 +259,19 @@ jobs:
           fi
 
   # =============================================================================
-  # BUILD WHEELS - All Platforms (Sequential to avoid concurrency conflicts)
+  # BUILD THE WHEEL
   # =============================================================================
-  # NOTE: Builds run sequentially because pytorch/test-infra workflows use a
-  # shared concurrency group that causes parallel builds to cancel each other.
-  # See: https://github.com/pytorch/tensordict/issues/XXX for tracking.
+  # tensordict is pure Python, so one py3-none-any wheel serves every platform
+  # and Python version.
 
-  build-linux:
-    name: Build Linux Wheels
+  build:
+    name: Build Wheel
     needs: [sanity-checks]
     if: ${{ !cancelled() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped') }}
-    uses: ./.github/workflows/build-wheels-linux.yml
+    uses: ./.github/workflows/build-wheel.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release }}
-      python-versions: ${{ inputs.python_versions }}
-
-  build-windows:
-    name: Build Windows Wheels
-    needs: [sanity-checks, build-linux]
-    # Run after Linux build completes (success or failure) to avoid concurrency conflicts
-    if: ${{ !cancelled() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped') }}
-    uses: ./.github/workflows/build-wheels-windows.yml
-    with:
-      test-infra-ref: ${{ inputs.pytorch_release }}
-      python-versions: ${{ inputs.python_versions }}
-
-  build-macos:
-    name: Build macOS Wheels
-    needs: [sanity-checks, build-windows]
-    # Run after Windows build completes (success or failure) to avoid concurrency conflicts
-    if: ${{ !cancelled() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped') }}
-    uses: ./.github/workflows/build-wheels-m1.yml
-    with:
-      test-infra-ref: ${{ inputs.pytorch_release }}
-      python-versions: ${{ inputs.python_versions }}
-
-  build-aarch64:
-    name: Build Aarch64 Linux Wheels
-    needs: [sanity-checks, build-macos]
-    # Run after macOS build completes (success or failure) to avoid concurrency conflicts
-    if: ${{ !cancelled() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped') }}
-    uses: ./.github/workflows/build-wheels-aarch64-linux.yml
-    with:
-      test-infra-ref: ${{ inputs.pytorch_release }}
+      # The wheel is built once; the smoke tests install it on these versions.
       python-versions: ${{ inputs.python_versions }}
 
   # =============================================================================
@@ -317,29 +279,21 @@ jobs:
   # =============================================================================
   collect-wheels:
     name: Collect Wheels
-    needs: [sanity-checks, build-linux, build-windows, build-macos, build-aarch64]
-    # Only run when ALL build jobs succeed. This ensures:
-    # 1. Incomplete wheel sets are never collected
-    # 2. If a build fails, this job is "skipped" (not "failed")
+    needs: [sanity-checks, build]
+    # Only run when the build succeeds. This ensures:
+    # 1. A wheel that failed its smoke tests is never collected
+    # 2. If the build fails, this job is "skipped" (not "failed")
     # 3. Re-running the failed build job will also trigger this job
     if: |
       always() && !cancelled() &&
-      needs.build-linux.result == 'success' &&
-      needs.build-windows.result == 'success' &&
-      needs.build-macos.result == 'success' &&
-      needs.build-aarch64.result == 'success' &&
+      needs.build.result == 'success' &&
       (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Check build results
         run: |
-          echo "Build results:"
-          echo "  Linux: ${{ needs.build-linux.result }}"
-          echo "  Windows: ${{ needs.build-windows.result }}"
-          echo "  macOS: ${{ needs.build-macos.result }}"
-          echo "  Aarch64: ${{ needs.build-aarch64.result }}"
-          echo ""
-          echo "All builds succeeded - proceeding with wheel collection"
+          echo "Build result: ${{ needs.build.result }}"
+          echo "The build succeeded - proceeding with wheel collection"
 
       - name: Download wheel artifacts
         uses: actions/download-artifact@v4
@@ -399,6 +353,13 @@ jobs:
           ls -la wheels/*.whl | sort
           echo ""
           echo "Total wheels: $(ls wheels/*.whl 2>/dev/null | wc -l)"
+          # tensordict is pure Python: expect exactly one py3-none-any wheel
+          WHEEL_COUNT=$(find wheels -name "*.whl" -type f | wc -l)
+          PURE_COUNT=$(find wheels -name "*-py3-none-any.whl" -type f | wc -l)
+          if [[ "$WHEEL_COUNT" -ne 1 || "$PURE_COUNT" -ne 1 ]]; then
+            echo "::error::Expected exactly one py3-none-any wheel"
+            exit 1
+          fi
 
       - name: Upload combined wheels artifact
         uses: actions/upload-artifact@v4
@@ -622,7 +583,7 @@ jobs:
   # =============================================================================
   release-summary:
     name: Release Summary
-    needs: [sanity-checks, build-linux, build-windows, build-macos, build-aarch64, collect-wheels, update-docs, create-release, publish-pypi]
+    needs: [sanity-checks, build, collect-wheels, update-docs, create-release, publish-pypi]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -633,10 +594,7 @@ jobs:
           echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Sanity Checks | ${{ needs.sanity-checks.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build Linux | ${{ needs.build-linux.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build Windows | ${{ needs.build-windows.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build macOS | ${{ needs.build-macos.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build Aarch64 | ${{ needs.build-aarch64.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Wheel | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Collect Wheels | ${{ needs.collect-wheels.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Update Docs | ${{ needs.update-docs.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Create Release | ${{ needs.create-release.result }} |" >> $GITHUB_STEP_SUMMARY

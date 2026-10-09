@@ -39,9 +39,6 @@ else
     export SETUPTOOLS_SCM_PRETEND_VERSION=$DEV_VERSION
 fi
 
-# TODO: consider lower this
-export MACOSX_DEPLOYMENT_TARGET=14.0
-
 # Set CONDA_RUN if not set
 if [[ -z "${CONDA_RUN:-}" ]]; then
 
@@ -49,8 +46,6 @@ if [[ -z "${CONDA_RUN:-}" ]]; then
 
     # for orjson
     export UNSAFE_PYO3_BUILD_FREE_THREADED=1
-
-    pip install "pybind11[global]"
 
     # Install setuptools_scm which is required for building with --no-isolation
     # This is done here (not in pre-script) to avoid cache issues
@@ -62,24 +57,6 @@ else
 
     # for orjson
     export UNSAFE_PYO3_BUILD_FREE_THREADED=1
-
-    ${CONDA_RUN} conda install -c conda-forge pybind11 -y
-
-    if [[ "${PYTHON_VERSION:-}" == 3.15* ]]; then
-        # conda-forge's Python 3.15 package ships libpython in separate
-        # packages, and CMake's FindPython needs it for the Development component.
-        if [[ "${OSTYPE:-}" == linux* ]]; then
-            ${CONDA_RUN} conda install -c conda-forge/label/python_dev -c conda-forge libpython-static -y
-            # test-infra's Linux smoke test installs 3.15 wheels with
-            # --index-url https://download.pytorch.org/whl/..., which has no pyvers.
-            # Install it from PyPI first; drop this once test-infra installs
-            # 3.15 wheels from PyPI. Keep the range in sync with pyproject.toml.
-            ${CONDA_RUN} pip install "pyvers>=0.2.0,<0.3.0"
-        elif [[ "${OSTYPE:-}" == darwin* ]]; then
-            # macOS takes the shared library, the layout of its Python 3.14 env.
-            ${CONDA_RUN} conda install -c conda-forge/label/python_dev -c conda-forge libpython -y
-        fi
-    fi
 
     # Install setuptools_scm which is required for building with --no-isolation
     # This is done here (not in pre-script) to avoid cache issues

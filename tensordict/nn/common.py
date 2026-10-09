@@ -25,6 +25,7 @@ from typing import (
 
 import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
+from functorch import FunctionalModule, FunctionalModuleWithBuffers
 from tensordict._td import TensorDict
 from tensordict.base import is_tensor_collection, NO_DEFAULT, TensorDictBase
 from tensordict.functional import make_tensordict
@@ -36,25 +37,7 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch import nn, Tensor
-
-try:
-    from torch.compiler import is_compiling
-except ImportError:  # torch 2.0
-    from torch._dynamo import is_compiling
-
-try:
-    from functorch import FunctionalModule, FunctionalModuleWithBuffers
-
-    _has_functorch = True
-except ImportError:
-    _has_functorch = False
-
-    class FunctionalModule:
-        pass
-
-    class FunctionalModuleWithBuffers:
-        pass
-
+from torch.compiler import is_compiling
 
 __all__ = [
     "TensorDictModule",
@@ -1113,7 +1096,7 @@ class TensorDictModule(TensorDictModuleBase):
 
     @property
     def is_functional(self) -> bool:
-        return _has_functorch and isinstance(
+        return isinstance(
             self.module,
             (FunctionalModule, FunctionalModuleWithBuffers),
         )

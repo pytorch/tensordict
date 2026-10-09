@@ -32,7 +32,6 @@ from tensordict._archive import (
 )
 from tensordict._nestedkey import NestedKey
 from tensordict.base import (
-    _get_device_module,
     _is_tensor_collection,
     _load_metadata,
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
@@ -59,7 +58,7 @@ from tensordict.utils import (
     TensorDictFuture,
     unravel_key,
 )
-from torch._utils import _get_available_device_type
+from torch._utils import _get_available_device_type, _get_device_module
 
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase

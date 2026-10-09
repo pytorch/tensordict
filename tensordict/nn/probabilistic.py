@@ -35,12 +35,8 @@ from tensordict.tensorclass import is_non_tensor
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import _ContextManager, _zip_strict, unravel_key
 from torch import distributions as D, Tensor
+from torch.compiler import is_compiling
 from torch.utils._contextlib import _DecoratorContextManager
-
-try:
-    from torch.compiler import is_compiling
-except ImportError:
-    from torch._dynamo import is_compiling
 
 try:
     from enum import StrEnum
