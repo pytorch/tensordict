@@ -12,7 +12,6 @@ from typing import Any, Callable, Iterable, List, OrderedDict, overload, TYPE_CH
 
 from tensordict._nestedkey import NestedKey
 from tensordict._td import TensorDict
-
 from tensordict.nn.common import (
     dispatch,
     TensorDictModule,
@@ -23,11 +22,7 @@ from tensordict.nn.utils import _set_skip_existing_None
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import _zip_strict, unravel_key_list
 from torch import nn
-
-try:
-    from torch.compiler import is_compiling
-except ImportError:
-    from torch._dynamo import is_compiling
+from torch.compiler import is_compiling
 
 _has_py311_or_greater = sys.version_info >= (3, 11)
 
@@ -227,9 +222,7 @@ class TensorDictSequential(TensorDictModule):
             modules_vals = self._convert_modules(modules[0].values())  # type: ignore[unreachable]
             in_keys, out_keys = self._compute_in_and_out_keys(modules_vals)
             self._complete_out_keys = list(out_keys)
-            modules = collections.OrderedDict(
-                **{key: val for key, val in _zip_strict(modules[0], modules_vals)}
-            )
+            modules = collections.OrderedDict(_zip_strict(modules[0], modules_vals))
             super().__init__(
                 module=nn.ModuleDict(modules),
                 in_keys=in_keys,
@@ -567,9 +560,7 @@ class TensorDictSequential(TensorDictModule):
             return type(self)(*modules)
         else:
             keys = [key for key in self.module if self.module[key] in modules]
-            modules_dict = collections.OrderedDict(
-                **{key: val for key, val in _zip_strict(keys, modules)}
-            )
+            modules_dict = collections.OrderedDict(_zip_strict(keys, modules))
             return type(self)(modules_dict)
 
     def _run_module(

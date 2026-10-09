@@ -10,12 +10,8 @@ from typing import Any
 
 import pytest
 import torch
-from packaging import version
-
 from tensordict import tensorclass, TensorDict
 from tensordict.utils import logger as tensordict_logger
-
-TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 
 @tensorclass
@@ -92,9 +88,6 @@ def default_device():
         ["reduce-overhead", None],
     ],
 )
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.5.0"), reason="requires torch>=2.5"
-)
 class TestConsolidate:
     def test_consolidate(
         self, benchmark, td, compile_mode, num_threads, default_device
@@ -122,7 +115,7 @@ class TestConsolidate:
         benchmark(consolidate, td, num_threads)
 
     def test_consolidate_njt(self, benchmark, njt_td, compile_mode, num_threads):
-        tensordict_logger.info(f"njtd size {njt_td.bytes() / 1024 / 1024 :.2f} Mb")
+        tensordict_logger.info(f"njtd size {njt_td.bytes() / 1024 / 1024:.2f} Mb")
 
         def consolidate(td, num_threads):
             return td.consolidate(num_threads=num_threads)
@@ -149,9 +142,6 @@ class TestConsolidate:
         # [True, False, 16],
         [True, "default", None],
     ],
-)
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.5.2"), reason="requires torch>=2.5"
 )
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no CUDA device found")
 class TestTo:
@@ -191,7 +181,7 @@ class TestTo:
                 "Compiling NJTs consolidation currently triggers a RuntimeError."
             )
 
-        tensordict_logger.info(f"njtd size {njt_td.bytes() / 1024 / 1024 :.2f} Mb")
+        tensordict_logger.info(f"njtd size {njt_td.bytes() / 1024 / 1024:.2f} Mb")
         pin_mem = default_device.type == "cuda"
         if consolidated is True:
             njt_td = njt_td.consolidate(pin_memory=pin_mem)

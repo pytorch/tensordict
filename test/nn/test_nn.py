@@ -20,7 +20,7 @@ from collections.abc import MutableSequence
 import pytest
 import torch
 from _utils_internal import is_npu_available
-
+from functorch import make_functional_with_buffers as make_functional_functorch
 from tensordict import (
     is_tensor_collection,
     NonTensorData,
@@ -61,29 +61,10 @@ from tensordict.nn.utils import (
     skip_existing,
 )
 from tensordict.tensorclass import TensorClass
-
-from torch import distributions, nn
+from torch import distributions, nn, vmap
 from torch.distributions import Categorical, Normal
+from torch.nn.parameter import Buffer
 from torch.utils._pytree import tree_map
-
-try:
-    import functorch  # noqa
-    from functorch import make_functional_with_buffers as make_functional_functorch
-
-    try:
-        from torch import vmap
-    except ImportError:
-        from functorch import vmap  # noqa: TOR103
-
-    _has_functorch = True
-    FUNCTORCH_ERR = ""
-except ImportError as err:
-    _has_functorch = False
-    FUNCTORCH_ERR = str(err)
-try:
-    from torch.nn.parameter import Buffer
-except ImportError:
-    from tensordict.utils import Buffer
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
@@ -651,9 +632,9 @@ class TestTDModule:
         for p in returned_params_eq_inplace_updated_params.values(
             include_nested=True, leaves_only=True
         ):
-            assert (
-                p.all()
-            ), f"Discrepancy between returned weights and those in-place updated {p}"
+            assert p.all(), (
+                f"Discrepancy between returned weights and those in-place updated {p}"
+            )
 
     def test_reset_functional_called_once(self):
         import unittest.mock
@@ -900,9 +881,6 @@ class TestTDModule:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-    )
     def test_functional_functorch(self):
         torch.manual_seed(0)
         param_multiplier = 1
@@ -1832,9 +1810,6 @@ class TestTDSequence:
         dist = tdmodule.get_dist(td)
         assert dist.rsample().shape[: td.ndimension()] == td.shape
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-    )
     def test_functional_functorch(self):
         torch.manual_seed(0)
         param_multiplier = 1
@@ -3161,9 +3136,9 @@ class TestEnsembleModule:
         mod = EnsembleModule(module, num_copies=2)
         for param in mod.params_td.values(True, True):
             p0, p1 = param.unbind(0)
-            assert not torch.allclose(
-                p0, p1
-            ), f"Ensemble params were not initialized correctly {p0}, {p1}"
+            assert not torch.allclose(p0, p1), (
+                f"Ensemble params were not initialized correctly {p0}, {p1}"
+            )
 
     @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
     @pytest.mark.parametrize(
@@ -3185,9 +3160,9 @@ class TestEnsembleModule:
         td = TensorDict({"bork": torch.randn(5, 1)}, batch_size=[5])
         out = mod(td)
         assert "dork" in out.keys(), "Ensemble forward failed to write keys"
-        assert out["dork"].shape == torch.Size(
-            [2, 5, 1]
-        ), "Ensemble forward failed to expand input"
+        assert out["dork"].shape == torch.Size([2, 5, 1]), (
+            "Ensemble forward failed to expand input"
+        )
         outs = out["dork"].unbind(0)
         assert not torch.allclose(outs[0], outs[1]), "Outputs should be different"
 
@@ -3214,16 +3189,16 @@ class TestEnsembleModule:
 
         for out_key in ["dork", "spork"]:
             assert out_key in out.keys(), f"Ensemble forward failed to write {out_key}"
-            assert out[out_key].shape == torch.Size(
-                [4, 5, 1]
-            ), f"Ensemble forward failed to expand input for {out_key}"
+            assert out[out_key].shape == torch.Size([4, 5, 1]), (
+                f"Ensemble forward failed to expand input for {out_key}"
+            )
             same_outputs = torch.isclose(
                 out[out_key].repeat(4, 1, 1), out[out_key].repeat_interleave(4, dim=0)
             ).reshape(4, 4, 5, 1)
             mask_out_diags = torch.eye(4).logical_not()
-            assert not torch.any(
-                same_outputs[mask_out_diags]
-            ), f"Module ensemble outputs should be different for {out_key}"
+            assert not torch.any(same_outputs[mask_out_diags]), (
+                f"Module ensemble outputs should be different for {out_key}"
+            )
 
     def test_reset_once(self):
         """Ensure we only call reset_parameters() once per ensemble member"""
@@ -3235,9 +3210,9 @@ class TestEnsembleModule:
             out_keys=["b"],
         )
         EnsembleModule(module, num_copies=2)
-        assert (
-            lin.reset_parameters.call_count == 2
-        ), f"Reset parameters called {lin.reset_parameters.call_count} times should be 2"
+        assert lin.reset_parameters.call_count == 2, (
+            f"Reset parameters called {lin.reset_parameters.call_count} times should be 2"
+        )
 
 
 class TestTensorDictParams:

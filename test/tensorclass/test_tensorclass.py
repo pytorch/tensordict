@@ -31,7 +31,6 @@ import pytest
 import tensordict.utils
 import torch
 from _utils_internal import is_npu_available
-
 from tensordict import (
     assert_allclose_td,
     is_tensorclass,
@@ -42,8 +41,8 @@ from tensordict import (
     NonTensorData,
     set_capture_non_tensor_stack,
     set_list_to_stack,
-    tensorclass,
     TensorClass,
+    tensorclass,
     TensorDict,
     TensorDictBase,
 )
@@ -52,7 +51,6 @@ from tensordict._td import lazy_stack
 from tensordict.base import _GENERIC_NESTED_ERR
 from tensordict.tensorclass import from_dataclass
 from tensordict.utils import _check_recursive_properties
-
 from torch import Tensor
 
 _has_streaming = importlib.util.find_spec("streaming", None) is not None
@@ -154,13 +152,13 @@ def _check_stub_class(stub_attrs, cls, exclusions):
         for name in runtime_attrs - stub_attrs - exclusions
         if not name.startswith("_")
     }
-    assert (
-        not missing
-    ), f"Public attributes of {cls.__name__} missing from its stub: {sorted(missing)}"
+    assert not missing, (
+        f"Public attributes of {cls.__name__} missing from its stub: {sorted(missing)}"
+    )
     extra = stub_attrs - runtime_attrs - exclusions
-    assert (
-        not extra
-    ), f"Stub attributes that {cls.__name__} lacks at runtime: {sorted(extra)}"
+    assert not extra, (
+        f"Stub attributes that {cls.__name__} lacks at runtime: {sorted(extra)}"
+    )
 
 
 def _get_methods_from_class(cls):
@@ -320,9 +318,9 @@ def test_sorted_methods():
         for j, lst2 in enumerate(lists_to_check):
             if i != j:
                 shared_elements = set(lst1) & set(lst2)
-                assert (
-                    not shared_elements
-                ), f"Lists {lst1} and {lst2} share elements: {shared_elements}"
+                assert not shared_elements, (
+                    f"Lists {lst1} and {lst2} share elements: {shared_elements}"
+                )
 
 
 def _make_data(shape):
@@ -4352,9 +4350,7 @@ class TestTensorOnly:
             a: torch.IntTensor
             b: torch.LongTensor
             c: torch.Tensor | None = None
-            d: torch.Tensor | Union[torch.IntTensor, torch.LongTensor] | None = (
-                None  # noqa
-            )
+            d: torch.Tensor | Union[torch.IntTensor, torch.LongTensor] | None = None  # noqa
             e: Optional[torch.IntTensor] = None  # noqa
             f: Optional[torch.IntTensor | None] = None  # noqa
             g: TensorDict | None = None

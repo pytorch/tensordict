@@ -23,7 +23,6 @@ from functools import wraps
 from pathlib import Path
 from textwrap import indent
 from threading import local
-from types import ModuleType
 from typing import (
     Any,
     Callable,
@@ -76,7 +75,6 @@ from tensordict.utils import (
     DeviceType,
     erase_cache,
     expand_as_right,
-    implement_for,
     IndexType,
     is_batchedtensor,
     is_non_tensor,
@@ -88,48 +86,33 @@ from tensordict.utils import (
     unravel_key,
     unravel_key_list,
 )
-from torch import multiprocessing as mp, nn, Tensor
-from torch.nn.parameter import UninitializedTensorMixin
+from torch import _foreach_copy_, multiprocessing as mp, nn, Tensor
+from torch.compiler import allow_in_graph, is_compiling
+from torch.nn.parameter import Buffer, UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
-try:
-    from torch.compiler import is_compiling
-except ImportError:  # torch 2.0
-    from torch._dynamo import is_compiling
+__all__ = [
+    "NO_DEFAULT",
+    "TensorDictBase",
+    "from_any",
+    "from_csv",
+    "from_dict",
+    "from_h5",
+    "from_json",
+    "from_namedtuple",
+    "from_pandas",
+    "from_parquet",
+    "from_struct_array",
+    "from_tuple",
+    "from_zarr",
+    "get_defaults_to_none",
+    "is_tensor_collection",
+    "set_get_defaults_to_none",
+]
 
-try:
-    from torch import _foreach_copy_
-except ImportError:
-    _foreach_copy_ = None
-
-try:
-    from torch.compiler import allow_in_graph as _allow_in_graph
-except (ImportError, AttributeError):
-    _allow_in_graph = None
-
-if _foreach_copy_ is not None and _allow_in_graph is not None:
-    _foreach_copy_compiled = _allow_in_graph(_foreach_copy_)
-else:
-    _foreach_copy_compiled = _foreach_copy_
-
-try:
-    from torch.nn.parameter import Buffer
-except ImportError:
-    from tensordict.utils import Buffer
+_foreach_copy_compiled = allow_in_graph(_foreach_copy_)
 
 _has_h5 = importlib.util.find_spec("h5py") is not None
-
-try:
-    from torch._utils import _get_device_module
-except ImportError:
-
-    def _get_device_module(device_type: str) -> ModuleType | None:
-        device_module = getattr(torch, device_type, None)
-        if device_module is None:
-            raise RuntimeError(
-                f"Device '{device_type}' does not have a corresponding module registered as 'torch.{device_type}'."
-            )
-        return device_module
 
 
 def _sync_cuda_transfer(stream=None):
@@ -855,9 +838,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             return 0
         return batch_size[0]
 
-    def __deepcopy__(
-        self, memo: Dict[Any, Any]
-    ) -> "tensordict.TensorDict":  # noqa  # type: ignore
+    def __deepcopy__(self, memo: Dict[Any, Any]) -> "tensordict.TensorDict":  # noqa  # type: ignore
         return self.clone()
 
     def __contains__(self, key: NestedKey) -> bool:  # type: ignore
@@ -1915,8 +1896,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             )
         elif not rename_map and not names:
             raise ValueError(
-                "Neither a name map nor a name list was passed. "
-                "Only one is accepted."
+                "Neither a name map nor a name list was passed. Only one is accepted."
             )
         elif rename_map:
             cnames = list(clone.names)
@@ -1947,12 +1927,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self._set_names(None)
         if rename_map and names:
             raise ValueError(
-                "Passed both a name map and a name list. " "Only one is accepted."
+                "Passed both a name map and a name list. Only one is accepted."
             )
         elif not rename_map and not names and self.batch_dims:
             raise ValueError(
-                "Neither a name map nor a name list was passed. "
-                "Only one is accepted."
+                "Neither a name map nor a name list was passed. Only one is accepted."
             )
         elif rename_map:
             cnames = list(self.names)
@@ -2128,7 +2107,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 exception is raised.
             shape (torch.Size or equivalent, torch.Tensor for nested tensors): the shape of the tensor to write.
 
-        Keyword arguments:
+        Keyword Arguments:
             dtype (torch.dtype, optional): the dtype of the new tensor.
             robust_key (bool, optional): if ``True`` (default), uses robust key encoding that safely
                 handles keys with path separators and special characters. If ``False``,
@@ -2169,7 +2148,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 storage.
             shape (torch.Size or equivalent, torch.Tensor for nested tensors): the shape of the tensor to write.
 
-        Keyword arguments:
+        Keyword Arguments:
             dtype (torch.dtype, optional): the dtype of the new tensor.
             robust_key (bool, optional): if ``True`` (default), uses robust key encoding that safely
                 handles keys with path separators and special characters. If ``False``,
@@ -2204,7 +2183,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 exception is raised.
             tensor (torch.Tensor): the tensor to replicate on physical memory.
 
-        Keyword arguments:
+        Keyword Arguments:
             copy_data (bool, optionaL): if ``False``, the new tensor will share the metadata of the input such as
                 shape and dtype, but the content will be empty. Defaults to ``True``.
             robust_key (bool, optional): if ``True`` (default), uses robust key encoding that safely
@@ -2286,12 +2265,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """
         if item is self:
             raise ValueError(_SELF_NESTING_ERROR.format(key))
-        key = _unravel_key_to_tuple(key)
+        key_tuple = _unravel_key_to_tuple(key)
+        if not key_tuple:
+            raise KeyError(_GENERIC_NESTED_ERR.format(key))
         # inplace is loose here, but for set_ it is constraining. We translate it
         # to None to tell _set_str and others to drop it if the key isn't found
         inplace = BEST_ATTEMPT_INPLACE if inplace else False
         return self._set_tuple(
-            key, item, inplace=inplace, validated=False, non_blocking=non_blocking
+            key_tuple, item, inplace=inplace, validated=False, non_blocking=non_blocking
         )
 
     @abc.abstractmethod
@@ -2562,9 +2543,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> assert (x == 0).all()
 
         """
-        key = _unravel_key_to_tuple(key)
+        key_tuple = _unravel_key_to_tuple(key)
+        if not key_tuple:
+            raise KeyError(_GENERIC_NESTED_ERR.format(key))
         return self._set_tuple(
-            key, item, inplace=True, validated=False, non_blocking=non_blocking
+            key_tuple, item, inplace=True, validated=False, non_blocking=non_blocking
         )
 
     # Stack functionality
@@ -2640,8 +2623,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> td.get("y")
             None
         """
-        key = _unravel_key_to_tuple(key)
-        if not key:
+        key_tuple = _unravel_key_to_tuple(key)
+        if not key_tuple:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
         # Find what the default is
         if args:
@@ -2658,7 +2641,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             default = None
         else:
             default = NO_DEFAULT
-        return self._get_tuple(key, default=default, **kwargs)
+        return self._get_tuple(key_tuple, default=default, **kwargs)
 
     @abc.abstractmethod
     def _get_str(self, key, default, **kwargs):
@@ -2715,8 +2698,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         """
         # TODO: check that this works with masks, and add to docstring
-        key = _unravel_key_to_tuple(key)
-        if not key:
+        key_tuple = _unravel_key_to_tuple(key)
+        if not key_tuple:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
 
         try:
@@ -2740,7 +2723,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         else:
             default = NO_DEFAULT
 
-        return self._get_at_tuple(key, index, default, **kwargs)
+        return self._get_at_tuple(key_tuple, index, default, **kwargs)
 
     def _get_at_str(self, key, idx, default, **kwargs):
         out = self._get_str(key, default, **kwargs)
@@ -2923,8 +2906,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self.update(input_dict_or_td, update_batch_size=True)
             return self
 
-        for key, value in input_dict_or_td.items():
-            key = _unravel_key_to_tuple(key)
+        for input_key, value in input_dict_or_td.items():
+            key = _unravel_key_to_tuple(input_key)
+            if not key:
+                raise KeyError(_GENERIC_NESTED_ERR.format(input_key))
             firstkey, subkey = key[0], key[1:]
             if keys_to_update and not any(
                 firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
@@ -3143,7 +3128,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             new_keys, other_val = input_dict_or_td._items_list(
                 True, True, sorting_keys=keys, default="intersection"
             )
-            if len(new_keys) and _foreach_copy_ is not None:
+            if len(new_keys):
                 if len(other_val) != len(vals):
                     vals = dict(zip(keys, vals))
                     vals = [vals[k] for k in new_keys]
@@ -3527,7 +3512,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 key=keyfunc,
             )
         else:
-
             if is_leaf is None:
                 is_leaf = _default_is_leaf
 
@@ -3610,7 +3594,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             for _, value in self.items(include_nested, leaves_only, is_leaf, sort=sort):
                 yield value
         else:
-
             if is_leaf is None:
                 is_leaf = _default_is_leaf
 
@@ -3835,21 +3818,21 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> none = td.pop("1", default=None)
             >>> assert none is None
         """
-        key = _unravel_key_to_tuple(key)
-        if not key:
+        key_tuple = _unravel_key_to_tuple(key)
+        if not key_tuple:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
         # Use _UNSET sentinel to detect if key exists without try/except (compile-friendly)
-        out = self.get(key, _UNSET)
+        out = self.get(key_tuple, _UNSET)
         if out is _UNSET:
             # Key not found
             if default is NO_DEFAULT:
                 raise KeyError(
-                    f"You are trying to pop key `{key}` which is not in dict "
+                    f"You are trying to pop key `{key_tuple}` which is not in dict "
                     f"without providing default value. "
-                    f"Keys={self.keys(include_nested=isinstance(key, tuple))}."
+                    f"Keys={self.keys(include_nested=isinstance(key_tuple, tuple))}."
                 )
             return default
-        self.del_(key)
+        self.del_(key_tuple)
         return out
 
     @property
@@ -4305,8 +4288,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             is_leaf = _default_is_leaf
         for key, item in self.items():
             if (
-                not call_on_nested
-                and not is_leaf(type(item))
+                not call_on_nested and not is_leaf(type(item))
                 # and not is_non_tensor(item)
             ):
                 if default is not NO_DEFAULT:
@@ -4429,7 +4411,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 result._tensordict[key] = item_trsf
 
         else:
-
             local_inplace = BEST_ATTEMPT_INPLACE if inplace else False
 
             def setter(
@@ -4454,7 +4435,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         for i, (key, local_future) in enumerate(
             _zip_strict(self.keys(), local_futures)
         ):
-
             if isinstance(local_future, list):
                 # We can't make this a future as it could cause deadlocks:
                 #  If we put a future over the root and this triggers another
@@ -4664,8 +4644,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         for key, item in self.items():
             if (
-                not call_on_nested
-                and not is_leaf(type(item))
+                not call_on_nested and not is_leaf(type(item))
                 # and not is_non_tensor(item)
             ):
                 if default is not NO_DEFAULT:
@@ -5331,7 +5310,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Copies the tensordict without cloning its tensors."""
         return self.copy()
 
-    @implement_for("torch", None, "2.4")
     def norm(
         self,
         *,
@@ -5343,47 +5321,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         Keyword Args:
             out (TensorDict, optional): the output tensordict.
-            dtype (torch.dtype, optional): the output dtype (torch>=2.4).
-            key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
-                If provided, all keys in the result will be transformed using this function.
-                For string keys, the function receives a string. For tuple keys, it receives a tuple.
-                Default: ``None``.
-
-        """
-        keys, vals = self._items_list(True, True, collapse=True)
-        if dtype is not None:
-            raise RuntimeError("dtype must be None for torch <= 2.3")
-        vals = torch._foreach_norm(vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        result = self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            batch_size=[],
-            propagate_lock=True,
-            out=out,
-        )
-        if key_transform is not None:
-            result = result._transform_keys(key_transform)
-        return result
-
-    @implement_for("torch", "2.4")
-    def norm(  # noqa: F811
-        self,
-        *,
-        out=None,
-        dtype: torch.dtype | None = None,
-        key_transform: Callable[[NestedKey], NestedKey] | None = None,
-    ) -> Self:
-        """Computes the norm of each tensor in the tensordict.
-
-        Keyword Args:
-            out (TensorDict, optional): the output tensordict.
-            dtype (torch.dtype, optional): the output dtype (torch>=2.4).
+            dtype (torch.dtype, optional): the output dtype.
             key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
                 If provided, all keys in the result will be transformed using this function.
                 For string keys, the function receives a string. For tuple keys, it receives a tuple.
@@ -5409,34 +5347,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             result = result._transform_keys(key_transform)
         return result
 
-    @implement_for("torch", None, "2.5")
     def _clone_recurse(self) -> Self:  # noqa: D417
-        keys, vals = self._items_list(True, True)
-        items = dict(
-            _zip_strict(
-                keys,
-                (val.clone() if hasattr(val, "clone") else val for val in vals),
-            )
-        )
-
-        def pop(name, val):
-            return items.pop(name, None)
-
-        result = self._fast_apply(
-            pop,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=False,
-            filter_empty=False,
-            default=None,
-        )
-        if items:
-            result.update(items)
-        return result
-
-    @implement_for("torch", "2.5")
-    def _clone_recurse(self) -> Self:  # noqa: F811, D417
         keys, vals = self._items_list(True, True)
         foreach_vals = {}
         iter_vals = {}
