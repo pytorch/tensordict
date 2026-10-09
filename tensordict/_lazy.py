@@ -128,6 +128,8 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
     tensordict: LazyStackedTensorDict
 
     def __len__(self) -> int:
+        if self.include_nested or self.leaves_only:
+            return super().__len__()
         return len(self._keys())
 
     def _keys(self) -> list[str]:

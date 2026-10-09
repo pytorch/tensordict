@@ -284,6 +284,19 @@ class TestLazyStackedTensorDict:
         stack = LazyStackedTensorDict.lazy_stack([td, td2])
         assert set(stack.keys(True, True)) == {"a"}
 
+    @pytest.mark.parametrize("include_nested", [False, True])
+    @pytest.mark.parametrize("leaves_only", [False, True])
+    def test_keys_len(self, include_nested, leaves_only):
+        td = TensorDict(
+            a=torch.zeros(3),
+            nested=TensorDict(b=torch.zeros(3), c=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        stack = lazy_stack([td[0], td[1]])
+        keys = stack.keys(include_nested, leaves_only)
+        assert len(keys) == len(list(keys))
+        assert len(keys) == len(td.keys(include_nested, leaves_only))
+
     @pytest.mark.parametrize("ragged", [False, True])
     def test_arithmetic_ops(self, ragged):
         td0 = LazyStackedTensorDict(
