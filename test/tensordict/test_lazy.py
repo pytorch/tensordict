@@ -2175,6 +2175,11 @@ class TestLazyStackedTensorDict:
         stack = NonTensorStack(*[NonTensorStack("a", "b") for _ in range(3)])
         empty = stack[torch.zeros(3, dtype=torch.bool)]
         assert empty.batch_size == torch.Size([0, 2])
+        # an N-D index that selects nothing keeps the other dims of the block
+        index = torch.zeros(2, 0, dtype=torch.long)
+        for idx in ((index,), (index, index), (slice(None), index)):
+            expected = torch.zeros(stack.batch_size)[idx].shape
+            assert stack[idx].batch_size == expected
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
     def test_lazy_empty_selection_non_tensor_entries(self, stack_dim):

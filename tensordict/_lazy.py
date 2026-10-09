@@ -2672,8 +2672,12 @@ class LazyStackedTensorDict(TensorDictBase):
             result = self.tensordicts[member]
             return result if member_index is None else result[member_index]
         if not split.parts:
-            # e.g. an empty slice or mask along the stack dim
-            return self._empty_getitem_result(index, split.dim)
+            # e.g. an empty slice or mask along the stack dim. The result has a
+            # dim of size 0 at the stack dim, or in the advanced block.
+            empty_dim = split.dim
+            if split.kind == _GATHER:
+                empty_dim += split.shape.index(0)
+            return self._empty_getitem_result(index, empty_dim)
         if split.kind == _STACK:
             items = []
             for member, member_index, _ in split.parts:

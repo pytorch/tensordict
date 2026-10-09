@@ -2326,6 +2326,88 @@ class TestTCDefaultsCompile:
         assert fn(inp) is None
 
 
+class TestTCCustomInitCompile:
+    """A user-defined __init__ runs under torch.compile (gh-1822)."""
+
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_custom_init(self, tensor_only):
+        class Data(TensorClass, tensor_only=tensor_only):
+            x: torch.Tensor
+
+            def __init__(self, x, **options):
+                self.x = x * options["scale"]
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(x):
+            return Data(x, scale=2.0, batch_size=[3]).x + Data(x=x, scale=3.0).x
+
+        inp = torch.ones(3)
+        torch.testing.assert_close(fn(inp), inp * 5)
+
+    def test_custom_init_inherited(self):
+        class Parent(TensorClass):
+            x: torch.Tensor
+
+            def __init__(self, x):
+                self.x = x * 2
+
+        class Child(Parent):
+            y: torch.Tensor = None
+            z: torch.Tensor = torch.zeros(3)
+            w: torch.Tensor = dataclasses.field(default_factory=lambda: torch.ones(3))
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(x):
+            child = Child(x, batch_size=[3])
+            return child.x, child.y, child.z, child.w
+
+        inp = torch.ones(3)
+        x, y, z, w = fn(inp)
+        torch.testing.assert_close(x, inp * 2)
+        assert y is None
+        torch.testing.assert_close(z, torch.zeros(3))
+        torch.testing.assert_close(w, torch.ones(3))
+
+    def test_custom_init_super(self):
+        class Base(TensorClass):
+            x: torch.Tensor
+
+        class Child(Base):
+            y: torch.Tensor
+
+            def __init__(self, x):
+                self.y = x + 1
+                super().__init__(x=x, batch_size=x.shape[:1])
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(x):
+            child = Child(x)
+            return child.x + child.y, child.batch_size
+
+        inp = torch.ones(3)
+        out, batch_size = fn(inp)
+        torch.testing.assert_close(out, inp * 3)
+        assert batch_size == torch.Size([3])
+
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_custom_init_frozen(self, tensor_only):
+        class Data(TensorClass, frozen=True, tensor_only=tensor_only):
+            x: torch.Tensor
+
+            def __init__(self, x):
+                object.__setattr__(self, "x", x * 2)
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(x):
+            return Data(x, batch_size=[3])
+
+        inp = torch.ones(3)
+        data = fn(inp)
+        torch.testing.assert_close(data.to_tensordict()["x"], inp * 2)
+        assert "x" not in data.__dict__
+        assert data.is_locked
+
+
 def _count_compiles(fn, *args):
     """Compile fn, run it twice, return (frame_count_first, frame_count_second).
 
