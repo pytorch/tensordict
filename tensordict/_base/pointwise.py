@@ -1907,9 +1907,9 @@ class _PointwiseOps:
             return self
         if any(_is_unbatched(v) for v in vals):
             if _is_tensor_collection(type(other)):
-                self.apply_(lambda x, y: x.maximum_(y), other)
+                self.apply_(lambda x, y: x.clamp_min_(y), other)
             else:
-                self.apply_(lambda x: x.maximum_(other))
+                self.apply_(lambda x: x.clamp_min_(other))
             return self
         torch._foreach_maximum_(vals, other_val)
         return self
@@ -1941,9 +1941,9 @@ class _PointwiseOps:
             return self.copy()
         if any(_is_unbatched(v) for v in vals):
             if _is_tensor_collection(type(other)):
-                return self.apply(lambda x, y: torch.maximum(x, y), other)
+                return self.apply(lambda x, y: torch.clamp_min(x, y), other)
             else:
-                return self.apply(lambda x: torch.maximum(x, other))
+                return self.apply(lambda x: torch.clamp_min(x, other))
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
                 True, True, sorting_keys=keys, default=default
@@ -1991,9 +1991,9 @@ class _PointwiseOps:
             return self
         if any(_is_unbatched(v) for v in vals):
             if _is_tensor_collection(type(other)):
-                self.apply_(lambda x, y: x.minimum_(y), other)
+                self.apply_(lambda x, y: x.clamp_max_(y), other)
             else:
-                self.apply_(lambda x: x.minimum_(other))
+                self.apply_(lambda x: x.clamp_max_(other))
             return self
         torch._foreach_minimum_(vals, other_val)
         return self
@@ -2025,9 +2025,9 @@ class _PointwiseOps:
             return self.copy()
         if any(_is_unbatched(v) for v in vals):
             if _is_tensor_collection(type(other)):
-                return self.apply(lambda x, y: torch.minimum(x, y), other)
+                return self.apply(lambda x, y: torch.clamp_max(x, y), other)
             else:
-                return self.apply(lambda x: torch.minimum(x, other))
+                return self.apply(lambda x: torch.clamp_max(x, other))
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
                 True, True, sorting_keys=keys, default=default
