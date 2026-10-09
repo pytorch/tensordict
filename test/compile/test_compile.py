@@ -1787,6 +1787,34 @@ class TestExport:
         assert out.batch_size == torch.Size([4, 6])
         torch.testing.assert_close(out["y"], out["x"] * 2)
 
+    class _TDInOutModule(torch.nn.Module):
+        def forward(self, td: TensorDict) -> TensorDict:
+            return TensorDict(c=td["a"] * 2 + td["b"], batch_size=td.batch_size)
+
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_export_td_input(self, strict):
+        td = TensorDict(a=torch.randn(4, 3), b=torch.randn(4, 1), batch_size=[4])
+        ep = torch.export.export(self._TDInOutModule(), (td,), strict=strict)
+        out = ep.module()(td)
+        assert out.batch_size == torch.Size([4])
+        torch.testing.assert_close(out["c"], td["a"] * 2 + td["b"])
+
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_export_td_input_dynamic_batch_size(self, strict):
+        td = TensorDict(a=torch.randn(4, 3), b=torch.randn(4, 1), batch_size=[4])
+        batch = torch.export.Dim("batch", min=2)
+        ep = torch.export.export(
+            self._TDInOutModule(),
+            (td,),
+            strict=strict,
+            # One entry per leaf of the tensordict, in key order.
+            dynamic_shapes=([{0: batch}, {0: batch}],),
+        )
+        td = TensorDict(a=torch.randn(5, 3), b=torch.randn(5, 1), batch_size=[5])
+        out = ep.module()(td)
+        assert out.batch_size == torch.Size([5])
+        torch.testing.assert_close(out["c"], td["a"] * 2 + td["b"])
+
     @pytest.mark.parametrize("strict", [False])  # , True])
     def test_export_with_td_params(self, strict):
         module = torch.nn.Sequential(
