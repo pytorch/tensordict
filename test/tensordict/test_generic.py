@@ -34,6 +34,7 @@ from tensordict import (
     tensorclass,
     TensorDict,
 )
+from tensordict._indexing import convert_ellipsis_to_idx
 from tensordict._td import is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _NESTED_TENSORS_AS_LISTS, TensorDictBase
@@ -44,7 +45,6 @@ from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
     assert_allclose_td,
-    convert_ellipsis_to_idx,
     is_non_tensor,
     is_tensorclass,
     set_lazy_legacy,

@@ -19,10 +19,10 @@ import torch
 from tensordict._deprecation import deprecated
 from tensordict.utils import (
     _maybe_correct_neg_dim,
+    _NESTED_TENSOR_ERR,
     _shape,
     _zip_strict,
     IndexType,
-    NESTED_TENSOR_ERR,
 )
 
 if TYPE_CHECKING:
@@ -272,7 +272,7 @@ class MemoryMappedTensor(torch.Tensor):
                 if func_offset_stride is not None:
                     offsets_strides = func_offset_stride(shape)
                 else:
-                    raise RuntimeError(NESTED_TENSOR_ERR)
+                    raise RuntimeError(_NESTED_TENSOR_ERR)
                 result = torch.frombuffer(memoryview(handler.buffer), dtype=input.dtype)
                 if copy_data:
                     result.untyped_storage().copy_(input.untyped_storage())
@@ -303,7 +303,7 @@ class MemoryMappedTensor(torch.Tensor):
                 if func_offset_stride is not None:
                     offsets_strides = func_offset_stride(shape)
                 else:
-                    raise RuntimeError(NESTED_TENSOR_ERR)
+                    raise RuntimeError(_NESTED_TENSOR_ERR)
                 if copy_data:
                     result.untyped_storage().copy_(input.untyped_storage())
                 result = torch._nested_view_from_buffer(
@@ -634,7 +634,7 @@ class MemoryMappedTensor(torch.Tensor):
                 if func_offset_stride is not None:
                     offsets_strides = func_offset_stride(shape)
                 else:
-                    raise RuntimeError(NESTED_TENSOR_ERR)
+                    raise RuntimeError(_NESTED_TENSOR_ERR)
                 result = torch.frombuffer(memoryview(handler.buffer), dtype=dtype)
                 result = torch._nested_view_from_buffer(
                     result,
@@ -662,7 +662,7 @@ class MemoryMappedTensor(torch.Tensor):
                 if func_offset_stride is not None:
                     offsets_strides = func_offset_stride(shape)
                 else:
-                    raise RuntimeError(NESTED_TENSOR_ERR)
+                    raise RuntimeError(_NESTED_TENSOR_ERR)
                 result = torch._nested_view_from_buffer(
                     result,
                     shape,

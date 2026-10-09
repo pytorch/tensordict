@@ -68,14 +68,17 @@ from tensordict.base import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
+    _cache_while_locked,
     _canonicalize_tensor,
     _check_is_flatten,
     _check_is_unflatten,
+    _erase_cache_first,
     _get_shape_from_args,
     _import_and_wrap_functorch,
     _infer_size_impl,
     _is_unbatched,
     _KEY_ERROR,
+    _lock_blocked,
     _maybe_correct_neg_dim,
     _parse_to,
     _recursive_unbind_list,
@@ -84,16 +87,12 @@ from tensordict.utils import (
     _td_fields,
     _unravel_key_to_tuple,
     _zip_strict,
-    cache,
     DeviceType,
-    erase_cache,
     expand_right,
     IndexType,
-    infer_size_impl,
     is_non_tensor,
     is_tensorclass,
     list_to_stack,
-    lock_blocked,
     NestedKey,
     unravel_key_list,
 )
@@ -554,7 +553,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return all(td._is_memmap for td in self.tensordicts)
 
     @property
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _has_exclusive_keys(self):
         keys = None
         for td in self.tensordicts:
@@ -696,7 +695,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return self._batch_size_setter(new_size)
 
     @property
-    @cache  # noqa
+    @_cache_while_locked  # noqa
     def names(self):
         names = list(self.tensordicts[0].names)
         for td in self.tensordicts[1:]:
@@ -708,7 +707,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return names
 
     @names.setter
-    @erase_cache  # a nested lazy stacked tensordict is not apparent to the root
+    @_erase_cache_first  # a nested lazy stacked tensordict is not apparent to the root
     def names(self, value):
         self._set_names(value)
 
@@ -1431,7 +1430,7 @@ class LazyStackedTensorDict(TensorDictBase):
             **kwargs,
         )
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _get_str(
         self,
         key: NestedKey,
@@ -1732,7 +1731,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
         return _stack(items, dim=dim, out=out, strict=strict, maybe_dense_stack=True)
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _add_batch_dim(self, *, in_dim, vmap_level):
         if self.is_memmap():
             td = LazyStackedTensorDict.lazy_stack(
@@ -1808,7 +1807,7 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         return out
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
         if self._hook_out is not None:
             # this is the hacked version. We just need to remove the hook_out and
@@ -1848,7 +1847,7 @@ class LazyStackedTensorDict(TensorDictBase):
             result.lock_()
         return result
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim):
         if self._hook_out is not None:
             # this is the hacked version. We just need to remove the hook_out and
@@ -2270,7 +2269,7 @@ class LazyStackedTensorDict(TensorDictBase):
         # this is about 20x faster than the version above
         yield from self._key_list()
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _key_list(self):
         if not self.tensordicts:
             return []
@@ -2285,7 +2284,7 @@ class LazyStackedTensorDict(TensorDictBase):
         # so that keys(), values() and items() agree.
         return [key for key in first_keys if key in keys]
 
-    @lock_blocked
+    @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         key, val = self.tensordicts[0].popitem()
         vals = [val]
@@ -2984,7 +2983,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 future.wait()
             return
 
-    @lock_blocked
+    @_lock_blocked
     def del_(self, key: NestedKey, **kwargs: Any) -> Self:
         # Use check-before-delete pattern for torch.compile compatibility
         key_tuple = _unravel_key_to_tuple(key)
@@ -3072,7 +3071,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 if not prefix.exists():
                     os.makedirs(prefix, exist_ok=True)
                 with open(prefix / "meta.json", "wb") as f:
-                    from tensordict.utils import json_dumps
+                    from tensordict._utils_key_json import json_dumps
 
                     json_str = json_dumps(
                         {"_type": str(type(self)), "stack_dim": self.stack_dim}
@@ -3216,7 +3215,7 @@ class LazyStackedTensorDict(TensorDictBase):
             return self
         return LazyStackedTensorDict.maybe_dense_stack(tensordicts, dim=stack_dim)
 
-    @lock_blocked
+    @_lock_blocked
     def update(
         self,
         input_dict_or_td: T | None = None,
@@ -3534,7 +3533,7 @@ class LazyStackedTensorDict(TensorDictBase):
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
-    @lock_blocked
+    @_lock_blocked
     def insert(self, index: int, tensordict: T) -> None:
         """Insert a TensorDict into the stack at the specified index.
 
@@ -3576,7 +3575,7 @@ class LazyStackedTensorDict(TensorDictBase):
         N = len(self.tensordicts)
         self._batch_size = self._compute_batch_size(batch_size, self.stack_dim, N)
 
-    @lock_blocked
+    @_lock_blocked
     def append(self, tensordict: T) -> None:
         """Append a TensorDict onto the stack.
 
@@ -3589,7 +3588,7 @@ class LazyStackedTensorDict(TensorDictBase):
         """
         self.insert(len(self.tensordicts), tensordict)
 
-    @lock_blocked
+    @_lock_blocked
     def extend(self, tensordict: list[T] | T) -> None:
         """Extends the lazy stack with new tensordicts."""
         if _is_tensor_collection(type(tensordict)):
@@ -3680,7 +3679,7 @@ class LazyStackedTensorDict(TensorDictBase):
         for dest in self.tensordicts:
             dest._propagate_lock(lock_parents_weakrefs, is_compiling=is_compiling)
 
-    @erase_cache
+    @_erase_cache_first
     def _propagate_unlock(self):
         # we can't set _is_locked to False because after it's unlocked, anything
         # can happen to a child tensordict.
@@ -4075,12 +4074,12 @@ class _CustomOpTensorDict(TensorDictBase):
 
     # These attributes should never be set
     @property
-    @cache  # noqa
+    @_cache_while_locked  # noqa
     def _is_shared(self):
         return self._source._is_shared
 
     @property
-    @cache  # noqa
+    @_cache_while_locked  # noqa
     def _is_memmap(self):
         return self._source._is_memmap
 
@@ -4301,7 +4300,7 @@ class _CustomOpTensorDict(TensorDictBase):
             f"\n\top={self.custom_op}({custom_op_kwargs_str}))"
         )
 
-    # @cache  # noqa: B019
+    # @_cache_while_locked  # noqa: B019
     def keys(
         self,
         include_nested: bool = False,
@@ -4387,7 +4386,7 @@ class _CustomOpTensorDict(TensorDictBase):
         self._source.rename_key_(old_key, new_key, safe=safe)
         return self
 
-    @lock_blocked
+    @_lock_blocked
     def del_(self, key: NestedKey) -> _CustomOpTensorDict:
         self._source = self._source.del_(key)
         return self
@@ -4434,7 +4433,7 @@ class _CustomOpTensorDict(TensorDictBase):
             )
         return self
 
-    @lock_blocked
+    @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         key, val = self._source.popitem()
         return key, self._transform_value(val)
@@ -4505,7 +4504,7 @@ class _CustomOpTensorDict(TensorDictBase):
                 }
             )
             with open(filepath, "wb") as json_metadata:
-                from tensordict.utils import json_dumps
+                from tensordict._utils_key_json import json_dumps
 
                 json_str = json_dumps(metadata)
                 # Ensure we write bytes to the binary file
@@ -4634,7 +4633,7 @@ class _CustomOpTensorDict(TensorDictBase):
         self._source.lock_()
         return self
 
-    @erase_cache
+    @_erase_cache_first
     @_as_context_manager("is_locked")
     def unlock_(self) -> Self:
         self._source.unlock_()
@@ -4643,11 +4642,11 @@ class _CustomOpTensorDict(TensorDictBase):
     def _remove_lock(self, lock_id):
         return self._source._remove_lock(lock_id)
 
-    @erase_cache
+    @_erase_cache_first
     def _propagate_lock(self, lock_ids, *, is_compiling):
         return self._source._propagate_lock(lock_ids, is_compiling=is_compiling)
 
-    @erase_cache
+    @_erase_cache_first
     def _propagate_unlock(self):
         return self._source._propagate_unlock()
 
@@ -4863,7 +4862,7 @@ class _ViewedTensorDict(_CustomOpTensorDict):
         elif len(shape) == 1 and isinstance(shape[0], (list, tuple, torch.Size)):
             return self._legacy_view(*shape[0])
         elif not isinstance(shape, torch.Size):
-            shape = infer_size_impl(shape, self.numel())
+            shape = _infer_size_impl(shape, self.numel())
             shape = torch.Size(shape)
         if shape == self._source.batch_size:
             return self._source
