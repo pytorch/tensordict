@@ -3174,16 +3174,6 @@ def _grad(self):
     return self._from_tensordict(self._tensordict.grad, self._non_tensordict)
 
 
-def _names_setter(self, names: str) -> None:  # noqa: D417
-    """Set the value of ``tensorclass.names``.
-
-    Args:
-        names (sequence of str)
-
-    """
-    self._tensordict.names = names
-
-
 def _state_dict(
     self, destination=None, prefix="", keep_vars=False, flatten=True
 ) -> dict[str, Any]:
