@@ -250,19 +250,27 @@ class CudaGraphModule:
                         sorting_keys=self._graph_input_keys,
                         default="intersection",
                     )
-                    dest_vals = self._graph_input_vals
-                    if len(src_keys) != len(dest_vals):
+                    if len(src_keys) == len(self._graph_input_keys):
+                        if src_vals:
+                            torch._foreach_copy_(
+                                self._graph_input_vals, src_vals, non_blocking=True
+                            )
+                    else:
+                        graph_keys = self._graph_inputs.keys(include_nested=True)
                         input_keys = tensordict.keys(include_nested=True)
-                        missing = [key for key in self.in_keys if key not in input_keys]
+                        missing = [
+                            key
+                            for key in self.in_keys
+                            if key in graph_keys and key not in input_keys
+                        ]
                         if missing:
                             raise KeyError(
                                 f"{self.__class__.__name__} input is missing the in_keys "
                                 f"{missing} that the captured graph reads."
                             )
-                        graph_inputs = dict(zip(self._graph_input_keys, dest_vals))
-                        dest_vals = [graph_inputs[key] for key in src_keys]
-                    if src_vals:
-                        torch._foreach_copy_(dest_vals, src_vals, non_blocking=True)
+                        # Other keys differ, or the layout does (e.g. a lazy stack
+                        # against a dense tensordict): ``update_`` matches the leaves.
+                        self._graph_inputs.update_(tensordict, non_blocking=True)
                     torch.cuda.synchronize(self.device)
                     self.graph.replay()
                     if self._out_matches_in:

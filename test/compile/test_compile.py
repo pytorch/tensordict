@@ -23,6 +23,7 @@ from packaging import version
 from tensordict import (
     assert_close,
     from_dataclass,
+    LazyStackedTensorDict,
     NonTensorData,
     tensorclass,
     TensorDict,
@@ -2134,6 +2135,39 @@ class TestCudaGraphs:
             tdmodule(TensorDict(x=torch.randn(3), batch_size=[3]))
         with pytest.raises(ValueError, match="captured with batch_size"):
             tdmodule(TensorDict(x=torch.randn(1), z=torch.randn(1), batch_size=[1]))
+
+    def test_tdmodule_uncaptured_in_key_missing(self, compiled):
+        # An in_key that the captured input did not hold is not reported missing.
+        if not torch.cuda.is_available():
+            pytest.skip("CudaGraphModule only replays graphs on CUDA")
+        func = self._make_cudagraph(
+            lambda td: td.set("y", td["x"] + 1),
+            compiled,
+            in_keys=["x", "unused"],
+            out_keys=["y"],
+        )
+        for _ in range(4):
+            func(TensorDict(x=torch.zeros(3), w=torch.zeros(3), batch_size=[3]))
+        td = func(TensorDict(x=torch.ones(3), batch_size=[3]))
+        torch.testing.assert_close(td["y"], torch.full((3,), 2.0))
+
+    @pytest.mark.parametrize("capture_lazy", [True, False])
+    def test_tdmodule_lazy_and_dense_inputs(self, compiled, capture_lazy):
+        # Captured on a lazy stack and replayed on a dense tensordict, or the
+        # reverse: the leaves have other keys, and must still be copied.
+        if not torch.cuda.is_available():
+            pytest.skip("CudaGraphModule only replays graphs on CUDA")
+
+        def make(value, lazy):
+            td = TensorDict(x=torch.full((2, 3), value), batch_size=[2])
+            return LazyStackedTensorDict(*td.unbind(0), stack_dim=0) if lazy else td
+
+        tdmodule = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
+        tdmodule = self._make_cudagraph(tdmodule, compiled)
+        for _ in range(4):
+            tdmodule(make(0.0, capture_lazy))
+        td = tdmodule(make(5.0, not capture_lazy))
+        torch.testing.assert_close(td["y"], torch.full((2, 3), 6.0))
 
     def test_non_tdmodule_shape_change_raises(self, compiled):
         if not torch.cuda.is_available():
