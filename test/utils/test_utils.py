@@ -1092,6 +1092,21 @@ def test_public_module_names():
     )
 
 
+def test_testing_module_is_deprecated():
+    import tensordict._testing
+    import tensordict.testing
+
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"^tensordict\.testing\.MyDistData is deprecated and will be removed "
+        r"in TensorDict 0\.17\.$",
+    ) as record:
+        from tensordict.testing import MyDistData
+    assert record[0].filename == __file__
+    assert MyDistData is tensordict._testing.MyDistData
+    assert MyDistData.__module__ == "tensordict._testing"
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
