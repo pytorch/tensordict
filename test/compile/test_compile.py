@@ -22,6 +22,7 @@ from packaging import version
 
 from tensordict import (
     assert_close,
+    from_dataclass,
     NonTensorData,
     tensorclass,
     TensorDict,
@@ -2256,6 +2257,14 @@ class _FactoryDefaultTC:
     cache: torch.Tensor = dataclasses.field(default_factory=lambda: torch.zeros(3))
 
 
+@dataclasses.dataclass
+class _FactoryDefaultDataClass:
+    cache: torch.Tensor = dataclasses.field(default_factory=lambda: torch.zeros(3))
+
+
+_FactoryDefaultFromDataclassTC = from_dataclass(_FactoryDefaultDataClass)
+
+
 @tensorclass
 class _NoneDefaultTC:
     x: torch.Tensor
@@ -2301,6 +2310,16 @@ class TestTCDefaultsCompile:
             return _FactoryDefaultTC().cache
 
         torch.testing.assert_close(_FactoryDefaultTC().cache, torch.zeros(3))
+        torch.testing.assert_close(fn(), torch.zeros(3))
+
+    def test_from_dataclass_default_factory_under_compile(self):
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn():
+            return _FactoryDefaultFromDataclassTC().cache
+
+        torch.testing.assert_close(
+            _FactoryDefaultFromDataclassTC().cache, torch.zeros(3)
+        )
         torch.testing.assert_close(fn(), torch.zeros(3))
 
     def test_omitted_none_default_under_compile(self):

@@ -113,6 +113,8 @@ jobs:
           PYTHON_VERSION: ${{ matrix.python_version }}
           CU_VERSION: cpu
           TORCH_VERSION: nightly
+          # pytest-xdist workers for run_test.sh; the runner has 48 CPUs.
+          TD_TEST_WORKERS: 16
           ARCH: x86_64
           RUNNER_ARTIFACT_DIR: ${{ github.workspace }}/artifacts
         run: |
@@ -230,6 +232,8 @@ jobs:
           PYTHON_VERSION: ${{ matrix.python_version }}
           CU_VERSION: cpu
           TORCH_VERSION: stable
+          # pytest-xdist workers for run_test.sh; the runner has 48 CPUs.
+          TD_TEST_WORKERS: 16
           ARCH: x86_64
           RUNNER_ARTIFACT_DIR: ${{ github.workspace }}/artifacts
         run: |
