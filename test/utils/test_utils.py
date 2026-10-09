@@ -872,6 +872,8 @@ _NOT_IN_ALL_PENDING = {
         "set_tensor",
         "set_tensor_dict",
     },
+    "tensordict.nn.params": {"implements_for_tdparam"},
+    "tensordict.nn.utils": {"StrEnum"},
     "tensordict.utils": {
         "BufferLegacy",
         "KeyDependentDefaultDict",
