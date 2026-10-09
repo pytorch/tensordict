@@ -10,7 +10,6 @@ from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.nn.common import TensorDictModuleBase
-
 from tensordict.nn.params import TensorDictParams
 
 __all__ = ["EnsembleModule"]

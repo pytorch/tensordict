@@ -347,9 +347,7 @@ class CompositeDistribution(d.Distribution, Mapping):
             shape + self.batch_shape,
         )
 
-    def log_prob(
-        self, sample: TensorDictBase
-    ) -> torch.Tensor | TensorDictBase:  # noqa: D417
+    def log_prob(self, sample: TensorDictBase) -> torch.Tensor | TensorDictBase:  # noqa: D417
         """Compute the summed log-probability of a given sample.
 
         Args:
