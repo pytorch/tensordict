@@ -461,7 +461,7 @@ def _maybe_preserve_module_state(
     return tensor
 
 
-def _set_tensor_dict(  # noqa: F811
+def _set_tensor_dict(
     __dict__,
     _parameters,
     _buffers,
@@ -598,6 +598,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
     # fast-paths can avoid iterating ``_tensordict`` (which would emit
     # DICT_KEYS_MATCH guards under Dynamo). Cleared on unlock_().
     _locked_schema = None
+    # Class-level default for the dim-name methods: no names until
+    # _set_names stores them on the instance.
+    _td_dim_names = None
 
     @classmethod
     def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
@@ -15934,7 +15937,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 return False
         return val
 
-    # Checks
     def _check_is_shared(self) -> bool:
         share_list = [_is_shared(value) for value in self.values()]
         if any(share_list) and not all(share_list):
