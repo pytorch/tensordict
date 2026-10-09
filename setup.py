@@ -175,9 +175,7 @@ with set_version():
             "build_ext": CMakeBuild,
             "clean": clean,
         },
-        packages=find_packages(
-            exclude=("test", "tutorials", "packaging", "gallery", "docs")
-        ),
+        packages=find_packages(exclude=("test", "tutorials", "packaging", "docs")),
         **(
             {"setup_requires": ["setuptools_scm"], "use_scm_version": True}
             if _has_setuptools_scm
