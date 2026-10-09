@@ -980,8 +980,24 @@ def _split(
 
 @implements_for_td(torch.tensor_split)
 def _tensor_split(
-    td: T, indices_or_sections: int | Sequence[int] | Tensor, dim: int = 0
+    td: T,
+    indices_or_sections: int | Sequence[int] | Tensor | None = None,
+    /,
+    dim: int = 0,
+    *,
+    sections: int | None = None,
+    indices: Sequence[int] | None = None,
+    tensor_indices_or_sections: Tensor | None = None,
 ) -> tuple[T, ...]:
+    # torch.tensor_split names this argument after its type: sections (int),
+    # indices (sequence of ints) or tensor_indices_or_sections (tensor)
+    if indices_or_sections is None:
+        if sections is not None:
+            indices_or_sections = sections
+        elif indices is not None:
+            indices_or_sections = indices
+        else:
+            indices_or_sections = tensor_indices_or_sections
     return td.tensor_split(indices_or_sections, dim)
 
 

@@ -1343,6 +1343,17 @@ class TestNonTensorData:
         result = tensor.where(condition=condition, other=other, out=out, pad=0)
         assert result.tolist() == [["a"], ["a"]]
 
+    def test_torch_where_non_tensor_data(self):
+        # NonTensorData.where does not select elementwise, so torch.where
+        # is not passed through to it
+        condition = torch.tensor([True, False])
+        with pytest.raises(TypeError, match="Multiple dispatch failed"):
+            torch.where(
+                condition,
+                NonTensorData("a", batch_size=(2,)),
+                NonTensorData("b", batch_size=(2,)),
+            )
+
     def test_linked_list_str(self):
         td = TensorDict(a=NonTensorStack("foo", "bar"), batch_size=(2,))
         # str must not double-wrap: list has no __str__ of its own, so a

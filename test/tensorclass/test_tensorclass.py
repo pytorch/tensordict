@@ -1773,6 +1773,12 @@ class TestTensorClass:
         assert repeated.shape == torch.Size((3, 8))
         assert repeated.y.shape == torch.Size((3, 8))
         assert repeated.z == z
+        repeated = torch.repeat_interleave(
+            data, repeats=torch.tensor([1, 2, 3, 4]), dim=1, output_size=10
+        )
+        assert type(repeated) is type(data)
+        assert repeated.shape == torch.Size((3, 10))
+        assert repeated.y.shape == torch.Size((3, 10))
 
     def test_repeat_interleave_tensor(self):
         class MyDataNested(TensorClass):
@@ -1816,11 +1822,14 @@ class TestTensorClass:
         assert isinstance(stacked_tc._tensordict, TensorDict)
         assert stacked_tc.z == stacked_tc.y.z == z
 
-        reshaped = torch.reshape(data, (4, 3))
-        assert type(reshaped) is type(data)
-        assert reshaped.shape == torch.Size([4, 3])
-        assert reshaped.y.shape == torch.Size([4, 3])
-        assert reshaped.z == reshaped.y.z == z
+        for reshaped in (
+            torch.reshape(data, (4, 3)),
+            torch.reshape(data, shape=(4, 3)),
+        ):
+            assert type(reshaped) is type(data)
+            assert reshaped.shape == torch.Size([4, 3])
+            assert reshaped.y.shape == torch.Size([4, 3])
+            assert reshaped.z == reshaped.y.z == z
 
     def test_set(self):
         @tensorclass
@@ -2346,13 +2355,20 @@ class TestTensorClass:
         assert data_split[2].batch_size == torch.Size([3, 1])
         assert data_split[2].batch_size == torch.Size([3, 1])
 
-        torch_split = torch.tensor_split(data_out, (1, 4, 5), 1)
-        assert len(torch_split) == 4
-        for split, expected in zip(torch_split, data_split):
-            assert type(split) is type(data_out)
-            assert split.batch_size == expected.batch_size
-            assert split.y.batch_size == expected.batch_size
-            assert split.z == "test_tensorclass"
+        for torch_split in (
+            torch.tensor_split(data_out, (1, 4, 5), 1),
+            torch.tensor_split(data_out, indices=[1, 4, 5], dim=1),
+            torch.tensor_split(data_out, torch.tensor([1, 4, 5]), 1),
+        ):
+            assert len(torch_split) == 4
+            for split, expected in zip(torch_split, data_split):
+                assert type(split) is type(data_out)
+                assert split.batch_size == expected.batch_size
+                assert split.y.batch_size == expected.batch_size
+                assert split.z == "test_tensorclass"
+        torch_split = torch.tensor_split(data_out, sections=4, dim=1)
+        assert [split.batch_size[1] for split in torch_split] == [2, 2, 1, 1]
+        assert all(type(split) is type(data_out) for split in torch_split)
 
     def test_torch_chunk(self):
         @tensorclass
@@ -2367,13 +2383,16 @@ class TestTensorClass:
         data_out = MyDataNested(
             X=torch.ones(3, 6, 5), z="test_tensorclass", y=data_in, batch_size=[3, 6]
         )
-        chunks = torch.chunk(data_out, 4, 1)
-        assert len(chunks) == len(data_out.chunk(4, 1)) == 3
-        for chunk in chunks:
-            assert type(chunk) is type(data_out)
-            assert chunk.batch_size == torch.Size([3, 2])
-            assert chunk.y.batch_size == torch.Size([3, 2])
-            assert chunk.z == "test_tensorclass"
+        for chunks in (
+            torch.chunk(data_out, 4, 1),
+            torch.chunk(data_out, chunks=4, dim=1),
+        ):
+            assert len(chunks) == len(data_out.chunk(4, 1)) == 3
+            for chunk in chunks:
+                assert type(chunk) is type(data_out)
+                assert chunk.batch_size == torch.Size([3, 2])
+                assert chunk.y.batch_size == torch.Size([3, 2])
+                assert chunk.z == "test_tensorclass"
 
     def test_torch_where(self):
         @tensorclass
@@ -2408,10 +2427,13 @@ class TestTensorClass:
             assert (result.X[~mask] == 0).all()
             assert (result.y.X[mask] == 1).all()
             assert (result.y.X[~mask] == 0).all()
+        # out is filled, and the result wraps its tensordict
         out = make(2.0)
         result = torch.where(mask, data1, data0, out=out)
         assert result._tensordict is out._tensordict
         assert (out.X[~mask] == 0).all()
+        with pytest.raises(TypeError, match="missing 2 required positional"):
+            torch.where(data0)
 
     def test_update(self):
         @tensorclass

@@ -1039,7 +1039,7 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         # get the output type from the arguments / keyword arguments
         if func is torch.where:
             # torch.where(condition, input, other): the result has the type of input
-            tensorclass_instance = args[1] if len(args) > 1 else kwargs["input"]
+            tensorclass_instance = args[1] if len(args) > 1 else kwargs.get("input")
         elif len(args) > 0:
             tensorclass_instance = args[0]
         else:
@@ -4535,8 +4535,12 @@ class NonTensorDataBase(TensorClass):
             issubclass(t, (NonTensorData, NonTensorStack)) for t in types
         ):
             return NonTensorData._cat_non_tensor(*args, **(kwargs or {}))
-        if func not in _TD_PASS_THROUGH or not all(
-            issubclass(t, (Tensor, cls)) for t in types
+        # NonTensorData.where does not select elementwise, so torch.where is
+        # not passed through
+        if (
+            func not in _TD_PASS_THROUGH
+            or func is torch.where
+            or not all(issubclass(t, (Tensor, cls)) for t in types)
         ):
             from torch._ops import HigherOrderOperator
 
@@ -4553,10 +4557,7 @@ class NonTensorDataBase(TensorClass):
             kwargs = {}
 
         # get the output type from the arguments / keyword arguments
-        if func is torch.where:
-            # torch.where(condition, input, other): the result has the type of input
-            tensorclass_instance = args[1] if len(args) > 1 else kwargs["input"]
-        elif len(args) > 0:
+        if len(args) > 0:
             tensorclass_instance = args[0]
         else:
             tensorclass_instance = kwargs.get("input", kwargs["tensors"])
