@@ -2994,7 +2994,7 @@ class TestGeneric:
             assert s.tolist() == ref.get("s").tolist()
         else:
             assert torch.equal(s["y"], ref["s", "y"])
-        assert "key 's'" in str(err.value)
+        assert f"found a {type(s).__name__} at key 's'" in str(err.value)
         assert "inplace=False" in str(err.value)
 
     @pytest.mark.parametrize("inplace", [True, False])

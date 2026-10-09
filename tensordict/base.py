@@ -4844,7 +4844,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def _raise_if_holds_lazy_stack(
         self, op_name: str, prefix: tuple[str, ...] = ()
     ) -> None:
-        """Raise if any nested entry is a lazy stack, before an in-place shape op.
+        """Raise if any nested entry is lazy, before an in-place shape op.
 
         ``_inplace_rebind_leaves`` rewrites the leaves in key order, and the
         ``LazyStackedTensorDict`` (and ``NonTensorStack``) versions of
@@ -4852,6 +4852,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         ``repeat_interleave`` and ``gather`` refuse ``inplace=True``. Finding a
         lazy stack halfway through would leave the earlier leaves rewritten
         while ``batch_size`` is unchanged, so the whole tree is checked first.
+        The check tests ``_lazy``, so it also catches the other lazy
+        tensordicts, such as ``_SubTensorDict``, which refuse these ops too.
         """
         for key in self.keys():
             value = self._get_str(key, default=None)
@@ -4866,8 +4868,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             if value._lazy:
                 raise NotImplementedError(
                     f"{op_name}(inplace=True) is not supported on a tensordict "
-                    f"that holds a lazy stack (LazyStackedTensorDict or "
-                    f"NonTensorStack); found one at key "
+                    f"that holds a lazy tensordict (such as a "
+                    f"LazyStackedTensorDict or a NonTensorStack); found a "
+                    f"{type(value).__name__} at key "
                     f"{nested_key[0] if len(nested_key) == 1 else nested_key!r}. "
                     f"Use inplace=False instead."
                 )
