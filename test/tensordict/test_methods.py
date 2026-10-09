@@ -40,6 +40,7 @@ from tensordict import (
     unpack_memmap,
 )
 from tensordict._archive import _ArchiveReader
+from tensordict._indexing import convert_ellipsis_to_idx
 from tensordict._lazy import _CustomOpTensorDict
 from tensordict._td import _str_to_index, _SubTensorDict, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
@@ -52,7 +53,6 @@ from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
     assert_allclose_td,
-    convert_ellipsis_to_idx,
     is_non_tensor,
     set_lazy_legacy,
 )
@@ -1303,6 +1303,22 @@ class TestTensorDicts(TestTensorDictsBase):
             assert result.batch_size == expected.batch_size
             assert_allclose_td(result, expected)
 
+    @pytest.mark.parametrize(
+        "index", [[[0], [1]], [0, 2], (slice(None), [[0], [1]]), [True, False] * 2]
+    )
+    def test_get_at_set_at_index_like_getitem(self, td_name, device, index):
+        # get_at and set_at_ read the index as getitem does: a bare nested list
+        # is one index, where torch reads it as a tuple of indices
+        td = getattr(self, td_name)(device)
+        expected = td[index]["a"]
+        assert (td.get_at("a", index) == expected).all()
+        if td_name == "td_h5":
+            # h5py does not take every selection that torch takes
+            return
+        with torch.no_grad():
+            td.set_at_("a", torch.zeros_like(expected), index)
+        assert (td[index]["a"] == 0).all()
+
     def test_getitem_string(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -1360,16 +1376,20 @@ class TestTensorDicts(TestTensorDictsBase):
         index = torch.tensor([[0, 1, 2], [1, 2, 0], [2, 0, 1]])
         if npy:
             index = index.numpy()
+        # the index varies along both dims of the block, which can't both
+        # take the name of the indexed dim: names are unique
         td_idx = td[:, index]
         assert tensor_example[:, index].shape == td_idx.shape
-        # TODO: this multiple dims with identical names should not be allowed
-        assert td_idx.names == [names[0], names[1], names[1], *names[2:]]
+        assert td_idx.names == [names[0], None, None, *names[2:]]
         td_idx = td[0, index]
         assert tensor_example[0, index].shape == td_idx.shape
-        assert td_idx.names == [names[1], names[1], *names[2:]]
+        assert td_idx.names == [None, None, *names[2:]]
         td_idx = td[..., index, :, :]
         assert tensor_example[..., index, :, :].shape == td_idx.shape
-        assert td_idx.names == [names[0], names[1], names[1], *names[2:]]
+        assert td_idx.names == [names[0], None, None, *names[2:]]
+        # along a dim of size 1, the index does not vary
+        td_idx = td[:, index[:1]]
+        assert td_idx.names == [names[0], None, names[1], *names[2:]]
 
     def test_inferred_view_size(self, td_name, device):
         if td_name in ("permute_td", "sub_td2"):
@@ -2244,18 +2264,17 @@ class TestTensorDicts(TestTensorDictsBase):
             td_stack[key]
         if dim in (0, -5):
             # this will work if stack_dim is 0 (or equivalently -self.batch_dims)
-            # it is the proper way to get that entry
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                td_stack.get_nestedtensor(key)
+                td_stack._get_nestedtensor(key)
         else:
-            # if the stack_dim is not zero, then calling get_nestedtensor is disallowed
+            # if the stack_dim is not zero, then calling _get_nestedtensor is disallowed
             with pytest.raises(
                 RuntimeError,
                 match="LazyStackedTensorDict.get_nestedtensor can only be called "
                 "when the stack_dim is 0.",
             ):
-                td_stack.get_nestedtensor(key)
+                td_stack._get_nestedtensor(key)
         with pytest.raises(
             RuntimeError, match="Failed to stack tensors within a tensordict"
         ):

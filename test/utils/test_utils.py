@@ -13,12 +13,15 @@ import random
 import re
 import sys
 import types
+import warnings
 from pathlib import Path
 
 import numpy as np
 import pytest
+import pyvers
 import tensordict
 import tensordict._td
+import tensordict.tensordict
 import torch
 from _utils_internal import get_available_devices
 from tensordict import (
@@ -30,6 +33,7 @@ from tensordict import (
     unravel_key,
     unravel_key_list,
 )
+from tensordict._indexing import convert_ellipsis_to_idx
 from tensordict.utils import (
     _check_recursive_properties,
     _get_shared_executor,
@@ -37,11 +41,10 @@ from tensordict.utils import (
     _make_cache_key,
     _TensorDictPropertyError,
     _unravel_key_to_tuple,
-    convert_ellipsis_to_idx,
+    _unravel_keys,
     isin,
     parse_tensor_dict_string,
     remove_duplicates,
-    unravel_keys,
 )
 
 
@@ -455,8 +458,8 @@ def test_unravel_key_invalid(key):
 
 
 def test_unravel_keys():
-    assert unravel_keys(("a",)) == "a"
-    assert unravel_keys("a", ("b", ("c",)), ("d",)) == ("a", ("b", "c"), "d")
+    assert _unravel_keys(("a",)) == "a"
+    assert _unravel_keys("a", ("b", ("c",)), ("d",)) == ("a", ("b", "c"), "d")
 
 
 @pytest.mark.parametrize("key,expected", _VALID_KEYS)
@@ -552,6 +555,160 @@ def test_C_module_is_deprecated():
     assert _C._unravel_key_to_tuple is _unravel_key_to_tuple
     # the C++ binding took a single key
     assert _C.unravel_keys(("a", ("b",))) == ("a", "b")
+
+
+_NESTED_KEY_REPLACEMENT = (
+    "isinstance(key, tensordict.NestedKey) (which rejects lists and accepts "
+    "nested tuples)"
+)
+_SEQ_OF_NESTED_KEY_REPLACEMENT = (
+    "isinstance(key, tensordict.NestedKey) on each key (which rejects lists "
+    "and accepts nested tuples)"
+)
+# The deprecated names of tensordict.utils, with the private object that each
+# one returns and what to use instead.
+_DEPRECATED_UTILS_NAMES = {
+    "BufferLegacy": ("_BufferLegacy", None),
+    "KeyDependentDefaultDict": ("_KeyDependentDefaultDict", None),
+    "NESTED_TENSOR_ERR": ("_NESTED_TENSOR_ERR", None),
+    "NUMPY_TO_TORCH_DTYPE_DICT": ("_NUMPY_TO_TORCH_DTYPE_DICT", None),
+    "TORCH_TO_NUMPY_DTYPE_DICT": ("_TORCH_TO_NUMPY_DTYPE_DICT", None),
+    "cache": ("_cache_while_locked", None),
+    "erase_cache": ("_erase_cache_first", None),
+    "infer_size_impl": ("_infer_size_impl", None),
+    "int_generator": ("_int_generator", None),
+    "is_namedtuple": ("_is_namedtuple", None),
+    "is_namedtuple_class": ("_is_namedtuple_class", None),
+    "is_nested_key": ("_is_nested_key", _NESTED_KEY_REPLACEMENT),
+    "is_seq_of_nested_key": ("_is_seq_of_nested_key", _SEQ_OF_NESTED_KEY_REPLACEMENT),
+    "lock_blocked": ("_lock_blocked", None),
+    "prod": ("_prod", "math.prod"),
+    "strtobool": ("_strtobool", None),
+    "unravel_keys": ("_unravel_keys", "unravel_key or unravel_key_list"),
+}
+
+
+def _deprecated_message_pattern(what, replacement):
+    message = f"{what} is deprecated and will be removed in TensorDict 0.17."
+    if replacement is not None:
+        message += f" Use {replacement} instead."
+    return "^" + re.escape(message) + "$"
+
+
+@pytest.mark.parametrize(
+    "name,private,replacement",
+    [(name, *value) for name, value in _DEPRECATED_UTILS_NAMES.items()]
+    + [
+        (
+            "convert_ellipsis_to_idx",
+            tensordict._indexing.convert_ellipsis_to_idx,
+            None,
+        ),
+        ("get_json_backend", tensordict._utils_key_json.get_json_backend, None),
+        (
+            "json_dumps",
+            tensordict._utils_key_json.json_dumps,
+            "json.dumps or orjson.dumps",
+        ),
+        ("set_json_backend", tensordict._utils_key_json.set_json_backend, None),
+    ],
+)
+def test_utils_deprecated_names(name, private, replacement):
+    if isinstance(private, str):
+        private = getattr(tensordict.utils, private)
+    with pytest.warns(
+        DeprecationWarning,
+        match=_deprecated_message_pattern(f"tensordict.utils.{name}", replacement),
+    ) as record:
+        value = getattr(tensordict.utils, name)
+    assert record[0].filename == __file__
+    assert value is private
+
+
+def test_utils_deprecated_names_behave_as_before():
+    with pytest.warns(DeprecationWarning, match="tensordict.utils.prod"):
+        from tensordict.utils import prod
+    assert prod([2, 3, 4]) == 24
+    assert prod(torch.Size([2, 3])) == 6
+    assert prod([]) == 1
+    with pytest.warns(DeprecationWarning, match="tensordict.utils.strtobool"):
+        from tensordict.utils import strtobool
+    assert strtobool("Yes") == 1
+    assert strtobool("off") == 0
+    with pytest.raises(ValueError, match="invalid truth value"):
+        strtobool("maybe")
+    with pytest.warns(DeprecationWarning, match="tensordict.utils.infer_size_impl"):
+        from tensordict.utils import infer_size_impl
+    assert infer_size_impl([2, -1], 6) == [2, 3]
+    with pytest.warns(DeprecationWarning, match="tensordict.utils.is_nested_key"):
+        from tensordict.utils import is_nested_key
+    with pytest.warns(
+        DeprecationWarning, match="tensordict.utils.is_seq_of_nested_key"
+    ):
+        from tensordict.utils import is_seq_of_nested_key
+    # Unlike NestedKey, lists are nested keys and nested tuples are not.
+    assert is_nested_key(["a", "b"])
+    assert not is_nested_key(("a", ("b",)))
+    assert is_seq_of_nested_key([("a", "b"), "c"])
+
+
+def test_tensordict_module_deprecated_names():
+    legacy_module = tensordict.tensordict
+    # Importing the legacy module, and the names that it still exports, does not warn.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        importlib.reload(legacy_module)
+        from tensordict.tensordict import (  # noqa: F401
+            assert_allclose_td,
+            dense_stack_tds,
+            expand_as_right,
+            expand_right,
+            is_tensor_collection,
+            is_tensorclass,
+            LazyStackedTensorDict,
+            make_tensordict,
+            MemoryMappedTensor,
+            merge_tensordicts,
+            NestedKey,
+            NO_DEFAULT,
+            pad,
+            pad_sequence,
+            TensorDict,
+            TensorDictBase,
+        )
+    assert legacy_module.TensorDict is TensorDict
+
+    deprecated = {
+        name: value
+        for name, value in _DEPRECATED_UTILS_NAMES.items()
+        if name
+        in (
+            "cache",
+            "erase_cache",
+            "infer_size_impl",
+            "int_generator",
+            "is_nested_key",
+            "is_seq_of_nested_key",
+            "lock_blocked",
+        )
+    }
+    deprecated["convert_ellipsis_to_idx"] = (
+        tensordict._indexing.convert_ellipsis_to_idx,
+        None,
+    )
+    deprecated["implement_for"] = (pyvers.implement_for, "pyvers.implement_for")
+    for name, (private, replacement) in deprecated.items():
+        if isinstance(private, str):
+            private = getattr(tensordict.utils, private)
+        with pytest.warns(
+            DeprecationWarning,
+            match=_deprecated_message_pattern(
+                f"tensordict.tensordict.{name}", replacement
+            ),
+        ) as record:
+            value = getattr(legacy_module, name)
+        assert record[0].filename == __file__
+        assert value is private
 
 
 class TestDeprecationHelpers:
@@ -863,25 +1020,6 @@ _NOT_IN_ALL_PENDING = {
     "tensordict.nn.functional_modules": {"set_tensor", "set_tensor_dict"},
     "tensordict.nn.params": {"implements_for_tdparam"},
     "tensordict.nn.utils": {"StrEnum"},
-    "tensordict.utils": {
-        "BufferLegacy",
-        "KeyDependentDefaultDict",
-        "cache",
-        "erase_cache",
-        "get_json_backend",
-        "infer_size_impl",
-        "int_generator",
-        "is_namedtuple",
-        "is_namedtuple_class",
-        "is_nested_key",
-        "is_seq_of_nested_key",
-        "json_dumps",
-        "lock_blocked",
-        "prod",
-        "set_json_backend",
-        "strtobool",
-        "unravel_keys",
-    },
 }
 
 # Public functions and classes that stay out of ``__all__`` on purpose.
@@ -952,6 +1090,21 @@ def test_public_module_names():
     assert not any(
         part.startswith("_") for name in module_names for part in name.split(".")
     )
+
+
+def test_testing_module_is_deprecated():
+    import tensordict._testing
+    import tensordict.testing
+
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"^tensordict\.testing\.MyDistData is deprecated and will be removed "
+        r"in TensorDict 0\.17\.$",
+    ) as record:
+        from tensordict.testing import MyDistData
+    assert record[0].filename == __file__
+    assert MyDistData is tensordict._testing.MyDistData
+    assert MyDistData.__module__ == "tensordict._testing"
 
 
 if __name__ == "__main__":

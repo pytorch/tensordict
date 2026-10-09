@@ -64,6 +64,23 @@ def _as_tuple(index) -> tuple:
     return index if isinstance(index, tuple) else (index,)
 
 
+def _entry_index(index):
+    """Return ``index`` as tensordict reads it, for an entry indexed with it.
+
+    tensordict reads a bare index as a 1-tuple, where torch reads a bare list
+    as a tuple of indices (deprecated). It also rejects NumPy bool scalars, see
+    :func:`_read_element`.
+    """
+    if isinstance(index, (int, slice, torch.Tensor)):
+        # the most common indices, which need no change
+        return index
+    if isinstance(index, list):
+        return (index,)
+    for element in _as_tuple(index):
+        _read_element(element)
+    return index
+
+
 def _read_element(element):
     """Read an element of an index as torch does.
 
@@ -281,6 +298,8 @@ def _getitem_names(names, index):
     single input dim vary. The other dims are unnamed: the dims that ``None``
     adds, and the advanced dims that come from several input dims, such as
     the dim of an N-D mask or of advanced indices that broadcast together.
+    Names are unique, so an N-D index of one input dim names at most one dim
+    of the block after it: the only one along which it varies.
     """
     dims, advanced, position, rest = _read_index(index, len(names))
     out = [None if dim is None else names[dim] for dim, _ in dims]
@@ -313,8 +332,18 @@ def _block_names(names, advanced):
         having = [(shape[dim], used) for shape, used in shapes if len(shape) >= -dim]
         varying = [used for size, used in having if size != 1]
         sources = set().union(*(varying or [used for _, used in having]))
-        out.append(names[sources.pop()] if len(sources) == 1 else None)
-    return out
+        name = names[sources.pop()] if len(sources) == 1 else None
+        out.append((name, bool(varying)))
+    # a name that several dims of the block would take stays only on the one
+    # along which its index varies, if there is exactly one
+    return [
+        name
+        if name is None
+        or [other for other, _ in out].count(name) == 1
+        or (varies and [v for other, v in out if other == name].count(True) == 1)
+        else None
+        for name, varies in out
+    ]
 
 
 def _advanced_shape(kind, element):

@@ -38,7 +38,6 @@ import torch.nn as nn
 import tqdm
 
 from tensordict import MemoryMappedTensor, tensorclass
-from tensordict.utils import strtobool
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
@@ -51,7 +50,14 @@ if __name__ == "__main__":
     # environment variable RUN_ON_CLUSTER set, then we set everything to run on a larger
     # subset of imagenet. the fraction of images can be set with the FRACTION environment
     # variable, we use the first `len(dataset) // FRACTION` images. Default is 10.
-    RUN_ON_CLUSTER = strtobool(os.environ.get("RUN_ON_CLUSTER", "False"))
+    RUN_ON_CLUSTER = os.environ.get("RUN_ON_CLUSTER", "False").lower() in (
+        "y",
+        "yes",
+        "t",
+        "true",
+        "on",
+        "1",
+    )
     FRACTION = int(os.environ.get("FRACTION", 10))
     # sphinx_gallery_end_ignore
     device = "cuda:0" if torch.cuda.is_available() else "cpu"

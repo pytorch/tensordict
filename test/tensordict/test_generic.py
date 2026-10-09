@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import gc
 import importlib.util
+import inspect
 import os
 import pickle
 import platform
@@ -20,7 +21,7 @@ from collections import UserDict
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, get_type_hints
 
 import numpy as np
 import pytest
@@ -34,6 +35,7 @@ from tensordict import (
     tensorclass,
     TensorDict,
 )
+from tensordict._indexing import convert_ellipsis_to_idx
 from tensordict._td import is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _NESTED_TENSORS_AS_LISTS, TensorDictBase
@@ -44,7 +46,6 @@ from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
     assert_allclose_td,
-    convert_ellipsis_to_idx,
     is_non_tensor,
     is_tensorclass,
     set_lazy_legacy,
@@ -1804,6 +1805,36 @@ class TestGeneric:
         assert (sub["n", "b"] == expected).all()
         assert (td_written["a"] == written).all()
 
+    @pytest.mark.parametrize(
+        "index",
+        [
+            [0, 2],
+            torch.tensor([0, 2]),
+            (slice(None), [0, 1]),
+            torch.tensor([True, False, True]),
+            1,
+        ],
+    )
+    def test_setitem_python_scalar_cast(self, index):
+        # torch writes a Python scalar in the dtype of the entry, with every
+        # kind of index
+        td = TensorDict(
+            {
+                "c": torch.zeros(3, 2, dtype=torch.long),
+                "n": {"b": torch.zeros(3, 2, dtype=torch.bool)},
+            },
+            [3, 2],
+        )
+        expected_c, expected_b = td["c"].clone(), td["n", "b"].clone()
+        expected_c[index] = -3.5
+        expected_b[index] = -3.5
+        td[index] = -3.5
+        assert (td["c"] == expected_c).all()
+        assert (td["n", "b"] == expected_b).all()
+        td.set_at_("c", 7.5, index)
+        expected_c[index] = 7.5
+        assert (td["c"] == expected_c).all()
+
     def test_getitem_scalar_bool_0d(self):
         td = TensorDict({"a": torch.tensor(1.0)}, [])
         assert td[True].batch_size == torch.Size([1])
@@ -1825,6 +1856,12 @@ class TestGeneric:
             td[index] = 1.0
         with pytest.raises(IndexError, match="NumPy bool"):
             td[index] = TensorDict({"a": torch.ones(4)}, [4])
+        with pytest.raises(IndexError, match="NumPy bool"):
+            td.get_at("a", index)
+        with pytest.raises(IndexError, match="NumPy bool"):
+            td.set_at_("a", 1.0, index)
+        with pytest.raises(IndexError, match="NumPy bool"):
+            td.copy_at_(TensorDict({"a": torch.ones(4)}, [4]), index)
         assert (td["a"] == 0).all()
         # a list of NumPy bools is a mask, as in torch
         assert td[[np.True_, np.False_, np.True_]].batch_size == torch.Size([2, 4])
@@ -1963,6 +2000,42 @@ class TestGeneric:
                 assert isinstance(tensor, FakeTensor)
 
             fake_state_dict.apply(assert_fake, filter_empty=True)
+
+    def test_load_underscore_deprecated(self, tmpdir):
+        td = TensorDict({"a": torch.arange(3), "b": {"c": torch.ones(3)}}, [3])
+        td.memmap(tmpdir)
+        dest = td.clone().zero_()
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^TensorDictBase\.load_\(\) is deprecated and will be removed in "
+            r"TensorDict 0\.17\. Use load_memmap_\(\) instead\.$",
+        ) as record:
+            out = dest.load_(tmpdir)
+        assert record[0].filename == __file__
+        assert out is dest
+        assert (dest == td).all()
+
+    def test_pin_memory_underscore_deprecated(self, monkeypatch):
+        td = TensorDict({"a": torch.arange(3)}, [3])
+        calls = []
+
+        def pin_memory(self, num_threads=None, inplace=False):
+            calls.append((num_threads, inplace))
+            return self
+
+        # pinning needs an accelerator, so check what pin_memory_ forwards
+        monkeypatch.setattr(TensorDict, "pin_memory", pin_memory)
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^TensorDictBase\.pin_memory_\(\) is deprecated and will be "
+            r"removed in TensorDict 0\.17\. Use pin_memory\(inplace=True\) instead\.$",
+        ) as record:
+            assert td.pin_memory_() is td
+        assert record[0].filename == __file__
+        assert calls == [(0, True)]
+        with pytest.warns(DeprecationWarning, match="pin_memory_"):
+            td.pin_memory_(num_threads=2)
+        assert calls[-1] == (2, True)
 
     def test_load_state_dict_incomplete(self):
         data = TensorDict({"a": {"b": {"c": {}}}, "d": 1}, [])
@@ -2321,6 +2394,26 @@ class TestGeneric:
 
         with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
             td.set("b", torch.randn(4, 5), inplace=True, non_blocking=False)
+
+    def test_mixin_method_annotations(self):
+        # The mixins under tensordict/_base/ import TensorDictBase for type
+        # checking only. Annotations that name it must still resolve at run
+        # time, as they did when these methods were defined in tensordict.base.
+        unresolved = {}
+        for mixin in tensordict_base._TENSORDICTBASE_MIXINS:
+            for name, attr in vars(mixin).items():
+                func = getattr(attr, "__func__", attr)
+                if name.startswith("_") or not inspect.isfunction(func):
+                    continue
+                try:
+                    get_type_hints(func)
+                except NameError as err:
+                    if err.name in vars(tensordict_base):
+                        unresolved[name] = err.name
+                except TypeError:
+                    # Annotations such as "str" | None fail for other reasons.
+                    pass
+        assert not unresolved, unresolved
 
     @pytest.mark.parametrize("dist_of_callables", [False, True])
     def test_merge_tensordicts(self, dist_of_callables):

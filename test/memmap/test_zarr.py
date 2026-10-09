@@ -11,7 +11,7 @@ import pytest
 import torch
 from tensordict import NonTensorData, PersistentTensorDict, TensorDict
 from tensordict.base import _is_leaf_nontensor
-from tensordict.utils import is_non_tensor, NUMPY_TO_TORCH_DTYPE_DICT
+from tensordict.utils import _NUMPY_TO_TORCH_DTYPE_DICT, is_non_tensor
 from torch import multiprocessing as mp
 
 TIMEOUT = 100
@@ -32,7 +32,7 @@ except ImportError:
 # dtypes that both torch and zarr v3 support natively
 _ZARR_DTYPES = [
     torch_dtype
-    for np_dtype, torch_dtype in NUMPY_TO_TORCH_DTYPE_DICT.items()
+    for np_dtype, torch_dtype in _NUMPY_TO_TORCH_DTYPE_DICT.items()
     if np_dtype not in (np.dtype("uint16"), np.dtype("uint32"), np.dtype("uint64"))
     or torch_dtype in (torch.uint16, torch.uint32, torch.uint64)
 ]

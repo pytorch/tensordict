@@ -20,6 +20,8 @@ from typing import Any, Callable, Tuple, Type, TYPE_CHECKING
 
 import numpy as np
 import torch
+from tensordict._deprecation import deprecated
+from tensordict._indexing import _entry_index
 from tensordict._td import (
     _TensorDictKeysView,
     _unravel_key_to_tuple,
@@ -39,21 +41,21 @@ from tensordict.base import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
+    _cache_while_locked,
     _CloudpickleWrapper,
+    _erase_cache_first,
     _KEY_ERROR,
+    _lock_blocked,
     _LOCK_ERROR,
+    _NUMPY_TO_TORCH_DTYPE_DICT,
     _parse_to,
     _proc_init,
     _split_tensordict,
     _zip_strict,
-    cache,
-    erase_cache,
     expand_right,
     IndexType,
     is_non_tensor,
-    lock_blocked,
     NestedKey,
-    NUMPY_TO_TORCH_DTYPE_DICT,
     unravel_key,
 )
 from torch import multiprocessing as mp, Tensor
@@ -270,7 +272,7 @@ class _H5Backend(_PersistentBackend):
         return _is_non_tensor_h5(node)
 
     def is_non_tensor_meta(self, node) -> bool:
-        return node.dtype not in NUMPY_TO_TORCH_DTYPE_DICT
+        return node.dtype not in _NUMPY_TO_TORCH_DTYPE_DICT
 
     def node_dtype(self, node):
         return node.dtype
@@ -511,7 +513,7 @@ class _ZarrBackend(_PersistentBackend):
     def is_non_tensor(self, node) -> bool:
         if self._non_tensor_marker(node) is not None:
             return True
-        return self.node_dtype(node) not in NUMPY_TO_TORCH_DTYPE_DICT
+        return self.node_dtype(node) not in _NUMPY_TO_TORCH_DTYPE_DICT
 
     def is_non_tensor_meta(self, node) -> bool:
         return self.is_non_tensor(node)
@@ -816,6 +818,16 @@ class PersistentTensorDict(TensorDictBase):
     _td_dim_names = None
     LOCKING = None
 
+    @property
+    @deprecated("PersistentTensorDict.kwargs", removal="0.17")
+    def kwargs(self) -> dict[str, Any]:
+        """The keyword arguments that the tensordict passes to the backend when it creates a dataset.
+
+        .. deprecated:: 0.15
+            This is internal and has no replacement.
+        """
+        return self._dataset_kwargs
+
     def __init__(
         self,
         *,
@@ -855,7 +867,7 @@ class PersistentTensorDict(TensorDictBase):
         self._device = torch.device(device) if device is not None else None
         self._is_shared = False
         self._is_memmap = False
-        self.kwargs = kwargs
+        self._dataset_kwargs = kwargs
 
         # we use this to allow nested tensordicts to have a different batch-size
         self._nested_tensordicts = {}
@@ -1042,7 +1054,7 @@ class PersistentTensorDict(TensorDictBase):
             backend=self.backend,
             # a persisted batch size was already validated at write time
             validate_batch_size=nested_batch_size is None,
-            **self.kwargs,
+            **self._dataset_kwargs,
         )
         # share the backend instance so per-store state (e.g. the consolidated
         # metadata flag of the zarr backend) is tracked once per store
@@ -1112,7 +1124,7 @@ class PersistentTensorDict(TensorDictBase):
                 out = self._make_nested(key, array)
             return out
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _get_str(self, key: NestedKey, default, **kwargs):
         key = _unravel_key_to_tuple(key)
         array = self._get_array(key, default)
@@ -1137,7 +1149,7 @@ class PersistentTensorDict(TensorDictBase):
         See :meth:`~tensordict.TensorDictBase.get_at`.
         """
         # Unlike TensorDictBase.get_at, a missing key raises unless a default is given
-        return self._get_at_tuple(key, idx, default)
+        return self._get_at_tuple(key, _entry_index(idx), default)
 
     def _read_array_at(self, array, idx):
         """Reads ``array[idx]``, loading only the required part of the array when possible.
@@ -1193,7 +1205,7 @@ class PersistentTensorDict(TensorDictBase):
         ):
             shape = torch.Size(array.shape)
             return {
-                "dtype": NUMPY_TO_TORCH_DTYPE_DICT[self._backend.node_dtype(array)],
+                "dtype": _NUMPY_TO_TORCH_DTYPE_DICT[self._backend.node_dtype(array)],
                 "shape": shape,
                 "dim": len(shape),
                 "array": True,
@@ -1267,7 +1279,7 @@ class PersistentTensorDict(TensorDictBase):
                 ) from err
         sub_td.update(value, inplace=True)
 
-    # @cache  # noqa: B019
+    # @_cache_while_locked  # noqa: B019
     def keys(
         self,
         include_nested: bool = False,
@@ -1335,7 +1347,7 @@ class PersistentTensorDict(TensorDictBase):
             out = out.contiguous(canonical=True)
         return out
 
-    @lock_blocked
+    @_lock_blocked
     def del_(self, key):
         key = self._process_key(key)
         self._backend.delete(self.file, key)
@@ -1401,7 +1413,7 @@ class PersistentTensorDict(TensorDictBase):
         for _td in self._nested_tensordicts.values():
             _td._propagate_lock(lock_parents_weakrefs, is_compiling=is_compiling)
 
-    @erase_cache
+    @_erase_cache_first
     def _propagate_unlock(self):
         # if we end up here, we can clear the graph associated with this td
         self._is_locked = False
@@ -1551,7 +1563,7 @@ class PersistentTensorDict(TensorDictBase):
                 }
             )
             with open(filepath, "wb") as json_metadata:
-                from tensordict.utils import json_dumps
+                from tensordict._utils_key_json import json_dumps
 
                 json_str = json_dumps(metadata)
                 # Ensure we write bytes to the binary file
@@ -1654,7 +1666,7 @@ class PersistentTensorDict(TensorDictBase):
             f"Cannot pin memory of a {type(self).__name__}. Call to_tensordict() before making this call."
         )
 
-    @lock_blocked
+    @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         raise NotImplementedError(
             f"popitem not implemented for class {type(self).__name__}."
@@ -1977,13 +1989,17 @@ class PersistentTensorDict(TensorDictBase):
             self._backend.write_at(array, idx, value)
         else:
             key = self._process_key(key)
-            if not self._backend.try_create_dataset(self.file, key, value, self.kwargs):
+            if not self._backend.try_create_dataset(
+                self.file, key, value, self._dataset_kwargs
+            ):
                 warnings.warn(
                     "Replacing an array with another one is inefficient. "
                     "Consider using different names or populating in-place using `inplace=True`."
                 )
                 self._backend.delete(self.file, key)
-                self._backend.try_create_dataset(self.file, key, value, self.kwargs)
+                self._backend.try_create_dataset(
+                    self.file, key, value, self._dataset_kwargs
+                )
             # If we have a nested key, let's make sure we have the corresponding TD registered
             if subkey:
                 self._get_tuple((first_key, *subkey[:-1]), default=NO_DEFAULT)
@@ -2076,7 +2092,7 @@ class PersistentTensorDict(TensorDictBase):
                 batch_size=td.batch_size,
                 device=td.device,
                 backend=self.backend,
-                **self.kwargs,
+                **self._dataset_kwargs,
             )
             self._nested_tensordicts[key]._backend = self._backend
             self._nested_tensordicts[key].names = td._td_dim_names
@@ -2102,7 +2118,9 @@ class PersistentTensorDict(TensorDictBase):
                 include_nested=True, leaves_only=True, is_leaf=_is_leaf_nontensor
             ):
                 key = self._process_key(key)
-                self._backend.copy_dataset(f_dest, key, f_src[key], self.kwargs)
+                self._backend.copy_dataset(
+                    f_dest, key, f_src[key], self._dataset_kwargs
+                )
             # create a non-recursive copy and update the file
             # this way, we can keep the batch-size of every nested tensordict
             clone = self.clone(False)
@@ -2132,7 +2150,7 @@ class PersistentTensorDict(TensorDictBase):
                 backend=self.backend,
                 device=self.device,
                 batch_size=self.batch_size,
-                **self.kwargs,
+                **self._dataset_kwargs,
             )
             clone._nested_tensordicts = nested_tds
             clone._pin_mem = False
@@ -2151,6 +2169,10 @@ class PersistentTensorDict(TensorDictBase):
         backend = state["_backend"]
         state["file"] = backend.setstate(state)
         state.pop("group_name", None)
+        # Pickles made with TensorDict 0.14 and earlier store the dataset
+        # options under "kwargs".
+        if "kwargs" in state:
+            state["_dataset_kwargs"] = state.pop("kwargs")
         self.__dict__.update(state)
         if self._is_locked:
             # this can cause avoidable overhead, as we will be locking the leaves

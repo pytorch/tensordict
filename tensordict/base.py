@@ -12,9 +12,10 @@ import gc
 import importlib
 import importlib.util
 
-# JSON backend is now handled by utils.json_dumps
+# JSON backend is now handled by _utils_key_json.json_dumps
 import json
 import os.path
+import sys
 import warnings
 import weakref
 from collections.abc import MutableMapping
@@ -41,20 +42,24 @@ from warnings import warn
 import numpy as np
 import torch
 from tensordict._contextlib import LAST_OP_MAPS
-from tensordict._indexing import _getitem_names, convert_ellipsis_to_idx
+from tensordict._deprecation import deprecated, warn_deprecated
+from tensordict._indexing import _entry_index, _getitem_names, convert_ellipsis_to_idx
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _add_batch_dim_pre_hook,
     _as_context_manager,
+    _cache_while_locked,
     _CloudpickleWrapper,
     _convert_list_to_stack,
+    _erase_cache_first,
     _GENERIC_NESTED_ERR,
     _is_non_tensor,
     _is_tensorclass,
     _is_unbatched,
     _KEY_ERROR,
+    _lock_blocked,
     _LOCK_ERROR,
     _lock_warn,
     _maybe_correct_neg_dim,
@@ -66,22 +71,19 @@ from tensordict.utils import (
     _set_max_batch_size,
     _shape,
     _split_tensordict,
+    _strtobool,
     _td_fields,
     _unravel_key_to_tuple,
     _zip_strict,
-    cache,
     capture_non_tensor_stack,
     DeviceType,
-    erase_cache,
     expand_as_right,
     IndexType,
     is_batchedtensor,
     is_non_tensor,
     is_tensorclass,
     list_to_stack,
-    lock_blocked,
     set_capture_non_tensor_stack,
-    strtobool,
     unravel_key,
     unravel_key_list,
 )
@@ -172,16 +174,46 @@ _SELF_NESTING_ERROR = (
 
 _HEURISTIC_EXCLUDED = (Tensor, tuple, list, set, dict, np.ndarray)
 
+_GET_DEFAULTS_TO_NONE_REPLACEMENT = "td[key] to raise a KeyError for a missing key"
+
 if "TD_GET_DEFAULTS_TO_NONE" in os.environ:
-    _GET_DEFAULTS_TO_NONE = strtobool(os.environ["TD_GET_DEFAULTS_TO_NONE"])
+    _GET_DEFAULTS_TO_NONE = _strtobool(os.environ["TD_GET_DEFAULTS_TO_NONE"])
 else:
     _GET_DEFAULTS_TO_NONE = True
 
+if not _GET_DEFAULTS_TO_NONE:
+    warn_deprecated(
+        f"TD_GET_DEFAULTS_TO_NONE={os.environ['TD_GET_DEFAULTS_TO_NONE']}",
+        removal="0.17",
+        replacement=_GET_DEFAULTS_TO_NONE_REPLACEMENT,
+        stacklevel=1,
+    )
 
+
+def _set_get_defaults_to_none(set_to_none: bool = True) -> None:
+    global _GET_DEFAULTS_TO_NONE
+    _GET_DEFAULTS_TO_NONE = bool(set_to_none)
+
+
+def _get_defaults_to_none() -> bool:
+    return _GET_DEFAULTS_TO_NONE
+
+
+@deprecated(
+    "set_get_defaults_to_none()",
+    removal="0.17",
+    replacement=_GET_DEFAULTS_TO_NONE_REPLACEMENT,
+)
 def set_get_defaults_to_none(set_to_none: bool = True):
     """Sets the default of `get` to `None` and silences deprecation warnings during calls to `get` that result in a `KeyError`.
 
     This can also be controlled via the environment variable ``TD_GET_DEFAULTS_TO_NONE``.
+
+    .. deprecated:: 0.15
+        Since v0.7, :meth:`~tensordict.TensorDictBase.get` returns ``None`` for a
+        missing key by default. This function, and setting ``TD_GET_DEFAULTS_TO_NONE``
+        to a false value, are deprecated and will be removed in TensorDict 0.17.
+        Use ``td[key]`` to raise a ``KeyError`` for a missing key.
 
     Args:
         set_to_none (bool): whether the default of `get` should be `None`, or should `get` raise a `KeyError` if
@@ -189,13 +221,23 @@ def set_get_defaults_to_none(set_to_none: bool = True):
             Defaults to `True`.
 
     """
-    global _GET_DEFAULTS_TO_NONE
-    _GET_DEFAULTS_TO_NONE = bool(set_to_none)
+    _set_get_defaults_to_none(set_to_none)
 
 
+@deprecated(
+    "get_defaults_to_none()",
+    removal="0.17",
+    replacement=_GET_DEFAULTS_TO_NONE_REPLACEMENT,
+)
 def get_defaults_to_none(set_to_none: bool = True):
-    """Returns the status of `get` default value."""
-    return _GET_DEFAULTS_TO_NONE
+    """Returns the status of `get` default value.
+
+    .. deprecated:: 0.15
+        Since v0.7, :meth:`~tensordict.TensorDictBase.get` returns ``None`` for a
+        missing key by default. This function is deprecated and will be removed in
+        TensorDict 0.17. Use ``td[key]`` to raise a ``KeyError`` for a missing key.
+    """
+    return _get_defaults_to_none()
 
 
 class _RecorderState(local):
@@ -741,8 +783,12 @@ def _expand_to_match_shape(
 # tensordict/_base/. Those modules import the helpers above from this module,
 # so they are imported here, after the helpers and before the class. Hence:
 # - A helper that a mixin imports must be defined above this point.
-# - In a mixin, TensorDictBase is imported for type checking only. A method
-#   that uses it at run time imports it locally.
+# - In a mixin, TensorDictBase is imported for type checking only. Once the
+#   class exists, this module binds it into each mixin module, so that
+#   annotations that name it resolve. Code that runs at import time, such as
+#   decorators and default values, cannot use it. A method that uses it at
+#   run time imports it locally (ruff's TC004 flags a run-time use of the
+#   TYPE_CHECKING import).
 # - Globals that this module rebinds at run time, such as
 #   _GET_DEFAULTS_TO_NONE and _ACCEPTED_CLASSES, must be read as
 #   tensordict.base.<name>: a mixin that imports one keeps its first value.
@@ -1203,7 +1249,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             val.grad.zero_()
         return self
 
-    @cache  # noqa
+    @_cache_while_locked  # noqa
     def _dtype(self):
         dtype = None
         for val in self.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
@@ -1325,7 +1371,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """
         return self._depth()
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _depth(self):
         depth = 0
         for key in self.keys(True, True, is_leaf=_is_leaf_nontensor):
@@ -2026,7 +2072,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def device(self, value: DeviceType) -> None:
         raise NotImplementedError
 
-    @lock_blocked
+    @_lock_blocked
     def clear(self) -> Self:
         """Erases the content of the tensordict."""
         for key in list(self.keys()):
@@ -2302,7 +2348,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def _set_tuple(self, key, value, *, inplace, validated, non_blocking: bool):
         raise NotImplementedError
 
-    @lock_blocked
+    @_lock_blocked
     def set_non_tensor(self, key: NestedKey, value: Any):
         """Registers a non-tensor value in the tensordict using :class:`tensordict.tensorclass.NonTensorData`.
 
@@ -2512,7 +2558,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """
         key = _unravel_key_to_tuple(key)
         return self._set_at_tuple(
-            key, value, index, validated=False, non_blocking=non_blocking
+            key, value, _entry_index(index), validated=False, non_blocking=non_blocking
         )
 
     @abc.abstractmethod
@@ -2620,8 +2666,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     Previously, if a key was not present in the tensordict and no default
                     was passed, a `KeyError` was raised. From v0.7, this behaviour has been changed
                     and a `None` value is returned instead (in accordance with the what dict.get behavior).
-                    To adopt the old behavior, set the environment variable `export TD_GET_DEFAULTS_TO_NONE='0'` or call
-                    :func`~tensordict.set_get_defaults_to_none(False)`.
+                    Use ``td[key]`` to raise a `KeyError` for a missing key. Restoring the old behavior with
+                    ``TD_GET_DEFAULTS_TO_NONE=0`` or ``set_get_defaults_to_none(False)`` is deprecated
+                    and will be removed in TensorDict 0.17.
 
         .. note:: Keyword arguments can be passed to :meth:`~.get` when dealing with ragged tensors.
             See :meth:`~tensordict.LazyStackedTensorDict.get` for a complete overview.
@@ -2733,7 +2780,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         else:
             default = NO_DEFAULT
 
-        return self._get_at_tuple(key_tuple, index, default, **kwargs)
+        return self._get_at_tuple(key_tuple, _entry_index(index), default, **kwargs)
 
     def _get_at_str(self, key, idx, default, **kwargs):
         out = self._get_str(key, default, **kwargs)
@@ -2751,7 +2798,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Returns the shape of the entry, possibly avoiding recurring to :meth:`~.get`."""
         return _shape(self.get(key))
 
-    @lock_blocked
+    @_lock_blocked
     def update(
         self,
         input_dict_or_td: dict[str, CompatibleType] | T | None = None,
@@ -3005,13 +3052,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     # We can swap target with value if the batch sizes are incongruent. We must make sure the id of target
                     # stays the same though
                     if isinstance(target, LazyStackedTensorDict):
+                        hook_out, hook_in = target._hook_out, target._hook_in
                         target.__init__(
                             *value.unbind(target.stack_dim),
                             stack_dim=target.stack_dim,
-                            hook_out=target.hook_out,
-                            hook_in=target.hook_in,
                             stack_dim_name=target._td_dim_name,
                         )
+                        target._hook_out, target._hook_in = hook_out, hook_in
                     else:
                         target = target.exclude(
                             *target.keys(True, True, is_leaf=is_leaf), inplace=True
@@ -3306,7 +3353,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         result.update(dict_to_replace)
         return result
 
-    @lock_blocked
+    @_lock_blocked
     def create_nested(self, key):
         """Creates a nested tensordict of the same shape, device and dim names as the current tensordict.
 
@@ -3631,7 +3678,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 for k in self.keys(sort=sort):
                     yield self._get_str(k, NO_DEFAULT)
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _values_list(
         self,
         include_nested: bool = False,
@@ -3663,7 +3710,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 source = dict(zip(keys, vals))
                 return [source[key] for key in sorting_keys]
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _items_list(
         self,
         include_nested: bool = False,
@@ -3846,7 +3893,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return out
 
     @property
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def sorted_keys(self) -> list[NestedKey]:
         """Returns the keys sorted in alphabetical order.
 
@@ -5409,17 +5456,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     # Functorch compatibility
     @abc.abstractmethod
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _add_batch_dim(self, *, in_dim: int, vmap_level: int) -> Self:
         raise NotImplementedError
 
     @abc.abstractmethod
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _remove_batch_dim(self, vmap_level: int, batch_size: int, out_dim: int) -> Self:
         raise NotImplementedError
 
     @abc.abstractmethod
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _maybe_remove_batch_dim(
         self, funcname: str, vmap_level: int, batch_size: int, out_dim: int
     ) -> Self:
@@ -6081,7 +6128,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """
         raise NotImplementedError
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     @_as_context_manager()
     def flatten_keys(
         self,
@@ -6249,7 +6296,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         self.exclude(*root_keys, inplace=True)
         return self
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     @_as_context_manager()
     def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> Self:
         """Converts a flat tensordict into a nested one, recursively.
@@ -6632,7 +6679,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         self._propagate_lock(is_compiling=is_comp)
         return self
 
-    @erase_cache
+    @_erase_cache_first
     def _propagate_unlock(self):
         # if we end up here, we can clear the graph associated with this td
         self._is_locked = False
@@ -7016,7 +7063,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """
         raise NotImplementedError
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def detach(self) -> Self:
         """Detach the tensors in the tensordict.
 
@@ -7033,6 +7080,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
+
+# The mixin modules import TensorDictBase for type checking only, so their
+# string annotations that name it (e.g. ``other: TensorDictBase | torch.Tensor``)
+# cannot be resolved at run time. Binding the class in each module lets
+# typing.get_type_hints and inspect.signature(eval_str=True) resolve them.
+for _mixin in _TENSORDICTBASE_MIXINS:
+    sys.modules[_mixin.__module__].TensorDictBase = TensorDictBase
+del _mixin
 
 _ACCEPTED_CLASSES = (
     Tensor,
