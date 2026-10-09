@@ -2,17 +2,21 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""Memory-mapping, saving, loading, consolidation and state dicts of :class:`~tensordict.TensorDictBase`.
+"""TensorDict's own storage formats: memory-mapping, saving, loading, consolidation and state dicts of :class:`~tensordict.TensorDictBase`.
 
 The methods live on a mixin that ``tensordict.base`` imports before it
 defines ``TensorDictBase``, so this module imports the helpers it needs from
-``tensordict.base`` without needing the class itself.
+``tensordict.base`` without needing the class itself. A method that uses
+``TensorDictBase`` at run time imports it locally. The comment above the
+mixin imports in ``tensordict/base.py`` gives the other rules.
 """
 
 from __future__ import annotations
 
 import collections
 import concurrent.futures
+import json
+import os.path
 from concurrent.futures import wait
 from copy import copy
 from pathlib import Path
@@ -62,7 +66,7 @@ if TYPE_CHECKING:
 
 
 class _Serialization:
-    """Memory-mapping, saving, loading, consolidation and state dicts."""
+    """TensorDict's own storage formats: memory-mapping, saving, loading, consolidation and state dicts."""
 
     # Serialization functionality
     def state_dict(
@@ -877,6 +881,27 @@ class _Serialization:
         if consolidate_futures is not None:
             return TensorDictFuture(consolidate_futures, result)
         return result
+
+    @classmethod
+    def from_consolidated(cls, filename):
+        # with open(Path(filename).with_suffix(".json"), "rb") as f:
+        #     metadata = json.loads(f.read())
+        file = torch.from_file(
+            str(filename),
+            dtype=torch.uint8,
+            size=os.path.getsize(filename),
+            # needed when device ctx differs
+            device=torch.device("cpu"),
+        )
+        metadata_size = file[-8:].clone().view(torch.int64)
+        metadata = file[-metadata_size - 8 : -8]
+        metadata = json.loads(bytes(metadata.tolist()))
+
+        from tensordict._reductions import _rebuild_tensordict_files_consolidated
+
+        return _rebuild_tensordict_files_consolidated(
+            metadata, file[: -metadata_size - 8]
+        )
 
     def is_consolidated(self):
         """Checks if a TensorDict has a consolidated storage."""

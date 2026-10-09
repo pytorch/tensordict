@@ -44,7 +44,6 @@ from warnings import warn
 import numpy as np
 import torch
 from tensordict._contextlib import LAST_OP_MAPS
-from tensordict._datasets import to_mds
 from tensordict._indexing import _getitem_names, convert_ellipsis_to_idx
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
@@ -761,7 +760,15 @@ def _expand_to_match_shape(
 
 # TensorDictBase's methods are grouped by area of the API into mixins under
 # tensordict/_base/. Those modules import the helpers above from this module,
-# so they are imported here, after the helpers and before the class.
+# so they are imported here, after the helpers and before the class. Hence:
+# - A helper that a mixin imports must be defined above this point.
+# - In a mixin, TensorDictBase is imported for type checking only. A method
+#   that uses it at run time imports it locally.
+# - Globals that this module rebinds at run time, such as
+#   _GET_DEFAULTS_TO_NONE and _ACCEPTED_CLASSES, must be read as
+#   tensordict.base.<name>: a mixin that imports one keeps its first value.
+# - Abstract methods, properties, implement_for overloads and methods that
+#   read a rebound global stay in the class below.
 from tensordict._base.convert import _Conversion  # noqa: E402
 from tensordict._base.device import _DeviceOps  # noqa: E402
 from tensordict._base.distributed import _Distributed  # noqa: E402
@@ -2101,8 +2108,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         raise AttributeError(
             f"The tensordict has no saved path (memmap={self.is_memmap()}, path={self._memmap_prefix})."
         )
-
-    to_mds = to_mds
 
     @abc.abstractmethod
     def make_memmap(

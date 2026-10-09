@@ -2,11 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""Device and dtype conversions, and memory placement of :class:`~tensordict.TensorDictBase`.
+"""Device and dtype conversions, memory placement and memory size of :class:`~tensordict.TensorDictBase`.
 
 The methods live on a mixin that ``tensordict.base`` imports before it
 defines ``TensorDictBase``, so this module imports the helpers it needs from
-``tensordict.base`` without needing the class itself.
+``tensordict.base`` without needing the class itself. A method that uses
+``TensorDictBase`` at run time imports it locally. The comment above the
+mixin imports in ``tensordict/base.py`` gives the other rules.
 """
 
 from __future__ import annotations
@@ -47,7 +49,7 @@ if TYPE_CHECKING:
 
 
 class _DeviceOps:
-    """Device and dtype conversions, and memory placement."""
+    """Device and dtype conversions, memory placement and memory size."""
 
     def auto_device_(self) -> Self:
         """Automatically sets the device, if it is unique.

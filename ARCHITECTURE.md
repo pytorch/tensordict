@@ -14,17 +14,21 @@ containers:
   `_tensorcollection.pyi`.
 - `base.py`: `TensorDictBase`: its abstract methods, which each backend
   implements, its core (keys, `get`, `set`, `update`, `apply`, locking,
-  names and its properties), and the helpers that the rest of the package
+  names and its properties), the methods that cannot move to a mixin (see
+  "Adding an operation"), and the helpers that the rest of the package
   imports from `tensordict.base`.
-- `_base/`: the rest of `TensorDictBase`'s methods, in mixins that
+- `_base/`: most of the other methods of `TensorDictBase`, in mixins that
   `TensorDictBase` inherits from, one module per area of the API:
   `pointwise.py` (arithmetic, comparisons and elementwise math),
   `reductions.py`, `shape.py` (views, reshaping, stacking, splitting and
-  padding), `device.py` (device and dtype conversions, pinning and sharing
-  memory), `serialization.py` (memmap, saving and loading, consolidation and
-  state dicts), `convert.py` (conversions to and from other containers and
-  formats) and `distributed.py`. These modules import `base.py`'s helpers, so
-  `base.py` imports them after its helpers and before the class.
+  padding), `device.py` (device and dtype conversions, pinning, sharing and
+  memory size), `serialization.py` (tensordict's own storage: memmap, saving
+  and loading, consolidation and state dicts), `convert.py` (conversions to
+  and from other containers and file formats, such as dicts, pytrees, H5,
+  Zarr, pandas and `nn.Module` parameters) and `distributed.py`. These
+  modules import `base.py`'s helpers, so `base.py` imports them after its
+  helpers and before the class. `_base/factories.py` holds the module-level
+  constructors (`from_dict`, `from_h5`, ...) that `base.py` re-exports.
 - `_td.py`: `TensorDict`, the dense implementation, and `_SubTensorDict`, a
   view on an index of another tensordict.
 - `_td_functions.py`: the module-level functions `stack`, `lazy_stack`,
@@ -212,9 +216,12 @@ as #1733 (`backward`) or `ec8d0082e` (`roll`). A complete change usually
 touches these places:
 
 1. The method and its docstring, on `TensorDictBase`: in the mixin of
-   `_base/` for its area, or in `base.py` for core operations and abstract
-   methods. If it can be written with other methods, write it once there.
-   Make it abstract (in `base.py`) only if each backend needs its own code.
+   `_base/` for its area, or in `base.py` for core operations. If it can be
+   written with other methods, write it once there. Make it abstract only if
+   each backend needs its own code. Abstract methods, properties,
+   `implement_for` overloads and methods that read a global that `base.py`
+   rebinds stay in `base.py`. The comment above the mixin imports in
+   `base.py` gives the rules for code in a mixin.
 2. If it is abstract: an implementation in each class of the hierarchy
    above (or a raise), and the name in one of the `_*_DELEGATES` lists of
    `typedtensordict.py`.
