@@ -11,7 +11,6 @@ Using tensorclasses for datasets
 # but modified to demonstrate use of tensorclass. See the related tutorial using
 # ``TensorDict``.
 
-
 import torch
 import torch.nn as nn
 

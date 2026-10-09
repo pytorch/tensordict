@@ -22,8 +22,8 @@ from tensordict import (
     lazy_stack,
     LazyStackedTensorDict,
     set_capture_non_tensor_stack,
-    tensorclass,
     TensorClass,
+    tensorclass,
     TensorDict,
     UnbatchedTensor,
 )
@@ -1064,15 +1064,15 @@ class TestNonTensorData:
 
         data[0, 0] = NonTensorData(data=99)
         assert data.tolist() == [[99, 7], [7, 7], [7, 7]]
-        assert (
-            data.tolist() == TensorDict.load_memmap(tmpdir).tolist()
-        ), TensorDict.load_memmap(tmpdir).tolist()
+        assert data.tolist() == TensorDict.load_memmap(tmpdir).tolist(), (
+            TensorDict.load_memmap(tmpdir).tolist()
+        )
 
         data.update_at_(NonTensorData(data=99), (0, 1))
         assert data.tolist() == [[99, 99], [7, 7], [7, 7]], data.tolist()
-        assert (
-            data.tolist() == TensorDict.load_memmap(tmpdir).tolist()
-        ), TensorDict.load_memmap(tmpdir).tolist()
+        assert data.tolist() == TensorDict.load_memmap(tmpdir).tolist(), (
+            TensorDict.load_memmap(tmpdir).tolist()
+        )
 
     def test_shared_limitations(self):
         # Sharing a special type works but it's locked for writing

@@ -25,7 +25,6 @@ import os
 import sys
 
 import pytorch_sphinx_theme
-
 import tensordict
 
 project = "tensordict"
