@@ -29,6 +29,7 @@ from typing import (
     AbstractSet,
     Any,
     Callable,
+    Generic,
     get_args,
     get_origin,
     get_type_hints,
@@ -137,6 +138,8 @@ _TensorTypes = (
 _TENSOR_ONLY_TYPE_ERR = TypeError(
     "tensor_only requires types to be Tensor, Tensor-subtrypes or None."
 )
+# flags accepted by the bracket form TensorClass["autocast", ...]
+_TENSORCLASS_FLAGS = ("autocast", "nocast", "frozen", "tensor_only", "shadow")
 # methods where non_tensordict data should be cleared in the return value
 _CLEAR_METADATA = {"all", "any"}
 # torch functions where we can wrap the corresponding TensorDict version
@@ -3758,6 +3761,19 @@ class _TensorClassMeta(abc.ABCMeta):
     def __getitem__(cls, item: IndexType) -> Self:
         if not isinstance(item, tuple):
             item = (item,)
+        if not all(
+            isinstance(_item, str) and _item in _TENSORCLASS_FLAGS for _item in item
+        ):
+            # Type arguments of a generic class, as in
+            # ``class Foo(TensorClass, Generic[T])`` or ``class Foo[T](TensorClass)``.
+            # This metaclass __getitem__ hides Generic.__class_getitem__, so we
+            # call it explicitly.
+            if issubclass(cls, Generic):
+                return Generic.__dict__["__class_getitem__"].__get__(None, cls)(item)
+            raise TypeError(
+                f"{cls.__name__} is not a generic class, so {cls.__name__}[...] only "
+                f"accepts the flags {_TENSORCLASS_FLAGS}. Got {item}."
+            )
         name = "_".join(item)  # type: ignore
         cls_name = f"TensorClass_{name}"
         bases = (cls,)
