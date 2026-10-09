@@ -606,7 +606,9 @@ class TensorDict(TensorDictBase):
             if isinstance(value, (TensorDictBase, dict)):
                 # torch reads the other values with None and True itself
                 value = _value_at_new_dim(self, value)
-                index = (slice(None),) * self.batch_dims
+                # a single slice, as an UnbatchedTensor entry may have fewer
+                # dims than the batch dims
+                index = slice(None)
         if isinstance(index, list):
             # Index with (list,), as __getitem__ does: torch reads a bare nested
             # list, and _SubTensorDict any bare list, as per-dim indices

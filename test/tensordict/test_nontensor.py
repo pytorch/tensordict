@@ -1704,6 +1704,23 @@ class TestUnbatchedTensor:
         assert isinstance(result, UnbatchedTensor)
         assert result.data_ptr() == data.data_ptr()
 
+    @pytest.mark.parametrize("value_type", ["tensordict", "dict"])
+    @pytest.mark.parametrize("index", [None, True, torch.tensor(True)])
+    def test_unbatched_setitem_new_dim(self, index, value_type):
+        # None and True add a dim of size 1: the value is written to all of td,
+        # as with td[:] = value
+        data = torch.arange(5.0)
+        td = TensorDict(a=torch.zeros(4, 3), u=UnbatchedTensor(data), batch_size=[4, 3])
+        value = {"a": torch.ones(1, 4, 3), "u": UnbatchedTensor(torch.full((5,), 7.0))}
+        if value_type == "tensordict":
+            value = TensorDict(value, batch_size=[1, 4, 3])
+        td[index] = value
+        assert (td["a"] == 1).all()
+        u = td.get("u")
+        assert isinstance(u, UnbatchedTensor)
+        assert u.data_ptr() == data.data_ptr()
+        assert (u == 7).all()
+
     @pytest.mark.parametrize("nested", [False, True])
     @pytest.mark.parametrize(
         "method", ["memmap", "memmap_", "memmap_threads", "save", "consolidate"]
