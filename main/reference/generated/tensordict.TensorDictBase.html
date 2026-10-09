@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4590+gf91fe7728.d20261009)
+                  main (0.14.0.dev4592+g285ad5089.d20261009)
                 </div>
               
             
@@ -8276,6 +8276,8 @@ size <cite>int(input.size(dim) / n) + 1</cite>, and the rest will have size <cit
 If <cite>indices_or_sections</cite> is a list or tuple of ints, or a one-dimensional long tensor, then input is split
 along dimension <cite>dim</cite> at each of the indices in the list, tuple or tensor.
 For instance, <cite>indices_or_sections=[2, 3]</cite> and <cite>dim=0</cite> would result in the tensors <cite>input[:2]</cite>, <cite>input[2:3]</cite>, and <cite>input[3:]</cite>.
+As with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.tensor_split.html#torch.tensor_split" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.tensor_split()</span></code></a>, negative indices count from the end, indices past the end are clamped,
+and an index smaller than the one before it gives an empty or an overlapping section.
 If <cite>indices_or_sections</cite> is a tensor, it must be a zero-dimensional or one-dimensional long tensor on the CPU.</p></li>
 <li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – dimension along which to split the tensor. Default: 0</p></li>
 </ul>
