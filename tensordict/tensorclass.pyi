@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import abc
+import builtins
 import dataclasses
 import enum
 import types
@@ -29,10 +30,13 @@ import numpy as np
 import torch
 import torch.distributed as dist
 from _typeshed import Incomplete
-from tensordict import TensorDictBase
+from streaming import MDSWriter
 from tensordict._contextlib import LAST_OP_MAPS as LAST_OP_MAPS
+from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
+from tensordict._ucxx import TensorDictPipe
+from tensordict.base import TensorDictBase
 from tensordict.memmap import MemoryMappedTensor as MemoryMappedTensor
 from tensordict.utils import (
     Buffer as Buffer,
@@ -48,7 +52,6 @@ from tensordict.utils import (
     is_namedtuple_class as is_namedtuple_class,
     lazy_legacy as lazy_legacy,
     lock_blocked as lock_blocked,
-    prod as prod,
     set_lazy_legacy as set_lazy_legacy,
     strtobool as strtobool,
     TensorDictFuture as TensorDictFuture,
@@ -127,17 +130,14 @@ class TensorClass:
     def __gt__(self, other: object) -> Self: ...
     def __le__(self, other: object) -> Self: ...
     def __lt__(self, other: object) -> Self: ...
-    def __deepcopy__(self, memodict={}) -> Self: ...
     def __iter__(self) -> Generator: ...
     def __len__(self) -> int: ...
-    def __contains__(self, key: NestedKey) -> bool: ...
     def __getitem__(
         self, index: IndexType
     ) -> Self | Tensor | TensorCollection | Any: ...
     __getitems__ = __getitem__
 
     def __setitem__(self, index: IndexType, value: Any) -> None: ...
-    def __delitem__(self, key: NestedKey) -> Any: ...
     @classmethod
     def __torch_function__(
         cls,
@@ -156,28 +156,21 @@ class TensorClass:
     @overload
     def amin(
         self,
-        dim: int | NO_DEFAULT = ...,
+        dim: int | _NoDefault = ...,
         keepdim: bool = False,
     ) -> Self: ...
     @overload
     def amin(
         self,
-        dim: int | NO_DEFAULT = ...,
+        dim: int | _NoDefault = ...,
         keepdim: bool = False,
         *,
         reduce: bool,
     ) -> Self | torch.Tensor: ...
-    def amin(
-        self,
-        dim: int | NO_DEFAULT = ...,
-        keepdim: bool = False,
-        *,
-        reduce: bool | None = None,
-    ) -> Self | torch.Tensor: ...
     @overload
     def min(
         self,
-        dim: int | NO_DEFAULT = ...,
+        dim: int | _NoDefault = ...,
         keepdim: bool = False,
         *,
         return_indices: bool = True,
@@ -185,45 +178,30 @@ class TensorClass:
     @overload
     def min(
         self,
-        dim: int | NO_DEFAULT = ...,
+        dim: int | _NoDefault = ...,
         keepdim: bool = False,
         *,
         reduce: bool,
         return_indices: bool = True,
     ) -> Self | torch.Tensor: ...
-    def min(
-        self,
-        dim: int | NO_DEFAULT = ...,
-        keepdim: bool = False,
-        *,
-        reduce: bool | None = None,
-        return_indices: bool = True,
-    ) -> Self | torch.Tensor: ...
     @overload
     def amax(
         self,
-        dim: int | NO_DEFAULT = ...,
+        dim: int | _NoDefault = ...,
         keepdim: bool = False,
     ) -> Self: ...
     @overload
     def amax(
         self,
-        dim: int | NO_DEFAULT = ...,
+        dim: int | _NoDefault = ...,
         keepdim: bool = False,
         *,
         reduce: bool,
     ) -> Self | torch.Tensor: ...
-    def amax(
-        self,
-        dim: int | NO_DEFAULT = ...,
-        keepdim: bool = False,
-        *,
-        reduce: bool | None = None,
-    ) -> Self | torch.Tensor: ...
     @overload
     def max(
         self,
-        dim: int | NO_DEFAULT = ...,
+        dim: int | _NoDefault = ...,
         keepdim: bool = False,
         *,
         return_indices: bool = True,
@@ -231,18 +209,10 @@ class TensorClass:
     @overload
     def max(
         self,
-        dim: int | NO_DEFAULT = ...,
+        dim: int | _NoDefault = ...,
         keepdim: bool = False,
         *,
         reduce: bool,
-        return_indices: bool = True,
-    ) -> Self | torch.Tensor: ...
-    def max(
-        self,
-        dim: int | NO_DEFAULT = ...,
-        keepdim: bool = False,
-        *,
-        reduce: bool | None = None,
         return_indices: bool = True,
     ) -> Self | torch.Tensor: ...
     @overload
@@ -251,18 +221,12 @@ class TensorClass:
     def cummin(
         self, dim: int, *, reduce: bool, return_indices: bool = True
     ) -> Self | torch.Tensor: ...
-    def cummin(
-        self, dim: int, *, reduce: bool | None = None, return_indices: bool = True
-    ) -> Self | torch.Tensor: ...
     @overload
     def cummax(self, dim: int, *, return_indices: bool = True) -> Self: ...
     @overload
     def cummax(
         self, dim: int, *, reduce: bool, return_indices: bool = True
     ) -> Self | torch.Tensor: ...
-    def cummax(
-        self, dim: int, *, reduce: bool | None = None, return_indices: bool = True
-    ) -> Self | torch.Tensor: ...
     @overload
     def mean(
         self,
@@ -279,14 +243,6 @@ class TensorClass:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool,
-    ) -> Self | torch.Tensor: ...
-    def mean(
-        self,
-        dim: int | tuple[int] = ...,
-        keepdim: bool = ...,
-        *,
-        dtype: torch.dtype | None = None,
-        reduce: bool | None = None,
     ) -> Self | torch.Tensor: ...
     @overload
     def nanmean(
@@ -305,14 +261,6 @@ class TensorClass:
         dtype: torch.dtype | None = None,
         reduce: bool,
     ) -> Self | torch.Tensor: ...
-    def nanmean(
-        self,
-        dim: int | tuple[int] = ...,
-        keepdim: bool = ...,
-        *,
-        dtype: torch.dtype | None = None,
-        reduce: bool | None = None,
-    ) -> Self | torch.Tensor: ...
     @overload
     def prod(
         self,
@@ -329,14 +277,6 @@ class TensorClass:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool,
-    ) -> Self | torch.Tensor: ...
-    def prod(
-        self,
-        dim: int | tuple[int] = ...,
-        keepdim: bool = ...,
-        *,
-        dtype: torch.dtype | None = None,
-        reduce: bool | None = None,
     ) -> Self | torch.Tensor: ...
     @overload
     def sum(
@@ -355,14 +295,6 @@ class TensorClass:
         dtype: torch.dtype | None = None,
         reduce: bool,
     ) -> Self | torch.Tensor: ...
-    def sum(
-        self,
-        dim: int | tuple[int] = ...,
-        keepdim: bool = ...,
-        *,
-        dtype: torch.dtype | None = None,
-        reduce: bool | None = None,
-    ) -> Self | torch.Tensor: ...
     @overload
     def nansum(
         self,
@@ -379,14 +311,6 @@ class TensorClass:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool,
-    ) -> Self | torch.Tensor: ...
-    def nansum(
-        self,
-        dim: int | tuple[int] = ...,
-        keepdim: bool = ...,
-        *,
-        dtype: torch.dtype | None = None,
-        reduce: bool | None = None,
     ) -> Self | torch.Tensor: ...
     @overload
     def std(
@@ -405,14 +329,6 @@ class TensorClass:
         correction: int = 1,
         reduce: bool,
     ) -> Self | torch.Tensor: ...
-    def std(
-        self,
-        dim: int | tuple[int] = ...,
-        keepdim: bool = ...,
-        *,
-        correction: int = 1,
-        reduce: bool | None = None,
-    ) -> Self | torch.Tensor: ...
     @overload
     def var(
         self,
@@ -429,14 +345,6 @@ class TensorClass:
         *,
         correction: int = 1,
         reduce: bool,
-    ) -> Self | torch.Tensor: ...
-    def var(
-        self,
-        dim: int | tuple[int] = ...,
-        keepdim: bool = ...,
-        *,
-        correction: int = 1,
-        reduce: bool | None = None,
     ) -> Self | torch.Tensor: ...
     @overload
     def quantile(
@@ -456,15 +364,6 @@ class TensorClass:
         *,
         interpolation: str = "linear",
         reduce: bool,
-    ) -> Self | torch.Tensor: ...
-    def quantile(
-        self,
-        q: float | torch.Tensor,
-        dim: int | tuple[int] = ...,
-        keepdim: bool = ...,
-        *,
-        interpolation: str = "linear",
-        reduce: bool | None = None,
     ) -> Self | torch.Tensor: ...
     def auto_batch_size_(self, batch_dims: int | None = None) -> Self: ...
     def auto_device_(self) -> Self: ...
@@ -759,12 +658,6 @@ class TensorClass:
     def view(self, dtype) -> Self: ...
     @overload
     def view(self, shape: torch.Size) -> Self: ...
-    def view(
-        self,
-        *shape: int,
-        size: Sequence[int] | torch.Size | None = None,
-        batch_size: torch.Size | None = None,
-    ) -> Self: ...
     def transpose(self, dim0, dim1) -> Self: ...
     def swapaxes(self, axis0: int, axis1: int) -> Self: ...
     def swapdims(self, dim0: int, dim1: int) -> Self: ...
@@ -1001,8 +894,6 @@ class TensorClass:
     @overload
     def get(self, key: NestedKey, default: CompatibleType | Any) -> CompatibleType: ...
     @overload
-    def get(self, key: NestedKey, *args, **kwargs) -> CompatibleType: ...
-    @overload
     def get(
         self,
         key: NestedKey,
@@ -1016,16 +907,12 @@ class TensorClass:
         **kwargs,
     ) -> CompatibleType: ...
     @overload
+    def get(self, key: NestedKey, *args, **kwargs) -> CompatibleType: ...
+    @overload
     def get_at(self, key: NestedKey, index: IndexType) -> CompatibleType: ...
     @overload
     def get_at(
         self, key: NestedKey, index: IndexType, default: CompatibleType | Any
-    ) -> CompatibleType: ...
-    def get_at(
-        self,
-        key: NestedKey,
-        *args,
-        **kwargs,
     ) -> CompatibleType: ...
     def get_item_shape(self, key: NestedKey) -> torch.Size: ...
     def update(
@@ -1121,7 +1008,7 @@ class TensorClass:
     ) -> Self: ...
     def del_(self, key: NestedKey) -> Self: ...
     def gather_and_stack(
-        self, dst: int, group: "dist.ProcessGroup" | None = None
+        self, dst: int, group: dist.ProcessGroup | None = None
     ) -> Self | None: ...
     def send(
         self,
@@ -1145,16 +1032,16 @@ class TensorClass:
     ) -> int: ...
     @classmethod
     def from_remote_init(
-        cls: T,
+        cls,
         src: int,
-        group: "ProcessGroup" | None = None,  # noqa: F821
+        group: dist.ProcessGroup | None = None,
         device: torch.device | None = None,
         use_broadcast: bool = False,
-    ) -> T: ...
+    ) -> Self: ...
     def init_remote(
         self,
         dst: int | None = None,
-        group: "ProcessGroup" | None = None,  # noqa: F821
+        group: dist.ProcessGroup | None = None,
         device: torch.device | None = None,
         use_broadcast: bool = False,
     ) -> Self: ...
@@ -1162,7 +1049,7 @@ class TensorClass:
         self,
         dst: int | None = None,
         *,
-        group: "dist.ProcessGroup" | None = None,  # noqa: F821
+        group: dist.ProcessGroup | None = None,
         group_dst: int | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
@@ -1178,10 +1065,10 @@ class TensorClass:
         init_tag: int = 0,
         pseudo_rand: bool = False,
     ) -> tuple[int, list[torch.Future]] | list[torch.Future] | None: ...
-    async def asend(self, dst: "TensorDictPipe") -> None: ...  # noqa: F821
+    async def asend(self, dst: TensorDictPipe) -> None: ...
     async def arecv(
         self,
-        src: "TensorDictPipe",  # noqa: F821
+        src: TensorDictPipe,
         *,
         device: torch.device | str | None = None,
     ) -> T: ...
@@ -1504,7 +1391,7 @@ class TensorClass:
         *,
         out: str | tuple[str, str],
         columns: dict[str, str] | None = None,
-        writer: "MDSWriter" | None = None,
+        writer: MDSWriter | None = None,
     ) -> None: ...
     @classmethod
     def from_list(
@@ -1515,7 +1402,7 @@ class TensorClass:
         batch_size: torch.Size | None = None,
         device: torch.device | None = None,
         batch_dims: int | None = None,
-        names: List[str] | None = None,
+        names: list[str] | None = None,
         lazy: bool | None = None,
     ) -> Self: ...
     def tolist(
@@ -1542,8 +1429,8 @@ class TensorClass:
         non_tensordict: dict | None = None,
         safe: bool = True,
     ) -> Self: ...
-    def _from_tensordict_with_copy(self, tensordict: TensorCollection) -> Self: ...
-    def _from_tensordict_with_none(self, tensordict: TensorCollection) -> Self: ...
+    @classmethod
+    def fields(cls) -> tuple[dataclasses.Field[Any], ...]: ...
     @classmethod
     def from_namedtuple(cls, named_tuple, *, auto_batch_size: bool = False) -> Self: ...
     def from_tuple(
@@ -1632,7 +1519,7 @@ class TensorClass:
     def separates(
         self,
         *keys: NestedKey,
-        default: Any = NO_DEFAULT,
+        default: Any = ...,
         strict: bool = True,
         filter_empty: bool = True,
     ) -> Self: ...
@@ -1665,7 +1552,6 @@ class TensorClass:
     def to(self, *, other: T, non_blocking: bool = ...) -> Self: ...
     @overload
     def to(self, *, batch_size: torch.Size) -> Self: ...
-    def to(self, *args, **kwargs) -> Self: ...
     def attrs(
         self, *, fields: Sequence[str] = ("device", "dtype", "shape")
     ) -> Self: ...
@@ -1677,13 +1563,13 @@ class TensorClass:
     def half(self) -> Self: ...
     def type(self, dst_type: torch.dtype) -> Self: ...
     @property
-    def requires_grad(self) -> bool: ...
-    def requires_grad_(self, requires_grad: bool = True) -> Self: ...
+    def requires_grad(self) -> builtins.bool: ...
+    def requires_grad_(self, requires_grad: builtins.bool = True) -> Self: ...
     def backward(
         self,
         gradient: TensorDictBase | None = None,
-        retain_graph: bool | None = None,
-        create_graph: bool = False,
+        retain_graph: builtins.bool | None = None,
+        create_graph: builtins.bool = False,
         inputs: TensorDictBase | Sequence[Tensor] | None = None,
     ) -> None: ...
     def detach_(self) -> Self: ...
@@ -1711,11 +1597,24 @@ class TensorClass:
 class NonTensorDataBase(TensorClass): ...
 class NonTensorData(NonTensorDataBase): ...
 class MetaData(NonTensorDataBase): ...
-class NonTensorStack(TensorDictBase): ...
 
+class TensorAttrs(TensorClass):
+    tgt_device: Any = None
+    tgt_dtype: Any = None
+    tgt_shape: Any = None
+    @classmethod
+    def from_tensor(
+        cls, tensor: Tensor, *, fields: Sequence[str] = ("device", "dtype", "shape")
+    ) -> Self: ...
+
+class NonTensorStack(LazyStackedTensorDict): ...
+
+_ClassT = TypeVar("_ClassT")
+
+@overload
 @dataclass_transform()
 def tensorclass(
-    cls: T = None,
+    cls: type[_ClassT],
     /,
     *,
     autocast: bool = False,
@@ -1723,7 +1622,18 @@ def tensorclass(
     nocast: bool = False,
     shadow: bool = False,
     tensor_only: bool = False,
-) -> T: ...
+) -> type[_ClassT]: ...
+@overload
+def tensorclass(
+    cls: None = None,
+    /,
+    *,
+    autocast: bool = False,
+    frozen: bool = False,
+    nocast: bool = False,
+    shadow: bool = False,
+    tensor_only: bool = False,
+) -> Callable[[type[_ClassT]], type[_ClassT]]: ...
 def is_non_tensor(obj) -> bool: ...
 def from_dataclass(
     obj: Any,

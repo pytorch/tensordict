@@ -52,4 +52,3 @@ jobs:
         bash .github/unittest/linux/scripts/setup_env.sh
         bash .github/unittest/linux/scripts/install.sh
         bash .github/unittest/linux/scripts/run_test.sh
-        bash .github/unittest/linux/scripts/post_process.sh

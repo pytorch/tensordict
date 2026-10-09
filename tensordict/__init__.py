@@ -3,7 +3,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import warnings as _warnings
+
 import tensordict._reductions
+
+# Registers the tensordict classes with torch's pytree.
+from tensordict import _pytree
 from tensordict._archive import (
     is_memmap_archive,
     pack_memmap,
@@ -56,6 +61,12 @@ from tensordict.functional import (
     pad_sequence,
 )
 from tensordict.memmap import MemoryMappedTensor
+from tensordict.nn import (
+    as_tensordict_module,
+    TensorClassModuleBase,
+    TensorClassModuleWrapper,
+    TensorDictParams,
+)
 from tensordict.persistent import PersistentTensorDict
 from tensordict.store import LazyStackedTensorDictStore, TensorDictStore
 from tensordict.tensorclass import (
@@ -87,20 +98,10 @@ from tensordict.utils import (
     unravel_key,
     unravel_key_list,
 )
-from tensordict._pytree import *
-from tensordict.nn import (
-    as_tensordict_module,
-    TensorClassModuleBase,
-    TensorClassModuleWrapper,
-    TensorDictParams,
-)
 
 __version__ = None  # type: ignore
 try:
-    try:
-        from importlib.metadata import version as _dist_version
-    except ImportError:  # pragma: no cover
-        from importlib_metadata import version as _dist_version  # type: ignore
+    from importlib.metadata import version as _dist_version
 
     __version__ = _dist_version("tensordict")
 except Exception:
@@ -118,6 +119,7 @@ __all__ = [
     "LazyStackedTensorDict",
     "UnbatchedTensor",
     "TensorClass",
+    "TypedTensorDict",
     "MemoryMappedTensor",
     "PersistentTensorDict",
     "TensorDictStore",
@@ -184,6 +186,7 @@ __all__ = [
     "list_to_stack",
     "set_list_to_stack",
     "get_printoptions",
+    "set_printoptions",
     # TensorClass components
     "tensorclass",
     "MetaData",
@@ -199,3 +202,34 @@ __all__ = [
     # Version
     "__version__",
 ]
+
+# Names that ``from tensordict._pytree import *`` used to leak into this
+# namespace, mapped to their replacements.
+_DEPRECATED_PYTREE_NAMES = {
+    "Any": "typing.Any",
+    "Context": "torch.utils._pytree.Context",
+    "Dict": "typing.Dict",
+    "List": "typing.List",
+    "MappingKey": "torch.utils._pytree.MappingKey",
+    "PYTREE_REGISTERED_LAZY_TDS": "tensordict.nn.functional_modules.PYTREE_REGISTERED_LAZY_TDS",
+    "PYTREE_REGISTERED_TDS": "tensordict.nn.functional_modules.PYTREE_REGISTERED_TDS",
+    "Tuple": "typing.Tuple",
+    "cls": "tensordict.LazyStackedTensorDict",
+    "defaultdict": "collections.defaultdict",
+    "implement_for": "pyvers.implement_for",
+    "is_compiling": "tensordict.utils.is_compiling",
+    "register_pytree_node": "torch.utils._pytree.register_pytree_node",
+    "torch": "torch",
+}
+
+
+def __getattr__(name: str) -> object:
+    if name in _DEPRECATED_PYTREE_NAMES:
+        _warnings.warn(
+            f"tensordict.{name} is deprecated and will be removed in TensorDict 0.17. "
+            f"Use {_DEPRECATED_PYTREE_NAMES[name]} instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return getattr(_pytree, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
