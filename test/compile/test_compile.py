@@ -2100,6 +2100,72 @@ class TestCudaGraphs:
             assert "y" not in td
             assert tdout["y"] == td["x"] + 1
 
+    def test_tdmodule_outputs_do_not_alias(self, compiled):
+        # Every replay writes into the same input and output buffers: the
+        # tensordicts returned by earlier calls, the capture call included,
+        # must keep their own values.
+        tdmodule = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
+        tdmodule = self._make_cudagraph(tdmodule, compiled)
+        tds = [
+            tdmodule(TensorDict(x=torch.full((3,), float(i)), batch_size=[3]))
+            for i in range(6)
+        ]
+        for i, td in enumerate(tds):
+            torch.testing.assert_close(td["x"], torch.full((3,), float(i)))
+            torch.testing.assert_close(td["y"], torch.full((3,), float(i + 1)))
+
+    def test_tdmodule_structure_change_raises(self, compiled):
+        if not torch.cuda.is_available():
+            pytest.skip("CudaGraphModule only replays graphs on CUDA")
+        tdmodule = TensorDictModule(
+            lambda x, z: x + z, in_keys=["x", "z"], out_keys=["y"]
+        )
+        tdmodule = self._make_cudagraph(tdmodule, compiled)
+        for _ in range(4):
+            tdmodule(
+                TensorDict(
+                    x=torch.randn(3), z=torch.randn(3), w=torch.randn(3), batch_size=[3]
+                )
+            )
+        # A key that is not an in_key may be missing.
+        td = tdmodule(TensorDict(x=torch.ones(3), z=torch.ones(3), batch_size=[3]))
+        torch.testing.assert_close(td["y"], torch.full((3,), 2.0))
+        with pytest.raises(KeyError, match="missing the in_keys \\['z'\\]"):
+            tdmodule(TensorDict(x=torch.randn(3), batch_size=[3]))
+        with pytest.raises(ValueError, match="captured with batch_size"):
+            tdmodule(TensorDict(x=torch.randn(1), z=torch.randn(1), batch_size=[1]))
+
+    def test_non_tdmodule_shape_change_raises(self, compiled):
+        if not torch.cuda.is_available():
+            pytest.skip("CudaGraphModule only replays graphs on CUDA")
+        func = self._make_cudagraph(lambda x: x + 1, compiled)
+        for _ in range(4):
+            func(torch.randn(3))
+        with pytest.raises(ValueError, match="captured with an input of shape"):
+            func(torch.randn(1))
+        func = self._make_cudagraph(lambda td: td["x"] + 1, compiled)
+        for _ in range(4):
+            func(TensorDict(x=torch.randn(3), batch_size=[3]))
+        with pytest.raises(ValueError, match="captured with batch_size"):
+            func(TensorDict(x=torch.randn(1), batch_size=[1]))
+
+    def test_td_input_non_tdmodule_writes_input(self, compiled):
+        # The function adds a key to its input: the capture must run on a
+        # tensordict with the warmup structure, or a compiled function
+        # recompiles during capture.
+        def func(td):
+            return td.set("y", td.get("x") + 1)
+
+        func = self._make_cudagraph(func, compiled)
+        for _ in range(4):
+            td = TensorDict(x=torch.randn(3), batch_size=[3])
+            out = func(td)
+            torch.testing.assert_close(out["y"], td["x"] + 1)
+
+    def test_repr(self, compiled):
+        func = self._make_cudagraph(lambda x: x + 1, compiled, warmup=3)
+        assert "warmup=3" in repr(func)
+
     def test_td_input_non_tdmodule(self, compiled):
         func = lambda x: x + 1
         func = self._make_cudagraph(func, compiled)
