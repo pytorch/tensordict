@@ -1178,7 +1178,8 @@ class TensorDict(TensorDictBase):
         Every new name list is computed before any is set, so a clash
         anywhere in the tree leaves all names unchanged.
         """
-        if not self._tensordict:
+        if not self._batch_size or not self._tensordict:
+            # no dim is shared, or no child to rename
             return
         renames = []
         self._collect_subtd_names(names, (), renames)

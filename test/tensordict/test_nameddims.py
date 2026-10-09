@@ -545,6 +545,15 @@ class TestNamedDims(TestTensorDictsBase):
         td.names = ["time"]
         assert td["agents"].names == ["time", "batch"]
 
+    def test_names_setter_none_keeps_lazy_stack_names(self):
+        # the members disagree on names, so the stack has no names of its own
+        stack = LazyStackedTensorDict(
+            TensorDict({}, [3], names=["x"]), TensorDict({}, [3], names=["y"])
+        )
+        td = TensorDict({"s": stack}, [])
+        td.names = None
+        assert [member.names for member in td["s"].tensordicts] == [["x"], ["y"]]
+
     def test_names_setter_clash_leaves_names_unchanged(self):
         td = TensorDict(
             {
