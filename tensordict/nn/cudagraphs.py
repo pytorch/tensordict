@@ -109,7 +109,8 @@ class CudaGraphModule:
 
         - The inputs are copied into the graph's buffers, and the graph is replayed, on the current stream. As for any
           CUDA operation, inputs written on another stream must be ordered before the call by the caller, e.g. with
-          ``torch.cuda.current_stream().wait_stream(producer_stream)``.
+          ``torch.cuda.current_stream().wait_stream(producer_stream)``. Consecutive calls share the graph's buffers:
+          issue them from one stream, or order each call after the previous one in the same way.
 
     .. warning::
         ``CudaGraphModule`` is not an :class:`~torch.nn.Module` by design, to discourage gathering parameters
