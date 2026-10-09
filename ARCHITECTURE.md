@@ -93,9 +93,12 @@ Modules (`nn/`):
 
 Stores (`store/`):
 
-- `store/_store.py`: `TensorDictStore`, `LazyStackedTensorDictStore` and
-  `_StoreStackElementView`. They keep their tensors in a key-value server
-  that speaks the Redis protocol, such as Redis or Dragonfly.
+- `store/_store.py`: `TensorDictStore`, which keeps its tensors in a
+  key-value server that speaks the Redis protocol, such as Redis or
+  Dragonfly.
+- `store/_lazy.py`: `LazyStackedTensorDictStore`, a lazy stack of stores,
+  and `_StoreStackElementView`, its write-through view of one member.
+  `store/_store.py` re-exports them.
 - `store/_utils.py`: byte-range helpers and the Lua scripts that the stores
   run on the server.
 
@@ -138,8 +141,8 @@ TensorCollection                       _tensorcollection.py
 │   ├── _CustomOpTensorDict            _lazy.py (legacy lazy mode)
 │   ├── PersistentTensorDict           persistent.py
 │   ├── TensorDictStore                store/_store.py
-│   ├── LazyStackedTensorDictStore     store/_store.py
-│   ├── _StoreStackElementView         store/_store.py
+│   ├── LazyStackedTensorDictStore     store/_lazy.py
+│   ├── _StoreStackElementView         store/_lazy.py
 │   ├── TensorDictParams               nn/params.py (also an nn.Module)
 │   └── TypedTensorDict                typedtensordict.py
 └── TensorClass                        tensorclass.py
