@@ -33,12 +33,12 @@ from tensordict.base import (
 )
 from tensordict.utils import (
     _as_context_manager,
+    _erase_cache_first,
     _is_tensorclass,
     _KEY_ERROR,
+    _lock_blocked,
     _LOCK_ERROR,
-    erase_cache,
     is_non_tensor,
-    lock_blocked,
     NestedKey,
     unravel_key,
 )
@@ -1656,7 +1656,7 @@ class TensorDictStore(TensorDictBase):
             sort=sort,
         )
 
-    @lock_blocked
+    @_lock_blocked
     def del_(self, key: NestedKey) -> TensorDictStore:
         if isinstance(key, str):
             key_path = self._full_key_path(key)
@@ -1779,7 +1779,7 @@ class TensorDictStore(TensorDictBase):
         for _td in self._nested_tensordicts.values():
             _td._propagate_lock(lock_parents_weakrefs, is_compiling=is_compiling)
 
-    @erase_cache
+    @_erase_cache_first
     def _propagate_unlock(self):
         self._is_locked = False
         self._is_shared = False
@@ -2265,7 +2265,7 @@ class TensorDictStore(TensorDictBase):
     def detach_(self) -> Self:
         return self
 
-    @lock_blocked
+    @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         keys_list = list(self.keys())
         if not keys_list:

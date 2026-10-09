@@ -12,7 +12,7 @@ import torch
 from tensordict._td import TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.nn.utils import composite_lp_aggregate, set_composite_lp_aggregate
-from tensordict.utils import IndexType, NestedKey, unravel_key, unravel_keys
+from tensordict.utils import IndexType, NestedKey, unravel_key
 from torch import distributions as d
 
 if TYPE_CHECKING:
@@ -558,7 +558,7 @@ class CompositeDistribution(d.Distribution, Mapping):
 
 
 def _add_suffix(key: NestedKey, suffix: str):
-    key = unravel_keys(key)
+    key = unravel_key(key)
     if isinstance(key, str):
         return key + suffix
     return key[:-1] + (key[-1] + suffix,)
