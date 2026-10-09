@@ -67,7 +67,9 @@ def _raise_if_jagged(tensor: torch.Tensor, key: str | None = None) -> None:
         raise NotImplementedError(
             f"memmap does not support nested tensors with the torch.jagged layout{where}. "
             "Convert it to the torch.strided layout first, for example with "
-            "LazyStackedTensorDict.densify(layout=torch.strided)."
+            "LazyStackedTensorDict.densify(layout=torch.strided), or with "
+            "torch.nested.nested_tensor(list(tensor.unbind()), layout=torch.strided) "
+            "for a tensor that is already jagged."
         )
 
 

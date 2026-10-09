@@ -781,22 +781,27 @@ class TestNestedTensor:
             for j in range(3):
                 assert (td[i, j] == tdsave[i, j]).all()
 
-    @pytest.mark.parametrize(
-        "layout", [torch.strided, torch.jagged], ids=["strided", "jagged"]
-    )
     @pytest.mark.parametrize("num_threads", [0, 2])
     @pytest.mark.parametrize("with_prefix", [False, True])
-    def test_memmap_td_nested_layout(self, layout, num_threads, with_prefix, tmpdir):
+    def test_memmap_td_jagged_raises(self, num_threads, with_prefix, tmpdir):
         # https://github.com/pytorch/tensordict/issues/1924
         lazy = TensorDict.from_list(
             [{"tokens": torch.arange(n)} for n in (3, 5, 2)], lazy=True
         )
-        td = lazy.densify(layout=layout)
+        td = lazy.densify(layout=torch.jagged)
         prefix = tmpdir if with_prefix else None
-        if layout == torch.jagged:
-            with pytest.raises(NotImplementedError, match="jagged.*'tokens'"):
-                td.memmap(prefix, num_threads=num_threads)
-            return
+        with pytest.raises(NotImplementedError, match="jagged.*'tokens'"):
+            td.memmap(prefix, num_threads=num_threads)
+
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    @pytest.mark.parametrize("with_prefix", [False, True])
+    def test_memmap_td_strided_nested(self, num_threads, with_prefix, tmpdir):
+        # https://github.com/pytorch/tensordict/issues/1924
+        lazy = TensorDict.from_list(
+            [{"tokens": torch.arange(n)} for n in (3, 5, 2)], lazy=True
+        )
+        td = lazy.densify(layout=torch.strided)
+        prefix = tmpdir if with_prefix else None
         tdmemmap = td.memmap(prefix, num_threads=num_threads)
         if with_prefix:
             del tdmemmap
