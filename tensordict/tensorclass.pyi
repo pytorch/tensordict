@@ -87,7 +87,18 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
-class TensorClass:
+@dataclasses.dataclass(kw_only=True)
+class _TensorClassInitArgs:
+    # Gives the constructor that dataclass_transform synthesizes for each
+    # subclass its keyword-only arguments, after the fields. InitVar keeps
+    # them apart from the batch_size, device and names properties.
+    batch_size: dataclasses.InitVar[Sequence[int] | torch.Size | int | None] = None
+    device: dataclasses.InitVar[DeviceType | None] = None
+    names: dataclasses.InitVar[Sequence[str] | None] = None
+    lock: dataclasses.InitVar[bool | None] = None
+
+@dataclass_transform(eq_default=False)
+class TensorClass(_TensorClassInitArgs):
     _autocast: bool = False
     _nocast: bool = False
     _frozen: bool = False
@@ -109,16 +120,6 @@ class TensorClass:
             Literal["autocast", "nocast", "frozen", "tensor_only", "shadow"], ...
         ],
     ) -> Type["TensorClass"]: ...
-    def __init__(
-        self,
-        *args,
-        batch_size: Sequence[int] | torch.Size | int | None = None,
-        device: DeviceType | None = None,
-        names: Sequence[str] | None = None,
-        non_blocking: bool | None = None,
-        lock: bool = False,
-        **kwargs,
-    ) -> None: ...
     @property
     def is_meta(self) -> bool: ...
     def __bool__(self) -> bool: ...
@@ -1594,7 +1595,9 @@ class TensorClass:
     def uint64(self) -> Self: ...
     def uint8(self) -> Self: ...
 
-class NonTensorDataBase(TensorClass): ...
+class NonTensorDataBase(TensorClass):
+    data: Any
+
 class NonTensorData(NonTensorDataBase): ...
 class MetaData(NonTensorDataBase): ...
 
