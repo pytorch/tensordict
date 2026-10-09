@@ -4122,8 +4122,6 @@ class LazyStackedTensorDict(TensorDictBase):
 
     unlock_ = TensorDictBase.unlock_
 
-    _index_tensordict = TensorDict._index_tensordict
-
 
 class _CustomOpTensorDict(TensorDictBase):
     """Encodes lazy operations on tensors contained in a TensorDict."""
@@ -4800,9 +4798,7 @@ class _CustomOpTensorDict(TensorDictBase):
         splits = -(self.batch_size[dim] // -chunks)
         return self.split(splits, dim)
 
-    __setitem__ = TensorDict.__setitem__
     _add_batch_dim = TensorDict._add_batch_dim
-    _index_tensordict = TensorDict._index_tensordict
 
     _maybe_remove_batch_dim = TensorDict._maybe_remove_batch_dim
     _remove_batch_dim = TensorDict._remove_batch_dim

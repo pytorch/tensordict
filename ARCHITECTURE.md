@@ -170,17 +170,18 @@ are `torch.Tensor` subclasses that a tensordict can store as entries.
 `TensorDictBase` marks its backend-specific methods with
 `@abc.abstractmethod`: the storage hooks (`_get_str`, `_set_str`, ...),
 the shape operations (`_view`, `_permute`, `_unsqueeze`, ...), `keys`,
-`_index_tensordict`, `_clone` and others, 40 in all. A class that lacks one
+`_clone` and others, 39 in all. A class that lacks one
 cannot be instantiated. The rest of `TensorDictBase` (`base.py` and the mixins in
 `_base/`) is written on top of these methods, and all the implementations
 share it, including generic
-implementations of operations such as `reshape`, `split`, `_apply_nest` and
-the comparison operators, which a class overrides only when it can do better.
+implementations of operations such as `reshape`, `split`, `__setitem__`,
+`_index_tensordict`, `_apply_nest` and the comparison operators, which a class
+overrides only when it can do better.
 
 The implementations also reuse code in two ways:
 
-- A few class-level aliases still borrow TensorDict's code, where it is
-  specific to dense storage or has not been moved to `TensorDictBase` yet. For
+- A few class-level aliases still borrow TensorDict's code where it is
+  specific to dense storage: the vmap hooks, `_memmap_` and `_load_memmap`. For
   example, `_load_memmap = TensorDict._load_memmap` binds the classmethod to
   `TensorDict`, so that a store or a `PersistentTensorDict` loads a memmap as
   a `TensorDict`.
