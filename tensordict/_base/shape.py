@@ -1109,23 +1109,21 @@ class _ShapeOps:
                 )
             new_batch_size = torch.Size(index.shape)
 
-            def leaf_fn(leaf):
+            def expand_index(shape):
                 index_expand = index
-                while index_expand.ndim < leaf.ndim:
+                while index_expand.ndim < len(shape):
                     index_expand = index_expand.unsqueeze(-1)
-                target_shape = list(leaf.shape)
+                target_shape = list(shape)
                 target_shape[dim_corrected] = index_expand.shape[dim_corrected]
-                index_expand = index_expand.expand(target_shape)
-                return torch.gather(leaf, dim_corrected, index_expand)
+                return index_expand.expand(target_shape)
+
+            def leaf_fn(leaf):
+                return torch.gather(leaf, dim_corrected, expand_index(leaf.shape))
 
             def nested_fn(nested):
-                index_expand = index
-                while index_expand.ndim < nested.batch_dims:
-                    index_expand = index_expand.unsqueeze(-1)
-                target_shape = list(nested.batch_size)
-                target_shape[dim_corrected] = index_expand.shape[dim_corrected]
-                index_expand = index_expand.expand(target_shape)
-                nested.gather(dim_corrected, index_expand, inplace=True)
+                nested.gather(
+                    dim_corrected, expand_index(nested.batch_size), inplace=True
+                )
 
             return self._inplace_rebind_leaves(leaf_fn, nested_fn, new_batch_size)
         return torch.gather(self, dim, index, out=out)
