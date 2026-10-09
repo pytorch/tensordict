@@ -45,12 +45,14 @@ from typing import (
 import numpy as np
 import tensordict as tensordict_lib
 import torch
+from tensordict._deprecation import deprecated
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._pytree import _register_td_node
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._tensorcollection import TensorCollection
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
+from tensordict._utils_options import _set_capture_non_tensor_stack
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _GET_DEFAULTS_TO_NONE,
@@ -67,6 +69,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _is_dataclass as is_dataclass,
     _is_json_serializable,
     _is_tensorclass,
+    _KeyDependentDefaultDict,
     _LOCK_ERROR,
     _REPR_OPTIONS,
     _td_fields,
@@ -77,14 +80,11 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     DeviceType,
     IndexType,
     is_tensorclass,
-    KeyDependentDefaultDict,
     LinkedList,
     list_to_stack,
-    set_capture_non_tensor_stack,
 )
 from torch import multiprocessing as mp, Tensor
-
-from torch.compiler import is_compiling
+from torch.compiler import is_compiling, is_dynamo_compiling
 from torch.multiprocessing import Manager
 from torch.utils._pytree import tree_map
 
@@ -92,6 +92,18 @@ if TYPE_CHECKING:
     from typing import Self
 else:
     Self = Any
+
+__all__ = [
+    "MetaData",
+    "NonTensorData",
+    "NonTensorDataBase",
+    "NonTensorStack",
+    "TensorAttrs",
+    "TensorClass",
+    "from_dataclass",
+    "is_non_tensor",
+    "tensorclass",
+]
 
 
 def _identity(cls):
@@ -1065,6 +1077,25 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             if field.name in own_names:
                 setattr(cls, field.name, copy(field))
 
+    # A user-defined __init__ runs instead of the generated one. As in plain
+    # Python, a class without one inherits that of a tensorclass parent.
+    init = cls.__dict__.get("__init__")
+    if init is None:
+        user_init = getattr(cls.__init__, "_user_init", None)
+    elif (
+        "__dataclass_fields__" in cls.__dict__
+        and getattr(getattr(init, "__code__", None), "co_filename", None) == "<string>"
+    ):
+        # cls was a dataclass already, and dataclass() generated this
+        # __init__. That relies on a CPython detail: dataclasses compiles the
+        # methods it generates from a string. Should that stop holding, a
+        # generated __init__ takes the slower custom path, with the same result
+        # except for a dataclass that was not frozen and that frozen=True
+        # freezes here: its __init__ would raise FrozenInstanceError.
+        user_init = None
+    else:
+        user_init = init
+
     # Breaks some tests, don't do that:
     # if not dataclasses.is_dataclass(cls):
     cls = dataclass(cls, frozen=frozen)
@@ -1105,7 +1136,12 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
                         return out
                     return out
 
-                return property(_getter)
+                def _setter(self, value):
+                    # Reached through object.__setattr__, as in the __init__
+                    # of a frozen class.
+                    type(self).set(self, key, value)
+
+                return property(_getter, _setter)
 
             setattr(cls, name, _make_prop(name))
 
@@ -1115,9 +1151,18 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     # user-defined and gets bypassed by the frozen __init__ via
     # object.__setattr__. Only non-frozen classes can have a real custom one.
     _has_custom_setattr = "__setattr__" in cls.__dict__ and not frozen
-    cls.__init__ = _init_wrapper(
-        cls.__init__, cls, frozen, shadow, tensor_only, _has_custom_setattr
-    )
+    if "_is_tensorclass" not in cls.__dict__:
+        # A class that was decorated before (e.g. @tensorclass on a
+        # TensorClass subclass) keeps the __init__ wrapper it got then.
+        cls.__init__ = _init_wrapper(
+            cls.__init__ if user_init is None else user_init,
+            cls,
+            frozen,
+            shadow,
+            tensor_only,
+            _has_custom_setattr,
+            _custom_init=user_init is not None,
+        )
     cls._from_tensordict = classmethod(_from_tensordict)
     cls.from_tensordict = cls._from_tensordict
     if not hasattr(cls, "__torch_function__"):
@@ -1134,7 +1179,6 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     else:
         cls.__getattr__ = _getattr
 
-    cls.__setattr_parent__ = object.__setattr__
     if "__setattr__" not in cls.__dict__:
         if not tensor_only:
             cls.__setattr__ = _setattr
@@ -1235,11 +1279,13 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     # if not hasattr(cls, "batch_size") and "batch_size" not in expected_keys:
     #     cls.batch_size = property(_batch_size, _batch_size_setter)
 
-    # Memmap
+    # Memmap. load and load_memmap are bound to cls (here and in the loop
+    # below): load_memmap falls back on the class it is called on when the
+    # saved class cannot be found by name.
     if not hasattr(cls, "load_memmap") and "load_memmap" not in expected_keys:
-        cls.load_memmap = TensorDictBase.load_memmap
+        cls.load_memmap = classmethod(TensorDictBase.load_memmap.__func__)
     if not hasattr(cls, "load") and "load" not in expected_keys:
-        cls.load = TensorDictBase.load
+        cls.load = classmethod(TensorDictBase.load.__func__)
     if not hasattr(cls, "load_memmap_") and "load_memmap_" not in expected_keys:
         cls.load_memmap_ = _load_memmap_
     if not hasattr(cls, "_load_memmap"):
@@ -1283,6 +1329,11 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
                 continue
             tdcls = func.__self__
             if issubclass(tdcls, TensorDictBase):  # detects classmethods
+                if attr in ("load", "load_memmap"):
+                    # Bound to cls rather than TensorDict (see "Memmap" above).
+                    # Rebind func too: on some Python versions, func.__get__
+                    # does not rebind a bound method.
+                    tdcls, func = cls, func.__func__.__get__(cls)
                 setattr(cls, attr, _wrap_classmethod(tdcls, cls, func))
 
     if not hasattr(cls, "select") and "select" not in expected_keys:
@@ -1401,11 +1452,15 @@ def _init_wrapper(
     shadow: bool,
     tensor_only: bool,
     _has_custom_setattr: bool = False,
+    _custom_init: bool = False,
 ) -> Callable:
     init_sig = inspect.signature(__init__)
     params = list(init_sig.parameters.values())
     # drop first entry of params which corresponds to self and isn't passed by the user
     required_params = [p.name for p in params[1:] if p.default is inspect._empty]
+    declared_params = frozenset(
+        p.name for p in params[1:] if p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)
+    )
     fields = dataclasses.fields(cls)
     field_names = tuple(field.name for field in fields)
     required_fields = frozenset(field_names)
@@ -1436,6 +1491,80 @@ def _init_wrapper(
         *args: Any,
         **kwargs,
     ):
+        if _custom_init or (type(self) is not cls and "_tensordict" in self.__dict__):
+            # Run a user-defined __init__ (own or inherited), or a parent's
+            # __init__ that one reaches through super().__init__(). The
+            # outermost call builds the container; nested calls reuse it.
+            # __init__ also gets the metadata that it declares as parameters,
+            # unless a field has that name (shadow=True).
+            batch_size, device, names, lock = [
+                None
+                if key in required_fields
+                else kwargs.get(key)
+                if key in declared_params
+                else kwargs.pop(key, None)
+                for key in ("batch_size", "device", "names", "lock")
+            ]
+            outer = type(self) is cls or "_tensordict" not in self.__dict__
+            if outer:
+                if batch_size is None:
+                    batch_size = ()
+                elif isinstance(batch_size, int):
+                    batch_size = (batch_size,)
+                td = TensorDict._new_unsafe(
+                    {}, batch_size=torch.Size(batch_size), device=device, names=names
+                )
+                object.__setattr__(self, "_tensordict", td)
+                object.__setattr__(self, "_non_tensordict", {})
+                object.__setattr__(self, "_is_initialized", True)
+            elif batch_size is not None or device is not None or names is not None:
+                # Metadata passed to super().__init__() replaces the outer
+                # call's. Keep the entries set before that call.
+                td = self._tensordict
+                td = TensorDict(
+                    td._tensordict,
+                    batch_size=td.batch_size if batch_size is None else batch_size,
+                    device=td.device if device is None else device,
+                    names=td._maybe_names() if names is None else names,
+                )
+                object.__setattr__(self, "_tensordict", td)
+            __init__(self, *args, **kwargs)
+            if outer:
+                # Move the fields that __init__ set with object.__setattr__
+                # (as a frozen class does) into the container, and give those
+                # it did not set their default.
+                if self._tensordict.is_locked:
+                    # super().__init__(..., lock=True) locked it already.
+                    self._tensordict.unlock_()
+                    lock = True
+                self_dict = self.__dict__
+                td_dict = self._tensordict._tensordict
+                non_td = self._non_tensordict
+                for key, field in type(self).__dataclass_fields__.items():
+                    if key not in required_fields:
+                        continue
+                    if key in self_dict:
+                        value = self_dict.pop(key)
+                    elif key in td_dict or key in non_td:
+                        continue
+                    elif field.default_factory is not dataclasses.MISSING:
+                        value = field.default_factory()
+                    elif field.default is not dataclasses.MISSING:
+                        value = field.default
+                    elif field.init:
+                        raise TypeError(
+                            f"{type(self).__name__}.__init__() did not set the "
+                            f"required field {key!r}"
+                        )
+                    else:
+                        value = None
+                    type(self).set(self, key, value)
+                if lock is None:
+                    lock = frozen
+            if lock:
+                self._tensordict.lock_()
+            return
+
         if "batch_size" in required_params:
             batch_size = torch.Size(())
         else:
@@ -1639,12 +1768,21 @@ def _init_wrapper(
             new_params.append(
                 inspect.Parameter("names", inspect.Parameter.KEYWORD_ONLY, default=None)
             )
-    wrapper.__signature__ = init_sig.replace(parameters=params + new_params)
+    # A user-defined __init__ may declare these itself or take **kwargs, which
+    # must stay last.
+    new_params = [p for p in new_params if p.name not in init_sig.parameters]
+    var_kwargs = []
+    if params and params[-1].kind is inspect.Parameter.VAR_KEYWORD:
+        var_kwargs = [params.pop()]
+    wrapper.__signature__ = init_sig.replace(
+        parameters=params + new_params + var_kwargs
+    )
+    wrapper._user_init = __init__ if _custom_init else None
 
     return wrapper
 
 
-_cast_funcs = KeyDependentDefaultDict(_identity)
+_cast_funcs = _KeyDependentDefaultDict(_identity)
 _cast_funcs[torch.Tensor] = torch.as_tensor
 _cast_funcs[np.ndarray] = np.asarray
 
@@ -1944,7 +2082,7 @@ def _memmap_(
                         metadata[key] = value
                     else:
                         to_pickle[key] = value
-                from tensordict.utils import json_dumps
+                from tensordict._utils_key_json import json_dumps
 
                 json_str = json_dumps(metadata)
                 # Ensure we write bytes to the binary file
@@ -2262,7 +2400,10 @@ def _setattr(self, key: str, value: Any) -> None:  # noqa: D417
 
 
 def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
-    if not is_compiling():
+    # ``is_compiling()`` stays true in every thread while any thread compiles,
+    # so code that runs eagerly (such as unpickling in a DataLoader's
+    # pin-memory thread) must not take the branch meant for Dynamo tracing.
+    if not is_dynamo_compiling():
         __dict__ = self.__dict__
         if (
             "_tensordict" not in __dict__
@@ -3631,8 +3772,6 @@ def _unbind(self, dim: int):
 # Custom classes
 # --------------
 
-NONTENSOR_HANDLED_FUNCTIONS = []
-
 _MP_MANAGER = None
 
 
@@ -4047,9 +4186,6 @@ class NonTensorDataBase(TensorClass):
         #  Make sure it's patched properly at init time
         old_eq = type(self).__eq__
         if old_eq is _eq:
-            global NONTENSOR_HANDLED_FUNCTIONS
-            NONTENSOR_HANDLED_FUNCTIONS.extend(TD_HANDLED_FUNCTIONS)
-
             # Patch only the first time a class is created
 
             @functools.wraps(_eq)
@@ -4867,7 +5003,7 @@ class NonTensorData(NonTensorDataBase):
             if out.batch_size != result.batch_size:
                 raise RuntimeError("out.batch_size and cat batch size must match.")
             if isinstance(out, NonTensorData) and isinstance(result, NonTensorStack):
-                with set_capture_non_tensor_stack(True):
+                with _set_capture_non_tensor_stack(True):
                     result = cls._stack_non_tensor(values, dim=dim)
             out.update_(result)
             return out
@@ -5232,7 +5368,25 @@ class NonTensorStack(LazyStackedTensorDict):
     _stack_non_tensor = NonTensorData._stack_non_tensor
 
     @classmethod
+    @deprecated(
+        "NonTensorStack.from_nontensordata()",
+        removal="0.17",
+        replacement="NonTensorData.maybe_to_stack()",
+    )
     def from_nontensordata(cls, non_tensor: NonTensorData):
+        """Expands a :class:`NonTensorData` into a stack of copies of it.
+
+        .. deprecated:: 0.15
+            Use :meth:`NonTensorData.maybe_to_stack` instead. It differs in
+            two ways: its elements share the data object of ``non_tensor``,
+            whereas this method copies it into every element; and when
+            ``non_tensor`` has an empty batch size, it returns ``non_tensor``
+            itself, whereas this method returns a copy.
+        """
+        return cls._from_nontensordata(non_tensor)
+
+    @classmethod
+    def _from_nontensordata(cls, non_tensor: NonTensorData):
         data = non_tensor.data
         prev = NonTensorData(data=data, batch_size=[], device=non_tensor.device)
         for dim in reversed(non_tensor.shape):
@@ -5246,7 +5400,7 @@ class NonTensorStack(LazyStackedTensorDict):
         selfrepr = indent(selfrepr, prefix=4 * " ")
         batch_size = indent(f"batch_size={self.batch_size}", prefix=4 * " ")
         device = indent(f"device={self.device}", prefix=4 * " ")
-        return f"NonTensorStack(\n{selfrepr}," f"\n{batch_size}," f"\n{device})"
+        return f"NonTensorStack(\n{selfrepr},\n{batch_size},\n{device})"
 
     @classmethod
     def lazy_stack(
@@ -5315,20 +5469,8 @@ class NonTensorStack(LazyStackedTensorDict):
         for size in reversed(self.batch_size):
             index.append(positions % size)
             positions = torch.div(positions, size, rounding_mode="floor")
-        index = tuple(reversed(index))
-        stack = self
-        if self.stack_dim != 0:
-            # Advanced indexing of a lazy stack expects the stack dim first, so
-            # bring it to the front and reorder the index accordingly. The
-            # result shape only depends on the index tensors, not on this
-            # permutation.
-            dims = [self.stack_dim] + [
-                d for d in range(self.ndim) if d != self.stack_dim
-            ]
-            stack = self.permute(dims)
-            index = tuple(index[d] for d in dims)
         # advanced indexing copies the selected entries
-        return stack[index]
+        return self[tuple(reversed(index))]
 
     def flip(self, dims: int | tuple[int, ...]) -> NonTensorStack:
         return self._select_positions(self._positions().flip(dims))
@@ -5413,7 +5555,7 @@ class NonTensorStack(LazyStackedTensorDict):
                     with open(prefix / "pickle.pkl", "wb") as f:
                         pickle.dump(data, f)
                 with open(prefix / "meta.json", "wb") as f:
-                    from tensordict.utils import json_dumps
+                    from tensordict._utils_key_json import json_dumps
 
                     json_str = json_dumps(jsondict, separators=(",", ":"))
                     # Ensure we write bytes to the binary file
@@ -5715,7 +5857,7 @@ class NonTensorStack(LazyStackedTensorDict):
         Raises a ValueError if there is more than one unique value.
         """
         try:
-            with set_capture_non_tensor_stack(True):
+            with _set_capture_non_tensor_stack(True):
                 nt = NonTensorData._stack_non_tensor(
                     self.tensordicts, raise_if_non_unique=True
                 )

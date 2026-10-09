@@ -12,13 +12,15 @@ import torch
 from tensordict._td import TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.nn.utils import composite_lp_aggregate, set_composite_lp_aggregate
-from tensordict.utils import IndexType, NestedKey, unravel_key, unravel_keys
+from tensordict.utils import IndexType, NestedKey, unravel_key
 from torch import distributions as d
 
 if TYPE_CHECKING:
     from typing import Self
 else:
     Self = Any
+
+__all__ = ["CompositeDistribution"]
 
 
 class CompositeDistribution(d.Distribution, Mapping):
@@ -276,13 +278,13 @@ class CompositeDistribution(d.Distribution, Mapping):
             if hasattr(dist, "deterministic_sample"):
                 return dist.deterministic_sample
             else:
-                from tensordict.nn.probabilistic import DETERMINISTIC_REGISTER
+                from tensordict.nn.probabilistic import _DETERMINISTIC_REGISTER
 
                 # Fallbacks
                 tdist = type(dist)
                 if issubclass(tdist, d.Independent):
                     tdist = type(dist.base_dist)
-                interaction_type = DETERMINISTIC_REGISTER.get(tdist)
+                interaction_type = _DETERMINISTIC_REGISTER.get(tdist)
                 if interaction_type == "mode":
                     return dist.mode
                 if interaction_type == "mean":
@@ -345,9 +347,7 @@ class CompositeDistribution(d.Distribution, Mapping):
             shape + self.batch_shape,
         )
 
-    def log_prob(
-        self, sample: TensorDictBase
-    ) -> torch.Tensor | TensorDictBase:  # noqa: D417
+    def log_prob(self, sample: TensorDictBase) -> torch.Tensor | TensorDictBase:  # noqa: D417
         """Compute the summed log-probability of a given sample.
 
         Args:
@@ -558,7 +558,7 @@ class CompositeDistribution(d.Distribution, Mapping):
 
 
 def _add_suffix(key: NestedKey, suffix: str):
-    key = unravel_keys(key)
+    key = unravel_key(key)
     if isinstance(key, str):
         return key + suffix
     return key[:-1] + (key[-1] + suffix,)

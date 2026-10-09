@@ -33,25 +33,25 @@ import torch
 import torch.distributed as dist
 from _typeshed import Incomplete
 from streaming import MDSWriter
+from tensordict._indexing import convert_ellipsis_to_idx as convert_ellipsis_to_idx
 from tensordict._nestedkey import NestedKey as NestedKey
 from tensordict._ucxx import TensorDictPipe
 from tensordict.memmap import MemoryMappedTensor as MemoryMappedTensor
 from tensordict.utils import (
+    _cache_while_locked as _cache_while_locked,
+    _erase_cache_first as _erase_cache_first,
+    _infer_size_impl as _infer_size_impl,
+    _int_generator as _int_generator,
+    _is_namedtuple as _is_namedtuple,
+    _is_namedtuple_class as _is_namedtuple_class,
+    _lock_blocked as _lock_blocked,
+    _strtobool as _strtobool,
     Buffer as Buffer,
-    cache as cache,
-    convert_ellipsis_to_idx as convert_ellipsis_to_idx,
     DeviceType as DeviceType,
-    erase_cache as erase_cache,
     implement_for as implement_for,
     IndexType as IndexType,
-    infer_size_impl as infer_size_impl,
-    int_generator as int_generator,
-    is_namedtuple as is_namedtuple,
-    is_namedtuple_class as is_namedtuple_class,
     lazy_legacy as lazy_legacy,
-    lock_blocked as lock_blocked,
     set_lazy_legacy as set_lazy_legacy,
-    strtobool as strtobool,
     TensorDictFuture as TensorDictFuture,
     unravel_key as unravel_key,
     unravel_key_list as unravel_key_list,
