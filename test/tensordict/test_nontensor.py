@@ -43,6 +43,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         DummyPicklableClass,
         get_available_devices,
         is_npu_available,
+        legacy_lazy_mode,
     )
 else:
     IS_FB = False
@@ -50,6 +51,7 @@ else:
         DummyPicklableClass,
         get_available_devices,
         is_npu_available,
+        legacy_lazy_mode,
     )
 
 
@@ -282,6 +284,15 @@ class TestNonTensorData:
         assert isinstance(result.get("query"), NonTensorStack)
         assert result.get("query").tolist() == expected.tolist()
         assert (result.get("x") == expected).all()
+
+    def test_shape_ops_non_tensor_stack_legacy_lazy(self):
+        # the entries move in the legacy lazy mode too, where permute is lazy
+        values = [[0, 1, 2], [3, 4, 5]]
+        columns = [NonTensorStack.from_list(list(col)) for col in zip(*values)]
+        stack = torch.stack(columns, dim=1)
+        assert stack.stack_dim == 1
+        with legacy_lazy_mode():
+            assert stack.flip(1).tolist() == torch.tensor(values).flip(1).tolist()
 
     def test_shape_ops_non_tensor_stack_semantics(self):
         stack = NonTensorStack("walk", "jump", "stand")

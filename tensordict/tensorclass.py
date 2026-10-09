@@ -5325,20 +5325,8 @@ class NonTensorStack(LazyStackedTensorDict):
         for size in reversed(self.batch_size):
             index.append(positions % size)
             positions = torch.div(positions, size, rounding_mode="floor")
-        index = tuple(reversed(index))
-        stack = self
-        if self.stack_dim != 0:
-            # Advanced indexing of a lazy stack expects the stack dim first, so
-            # bring it to the front and reorder the index accordingly. The
-            # result shape only depends on the index tensors, not on this
-            # permutation.
-            dims = [self.stack_dim] + [
-                d for d in range(self.ndim) if d != self.stack_dim
-            ]
-            stack = self.permute(dims)
-            index = tuple(index[d] for d in dims)
         # advanced indexing copies the selected entries
-        return stack[index]
+        return self[tuple(reversed(index))]
 
     def flip(self, dims: int | tuple[int, ...]) -> NonTensorStack:
         return self._select_positions(self._positions().flip(dims))
