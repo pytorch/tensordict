@@ -1804,6 +1804,36 @@ class TestGeneric:
         assert (sub["n", "b"] == expected).all()
         assert (td_written["a"] == written).all()
 
+    @pytest.mark.parametrize(
+        "index",
+        [
+            [0, 2],
+            torch.tensor([0, 2]),
+            (slice(None), [0, 1]),
+            torch.tensor([True, False, True]),
+            1,
+        ],
+    )
+    def test_setitem_python_scalar_cast(self, index):
+        # torch writes a Python scalar in the dtype of the entry, with every
+        # kind of index
+        td = TensorDict(
+            {
+                "c": torch.zeros(3, 2, dtype=torch.long),
+                "n": {"b": torch.zeros(3, 2, dtype=torch.bool)},
+            },
+            [3, 2],
+        )
+        expected_c, expected_b = td["c"].clone(), td["n", "b"].clone()
+        expected_c[index] = -3.5
+        expected_b[index] = -3.5
+        td[index] = -3.5
+        assert (td["c"] == expected_c).all()
+        assert (td["n", "b"] == expected_b).all()
+        td.set_at_("c", 7.5, index)
+        expected_c[index] = 7.5
+        assert (td["c"] == expected_c).all()
+
     def test_getitem_scalar_bool_0d(self):
         td = TensorDict({"a": torch.tensor(1.0)}, [])
         assert td[True].batch_size == torch.Size([1])
