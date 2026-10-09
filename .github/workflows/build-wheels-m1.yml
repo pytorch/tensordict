@@ -47,8 +47,6 @@ jobs:
         include:
           - repository: pytorch/tensordict
             smoke-test-script: test/smoke_test.py
-            pre-script: .github/scripts/linux-pre-script.sh
-            post-script: .github/scripts/linux-post-script.sh
             package-name: tensordict
     name: ${{ matrix.repository }}
     uses: pytorch/test-infra/.github/workflows/build_wheels_macos.yml@main
