@@ -67,9 +67,9 @@ class CudaGraphModule:
 
         - The function must execute a code that can be exactly re-run using the same buffers. This means that
           dynamic shapes (changing shape in the input or during the code execution) is not supported. In other words,
-          the input must have a constant shape. After the capture, a tensor input with a different shape or a
-          tensordict input with a different batch size raises a ``ValueError``, and a tensordict input that lacks one
-          of the ``in_keys`` raises a ``KeyError``.
+          the input must have a constant shape. After the capture, a tensor input with a different shape, or a
+          tensordict input with a different batch size or an entry of a different shape, raises a ``ValueError``, and
+          a tensordict input that lacks one of the ``in_keys`` raises a ``KeyError``.
         - The output of the function must be detached. If a call to the optimizers is required, put it in the input
           function. For instance, the following function is a valid operator:
 
@@ -260,6 +260,11 @@ class CudaGraphModule:
                     # copies are blocking so that the caller may overwrite a (pinned)
                     # CPU input as soon as the call returns.
                     if len(src_keys) == len(self._graph_input_keys):
+                        if [val.shape for val in src_vals] != self._graph_input_shapes:
+                            for key, val, shape in zip(
+                                src_keys, src_vals, self._graph_input_shapes
+                            ):
+                                self._check_entry_shape(key, val.shape, shape)
                         if src_vals:
                             torch._foreach_copy_(self._graph_input_vals, src_vals)
                     else:
@@ -277,6 +282,18 @@ class CudaGraphModule:
                             )
                         # Other keys differ, or the layout does (e.g. a lazy stack
                         # against a dense tensordict): ``update_`` matches the leaves.
+                        graph_leaves = self._graph_inputs.keys(
+                            include_nested=True, leaves_only=True
+                        )
+                        for key in tensordict.keys(
+                            include_nested=True, leaves_only=True
+                        ):
+                            if key in graph_leaves:
+                                self._check_entry_shape(
+                                    key,
+                                    tensordict.get_item_shape(key),
+                                    self._graph_inputs.get_item_shape(key),
+                                )
                         self._graph_inputs.update_(tensordict)
                     self.graph.replay()
                     if self._out_matches_in:
@@ -334,6 +351,9 @@ class CudaGraphModule:
                             self._graph_input_keys,
                             self._graph_input_vals,
                         ) = self._graph_inputs._items_list(True, True)
+                        self._graph_input_shapes = [
+                            val.shape for val in self._graph_input_vals
+                        ]
                         self._graph_batch_size = self._graph_inputs.batch_size
                         if tensordict_out is not None:
                             td_out_save = tensordict_out.copy()
@@ -469,6 +489,14 @@ class CudaGraphModule:
 
         _call_func = functools.wraps(self.module)(_call)
         self._call_func = _call_func
+
+    def _check_entry_shape(self, key, shape, captured_shape):
+        if shape != captured_shape:
+            raise ValueError(
+                f"{self.__class__.__name__} was captured with the entry {key!r} of "
+                f"shape {captured_shape} but got shape {shape}. CUDA graphs replay "
+                "fixed shapes."
+            )
 
     @staticmethod
     def _maybe_copy_onto_(src, dest, srcs, dests):

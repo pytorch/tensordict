@@ -2146,6 +2146,37 @@ class TestCudaGraphs:
         x.fill_(100.0)
         torch.testing.assert_close(td["y"], torch.full((3,), 2.0))
 
+    def test_tdmodule_entry_shape_change_raises(self, compiled):
+        # Same batch size, entry of another shape: it must not be broadcast into
+        # the captured buffer, or fail in the copy.
+        if not torch.cuda.is_available():
+            pytest.skip("CudaGraphModule only replays graphs on CUDA")
+        tdmodule = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
+        tdmodule = self._make_cudagraph(tdmodule, compiled)
+        for _ in range(4):
+            tdmodule(TensorDict(x=torch.zeros(3, 4), w=torch.zeros(3), batch_size=[3]))
+        match = r"entry 'x' of shape torch.Size\(\[3, 4\]\) but got shape"
+        for shape in ((3, 1), (3, 5)):
+            # Every captured entry is present.
+            with pytest.raises(ValueError, match=match):
+                tdmodule(
+                    TensorDict(x=torch.zeros(shape), w=torch.zeros(3), batch_size=[3])
+                )
+            # A captured entry that is not an in_key is missing.
+            with pytest.raises(ValueError, match=match):
+                tdmodule(TensorDict(x=torch.zeros(shape), batch_size=[3]))
+        # Captured on a lazy stack, replayed on a dense tensordict.
+        tdmodule = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
+        tdmodule = self._make_cudagraph(tdmodule, compiled)
+        for _ in range(4):
+            tdmodule(
+                LazyStackedTensorDict(
+                    *TensorDict(x=torch.zeros(3, 4), batch_size=[3]).unbind(0)
+                )
+            )
+        with pytest.raises(ValueError, match=match):
+            tdmodule(TensorDict(x=torch.zeros(3, 1), batch_size=[3]))
+
     def test_tdmodule_uncaptured_in_key_missing(self, compiled):
         # An in_key that the captured input did not hold is not reported missing.
         if not torch.cuda.is_available():
