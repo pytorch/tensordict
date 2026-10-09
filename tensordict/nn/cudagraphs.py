@@ -34,6 +34,8 @@ from torch.utils._pytree import (
     tree_unflatten,
 )
 
+__all__ = ["CudaGraphModule"]
+
 
 class CudaGraphModule:
     """A cudagraph wrapper for PyTorch callables.

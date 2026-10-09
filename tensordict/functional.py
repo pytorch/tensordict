@@ -30,6 +30,14 @@ from tensordict.utils import (
     unravel_key,
 )
 
+__all__ = [
+    "dense_stack_tds",
+    "make_tensordict",
+    "merge_tensordicts",
+    "pad",
+    "pad_sequence",
+]
+
 
 def pad(
     tensordict: T,

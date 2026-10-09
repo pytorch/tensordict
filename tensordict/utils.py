@@ -69,6 +69,42 @@ if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
     from tensordict.tensorclass import NonTensorStack
 
+__all__ = [
+    # Types
+    "DeviceType",
+    "IndexType",
+    "NestedKey",
+    # Classes
+    "Buffer",
+    "LinkedList",
+    "TensorDictFuture",
+    "timeit",
+    # Functions
+    "assert_allclose_td",
+    "assert_close",
+    "expand_as_right",
+    "expand_right",
+    "is_non_tensor",
+    "is_tensorclass",
+    "isin",
+    "parse_tensor_dict_string",
+    "print_directory_tree",
+    "remove_duplicates",
+    "unravel_key",
+    "unravel_key_list",
+    # Configuration
+    "capture_non_tensor_stack",
+    "get_printoptions",
+    "lazy_legacy",
+    "list_to_stack",
+    "set_capture_non_tensor_stack",
+    "set_lazy_legacy",
+    "set_list_to_stack",
+    "set_printoptions",
+    # Logging
+    "logger",
+]
+
 
 # Utility function to wrap C++ functorch functions for torch.compile support
 def _wrap_functorch_function(func):

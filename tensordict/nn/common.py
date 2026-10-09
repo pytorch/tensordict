@@ -42,7 +42,11 @@ from torch.compiler import is_compiling
 
 __all__ = [
     "TensorDictModule",
+    "TensorDictModuleBase",
     "TensorDictModuleWrapper",
+    "WrapModule",
+    "as_tensordict_module",
+    "dispatch",
 ]
 
 
