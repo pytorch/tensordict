@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4655+g333923649.d20261009)
+                  main (0.14.0.dev4656+g433ad8e1b.d20261009)
                 </div>
               
             
@@ -660,6 +660,11 @@ loading process:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data_loaded</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
 </pre></div>
 </div>
+<p>The class is saved under its module and name. A class defined in <code class="docutils literal notranslate"><span class="pre">__main__</span></code>
+(a script or a notebook) cannot be found under that name by another program.
+Load such data with the tensorclass itself, e.g.
+<code class="docutils literal notranslate"><span class="pre">MyClass.load_memmap(&quot;path/to/saved/directory&quot;)</span></code>: <code class="docutils literal notranslate"><span class="pre">load_memmap</span></code> uses the
+class it is called on when its name matches the saved one.</p>
 <p>Loading pickled non-tensor data without passing <code class="docutils literal notranslate"><span class="pre">allow_pickle</span></code> emits a
 <code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code> in TensorDict 0.14; the default becomes
 <code class="docutils literal notranslate"><span class="pre">allow_pickle=False</span></code> (which refuses to load it) in 0.15. Pass
