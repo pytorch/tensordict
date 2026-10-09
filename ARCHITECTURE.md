@@ -146,15 +146,19 @@ are `torch.Tensor` subclasses that a tensordict can store as entries.
 `TensorDictBase` marks its backend-specific methods with
 `@abc.abstractmethod`: the storage hooks (`_get_str`, `_set_str`, ...),
 the shape operations (`_view`, `_permute`, `_unsqueeze`, ...), `keys`,
-`_index_tensordict`, `_clone` and others. A class that lacks one cannot be
-instantiated. The rest of `base.py` is written on top of these methods, and
-all the implementations share it.
+`_index_tensordict`, `_clone` and others, 40 in all. A class that lacks one
+cannot be instantiated. The rest of `TensorDictBase` is written on top of
+these methods, and all the implementations share it, including generic
+implementations of operations such as `reshape`, `split`, `_apply_nest` and
+the comparison operators, which a class overrides only when it can do better.
 
-The implementations reuse code in two ways:
+The implementations also reuse code in two ways:
 
-- Class-level aliases borrow TensorDict's code, for example
-  `_apply_nest = TensorDict._apply_nest` in `_SubTensorDict`,
-  `PersistentTensorDict` and the store classes.
+- A few class-level aliases still borrow TensorDict's code, where it is
+  specific to dense storage or has not been moved to `TensorDictBase` yet. For
+  example, `_load_memmap = TensorDict._load_memmap` binds the classmethod to
+  `TensorDict`, so that a store or a `PersistentTensorDict` loads a memmap as
+  a `TensorDict`.
 - `TensorDictParams` forwards most calls to the tensordict it wraps
   (`_param_td`), through the `_fallback` decorators in `nn/params.py`.
   `TypedTensorDict` forwards to `_source` through the `_*_DELEGATES` lists at
@@ -199,8 +203,8 @@ touches these places:
    be written with other methods, write it once there. Make it abstract
    only if each backend needs its own code.
 2. If it is abstract: an implementation in each class of the hierarchy
-   above (an alias of TensorDict's method where that works, or a raise),
-   and the name in one of the `_*_DELEGATES` lists of `typedtensordict.py`.
+   above (or a raise), and the name in one of the `_*_DELEGATES` lists of
+   `typedtensordict.py`.
 3. `tensorclass.py`: the name in `_FALLBACK_METHOD_FROM_TD`, or in another
    `_METHOD_FROM_TD*` list. `test_sorted_methods` checks that the lists are
    sorted.
