@@ -20,12 +20,6 @@ from tensordict.nn.distributions import (
     TruncatedNormal,
 )
 from tensordict.nn.ensemble import EnsembleModule
-from tensordict.nn.functional_modules import (
-    get_functional,
-    is_functional,
-    make_functional,
-    repopulate_module,
-)
 from tensordict.nn.params import TensorDictParams
 from tensordict.nn.probabilistic import (
     InteractionType,
@@ -68,11 +62,6 @@ __all__ = [
     "ProbabilisticTensorDictSequential",
     "InteractionType",
     "set_interaction_type",
-    # Functional modules
-    "make_functional",
-    "get_functional",
-    "is_functional",
-    "repopulate_module",
     # Distributions
     "AddStateIndependentNormalScale",
     "CompositeDistribution",

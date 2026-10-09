@@ -1134,7 +1134,6 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     else:
         cls.__getattr__ = _getattr
 
-    cls.__setattr_parent__ = object.__setattr__
     if "__setattr__" not in cls.__dict__:
         if not tensor_only:
             cls.__setattr__ = _setattr
@@ -3631,8 +3630,6 @@ def _unbind(self, dim: int):
 # Custom classes
 # --------------
 
-NONTENSOR_HANDLED_FUNCTIONS = []
-
 _MP_MANAGER = None
 
 
@@ -4046,9 +4043,6 @@ class NonTensorDataBase(TensorClass):
         #  Make sure it's patched properly at init time
         old_eq = type(self).__eq__
         if old_eq is _eq:
-            global NONTENSOR_HANDLED_FUNCTIONS
-            NONTENSOR_HANDLED_FUNCTIONS.extend(TD_HANDLED_FUNCTIONS)
-
             # Patch only the first time a class is created
 
             @functools.wraps(_eq)
