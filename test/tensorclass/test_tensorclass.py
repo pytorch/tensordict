@@ -406,7 +406,9 @@ class TestTensorClass:
         else:
             assert data.x.device.type == data.y.device.type == "meta"
             assert x.device.type == "cpu"
-        with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+        with pytest.raises(
+            RuntimeError, match="batch dimension mismatch.* for key 'y'"
+        ):
             Data(x=x, y=torch.zeros(2), batch_size=[3], device=device)
         with pytest.raises(TypeError, match="torch.Size"):
             Data(x=x, y=y, batch_size="bad")
@@ -417,7 +419,13 @@ class TestTensorClass:
         with pytest.raises(ValueError, match="already set"):
             Data(x, x=x, y=y)
         if not tensor_only:
-            with pytest.raises(AttributeError, match="expected attributes"):
+            with pytest.raises(
+                AttributeError,
+                match=re.escape(
+                    "Cannot set the attribute 'extra': Data has no such field. "
+                    "Its fields are ['x', 'y']."
+                ),
+            ):
                 Data(x=x, y=y, extra=x)
         # None values must still enter non-tensor storage.
         assert Data(x=x, y=None, batch_size=[3]).y is None
@@ -1420,8 +1428,19 @@ class TestTensorClass:
         ):
             data[1][1][1]
 
-        with pytest.raises(ValueError, match="Invalid indexing arguments."):
+        with pytest.raises(
+            ValueError,
+            match=re.escape(
+                "Invalid indexing arguments: 'X'. A tensorclass is indexed along its "
+                "batch dimensions; to read a field, use the attribute or get('X')."
+            ),
+        ):
             data["X"]
+        with pytest.raises(
+            ValueError,
+            match=re.escape("to write a field, use the attribute or set('X', value)"),
+        ):
+            data["X"] = X
 
     def test_grad(self):
         @tensorclass
@@ -1831,7 +1850,13 @@ class TestTensorClass:
         ):
             data.set("z", TensorDict({"smth": torch.zeros(1)}, []))
         # check that you can't write any attribute
-        with pytest.raises(AttributeError, match=re.escape("Cannot set the attribute")):
+        with pytest.raises(
+            AttributeError,
+            match=re.escape(
+                "Cannot set the attribute 'newattr': MyDataParent has no such field. "
+                "Its fields are ['X', 'k', 'v', 'y', 'z']."
+            ),
+        ):
             data.set("newattr", TensorDict({"smth": torch.zeros(1)}, []))
 
         # Testing nested cases
@@ -2020,7 +2045,13 @@ class TestTensorClass:
         ):
             data.z = TensorDict({"smth": torch.zeros(1)}, [])
         # check that you can't write any attribute
-        with pytest.raises(AttributeError, match=re.escape("Cannot set the attribute")):
+        with pytest.raises(
+            AttributeError,
+            match=re.escape(
+                "Cannot set the attribute 'newattr': MyDataParent has no such field. "
+                "Its fields are ['W', 'X', 'k', 'v', 'y', 'z']."
+            ),
+        ):
             data.newattr = TensorDict({"smth": torch.zeros(1)}, [])
         # Testing nested cases
         data_nest.X = torch.zeros(3, 4, 5)

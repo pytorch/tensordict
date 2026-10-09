@@ -1597,7 +1597,7 @@ def _init_wrapper(
                                 key, value, _tensordict_fields
                             )
                         _td_dict[key] = _validate(
-                            value, check_shape=True, non_blocking=False
+                            value, check_shape=True, non_blocking=False, key=key
                         )
             else:
                 set_value = type(self).set
@@ -2251,7 +2251,8 @@ def _setattr(self, key: str, value: Any) -> None:  # noqa: D417
 
     if key not in self.__expected_keys__:
         raise AttributeError(
-            f"Cannot set the attribute {key} in {self} as this entry is not amongst the expected ones ({self.__expected_keys__})."
+            f"Cannot set the attribute {key!r}: {type(self).__name__} has no such "
+            f"field. Its fields are {sorted(self.__expected_keys__)}."
         )
     out = self.set(key, value)
     if out is not self:
@@ -2284,7 +2285,8 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
             return object.__setattr__(self, key, value)
     if key not in self.__expected_keys__:
         raise AttributeError(
-            f"Cannot set attribute {key} in {self} as this entry is not amongst the expected ones ({self.__expected_keys__})."
+            f"Cannot set the attribute {key!r}: {type(self).__name__} has no such "
+            f"field. Its fields are {sorted(self.__expected_keys__)}."
         )
     if value is None:
         self._non_tensordict[key] = None
@@ -2581,7 +2583,11 @@ def _getitem(self, item: NestedKey) -> Tensor | TensorCollection | Any:
     if isinstance(item, str) or (
         isinstance(item, tuple) and all(isinstance(_item, str) for _item in item)
     ):
-        raise ValueError(f"Invalid indexing arguments: {item}.")
+        raise ValueError(
+            f"Invalid indexing arguments: {item!r}. A tensorclass is indexed along "
+            f"its batch dimensions; to read a field, use the attribute or "
+            f"get({item!r})."
+        )
     # tensor_res = super(type(self), self).__getattribute__("_tensordict")[item]
     tensor_res = self.__dict__["_tensordict"][item]
     return _from_tensordict_with_copy(self, tensor_res)  # device=res.device)
@@ -2600,7 +2606,11 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
         # _unravel_key_to_tuple will return an empty tuple if the index isn't a NestedKey
         idx_unravel = _unravel_key_to_tuple(item)
         if idx_unravel:
-            raise ValueError(f"Invalid indexing arguments: {item}.")
+            raise ValueError(
+                f"Invalid indexing arguments: {item!r}. A tensorclass is indexed "
+                f"along its batch dimensions; to write a field, use the attribute "
+                f"or set({item!r}, value)."
+            )
 
     if istuple and len(item) == 1:
         return _setitem(self, item[0], value)
@@ -2890,7 +2900,8 @@ def _set(
         expected_keys = cls.__expected_keys__
         if key not in expected_keys:
             raise AttributeError(
-                f"Cannot set the attribute '{key}', expected attributes are {expected_keys}."
+                f"Cannot set the attribute {key!r}: {cls.__name__} has no such "
+                f"field. Its fields are {sorted(expected_keys)}."
             )
 
         self_is_non_tensor = self._is_non_tensor
