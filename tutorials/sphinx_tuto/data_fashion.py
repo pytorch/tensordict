@@ -10,7 +10,6 @@ Using TensorDict for datasets
 # Tutorial <https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html>`__,
 # but modified to demonstrate use of ``TensorDict``.
 
-
 import torch
 import torch.nn as nn
 

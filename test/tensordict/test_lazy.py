@@ -21,6 +21,7 @@ from tensordict import (
     NonTensorStack,
     TensorClass,
     TensorDict,
+    UnbatchedTensor,
 )
 from tensordict._reductions import _reduce_td
 from tensordict._torch_func import _stack as stack_td
@@ -246,6 +247,104 @@ class TestLazyStackedTensorDict:
         std = fun(td)
         for value in std.values(True, True):
             assert (value == 0).all()
+
+    def test_hooks_are_deprecated(self):
+        td = LazyStackedTensorDict(
+            TensorDict({"a": torch.zeros(3)}, [3]),
+            TensorDict({"a": torch.ones(3)}, [3]),
+        )
+        assert td._hook_out is None
+        assert td._hook_in is None
+
+        def hook(x):
+            return x + 1
+
+        for name in ("hook_out", "hook_in"):
+            match = (
+                rf"^LazyStackedTensorDict\.{name} is deprecated and will be removed "
+                r"in TensorDict 0\.17\.$"
+            )
+            with pytest.warns(DeprecationWarning, match=match) as record:
+                assert getattr(td, name) is None
+            assert record[0].filename == __file__
+            with pytest.warns(DeprecationWarning, match=match) as record:
+                setattr(td, name, hook)
+            assert record[0].filename == __file__
+            assert getattr(td, f"_{name}") is hook
+        for name in ("hook_out", "hook_in"):
+            with pytest.warns(
+                DeprecationWarning,
+                match=rf"^LazyStackedTensorDict\({name}=\.\.\.\) is deprecated and "
+                r"will be removed in TensorDict 0\.17\.$",
+            ) as record:
+                td2 = LazyStackedTensorDict(*td.tensordicts, **{name: hook})
+            assert record[0].filename == __file__
+            assert getattr(td2, f"_{name}") is hook
+            if name == "hook_out":
+                # hook_out still applies to the values that get returns
+                assert (td2.get("a") == torch.tensor([[1.0], [2.0]])).all()
+
+    def test_setstate_hooks_of_old_pickles(self):
+        # TensorDict 0.14 pickled the hooks under their public names
+        td = lazy_stack(
+            [
+                TensorDict({"a": torch.zeros(3)}, [3]),
+                TensorDict({"a": torch.ones(3)}, [3]),
+            ]
+        )
+        state = td.__getstate__()
+        state["hook_out"] = state.pop("_hook_out")
+        state["hook_in"] = state.pop("_hook_in")
+        loaded = LazyStackedTensorDict.__new__(LazyStackedTensorDict)
+        loaded.__setstate__(state)
+        assert "hook_out" not in vars(loaded)
+        assert "hook_in" not in vars(loaded)
+        assert loaded._hook_out is None
+        assert loaded._hook_in is None
+        assert (loaded == td).all()
+        loaded = pickle.loads(pickle.dumps(td))
+        assert loaded._hook_out is None
+        assert (loaded == td).all()
+
+    def test_valid_keys_is_deprecated(self):
+        td = lazy_stack(
+            [
+                TensorDict({"a": torch.zeros(3), "b": {"c": torch.zeros(3)}}, [3]),
+                TensorDict({"a": torch.ones(3), "b": {"c": torch.ones(3)}}, [3]),
+            ]
+        )
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^LazyStackedTensorDict\.valid_keys\(\) is deprecated and will be "
+            r"removed in TensorDict 0\.17\. Use keys\(\) instead\.$",
+        ) as record:
+            keys = td.valid_keys(True, True)
+        assert record[0].filename == __file__
+        assert set(keys) == set(td.keys(True, True)) == {"a", ("b", "c")}
+
+    def test_get_nestedtensor_is_deprecated(self):
+        td = lazy_stack(
+            [
+                TensorDict({"a": torch.zeros(4), "n": {"c": torch.zeros(2)}}, []),
+                TensorDict({"a": torch.ones(5), "n": {"c": torch.ones(3)}}, []),
+            ]
+        )
+        for key in ("a", ("n", "c")):
+            with pytest.warns(
+                DeprecationWarning,
+                match=r"^LazyStackedTensorDict\.get_nestedtensor\(\) is deprecated "
+                r"and will be removed in TensorDict 0\.17\. Use "
+                r"get\(key, as_nested_tensor=True\) instead\.$",
+            ) as record:
+                nested = td.get_nestedtensor(key)
+            # one warning, also for nested keys
+            record = [w for w in record if w.category is DeprecationWarning]
+            assert len(record) == 1
+            assert record[0].filename == __file__
+            assert nested.layout == torch.strided
+            expected = td.get(key, as_nested_tensor=True, layout=torch.strided)
+            for t1, t2 in zip(nested.unbind(), expected.unbind()):
+                assert (t1 == t2).all()
 
     @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
     def test_to_mds(self, tmpdir):
@@ -1019,6 +1118,8 @@ class TestLazyStackedTensorDict:
         dense = TensorDict(
             {
                 "a": torch.arange(24.0).view(3, 4, 2),
+                # torch casts a written scalar to the dtype of the entry
+                "c": torch.arange(24).view(3, 4, 2),
                 "nested": {"b": torch.arange(48.0).view(3, 4, 2, 2)},
             },
             [3, 4, 2],
@@ -1047,6 +1148,20 @@ class TestLazyStackedTensorDict:
             lazy.update_at_(value, index)
             dense.update_at_(value, index)
         assert (lazy.to_tensordict() == dense).all()
+
+    def test_lazy_setitem_scalar_unbatched(self):
+        # each member writes a scalar as it is, also into an entry that the
+        # batch dims don't index
+        tds = [
+            TensorDict({"a": torch.zeros(2), "u": UnbatchedTensor(torch.zeros(5))}, [2])
+            for _ in range(3)
+        ]
+        lazy = lazy_stack(tds)
+        lazy[1] = 5.0
+        lazy[[0, 2]] = torch.tensor(4.0)
+        for td, value in zip(tds, (4.0, 5.0, 4.0)):
+            assert (td["a"] == value).all()
+            assert (td["u"] == value).all()
 
     def test_lazy_mask_indexing_single(self):
         td = LazyStackedTensorDict(
@@ -2090,6 +2205,11 @@ class TestLazyStackedTensorDict:
         stack = NonTensorStack(*[NonTensorStack("a", "b") for _ in range(3)])
         empty = stack[torch.zeros(3, dtype=torch.bool)]
         assert empty.batch_size == torch.Size([0, 2])
+        # an N-D index that selects nothing keeps the other dims of the block
+        index = torch.zeros(2, 0, dtype=torch.long)
+        for idx in ((index,), (index, index), (slice(None), index)):
+            expected = torch.zeros(stack.batch_size)[idx].shape
+            assert stack[idx].batch_size == expected
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
     def test_lazy_empty_selection_non_tensor_entries(self, stack_dim):

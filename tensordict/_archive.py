@@ -17,6 +17,7 @@ produces a directory that :meth:`~tensordict.TensorDictBase.load_memmap`
 accepts, and ``zip -0 -r`` over an existing memmap directory produces a
 loadable archive (unaligned entries silently fall back to a copying read).
 """
+
 from __future__ import annotations
 
 import io
@@ -32,7 +33,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
 
 import torch
-
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import _zip_strict
 
@@ -464,7 +464,7 @@ class _ArchiveReader:
         self.writable = writable
         if writable and not os.access(self.path, os.W_OK):
             raise PermissionError(
-                f"Cannot open {self.path} with mode='r+': the file is not " f"writable."
+                f"Cannot open {self.path} with mode='r+': the file is not writable."
             )
         self._zf = zipfile.ZipFile(self.path)
         self.entries: dict[str, _ArchiveEntry] = {}
@@ -754,8 +754,7 @@ def _memmap_tensor_from_path(
 def _check_archive_target(archive_path: Path, existsok: bool) -> None:
     if archive_path.is_dir():
         raise ValueError(
-            f"Cannot write an archive at {archive_path}: it is an existing "
-            f"directory."
+            f"Cannot write an archive at {archive_path}: it is an existing directory."
         )
     if archive_path.exists() and not existsok:
         raise RuntimeError(

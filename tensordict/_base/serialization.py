@@ -30,6 +30,7 @@ from tensordict._archive import (
     is_memmap_archive,
     TENSORDICT_ARCHIVE_SUFFIX,
 )
+from tensordict._deprecation import deprecated
 from tensordict._nestedkey import NestedKey
 from tensordict.base import (
     _is_tensor_collection,
@@ -615,7 +616,7 @@ class _Serialization:
         else:
             # Convert the dict to json
             try:
-                from tensordict.utils import json_dumps
+                from tensordict._utils_key_json import json_dumps
 
                 metadata_dict_json = json_dumps(metadata_dict)
             except TypeError as e:
@@ -1325,10 +1326,14 @@ class _Serialization:
         """
         return cls.load_memmap(prefix, *args, **kwargs)
 
+    @deprecated("TensorDictBase.load_()", removal="0.17", replacement="load_memmap_()")
     def load_(self, prefix: str | Path, *args, **kwargs):
         """Loads a tensordict from disk within the current tensordict.
 
         This class method is a proxy to :meth:`~.load_memmap_`.
+
+        .. deprecated:: 0.15
+            Use :meth:`~.load_memmap_` instead.
         """
         return self.load_memmap_(prefix, *args, **kwargs)
 
@@ -1503,8 +1508,7 @@ class _Serialization:
                 subpath = _unravel_key_to_tuple(subpath)
                 if not subpath:
                     raise ValueError(
-                        "subpath must be a string path or a (nested) tuple of "
-                        "strings."
+                        "subpath must be a string path or a (nested) tuple of strings."
                     )
             for part in subpath:
                 effective_robust_key = _get_robust_key_setting_with_warning(
@@ -1544,10 +1548,26 @@ class _Serialization:
                 if str(other_cls) == type_name:
                     break
             else:
-                raise RuntimeError(
-                    f"Could not find name {type_name} in {tensordict.base._ACCEPTED_CLASSES}. "
-                    f"Did you call _register_tensor_class(cls) on {type_name}?"
-                )
+                # The saved name includes the module, which differs when the
+                # class was saved from __main__ (a script or a notebook): use
+                # the class load_memmap is called on if its qualname matches.
+                # The module and the qualname cannot be told apart in general,
+                # but __main__ is never a package and no module path contains
+                # "<locals>".
+                saved_name = type_name.removeprefix("<class '").removesuffix("'>")
+                saved_module = saved_name.removesuffix(f".{cls.__qualname__}")
+                if (
+                    saved_module == saved_name
+                    or saved_module.startswith("__main__.")
+                    or "<locals>" in saved_module
+                ):
+                    raise RuntimeError(
+                        f"Could not find the class {saved_name} saved in "
+                        f"{prefix}. Import the module that defines it, or call "
+                        f"{saved_name.rpartition('.')[2]}.load_memmap() instead "
+                        f"of {cls.__qualname__}.load_memmap()."
+                    )
+                other_cls = cls
         else:
             other_cls = cls
         load_kwargs = {

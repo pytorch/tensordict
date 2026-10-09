@@ -14,7 +14,6 @@ Usage (2-node cluster via torchrun)::
 import pytest
 import torch
 import torch.distributed as dist
-
 from tensordict import TensorDict
 
 _DIST_AVAILABLE = dist.is_available()
