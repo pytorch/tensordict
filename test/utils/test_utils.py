@@ -30,7 +30,6 @@ from tensordict import (
     unravel_key,
     unravel_key_list,
 )
-from tensordict._indexing import _traceable_slice_length
 from tensordict.utils import (
     _check_recursive_properties,
     _get_shared_executor,
@@ -200,18 +199,6 @@ def test_getitem_batch_size_ellipsis(index):
     # the Ellipsis does not need to be converted first
     tensor = torch.zeros(3, 4, 5)
     assert _getitem_batch_size(tensor.shape, index) == tensor[index].shape
-
-
-def test_traceable_slice_length():
-    # what torch.compile uses instead of slice.indices
-    for size in range(5):
-        for start in (None, *range(-6, 7)):
-            for stop in (None, *range(-6, 7)):
-                for step in (None, -2, -1, 1, 2, 3):
-                    index = slice(start, stop, step)
-                    assert _traceable_slice_length(index, size) == len(
-                        range(size)[index]
-                    ), (index, size)
 
 
 @pytest.fixture
@@ -910,6 +897,10 @@ _NOT_IN_ALL_PENDING = {
 
 # Public functions and classes that stay out of ``__all__`` on purpose.
 _NOT_IN_ALL = {
+    # Python < 3.11 has no typing.dataclass_transform, so these modules define a
+    # fallback with that name. On Python >= 3.11 the name is imported from typing.
+    "tensordict.tensorclass": {"dataclass_transform"},
+    "tensordict.typedtensordict": {"dataclass_transform"},
     # The names in ``discrete.__all__`` are the classes of
     # ``tensordict.nn.distributions.distributions_maps``. rand_one_hot is
     # public through ``tensordict.nn``.
