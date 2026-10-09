@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import gc
 import importlib.util
+import inspect
 import os
 import pickle
 import platform
@@ -20,7 +21,7 @@ from collections import UserDict
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, get_type_hints
 
 import numpy as np
 import pytest
@@ -2416,6 +2417,26 @@ class TestGeneric:
 
         with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
             td.set("b", torch.randn(4, 5), inplace=True, non_blocking=False)
+
+    def test_mixin_method_annotations(self):
+        # The mixins under tensordict/_base/ import TensorDictBase for type
+        # checking only. Annotations that name it must still resolve at run
+        # time, as they did when these methods were defined in tensordict.base.
+        unresolved = {}
+        for mixin in tensordict_base._TENSORDICTBASE_MIXINS:
+            for name, attr in vars(mixin).items():
+                func = getattr(attr, "__func__", attr)
+                if name.startswith("_") or not inspect.isfunction(func):
+                    continue
+                try:
+                    get_type_hints(func)
+                except NameError as err:
+                    if err.name in vars(tensordict_base):
+                        unresolved[name] = err.name
+                except TypeError:
+                    # Annotations such as "str" | None fail for other reasons.
+                    pass
+        assert not unresolved, unresolved
 
     @pytest.mark.parametrize("dist_of_callables", [False, True])
     def test_merge_tensordicts(self, dist_of_callables):
