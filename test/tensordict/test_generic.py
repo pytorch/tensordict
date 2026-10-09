@@ -9,6 +9,7 @@ import contextlib
 import gc
 import importlib.util
 import os
+import pickle
 import platform
 import re
 import sys
@@ -29,10 +30,11 @@ from tensordict import (
     lazy_stack,
     LazyStackedTensorDict,
     set_capture_non_tensor_stack,
-    tensorclass,
     TensorClass,
+    tensorclass,
     TensorDict,
 )
+from tensordict._indexing import convert_ellipsis_to_idx
 from tensordict._td import is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _NESTED_TENSORS_AS_LISTS, TensorDictBase
@@ -43,7 +45,6 @@ from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
     assert_allclose_td,
-    convert_ellipsis_to_idx,
     is_non_tensor,
     is_tensorclass,
     set_lazy_legacy,
@@ -58,6 +59,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
     from pytorch.tensordict.test._utils_internal import (
         decompose,
+        DummyPicklableClass,
         get_available_devices,
         is_npu_available,
         legacy_lazy_mode,
@@ -67,6 +69,7 @@ else:
     IS_FB = False
     from _utils_internal import (
         decompose,
+        DummyPicklableClass,
         get_available_devices,
         is_npu_available,
         legacy_lazy_mode,
@@ -454,9 +457,9 @@ class TestGeneric:
         filename = Path(tmpdir) / "file.pkl"
         if not nested:
             torch.save(td, filename)
-            assert (
-                td == torch.load(filename, weights_only=False)
-            ).all(), td_c.to_dict()
+            assert (td == torch.load(filename, weights_only=False)).all(), (
+                td_c.to_dict()
+            )
         else:
             pass
             # wait for https://github.com/pytorch/pytorch/issues/129366 to be resolved
@@ -468,9 +471,9 @@ class TestGeneric:
         td_c = td.consolidate()
         torch.save(td_c, filename)
         if not nested:
-            assert (
-                td == torch.load(filename, weights_only=False)
-            ).all(), td_c.to_dict()
+            assert (td == torch.load(filename, weights_only=False)).all(), (
+                td_c.to_dict()
+            )
         else:
             assert all(
                 (_td == _td_c).all()
@@ -1822,6 +1825,12 @@ class TestGeneric:
             td[index] = 1.0
         with pytest.raises(IndexError, match="NumPy bool"):
             td[index] = TensorDict({"a": torch.ones(4)}, [4])
+        with pytest.raises(IndexError, match="NumPy bool"):
+            td.get_at("a", index)
+        with pytest.raises(IndexError, match="NumPy bool"):
+            td.set_at_("a", 1.0, index)
+        with pytest.raises(IndexError, match="NumPy bool"):
+            td.copy_at_(TensorDict({"a": torch.ones(4)}, [4]), index)
         assert (td["a"] == 0).all()
         # a list of NumPy bools is a mask, as in torch
         assert td[[np.True_, np.False_, np.True_]].batch_size == torch.Size([2, 4])
@@ -2042,6 +2051,71 @@ class TestGeneric:
         sd_kept = td.state_dict(keep_vars=True)
         assert sd_kept["a"].requires_grad
         assert sd_kept["a"].data_ptr() == t.data_ptr()
+
+    @pytest.mark.parametrize(
+        "make_td",
+        [
+            lambda: TensorDict(
+                a=torch.randn(3, 4),
+                b={"c": torch.zeros(3, dtype=torch.int64)},
+                batch_size=[3],
+            ),
+            lambda: TensorDict(
+                a=torch.randn(3), b={"c": torch.zeros(3)}, batch_size=[3]
+            ).lock_(),
+            lambda: TensorDict(
+                a=torch.randn(3, 4), batch_size=[3, 4], names=["x", "y"]
+            ),
+            lambda: TensorDict(
+                a=torch.randn(3), b={"c": "text"}, batch_size=[3]
+            ).consolidate(),
+            lambda: lazy_stack(
+                [TensorDict(a=torch.randn(3)), TensorDict(a=torch.randn(4))]
+            ),
+            lambda: TensorDict(
+                s="text",
+                i=NonTensorData(1),
+                l=NonTensorData([1, "a"]),
+                d=NonTensorData({"k": 0.5}),
+            ),
+            lambda: TensorDict(
+                a=torch.zeros(2), s=NonTensorStack("x", "y"), batch_size=[2]
+            ),
+        ],
+        ids=[
+            "nested",
+            "locked",
+            "named",
+            "consolidated",
+            "lazy_stack",
+            "non_tensor",
+            "non_tensor_stack",
+        ],
+    )
+    def test_torch_load_weights_only(self, make_td, tmpdir):
+        td = make_td()
+        filename = Path(tmpdir) / "td.pt"
+        torch.save(td, filename)
+        td_load = torch.load(filename, weights_only=True)
+        assert type(td_load) is type(td)
+        assert td_load.batch_size == td.batch_size
+        assert td_load.names == td.names
+        assert (td_load == td).all()
+
+    @pytest.mark.parametrize(
+        "payload", [np.zeros(2), DummyPicklableClass(0)], ids=["numpy", "custom_class"]
+    )
+    def test_torch_load_weights_only_unlisted_payload(self, payload, tmpdir):
+        # tensordict only allowlists its own classes: loading stops at the
+        # payload's class, which the user has to allowlist.
+        td = TensorDict(a=torch.zeros(3), s=NonTensorData(payload), batch_size=[3])
+        filename = Path(tmpdir) / "td.pt"
+        torch.save(td, filename)
+        module = re.escape(type(payload).__module__)
+        with pytest.raises(
+            pickle.UnpicklingError, match=f"Unsupported global: GLOBAL {module}"
+        ):
+            torch.load(filename, weights_only=True)
 
     def test_make_memmap(self, tmpdir):
         td = TensorDict()
@@ -4048,6 +4122,24 @@ class TestGeneric:
         with pytest.raises(ValueError, match="split_size must be positive, got -1."):
             td.split(-1, -1)
 
+    def test_tensor_split_invalid_tensor(self):
+        td = TensorDict({"a": torch.zeros(5)}, [5])
+        for indices in (
+            torch.tensor([1.0]),
+            torch.tensor([1], dtype=torch.int32),
+            torch.tensor([[1]]),
+        ):
+            with pytest.raises(ValueError, match="long tensor on the CPU"):
+                td.tensor_split(indices)
+
+    @pytest.mark.parametrize("indices", [[2], [3, 1]], ids=["asc", "desc"])
+    def test_tensor_split_locked_views(self, indices):
+        td = TensorDict({"a": torch.arange(5)}, [5]).lock_()
+        chunks = td.tensor_split(indices)
+        assert all(chunk.is_locked for chunk in chunks)
+        chunks[-1]["a"].zero_()
+        assert (td["a"][indices[-1] :] == 0).all()
+
     def test_split_with_negative_dim(self):
         td = TensorDict(
             {"a": torch.zeros(5, 4, 2, 1), "b": torch.zeros(5, 4, 1)}, [5, 4]
@@ -4406,15 +4498,15 @@ class TestGeneric:
         td_select._check_batch_size()
 
         td_reconstruct = stack_td(list(td), 0, contiguous=False)
-        assert (
-            td_reconstruct == td
-        ).all(), f"td and td_reconstruct differ, got {td} and {td_reconstruct}"
+        assert (td_reconstruct == td).all(), (
+            f"td and td_reconstruct differ, got {td} and {td_reconstruct}"
+        )
 
         superlist = [stack_td(list(_td), 0, contiguous=False) for _td in td]
         td_reconstruct = stack_td(superlist, 0, contiguous=False)
-        assert (
-            td_reconstruct == td
-        ).all(), f"td and td_reconstruct differ, got {td == td_reconstruct}"
+        assert (td_reconstruct == td).all(), (
+            f"td and td_reconstruct differ, got {td == td_reconstruct}"
+        )
 
         x = torch.randn(4, 5, device=device)
         td = TensorDict(
@@ -4759,9 +4851,9 @@ class TestGeneric:
         }
         td = TensorDict(batch_size=(4, 5), source=d)
         td_unbind = torch.unbind(td, dim=1)
-        assert (
-            td_unbind[0].batch_size == td[:, 0].batch_size
-        ), f"got {td_unbind[0].batch_size} and {td[:, 0].batch_size}"
+        assert td_unbind[0].batch_size == td[:, 0].batch_size, (
+            f"got {td_unbind[0].batch_size} and {td[:, 0].batch_size}"
+        )
 
     @pytest.mark.parametrize("stack", [True, False])
     @pytest.mark.parametrize("todict", [True, False])
