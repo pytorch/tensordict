@@ -419,6 +419,25 @@ class TestNonTensorData:
         assert gathered.tolist() == ["jump", "hop", "walk"]
         assert stack.tolist() == ["walk", "jump", "stand"]
 
+    @pytest.mark.parametrize("invalid", [-1, 3])
+    def test_gather_non_tensor_stack_invalid_index(self, invalid):
+        # torch.gather rejects negative and out-of-range indices
+        stack = NonTensorStack.from_list([[0, 1, 2], [3, 4, 5]])
+        index = torch.tensor([[invalid, 0, 1], [0, 0, 0]])
+        with pytest.raises(RuntimeError, match="out of bounds"):
+            torch.gather(stack, 1, index)
+
+    def test_gather_non_tensor_stack_smaller_index(self):
+        # as with torch.gather, the index may be smaller than the input on the
+        # dims that are not gathered
+        values = [[0, 1, 2], [3, 4, 5]]
+        stack = NonTensorStack.from_list(values)
+        for dim, index in ((1, torch.tensor([[2, 0]])), (0, torch.tensor([[1, 0]]))):
+            expected = torch.gather(torch.tensor(values), dim, index)
+            gathered = torch.gather(stack, dim, index)
+            assert gathered.batch_size == expected.shape
+            assert gathered.tolist() == expected.tolist()
+
     @pytest.mark.parametrize("capture", [False, True])
     @pytest.mark.parametrize("dim", [0, 1, -1])
     @pytest.mark.parametrize("stacked", [(False, False), (False, True), (True, False)])

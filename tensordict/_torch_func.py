@@ -200,26 +200,18 @@ def _gather(
         return out
 
     def _gather_non_tensor_stack(stack):
-        # A non-tensor stack has no tensor leaves to gather. Select its entries with
-        # the equivalent advanced index instead, which copies the values themselves.
-        coords = list(
-            torch.meshgrid(
-                *[torch.arange(n, device=index.device) for n in index.shape],
-                indexing="ij",
-            )
-        )
-        coords[dim] = index
-        if 0 < stack.stack_dim < len(coords):
-            # Advanced indexing of a lazy stack expects the stack dim first, so
-            # bring it to the front and reorder the coordinates accordingly. The
-            # indexed dims all lead and are replaced by the index shape, so this
-            # permutation does not change the result layout.
-            dims = [stack.stack_dim] + [
-                d for d in range(len(coords)) if d != stack.stack_dim
-            ]
-            coords = [coords[d] for d in dims]
-            stack = stack.permute(dims + list(range(len(coords), stack.ndim)))
-        return stack[tuple(coords)]
+        # A non-tensor stack has no tensor leaves to gather. Gather the position of
+        # each entry instead, then select the entries at those positions, which
+        # copies the values themselves. _gather_tensor expands the index to the
+        # leaf shape on every non-gather dim; only expand the trailing dims the
+        # index lacks, so that a bare stack follows torch.gather.
+        positions = stack._positions().to(index.device)
+        index_expand = index
+        while index_expand.ndim < positions.ndim:
+            index_expand = index_expand.unsqueeze(-1)
+        target_shape = list(index.shape) + list(positions.shape[index.ndim :])
+        index_expand = index_expand.expand(target_shape)
+        return stack._select_positions(torch.gather(positions, dim, index_expand))
 
     def _process_gather_value(value):
         if _is_unbatched(value):
