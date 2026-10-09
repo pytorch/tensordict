@@ -118,10 +118,10 @@ Options and utilities:
 - `prototype/fx.py`: `symbolic_trace` for tensordict modules.
 - `testing.py`: tensorclasses that the distributed tests import by name.
 
-The C++ extension: `csrc/` holds the pybind11 source of `tensordict._C`
-(`unravel_key`, `unravel_key_list`, `_unravel_key_to_tuple`). `setup.py`
-builds it with CMake, `_C/__init__.pyi` is its stub, and `utils.py` imports
-from it.
+`tensordict` is pure Python. `_C/` keeps the module path `tensordict._C`,
+which was a C++ extension, as a deprecated re-export of the nested-key
+helpers of `utils.py` (`unravel_key`, `unravel_key_list`,
+`_unravel_key_to_tuple`).
 
 Compatibility: `tensordict.py` keeps the old import path
 `tensordict.tensordict`, which TorchRL's tests still import.
