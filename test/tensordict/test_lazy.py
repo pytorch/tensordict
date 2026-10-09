@@ -1689,6 +1689,78 @@ class TestLazyStackedTensorDict:
         tensor = getattr(td, reduction)(dim="feature", reduce=True)
         assert tensor.shape == td.shape
 
+    @staticmethod
+    def _reduce_tds(stack_dim):
+        dense = TensorDict(
+            a=torch.rand(2, 3, 4),
+            nested=TensorDict(b=torch.rand(2, 3, 4), batch_size=[2, 3]),
+            batch_size=[2, 3],
+        )
+        return dense, lazy_stack(dense.unbind(stack_dim), stack_dim)
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [{}, {"dim": 0}, {"dim": 1}, {"dim": 1, "keepdim": True}, {"dim": "feature"}],
+        ids=["no-dim", "dim0", "dim1", "dim1-keepdim", "feature"],
+    )
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize(
+        "reduction",
+        [
+            "sum",
+            "nansum",
+            "mean",
+            "nanmean",
+            "prod",
+            "std",
+            "var",
+            "amax",
+            "amin",
+            "quantile",
+        ],
+    )
+    def test_reduction_reduce_true(self, reduction, stack_dim, kwargs):
+        # with reduce=True, a lazy stack gives the tensor of its dense copy
+        dense, lazy = self._reduce_tds(stack_dim)
+        args = (0.5,) if reduction == "quantile" else ()
+        torch.testing.assert_close(
+            getattr(lazy, reduction)(*args, reduce=True, **kwargs),
+            getattr(dense, reduction)(*args, reduce=True, **kwargs),
+        )
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_reduction_reduce_true_max_min(self, stack_dim):
+        # max and min without a dim, cummax and cummin along a batch dim
+        dense, lazy = self._reduce_tds(stack_dim)
+        for reduction in ("max", "min"):
+            torch.testing.assert_close(
+                getattr(lazy, reduction)(reduce=True),
+                getattr(dense, reduction)(reduce=True),
+            )
+        # the (values, indices) named tuples are compared item by item
+        for reduction in ("cummax", "cummin"):
+            for dim in (0, 1):
+                torch.testing.assert_close(
+                    getattr(lazy, reduction)(dim, reduce=True),
+                    getattr(dense, reduction)(dim, reduce=True),
+                )
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize(
+        "reduction",
+        ["sum", "nansum", "mean", "nanmean", "std", "var", "amax", "amin", "quantile"],
+    )
+    def test_reduction_reduce_true_dim_none(self, reduction, stack_dim):
+        # dim=None reduces all the dims, as a call without a dim does
+        dense, lazy = self._reduce_tds(stack_dim)
+        args = (0.5,) if reduction == "quantile" else ()
+        expected = getattr(dense, reduction)(*args, reduce=True)
+        for kwargs in ({}, {"keepdim": False}):
+            torch.testing.assert_close(
+                getattr(lazy, reduction)(*args, dim=None, reduce=True, **kwargs),
+                expected,
+            )
+
     @set_list_to_stack(True)
     def test_set_list_stack(self):
         td = LazyStackedTensorDict(TensorDict(), TensorDict())

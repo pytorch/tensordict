@@ -2863,7 +2863,10 @@ class LazyStackedTensorDict(TensorDictBase):
         further_reduce: bool,
         **kwargs,
     ):
-        if further_reduce:
+        if further_reduce and (dim is NO_DEFAULT or dim is None or dim == "feature"):
+            # Options for a tensordict result, which torch doesn't take
+            for key in ("values_only", "call_on_nested", "batch_size"):
+                kwargs.pop(key, None)
             if dim is NO_DEFAULT:
                 # It is not very memory-efficient to do this, but it's the easiest to cover all use cases
                 agglomerate = [
@@ -2895,16 +2898,19 @@ class LazyStackedTensorDict(TensorDictBase):
                 cat_dim = -1
                 keepdim = False
             else:
+                # dim=None reduces all dims, including the new one the leaves
+                # are stacked on
                 agglomerate = [
                     val.contiguous().unsqueeze(self.stack_dim)
                     for val in self.values(True, True)
                 ]
                 cat_dim = self.stack_dim
+            if keepdim is not NO_DEFAULT:
+                kwargs["keepdim"] = keepdim
             agglomerate = torch.cat(agglomerate, dim=cat_dim)
-            return getattr(torch, reduction_name)(
-                agglomerate, dim=dim, keepdim=keepdim, **kwargs
-            )
+            return getattr(torch, reduction_name)(agglomerate, dim=dim, **kwargs)
 
+        # Reduce a dense copy, also for reduce=True with an int or tuple dim
         try:
             td: TensorDict = self.to_tensordict()
         except Exception:
