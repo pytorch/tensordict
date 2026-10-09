@@ -79,7 +79,6 @@ from tensordict.utils import (
     _maybe_correct_neg_dim,
     _parse_to,
     _recursive_unbind_list,
-    _renamed_inplace_method,
     _REPR_OPTIONS,
     _shape,
     _td_fields,
@@ -3472,8 +3471,6 @@ class LazyStackedTensorDict(TensorDictBase):
             td.rename_key_(old_key, new_key, safe=safe)
         return self
 
-    rename_key = _renamed_inplace_method(rename_key_)
-
     def where(
         self,
         condition: Tensor,
@@ -4036,10 +4033,8 @@ class LazyStackedTensorDict(TensorDictBase):
         return self.split(splits, dim)
 
     lock_ = TensorDictBase.lock_
-    lock = _renamed_inplace_method(lock_)
 
     unlock_ = TensorDictBase.unlock_
-    unlock = _renamed_inplace_method(unlock_)
 
     _index_tensordict = TensorDict._index_tensordict
 
@@ -4388,8 +4383,6 @@ class _CustomOpTensorDict(TensorDictBase):
         self._source.rename_key_(old_key, new_key, safe=safe)
         return self
 
-    rename_key = _renamed_inplace_method(rename_key_)
-
     @lock_blocked
     def del_(self, key: NestedKey) -> _CustomOpTensorDict:
         self._source = self._source.del_(key)
@@ -4653,9 +4646,6 @@ class _CustomOpTensorDict(TensorDictBase):
     @erase_cache
     def _propagate_unlock(self):
         return self._source._propagate_unlock()
-
-    lock = _renamed_inplace_method(lock_)
-    unlock = _renamed_inplace_method(unlock_)
 
     def __del__(self):
         pass

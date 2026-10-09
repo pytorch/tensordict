@@ -25,7 +25,11 @@ from typing import (
 
 import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
-from functorch import FunctionalModule, FunctionalModuleWithBuffers
+from functorch import (
+    FunctionalModule as _FunctionalModule,
+    FunctionalModuleWithBuffers as _FunctionalModuleWithBuffers,
+)
+from tensordict._deprecation import deprecated, deprecated_attributes
 from tensordict._td import TensorDict
 from tensordict.base import is_tensor_collection, NO_DEFAULT, TensorDictBase
 from tensordict.functional import make_tensordict
@@ -357,7 +361,14 @@ class dispatch:
 
         return wrapper
 
+    @deprecated("dispatch.get_source()", removal="0.17")
     def get_source(self, func, self_func):
+        """Returns the input keys that ``source`` points to.
+
+        .. deprecated:: 0.15
+            This method will be removed in TensorDict 0.17. It has no
+            replacement.
+        """
         source = self.source
         if isinstance(source, str):
             return getattr(self_func, source)
@@ -1099,10 +1110,18 @@ class TensorDictModule(TensorDictModuleBase):
         self._get_kwargs = get_kwargs if get_kwargs is not None else {}
 
     @property
+    @deprecated("TensorDictModule.is_functional", removal="0.17")
     def is_functional(self) -> bool:
+        """Whether the wrapped module is a legacy functorch functional module.
+
+        .. deprecated:: 0.15
+            This property will be removed in TensorDict 0.17. It only checks
+            for the ``FunctionalModule`` classes of the legacy
+            ``functorch.make_functional`` API and has no replacement.
+        """
         return isinstance(
             self.module,
-            (FunctionalModule, FunctionalModuleWithBuffers),
+            (_FunctionalModule, _FunctionalModuleWithBuffers),
         )
 
     def _write_to_tensordict(
@@ -1517,3 +1536,16 @@ class as_tensordict_module:
                 return tdmodule(*args, **kwargs)
 
         return wrapped
+
+
+__getattr__ = deprecated_attributes(
+    __name__,
+    {
+        "FunctionalModule": (_FunctionalModule, "functorch.FunctionalModule"),
+        "FunctionalModuleWithBuffers": (
+            _FunctionalModuleWithBuffers,
+            "functorch.FunctionalModuleWithBuffers",
+        ),
+    },
+    removal="0.17",
+)

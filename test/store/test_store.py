@@ -492,6 +492,22 @@ class TestTensorDictStore:
             td.clear_redis()
             td.close()
 
+    def test_names_setter_keeps_nested_trailing_name(self, store_kwargs):
+        """Setting or clearing the parent names keeps the child's own names."""
+        source = TensorDict(
+            {"agents": TensorDict({"obs": torch.zeros(2, 3, 4)}, [2, 3])}, [2]
+        )
+        td = TensorDictStore.from_tensordict(source, **store_kwargs)
+        try:
+            td["agents"].names = [None, "agent"]
+            td.names = ["batch"]
+            assert td["agents"].names == ["batch", "agent"]
+            td.names = None
+            assert td["agents"].names == [None, "agent"]
+        finally:
+            td.clear_redis()
+            td.close()
+
     def test_from_store(self, store_kwargs):
         """Test from_store: reconnect to existing data by td_id."""
 
