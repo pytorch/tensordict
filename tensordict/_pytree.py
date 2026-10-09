@@ -10,7 +10,10 @@ from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import _SubTensorDict, TensorDict, TensorDictBase
 from tensordict.base import _NESTED_TENSORS_AS_LISTS
 from tensordict.persistent import PersistentTensorDict
-from tensordict.utils import _shape, is_compiling
+
+# implement_for stays importable from here for the deprecated
+# tensordict.implement_for alias of tensordict/__init__.py, until 0.17.
+from tensordict.utils import _shape, implement_for, is_compiling  # noqa: F401
 from torch.utils._pytree import Context, MappingKey, register_pytree_node
 
 PYTREE_REGISTERED_TDS = (
