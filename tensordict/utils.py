@@ -627,10 +627,15 @@ _TENSORCLASS_MEMO = {}
 
 
 def _is_tensorclass(cls: type) -> bool:
-    out = _TENSORCLASS_MEMO.get(cls)
+    # Under Dynamo the memo is not read: a lookup that misses guards on all the
+    # keys of the memo, so any class memoized later in eager would recompile.
+    is_dynamo = is_compiling()
+    out = None
+    if not is_dynamo:
+        out = _TENSORCLASS_MEMO.get(cls)
     if out is None:
         out = getattr(cls, "_is_tensorclass", False)
-        if not is_compiling():
+        if not is_dynamo:
             _TENSORCLASS_MEMO[cls] = out
     return out
 

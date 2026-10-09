@@ -43,7 +43,6 @@ from typing import (
 )
 
 import numpy as np
-import tensordict as tensordict_lib
 import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
@@ -54,6 +53,7 @@ from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _GET_DEFAULTS_TO_NONE,
+    _is_accepted_class,
     _is_leaf_nontensor,
     _is_tensor_collection,
     _register_tensor_class,
@@ -77,7 +77,6 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     DeviceType,
     IndexType,
     is_tensorclass,
-    KeyDependentDefaultDict,
     LinkedList,
     list_to_stack,
     set_capture_non_tensor_stack,
@@ -1317,10 +1316,6 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     # faster than doing instance checks
     cls._is_non_tensor = _is_non_tensor
     cls._is_tensorclass = True
-
-    from tensordict import _pytree
-
-    _pytree._CONSTRUCTORS[cls] = _pytree._tensorclass_constructor
     return cls
 
 
@@ -1644,9 +1639,15 @@ def _init_wrapper(
     return wrapper
 
 
-_cast_funcs = KeyDependentDefaultDict(_identity)
-_cast_funcs[torch.Tensor] = torch.as_tensor
-_cast_funcs[np.ndarray] = np.asarray
+def _cast_func(cls: type) -> Callable:
+    """Returns the function that casts a value to the type annotation ``cls``."""
+    # Not a module-level dict: Dynamo guards on all the keys of a global dict
+    # read with a non-constant key, so a new type cast in eager would recompile.
+    if cls is torch.Tensor:
+        return torch.as_tensor
+    if cls is np.ndarray:
+        return np.asarray
+    return cls
 
 
 def _new_unsafe(cls, *args, **kwargs) -> T:
@@ -2948,15 +2949,13 @@ def _set(
                     return self
                 elif type_hints is None:
                     warnings.warn(type(self)._set_dict_warn_msg)
-            elif value is not None and issubclass(
-                target_cls, tuple(tensordict_lib.base._ACCEPTED_CLASSES)
-            ):
+            elif value is not None and _is_accepted_class(target_cls):
                 try:
                     if not issubclass(value_type, target_cls):
                         if issubclass(target_cls, torch.Tensor):
                             # first convert to tensor to make sure that the dtype is preserved
                             value = torch.as_tensor(value)
-                        cast_val = _cast_funcs[target_cls](value)
+                        cast_val = _cast_func(target_cls)(value)
                     else:
                         cast_val = value
                 except TypeError:
@@ -2965,7 +2964,7 @@ def _set(
                     )
                 return set_tensor(value=cast_val)
             elif value is not None and target_cls is not _AnyType:
-                cast_val = _cast_funcs[target_cls](value)
+                cast_val = _cast_func(target_cls)(value)
                 return set_tensor(value=cast_val, non_tensor=True)
             elif target_cls is _AnyType and _is_castable(value_type):
                 return set_tensor()

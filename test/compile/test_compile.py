@@ -23,6 +23,8 @@ from packaging import version
 from tensordict import (
     assert_close,
     from_dataclass,
+    is_tensor_collection,
+    lazy_stack,
     NonTensorData,
     tensorclass,
     TensorDict,
@@ -56,7 +58,7 @@ from tensordict.utils import (
 )
 
 from torch._dynamo.testing import CompileCounterWithBackend
-from torch.utils._pytree import SUPPORTED_NODES, tree_map
+from torch.utils._pytree import SUPPORTED_NODES, tree_flatten, tree_map, tree_unflatten
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
@@ -2664,6 +2666,130 @@ class TestGuardCount:
         assert second == 1, (
             "Mixing eager-built and compile-built TDs recompiled: " f"{second} frames"
         )
+
+    def test_new_type_in_eager_no_recompile(self):
+        # The type predicates must not read their memo under Dynamo: a lookup
+        # that misses guards on all the keys of the memo, which grows each
+        # time eager code checks a new type.
+        def fn(td):
+            return td.apply(lambda x: x + 1)
+
+        td = TensorDict(a=torch.randn(4), b=torch.randn(4, 3), batch_size=[4])
+        torch._dynamo.reset_code_caches()
+        cnt = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=cnt, fullgraph=True)
+        compiled(td)
+        for i in range(3):
+            is_tensor_collection(type(f"_NewType{i}", (), {}))
+            compiled(td)
+        assert cnt.frame_count == 1, f"Recompilation detected: {cnt.frame_count}"
+
+    @pytest.mark.parametrize("op", ["set_scalar", "update_at_", "autocast"])
+    def test_new_tensorclass_in_eager_no_recompile(self, op):
+        # Defining a tensorclass rebinds tensordict.base._ACCEPTED_CLASSES,
+        # which compiled frames must not guard on.
+        @tensorclass(autocast=True)
+        class AutoCast:
+            x: torch.Tensor
+            y: float
+
+        def fn(obj):
+            if op == "set_scalar":
+                obj["c"] = 3.0
+                return obj["a"] + obj["c"]
+            if op == "update_at_":
+                obj.update_at_({"a": torch.ones(())}, 0)
+                return obj["a"] + 1
+            obj.x = [1.0, 2.0, 3.0]
+            obj.y = 2
+            return obj.x + 1
+
+        def make():
+            if op == "set_scalar":
+                return TensorDict(a=torch.zeros(3))
+            if op == "update_at_":
+                return TensorDict(a=torch.zeros(3), batch_size=[3])
+            return AutoCast(x=torch.zeros(3), y=1.0)
+
+        torch._dynamo.reset_code_caches()
+        cnt = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=cnt, fullgraph=True)
+        compiled(make())
+        for i in range(2):
+            tensorclass(
+                type(f"_NewTC{i}", (), {"__annotations__": {"x": torch.Tensor}})
+            )
+            compiled(make())
+        assert cnt.frame_count == 1, f"Recompilation detected: {cnt.frame_count}"
+
+    def test_autocast_new_type_in_eager_no_recompile(self):
+        # Autocasting a field to a type that was never cast to before must not
+        # recompile the compiled frames that autocast.
+        class NewFloat(float):
+            pass
+
+        @tensorclass(autocast=True)
+        class AutoCast:
+            x: torch.Tensor
+
+        @tensorclass(autocast=True)
+        class AutoCastNewFloat:
+            z: NewFloat
+
+        def fn(obj):
+            obj.x = [1.0, 2.0, 3.0]
+            return obj.x + 1
+
+        obj = AutoCast(x=torch.zeros(3))
+        torch._dynamo.reset_code_caches()
+        cnt = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=cnt, fullgraph=True)
+        compiled(obj)
+        assert type(AutoCastNewFloat(z=1.0).z) is NewFloat
+        compiled(obj)
+        assert cnt.frame_count == 1, f"Recompilation detected: {cnt.frame_count}"
+
+    def test_eager_flatten_of_new_td_type_no_recompile(self):
+        # The pytree flatten of a td picks its constructor without a module-level
+        # dict that eager flattens of new td types would grow.
+        class FlatState(TypedTensorDict):
+            x: torch.Tensor
+
+        def fn(td):
+            return tree_map(lambda x: x + 1, td)["a"]
+
+        td = TensorDict(a=torch.zeros(4), batch_size=[4])
+        torch._dynamo.reset_code_caches()
+        cnt = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=cnt, fullgraph=True)
+        compiled(td)
+        leaves, spec = tree_flatten(FlatState(x=torch.zeros(4), batch_size=[4]))
+        assert type(tree_unflatten(leaves, spec)) is FlatState
+        compiled(td)
+        assert cnt.frame_count == 1, f"Recompilation detected: {cnt.frame_count}"
+
+    def test_lazy_del_new_stack_no_recompile(self):
+        # del_ on a lazy stack must not guard on the id() of its members.
+        def make():
+            return lazy_stack(
+                [
+                    TensorDict(a=torch.zeros(3), b=torch.zeros(3), batch_size=[3])
+                    for _ in range(2)
+                ]
+            )
+
+        def fn(td):
+            del td["a"]
+            return td["b"] + 1
+
+        torch._dynamo.reset_code_caches()
+        cnt = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=cnt, fullgraph=True)
+        for _ in range(3):
+            td = make()
+            compiled(td)
+            assert "a" not in td.keys()
+        assert cnt.frame_count == 1, f"Recompilation detected: {cnt.frame_count}"
 
 
 class TestNestedCompileRegion:
