@@ -24,6 +24,7 @@ from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
+from types import NoneType, UnionType
 from typing import (
     AbstractSet,
     Any,
@@ -113,13 +114,6 @@ except ImportError:
 T = TypeVar("T", bound=TensorCollection)
 # We use an abstract AnyType instead of Any because Any isn't recognised as a type for python < 3.10
 major, minor = sys.version_info[:2]
-if (major, minor) < (3, 10):
-    from typing import Union  # noqa
-
-    NonType = type(None)
-    UnionType = type(Union)
-else:
-    from types import NoneType, UnionType
 if (major, minor) < (3, 11):
 
     class _AnyType:

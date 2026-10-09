@@ -89,8 +89,7 @@ uv_pip_install \
   orjson \
   ninja \
   pyvers \
-  packaging \
-  importlib_metadata
+  packaging
 
 # ============================================================================================ #
 # ================================ PyTorch & TensorDict & TorchRL ============================ #

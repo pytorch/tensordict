@@ -97,10 +97,7 @@ from tensordict.nn import (
 
 __version__ = None  # type: ignore
 try:
-    try:
-        from importlib.metadata import version as _dist_version
-    except ImportError:  # pragma: no cover
-        from importlib_metadata import version as _dist_version  # type: ignore
+    from importlib.metadata import version as _dist_version
 
     __version__ = _dist_version("tensordict")
 except Exception:

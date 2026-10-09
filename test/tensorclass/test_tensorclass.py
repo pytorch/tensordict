@@ -15,7 +15,6 @@ import os
 import pathlib
 import pickle
 import re
-import sys
 import weakref
 from collections import UserDict
 from dataclasses import field
@@ -340,10 +339,6 @@ class MyData:
     def stuff(self):
         return self.X + self.y
 
-
-PY8 = sys.version_info >= (3, 8) and sys.version_info < (3, 9)
-PY9 = sys.version_info >= (3, 9) and sys.version_info < (3, 10)
-PY10 = sys.version_info >= (3, 10)
 
 # this slightly convoluted construction of MyData allows us to check that instances of
 # the tensorclass are instances of the original class.
@@ -2466,10 +2461,6 @@ class TestTensorClass:
         assert isinstance(tc2, MyTensorClass)
         assert isinstance(tc2._tensordict, LazyStackedTensorDict)
 
-    # Not working on python 3.9 and below
-    @pytest.mark.skipif(
-        sys.version_info < (3, 10), reason="Not working on python 3.9 and below"
-    )
     @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
     def test_to_mds(self, tmpdir):
         td = LazyStackedTensorDict(
@@ -3374,45 +3365,31 @@ class TestAutoCasting:
         assert isinstance(obj.tensor, torch.Tensor)
         assert isinstance(obj.non_tensor, str)
         assert isinstance(obj.td, TensorDict)
-        if not PY8:
-            assert isinstance(obj.tc, self.ClsAutoCast), (type(obj.tc), type(obj))
-        else:
-            assert isinstance(obj.tc, dict), (type(obj.tc), type(obj))
+        assert isinstance(obj.tc, self.ClsAutoCast), (type(obj.tc), type(obj))
 
         assert isinstance(obj.tc_global, AutoCast), (type(obj.tc), type(obj))
 
-        if not PY8:
-            assert isinstance(obj.tc.tensor, torch.Tensor)
-            assert isinstance(obj.tc.non_tensor, str)
-            assert isinstance(obj.tc.td, TensorDict)
-            assert obj.tc.tc is None
+        assert isinstance(obj.tc.tensor, torch.Tensor)
+        assert isinstance(obj.tc.non_tensor, str)
+        assert isinstance(obj.tc.td, TensorDict)
+        assert obj.tc.tc is None
 
     def test_autocast_or(self):
-        with (
-            pytest.warns(
-                UserWarning, match="This may be caused by annotations that use plain"
-            )
-            if not PY10
-            else contextlib.nullcontext()
-        ):
-            obj = AutoCastOr(
-                tensor=torch.zeros(()),
-                non_tensor="x",
-                td={"a": 0.0},
-                tc={
-                    "tensor": torch.zeros(()),
-                    "non_tensor": "y",
-                    "td": {"b": 0.0},
-                    "tc": None,
-                },
-            )
+        obj = AutoCastOr(
+            tensor=torch.zeros(()),
+            non_tensor="x",
+            td={"a": 0.0},
+            tc={
+                "tensor": torch.zeros(()),
+                "non_tensor": "y",
+                "td": {"b": 0.0},
+                "tc": None,
+            },
+        )
 
         assert isinstance(obj.tensor, torch.Tensor)
         assert isinstance(obj.non_tensor, str)
-        if not PY10:
-            assert not isinstance(obj.td, TensorDict)
-        else:
-            assert isinstance(obj.td, TensorDict)
+        assert isinstance(obj.td, TensorDict)
         assert not isinstance(obj.tc, AutoCast), (type(obj.tc), type(obj))
 
         assert isinstance(obj.tc["tensor"], torch.Tensor)
@@ -4091,7 +4068,6 @@ class TestTensorOnly:
                 b: torch.Tensor
                 c: torch.Tensor | None = None
 
-    @pytest.mark.skipif(PY9, reason="3.9 not supported for type checks")
     def test_wrong_tensor_only(self):
         class TensorOnly(TensorClass["tensor_only"]):
             a: torch.IntTensor
@@ -4135,7 +4111,6 @@ class TestTensorOnly:
                 b: torch.Tensor
                 c: torch.Tensor | Union[torch.IntTensor, str] | None = None  # noqa
 
-    @pytest.mark.skipif(PY9, reason="3.9 not supported for type checks")
     def test_tensor_only_parameterized_generic(self):
         # Regression test for GitHub issue #1658:
         # tensor_only=True should accept parameterized generics like TensorDict[str, Tensor]
