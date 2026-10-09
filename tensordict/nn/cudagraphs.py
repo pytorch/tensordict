@@ -14,7 +14,6 @@ from textwrap import indent
 from typing import Any, Callable, List
 
 import torch
-
 from tensordict._nestedkey import NestedKey
 from tensordict.base import is_tensor_collection, TensorDictBase
 from tensordict.nn.common import dispatch
@@ -23,9 +22,8 @@ from tensordict.nn.functional_modules import (
     PYTREE_REGISTERED_LAZY_TDS,
     PYTREE_REGISTERED_TDS,
 )
-from tensordict.utils import _zip_strict, logger as tensordict_logger, strtobool
+from tensordict.utils import _strtobool, _zip_strict, logger as tensordict_logger
 from torch import Tensor
-
 from torch.utils._pytree import (
     SUPPORTED_NODES,
     tree_flatten,
@@ -33,6 +31,8 @@ from torch.utils._pytree import (
     tree_map,
     tree_unflatten,
 )
+
+__all__ = ["CudaGraphModule"]
 
 
 class CudaGraphModule:
@@ -207,7 +207,7 @@ class CudaGraphModule:
         self_ref = weakref.proxy(self)
         for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
             if tdtype in SUPPORTED_NODES:
-                if not strtobool(os.environ.get("EXCLUDE_TD_FROM_PYTREE", "0")):
+                if not _strtobool(os.environ.get("EXCLUDE_TD_FROM_PYTREE", "0")):
                     warnings.warn(
                         f"Tensordict is registered in PyTree. This is incompatible with {self.__class__.__name__}. "
                         f"Removing TDs from PyTree. To silence this warning, call tensordict.nn.functional_modules._exclude_td_from_pytree().set() "

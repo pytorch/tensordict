@@ -8,7 +8,6 @@ import argparse
 
 import pytest
 import torch
-
 from tensordict import is_tensor_collection, TensorDict
 from tensordict.utils import _unravel_key_to_tuple, unravel_key, unravel_key_list
 
