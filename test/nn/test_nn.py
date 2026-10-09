@@ -3606,6 +3606,56 @@ class TestTensorDictParams:
         td_clone = td.clone()
         assert td_clone["c"] is td_clone["a", "b", "c"]
 
+    @pytest.mark.parametrize("no_convert", [False, True])
+    @pytest.mark.parametrize(
+        "convert",
+        [
+            pytest.param(lambda p: p.to(torch.float64), id="float64"),
+            pytest.param(lambda p: p.to(torch.bfloat16), id="bfloat16"),
+            pytest.param(lambda p: p.to("meta"), id="meta"),
+            pytest.param(lambda p: p.cpu(), id="cpu"),
+            pytest.param(
+                lambda p: p.cuda(),
+                id="cuda",
+                marks=pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="CUDA is not available"
+                ),
+            ),
+        ],
+    )
+    def test_to_keeps_params_and_buffers(self, convert, no_convert):
+        params = TensorDictParams(
+            TensorDict(
+                weight=nn.Parameter(torch.ones(3)),
+                frozen=nn.Parameter(torch.ones(3), requires_grad=False),
+                running_mean=Buffer(torch.zeros(3)),
+                nested=TensorDict(count=Buffer(torch.zeros((), dtype=torch.long))),
+            ),
+            no_convert=no_convert,
+        )
+        converted = convert(params)
+        assert isinstance(converted, TensorDictParams)
+        assert converted.no_convert is no_convert
+        assert dict(converted.named_parameters()).keys() == {"weight", "frozen"}
+        assert dict(converted.named_buffers()).keys() == {
+            "running_mean",
+            "nested.count",
+        }
+        assert converted["weight"].requires_grad
+        assert not converted["frozen"].requires_grad
+        assert not converted["running_mean"].requires_grad
+
+    def test_to_keeps_buffer_graph(self):
+        # A buffer that tracks gradients stays a buffer in the graph after to()
+        weight = nn.Parameter(torch.ones(3))
+        params = TensorDictParams(
+            TensorDict(expanded=weight.expand(2, 3)), no_convert=True
+        )
+        converted = params.to(torch.float64)
+        assert dict(converted.named_buffers()).keys() == {"expanded"}
+        converted["expanded"].sum().backward()
+        torch.testing.assert_close(weight.grad, torch.full_like(weight, 2))
+
     @pytest.mark.parametrize("with_batch", [False, True])
     def test_func_on_tdparams(self, with_batch):
         # tdparams isn't represented in a nested way, so we must check that calling to_module on it works ok
