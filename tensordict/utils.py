@@ -13,7 +13,6 @@ import logging
 import math
 import os
 import re
-import sys
 import threading
 import time
 import warnings
@@ -21,13 +20,13 @@ import weakref
 from collections import defaultdict
 from collections.abc import KeysView
 from contextlib import nullcontext
+from dataclasses import is_dataclass
 from functools import wraps
 from numbers import Number
 from textwrap import indent
 from typing import (
     Any,
     Callable,
-    Iterator,
     List,
     NamedTuple,
     Sequence,
@@ -71,27 +70,14 @@ if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
     from tensordict.tensorclass import NonTensorStack
 
-try:
-    from dataclasses import GenericAlias
-except ImportError:
-    # python < 3.9
-    class GenericAlias:
-        """Placeholder."""
-
-        ...
-
 
 try:
     try:
-        from torch._C._functorch import (  # @manual=fbcode//caffe2:torch
-            get_unwrapped,
-            is_batchedtensor,
-        )
+        from torch._C._functorch import is_batchedtensor  # @manual=fbcode//caffe2:torch
     except ImportError:
-        from functorch._C import (  # @manual=fbcode//caffe2/functorch:_C  # noqa
-            get_unwrapped,
+        from functorch._C import (  # noqa: F401
             is_batchedtensor,
-        )
+        )  # @manual=fbcode//caffe2/functorch:_C
 except ImportError:
     pass
 
@@ -326,20 +312,6 @@ def infer_size_impl(shape: list[int], numel: int) -> list[int]:
     return out
 
 
-def _unwrap_value(value: Tensor) -> Tensor:
-    # batch_dims = value.ndimension()
-    if not isinstance(value, Tensor):
-        out = value
-    elif is_batchedtensor(value):
-        out = get_unwrapped(value)
-    else:
-        out = value
-    return out
-    # batch_dims = out.ndimension() - batch_dims
-    # batch_size = out.shape[:batch_dims]
-    # return out, batch_size
-
-
 if hasattr(math, "prod"):  # Python 3.8+
 
     def prod(sequence):
@@ -462,13 +434,6 @@ def is_seq_of_nested_key(seq: Sequence[NestedKey]) -> bool:
     return False
 
 
-def _ndimension(tensor: Tensor) -> int:
-    if isinstance(tensor, Tensor):
-        return tensor.ndimension()
-    else:
-        return tensor.ndimension()
-
-
 def _shape(tensor: Tensor, nested_shape=False) -> torch.Size:
     if isinstance(tensor, UninitializedTensorMixin):
         return torch.Size([*getattr(tensor, "batch_size", ()), -1])
@@ -534,13 +499,6 @@ def _is_shared(tensor: Tensor) -> bool:
         return tensor.is_shared()
 
 
-def _is_meta(tensor: Tensor) -> bool:
-    if isinstance(tensor, Tensor):
-        return tensor.is_meta
-    else:
-        return tensor.is_meta
-
-
 def _dtype(tensor: Tensor) -> torch.dtype:
     if isinstance(tensor, Tensor):
         return tensor.dtype
@@ -592,13 +550,6 @@ def _set_item(
     else:
         tensor[index] = value
         return tensor
-
-
-def _requires_grad(tensor: Tensor) -> bool:
-    if isinstance(tensor, Tensor):
-        return tensor.requires_grad
-    else:
-        return tensor.requires_grad
 
 
 class timeit:
@@ -1146,18 +1097,6 @@ class _ErrorInteceptor:
             exc_value.args = (self._add_key_to_error_msg(str(exc_value)),)
 
 
-def _nested_keys_to_dict(keys: Iterator[NestedKey]) -> dict[str, Any]:
-    nested_keys = {}
-    for key in keys:
-        if isinstance(key, str):
-            nested_keys.setdefault(key, {})
-        else:
-            d = nested_keys
-            for subkey in key:
-                d = d.setdefault(subkey, {})
-    return nested_keys
-
-
 def _dict_to_nested_keys(
     nested_keys: dict[NestedKey, NestedKey], prefix: tuple[str, ...] = ()
 ) -> tuple[str, ...]:
@@ -1168,19 +1107,6 @@ def _dict_to_nested_keys(
             yield (*prefix, key)
         else:
             yield key
-
-
-def _default_hook(td: T, key: tuple[str, ...]) -> None:
-    """Used to populate a tensordict.
-
-    For example, ``td.set(("a", "b"))`` may require to create ``"a"``.
-
-    """
-    out = td.get(key[0])
-    if out is None:
-        td._create_nested_str(key[0])
-        out = td._get_str(key[0], None)
-    return out
 
 
 def _get_leaf_tensordict(
@@ -2850,17 +2776,7 @@ def _check_inbuild():
 
 _check_inbuild = assume_constant_result(_check_inbuild)
 
-if sys.version_info >= (3, 10):
-    _zip_strict = functools.partial(zip, strict=True)
-else:
-
-    def _zip_strict(*iterables):
-        iterables = tuple(tuple(it) for it in iterables)
-        lengths = {len(it) for it in iterables}
-        if len(lengths) > 1:
-            raise ValueError("lengths of iterables differ.")
-
-        return zip(*iterables)
+_zip_strict = functools.partial(zip, strict=True)
 
 
 def _pin_mem(q_in, q_out):
@@ -3050,18 +2966,7 @@ def _mismatch_keys(keys1, keys2):
 
 def _is_dataclass(obj):
     """Check if an object is a dataclass."""
-    try:
-        from dataclasses import is_dataclass
-
-        return is_dataclass(obj)
-    except ImportError:
-        # Fallback for older Python versions
-        cls = (
-            obj
-            if isinstance(obj, type) and not isinstance(obj, GenericAlias)
-            else type(obj)
-        )
-        return hasattr(cls, "__dataclass_fields__")
+    return is_dataclass(obj)
 
 
 def _is_list_tensor_compatible(t) -> Tuple[bool, tuple | None, type | None]:

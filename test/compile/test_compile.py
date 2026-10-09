@@ -24,8 +24,6 @@ from packaging import version
 from tensordict import (
     assert_close,
     NonTensorData,
-    PYTREE_REGISTERED_LAZY_TDS,
-    PYTREE_REGISTERED_TDS,
     tensorclass,
     TensorDict,
     TensorDictParams,
@@ -42,7 +40,11 @@ from tensordict.nn import (
     TensorDictModule as Mod,
     TensorDictSequential as Seq,
 )
-from tensordict.nn.functional_modules import _exclude_td_from_pytree
+from tensordict.nn.functional_modules import (
+    _exclude_td_from_pytree,
+    PYTREE_REGISTERED_LAZY_TDS,
+    PYTREE_REGISTERED_TDS,
+)
 from tensordict.store._utils import _prepare_indexed_value
 
 from tensordict.tensorclass import TensorClass
