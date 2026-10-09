@@ -26,6 +26,7 @@ import pytest
 import tensordict.base as tensordict_base
 import torch
 from tensordict import (
+    is_leaf_nontensor,
     lazy_stack,
     LazyStackedTensorDict,
     set_capture_non_tensor_stack,
@@ -1914,6 +1915,69 @@ class TestGeneric:
 
         assert leaves == set()
         assert leaves_nested == {("a", "b", "c")}
+
+    @pytest.mark.parametrize("stack", [False, True])
+    @pytest.mark.parametrize("sort", [False, True])
+    @pytest.mark.parametrize("include_nested", [False, True])
+    @pytest.mark.parametrize("leaves_only", [False, True])
+    @pytest.mark.parametrize("is_leaf", ["default", "nontensor", "custom"])
+    def test_keys_view_iteration(
+        self, stack, sort, include_nested, leaves_only, is_leaf
+    ):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+
+        td = TensorDict(
+            a=torch.zeros(3, 1),
+            nested=TensorDict(
+                b=torch.zeros(3),
+                c=TensorDict(d=torch.zeros(3, 2), batch_size=[3]),
+                batch_size=[3],
+            ),
+            tc=MyClass(x=torch.zeros(3, 4), batch_size=[3]),
+            nt=NonTensorData("a string", batch_size=[3]),
+            batch_size=[3],
+        )
+        if stack:
+            if not include_nested and leaves_only and is_leaf != "default":
+                pytest.skip(
+                    "LazyStackedTensorDict.entry_class gives LazyStackedTensorDict "
+                    "for tensorclass and non-tensor entries"
+                )
+            td = lazy_stack([td[0], td[1]])
+        leaves = {"a", ("nested", "b"), ("nested", "c", "d"), ("tc", "x")}
+        if not leaves_only:
+            expected = leaves | {"nested", ("nested", "c"), "tc", "nt"}
+        elif is_leaf == "default":
+            expected = leaves
+        elif is_leaf == "nontensor":
+            expected = leaves | {"nt"}
+        else:
+            # the custom is_leaf rejects tensors
+            expected = {"tc"}
+        if not include_nested:
+            expected = {key for key in expected if isinstance(key, str)}
+        is_leaf = {
+            "default": None,
+            "nontensor": is_leaf_nontensor,
+            "custom": lambda cls: cls is MyClass,
+        }[is_leaf]
+        keys = td.keys(include_nested, leaves_only, is_leaf=is_leaf, sort=sort)
+        # list() and tuple() ask the view for its length first: they must
+        # give the same keys as a plain loop.
+        listed = list(keys)
+        assert listed == [key for key in keys]  # noqa: C416
+        assert tuple(listed) == tuple(keys)
+        assert len(listed) == len(expected)
+        assert set(listed) == expected
+        if sort:
+            assert listed == sorted(
+                expected,
+                key=lambda key: ".".join(key) if isinstance(key, tuple) else key,
+            )
+        if not stack:
+            assert len(keys) == len(expected)
 
     def test_load_device(self, tmpdir):
         t = nn.Transformer(

@@ -736,7 +736,7 @@ class _StringKeys(KeysView):
         return self.keys.__getitem__(key)
 
     def __iter__(self):
-        yield from self.keys
+        return iter(self.keys)
 
     def __repr__(self):
         return f"{type(self).__name__}({self.keys})"
@@ -1814,10 +1814,13 @@ def _check_keys(
 
     if not len(list_of_tensordicts):
         return set()
+    # is_leaf only filters nested or leaf keys: without it, TensorDict.keys()
+    # returns its cheap view of the dict keys.
+    is_leaf = _is_leaf_nontensor if include_nested or leaves_only else None
     keys = list_of_tensordicts[0].keys(
         include_nested=include_nested,
         leaves_only=leaves_only,
-        is_leaf=_is_leaf_nontensor,
+        is_leaf=is_leaf,
     )
     # TODO: compile doesn't like set() over an arbitrary object
     is_comp = is_compiling()
@@ -1829,7 +1832,7 @@ def _check_keys(
         k = td.keys(
             include_nested=include_nested,
             leaves_only=leaves_only,
-            is_leaf=_is_leaf_nontensor,
+            is_leaf=is_leaf,
         )
         if not strict:
             keys_set = keys_set.intersection(k)
@@ -2412,6 +2415,8 @@ def _is_unbatched(data) -> bool:
     this only matches types that explicitly set ``_pass_through = True``.
     """
     cls = type(data)
+    if cls is Tensor:
+        return False
     is_dynamo = is_compiling()
     if not is_dynamo:
         out = _UNBATCHED_MEMO.get(cls)
@@ -2623,9 +2628,10 @@ def unravel_key_list(keys):
         )
     result = []
     for key in keys:
-        key = unravel_key(key)
-        if key == ():
-            raise RuntimeError("key should be a Sequence<NestedKey>")
+        if not isinstance(key, str):
+            key = unravel_key(key)
+            if key == ():
+                raise RuntimeError("key should be a Sequence<NestedKey>")
         result.append(key)
     return result
 

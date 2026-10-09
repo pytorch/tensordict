@@ -10,7 +10,7 @@ import pytest
 import torch
 
 from tensordict import is_tensor_collection, TensorDict
-from tensordict.utils import _unravel_key_to_tuple, unravel_key
+from tensordict.utils import _unravel_key_to_tuple, unravel_key, unravel_key_list
 
 
 @pytest.fixture
@@ -215,6 +215,11 @@ def test_keys_nested_locked(benchmark):
 def test_keys_nested_leaf(benchmark):
     td = big_nested_td()[0][0]
     benchmark(lambda: list(td.keys(True, True)))
+
+
+def test_keys_nested_leaf_loop(benchmark):
+    td = big_nested_td()[0][0]
+    benchmark(lambda: [key for key in td.keys(True, True)])  # noqa: C416
 
 
 def test_keys_stack_nested(benchmark):
@@ -711,6 +716,12 @@ def test_unravel_key(benchmark, kind):
     benchmark(unravel_key, _KEYS[kind])
 
 
+@pytest.mark.parametrize("kind", ["str", "mixed"])
+def test_unravel_key_list(benchmark, kind):
+    keys = ["a", "b", "c"] if kind == "str" else list(_KEYS.values())
+    benchmark(unravel_key_list, keys)
+
+
 @pytest.mark.parametrize("kind", list(_KEYS))
 def test_unravel_key_to_tuple(benchmark, kind):
     benchmark(_unravel_key_to_tuple, _KEYS[kind])
@@ -878,6 +889,21 @@ def test_unbind_speed_stack0(benchmark):
 def test_unbind_speed_stack1(benchmark):
     (td,), _ = big_nested_stacked_td()
     benchmark(lambda td: td.unbind(1), td)
+
+
+def test_stack_nested(benchmark):
+    td = big_nested_td()[0][0]
+    benchmark(torch.stack, [td] * 4, 0)
+
+
+def test_cat_nested(benchmark):
+    td = big_nested_td()[0][0]
+    benchmark(torch.cat, [td] * 4, 0)
+
+
+def test_apply_nested(benchmark):
+    td = big_nested_td()[0][0]
+    benchmark(td.apply, lambda x: x)
 
 
 def test_split(benchmark):
