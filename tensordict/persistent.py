@@ -2199,8 +2199,6 @@ class PersistentTensorDict(TensorDictBase):
         splits = -(self.batch_size[dim] // -chunks)
         return self.split(splits, dim)
 
-    _index_tensordict = TensorDict._index_tensordict
-
 
 _register_tensor_class(PersistentTensorDict)
 

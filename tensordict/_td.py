@@ -15,7 +15,6 @@ from typing import (
     Callable,
     Iterable,
     Iterator,
-    List,
     Sequence,
     Tuple,
     Type,
@@ -27,10 +26,7 @@ import numpy as np
 import torch
 from tensordict._archive import _memmap_tensor_from_path
 from tensordict._indexing import (
-    _as_tuple,
     _getitem_batch_size,
-    _is_new_dim_index,
-    _read_element,
     convert_ellipsis_to_idx,
 )
 from tensordict._nestedkey import NestedKey
@@ -46,7 +42,6 @@ from tensordict.base import (
     _is_tensor_collection,
     _load_metadata,
     _register_tensor_class,
-    _SELF_NESTING_ERROR,
     _UNSET,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
@@ -66,12 +61,10 @@ from tensordict.utils import (
     _clone_value,
     _create_segments_from_int,
     _encode_key_for_filesystem,
-    _get_item,
     _get_leaf_tensordict,
     _get_robust_key_setting_with_warning,
     _get_shape_from_args,
     _import_and_wrap_functorch,
-    _index_preserve_data_ptr,
     _infer_size_impl,
     _is_safe_legacy_key,
     _is_unbatched,
@@ -562,100 +555,6 @@ class TensorDict(TensorDictBase):
                 return False
         return True
 
-    def __setitem__(
-        self,
-        index: IndexType,
-        value: Any,
-    ) -> None:
-        istuple = isinstance(index, tuple)
-        if istuple or isinstance(index, str):
-            # try:
-            index_unravel = _unravel_key_to_tuple(index)
-            if index_unravel:
-                if value is self:
-                    raise ValueError(_SELF_NESTING_ERROR.format(index))
-                self._set_tuple(
-                    index_unravel,
-                    value,
-                    inplace=(
-                        BEST_ATTEMPT_INPLACE
-                        if isinstance(self, _SubTensorDict)
-                        else False
-                    ),
-                    validated=False,
-                    non_blocking=False,
-                )
-                return
-
-        # we must use any and because using Ellipsis in index can break with some indices
-        if index is Ellipsis or (
-            isinstance(index, tuple) and any(idx is Ellipsis for idx in index)
-        ):
-            index = convert_ellipsis_to_idx(index, self.batch_size)
-        if isinstance(index, tuple) and len(index) == 1:
-            index = index[0]
-        if _is_new_dim_index(index):
-            # None and True add a dim of size 1, and the value is written to it
-            # (False selects nothing, as a 0-d False mask does)
-            if not self.batch_dims:
-                # the entries of a tensordict without batch dims may not take an
-                # index (e.g. NonTensorData), so write through a dim of size 1
-                with self.unsqueeze(0) as td_unsqueezed:
-                    td_unsqueezed[:] = value
-                return
-            if isinstance(value, (TensorDictBase, dict)):
-                # torch reads the other values with None and True itself
-                value = _value_at_new_dim(self, value)
-                index = (slice(None),) * self.batch_dims
-        if isinstance(index, list):
-            # Index with (list,), as __getitem__ does: torch reads a bare nested
-            # list, and _SubTensorDict any bare list, as per-dim indices
-            index = (index,)
-
-        if isinstance(value, (TensorDictBase, dict)):
-            indexed_bs = _getitem_batch_size(self.batch_size, index)
-            if isinstance(value, dict):
-                value = self.from_dict_instance(
-                    value, batch_size=indexed_bs, device=self.device
-                )
-            elif value.device != self.device:
-                value = value.to(self.device)
-                # value = self.empty(recurse=True)[index].update(value)
-            if value.batch_size != indexed_bs:
-                if value.shape == indexed_bs[-len(value.shape) :]:
-                    # try to expand on the left (broadcasting)
-                    value = value.expand(indexed_bs)
-                else:
-                    try:
-                        # copy and change batch_size if can't be expanded
-                        value = value.copy()
-                        value.batch_size = indexed_bs
-                    except RuntimeError as err:
-                        raise RuntimeError(
-                            f"indexed destination TensorDict batch size is {indexed_bs} "
-                            f"(batch_size = {self.batch_size}, index={index}), "
-                            f"which differs from the source batch size {value.batch_size}"
-                        ) from err
-
-            keys = set(self.keys())
-            subtd = None
-            for value_key, item in value.items():
-                if value_key in keys:
-                    self._set_at_str(
-                        value_key, item, index, validated=True, non_blocking=False
-                    )
-                else:
-                    if subtd is None:
-                        subtd = self._get_sub_tensordict(index)
-                    subtd.set(value_key, item, inplace=True, non_blocking=False)
-        else:
-            # torch indexes the entries, and would read a NumPy bool as an int
-            # before NumPy 2.3: _read_element rejects it, as getitem does
-            for element in _as_tuple(index):
-                _read_element(element)
-            for key in self.keys():
-                self.set_at_(key, value, index)
-
     # Functorch compatibility
     @cache  # noqa: B019
     def _add_batch_dim(self, *, in_dim: int, vmap_level: int) -> Self:
@@ -760,73 +659,6 @@ class TensorDict(TensorDictBase):
             lock=self.is_locked,
         )
         return out
-
-    def _index_tensordict(
-        self,
-        index: IndexType,
-        new_batch_size: torch.Size | None = None,
-        names: List[str] | None = None,
-    ) -> Self:
-        batch_size = self.batch_size
-        batch_dims = len(batch_size)
-
-        def _check_for_invalid_index(index):
-            if batch_size:
-                return
-            if index is None or isinstance(index, (bool, np.bool_)):
-                return
-            if (
-                isinstance(index, torch.Tensor)
-                and index.dtype == torch.bool
-                and not index.ndim
-            ):
-                return
-            if isinstance(index, tuple):
-                if len(index) == 1:
-                    return _check_for_invalid_index(index[0])
-                # None and the scalar bools use no dim
-                elif all(_read_element(idx)[1] == 0 for idx in index):
-                    return
-            raise RuntimeError(
-                f"indexing a tensordict with td.batch_dims==0 is not permitted. Got index {index}."
-            )
-
-        _check_for_invalid_index(index)
-
-        if new_batch_size is not None:
-            batch_size = new_batch_size
-        else:
-            batch_size = _getitem_batch_size(batch_size, index)
-
-        if names is None:
-            names = self._get_names_idx(index)
-
-        source = {}
-        for key, item in self.items():
-            if _is_unbatched(item):
-                source[key] = item._with_batch_size(batch_size)
-            elif isinstance(item, TensorDict):
-                # this is the simplest case, we can pre-compute the batch size easily
-                new_batch_size = batch_size + item.batch_size[batch_dims:]
-                source[key] = item._index_tensordict(
-                    index, new_batch_size=new_batch_size
-                )
-            else:
-                source[key] = _get_item(item, index)
-        result = self._new_unsafe(
-            source=source,
-            batch_size=batch_size,
-            device=self.device,
-            names=names,
-            # lock=self.is_locked,
-        )
-        if self._is_memmap and _index_preserve_data_ptr(index):
-            result._is_memmap = True
-            result.lock_()
-        elif self._is_shared and _index_preserve_data_ptr(index):
-            result._is_shared = True
-            result.lock_()
-        return result
 
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
         if chunks < 1:
@@ -3589,7 +3421,6 @@ class _SubTensorDict(TensorDictBase):
         )
 
     # TODO: check these implementations
-    __setitem__ = TensorDict.__setitem__
 
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
         splits = -(self.batch_size[dim] // -chunks)
@@ -3837,18 +3668,6 @@ class _TensorDictKeysView:
         include_nested = f"include_nested={self.include_nested}"
         leaves_only = f"leaves_only={self.leaves_only}"
         return f"{type(self).__name__}({list(self)},\n{indent(include_nested, 4 * ' ')},\n{indent(leaves_only, 4 * ' ')})"
-
-
-def _value_at_new_dim(td: TensorDictBase, value):
-    """Return what ``td[None] = value`` and ``td[True] = value`` write to every element of ``td``.
-
-    ``None`` and ``True`` add a dim of size 1 in front of the batch dims. The
-    value is broadcast to that batch size, and its only element is written.
-    """
-    batch_size = torch.Size([1, *td.batch_size])
-    if isinstance(value, dict):
-        value = td.from_dict_instance(value, batch_size=batch_size, device=td.device)
-    return value.expand(batch_size)[0]
 
 
 def _index_to_str(index: IndexType) -> Any:
