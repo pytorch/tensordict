@@ -44,7 +44,6 @@ from tensordict._C import (  # noqa: F401  # @manual=//pytorch/tensordict:_C
     _unravel_key_to_tuple as _unravel_key_to_tuple_cpp,
     unravel_key as unravel_key_cpp,
     unravel_key_list as unravel_key_list_cpp,
-    unravel_keys as unravel_keys_cpp,
 )
 
 from tensordict._indexing import (  # noqa: F401
@@ -2654,11 +2653,20 @@ def _unravel_key_to_tuple(key):
         return (key,)
     if not isinstance(key, tuple):
         return ()
-    return tuple(subk for k in key for subk in _unravel_key_to_tuple(k))
+    result = ()
+    for subkey in key:
+        subkey = _unravel_key_to_tuple(subkey)
+        if not subkey:
+            return ()
+        result = result + subkey
+    return result
 
 
 def unravel_key(key):
     """Unravel a nested key.
+
+    A tuple with a part that is neither a str nor a tuple of str unravels to
+    ``()``. A key that is neither a str nor a tuple raises a ``RuntimeError``.
 
     Examples:
         >>> unravel_key("a")
@@ -2667,23 +2675,24 @@ def unravel_key(key):
         'a'
         >>> unravel_key((("a", ("b",))))
         ('a', 'b')
+        >>> unravel_key(("a", 1))
+        ()
 
     """
     if not is_compiling():
         return unravel_key_cpp(key)
     if isinstance(key, str):
         return key
-    if isinstance(key, tuple):
-        if len(key) == 1:
-            return unravel_key(key[0])
-        return tuple(unravel_key(_key) for _key in key)
-    raise ValueError("the key must be a str or a tuple of str")
+    if not isinstance(key, tuple):
+        raise RuntimeError("key should be a Sequence<NestedKey>")
+    key = _unravel_key_to_tuple(key)
+    if len(key) == 1:
+        return key[0]
+    return key
 
 
 def unravel_keys(*keys):
     """Unravels a sequence of keys."""
-    if not is_compiling():
-        return unravel_keys_cpp(*keys)
     if len(keys) == 1:
         return unravel_key(keys[0])
     return tuple(unravel_key(key) for key in keys)
@@ -2693,7 +2702,13 @@ def unravel_key_list(keys):
     """Unravels a list of keys."""
     if not is_compiling():
         return unravel_key_list_cpp(keys)
-    return [unravel_key(key) for key in keys]
+    result = []
+    for key in keys:
+        key = unravel_key(key)
+        if key == ():
+            raise RuntimeError("key should be a Sequence<NestedKey>")
+        result.append(key)
+    return result
 
 
 from tensordict._utils_key_json import (  # noqa: F401

@@ -47,6 +47,9 @@ py::object unravel_key(const py::object &key) {
         count++;
       } else {
         auto _key = _unravel_key_to_tuple(subkey.cast<py::object>());
+        if (_key.size() == 0) {
+          return py::make_tuple();
+        }
         count += _key.size();
         newkey += _key;
       }
@@ -67,6 +70,9 @@ py::list unravel_key_list(const py::list &keys) {
   py::list newkeys;
   for (const auto &key : keys) {
     auto _key = unravel_key(key.cast<py::object>());
+    if (py::isinstance<py::tuple>(_key) && py::len(_key) == 0) {
+      throw std::runtime_error("key should be a Sequence<NestedKey>");
+    }
     newkeys.append(_key);
   }
   return newkeys;
