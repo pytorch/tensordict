@@ -934,13 +934,13 @@ class TensorDict(TensorDictBase):
             )
         # note: to allow this to work recursively, we must allow permutation order with fewer elements than dims,
         # as long as this list is complete.
-        if not np.array_equal(sorted(dims_list), range(len(dims_list))):
+        if sorted(dims_list) != list(range(len(dims_list))):
             raise ValueError(
                 f"Cannot compute the permutation, got dims={dims_list} but expected a permutation of {list(range(len(dims_list)))}."
             )
         if not len(dims_list) and not self.batch_dims:
             return self
-        if np.array_equal(dims_list, range(len(dims_list))):
+        if list(dims_list) == list(range(len(dims_list))):
             return self
 
         def _permute(tensor):

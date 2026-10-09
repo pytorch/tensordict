@@ -17,12 +17,14 @@ import pytest
 
 import torch
 
-from _utils_internal import is_npu_available
+from _utils_internal import is_npu_available, legacy_lazy_mode
 from packaging import version
 
 from tensordict import (
     assert_close,
     from_dataclass,
+    lazy_stack,
+    MetaData,
     NonTensorData,
     tensorclass,
     TensorDict,
@@ -393,6 +395,34 @@ class TestTD:
         data_transpose_c = transpose_c(data)
         assert (data_transpose == data_transpose_c).all()
 
+    @pytest.mark.parametrize("dims", [(1, 0), (0, 1)])
+    @pytest.mark.parametrize("legacy", [False, True])
+    def test_permute(self, dims, legacy, mode):
+        def permute(td):
+            return td.permute(*dims)["a", "b"]
+
+        permute_c = torch.compile(permute, fullgraph=True, mode=mode)
+        data = TensorDict({"a": {"b": torch.arange(6).view(2, 3)}}, [2, 3])
+        with legacy_lazy_mode() if legacy else contextlib.nullcontext():
+            data_permute = permute(data)
+            _ = permute_c(data)
+            data_permute_c = permute_c(data)
+        torch.testing.assert_close(data_permute_c, data_permute)
+
+    def test_lazy_stack_contains_is_empty(self, mode):
+        def contains_is_empty(td):
+            return "a" in td.keys(), "c" in td.keys(), td.is_empty(), td["a"] + 1
+
+        contains_is_empty_c = torch.compile(
+            contains_is_empty, fullgraph=True, mode=mode
+        )
+        data = lazy_stack([TensorDict(a=torch.randn(3)) for _ in range(2)])
+        has_a, has_c, is_empty, a = contains_is_empty_c(data)
+        assert has_a
+        assert not has_c
+        assert not is_empty
+        torch.testing.assert_close(a, data["a"] + 1)
+
     def test_unbind(self, mode):
         def unbind(td):
             return td.unbind(0)
@@ -621,6 +651,32 @@ class TestTD:
         td_device_c = test_to_device_c(td)
         assert td_device_c.batch_size == td.batch_size
         assert td_device_c.device == torch.device(device)
+
+    def test_to_cpu(self, mode):
+        def to_cpu(td):
+            return td.to("cpu")
+
+        td = TensorDict({"a": torch.randn(1, 2, 3)}, batch_size=[1, 2])
+        to_cpu_c = torch.compile(to_cpu, fullgraph=True, mode=mode)
+        td_cpu_c = to_cpu_c(td)
+        assert td_cpu_c.device == torch.device("cpu")
+        torch.testing.assert_close(td_cpu_c["a"], td["a"])
+
+    def test_to_dtype(self, mode):
+        def to_dtype(td):
+            return td.to(torch.float64)
+
+        def to_tensor(td, other):
+            return td.to(other)
+
+        td = TensorDict({"a": torch.randn(1, 2, 3)}, batch_size=[1, 2])
+        to_dtype_c = torch.compile(to_dtype, fullgraph=True, mode=mode)
+        to_tensor_c = torch.compile(to_tensor, fullgraph=True, mode=mode)
+        assert to_dtype_c(td)["a"].dtype == torch.float64
+        other = torch.zeros((), dtype=torch.float64)
+        td_other_c = to_tensor_c(td, other)
+        assert td_other_c["a"].dtype == torch.float64
+        assert td_other_c.device == other.device
 
     @pytest.mark.skipif(
         is_npu_available(),
@@ -1585,39 +1641,6 @@ class TestNN:
 
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestFunctional:
-    def test_functional_error(self, mode):
-        TORCHDYNAMO_INLINE_INBUILT_NN_MODULES = (
-            torch._dynamo.config.inline_inbuilt_nn_modules
-        )
-        torch._dynamo.config.inline_inbuilt_nn_modules = True
-        module = torch.nn.Sequential(
-            torch.nn.Linear(3, 4),
-            torch.nn.ReLU(),
-            torch.nn.Linear(4, 5),
-        )
-        td = TensorDict.from_module(module)
-        td_zero = TensorDictParams(td.data.clone())
-        td_zero.zero_()
-
-        torch._dynamo.config.inline_inbuilt_nn_modules = False
-        try:
-
-            def call(x, td):
-                with td.to_module(module, preserve_module_state=False):
-                    return module(x)
-
-            call_compile = torch.compile(call, fullgraph=True, mode=mode)
-            x = torch.randn(2, 3)
-            with pytest.raises(
-                RuntimeError, match="torch._dynamo.config.inline_inbuilt_nn_modules"
-            ):
-                call_compile(x, td_zero)
-        finally:
-            if torch._dynamo.config.inline_inbuilt_nn_modules is not None:
-                torch._dynamo.config.inline_inbuilt_nn_modules = (
-                    TORCHDYNAMO_INLINE_INBUILT_NN_MODULES
-                )
-
     # in-place modif raises an error even if fullgraph=False
     @pytest.mark.parametrize("modif_param", [False])
     def test_functional(self, modif_param, mode):
@@ -2237,6 +2260,36 @@ class TestTCNonTensorInit:
         inp = torch.randn(3)
         result = fn(inp)
         torch.testing.assert_close(result, inp * 2)
+
+    def test_tc_positional_init_fullgraph(self):
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(a):
+            tc = self.MyTC(a, "hello", batch_size=[3])
+            return tc.x + 1, tc.label
+
+        inp = torch.randn(3)
+        result, label = fn(inp)
+        torch.testing.assert_close(result, inp + 1)
+        assert label == "hello"
+
+    def test_nontensordata_positional_init_fullgraph(self):
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(a):
+            return a + 1, NonTensorData("hello", batch_size=[3])
+
+        _, data = fn(torch.randn(3))
+        assert isinstance(data, NonTensorData)
+        assert data.data == "hello"
+        assert data.batch_size == (3,)
+
+    def test_metadata_positional_init_fullgraph(self):
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(a):
+            return a + 1, MetaData({"a": 1})
+
+        _, data = fn(torch.randn(3))
+        assert isinstance(data, MetaData)
+        assert data.data == {"a": 1}
 
 
 @tensorclass

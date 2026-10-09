@@ -3406,6 +3406,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def is_empty(self) -> bool:
         """Checks if the tensordict contains any leaf."""
+        if is_compiling():
+            # Dynamo cannot close a key generator that is left before its end.
+            return not list(self.keys(True, True))
         for _ in self.keys(True, True):
             return False
         return True

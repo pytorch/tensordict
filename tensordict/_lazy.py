@@ -145,7 +145,7 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
 
     def __contains__(self, item):
         item = _unravel_key_to_tuple(item)
-        if item[0] in self.tensordict._iterate_over_keys():
+        if item[0] in self.tensordict._key_list():
             if self.leaves_only:
                 return not _is_tensor_collection(self.tensordict.entry_class(item[0]))
             has_first_key = True

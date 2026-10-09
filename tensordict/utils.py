@@ -997,7 +997,15 @@ def _parse_to(*args, **kwargs):
     else:
         non_blocking = kwargs.get("non_blocking", False)
         convert_to_format = kwargs.get("convert_to_format")
-        if len(args) > 0:
+        if len(args) > 0 and isinstance(args[0], torch.dtype):
+            # td.to(dtype)
+            device = kwargs.get("device")
+            dtype = args[0]
+        elif len(args) > 0 and isinstance(args[0], torch.Tensor):
+            # td.to(tensor)
+            device = args[0].device
+            dtype = args[0].dtype
+        elif len(args) > 0:
             device = torch.device(args[0])
             if len(args) > 1:
                 dtype = args[1]
@@ -2672,15 +2680,6 @@ def _lock_warn():
 
 _lock_warn = assume_constant_result(_lock_warn)
 
-
-def _check_inbuild():
-    if not torch._dynamo.config.inline_inbuilt_nn_modules:
-        raise RuntimeError(
-            "to_module requires torch._dynamo.config.inline_inbuilt_nn_modules to be set to True."
-        )
-
-
-_check_inbuild = assume_constant_result(_check_inbuild)
 
 _zip_strict = functools.partial(zip, strict=True)
 
