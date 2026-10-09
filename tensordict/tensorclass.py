@@ -67,6 +67,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _is_dataclass as is_dataclass,
     _is_json_serializable,
     _is_tensorclass,
+    _KeyDependentDefaultDict,
     _LOCK_ERROR,
     _REPR_OPTIONS,
     _td_fields,
@@ -77,7 +78,6 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     DeviceType,
     IndexType,
     is_tensorclass,
-    KeyDependentDefaultDict,
     LinkedList,
     list_to_stack,
     set_capture_non_tensor_stack,
@@ -1644,7 +1644,7 @@ def _init_wrapper(
     return wrapper
 
 
-_cast_funcs = KeyDependentDefaultDict(_identity)
+_cast_funcs = _KeyDependentDefaultDict(_identity)
 _cast_funcs[torch.Tensor] = torch.as_tensor
 _cast_funcs[np.ndarray] = np.asarray
 
@@ -1944,7 +1944,7 @@ def _memmap_(
                         metadata[key] = value
                     else:
                         to_pickle[key] = value
-                from tensordict.utils import json_dumps
+                from tensordict._utils_key_json import json_dumps
 
                 json_str = json_dumps(metadata)
                 # Ensure we write bytes to the binary file
@@ -5412,7 +5412,7 @@ class NonTensorStack(LazyStackedTensorDict):
                     with open(prefix / "pickle.pkl", "wb") as f:
                         pickle.dump(data, f)
                 with open(prefix / "meta.json", "wb") as f:
-                    from tensordict.utils import json_dumps
+                    from tensordict._utils_key_json import json_dumps
 
                     json_str = json_dumps(jsondict, separators=(",", ":"))
                     # Ensure we write bytes to the binary file

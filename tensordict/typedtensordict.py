@@ -14,7 +14,7 @@ import torch
 from tensordict._pytree import _register_td_node
 from tensordict._td import TensorDict
 from tensordict.base import _register_tensor_class, NO_DEFAULT, TensorDictBase
-from tensordict.utils import _as_context_manager, cache
+from tensordict.utils import _as_context_manager, _cache_while_locked
 
 try:
     # Python 3.11+ (PEP 681)
@@ -873,17 +873,17 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     # ------------------------------------------------------------------
     # Vmap cached methods
     # ------------------------------------------------------------------
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _add_batch_dim(self, *, in_dim: int, vmap_level: int):
         result = self._source._add_batch_dim(in_dim=in_dim, vmap_level=vmap_level)
         return type(self)._wrap_td(result)
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _remove_batch_dim(self, vmap_level: int, batch_size: int, out_dim: int):
         result = self._source._remove_batch_dim(vmap_level, batch_size, out_dim)
         return type(self)._wrap_td(result)
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _maybe_remove_batch_dim(
         self, funcname: str, vmap_level: int, batch_size: int, out_dim: int
     ):

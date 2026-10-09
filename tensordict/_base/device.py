@@ -31,13 +31,13 @@ from tensordict.base import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
+    _cache_while_locked,
     _is_shared,
     _make_dtype_promotion,
     _parse_to,
     _pin_mem,
     _PIN_MEM_TIMEOUT,
     _zip_strict,
-    cache,
 )
 from torch import Tensor
 from torch._utils import _get_available_device_type, _get_device_module
@@ -150,7 +150,7 @@ class _DeviceOps:
                 value._set_device(device=device)
         return self
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def param_count(self, *, count_duplicates: bool = True) -> int:
         """Counts the number of parameters (total number of indexable items), accounting for tensors only.
 
@@ -169,7 +169,7 @@ class _DeviceOps:
             total += v.numel()
         return total
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def bytes(self, *, count_duplicates: bool = True) -> int:
         """Counts the number of bytes of the contained tensors.
 

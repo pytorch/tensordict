@@ -50,9 +50,9 @@ from tensordict.store._utils import _prepare_indexed_value
 from tensordict.tensorclass import TensorClass
 from tensordict.utils import (
     _unravel_key_to_tuple,
+    _unravel_keys,
     unravel_key,
     unravel_key_list,
-    unravel_keys,
 )
 
 from torch._dynamo.testing import CompileCounterWithBackend
@@ -136,9 +136,9 @@ def test_vmap_compile():
 )
 def test_unravel_keys_compile(key):
     """Test that unravel_keys returns consistent results under torch.compile."""
-    eager = unravel_keys(key)
+    eager = _unravel_keys(key)
     torch._dynamo.reset()
-    compiled = torch.compile(unravel_keys, backend="eager")(key)
+    compiled = torch.compile(_unravel_keys, backend="eager")(key)
     assert (
         eager == compiled
     ), f"unravel_keys mismatch for {key!r}: eager={eager!r}, compiled={compiled!r}"
@@ -183,14 +183,14 @@ def test_unravel_key_fullgraph(fn, key):
 
 def test_unravel_key_list_fullgraph():
     eager = unravel_key_list(_UNRAVEL_VALID_KEYS)
-    eager_keys = unravel_keys(*_UNRAVEL_VALID_KEYS)
+    eager_keys = _unravel_keys(*_UNRAVEL_VALID_KEYS)
     torch._dynamo.reset()
 
     def f(x):
         return (
             x + 1,
             unravel_key_list(_UNRAVEL_VALID_KEYS),
-            unravel_keys(*_UNRAVEL_VALID_KEYS),
+            _unravel_keys(*_UNRAVEL_VALID_KEYS),
         )
 
     _, compiled, compiled_keys = torch.compile(f, fullgraph=True, backend="eager")(
