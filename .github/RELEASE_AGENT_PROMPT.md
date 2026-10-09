@@ -39,8 +39,13 @@ The procedure has three parts:
   latest stable torch, plus any other torch version that
   `.github/workflows/test-linux.yml` of the branch lists. Code paths for older
   torch versions are tested only if you run them, as in step 3.
-- A dry run and a real run take about 45 minutes each, because the four
-  platforms build one after another.
+- Since TensorDict 0.15, tensordict is pure Python: a run builds one
+  `py3-none-any` wheel. The build job smoke-tests it on Linux x86_64, with the
+  oldest Python of test-infra's matrix and the torch of `pytorch_release`.
+  Another job then installs it on Linux arm64, macOS and Windows, with each
+  Python version in `python_versions` and the latest stable torch. The 0.14
+  line still builds one wheel per platform and Python version, on four
+  platforms one after another, which takes about 45 minutes.
 
 ## 1. Choose the inputs
 
@@ -49,17 +54,27 @@ VERSION=0.14.4   # the version to release
 PREV=v0.14.3     # the latest release of the same line; for X.Y.0, the latest X.(Y-1) release
 ```
 
-**Python versions.** Build the same Python versions as the previous release,
-unless the maintainer decides otherwise. For a minor release, propose any
-change (a new CPython version, or one that stable torch dropped) in the message
-of step 6 instead of making it silently.
+**Python versions.** On the 0.14 line, the workflow builds a wheel for each
+version in `python_versions`: use those of the previous release, unless the
+maintainer decides otherwise. Since 0.15, the workflow smoke-tests its single
+wheel on each of them: use the CPython versions that the classifiers of
+`pyproject.toml` list. For a minor release, propose any change (a new CPython
+version, or one that stable torch dropped) in the message of step 6 instead of
+making it silently.
 
 ```bash
+# On the 0.14 line: the Python versions of the wheels of the previous release
 PYTHON_VERSIONS=$(curl -fsS "https://pypi.org/pypi/tensordict/${PREV#v}/json" | python3 -c '
 import json, re, sys
 abis = {re.search(r"-cp\d+t?-cp(\d)(\d+)(t?)-", u["filename"]).groups() for u in json.load(sys.stdin)["urls"] if u["filename"].endswith(".whl")}
 print(json.dumps([f"{a}.{b}{t}" for a, b, t in sorted(abis, key=lambda x: (int(x[0]), int(x[1]), x[2]))]))')
 echo "$PYTHON_VERSIONS"   # ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"] for 0.14.3
+
+# Since 0.15: the classifiers of the commit to release ($PREV for a patch
+# release, upstream/main for X.Y.0)
+PYTHON_VERSIONS=$(git show "$PREV:pyproject.toml" | python3 -c '
+import json, re, sys
+print(json.dumps(re.findall(r"Programming Language :: Python :: (3\.\d+)", sys.stdin.read())))')
 ```
 
 **test-infra branch (`pytorch_release`).** Use the pytorch/test-infra branch
@@ -74,8 +89,11 @@ gh api "repos/pytorch/test-infra/contents/tools/scripts/generate_binary_build_ma
 
 On a release branch, the builds install the torch version that the test-infra
 branch sets as `CURRENT_CANDIDATE_VERSION`, and that torch needs a wheel for
-every Python version that you build. On test-infra `main`, it is the next
-PyTorch release, which can drop Python versions: with `main`, the 0.14.3
+every Python version that you build: on the 0.14 line, each version in
+`python_versions`; since 0.15, the oldest Python of test-infra's matrix. The
+smoke tests on the other platforms install the latest stable torch, which
+needs a wheel for each version in `python_versions`. On test-infra `main`,
+`CURRENT_CANDIDATE_VERSION` is the next PyTorch release, which can drop Python versions: with `main`, the 0.14.3
 builds installed torch 2.15.0, which has no Python 3.10 wheels, and they
 failed. For a minor release that comes out together with a new PyTorch
 release, use that release's branch.
@@ -124,26 +142,34 @@ Choose the commits with these rules:
 
 Create `release/X.Y.0` from the `main` commit that the maintainer names, or
 else from the head of `main` once its CI passes. After the release, open a PR
-that sets the four version files on `main` to X.Y.0. They set the base version
+that sets the three version files on `main` to X.Y.0. They set the base version
 of the nightly builds.
 
 ### Bump the version
 
-All four files must have the new version. The Release workflow checks them.
+All the version files must have the new version: `version.txt`,
+`.github/scripts/version.txt` and `.github/scripts/version_script.sh`, and on
+the 0.14 line also `.github/scripts/version_script_windows.sh`. The Release
+workflow checks them.
 
 ```bash
 echo "$VERSION" > version.txt
 echo "$VERSION" > .github/scripts/version.txt
-sed -i "s/^BASE_VERSION=.*/BASE_VERSION=$VERSION/" .github/scripts/version_script.sh .github/scripts/version_script_windows.sh
+sed -i "s/^BASE_VERSION=.*/BASE_VERSION=$VERSION/" .github/scripts/version_script.sh
+[ -f .github/scripts/version_script_windows.sh ] && sed -i "s/^BASE_VERSION=.*/BASE_VERSION=$VERSION/" .github/scripts/version_script_windows.sh
 ```
 
 If the `release.yml` of the branch has no `python_versions` input, as on the
-0.14 line, take the workflow from `main` in the same commit. It passes
-`python-versions` and `test-infra-ref` to the `build-wheels-*.yml` workflows of
-the branch, which take both inputs on the 0.14 line.
+0.14 line, take the workflow in the same commit from the last `main` commit
+that still built a wheel per platform: the parent of the commit that deleted
+`build-wheels-linux.yml`. It passes `python-versions` and
+`test-infra-ref` to the `build-wheels-*.yml` workflows of the branch, which
+take both inputs on the 0.14 line. The `release.yml` of later `main` commits
+builds a single pure-Python wheel, which the 0.14 line cannot.
 
 ```bash
-grep -q 'python_versions:' .github/workflows/release.yml || git checkout upstream/main -- .github/workflows/release.yml
+PER_PLATFORM=$(git rev-list -1 upstream/main -- .github/workflows/build-wheels-linux.yml)~1
+grep -q 'python_versions:' .github/workflows/release.yml || git checkout "$PER_PLATFORM" -- .github/workflows/release.yml
 git commit -am "[Versioning] Prepare TensorDict $VERSION"
 ```
 
@@ -169,9 +195,11 @@ picked for 0.14.3 had broken it.
 
 Run the same suite on `$PREV` in the same environment. Every test that fails
 on the branch but passes on `$PREV` needs an explanation before step 6. To
-test `$PREV` with the venvs below, check it out in a second worktree, copy
-`tensordict/_C.so` into it if `tensordict/csrc` is unchanged, and run pytest
-there with `PYTHONPATH` set to that worktree. To find the commit that caused
+test `$PREV` with the venvs below, check it out in a second worktree and run
+pytest there with `PYTHONPATH` set to that worktree. A 0.14 checkout also needs
+its C++ extension: on the 0.14 line, copy `tensordict/_C.so` from the branch if
+`tensordict/csrc` is unchanged; for 0.15.0, build it in the worktree with
+`CMAKE_PREFIX_PATH=$("$V/bin/python" -m pybind11 --cmakedir) "$V/bin/python" setup.py build_ext --inplace`. To find the commit that caused
 a failure, test the cherry-picks one by one, for example with `git bisect`
 over `$PREV..HEAD`.
 
@@ -180,6 +208,7 @@ TORCH=2.14.1   # then the old torch, e.g. 2.11.0
 V=~/.cache/tensordict-release/venv-$TORCH
 uv venv --python 3.12 "$V"
 uv pip install --python "$V/bin/python" "torch==$TORCH" --index-url https://download.pytorch.org/whl/cpu
+# pybind11, cmake and ninja build the C++ extension of the 0.14 line
 uv pip install --python "$V/bin/python" numpy cloudpickle packaging importlib_metadata orjson "pyvers>=0.2,<0.3" \
   pytest pytest-xdist pytest-timeout pytest-rerunfailures pytest-instafail pytest-benchmark pytest-mock pyyaml \
   hypothesis expecttest h5py pandas pyarrow redis zarr setuptools wheel "pybind11[global]>=2.13" setuptools_scm cmake ninja
@@ -196,8 +225,9 @@ TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1 TD_GET_DEFAULTS_TO_NONE=1 LIST_TO_STACK=
 
 What to expect:
 
-- `test/utils/test_setup.py` builds tensordict in new environments. Its
-  install tests fail when the machine has no complete build toolchain.
+- `test/utils/test_setup.py` builds tensordict in new environments. On the
+  0.14 line, its install tests fail when the machine has no complete C++
+  build toolchain.
 - The distributed tests use the fixed port 10017, and the store tests use the
   ports 6379 and 6380. Run only one test suite per machine at a time. On a
   shared machine, run `test/distributed` in its own network namespace, for
@@ -220,12 +250,15 @@ gh run list -R pytorch/tensordict --workflow release.yml --branch "release/$VERS
 
 The push also starts the CI of the branch: lint, the unit tests and a docs
 build that publishes nothing. Wait for the CI and for the dry run. In the
-"Collect Wheels" job of the dry run, check that there is one wheel per Python
-version and platform, all with the new version. 0.14.3 had 24: six Python
-versions on Linux x86_64, Linux aarch64, macOS arm64 and Windows.
+"Collect Wheels" job of the dry run, check the wheels, all with the new
+version: since 0.15, one `py3-none-any` wheel; on the 0.14 line, one per Python
+version and platform (0.14.3 had 24: six Python versions on Linux x86_64,
+Linux aarch64, macOS arm64 and Windows).
 
-If the Linux builds fail at "Install torch dependency", the torch version of
-`pytorch_release` has no wheel for one of the Python versions (see step 1).
+If a build or a smoke test fails at "Install torch dependency", the torch
+version of `pytorch_release` has no wheel for one of the Python versions (see
+step 1). Since 0.15, if a smoke test fails at "Install PyTorch and the wheel",
+the latest stable torch has no wheel for that platform and Python version.
 
 From now on the branch is public. Add new commits to it, but don't rewrite
 it.
