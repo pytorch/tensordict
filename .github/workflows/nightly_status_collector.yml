@@ -30,6 +30,11 @@ permissions:
 jobs:
   collect-status:
     runs-on: ubuntu-latest
+    # Every job that pushes to gh-pages joins this group, so they push one at a
+    # time. With `queue: max`, later jobs wait instead of being cancelled.
+    concurrency:
+      group: gh-pages
+      queue: max
     outputs:
       should-deploy: ${{ steps.resolve-deploy.outputs.deploy }}
     steps:

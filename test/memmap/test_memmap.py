@@ -5,6 +5,7 @@
 import argparse
 import gc
 import os
+import pickle
 import stat
 from contextlib import nullcontext
 from pathlib import Path
@@ -523,37 +524,36 @@ class TestIndexing:
             assert (_t == t[i]).all()
 
     @staticmethod
-    def _test_copy_onto_subproc(queue):
+    def _test_copy_onto_subproc(queue_out, queue_in):
         t = MemoryMappedTensor.from_tensor(torch.rand(10, 5))
         idx = torch.tensor([1, 2])
         t_indexed1 = t[idx]
-        queue.put(t_indexed1, block=True)
-        while queue.full():
-            continue
+        queue_out.put(t_indexed1, block=True)
 
         idx = torch.tensor([3, 4])
         t_indexed2 = t[idx]
-        queue.put(t_indexed2, block=True)
-        while queue.full():
-            continue
-        msg = queue.get(timeout=TIMEOUT)
+        queue_out.put(t_indexed2, block=True)
+        msg = queue_in.get(timeout=TIMEOUT)
         assert msg == "done"
         assert (t_indexed1 == t_indexed2).all()
-        del queue
+        del queue_out, queue_in
 
     def test_copy_onto(self):
-        queue = mp.Queue(1)
-        p = mp.Process(target=TestIndexing._test_copy_onto_subproc, args=(queue,))
+        queue_in = mp.Queue(1)
+        queue_out = mp.Queue(1)
+        p = mp.Process(
+            target=TestIndexing._test_copy_onto_subproc, args=(queue_in, queue_out)
+        )
         p.start()
         try:
-            t_indexed1 = queue.get(timeout=TIMEOUT)
+            t_indexed1 = queue_in.get(timeout=TIMEOUT)
 
             # receive 2nd copy
-            t_indexed2 = queue.get(timeout=TIMEOUT)
+            t_indexed2 = queue_in.get(timeout=TIMEOUT)
             t_indexed1.copy_(t_indexed2)
             _ = t_indexed2 + 1
-            queue.put("done", block=True)
-            queue.close()
+            queue_out.put("done", block=True)
+            queue_out.close()
         finally:
             p.join()
 
@@ -820,6 +820,34 @@ class TestReadWrite:
             filename=file_path, shape=[2, 3], dtype=torch.float64
         )
         assert (mmap.reshape(-1) == torch.arange(6)).all()
+        with pytest.raises(PermissionError, match="not writable"):
+            MemoryMappedTensor.from_filename(
+                filename=file_path, shape=[2, 3], dtype=torch.float64, mode="r+"
+            )
+
+    def test_mode(self, tmpdir):
+        file_path = Path(tmpdir) / "elt.mmap"
+        MemoryMappedTensor.from_tensor(torch.zeros(4), filename=file_path)
+
+        def load(mode=None):
+            return MemoryMappedTensor.from_filename(
+                filename=file_path, shape=[4], dtype=torch.float32, mode=mode
+            )
+
+        # "r" maps the file copy-on-write: in-place writes stay in memory
+        cow = load("r")
+        cow.fill_(1)
+        assert (load() == 0).all()
+        # "r+" maps it shared: in-place writes reach the file
+        load("r+").fill_(2)
+        assert (load() == 2).all()
+        assert (cow == 1).all()
+        # the mode survives pickling, also for indexed views
+        for tensor in (cow, cow[1:]):
+            pickle.loads(pickle.dumps(tensor)).fill_(3)
+        assert (load() == 2).all()
+        with pytest.raises(ValueError, match="mode must be"):
+            load("w")
 
     @pytest.mark.skipif(not HAS_NESTED_TENSOR, reason="Nested tensor incomplete")
     @pytest.mark.skipif(os.getuid() == 0, reason="root can write to read-only files")

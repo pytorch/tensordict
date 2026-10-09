@@ -8,8 +8,8 @@ import dataclasses
 import importlib.util
 import inspect
 import platform
-import sys
 import warnings
+import weakref
 from pathlib import Path
 from typing import Any, Callable
 
@@ -22,9 +22,8 @@ from packaging import version
 
 from tensordict import (
     assert_close,
+    from_dataclass,
     NonTensorData,
-    PYTREE_REGISTERED_LAZY_TDS,
-    PYTREE_REGISTERED_TDS,
     tensorclass,
     TensorDict,
     TensorDictParams,
@@ -41,10 +40,20 @@ from tensordict.nn import (
     TensorDictModule as Mod,
     TensorDictSequential as Seq,
 )
-from tensordict.nn.functional_modules import _exclude_td_from_pytree
+from tensordict.nn.functional_modules import (
+    _exclude_td_from_pytree,
+    PYTREE_REGISTERED_LAZY_TDS,
+    PYTREE_REGISTERED_TDS,
+)
+from tensordict.store._utils import _prepare_indexed_value
 
 from tensordict.tensorclass import TensorClass
-from tensordict.utils import unravel_keys
+from tensordict.utils import (
+    _unravel_key_to_tuple,
+    unravel_key,
+    unravel_key_list,
+    unravel_keys,
+)
 
 from torch._dynamo.testing import CompileCounterWithBackend
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
@@ -66,10 +75,27 @@ elif is_npu_available():
     cur_device = "npu"
     npu_device_count = torch.npu.device_count()
 
-pytestmark = pytest.mark.skipif(
-    sys.version_info >= (3, 14),
-    reason="torch.compile is not supported on python 3.14+ ",
-)
+
+@pytest.mark.parametrize("is_tensordict_module", [False, True])
+def test_cudagraph_module_is_released_without_gc(is_tensordict_module):
+    if is_tensordict_module:
+        module = TensorDictModule(lambda x: x, in_keys=["x"], out_keys=["y"])
+    else:
+
+        def module(x):
+            return x
+
+    with _exclude_td_from_pytree():
+        with (
+            pytest.warns(UserWarning)
+            if not torch.cuda.is_available()
+            else contextlib.nullcontext()
+        ):
+            wrapper = CudaGraphModule(module)
+
+        wrapper_ref = weakref.ref(wrapper)
+        del wrapper
+        assert wrapper_ref() is None
 
 
 @pytest.fixture(autouse=True)
@@ -78,6 +104,19 @@ def _reset_dynamo_code_caches():
     # between tests keeps recompile/guard-count assertions reliable and prevents
     # one test's frame from leaking into the next.
     torch._dynamo.reset_code_caches()
+
+
+@pytest.mark.parametrize("value_shape", [(), (3,)])
+def test_store_indexed_value_compile(value_shape):
+    idx = torch.tensor([[0, 2], [1, 3]])
+    value = torch.full(value_shape, 7.0, requires_grad=True)
+    compiled = torch.compile(_prepare_indexed_value, fullgraph=True)
+    actual = compiled(value, [5, 3], torch.float32, idx)
+    torch.testing.assert_close(actual, torch.full((2, 2, 3), 7.0))
+    actual.sum().backward()
+    torch.testing.assert_close(
+        value.grad, torch.full_like(value, actual.numel() / value.numel())
+    )
 
 
 def test_vmap_compile():
@@ -106,6 +145,90 @@ def test_unravel_keys_compile(key):
     assert (
         eager == compiled
     ), f"unravel_keys mismatch for {key!r}: eager={eager!r}, compiled={compiled!r}"
+
+
+_UNRAVEL_VALID_KEYS = [
+    "a",
+    ("a",),
+    ("a", "b"),
+    (("a", "b"), "c"),
+    ("a", ("b", ("c",))),
+    ((("a",),),),
+]
+# These unravel to () in both modes.
+_UNRAVEL_INVALID_TUPLE_KEYS = [
+    ("a", 1),
+    (("a", 1), "b"),
+    ("a", ()),
+    (),
+    ((),),
+    (slice(None), 0),
+    (0, Ellipsis),
+]
+
+
+@pytest.mark.parametrize(
+    "fn", [_unravel_key_to_tuple, unravel_key], ids=lambda fn: fn.__name__
+)
+@pytest.mark.parametrize(
+    "key", _UNRAVEL_VALID_KEYS + _UNRAVEL_INVALID_TUPLE_KEYS, ids=repr
+)
+def test_unravel_key_fullgraph(fn, key):
+    eager = fn(key)
+    torch._dynamo.reset()
+
+    def f(x):
+        return x + 1, fn(key)
+
+    compiled = torch.compile(f, fullgraph=True, backend="eager")(torch.zeros(()))[1]
+    assert compiled == eager
+
+
+def test_unravel_key_list_fullgraph():
+    eager = unravel_key_list(_UNRAVEL_VALID_KEYS)
+    eager_keys = unravel_keys(*_UNRAVEL_VALID_KEYS)
+    torch._dynamo.reset()
+
+    def f(x):
+        return (
+            x + 1,
+            unravel_key_list(_UNRAVEL_VALID_KEYS),
+            unravel_keys(*_UNRAVEL_VALID_KEYS),
+        )
+
+    _, compiled, compiled_keys = torch.compile(f, fullgraph=True, backend="eager")(
+        torch.zeros(())
+    )
+    assert compiled == eager
+    assert compiled_keys == eager_keys
+
+
+@pytest.mark.parametrize(
+    "fn,key",
+    [
+        (unravel_key, 1),
+        (unravel_key, None),
+        (unravel_key_list, ["a", 1]),
+        (unravel_key_list, ["a", ("a", 1)]),
+        (unravel_key_list, ["a", ()]),
+    ],
+    ids=["unravel_key-int", "unravel_key-None", "list-int", "list-mixed", "list-empty"],
+)
+def test_unravel_key_invalid_fullgraph(fn, key):
+    msg = "key should be a Sequence<NestedKey>"
+    with pytest.raises(RuntimeError, match=msg):
+        fn(key)
+    torch._dynamo.reset()
+
+    def f(x):
+        try:
+            fn(key)
+        except RuntimeError as err:
+            return x + 1, str(err)
+        return x, None
+
+    _, compiled_msg = torch.compile(f, fullgraph=True, backend="eager")(torch.zeros(()))
+    assert compiled_msg == msg
 
 
 @pytest.mark.skipif(
@@ -184,6 +307,27 @@ class TestTD:
             assert (add_one(data)["a", "b"] == torch.arange(1, 3)).all()
             assert (add_one_c(data)["a", "b"] == torch.arange(1, 3)).all()
             assert add_one_c(data).shape == torch.Size([2])
+
+    def test_td_index_empty_slice(self, mode):
+        def index(td):
+            return td[:0]
+
+        index_c = torch.compile(index, fullgraph=True, mode=mode)
+        data = TensorDict({"a": {"b": torch.arange(3)}}, [3])
+        result = index_c(data)
+        assert result.shape == torch.Size([0])
+        assert result["a", "b"].shape == torch.Size([0])
+
+    def test_td_index_bool_mask(self, mode):
+        # the masked size depends on the data, so this graph-breaks
+        def add_one(td, mask):
+            return td[mask] + 1
+
+        add_one_c = torch.compile(add_one, mode=mode)
+        data = TensorDict({"a": {"b": torch.arange(3)}}, [3])
+        result = add_one_c(data, torch.tensor([True, False, True]))
+        assert result.shape == torch.Size([2])
+        assert (result["a", "b"] == torch.tensor([1, 3])).all()
 
     def test_stack(self, mode):
         def stack_tds(td0, td1):
@@ -1440,6 +1584,28 @@ class TestNN:
         prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
         prob_mod_c(TensorDict(inp=torch.randn(3)))
 
+    @pytest.mark.parametrize("mean_raises", [False, True])
+    def test_prob_module_mean(self, mode, mean_raises):
+        class NoMeanNormal(torch.distributions.Normal):
+            @property
+            def mean(self):
+                raise NotImplementedError
+
+        dist_cls = NoMeanNormal if mean_raises else torch.distributions.Normal
+        prob_mod = Prob(
+            in_keys=["loc", "scale"],
+            out_keys=["sample"],
+            distribution_class=dist_cls,
+            default_interaction_type=InteractionType.MEAN,
+            n_empirical_estimate=8,
+        )
+        td = TensorDict(loc=torch.randn(3), scale=torch.ones(3))
+        prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
+        sample = prob_mod_c(td.copy())["sample"]
+        assert sample.shape == td["loc"].shape
+        if not mean_raises:
+            torch.testing.assert_close(sample, td["loc"])
+
 
 @pytest.mark.skipif(
     TORCH_VERSION <= version.parse("2.4.0"), reason="requires torch>2.4"
@@ -1550,7 +1716,8 @@ class TestFunctional:
     @pytest.mark.skipif(
         TORCH_VERSION <= version.parse("2.5.0"), reason="requires torch>2.5"
     )
-    def test_vmap_functional(self, mode):
+    @pytest.mark.parametrize("preserve_module_state", [False, True])
+    def test_vmap_functional(self, mode, preserve_module_state):
         module = torch.nn.Sequential(
             torch.nn.Linear(3, 4),
             torch.nn.ReLU(),
@@ -1561,7 +1728,7 @@ class TestFunctional:
         td_zero = TensorDictParams(td.data.expand(10).clone().zero_())
 
         def call(x, td):
-            with td.to_module(module, preserve_module_state=False):
+            with td.to_module(module, preserve_module_state=preserve_module_state):
                 result = module(x)
             return result
 
@@ -1581,10 +1748,6 @@ class TestFunctional:
 
 
 @pytest.mark.skipif(not _v2_5, reason="Requires PT>=2.5")
-@pytest.mark.skipif(
-    sys.version_info >= (3, 14),
-    reason="torch.export has compatibility issues with Python 3.14 (networkx/dataclasses)",
-)
 class TestExport:
     def test_export_module(self):
         tdm = Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"])
@@ -2136,6 +2299,14 @@ class _FactoryDefaultTC:
     cache: torch.Tensor = dataclasses.field(default_factory=lambda: torch.zeros(3))
 
 
+@dataclasses.dataclass
+class _FactoryDefaultDataClass:
+    cache: torch.Tensor = dataclasses.field(default_factory=lambda: torch.zeros(3))
+
+
+_FactoryDefaultFromDataclassTC = from_dataclass(_FactoryDefaultDataClass)
+
+
 @tensorclass
 class _NoneDefaultTC:
     x: torch.Tensor
@@ -2181,6 +2352,16 @@ class TestTCDefaultsCompile:
             return _FactoryDefaultTC().cache
 
         torch.testing.assert_close(_FactoryDefaultTC().cache, torch.zeros(3))
+        torch.testing.assert_close(fn(), torch.zeros(3))
+
+    def test_from_dataclass_default_factory_under_compile(self):
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn():
+            return _FactoryDefaultFromDataclassTC().cache
+
+        torch.testing.assert_close(
+            _FactoryDefaultFromDataclassTC().cache, torch.zeros(3)
+        )
         torch.testing.assert_close(fn(), torch.zeros(3))
 
     def test_omitted_none_default_under_compile(self):

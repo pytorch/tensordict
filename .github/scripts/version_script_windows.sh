@@ -49,6 +49,14 @@ export UNSAFE_PYO3_BUILD_FREE_THREADED=1
 # Install setuptools_scm which is required for building with --no-isolation
 pip install setuptools_scm
 
+# test-infra's Windows smoke test installs 3.15 wheels with
+# --index-url https://download.pytorch.org/whl/..., which has no pyvers.
+# Install it from PyPI first; drop this once test-infra installs 3.15 wheels
+# from PyPI. Keep the range in sync with pyproject.toml.
+if [[ "${PYTHON_VERSION:-}" == 3.15* ]]; then
+    pip install "pyvers>=0.2.0,<0.3.0"
+fi
+
 # Execute the build command passed as arguments
 if [[ $# -gt 0 ]]; then
     echo "Executing build command: $@"

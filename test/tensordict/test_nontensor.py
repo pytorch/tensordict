@@ -206,6 +206,137 @@ class TestNonTensorData:
         c_nested = ls_nested.contiguous(canonical=canonical)
         assert c_nested["sub", "q"] == ["s0", "s1"]
 
+    @pytest.mark.parametrize(
+        "container",
+        ["stack", "stack_dim1", "dense", "dense_dim1", "lazy", "lazy_dim1"],
+    )
+    @pytest.mark.parametrize(
+        "op",
+        [
+            lambda x: x.flip(1),
+            lambda x: torch.flip(x, [0, 1]),
+            lambda x: x.roll(1, 1),
+            lambda x: torch.rot90(x, 1, [0, 1]),
+            lambda x: x.narrow(1, 1, 2),
+            lambda x: torch.tile(x, (2, 1)),
+            lambda x: x.broadcast_to((2, 2, 3)),
+            lambda x: x.reshape(3, 2),
+        ],
+        ids=[
+            "flip",
+            "torch.flip",
+            "roll",
+            "rot90",
+            "narrow",
+            "tile",
+            "broadcast_to",
+            "reshape",
+        ],
+    )
+    def test_shape_ops_preserve_non_tensor_values(self, op, container):
+        values = [[0, 1, 2], [3, 4, 5]]
+        # stacking the columns along dim=1 yields the same values but a stack
+        # whose stack_dim is not the first dimension
+        columns = [list(col) for col in zip(*values)]
+        expected = op(torch.tensor(values))
+        if container == "stack":
+            result = op(NonTensorStack.from_list(values))
+            assert isinstance(result, NonTensorStack)
+            assert result.tolist() == expected.tolist()
+            return
+        if container == "stack_dim1":
+            stack = torch.stack(
+                [NonTensorStack.from_list(col) for col in columns], dim=1
+            )
+            assert stack.stack_dim == 1
+            result = op(stack)
+            assert isinstance(result, NonTensorStack)
+            assert result.tolist() == expected.tolist()
+            return
+        if container == "lazy":
+            td = lazy_stack(
+                [
+                    TensorDict(
+                        query=NonTensorStack.from_list(row),
+                        x=torch.tensor(row),
+                        batch_size=[3],
+                    )
+                    for row in values
+                ]
+            )
+        elif container in ("dense_dim1", "lazy_dim1"):
+            stack_fn = lazy_stack if container == "lazy_dim1" else torch.stack
+            td = stack_fn(
+                [
+                    TensorDict(
+                        query=NonTensorStack.from_list(col),
+                        x=torch.tensor(col),
+                        batch_size=[2],
+                    )
+                    for col in columns
+                ],
+                dim=1,
+            )
+            assert td.get("query").stack_dim == 1
+        else:
+            td = TensorDict(
+                query=NonTensorStack.from_list(values),
+                x=torch.tensor(values),
+                batch_size=[2, 3],
+            )
+        result = op(td)
+        assert isinstance(result.get("query"), NonTensorStack)
+        assert result.get("query").tolist() == expected.tolist()
+        assert (result.get("x") == expected).all()
+
+    def test_shape_ops_non_tensor_stack_semantics(self):
+        stack = NonTensorStack("walk", "jump", "stand")
+        # flip copies the entries, as it copies tensors
+        flipped = stack.flip(0)
+        flipped[0] = "hop"
+        assert flipped.tolist() == ["hop", "jump", "walk"]
+        assert stack.tolist() == ["walk", "jump", "stand"]
+        # narrow is a slice, so the entries are shared like a view
+        narrowed = stack.narrow(0, -2, 2)
+        narrowed[0] = "hop"
+        assert stack.tolist() == ["walk", "hop", "stand"]
+        with pytest.raises(RuntimeError, match="exceeds dimension size"):
+            stack.narrow(0, 2, 2)
+
+        # an in-place roll moves the non-tensor entries along with the tensors
+        td = TensorDict(
+            query=NonTensorStack("a", "b", "c"), x=torch.arange(3), batch_size=[3]
+        )
+        assert td.roll(1, 0, inplace=True) is td
+        assert td.get("query").tolist() == ["c", "a", "b"]
+        assert td.get("x").tolist() == [2, 0, 1]
+        # the same when the stack dim of the entries is not the first one
+        td = torch.stack(
+            [
+                TensorDict(
+                    query=NonTensorStack("a", "b"),
+                    x=torch.tensor([0, 1]),
+                    batch_size=[2],
+                ),
+                TensorDict(
+                    query=NonTensorStack("c", "d"),
+                    x=torch.tensor([2, 3]),
+                    batch_size=[2],
+                ),
+            ],
+            dim=1,
+        )
+        assert td.get("query").stack_dim == 1
+        assert td.roll(1, 0, inplace=True) is td
+        assert td.get("query").tolist() == [["b", "d"], ["a", "c"]]
+        assert td.get("x").tolist() == [[1, 3], [0, 2]]
+
+        grid = NonTensorStack.from_list([["a", "b", "c"], ["d", "e", "f"]])
+        assert grid.reshape(2, 3) is grid
+        assert grid.reshape(6, 1).tolist() == [["a"], ["b"], ["c"], ["d"], ["e"], ["f"]]
+        with pytest.raises(RuntimeError, match="invalid for input of size 6"):
+            grid.reshape(4, 2)
+
     def test_comparison(self, non_tensor_data):
         non_tensor_data = non_tensor_data.exclude(("nested", "str"))
         assert (non_tensor_data | non_tensor_data).get_non_tensor(("nested", "bool"))
@@ -421,6 +552,28 @@ class TestNonTensorData:
             non_tensor_data.get_non_tensor(("nested", "another_string"))
             == "another string!"
         )
+
+    @pytest.mark.parametrize("stacked", [False, True])
+    @pytest.mark.parametrize("array", [np.array, torch.tensor], ids=["numpy", "torch"])
+    def test_set_at_array_data(self, array, stacked):
+        # Arrays and tensors compare elementwise, so comparing the old and new
+        # contents does not give a bool. Writing them used to raise.
+        if stacked:
+            data = NonTensorStack(*[NonTensorData(array([0, 0])) for _ in range(3)])
+        else:
+            data = NonTensorData(array([0, 0]), batch_size=[3])
+        td = TensorDict(a=data, b=torch.zeros(3), batch_size=[3])
+        td.set_at_("a", NonTensorData(array([0, 0])), 0)
+        td.set_at_("a", NonTensorData(array([1, 2, 3])), 1)
+        td[2] = TensorDict(a=NonTensorData(array([4, 5])), b=torch.ones(()))
+        assert [x.tolist() for x in td.get("a").tolist()] == [[0, 0], [1, 2, 3], [4, 5]]
+        td[:2] = TensorDict(
+            a=NonTensorData(array([6, 7]), batch_size=[2]),
+            b=torch.ones(2),
+            batch_size=[2],
+        )
+        assert [x.tolist() for x in td.get("a").tolist()] == [[6, 7], [6, 7], [4, 5]]
+        assert td["b"].tolist() == [1.0, 1.0, 1.0]
 
     def test_setitem_edge_case(self):
         s = NonTensorStack("a string")
@@ -774,6 +927,27 @@ class TestNonTensorData:
         assert not pickle_path.exists()
         loaded = TensorDict.load_memmap(tmp_path, allow_pickle=False)
         assert loaded.tolist() == ["a", "b"]
+
+    def test_load_memmap_refreshes_non_tensor(self, tmp_path):
+        def make(version):
+            return TensorDict(
+                {
+                    "a": torch.full((2,), float(version)),
+                    "data": NonTensorData(f"v{version}", batch_size=[2]),
+                    "stack": NonTensorStack(f"s{version}", f"t{version}"),
+                    "nested": {"data": NonTensorData(f"w{version}", batch_size=[2])},
+                },
+                batch_size=[2],
+            )
+
+        make(2).memmap(tmp_path / "src")
+        dest = make(1).memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "src", allow_pickle=False)
+        assert (dest["a"] == 2).all()
+        assert dest["data"] == "v2"
+        assert list(dest["stack"]) == ["s2", "t2"]
+        assert dest["nested", "data"] == "w2"
+        assert dest.is_memmap()
 
     @pytest.mark.parametrize("allow_pickle", [0, 1, np.bool_(False), np.bool_(True)])
     def test_memmap_pickle_policy_requires_bool(self, tmp_path, allow_pickle):
@@ -1416,6 +1590,36 @@ class TestUnbatchedTensor:
         assert isinstance(result, torch.Tensor)
         assert isinstance(result, UnbatchedTensor)
         assert result.data_ptr() == data.data_ptr()
+
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize(
+        "method", ["memmap", "memmap_", "memmap_threads", "save", "consolidate"]
+    )
+    def test_unbatched_memmap_consolidate_raise(self, method, nested, tmpdir):
+        # Not supported yet: these used to write the entry as a plain tensor
+        # that no longer matches the batch size.
+        td = TensorDict(
+            a=torch.randn(2, 3),
+            config=UnbatchedTensor(torch.arange(3.0)),
+            batch_size=(2, 3),
+        )
+        if nested:
+            td = TensorDict(nested=td, b=torch.randn(2), batch_size=(2,))
+        match = "memory-mapped" if method != "consolidate" else "consolidated"
+        with pytest.raises(NotImplementedError, match=f"cannot be {match} yet"):
+            if method == "memmap":
+                td.memmap(tmpdir)
+            elif method == "memmap_":
+                td.memmap_(tmpdir)
+            elif method == "memmap_threads":
+                td.memmap(tmpdir, num_threads=2)
+            elif method == "save":
+                td.save(tmpdir)
+            else:
+                td.consolidate()
+        if method == "memmap_" and not nested:
+            assert not td.is_memmap()
+            assert isinstance(td.get("config"), UnbatchedTensor)
 
     def test_unbatched_stack_same_data_no_warning(self):
         data = torch.randn(5)

@@ -23,88 +23,117 @@ jobs:
   build-docs:
     strategy:
       matrix:
-        python_version: ["3.10"]
+        # The zarr tutorial needs zarr>=3, which requires Python>=3.11.
+        python_version: ["3.12"]
         cuda_arch_version: ["12.8"]
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    # The docs build uses the CPU build of torch and no GPU.
+    runs-on: "mt-l-x86iavx512-48-384"
+    container:
+      image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
+    timeout-minutes: 120
     permissions:
-      id-token: write
       contents: read
-    with:
-      repository: pytorch/tensordict
-      upload-artifact: docs
-      runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
-      timeout: 120
-      script: |
-        set -e
-        set -v
+    # setup_env.sh bootstraps and sources conda, so a login shell.
+    defaults:
+      run:
+        shell: bash -l {0}
+    env:
+      RUNNER_ARTIFACT_DIR: ${{ github.workspace }}/artifacts
+    steps:
+      # Before checkout on purpose: actions/checkout needs git in the
+      # container, and this image has none -- without it the checkout
+      # degrades to a REST API tarball with no .git, which setup_env.sh needs.
+      - name: Install git
+        run: |
+          set -eux
+          apt-get update
+          apt-get install -y git
 
-        # Set up environment variables
-        export PYTHON_VERSION=3.10
-        export CU_VERSION="cpu"
-        export TORCH_VERSION=nightly
-        export ARCH=x86_64
+      - name: Check out code
+        uses: actions/checkout@v4
 
-        # Use existing setup script
-        bash .github/unittest/linux/scripts/setup_env.sh
+      - name: Build docs
+        run: |
+          mkdir -p "${RUNNER_ARTIFACT_DIR}"
+          set -e
+          set -v
 
-        # Install additional tools needed for docs build
-        apt update && apt install -y unzip
+          # Set up environment variables
+          export PYTHON_VERSION=${{ matrix.python_version }}
+          export CU_VERSION="cpu"
+          export TORCH_VERSION=nightly
+          export ARCH=x86_64
 
-        # Activate the conda environment
-        eval "$(./conda/bin/conda shell.bash hook)"
-        conda activate "./env"
+          # Use existing setup script
+          bash .github/unittest/linux/scripts/setup_env.sh
 
-        # Install PyTorch and torchvision (CPU version for docs)
-        python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
+          # Install additional tools needed for docs build
+          apt update && apt install -y unzip
 
-        # Install tensordict runtime deps explicitly (except torch which is handled above),
-        # then install tensordict without resolving dependencies to avoid any solver changing the
-        # PyTorch build (stable vs nightly).
-        python -m pip install -U packaging pyvers importlib_metadata --quiet --root-user-action=ignore
+          # Activate the conda environment
+          eval "$(./conda/bin/conda shell.bash hook)"
+          conda activate "./env"
 
-        # Set up versioning environment (conditional on release branch/tag)
-        export GITHUB_REF_TYPE=${{ github.ref_type }}
-        export GITHUB_REF_NAME=${{ github.ref_name }}
-        source .github/scripts/version_script.sh
+          # Install PyTorch and torchvision (CPU version for docs)
+          python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
 
-        # Install tensordict -- install as develop if not on a release branch
-        if [[ ${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/* ]] || [[ ${{ github.ref_type }} == tag ]]; then
-          python -m pip install . --no-deps
-        else
-          python -m pip install -e . --no-deps
-        fi
+          # Install tensordict runtime deps explicitly (except torch which is handled above),
+          # then install tensordict without resolving dependencies to avoid any solver changing the
+          # PyTorch build (stable vs nightly).
+          python -m pip install -U packaging pyvers --quiet --root-user-action=ignore
 
-        # Install docs requirements
-        export TD_GET_DEFAULTS_TO_NONE='1'
-        python -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
+          # Set up versioning environment (conditional on release branch/tag)
+          export GITHUB_REF_TYPE=${{ github.ref_type }}
+          export GITHUB_REF_NAME=${{ github.ref_name }}
+          source .github/scripts/version_script.sh
 
-        # Test tensordict installation
-        mkdir _tmp
-        cd _tmp
-        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python -c "from tensordict import *"
-        cd ..
+          # Install tensordict -- install as develop if not on a release branch
+          if [[ ${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/* ]] || [[ ${{ github.ref_type }} == tag ]]; then
+            python -m pip install . --no-deps
+          else
+            python -m pip install -e . --no-deps
+          fi
 
-        # Set sanitize version for releases
-        if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
-          echo '::group::Enable version string sanitization'
-          # This environment variable just has to exist and must not be empty. The actual value is arbitrary.
-          # See docs/source/conf.py for details
-          export TENSORDICT_SANITIZE_VERSION_STR_IN_DOCS=1
-          echo '::endgroup::'
-        fi
+          # Install docs requirements
+          export TD_GET_DEFAULTS_TO_NONE='1'
+          python -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
 
-        # Build documentation
-        cd ./docs
-        make docs
-        cd ..
+          # Test tensordict installation
+          mkdir _tmp
+          cd _tmp
+          PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python -c "from tensordict import *"
+          cd ..
 
-        # Copy artifacts
-        cp -r docs/build/html/* "${RUNNER_ARTIFACT_DIR}"
-        echo $(ls "${RUNNER_ARTIFACT_DIR}")
-        if [[ ${{ github.event_name == 'pull_request' }} ]]; then
-          cp -r docs/build/html/* "${RUNNER_DOCS_DIR}"
-        fi
+          # Set sanitize version for releases
+          if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
+            echo '::group::Enable version string sanitization'
+            # This environment variable just has to exist and must not be empty. The actual value is arbitrary.
+            # See docs/source/conf.py for details
+            export TENSORDICT_SANITIZE_VERSION_STR_IN_DOCS=1
+            echo '::endgroup::'
+          fi
+
+          # Build documentation
+          cd ./docs
+          make docs
+          cd ..
+
+          # Copy artifacts
+          cp -r docs/build/html/* "${RUNNER_ARTIFACT_DIR}"
+          echo $(ls "${RUNNER_ARTIFACT_DIR}")
+
+          # On pull requests, upload-docs-preview.yml reads this file and
+          # publishes the artifact to S3 as the docs preview. This job cannot:
+          # pull requests from forks get no OIDC token, so no AWS credentials.
+          if [[ ${{ github.event_name }} == pull_request ]]; then
+            echo "PR_NUMBER=${{ github.event.pull_request.number }}" > "${RUNNER_ARTIFACT_DIR}/pr-metadata.txt"
+          fi
+
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs
+          path: ${{ github.workspace }}/artifacts
 
   upload:
     needs: build-docs
@@ -112,7 +141,12 @@ jobs:
         ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
     permissions:
       contents: write
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    # Every job that pushes to gh-pages joins this group, so they push one at a
+    # time. With `queue: max`, later jobs wait instead of being cancelled.
+    concurrency:
+      group: gh-pages
+      queue: max
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/tensordict
       download-artifact: docs
@@ -151,7 +185,10 @@ jobs:
         rm -rf "${TARGET_FOLDER}"/*
 
         echo $(ls "${RUNNER_ARTIFACT_DIR}")
-        rsync -a "${RUNNER_ARTIFACT_DIR}"/ "${TARGET_FOLDER}"
+        # Was rsync, which linux_job.yml's conda-builder image had.
+        # almalinux-builder, the v3 default, does not; a plain recursive
+        # copy is all this needed.
+        cp -a "${RUNNER_ARTIFACT_DIR}"/. "${TARGET_FOLDER}"/
         git add "${TARGET_FOLDER}" || true
 
         if [[ "${TARGET_FOLDER}" == "main" ]] ; then

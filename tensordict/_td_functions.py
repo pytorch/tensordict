@@ -125,6 +125,7 @@ def load(
     out: TensorCollection | None = None,
     robust_key: bool | None = True,
     allow_pickle: bool | None = None,
+    mode: str | None = None,
 ) -> "Self":
     """Loads a tensordict from disk."""
     return load_memmap(
@@ -134,6 +135,7 @@ def load(
         out=out,
         robust_key=robust_key,
         allow_pickle=allow_pickle,
+        mode=mode,
     )
 
 
@@ -145,6 +147,7 @@ def load_memmap(
     out: TensorCollection | None = None,
     robust_key: bool | None = True,
     allow_pickle: bool | None = None,
+    mode: str | None = None,
 ) -> "Self":
     """Loads a memory-mapped tensordict from disk."""
     return _tensordict_cls().load_memmap(
@@ -154,6 +157,7 @@ def load_memmap(
         out=out,
         robust_key=robust_key,
         allow_pickle=allow_pickle,
+        mode=mode,
     )
 
 

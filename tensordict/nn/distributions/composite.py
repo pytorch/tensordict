@@ -30,7 +30,7 @@ class CompositeDistribution(d.Distribution, Mapping):
     Args:
         params (TensorDictBase): A nested key-tensor map where the root entries correspond to sample names, and the leaves
             are the distribution parameters. Entry names must match those specified in `distribution_map`.
-        distribution_map (Dict[NestedKey, Type[torch.distribution.Distribution]]): Specifies the distribution types to be used.
+        distribution_map (Dict[NestedKey, Type[torch.distributions.Distribution]]): Specifies the distribution types to be used.
             The names of the distributions should match the sample names in the `TensorDict`.
 
     Keyword Arguments:
@@ -40,16 +40,16 @@ class CompositeDistribution(d.Distribution, Mapping):
         log_prob_key (NestedKey, optional): The key where the aggregated log probability will be stored.
             Defaults to `'sample_log_prob'`.
 
-            .. note:: if :func:`tensordict.nn.probabilistic.composite_lp_aggregate` returns ``False``, tbe log-probabilities will
+            .. note:: if :func:`tensordict.nn.composite_lp_aggregate` returns ``False``, tbe log-probabilities will
                 be written under `("path", "to", "leaf", "<sample_name>_log_prob")`
-                where `("path", "to", "leaf", "<sample_name>")` is the :class:`~tensordict.NestedKey` corresponding to
+                where `("path", "to", "leaf", "<sample_name>")` is the ``NestedKey`` corresponding to
                 the leaf tensor being sampled. In that case, the ``log_prob_key`` argument will be ignored.
 
         entropy_key (NestedKey, optional): The key where the entropy will be stored. Defaults to `'entropy'`
 
-            .. note:: if :func:`tensordict.nn.probabilistic.composite_lp_aggregate` returns ``False``, tbe entropies will
+            .. note:: if :func:`tensordict.nn.composite_lp_aggregate` returns ``False``, tbe entropies will
                 be written under `("path", "to", "leaf", "<sample_name>_entropy")`
-                where `("path", "to", "leaf", "<sample_name>")` is the :class:`~tensordict.NestedKey` corresponding to
+                where `("path", "to", "leaf", "<sample_name>")` is the ``NestedKey`` corresponding to
                 the leaf tensor being sampled. In that case, the ``entropy_key`` argument will be ignored.
 
     .. note:: The batch size of the input TensorDict containing the parameters (`params`) determines the batch shape of
@@ -74,16 +74,14 @@ class CompositeDistribution(d.Distribution, Mapping):
         ...     print(sample)
         TensorDict(
             fields={
-                cont: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
                 cont_log_prob: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
                 nested: TensorDict(
                     fields={
-                        disc: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.int64, is_shared=False),
                         disc_log_prob: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                    batch_size=torch.Size([4]),
+                    batch_size=torch.Size([4, 3]),
                     device=None,
                     is_shared=False)},
-            batch_size=torch.Size([4]),
+            batch_size=torch.Size([4, 3]),
             device=None,
             is_shared=False)
 

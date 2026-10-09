@@ -20,10 +20,10 @@ class EnsembleModule(TensorDictModuleBase):
     Args:
         module (nn.Module): The nn.module to duplicate and wrap.
         num_copies (int): The number of copies of module to make.
-        parameter_init_function (Callable): A function that takes a module copy and initializes its parameters.
-        expand_input (bool): Whether to expand the input TensorDict to match the number of copies. This should be
+        expand_input (bool, optional): Whether to expand the input TensorDict to match the number of copies. This should be
             True unless you are chaining ensemble modules together, e.g. EnsembleModule(cnn) -> EnsembleModule(mlp).
             If False, EnsembleModule(mlp) will expected the previous module(s) to have already expanded the input.
+            Defaults to ``True``.
 
     Examples:
         >>> import torch

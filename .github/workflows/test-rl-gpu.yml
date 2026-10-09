@@ -29,28 +29,53 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    runs-on: mt-l-x86aavx2-11-41-a10g
+    container:
+      image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
+      options: --gpus all
+    timeout-minutes: 120
     permissions:
-      id-token: write
       contents: read
-    with:
-      runner: linux.g5.4xlarge.nvidia.gpu
-      docker-image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
-      repository: pytorch/tensordict
-      gpu-arch-type: cuda
-      gpu-arch-version: ${{ matrix.cuda_arch_version }}
-      timeout: 120
-      script: |
-        # Set env vars from matrix
-        export PYTHON_VERSION=${{ matrix.python_version }}
-        # Commenting these out for now because the GPU test are not working inside docker
-        export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
-        export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
-        export TORCH_VERSION=nightly
-        # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
-        #export CU_VERSION="cpu"
+    # run_all.sh sources conda, so a login shell.
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      # Before checkout on purpose: actions/checkout needs git in the
+      # container, and this image has none -- without it the checkout
+      # degrades to a REST API tarball with no .git, which the script needs.
+      - name: Install git
+        run: |
+          set -eux
+          apt-get update
+          apt-get install -y git
 
-        echo "PYTHON_VERSION: $PYTHON_VERSION"
-        echo "CU_VERSION: $CU_VERSION"
+      - name: Check out code
+        uses: actions/checkout@v4
 
-        bash .github/unittest/rl_linux_optdeps/scripts/run_all.sh
+      # torchrl's distributed transport does
+      # socket.gethostbyname(socket.gethostname()) to pick the TCPStore
+      # address. Under linux_job_v2 the script ran in a plain `docker run`,
+      # which writes the container hostname into /etc/hosts; an OSDC job
+      # container gets no such entry and the lookup raises
+      # "gaierror: [Errno -2] Name or service not known". Everything that
+      # talks to that store lives in this container, so loopback is the
+      # right answer.
+      - name: Make the container hostname resolvable
+        run: |
+          set -eux
+          echo "127.0.0.1 $(hostname)" >> /etc/hosts
+          getent hosts "$(hostname)"
+
+      - name: Run tests
+        env:
+          PYTHON_VERSION: ${{ matrix.python_version }}
+          CUDA_ARCH_VERSION: ${{ matrix.cuda_arch_version }}
+          TORCH_VERSION: nightly
+        run: |
+          set -eux
+          export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
+          echo "PYTHON_VERSION: $PYTHON_VERSION"
+          echo "CU_VERSION: $CU_VERSION"
+
+          bash .github/unittest/rl_linux_optdeps/scripts/run_all.sh

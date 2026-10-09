@@ -11,9 +11,11 @@ TensorDict serialization API mainly relies on :class:`~tensordict.MemoryMappedTe
 which is used to write tensors independently on disk with a data structure
 that mimics the TensorDict's one.
 
-TensorDict's serialization speed can be an order of magnitude **faster** than
-PyTorch's one with :func:`~torch.save`'s pickle reliance. This document explains
-how to create and interact with data stored on disk using TensorDict.
+Because each leaf is written to an independent file, saving can be spread over
+several threads, and loading is lazy: the files are memory-mapped and only read
+when accessed. A speed comparison with :func:`~torch.save` and other formats is
+given below. This document explains how to create and interact with data
+stored on disk using TensorDict.
 
 Saving memory-mapped TensorDicts
 --------------------------------
@@ -113,9 +115,13 @@ needs to be preallocated on disk, the typical usage being:
 As illustrated above, when converting entries of a :class:`~tensordict.TensorDict`
 to :class:`~tensordict.MemoryMappedTensor`, it is possible to control where
 the memory maps are saved on disk so that they persist and can
-be loaded at a later date. On the other hand, the file system can also be used.
-To use this, simply discard the ``prefix`` argument in the three serialization
-methods above.
+be loaded at a later date. If the ``prefix`` argument of the three serialization
+methods above is omitted, each tensor is instead stored in an anonymous
+temporary mapping: on Linux, an unlinked file in shared memory (``/dev/shm``,
+i.e. in RAM) when it has enough free space; on other platforms (or when
+``/dev/shm`` is too small), an unlinked temporary file or, on Windows, a named
+shared-memory block. Such tensors have no associated file name, do not persist
+and cannot be reloaded with :meth:`~tensordict.TensorDictBase.load_memmap`.
 
 When a ``prefix`` is specified, the data structure follows the TensorDict's one:
 
@@ -139,7 +145,7 @@ The ``meta.json`` files contain all the relevant information to rebuild the
 tensordict, such as device, batch-size, but also the tensordict subtypes.
 This means that :meth:`~tensordict.TensorDict.load_memmap` will be able to
 reconstruct complex nested structures where sub-tensordicts have different types
-than parents:
+than parents, such as a tensorclass stored in a :class:`~tensordict.TensorDict`:
 
   >>> from tensordict import TensorDict, tensorclass, TensorDictBase
   >>> from tensordict.utils import print_directory_tree
@@ -157,32 +163,33 @@ than parents:
   ...
   ...     loaded_data = TensorDictBase.load_memmap(tempdir)
   ...     assert (loaded_data == data).all()
-  ...     print_directory_tree(tempdir)
-  tmpzy1jcaoq/
+  ...     tree = print_directory_tree(tempdir)
+  >>> type(loaded_data["tensorclass"]) is MyClass
+  True
+
+``print_directory_tree`` writes the tree through the ``tensordict`` logger (one
+``INFO`` record per line) and also returns it as a string. The logged messages
+are:
+
+.. code-block::
+
+  Directory size: 673.00 B
+  tmp5h_fgq76/
+      meta.json
       tensorclass/
           _tensordict/
               data.memmap
               meta.json
+              metadata/
+                  meta.json
           meta.json
       td_list/
-          0/
-              item.memmap
-              meta.json
-          1/
-              item.memmap
-              meta.json
-          3/
-              item.memmap
-              meta.json
-          2/
-              item.memmap
-              meta.json
+          item.memmap
           meta.json
-      meta.json
 
 
-Handling existing :class:`~tensordict.MemoryMappedTensor`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Handling existing ``MemoryMappedTensor``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If the :class:`~tensordict.TensorDict` already contains
 :class:`~tensordict.MemoryMappedTensor` entries there are a few
@@ -205,14 +212,37 @@ possible behaviours.
     ...     td0 = td.memmap(tmpdir_0)
     ...     td0 = td.memmap(tmpdir_0)  # works, results are just overwritten
     ...     with tempfile.TemporaryDirectory() as tmpdir_1:
-    ...         td1 = td0.memmap(tmpdir_1)
-    ...         td_load = TensorDict.load_memmap(tmpdir_1)  # works!
-    ...     assert (td_load == td).all()
+    ...         td1 = td0.memmap(tmpdir_1)  # breaks!
+    Traceback (most recent call last):
+    ...
+    RuntimeError: A filename was provided but the tensor already has a file associated (...). To copy the tensor onto the new location, pass copy_existing=True.
+    >>> with tempfile.TemporaryDirectory() as tmpdir_0:
+    ...     td0 = td.memmap(tmpdir_0)
     ...     with tempfile.TemporaryDirectory() as tmpdir_1:
-    ...         td_load = TensorDict.load_memmap(tmpdir_1)  # breaks!
+    ...         td1 = td0.memmap(tmpdir_1, copy_existing=True)  # works!
+    ...         td_load = TensorDict.load_memmap(tmpdir_1)
+    ...         assert (td_load == td).all()
 
   This feature is implemented to prevent users from inadvertently copying memory-mapped
   tensors from one location to another.
+
+Copy-on-write loading
+~~~~~~~~~~~~~~~~~~~~~
+
+By default, :meth:`~tensordict.TensorDictBase.load_memmap` maps each file of a
+directory shared if the process can write it, so in-place writes to the leaves
+reach the files. Data that is only read can be loaded with ``mode="r"``
+instead: the files are then mapped copy-on-write, and in-place writes stay in
+memory.
+
+  >>> td = TensorDict.load_memmap("/path/to/dataset", mode="r")
+  >>> td["a"].add_(1)  # the file is unchanged
+
+Prefer ``mode="r"`` for datasets on network file systems. On some of them
+(e.g. Lustre), page faults on a shared writable mapping take write locks, so
+readers of the same files on different nodes block each other.
+``mode="r+"`` requests the shared mapping explicitly and raises an error if a
+file is not writable.
 
 Single-file memmap archives
 ---------------------------
@@ -259,7 +289,7 @@ weights barely do.
 .. note::
   Two differences with directory-backed tensordicts are worth keeping in
   mind. First, by default an archive-loaded tensordict behaves like the
-  result of :meth:`~tensordict.TensorDictBase.from_consolidated`: leaves are
+  result of :func:`~tensordict.from_consolidated`: leaves are
   views into a single storage and in-place writes do **not** propagate to
   the file. Second, archives written by external zip tools (without payload
   alignment) load correctly, but misaligned leaves are copied in memory

@@ -11,7 +11,6 @@ import importlib
 import os
 import pathlib
 import pickle
-import sys
 import unittest
 import warnings
 import weakref
@@ -29,8 +28,8 @@ from tensordict import (
     set_list_to_stack,
     tensorclass,
     TensorDict,
+    unravel_key_list,
 )
-from tensordict._C import unravel_key_list
 from tensordict.nn import (
     as_tensordict_module,
     dispatch,
@@ -968,6 +967,18 @@ class TestTDModule:
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
         tdm(a=torch.zeros(1, 1))
 
+    def test_dispatch_deactivate_function(self):
+        @dispatch(source=["a"], dest=["b"])
+        def func(tensordict):
+            tensordict["b"] = tensordict["a"] + 1
+            return tensordict
+
+        assert (func(torch.zeros(1, 2)) == 1).all()
+        td = TensorDict(a=torch.zeros(1, 2))
+        with _set_dispatch_td_nn_modules(False):
+            assert func(td) is td
+        assert (td["b"] == 1).all()
+
     def test_dispatch(self):
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
         td = TensorDict({"a": torch.zeros(1, 1)}, 1)
@@ -1090,6 +1101,43 @@ class TestTDModule:
         module = MyModuleNest()
         (b,) = module(asepc=torch.zeros(1, 2))
         assert (b == 1).all()
+
+    @pytest.mark.parametrize(
+        "source,dest", [("in_keys", "out_keys"), (["a", "b"], ["c"])]
+    )
+    def test_dispatch_bound_method(self, source, dest):
+        # https://github.com/pytorch/tensordict/issues/1459
+        class MyModule(nn.Module):
+            in_keys = ["a", "b"]
+            out_keys = ["c"]
+
+            def inner_forward(self, tensordict):
+                tensordict["c"] = tensordict["a"] - tensordict["b"]
+                return tensordict
+
+            def forward(self, *args, **kwargs):
+                return dispatch(source=source, dest=dest)(self.inner_forward)(
+                    *args, **kwargs
+                )
+
+            def filler_forward(self, filler, tensordict):
+                return self.inner_forward(tensordict)
+
+        module = MyModule()
+        a, b = torch.ones(1, 2), torch.zeros(1, 2)
+        assert (module(a, b) == 1).all()
+        assert (module(a=a, b=b) == 1).all()
+        td = TensorDict(a=a, b=b)
+        assert module(td) is td
+        assert (td["c"] == 1).all()
+        dispatched = dispatch(source=source, dest=dest)(module.inner_forward)
+        td = TensorDict(a=a, b=b)
+        with _set_dispatch_td_nn_modules(False):
+            assert dispatched(td) is td
+        assert (td["c"] == 1).all()
+        # self is bound already: the first argument must be the tensordict
+        with pytest.raises(RuntimeError, match="Got filler instead"):
+            dispatch(source=source, dest=dest)(module.filler_forward)
 
     def test_dispatch_multi(self):
         tdm = TensorDictSequential(
@@ -2471,9 +2519,6 @@ def test_module_buffer():
     ],
 )
 @pytest.mark.parametrize("tc", [True, False], ids=["tc", "td"])
-@pytest.mark.skipif(
-    sys.version_info < (3, 10), reason="Not working on python 3.9 and below"
-)
 def test_to_context(original_device, new_device, tc):
     if tc:
 
@@ -2847,6 +2892,43 @@ class TestProbabilisticTensorDictModule:
             mod(td.copy())
             mod.log_prob(mod(td.copy()))
             mod.log_prob_key
+
+    @pytest.mark.parametrize("error", [NotImplementedError, AttributeError])
+    def test_mean_falls_back_to_empirical_estimate(self, error):
+        class BrokenMeanNormal(Normal):
+            @property
+            def mean(self):
+                raise error
+
+        n_empirical_estimate = 8
+        module = ProbabilisticTensorDictModule(
+            in_keys=["loc", "scale"],
+            out_keys=["sample"],
+            distribution_class=BrokenMeanNormal,
+            default_interaction_type="mean",
+            n_empirical_estimate=n_empirical_estimate,
+        )
+        td = TensorDict(loc=torch.zeros(4), scale=torch.ones(4))
+        torch.manual_seed(0)
+        sample = module(td)["sample"]
+        torch.manual_seed(0)
+        dist = BrokenMeanNormal(td["loc"], td["scale"])
+        expected = dist.rsample((n_empirical_estimate,)).mean(0)
+        torch.testing.assert_close(sample, expected)
+
+    def test_mean_does_not_sample_when_implemented(self):
+        module = ProbabilisticTensorDictModule(
+            in_keys=["loc", "scale"],
+            out_keys=["sample"],
+            distribution_class=Normal,
+            default_interaction_type="mean",
+        )
+        td = TensorDict(loc=torch.tensor([1.0, 2.0, 3.0]), scale=torch.ones(3))
+        torch.manual_seed(0)
+        state_before = torch.get_rng_state()
+        sample = module(td)["sample"]
+        assert torch.equal(torch.get_rng_state(), state_before)
+        assert torch.equal(sample, td["loc"])
 
     # ------------------------------------------------------------------
     # generator argument: Generator object, int seed, and tensordict-key forms
@@ -3908,6 +3990,9 @@ class TestCompositeDist:
         assert sample.get(("nested", "cont_cdf")).requires_grad
 
     def test_icdf(self):
+        # The cdf-icdf round trip loses float32 precision far in the tails, and
+        # about 1% of unseeded draws land there and fail assert_close.
+        torch.manual_seed(0)
         params = TensorDict(
             {
                 "cont": {
@@ -4572,6 +4657,37 @@ class TestToModule:
         torch.testing.assert_close(module.weight, params["weight"])
         torch.testing.assert_close(module.bias, params["bias"])
 
+    @pytest.mark.parametrize("source", ["computed", "leaf"])
+    @pytest.mark.parametrize("custom_setattr", [False, True])
+    def test_preserve_module_state_keeps_gradients(
+        self, as_module, source, custom_setattr
+    ):
+        class MyLinear(nn.Linear):
+            def __setattr__(self, key, value):
+                return super().__setattr__(key, value)
+
+        module = MyLinear(4, 2) if custom_setattr else nn.Linear(4, 2)
+        weight, bias = module.weight, module.bias
+        params = TensorDict.from_module(module, as_module=as_module)
+        if source == "computed":
+            params = params.apply(lambda p: p * 2)
+            grad_targets = [weight, bias]
+        else:
+            params = params.data.clone().requires_grad_()
+            grad_targets = [params["weight"], params["bias"]]
+        state_dict_keys = set(module.state_dict())
+
+        with params.to_module(module):
+            assert set(module.state_dict()) == state_dict_keys
+            assert set(dict(module.named_parameters())) == {"weight", "bias"}
+            y = module(torch.randn(3, 4))
+        y.sum().backward()
+
+        assert module.weight is weight
+        assert module.bias is bias
+        for target in grad_targets:
+            assert target.grad is not None
+
     def test_plain_tensor_to_module_can_keep_current_behavior(self, as_module):
         module = nn.Linear(4, 2)
         params = TensorDict.from_module(module, as_module=as_module).data.detach()
@@ -4836,6 +4952,34 @@ class AddDiffModule(TensorClassModuleBase[InputTensorClass, AddDiffResult]):
         )
 
 
+# String annotations are what `from __future__ import annotations` produces.
+class StringAnnotationInput(TensorClass):
+    """Test input TensorClass with string and optional annotations."""
+
+    a: "torch.Tensor"
+    b: "torch.Tensor"
+    mask: torch.Tensor | None = None
+
+
+class StringAnnotationOutput(TensorClass):
+    """Test output TensorClass with string annotations for nested fields."""
+
+    input: "StringAnnotationInput"
+    result: "AddDiffResult"
+
+
+class StringAnnotationModule(
+    TensorClassModuleBase[StringAnnotationInput, StringAnnotationOutput]
+):
+    """Test module whose input and output TensorClasses use string annotations."""
+
+    def forward(self, x: StringAnnotationInput) -> StringAnnotationOutput:
+        result = AddDiffResult(
+            added=x.a + x.b, substracted=x.a - x.b, batch_size=x.batch_size
+        )
+        return StringAnnotationOutput(input=x, result=result, batch_size=x.batch_size)
+
+
 class TestTensorClassModule(TensorClassModuleBase[InputTensorClass, OutputTensorClass]):
     """Test module with nested TensorClass output."""
 
@@ -4880,6 +5024,22 @@ class TestTensorClassModuleForward:
             ("result", "added"),
             ("result", "substracted"),
         }
+
+    def test_wrapper_keys_from_string_and_optional_annotations(self) -> None:
+        """Test that wrapper keys are read from string and optional annotations."""
+        td_module = StringAnnotationModule().as_td_module()
+        assert set(td_module.in_keys) == {"a", "b", "mask"}
+        assert set(td_module.out_keys) == {
+            ("input", "a"),
+            ("input", "b"),
+            ("input", "mask"),
+            ("result", "added"),
+            ("result", "substracted"),
+        }
+        value = StringAnnotationInput(a=10, b=5, batch_size=[])
+        td_output = td_module(value.to_tensordict())
+        assert td_output["result", "added"] == 15
+        assert td_output["result", "substracted"] == 5
 
 
 @pytest.mark.skipif(not _has_onnx, reason="ONNX is not available")

@@ -1,14 +1,14 @@
 Tracing TensorDictModule
 ========================
 
-We support tracing execution of :obj:`TensorDictModule` to create FX graphs. Simply import :obj:`symbolic_trace` from ``tensordict.prototype.fx`` instead of ``torch.fx``.
+We support tracing execution of :class:`~tensordict.nn.TensorDictModule` to create FX graphs. Simply import ``symbolic_trace`` from ``tensordict.prototype.fx`` instead of ``torch.fx``.
 
 .. note:: Support for ``torch.fx`` is highly experimental and subject to change. Use with caution, and raise an issue if you try it out and encounter problems.
 
-Tracing a :obj:`TensorDictModule`
----------------------------------
+Tracing a ``TensorDictModule``
+------------------------------
 
-We'll illustrate with an example from the overview. We create a :obj:`TensorDictModule`, trace it, and inspect the graph and generated code.
+We'll illustrate with an example from the overview. We create a :class:`~tensordict.nn.TensorDictModule`, trace it, and inspect the graph and generated code.
 
 .. code-block::
    :caption: Tracing a TensorDictModule
@@ -35,13 +35,12 @@ We'll illustrate with an example from the overview. We create a :obj:`TensorDict
    >>> graph_module = symbolic_trace(module)
    >>> print(graph_module.graph)
    graph():
-       %tensordict : [#users=1] = placeholder[target=tensordict]
-       %getitem : [#users=1] = call_function[target=operator.getitem](args = (%tensordict, input), kwargs = {})
-       %linear : [#users=2] = call_module[target=linear](args = (%getitem,), kwargs = {})
-       %sigmoid : [#users=1] = call_function[target=torch.sigmoid](args = (%linear,), kwargs = {})
+       %tensordict : [num_users=1] = placeholder[target=tensordict]
+       %getitem : [num_users=1] = call_function[target=operator.getitem](args = (%tensordict, input), kwargs = {})
+       %linear : [num_users=2] = call_module[target=linear](args = (%getitem,), kwargs = {})
+       %sigmoid : [num_users=1] = call_function[target=torch.sigmoid](args = (%linear,), kwargs = {})
        return (linear, sigmoid)
    >>> print(graph_module.code)
-
    def forward(self, tensordict):
        getitem = tensordict['input'];  tensordict = None
        linear = self.linear(getitem);  getitem = None
@@ -61,10 +60,10 @@ We can check that a forward pass with each module results in the same outputs.
    ...     == graph_module_out["outputs", "probabilities"]
    ... ).all()
 
-Tracing a :obj:`TensorDictSequential`
--------------------------------------
+Tracing a ``TensorDictSequential``
+----------------------------------
 
-We can also trace :obj:`TensorDictSequential`. In this case the entire execution of the module is traced into a single graph, eliminating intermediate reads and writes on the input :obj:`TensorDict`.
+We can also trace :class:`~tensordict.nn.TensorDictSequential`. In this case the entire execution of the module is traced into a single graph, eliminating intermediate reads and writes on the input :class:`~tensordict.TensorDict`.
 
 We demonstrate by tracing the sequential example from the overview.
 
@@ -100,7 +99,6 @@ We demonstrate by tracing the sequential example from the overview.
    >>> module = TensorDictSequential(net, masker)
    >>> graph_module = symbolic_trace(module)
    >>> print(graph_module.code)
-
    def forward(self, tensordict):
        getitem = tensordict[('input', 'x')]
        _0_fc1 = getattr(self, "0").module.fc1(getitem);  getitem = None

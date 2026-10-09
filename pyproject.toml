@@ -1,12 +1,11 @@
 [build-system]
-requires = ["setuptools", "wheel", "pybind11[global]>=2.13", "setuptools_scm"]
+requires = ["setuptools", "wheel", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [tool.usort]
 first_party_detection = false
 target-version = ["py310"]
 excludes = [
-    "gallery",
     "tutorials",
 ]
 
@@ -22,7 +21,7 @@ authors = [
   { name="Vincent Moens", email="vincentmoens@gmail.com" }
 ]
 readme = "README.md"
-license = { text = "BSD" }
+license = { text = "MIT" }
 requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3.10",
@@ -37,7 +36,6 @@ dependencies = [
     "numpy",
     "cloudpickle",
     "packaging",
-    "importlib_metadata",
     # orjson fails to be installed in python 3.13t
     'orjson ; python_version < "3.13"',
     "pyvers (>=0.2.0,<0.3.0)",
@@ -62,7 +60,6 @@ zarr = ["zarr>=3.0; python_version >= '3.11'"]
 pandas = ["pandas>=1.5"]
 parquet = ["pyarrow>=10.0"]
 tabular = ["pandas>=1.5", "pyarrow>=10.0"]
-dev = ["pybind11>=2.13", "ninja"]
 typecheck = ["mypy>=1.0.0"]
 onnx = ["onnx", "onnxscript", "onnxruntime"]
 
@@ -70,13 +67,7 @@ onnx = ["onnx", "onnxscript", "onnxruntime"]
 include-package-data = false
 
 [tool.setuptools.packages.find]
-exclude = ["test*", "tutorials*", "packaging*", "gallery*", "docs*", "benchmarks*"]
-
-#[tool.setuptools.extension]
-#my_extension = { sources = ["tensordict/csrc/pybind.cpp", "tensordict/csrc/utils.cpp"] }
-
-[tool.setuptools.package-data]
-"tensordict" = ["*.so", "*.pyd", "*.dll"]
+exclude = ["test*", "tutorials*", "packaging*", "docs*", "benchmarks*"]
 
 [tool.setuptools_scm]
 # Use SETUPTOOLS_SCM_PRETEND_VERSION=M.Major.Minor to set the version for stable releases

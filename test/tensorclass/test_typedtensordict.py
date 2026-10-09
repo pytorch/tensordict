@@ -14,6 +14,7 @@ except ImportError:
     from typing_extensions import NotRequired
 
 import tempfile
+import warnings
 
 import pytest
 import torch
@@ -644,6 +645,36 @@ class TestClassOptions:
     def test_invalid_option(self):
         with pytest.raises(ValueError, match="Unknown TypedTensorDict option"):
             TypedTensorDict["invalid_option"]
+
+    @pytest.mark.parametrize("option", ["autocast", "nocast", "tensor_only"])
+    def test_ignored_option_deprecated(self, option):
+        match = rf"option '{option}' has no effect.*removed in TensorDict 0\.17"
+        with pytest.warns(DeprecationWarning, match=match) as record:
+            base = TypedTensorDict[option]
+        assert record[0].filename == __file__
+        with pytest.warns(DeprecationWarning, match=match) as record:
+
+            class Keyword(TypedTensorDict, **{option: True}):
+                x: Tensor
+
+        assert record[0].filename == __file__
+        # a subclass inherits the option without a new warning
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+
+            class Child(base):
+                x: Tensor
+
+        assert getattr(Child, f"_{option}") is True
+        assert getattr(Keyword, f"_{option}") is True
+
+    def test_supported_options_do_not_warn(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            TypedTensorDict["shadow", "frozen"]
+
+            class Frozen(TypedTensorDict, frozen=True):
+                x: Tensor
 
 
 # ---------------------------------------------------------------------------
