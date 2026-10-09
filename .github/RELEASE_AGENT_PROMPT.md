@@ -70,9 +70,10 @@ abis = {re.search(r"-cp\d+t?-cp(\d)(\d+)(t?)-", u["filename"]).groups() for u in
 print(json.dumps([f"{a}.{b}{t}" for a, b, t in sorted(abis, key=lambda x: (int(x[0]), int(x[1]), x[2]))]))')
 echo "$PYTHON_VERSIONS"   # ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"] for 0.14.3
 
-# Since 0.15: the classifiers of the commit to release ($PREV for a patch
-# release, upstream/main for X.Y.0)
-PYTHON_VERSIONS=$(git show "$PREV:pyproject.toml" | python3 -c '
+# Since 0.15: the classifiers of the commit to release. For a patch release,
+# that is $PREV; for X.Y.0, the main commit that step 2 starts the branch from.
+START=$PREV   # for X.Y.0: upstream/main, or the commit that the maintainer names
+PYTHON_VERSIONS=$(git show "$START:pyproject.toml" | python3 -c '
 import json, re, sys
 print(json.dumps(re.findall(r"Programming Language :: Python :: (3\.\d+)", sys.stdin.read())))')
 ```
