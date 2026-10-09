@@ -55,7 +55,7 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
-from tensordict.memmap import MemoryMappedTensor
+from tensordict.memmap import _raise_if_jagged, MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
     _BatchedUninitializedBuffer,
@@ -1808,6 +1808,9 @@ class TensorDict(TensorDictBase):
                     )
                 continue
             else:
+                # Check on the calling thread: memmap() does not re-raise
+                # errors from executor jobs.
+                _raise_if_jagged(value, key)
                 if executor is None:
                     _populate_memmap(
                         dest=dest,

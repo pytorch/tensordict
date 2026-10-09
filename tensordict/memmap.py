@@ -60,6 +60,17 @@ def _prepare_memmap_file(
         os.close(fd)
 
 
+def _raise_if_jagged(tensor: torch.Tensor, key: str | None = None) -> None:
+    """Raise a clear error for a jagged nested tensor, which memmap cannot store."""
+    if tensor.is_nested and tensor.layout == torch.jagged:
+        where = "" if key is None else f" (key {key!r})"
+        raise NotImplementedError(
+            f"memmap does not support nested tensors with the torch.jagged layout{where}. "
+            "Convert it to the torch.strided layout first, for example with "
+            "LazyStackedTensorDict.densify(layout=torch.strided)."
+        )
+
+
 class MemoryMappedTensor(torch.Tensor):
     """A Memory-mapped Tensor.
 
@@ -243,6 +254,7 @@ class MemoryMappedTensor(torch.Tensor):
             raise RuntimeError(
                 "MemoryMappedTensor.from_tensor is incompatible with tensor.requires_grad."
             )
+        _raise_if_jagged(input)
         if shape is None:
             shape = _shape(input, nested_shape=True)
         if isinstance(shape, torch.Tensor):
