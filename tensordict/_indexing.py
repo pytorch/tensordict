@@ -210,8 +210,8 @@ def _read_index(index, ndim, sizes=None):
 
     If the ``sizes`` of the dims are given, the index is checked against them
     as torch checks it: too many indices, ints out of range and masks of
-    another shape raise an ``IndexError``. Index tensors are not read, so the
-    values out of range that they may hold are not found.
+    another shape raise the ``IndexError`` that torch raises. Index tensors
+    are not read, so the values out of range that they may hold are not found.
 
     Returns ``(dims, advanced, position, rest)``:
 
@@ -226,22 +226,32 @@ def _read_index(index, ndim, sizes=None):
     """
     if not isinstance(index, tuple):
         index = (index,)
+    given = index
+    if sizes is not None and any(element is Ellipsis for element in index):
+        used = sum(_num_indexed_dims(e) for e in index if e is not Ellipsis)
+        if used > ndim:
+            _raise_index_error(
+                sizes, given, f"too many indices for tensor of dimension {ndim}"
+            )
     index = _expand_ellipsis(index, ndim)
     dims = []
     advanced = []
     position = None
     after_gap = separated = False
     dim = 0
+    error = None
     for element in index:
         kind, num_dims, element = _read_element(element)
-        if sizes is not None:
+        if sizes is not None and error is None:
+            # the conditions are checked here, and the message is only built
+            # for an element that fails them
             if kind == _INT:
                 if isinstance(element, (int, np.integer)) and not (
                     dim < ndim and -sizes[dim] <= element < sizes[dim]
                 ):
-                    _check_element(kind, element, dim, num_dims, sizes)
+                    error = _element_error(kind, element, dim, num_dims, sizes)
             elif kind == _MASK and element.shape != sizes[dim : dim + num_dims]:
-                _check_element(kind, element, dim, num_dims, sizes)
+                error = _element_error(kind, element, dim, num_dims, sizes)
         if kind == _INT:
             dim += 1
         elif kind == _SLICE:
@@ -260,26 +270,50 @@ def _read_index(index, ndim, sizes=None):
             dim += num_dims
     if separated:
         position = 0
-    if sizes is not None and dim > ndim:
-        raise IndexError(f"too many indices for tensor of dimension {ndim}")
+    if sizes is not None:
+        # torch counts the indexed dims first
+        if dim > ndim:
+            error = f"too many indices for tensor of dimension {ndim}"
+        if error is not None:
+            _raise_index_error(sizes, given, error)
     return dims, advanced, position, dim
 
 
-def _check_element(kind, element, dim, num_dims, sizes):
-    """Raise the ``IndexError`` that torch raises for an element of an index that uses the dims from ``dim`` on."""
-    if dim + num_dims > len(sizes):
-        raise IndexError(f"too many indices for tensor of dimension {len(sizes)}")
+def _element_error(kind, element, dim, num_dims, sizes):
+    """The error that torch finds in an element of an index that uses the dims from ``dim`` on, or ``None``."""
     if kind == _INT and isinstance(element, (int, np.integer)):
-        size = sizes[dim]
-        if not -size <= element < size:
-            raise IndexError(
-                f"index {element} is out of bounds for dimension {dim} with size {size}"
+        if dim < len(sizes) and not -sizes[dim] <= element < sizes[dim]:
+            return (
+                f"index {element} is out of bounds for dimension {dim} with size "
+                f"{sizes[dim]}"
             )
-    elif kind == _MASK and tuple(element.shape) != tuple(sizes[dim : dim + num_dims]):
-        raise IndexError(
-            f"The shape of the mask {list(element.shape)} at index {dim} does not "
-            f"match the shape of the indexed tensor {list(sizes)} at index {dim}"
-        )
+    elif kind == _MASK and element.shape != sizes[dim : dim + num_dims]:
+        for i, (size, expected) in enumerate(zip(element.shape, sizes[dim:])):
+            if size != expected:
+                return (
+                    f"The shape of the mask {list(element.shape)} at index {i} does "
+                    f"not match the shape of the indexed tensor {list(sizes)} at "
+                    f"index {dim + i}"
+                )
+    return None
+
+
+def _raise_index_error(sizes, index, message):
+    """Raise the ``IndexError`` that torch raises for ``index`` on a tensor of shape ``sizes``.
+
+    Torch writes its message from the part of the tensor that it has indexed
+    when it finds the error, so ``index`` is read on a tensor of that shape,
+    which a single expanded element backs. ``message`` is used if that tensor
+    does not give an ``IndexError``, which happens with index tensors on
+    another device than the CPU.
+    """
+    try:
+        torch.zeros(()).expand(sizes)[index]
+    except IndexError:
+        raise
+    except RuntimeError:
+        pass
+    raise IndexError(message)
 
 
 def _getitem_batch_size(batch_size, index):
@@ -305,7 +339,7 @@ def _getitem_batch_size(batch_size, index):
     if not isinstance(index, tuple):
         if isinstance(index, int) and not isinstance(index, bool):
             if not batch_size or not -batch_size[0] <= index < batch_size[0]:
-                _check_element(_INT, index, 0, 1, batch_size)
+                _read_index(index, len(batch_size), batch_size)
             return batch_size[1:]
         if isinstance(index, slice) and index == slice(None):
             return batch_size
@@ -323,10 +357,12 @@ def _getitem_batch_size(batch_size, index):
             try:
                 shape = torch.broadcast_shapes(*shapes)
             except RuntimeError:
-                raise IndexError(
+                _raise_index_error(
+                    batch_size,
+                    index,
                     "shape mismatch: indexing tensors could not be broadcast "
-                    f"together with shapes {', '.join(str(list(s)) for s in shapes)}"
-                ) from None
+                    f"together with shapes {', '.join(str(list(s)) for s in shapes)}",
+                )
         out[position:position] = shape
     return torch.Size(out)
 
