@@ -337,7 +337,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         ...     TensorDictModule,
         ... )
         >>> from tensordict.nn.distributions import NormalParamExtractor
-        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch.distributions import Normal, Independent
         >>> td = TensorDict(
         ...     {"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3]
@@ -677,12 +676,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             lp_key_expected = _add_suffix(out_key, "_log_prob")
             if lp_key != lp_key_expected:
                 lp.rename_key_(lp_key_expected, lp_key)
-
-    @property
-    def SAMPLE_LOG_PROB_KEY(self):
-        raise RuntimeError(
-            "SAMPLE_LOG_PROB_KEY is fully deprecated. Use `obj.log_prob_key` instead."
-        )
 
     @dispatch(auto_batch_size=False)
     @_set_skip_existing_None()

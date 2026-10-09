@@ -7046,7 +7046,6 @@ from tensordict._base.factories import (  # noqa: F401
     from_dict,
     from_h5,
     from_json,
-    from_list,
     from_namedtuple,
     from_pandas,
     from_parquet,
