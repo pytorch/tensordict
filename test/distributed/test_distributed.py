@@ -1486,7 +1486,7 @@ class TestGroupPeerValidation:
 # Tensorclass distributed tests
 # ========================================================================
 
-from tensordict.testing import MyDistData
+from tensordict._testing import MyDistData
 
 
 class TestTensorclassBroadcast:

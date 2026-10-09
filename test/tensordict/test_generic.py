@@ -1827,6 +1827,36 @@ class TestGeneric:
         with pytest.raises(IndexError):
             td[index] = TensorDict()
 
+    @pytest.mark.parametrize(
+        "index",
+        [
+            [0, 2],
+            torch.tensor([0, 2]),
+            (slice(None), [0, 1]),
+            torch.tensor([True, False, True]),
+            1,
+        ],
+    )
+    def test_setitem_python_scalar_cast(self, index):
+        # torch writes a Python scalar in the dtype of the entry, with every
+        # kind of index
+        td = TensorDict(
+            {
+                "c": torch.zeros(3, 2, dtype=torch.long),
+                "n": {"b": torch.zeros(3, 2, dtype=torch.bool)},
+            },
+            [3, 2],
+        )
+        expected_c, expected_b = td["c"].clone(), td["n", "b"].clone()
+        expected_c[index] = -3.5
+        expected_b[index] = -3.5
+        td[index] = -3.5
+        assert (td["c"] == expected_c).all()
+        assert (td["n", "b"] == expected_b).all()
+        td.set_at_("c", 7.5, index)
+        expected_c[index] = 7.5
+        assert (td["c"] == expected_c).all()
+
     def test_getitem_scalar_bool_0d(self):
         td = TensorDict({"a": torch.tensor(1.0)}, [])
         assert td[True].batch_size == torch.Size([1])
@@ -1992,6 +2022,42 @@ class TestGeneric:
                 assert isinstance(tensor, FakeTensor)
 
             fake_state_dict.apply(assert_fake, filter_empty=True)
+
+    def test_load_underscore_deprecated(self, tmpdir):
+        td = TensorDict({"a": torch.arange(3), "b": {"c": torch.ones(3)}}, [3])
+        td.memmap(tmpdir)
+        dest = td.clone().zero_()
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^TensorDictBase\.load_\(\) is deprecated and will be removed in "
+            r"TensorDict 0\.17\. Use load_memmap_\(\) instead\.$",
+        ) as record:
+            out = dest.load_(tmpdir)
+        assert record[0].filename == __file__
+        assert out is dest
+        assert (dest == td).all()
+
+    def test_pin_memory_underscore_deprecated(self, monkeypatch):
+        td = TensorDict({"a": torch.arange(3)}, [3])
+        calls = []
+
+        def pin_memory(self, num_threads=None, inplace=False):
+            calls.append((num_threads, inplace))
+            return self
+
+        # pinning needs an accelerator, so check what pin_memory_ forwards
+        monkeypatch.setattr(TensorDict, "pin_memory", pin_memory)
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^TensorDictBase\.pin_memory_\(\) is deprecated and will be "
+            r"removed in TensorDict 0\.17\. Use pin_memory\(inplace=True\) instead\.$",
+        ) as record:
+            assert td.pin_memory_() is td
+        assert record[0].filename == __file__
+        assert calls == [(0, True)]
+        with pytest.warns(DeprecationWarning, match="pin_memory_"):
+            td.pin_memory_(num_threads=2)
+        assert calls[-1] == (2, True)
 
     def test_load_state_dict_incomplete(self):
         data = TensorDict({"a": {"b": {"c": {}}}, "d": 1}, [])
