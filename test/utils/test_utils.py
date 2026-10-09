@@ -873,18 +873,7 @@ _NOT_PUBLIC_MODULES = {"tensordict.tabular", "tensordict.testing"}
 # make private, and so are left out of ``__all__``. Remove the entries as those
 # changes land; entries for names that no longer exist are ignored.
 _NOT_IN_ALL_PENDING = {
-    "tensordict.base": {"from_list"},
-    "tensordict.memmap": {"implements_for_memmap"},
-    "tensordict.nn.distributions.continuous": {"NormalParamWrapper"},
-    "tensordict.nn.functional_modules": {
-        "extract_weights_and_buffers",
-        "get_functional",
-        "is_functional",
-        "make_functional",
-        "repopulate_module",
-        "set_tensor",
-        "set_tensor_dict",
-    },
+    "tensordict.nn.functional_modules": {"set_tensor", "set_tensor_dict"},
     "tensordict.nn.params": {"implements_for_tdparam"},
     "tensordict.nn.utils": {"StrEnum"},
     "tensordict.utils": {
