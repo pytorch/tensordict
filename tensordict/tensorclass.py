@@ -24,6 +24,7 @@ from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
+from types import NoneType, UnionType
 from typing import (
     AbstractSet,
     Any,
@@ -114,13 +115,6 @@ except ImportError:
 T = TypeVar("T", bound=TensorCollection)
 # We use an abstract AnyType instead of Any because Any isn't recognised as a type for python < 3.10
 major, minor = sys.version_info[:2]
-if (major, minor) < (3, 10):
-    from typing import Union  # noqa
-
-    NonType = type(None)
-    UnionType = type(Union)
-else:
-    from types import NoneType, UnionType
 if (major, minor) < (3, 11):
 
     class _AnyType:
@@ -1121,6 +1115,10 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         cls.__torch_function__ = classmethod(__torch_function__)
     cls.__getstate__ = _getstate
     cls.__setstate__ = _setstate
+    if not hasattr(cls, "__copy__"):
+        cls.__copy__ = _copy
+    if not hasattr(cls, "__deepcopy__"):
+        cls.__deepcopy__ = _deepcopy
 
     if tensor_only:
         cls.__getattr__ = _getattr_tensor_only
@@ -2127,6 +2125,16 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
         self._non_tensordict = state.get("non_tensordict")
 
 
+def _copy(self) -> Any:
+    """Copies the tensorclass without cloning its tensors, like ``self.copy()``."""
+    return self.copy()
+
+
+def _deepcopy(self, memo: dict[int, Any]) -> Any:
+    """Copies the tensorclass and clones its tensors, like ``self.clone()``."""
+    return self.clone()
+
+
 def _getattr_tensor_only(self, item: str, **kwargs) -> Any:
     # Guard against infinite recursion when _tensordict/_non_tensordict are
     # not yet set (e.g. during Dynamo tracing of the constructor or pytree
@@ -2886,8 +2894,11 @@ def _set(
                 self._non_tensordict[key] = value
                 return self
             if non_tensor:
+                # Read the metadata from the TensorDict: with shadow=True,
+                # self.batch_size and self.device can be fields.
+                td = self._tensordict
                 value = NonTensorData(
-                    data=value, batch_size=self.batch_size, device=self.device
+                    data=value, batch_size=td.batch_size, device=td.device
                 )
             if key in self._non_tensordict:
                 del self._non_tensordict[key]
@@ -3181,16 +3192,6 @@ def _grad(self):
     if grad is None:
         return None
     return self._from_tensordict(self._tensordict.grad, self._non_tensordict)
-
-
-def _names_setter(self, names: str) -> None:  # noqa: D417
-    """Set the value of ``tensorclass.names``.
-
-    Args:
-        names (sequence of str)
-
-    """
-    self._tensordict.names = names
 
 
 def _state_dict(

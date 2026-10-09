@@ -78,27 +78,88 @@ pytestmark = [
 IS_FB = os.getenv("PYTORCH_TEST_FBCODE")
 
 
-def _get_methods_from_pyi(file_path):
+_TENSORDICT_DIR = pathlib.Path(__file__).parents[2] / "tensordict"
+
+
+def _get_class_attrs_from_pyi(file_path, class_name):
     """
-    Reads a .pyi file and returns a set of method names.
+    Reads a .pyi file and returns the names that one of its classes declares.
+
+    Args:
+        file_path (str): Path to the .pyi file.
+        class_name (str): Name of the class in the .pyi file.
+
+    Returns:
+        set: The names of the methods, properties and attributes of the class.
+    """
+    with open(file_path, "r") as f:
+        tree = ast.parse(f.read())
+
+    (class_node,) = (
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == class_name
+    )
+    attrs = set()
+    for child_node in class_node.body:
+        if isinstance(child_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            attrs.add(child_node.name)
+        elif isinstance(child_node, ast.AnnAssign):
+            attrs.add(child_node.target.id)
+        elif isinstance(child_node, ast.Assign):
+            attrs.update(target.id for target in child_node.targets)
+    return attrs
+
+
+def _get_module_names_from_pyi(file_path):
+    """
+    Reads a .pyi file and returns the names that the module exports.
 
     Args:
         file_path (str): Path to the .pyi file.
 
     Returns:
-        set: A set of method names.
+        set: The names of the top-level classes, functions and variables, and
+        of the ``from x import y as y`` re-exports.
     """
     with open(file_path, "r") as f:
         tree = ast.parse(f.read())
 
-    methods = set()
+    names = set()
     for node in tree.body:
-        if isinstance(node, ast.ClassDef):
-            for child_node in node.body:
-                if isinstance(child_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    methods.add(child_node.name)
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.AnnAssign):
+            names.add(node.target.id)
+        elif isinstance(node, ast.Assign):
+            names.update(target.id for target in node.targets)
+        elif isinstance(node, ast.ImportFrom):
+            names.update(
+                alias.name for alias in node.names if alias.asname == alias.name
+            )
+    return names
 
-    return methods
+
+def _check_stub_class(stub_attrs, cls, exclusions):
+    """
+    Checks that a class stub declares every public attribute of ``cls``, and
+    nothing that ``cls`` lacks, except for the names in ``exclusions``.
+    """
+    runtime_attrs = set(dir(cls))
+    stale_exclusions = exclusions - (stub_attrs ^ runtime_attrs)
+    assert not stale_exclusions, f"Stale exclusions: {sorted(stale_exclusions)}"
+    missing = {
+        name
+        for name in runtime_attrs - stub_attrs - exclusions
+        if not name.startswith("_")
+    }
+    assert (
+        not missing
+    ), f"Public attributes of {cls.__name__} missing from its stub: {sorted(missing)}"
+    extra = stub_attrs - runtime_attrs - exclusions
+    assert (
+        not extra
+    ), f"Stub attributes that {cls.__name__} lacks at runtime: {sorted(extra)}"
 
 
 def _get_methods_from_class(cls):
@@ -125,11 +186,66 @@ def _get_methods_from_class(cls):
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
-def test_tensorclass_stub_methods():
-    tensorclass_pyi_path = (
-        pathlib.Path(__file__).parents[2] / "tensordict/tensorclass.pyi"
+def test_init_stub_exports():
+    # Type checkers read tensordict/__init__.pyi instead of __init__.py.
+    with open(_TENSORDICT_DIR / "__init__.pyi", "r") as f:
+        tree = ast.parse(f.read())
+
+    stub_all = None
+    stub_names = set()
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            module = importlib.import_module(node.module)
+            module_path = _TENSORDICT_DIR.parent / node.module.replace(".", "/")
+            module_stub = next(
+                (
+                    path
+                    for path in (
+                        module_path.with_suffix(".pyi"),
+                        module_path / "__init__.pyi",
+                    )
+                    if path.exists()
+                ),
+                None,
+            )
+            module_stub_names = (
+                _get_module_names_from_pyi(module_stub)
+                if module_stub is not None
+                else None
+            )
+            for alias in node.names:
+                assert hasattr(module, alias.name), (node.module, alias.name)
+                if module_stub_names is not None:
+                    assert alias.name in module_stub_names, (
+                        module_stub.name,
+                        alias.name,
+                    )
+                stub_names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.AnnAssign):
+            stub_names.add(node.target.id)
+        elif isinstance(node, ast.Assign) and node.targets[0].id == "__all__":
+            stub_all = ast.literal_eval(node.value)
+
+    assert sorted(stub_all) == sorted(tensordict.__all__)
+    unbound = set(stub_all) - stub_names
+    assert not unbound, f"__init__.pyi exports undefined names: {sorted(unbound)}"
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+def test_tensorcollection_stub_methods():
+    # TensorCollection is an empty base class at runtime; its stub declares
+    # the interface of TensorDictBase.
+    stub_attrs = _get_class_attrs_from_pyi(
+        str(_TENSORDICT_DIR / "_tensorcollection.pyi"), "TensorCollection"
     )
-    tensorclass_methods = _get_methods_from_pyi(str(tensorclass_pyi_path))
+    _check_stub_class(stub_attrs, TensorDictBase, exclusions=set())
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+def test_tensorclass_stub_methods():
+    tensorclass_methods = _get_class_attrs_from_pyi(
+        str(_TENSORDICT_DIR / "tensorclass.pyi"), "TensorClass"
+    )
 
     from tensordict import TensorDict
 
@@ -146,30 +262,38 @@ def test_tensorclass_stub_methods():
         )
 
 
+# Names on which the TensorClass stub and runtime tensorclasses differ on purpose.
+_TENSORCLASS_STUB_EXCLUSIONS = {
+    # Forwards to LazyStackedTensorDict.extend, so it works only when the
+    # tensorclass wraps a lazy stack; TensorDictBase has no extend.
+    "extend",
+    # Iteration goes through __getitem__ at runtime; the stub declares
+    # __iter__ so that type checkers know what a loop yields.
+    "__iter__",
+}
+
+
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
-def test_tensorclass_instance_methods():
-    @tensorclass
-    class X:
-        x: torch.Tensor
+@pytest.mark.parametrize("form", ["decorator", "subclass"])
+def test_tensorclass_instance_methods(form):
+    exclusions = set(_TENSORCLASS_STUB_EXCLUSIONS)
+    if form == "decorator":
 
-    tensorclass_pyi_path = (
-        pathlib.Path(__file__).parents[2] / "tensordict/tensorclass.pyi"
+        @tensorclass
+        class X:
+            x: torch.Tensor
+
+        # TensorClass["nocast"] and the like exist on TensorClass only.
+        exclusions.add("__class_getitem__")
+    else:
+
+        class X(TensorClass):
+            x: torch.Tensor
+
+    stub_attrs = _get_class_attrs_from_pyi(
+        str(_TENSORDICT_DIR / "tensorclass.pyi"), "TensorClass"
     )
-    tensorclass_abstract_methods = _get_methods_from_pyi(str(tensorclass_pyi_path))
-
-    tensorclass_methods = _get_methods_from_class(X)
-
-    missing_methods = (
-        tensorclass_abstract_methods - tensorclass_methods - {"data", "grad"}
-    )
-    missing_methods = [
-        method for method in missing_methods if (not method.startswith("_"))
-    ]
-
-    if missing_methods:
-        raise Exception(
-            f"Missing methods in tensorclass.pyi: {sorted(missing_methods)}"
-        )
+    _check_stub_class(stub_attrs, X, exclusions)
 
 
 def test_sorted_methods():
@@ -217,10 +341,6 @@ class MyData:
     def stuff(self):
         return self.X + self.y
 
-
-PY8 = sys.version_info >= (3, 8) and sys.version_info < (3, 9)
-PY9 = sys.version_info >= (3, 9) and sys.version_info < (3, 10)
-PY10 = sys.version_info >= (3, 10)
 
 # this slightly convoluted construction of MyData allows us to check that instances of
 # the tensorclass are instances of the original class.
@@ -1435,6 +1555,51 @@ class TestTensorClass:
             assert data2.z == data.z
             assert data2.batch_size == data.batch_size
 
+    @pytest.mark.parametrize("frozen", [False, True])
+    def test_copy_deepcopy(self, frozen):
+        if frozen:
+            data = MyDataFrozen(X=torch.ones(3, 4, 5), z="z", batch_size=[3, 4])
+        else:
+            data = MyData(
+                X=torch.ones(3, 4, 5), y=torch.zeros(3, 4), z="z", batch_size=[3, 4]
+            )
+        shallow = copy.copy(data)
+        assert type(shallow) is type(data)
+        assert shallow._tensordict is not data._tensordict
+        assert shallow.X.data_ptr() == data.X.data_ptr()
+        deep = copy.deepcopy(data)
+        assert type(deep) is type(data)
+        assert deep is not data
+        assert deep._tensordict is not data._tensordict
+        assert deep.X.data_ptr() != data.X.data_ptr()
+        assert (deep.X == data.X).all()
+        assert deep.z == data.z
+        if not frozen:
+            shallow.z = "other"
+            shallow.batch_size = [3]
+            assert data.z == "z"
+            assert data.batch_size == torch.Size([3, 4])
+
+    def test_copy_deepcopy_user_defined(self):
+        @tensorclass
+        class MyDataCopy:
+            X: torch.Tensor
+
+            def __copy__(self):
+                return "copy"
+
+            def __deepcopy__(self, memo):
+                return "deepcopy"
+
+        @tensorclass
+        class MyDataCopyChild(MyDataCopy):
+            y: torch.Tensor = None
+
+        for cls in (MyDataCopy, MyDataCopyChild):
+            data = cls(X=torch.ones(3), batch_size=[3])
+            assert copy.copy(data) == "copy"
+            assert copy.deepcopy(data) == "deepcopy"
+
     @pytest.mark.parametrize("consolidate", [False, True])
     def test_pickle_consolidate(self, consolidate):
         with set_capture_non_tensor_stack(False):
@@ -2343,10 +2508,6 @@ class TestTensorClass:
         assert isinstance(tc2, MyTensorClass)
         assert isinstance(tc2._tensordict, LazyStackedTensorDict)
 
-    # Not working on python 3.9 and below
-    @pytest.mark.skipif(
-        sys.version_info < (3, 10), reason="Not working on python 3.9 and below"
-    )
     @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
     def test_to_mds(self, tmpdir):
         td = LazyStackedTensorDict(
@@ -3251,45 +3412,31 @@ class TestAutoCasting:
         assert isinstance(obj.tensor, torch.Tensor)
         assert isinstance(obj.non_tensor, str)
         assert isinstance(obj.td, TensorDict)
-        if not PY8:
-            assert isinstance(obj.tc, self.ClsAutoCast), (type(obj.tc), type(obj))
-        else:
-            assert isinstance(obj.tc, dict), (type(obj.tc), type(obj))
+        assert isinstance(obj.tc, self.ClsAutoCast), (type(obj.tc), type(obj))
 
         assert isinstance(obj.tc_global, AutoCast), (type(obj.tc), type(obj))
 
-        if not PY8:
-            assert isinstance(obj.tc.tensor, torch.Tensor)
-            assert isinstance(obj.tc.non_tensor, str)
-            assert isinstance(obj.tc.td, TensorDict)
-            assert obj.tc.tc is None
+        assert isinstance(obj.tc.tensor, torch.Tensor)
+        assert isinstance(obj.tc.non_tensor, str)
+        assert isinstance(obj.tc.td, TensorDict)
+        assert obj.tc.tc is None
 
     def test_autocast_or(self):
-        with (
-            pytest.warns(
-                UserWarning, match="This may be caused by annotations that use plain"
-            )
-            if not PY10
-            else contextlib.nullcontext()
-        ):
-            obj = AutoCastOr(
-                tensor=torch.zeros(()),
-                non_tensor="x",
-                td={"a": 0.0},
-                tc={
-                    "tensor": torch.zeros(()),
-                    "non_tensor": "y",
-                    "td": {"b": 0.0},
-                    "tc": None,
-                },
-            )
+        obj = AutoCastOr(
+            tensor=torch.zeros(()),
+            non_tensor="x",
+            td={"a": 0.0},
+            tc={
+                "tensor": torch.zeros(()),
+                "non_tensor": "y",
+                "td": {"b": 0.0},
+                "tc": None,
+            },
+        )
 
         assert isinstance(obj.tensor, torch.Tensor)
         assert isinstance(obj.non_tensor, str)
-        if not PY10:
-            assert not isinstance(obj.td, TensorDict)
-        else:
-            assert isinstance(obj.td, TensorDict)
+        assert isinstance(obj.td, TensorDict)
         assert not isinstance(obj.tc, AutoCast), (type(obj.tc), type(obj))
 
         assert isinstance(obj.tc["tensor"], torch.Tensor)
@@ -3421,6 +3568,29 @@ class TestShadow:
         assert c.device == 0
         c.batch_size = 1
         assert c.batch_size == 1
+
+    def test_shadow_non_tensor_values(self):
+        # Non-tensor values are wrapped in NonTensorData, which must take the
+        # batch size and device of the TensorDict, not the shadowed fields.
+        @tensorclass(shadow=True, nocast=True)
+        class MyClass:
+            x: torch.Tensor
+            batch_size: Any
+            device: Any
+            name: str
+
+        c = MyClass(
+            torch.zeros(10, 4), batch_size=4, device="not-a-device", name="graph"
+        )
+        assert c.batch_size == 4
+        assert c.device == "not-a-device"
+        assert c.name == "graph"
+        assert c._tensordict.batch_size == torch.Size([])
+        assert c._tensordict.device is None
+        c.batch_size = 5
+        c.device = "other"
+        assert c.batch_size == 5
+        assert c.device == "other"
 
     def test_shadow_values_dec_subcls(self):
         @tensorclass(shadow=True)
@@ -4037,7 +4207,6 @@ class TestTensorOnly:
                 b: torch.Tensor
                 c: torch.Tensor | None = None
 
-    @pytest.mark.skipif(PY9, reason="3.9 not supported for type checks")
     def test_wrong_tensor_only(self):
         class TensorOnly(TensorClass["tensor_only"]):
             a: torch.IntTensor
@@ -4081,7 +4250,6 @@ class TestTensorOnly:
                 b: torch.Tensor
                 c: torch.Tensor | Union[torch.IntTensor, str] | None = None  # noqa
 
-    @pytest.mark.skipif(PY9, reason="3.9 not supported for type checks")
     def test_tensor_only_parameterized_generic(self):
         # Regression test for GitHub issue #1658:
         # tensor_only=True should accept parameterized generics like TensorDict[str, Tensor]

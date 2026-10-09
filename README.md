@@ -257,7 +257,7 @@ installed by pip unless you pass `--no-build-isolation`. `--no-deps` also skips
 the runtime dependencies, so install them first:
 
 ```bash
-pip install numpy cloudpickle packaging importlib_metadata orjson "pyvers>=0.2,<0.3"
+pip install numpy cloudpickle packaging orjson "pyvers>=0.2,<0.3"
 pip install -e . --no-deps
 ```
 
