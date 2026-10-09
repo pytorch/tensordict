@@ -380,6 +380,11 @@ class MyDataFrozen:
     z: str
 
 
+@tensorclass(tensor_only=True)
+class MyDataTensorOnly:
+    X: torch.Tensor
+
+
 class TestTensorClass:
     @pytest.mark.parametrize("tensor_only", [False, True])
     @pytest.mark.parametrize("frozen", [False, True])
@@ -1617,6 +1622,17 @@ class TestTensorClass:
             assert (data2.X == data.X).all()
             assert data2.z == data.z
             assert data2.batch_size == data.batch_size
+
+    def test_pickle_tensor_only_while_compiling(self):
+        # torch.compile sets this process-wide flag for as long as it compiles,
+        # so other threads, such as a DataLoader's pin-memory thread, see it.
+        data = MyDataTensorOnly(X=torch.ones(3, 4), batch_size=[3])
+        payload = pickle.dumps(data)
+        with torch.compiler._compile_session_context():
+            data2 = pickle.loads(payload)
+        assert isinstance(data2, MyDataTensorOnly)
+        assert (data2.X == data.X).all()
+        assert data2.batch_size == data.batch_size
 
     @pytest.mark.parametrize("frozen", [False, True])
     def test_copy_deepcopy(self, frozen):
