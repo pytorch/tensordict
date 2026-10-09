@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import mmap
+import operator
 import os
 import re
 import sys
@@ -17,6 +18,7 @@ from typing import Any, overload, TYPE_CHECKING
 import numpy as np
 import torch
 from tensordict._deprecation import deprecated
+from tensordict._indexing import _expand_ellipsis, _INT, _NONE, _read_element, _SLICE
 from tensordict.utils import (
     _maybe_correct_neg_dim,
     _NESTED_TENSOR_ERR,
@@ -59,6 +61,111 @@ def _prepare_memmap_file(
         raise RuntimeError(f"{err.strerror}: {filename}") from err
     else:
         os.close(fd)
+
+
+def _index_elements(index, ndim: int) -> list:
+    """Read an index that makes a view of a tensor with ``ndim`` dims.
+
+    Returns its elements: ints as ints, and the Ellipsis and the dims that the
+    index leaves out as ``slice(None)``.
+    """
+    if isinstance(index, list) and any(
+        element is None
+        or element is Ellipsis
+        or isinstance(element, (slice, torch.Tensor))
+        for element in index
+    ):
+        # torch reads such a list as a tuple (deprecated)
+        index = tuple(index)
+    elif not isinstance(index, tuple):
+        index = (index,)
+    elements = []
+    for element in _expand_ellipsis(index, ndim):
+        kind, _, element = _read_element(element)
+        if kind == _INT:
+            element = operator.index(element)
+        elif kind not in (_SLICE, _NONE):
+            raise RuntimeError(
+                f"Cannot pickle this MemoryMappedTensor: the index {element!r} "
+                "that built it makes a copy."
+            )
+        elements.append(element)
+    return elements + [slice(None)] * (ndim - sum(e is not None for e in elements))
+
+
+def _compose_index(shape, first, second) -> tuple:
+    """Return one index that selects ``t[first][second]`` from a tensor ``t``.
+
+    ``first`` and ``second`` are indices that make views (ints, slices, None and
+    Ellipsis). ``shape`` is the shape of ``t``, or its nested shapes if ``t`` is
+    a nested tensor. Raises a ``RuntimeError`` if no index selects that view.
+    """
+    nested = isinstance(shape, torch.Tensor)
+    # the sizes of the dims of t, None for those of a nested tensor
+    sizes = [None] * (shape.shape[1] + 1) if nested else list(shape)
+    # t[first], as one entry per element of first: an int selects a dim of t, a
+    # range keeps part of one, slice(None) keeps one of unknown size, and None
+    # adds a dim of size 1
+    view = []
+    dim = 0
+    for element in _index_elements(first, len(sizes)):
+        if element is None:
+            view.append(None)
+            continue
+        if isinstance(element, int):
+            view.append(element)
+            if nested and dim == 0:
+                # the other dims have the sizes of the tensor that it selects
+                sizes[1:] = shape[element].tolist()
+        elif sizes[dim] is not None:
+            view.append(range(sizes[dim])[element])
+        elif element == slice(None):
+            view.append(element)
+        else:
+            raise RuntimeError(
+                "Cannot pickle this MemoryMappedTensor: it slices a dim of a "
+                "nested tensor."
+            )
+        dim += 1
+    # t[first][second], in the same form
+    out = []
+    pos = 0
+    n_dims = sum(not isinstance(entry, int) for entry in view)
+    for element in _index_elements(second, n_dims):
+        # the ints go first: nested tensors take no None at dim 0
+        while pos < len(view) and isinstance(view[pos], int):
+            out.append(view[pos])
+            pos += 1
+        if element is None:
+            out.append(None)
+            continue
+        entry = view[pos]
+        pos += 1
+        if isinstance(entry, range):
+            out.append(entry[element])
+        elif entry is not None:
+            out.append(element)
+        elif isinstance(element, slice):
+            # a dim that None added, which an int removes
+            if not range(1)[element]:
+                raise RuntimeError(
+                    "Cannot pickle this MemoryMappedTensor: it slices a dim "
+                    "that None added to length 0, and no index selects such a "
+                    "view from the tensor that holds its memory."
+                )
+            out.append(None)
+    out.extend(view[pos:])
+    index = [
+        slice(entry.start, entry.stop, entry.step)
+        if isinstance(entry, range)
+        else entry
+        for entry in out
+    ]
+    if nested and index[0] == slice(None):
+        # nested tensors take an Ellipsis, but no slice, for the dims they keep
+        end = next((i for i, entry in enumerate(index) if entry != slice(None)), None)
+        index[:end] = [Ellipsis]
+    return tuple(index)
 
 
 class MemoryMappedTensor(torch.Tensor):
@@ -112,6 +219,9 @@ class MemoryMappedTensor(torch.Tensor):
     _mode: str | None = None
     _clear: bool
     _index: Any
+    # the indices that made this tensor from the one that its file or handler
+    # holds, as nested pairs: (the chain of the parent, the last index)
+    _index_chain: tuple = ()
     _parent_shape: torch.Size
 
     def __new__(
@@ -803,6 +913,7 @@ class MemoryMappedTensor(torch.Tensor):
         out._handler = None
         out._mode = mode
         out._index = index
+        out._index_chain = () if index is None else ((), index)
         out._parent_shape = shape
         return out
 
@@ -858,6 +969,7 @@ class MemoryMappedTensor(torch.Tensor):
         out.filename = None
         out._handler = handler
         out._index = index
+        out._index_chain = () if index is None else ((), index)
         out._parent_shape = shape
         return out
 
@@ -869,18 +981,20 @@ class MemoryMappedTensor(torch.Tensor):
 
     def __getstate__(self):
         if getattr(self, "_handler", None) is not None:
+            shape, index = self._pickle_args()
             return {
                 "handler": self._handler,
                 "dtype": self.dtype,
-                "shape": list(self._parent_shape),
-                "index": self._index,
+                "shape": list(shape),
+                "index": index,
             }
         elif getattr(self, "_filename", None) is not None:
+            shape, index = self._pickle_args()
             return {
                 "filename": self._filename,
                 "dtype": self.dtype,
-                "shape": self._parent_shape,
-                "index": self._index,
+                "shape": shape,
+                "index": index,
                 "mode": self._mode,
             }
         else:
@@ -894,17 +1008,39 @@ class MemoryMappedTensor(torch.Tensor):
             return type(self)._from_handler, (
                 self._handler,
                 self.dtype,
-                self._parent_shape,
-                self._index,
+                *self._pickle_args(),
             )
         elif getattr(self, "_filename", None) is not None:
-            args = (self._filename, self.dtype, self._parent_shape, self._index)
+            args = (self._filename, self.dtype, *self._pickle_args())
             if self._mode is not None:
                 # Only when set, so that earlier versions can load other pickles.
                 args += (self._mode,)
             return type(self).from_filename, args
         else:
             raise RuntimeError("Could not find handler or filename.")
+
+    def _pickle_args(self):
+        # The shape of the tensor that the file or handler holds, and one index
+        # that selects this tensor from it, so that earlier versions can load
+        # the pickle too
+        if not self._index_chain:
+            return self._parent_shape, None
+        if not self.is_nested and not self.untyped_storage().nbytes():
+            # No memory to share, and __getitem__ also wraps the copies that
+            # index a tensor with no elements: pickle a tensor of this shape
+            return self.shape, None
+        indices = []
+        chain = self._index_chain
+        while chain:
+            chain, item = chain
+            indices.append(item)
+        index, *items = reversed(indices)
+        if index is None:
+            # from_filename and _from_handler read None as no index
+            index = (None,)
+        for item in items:
+            index = _compose_index(self._parent_shape, index, item)
+        return self._parent_shape, index
 
     @property
     @deprecated("MemoryMappedTensor.index", removal="0.17")
@@ -959,6 +1095,7 @@ class MemoryMappedTensor(torch.Tensor):
         tensor.filename = getattr(self, "_filename", None)
         tensor._mode = self._mode
         tensor._index = item
+        tensor._index_chain = (self._index_chain, item)
         tensor._parent_shape = getattr(self, "_parent_shape", None)
         return tensor
 
