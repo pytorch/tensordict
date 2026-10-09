@@ -142,6 +142,24 @@ class TestErrorMessage:
             td.set(("nested", "self"), td)
         assert set(td.keys()) == {"a"}
 
+    @staticmethod
+    @pytest.mark.parametrize("td_type", ["td", "sub_td", "params"])
+    def test_iter_0d(td_type):
+        td = TensorDict({"a": torch.zeros(2, 3)}, [2])
+        if td_type == "sub_td":
+            td = td._get_sub_tensordict(0)
+        else:
+            td = td[0]
+            if td_type == "params":
+                td = TensorDictParams(td)
+        assert td.batch_dims == 0
+        err = "iteration over a 0-d tensordict"
+        # iter() raises at once, as it does for a 0-d tensor
+        with pytest.raises(TypeError, match=err):
+            iter(td)
+        with pytest.raises(TypeError, match=err):
+            list(td)
+
 
 class TestErrors:
     def test_error_get(self):

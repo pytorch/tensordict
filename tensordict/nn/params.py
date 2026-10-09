@@ -439,7 +439,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         return self
 
     def __iter__(self):
-        yield from self._param_td.__iter__()
+        return iter(self._param_td)
 
     def register_get_post_hook(self, hook):
         """Register a hook to be called after any get operation on leaf tensors."""
