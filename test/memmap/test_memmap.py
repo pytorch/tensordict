@@ -781,6 +781,19 @@ class TestNestedTensor:
             for j in range(3):
                 assert (td[i, j] == tdsave[i, j]).all()
 
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_memmap_like_td_with_nested(self, tmpdir, num_threads):
+        nt = torch.nested.nested_tensor([torch.ones(2), torch.ones(3)])
+        td = TensorDict({"n": nt}, batch_size=[2])
+        out = td.memmap_like(tmpdir, num_threads=num_threads)
+        assert out["n"].is_nested
+        assert (out["n"]._nested_tensor_size() == nt._nested_tensor_size()).all()
+        assert all((t == 0).all() for t in out["n"].unbind(0))
+        assert all((t == 1).all() for t in td["n"].unbind(0))
+        loaded = TensorDict.load_memmap(tmpdir)
+        assert loaded["n"].is_nested
+        assert (loaded["n"]._nested_tensor_size() == nt._nested_tensor_size()).all()
+
 
 class TestReadWrite:
     @pytest.mark.skipif(os.getuid() == 0, reason="root can write to read-only files")
