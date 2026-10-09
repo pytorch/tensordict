@@ -21,6 +21,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 import numpy as np
 import pytest
@@ -905,6 +906,45 @@ class TestGeneric:
         viewedtd.set("a", a)
         assert viewedtd.get("a").device == device
         assert (a.to(device) == viewedtd.get("a")).all()
+
+    @pytest.mark.parametrize("as_tensorclass", [False, True])
+    @pytest.mark.parametrize(
+        "device,expected",
+        [
+            (None, torch.device("cuda")),
+            (1, torch.device("cuda", 1)),
+            ("cuda", torch.device("cuda")),
+            ("cuda:1", torch.device("cuda", 1)),
+            (torch.device("cuda", 1), torch.device("cuda", 1)),
+        ],
+    )
+    def test_cuda_device_and_kwargs(self, as_tensorclass, device, expected):
+        # `to` is mocked so that the test runs without a GPU.
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        if as_tensorclass:
+
+            @tensorclass
+            class MyClass:
+                a: torch.Tensor
+
+            td = MyClass.from_tensordict(td)
+        with mock.patch.object(TensorDict, "to", autospec=True) as to:
+            if device is None:
+                td.cuda(non_blocking=True)
+            else:
+                td.cuda(device, non_blocking=True)
+        to.assert_called_once()
+        (target,) = to.call_args.args[1:]
+        assert torch.device(target) == expected
+        assert to.call_args.kwargs == {"non_blocking": True}
+
+    @pytest.mark.parametrize("device", ["cpu", torch.device("cpu"), "meta"])
+    def test_cuda_rejects_non_cuda_device(self, device):
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        with mock.patch.object(TensorDict, "to", autospec=True) as to:
+            with pytest.raises(RuntimeError, match="must be a cuda device"):
+                td.cuda(device)
+        to.assert_not_called()
 
     def test_data_grad(self):
         td = TensorDict(
