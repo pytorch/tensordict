@@ -1503,8 +1503,7 @@ class _Serialization:
                 subpath = _unravel_key_to_tuple(subpath)
                 if not subpath:
                     raise ValueError(
-                        "subpath must be a string path or a (nested) tuple of "
-                        "strings."
+                        "subpath must be a string path or a (nested) tuple of strings."
                     )
             for part in subpath:
                 effective_robust_key = _get_robust_key_setting_with_warning(

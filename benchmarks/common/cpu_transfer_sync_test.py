@@ -12,11 +12,11 @@ Three strategies are compared:
 Strategy (3) is the current default (.to("cpu") with non_blocking=None).
 Strategy (2) was the previous default before the event-based sync change.
 """
+
 from __future__ import annotations
 
 import pytest
 import torch
-
 from tensordict import TensorDict
 from tensordict.base import _sync_cuda_transfer
 from tensordict.utils import logger as tensordict_logger

@@ -83,7 +83,6 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     set_capture_non_tensor_stack,
 )
 from torch import multiprocessing as mp, Tensor
-
 from torch.compiler import is_compiling
 from torch.multiprocessing import Manager
 from torch.utils._pytree import tree_map
@@ -92,6 +91,18 @@ if TYPE_CHECKING:
     from typing import Self
 else:
     Self = Any
+
+__all__ = [
+    "MetaData",
+    "NonTensorData",
+    "NonTensorDataBase",
+    "NonTensorStack",
+    "TensorAttrs",
+    "TensorClass",
+    "from_dataclass",
+    "is_non_tensor",
+    "tensorclass",
+]
 
 
 def _identity(cls):
@@ -5245,7 +5256,7 @@ class NonTensorStack(LazyStackedTensorDict):
         selfrepr = indent(selfrepr, prefix=4 * " ")
         batch_size = indent(f"batch_size={self.batch_size}", prefix=4 * " ")
         device = indent(f"device={self.device}", prefix=4 * " ")
-        return f"NonTensorStack(\n{selfrepr}," f"\n{batch_size}," f"\n{device})"
+        return f"NonTensorStack(\n{selfrepr},\n{batch_size},\n{device})"
 
     @classmethod
     def lazy_stack(

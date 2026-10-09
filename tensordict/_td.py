@@ -24,9 +24,7 @@ from typing import (
 from warnings import warn
 
 import numpy as np
-
 import torch
-
 from tensordict._archive import _memmap_tensor_from_path
 from tensordict._indexing import (
     _as_tuple,
