@@ -321,6 +321,12 @@ loading process:
   >>> data_loaded = TensorDict.load_memmap("path/to/saved/directory")
   >>> assert isinstance(data_loaded, type(data))
 
+The class is saved under its module and name. A class defined in ``__main__``
+(a script or a notebook) cannot be found under that name by another program.
+Load such data with the tensorclass itself, e.g.
+``MyClass.load_memmap("path/to/saved/directory")``: ``load_memmap`` uses the
+class it is called on when its name matches the saved one.
+
 Loading pickled non-tensor data without passing ``allow_pickle`` emits a
 ``FutureWarning`` in TensorDict 0.14; the default becomes
 ``allow_pickle=False`` (which refuses to load it) in 0.15. Pass

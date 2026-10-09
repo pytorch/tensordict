@@ -7,13 +7,13 @@
 
 Skipped automatically when ``h5py`` is missing.
 """
+
 from __future__ import annotations
 
 import importlib
 
 import pytest
 import torch
-
 from tensordict import PersistentTensorDict, TensorDict
 
 _has_h5py = importlib.util.find_spec("h5py", None) is not None
