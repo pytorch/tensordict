@@ -5,19 +5,14 @@
 
 from __future__ import annotations
 
-import numbers
 import os
-import weakref
 from collections import defaultdict
-from concurrent.futures import Future, ThreadPoolExecutor, wait
-from copy import copy
 from numbers import Number
 from pathlib import Path
 from textwrap import indent
 from typing import (
     Any,
     Callable,
-    Dict,
     Iterable,
     Iterator,
     List,
@@ -52,9 +47,8 @@ from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
     _load_metadata,
-    _maybe_broadcast_other,
-    _NESTED_TENSORS_AS_LISTS,
     _register_tensor_class,
+    _SELF_NESTING_ERROR,
     _UNSET,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
@@ -65,17 +59,14 @@ from tensordict.base import (
 )
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
-    _add_batch_dim_pre_hook,
     _as_context_manager,
     _BatchedUninitializedBuffer,
     _BatchedUninitializedParameter,
     _canonicalize_tensor,
-    _check_inbuild,
     _CHECK_INVARIANTS,
     _check_invariants,
     _clone_value,
     _create_segments_from_int,
-    _create_segments_from_list,
     _encode_key_for_filesystem,
     _get_item,
     _get_leaf_tensordict,
@@ -84,13 +75,11 @@ from tensordict.utils import (
     _index_preserve_data_ptr,
     _infer_size_impl,
     _is_safe_legacy_key,
-    _is_shared,
     _is_unbatched,
     _KEY_ERROR,
     _LOCK_ERROR,
     _LockedSchema,
     _maybe_correct_neg_dim,
-    _mismatch_keys,
     _NON_STR_KEY_ERR,
     _NON_STR_KEY_TUPLE_ERR,
     _parse_to,
@@ -109,17 +98,14 @@ from tensordict.utils import (
     DeviceType,
     expand_as_right,
     IndexType,
-    is_batchedtensor,
     is_non_tensor,
     is_tensorclass,
     lock_blocked,
     unravel_key,
     unravel_key_list,
 )
-from torch import nn, Tensor
+from torch import Tensor
 from torch._functorch.vmap import _maybe_remove_batch_dim
-from torch.nn.parameter import UninitializedTensorMixin
-from torch.nn.utils._named_member_accessor import swap_tensor
 from torch.utils._pytree import tree_map
 
 try:
@@ -135,11 +121,6 @@ try:
 except ImportError:  # torch 2.0
     from torch._dynamo import is_compiling
 
-try:
-    from torch.nn.parameter import Buffer
-except ImportError:
-    from tensordict.utils import Buffer
-
 if TYPE_CHECKING:
     from typing import Self
 else:
@@ -147,7 +128,6 @@ else:
 
 _register_tensor_class(ftdim.Tensor)
 
-__base__setattr__ = torch.nn.Module.__setattr__
 
 try:
     from tensordict.utils import _import_and_wrap_functorch
@@ -596,359 +576,6 @@ class TensorDict(TensorDictBase):
                 return False
         return True
 
-    def _to_module(
-        self,
-        module: nn.Module,
-        *,
-        inplace: bool | None = None,
-        return_swap: bool = True,
-        swap_dest=None,
-        memo=None,
-        use_state_dict: bool = False,
-        non_blocking: bool = False,
-        preserve_module_state: bool | None = True,
-        is_dynamo: bool | None = None,
-    ):
-        if is_dynamo is None:
-            is_dynamo = is_compiling()
-        if is_dynamo:
-            _check_inbuild()
-
-        if not use_state_dict and isinstance(module, TensorDictBase):
-            if return_swap:
-                swap = module.copy()
-                module._param_td = getattr(self, "_param_td", self)
-                return swap
-            else:
-                module.update(self)
-                return
-
-        hooks = memo["hooks"]
-        if return_swap:
-            _swap = {}
-            if not is_dynamo:
-                memo[weakref.ref(module)] = _swap
-
-        if use_state_dict:
-            if inplace is not None:
-                raise RuntimeError(
-                    "inplace argument cannot be passed when use_state_dict=True."
-                )
-            # execute module's pre-hooks
-            state_dict = self.flatten_keys(".")
-            prefix = ""
-            strict = True
-            local_metadata = {}
-            missing_keys = []
-            unexpected_keys = []
-            error_msgs = []
-            for hook in module._load_state_dict_pre_hooks.values():
-                hook(
-                    state_dict,
-                    prefix,
-                    local_metadata,
-                    strict,
-                    missing_keys,
-                    unexpected_keys,
-                    error_msgs,
-                )
-
-            def convert_type(x, y):
-                if isinstance(y, nn.Parameter):
-                    return nn.Parameter(x)
-                if isinstance(y, Buffer):
-                    return Buffer(x)
-                return x
-
-            input = state_dict.unflatten_keys(".")._fast_apply(
-                convert_type, self, propagate_lock=True
-            )
-        else:
-            input = self
-            inplace = bool(inplace)
-
-        # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
-        if not is_dynamo and type(module).__setattr__ is __base__setattr__:
-            # if type(module).__setattr__ is __base__setattr__:
-            __dict__ = module.__dict__
-            _parameters = __dict__["_parameters"]
-            _buffers = __dict__["_buffers"]
-        else:
-            __dict__ = None
-
-        for key, value in input.items():
-            if isinstance(value, (Tensor, ftdim.Tensor)):
-                # For Dynamo, we use regular set/delattr as we're not
-                #  much afraid by overhead (and dynamo doesn't like those
-                #  hacks we're doing).
-                if __dict__ is not None:
-                    # if setattr is the native nn.Module.setattr, we can rely on _set_tensor_dict
-                    local_out = _set_tensor_dict(
-                        __dict__,
-                        _parameters,
-                        _buffers,
-                        hooks,
-                        module,
-                        key,
-                        value,
-                        inplace,
-                        return_swap=return_swap,
-                        preserve_module_state=preserve_module_state,
-                        memo=memo,
-                    )
-                else:
-                    if not inplace:
-                        value = _maybe_preserve_module_state(
-                            module,
-                            key,
-                            value,
-                            preserve_module_state=preserve_module_state,
-                            memo=memo,
-                        )
-                        local_out = swap_tensor(module, key, value)
-                    else:
-                        new_val = local_out
-                        if return_swap:
-                            local_out = local_out.clone()
-                        new_val.data.copy_(value.data, non_blocking=non_blocking)
-            else:
-                if __dict__ is not None:
-                    child = __dict__["_modules"][key]
-                else:
-                    child = module._modules.get(key)
-
-                if not is_dynamo:
-                    local_out = memo.get(weakref.ref(child), NO_DEFAULT)
-
-                if is_dynamo or local_out is NO_DEFAULT:
-                    local_out = value._to_module(
-                        child,
-                        inplace=inplace,
-                        return_swap=return_swap,
-                        swap_dest={},  # we'll be calling update later
-                        memo=memo,
-                        use_state_dict=use_state_dict,
-                        non_blocking=non_blocking,
-                        preserve_module_state=preserve_module_state,
-                        is_dynamo=is_dynamo,
-                    )
-
-            if return_swap:
-                _swap[key] = local_out
-
-        if return_swap:
-            if isinstance(swap_dest, dict):
-                return _swap
-            elif swap_dest is not None:
-
-                def _quick_set(swap_dict, swap_td):
-                    for key, val in swap_dict.items():
-                        if isinstance(val, dict):
-                            _quick_set(val, swap_td._get_str(key, default=NO_DEFAULT))
-                        elif swap_td._get_str(key, None) is not val:
-                            swap_td._set_str(
-                                key,
-                                val,
-                                inplace=False,
-                                validated=True,
-                                non_blocking=non_blocking,
-                            )
-
-                _quick_set(_swap, swap_dest)
-                return swap_dest
-            else:
-                return self._new_unsafe(_swap, batch_size=torch.Size(()))
-
-    @_maybe_broadcast_other("__ne__")
-    def __ne__(self, other: Any) -> Self | bool:
-        if is_tensorclass(other):
-            return other != self
-        if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other, auto_batch_size=False)
-        if _is_tensor_collection(type(other)):
-            keys1 = set(self.keys())
-            keys2 = set(other.keys())
-            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-                raise KeyError(
-                    f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
-                )
-            d = {}
-            for key, item1 in self.items():
-                d[key] = item1 != other.get(key)
-            return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
-        if isinstance(other, (numbers.Number, Tensor)):
-            return TensorDict(
-                {key: value != other for key, value in self.items()},
-                self.batch_size,
-                device=self.device,
-            )
-        return True
-
-    @_maybe_broadcast_other("__xor__")
-    def __xor__(self, other: Any) -> Self | bool:
-        if is_tensorclass(other):
-            return other ^ self
-        if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other, auto_batch_size=False)
-        if _is_tensor_collection(type(other)):
-            keys1 = set(self.keys())
-            keys2 = set(other.keys())
-            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-                raise KeyError(
-                    f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
-                )
-            d = {}
-            for key, item1 in self.items():
-                d[key] = item1 ^ other.get(key)
-            return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
-        if isinstance(other, (numbers.Number, Tensor)):
-            return TensorDict(
-                {key: value ^ other for key, value in self.items()},
-                self.batch_size,
-                device=self.device,
-            )
-        return True
-
-    @_maybe_broadcast_other("__or__")
-    def __or__(self, other: Any) -> Self | bool:
-        if is_tensorclass(other):
-            return other | self
-        if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other, auto_batch_size=False)
-        if _is_tensor_collection(type(other)):
-            keys1 = set(self.keys())
-            keys2 = set(other.keys())
-            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-                raise KeyError(
-                    f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
-                )
-            d = {}
-            for key, item1 in self.items():
-                d[key] = item1 | other.get(key)
-            return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
-        if isinstance(other, (numbers.Number, Tensor)):
-            return TensorDict(
-                {key: value | other for key, value in self.items()},
-                self.batch_size,
-                device=self.device,
-            )
-        return False
-
-    @_maybe_broadcast_other("__eq__")
-    def __eq__(self, other: Any) -> Self | bool:
-        if is_tensorclass(other):
-            return other == self
-        if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other, auto_batch_size=False)
-        if _is_tensor_collection(type(other)):
-            keys1 = set(self.keys())
-            keys2 = set(other.keys())
-            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-                _mismatch_keys(keys1, keys2)
-            d = {}
-            for key, item1 in self.items():
-                d[key] = item1 == other.get(key)
-            return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
-        if isinstance(other, (numbers.Number, Tensor)):
-            return TensorDict(
-                {key: value == other for key, value in self.items()},
-                self.batch_size,
-                device=self.device,
-            )
-        return False
-
-    @_maybe_broadcast_other("__ge__")
-    def __ge__(self, other: Any) -> Self | bool:
-        if is_tensorclass(other):
-            return other <= self
-        if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other, auto_batch_size=False)
-        if _is_tensor_collection(type(other)):
-            keys1 = set(self.keys())
-            keys2 = set(other.keys())
-            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-                _mismatch_keys(keys1, keys2)
-            d = {}
-            for key, item1 in self.items():
-                d[key] = item1 >= other.get(key)
-            return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
-        if isinstance(other, (numbers.Number, Tensor)):
-            return TensorDict(
-                {key: value >= other for key, value in self.items()},
-                self.batch_size,
-                device=self.device,
-            )
-        return False
-
-    @_maybe_broadcast_other("__gt__")
-    def __gt__(self, other: Any) -> Self | bool:
-        if is_tensorclass(other):
-            return other < self
-        if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other, auto_batch_size=False)
-        if _is_tensor_collection(type(other)):
-            keys1 = set(self.keys())
-            keys2 = set(other.keys())
-            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-                _mismatch_keys(keys1, keys2)
-            d = {}
-            for key, item1 in self.items():
-                d[key] = item1 > other.get(key)
-            return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
-        if isinstance(other, (numbers.Number, Tensor)):
-            return TensorDict(
-                {key: value > other for key, value in self.items()},
-                self.batch_size,
-                device=self.device,
-            )
-        return False
-
-    @_maybe_broadcast_other("__le__")
-    def __le__(self, other: Any) -> Self | bool:
-        if is_tensorclass(other):
-            return other >= self
-        if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other, auto_batch_size=False)
-        if _is_tensor_collection(type(other)):
-            keys1 = set(self.keys())
-            keys2 = set(other.keys())
-            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-                _mismatch_keys(keys1, keys2)
-            d = {}
-            for key, item1 in self.items():
-                d[key] = item1 <= other.get(key)
-            return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
-        if isinstance(other, (numbers.Number, Tensor)):
-            return TensorDict(
-                {key: value <= other for key, value in self.items()},
-                self.batch_size,
-                device=self.device,
-            )
-        return False
-
-    @_maybe_broadcast_other("__lt__")
-    def __lt__(self, other: Any) -> Self | bool:
-        if is_tensorclass(other):
-            return other > self
-        if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other, auto_batch_size=False)
-        if _is_tensor_collection(type(other)):
-            keys1 = set(self.keys())
-            keys2 = set(other.keys())
-            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-                _mismatch_keys(keys1, keys2)
-            d = {}
-            for key, item1 in self.items():
-                d[key] = item1 < other.get(key)
-            return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
-        if isinstance(other, (numbers.Number, Tensor)):
-            return TensorDict(
-                {key: value < other for key, value in self.items()},
-                self.batch_size,
-                device=self.device,
-            )
-        return False
-
     def __setitem__(
         self,
         index: IndexType,
@@ -959,6 +586,8 @@ class TensorDict(TensorDictBase):
             # try:
             index_unravel = _unravel_key_to_tuple(index)
             if index_unravel:
+                if value is self:
+                    raise ValueError(_SELF_NESTING_ERROR.format(index))
                 self._set_tuple(
                     index_unravel,
                     value,
@@ -1040,628 +669,6 @@ class TensorDict(TensorDictBase):
                 _read_element(element)
             for key in self.keys():
                 self.set_at_(key, value, index)
-
-    def all(self, dim: int | None = None) -> bool | TensorCollection:
-        if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
-            raise RuntimeError(
-                "dim must be greater than or equal to -tensordict.batch_dims and "
-                "smaller than tensordict.batch_dims"
-            )
-        if dim is not None:
-            dim = _maybe_correct_neg_dim(dim, self.batch_size)
-
-            names = None
-            if self._has_names():
-                names = [name for i, name in enumerate(self.names) if i != dim]
-
-            return TensorDict(
-                source={key: value.all(dim=dim) for key, value in self.items()},
-                batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
-                device=self.device,
-                names=names,
-            )
-        return all(value.all() for value in self.values())
-
-    def any(self, dim: int | None = None) -> bool | TensorCollection:
-        if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
-            raise RuntimeError(
-                "dim must be greater than or equal to -tensordict.batch_dims and "
-                "smaller than tensordict.batch_dims"
-            )
-        if dim is not None:
-            dim = _maybe_correct_neg_dim(dim, self.batch_size)
-
-            names = None
-            if self._has_names():
-                names = [name for i, name in enumerate(self.names) if i != dim]
-
-            return TensorDict(
-                source={key: value.any(dim=dim) for key, value in self.items()},
-                batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
-                device=self.device,
-                names=names,
-            )
-        return any([value.any() for value in self.values()])
-
-    def _cast_reduction(
-        self,
-        *,
-        reduction_name,
-        dim=NO_DEFAULT,
-        keepdim=NO_DEFAULT,
-        tuple_ok=True,
-        further_reduce: bool,
-        values_only: bool = True,
-        call_on_nested: bool = True,
-        batch_size=None,
-        **kwargs,
-    ):
-        if further_reduce:
-            # It is not very memory-efficient to do this, but it's the easiest to cover all use cases
-            if dim is NO_DEFAULT:
-                agglomerate = [
-                    val.contiguous().flatten()
-                    for val in self._values_list(
-                        True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
-                    )
-                ]
-                agglomerate = torch.cat(agglomerate, dim=0)
-                if reduction_name == "quantile":
-                    q = kwargs.pop("q")
-                    return getattr(torch, reduction_name)(agglomerate, q, **kwargs)
-                return getattr(torch, reduction_name)(agglomerate, **kwargs)
-            else:
-                agglomerate = list(
-                    self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
-                )
-                if dim == "feature":
-                    agglomerate = [
-                        (
-                            val.flatten(self.ndim, -1)
-                            if val.ndim > self.ndim
-                            else val.unsqueeze(-1)
-                        )
-                        for val in agglomerate
-                    ]
-                    cat_dim = -1
-                    dim = -1
-                    keepdim = False
-                elif isinstance(dim, tuple):
-                    cat_dim = dim[0]
-                else:
-                    cat_dim = dim
-                agglomerate = torch.cat(agglomerate, dim=cat_dim)
-                kwargs_copy = {}
-                if keepdim is not NO_DEFAULT:
-                    kwargs_copy["keepdim"] = keepdim
-                if reduction_name == "quantile":
-                    q = kwargs.pop("q")
-                    kwargs_copy.update(kwargs)
-                    return getattr(torch, reduction_name)(
-                        agglomerate, q, dim=dim, **kwargs_copy
-                    )
-                kwargs_copy.update(kwargs)
-                return getattr(torch, reduction_name)(
-                    agglomerate, dim=dim, **kwargs_copy
-                )
-
-        # IMPORTANT: do not directly access batch_dims (or any other property)
-        # via self.batch_dims otherwise a reference cycle is introduced
-        def proc_dim(dim, batch_dims, tuple_ok=True):
-            if dim is None:
-                return dim
-            if isinstance(dim, tuple):
-                if tuple_ok:
-                    return tuple(
-                        _d
-                        for d in dim
-                        for _d in proc_dim(d, batch_dims, tuple_ok=False)
-                    )
-                return dim
-            return (_maybe_correct_neg_dim(dim, None, batch_dims),)
-
-        dim_needs_proc = (dim is not NO_DEFAULT) and (dim not in ("feature",))
-        if dim_needs_proc:
-            dim = proc_dim(dim, self.batch_dims, tuple_ok=tuple_ok)
-            if not tuple_ok:
-                dim = dim[0]
-        if dim in ("feature",):
-            if keepdim:
-                raise TypeError("dim='feature' is incompatible with keepdim=True.")
-
-            ndim = self.ndim
-
-            def reduction(val):
-                if _is_tensor_collection(type(val)):
-                    local_dim = dim
-                else:
-                    if val.ndim > ndim:
-                        val = val.flatten(ndim, -1)
-                    else:
-                        val = val.unsqueeze(-1)
-                    local_dim = -1
-                if reduction_name == "quantile":
-                    # Make a copy of kwargs to avoid consuming q multiple times
-                    kwargs_copy = kwargs.copy()
-                    q = kwargs_copy.pop("q")
-                    result = getattr(val, reduction_name)(q, local_dim, **kwargs_copy)
-                else:
-                    result = getattr(val, reduction_name)(dim=local_dim, **kwargs)
-                if isinstance(result, tuple):
-                    if values_only:
-                        result = result.values
-                    else:
-                        return TensorDict.from_namedtuple(result)
-                return result
-
-            if self._has_names():
-                names = list(self.names)
-            else:
-                names = None
-            if not call_on_nested:
-                raise RuntimeError(
-                    f"reduction {reduction_name} must be called with call_on_nested=True when dim='feature'."
-                )
-            return self._fast_apply(
-                reduction,
-                call_on_nested=call_on_nested,
-                device=self.device,
-                names=names,
-            )
-
-        elif dim is not NO_DEFAULT or keepdim:
-            names = None
-            if self._has_names():
-                if not keepdim and isinstance(dim, tuple):
-                    names = [name for i, name in enumerate(self.names) if i not in dim]
-                else:
-                    names = [name for i, name in enumerate(self.names) if i != dim]
-            if dim is not NO_DEFAULT:
-                kwargs["dim"] = dim
-            if keepdim is not NO_DEFAULT:
-                kwargs["keepdim"] = keepdim
-
-            def reduction(val):
-                if reduction_name == "quantile":
-                    # Make a copy of kwargs to avoid consuming q multiple times
-                    kwargs_copy = kwargs.copy()
-                    q = kwargs_copy.pop("q")
-                    # Handle dim parameter properly for quantile
-                    if "dim" in kwargs_copy:
-                        dim_val = kwargs_copy.pop("dim")
-                        # torch.quantile doesn't support tuple dimensions, so we need to handle this
-                        if isinstance(dim_val, tuple):
-                            # For tuple dimensions, we'll use the first dimension
-                            # This is a limitation of torch.quantile compared to other reductions
-                            dim_val = dim_val[0]
-                        result = getattr(val, reduction_name)(q, dim_val, **kwargs_copy)
-                    else:
-                        result = getattr(val, reduction_name)(q, **kwargs_copy)
-                else:
-                    result = getattr(val, reduction_name)(**kwargs)
-                if isinstance(result, tuple):
-                    if values_only:
-                        result = result.values
-                    else:
-                        return TensorDict.from_namedtuple(result, batch_size=batch_size)
-                return result
-
-            if batch_size is not None:
-                pass
-            elif dim is not None and dim is not NO_DEFAULT:
-                if not keepdim:
-                    if isinstance(dim, tuple):
-                        batch_size = [
-                            b for i, b in enumerate(self.batch_size) if i not in dim
-                        ]
-                    else:
-                        batch_size = [
-                            b for i, b in enumerate(self.batch_size) if i != dim
-                        ]
-                else:
-                    if isinstance(dim, tuple):
-                        batch_size = [
-                            b if i not in dim else 1
-                            for i, b in enumerate(self.batch_size)
-                        ]
-                    else:
-                        batch_size = [
-                            b if i != dim else 1 for i, b in enumerate(self.batch_size)
-                        ]
-
-            else:
-                batch_size = [1 for b in self.batch_size]
-
-            return self._fast_apply(
-                reduction,
-                call_on_nested=call_on_nested,
-                batch_size=torch.Size(batch_size),
-                device=self.device,
-                names=names,
-            )
-
-        def reduction(val):
-            if reduction_name == "quantile":
-                # Make a copy of kwargs to avoid consuming q multiple times
-                kwargs_copy = kwargs.copy()
-                q = kwargs_copy.pop("q")
-                return getattr(val, reduction_name)(q, **kwargs_copy)
-            return getattr(val, reduction_name)(**kwargs)
-
-        return self._fast_apply(
-            reduction,
-            call_on_nested=True,
-            batch_size=torch.Size([]),
-            device=self.device,
-            names=None,
-        )
-
-    def _multithread_apply_flat(
-        self,
-        fn: Callable,
-        *others: T,
-        call_on_nested: bool = False,
-        default: Any = NO_DEFAULT,
-        named: bool = False,
-        nested_keys: bool = False,
-        prefix: tuple = (),
-        is_leaf: Callable[[Type], bool] | None = None,
-        executor: ThreadPoolExecutor,
-        futures: List[Future],
-        local_futures: List,
-    ) -> None:
-        if is_leaf is None:
-            is_leaf = _default_is_leaf
-        for key, item in self.items():
-            if (
-                not call_on_nested
-                and not is_leaf(type(item))
-                # and not is_non_tensor(item)
-            ):
-                if default is not NO_DEFAULT:
-                    _others = [_other._get_str(key, default=None) for _other in others]
-                    _others = [
-                        self.empty(recurse=True) if _other is None else _other
-                        for _other in _others
-                    ]
-                else:
-                    _others = [
-                        _other._get_str(key, default=NO_DEFAULT) for _other in others
-                    ]
-                local_futures.append([])
-                item._multithread_apply_flat(
-                    fn,
-                    *_others,
-                    named=named,
-                    nested_keys=nested_keys,
-                    prefix=prefix + (key,),
-                    is_leaf=is_leaf,
-                    executor=executor,
-                    futures=futures,
-                    local_futures=local_futures[-1],
-                )
-            else:
-                _others = [_other._get_str(key, default=default) for _other in others]
-                if named:
-                    if nested_keys:
-                        future = executor.submit(
-                            fn, prefix + (key,) if prefix != () else key, item, *_others
-                        )
-                    else:
-                        future = executor.submit(fn, key, item, *_others)
-                else:
-                    future = executor.submit(fn, item, *_others)
-                futures.append(future)
-                local_futures.append(future)
-
-    def _multithread_rebuild(
-        self,
-        *,
-        batch_size: Sequence[int] | None = None,
-        device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = NO_DEFAULT,
-        inplace: bool = False,
-        checked: bool = False,
-        out: TensorCollection | None = None,
-        filter_empty: bool = False,
-        executor: ThreadPoolExecutor,
-        futures: List[Future],
-        local_futures: List,
-        subs_results: Dict[Future, Any] | None = None,
-        multithread_set: bool = False,  # Experimental
-        **constructor_kwargs,
-    ) -> None:
-        if constructor_kwargs:
-            raise RuntimeError(
-                f"constructor_kwargs not supported for class {type(self).__name__}."
-            )
-        # Rebuilds a tensordict from the futures of its leaves
-        if inplace:
-            result = self
-            is_locked = result.is_locked
-        elif out is not None:
-            result = out
-            if out.is_locked:
-                raise RuntimeError(_LOCK_ERROR)
-            is_locked = False
-            if batch_size is not None and batch_size != out.batch_size:
-                raise RuntimeError(
-                    "batch_size and out.batch_size must be equal when both are provided."
-                )
-            if device is not NO_DEFAULT and device != out.device:
-                raise RuntimeError(
-                    "device and out.device must be equal when both are provided."
-                )
-        else:
-
-            def make_result(names=names, batch_size=batch_size):
-                if names is NO_DEFAULT:
-                    if batch_size is not None:
-                        # erase names
-                        names = None
-                    elif batch_size is None:
-                        names = self.names if self._has_names() else None
-                return self.empty(batch_size=batch_size, device=device, names=names)
-
-            result = make_result()
-            is_locked = False
-
-        any_set = set()
-
-        if isinstance(result, _SubTensorDict):
-
-            def setter(
-                item_trsf,
-                key,
-                inplace=inplace,
-                result=result,
-            ):
-                set_item = item_trsf is not None
-                any_set.add(set_item)
-                if not set_item:
-                    return
-                result.set(key, item_trsf, inplace=inplace)
-
-        elif checked and isinstance(result, TensorDict) and (inplace is not True):
-
-            def setter(
-                item_trsf,
-                key,
-                result=result,
-            ):
-                set_item = item_trsf is not None
-                any_set.add(set_item)
-                if not set_item:
-                    return
-                result._tensordict[key] = item_trsf
-
-        else:
-
-            local_inplace = BEST_ATTEMPT_INPLACE if inplace else False
-
-            def setter(
-                item_trsf,
-                key,
-                result=result,
-                checked=checked,
-            ):
-                set_item = item_trsf is not None
-                any_set.add(set_item)
-                if not set_item:
-                    return
-
-                result._set_str(
-                    key,
-                    item_trsf,
-                    inplace=local_inplace,
-                    validated=checked,
-                    non_blocking=False,
-                )
-
-        for i, (key, local_future) in enumerate(
-            _zip_strict(self.keys(), local_futures)
-        ):
-
-            if isinstance(local_future, list):
-                # We can't make this a future as it could cause deadlocks:
-                #  If we put a future over the root and this triggers another
-                #  call on the leaves, the root will occupy a spot in the execution queue
-                #  and wait for completion, potentially preventing the leaf of
-                #  getting in the execution queue at all.
-                td = self._get_str(key, default=None)
-                item_trsf = td._multithread_rebuild(
-                    batch_size=batch_size,
-                    device=device,
-                    names=names,
-                    inplace=inplace,
-                    checked=checked,
-                    out=out,
-                    filter_empty=filter_empty,
-                    executor=executor,
-                    futures=futures,
-                    local_futures=local_future,
-                    subs_results=subs_results,
-                    multithread_set=multithread_set,
-                    **constructor_kwargs,
-                )
-                if multithread_set:
-                    local_future = executor.submit(setter, item_trsf=item_trsf, key=key)
-                    local_futures[i] = local_future
-                    futures.append(local_future)
-                else:
-                    setter(item_trsf=item_trsf, key=key)
-            else:
-                if multithread_set:
-                    if subs_results is not None:
-                        local_result = subs_results[local_future]
-                    else:
-                        # TODO: check if add_done_callback can safely be used here
-                        #  The issue is that it does not raises an exception encountered during the
-                        #  execution, resulting in UBs.
-                        local_result = local_future.result()
-                    local_future = executor.submit(
-                        setter, item_trsf=local_result, key=key
-                    )
-                    futures.append(local_future)
-                    local_futures[i] = local_future
-                else:
-                    local_result = local_future.result()
-                    setter(item_trsf=local_result, key=key)
-
-        if multithread_set:
-            wait(local_futures)
-        any_set = True in any_set or is_non_tensor(self)
-
-        if filter_empty and not any_set:
-            return
-        elif not filter_empty and not inplace and is_locked:
-            result.lock_()
-        return result
-
-    def _apply_nest(
-        self,
-        fn: Callable,
-        *others: T,
-        batch_size: Sequence[int] | None = None,
-        device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = NO_DEFAULT,
-        inplace: bool = False,
-        checked: bool = False,
-        call_on_nested: bool = False,
-        default: Any = NO_DEFAULT,
-        named: bool = False,
-        nested_keys: bool = False,
-        prefix: tuple = (),
-        filter_empty: bool | None = None,
-        is_leaf: Callable[[Type], bool] | None = None,
-        out: TensorDictBase | None = None,
-        **constructor_kwargs,
-    ) -> Self | None:
-        if inplace:
-            result = self
-            is_locked = result.is_locked
-        elif out is not None:
-            result = out
-            if out.is_locked:
-                raise RuntimeError(_LOCK_ERROR)
-            is_locked = False
-            if batch_size is not None and batch_size != out.batch_size:
-                raise RuntimeError(
-                    "batch_size and out.batch_size must be equal when both are provided."
-                )
-            if device is not NO_DEFAULT and device != out.device:
-                if not checked:
-                    raise RuntimeError(
-                        f"device and out.device must be equal when both are provided. Got device={device} and out.device={out.device}."
-                    )
-                else:
-                    device = torch.device(device)
-                    out._device = device
-                    for node in out.values(True, True, is_leaf=_is_tensor_collection):
-                        if is_tensorclass(node):
-                            node._tensordict._device = device
-                        else:
-                            node._device = device
-        else:
-
-            def make_result(names=names, batch_size=batch_size):
-                if names is NO_DEFAULT:
-                    if batch_size is not None:
-                        # erase names
-                        names = None
-                    else:
-                        names = self.names if self._has_names() else None
-                return self.empty(batch_size=batch_size, device=device, names=names)
-
-            result = None
-            is_locked = False
-
-        any_set = False
-        if is_leaf is None:
-            is_leaf = _default_is_leaf
-
-        for key, item in self.items():
-            if (
-                not call_on_nested
-                and not is_leaf(type(item))
-                # and not is_non_tensor(item)
-            ):
-                if default is not NO_DEFAULT:
-                    _others = [_other._get_str(key, default=None) for _other in others]
-                    _others = [
-                        self.empty(recurse=True) if _other is None else _other
-                        for _other in _others
-                    ]
-                else:
-                    _others = [
-                        _other._get_str(key, default=NO_DEFAULT) for _other in others
-                    ]
-
-                item_trsf = item._apply_nest(
-                    fn,
-                    *_others,
-                    inplace=inplace,
-                    batch_size=batch_size,
-                    device=device,
-                    checked=checked,
-                    named=named,
-                    nested_keys=nested_keys,
-                    default=default,
-                    prefix=prefix + (key,),
-                    filter_empty=filter_empty,
-                    is_leaf=is_leaf,
-                    out=out._get_str(key, default=None) if out is not None else None,
-                    **constructor_kwargs,
-                )
-            else:
-                # Pass-through values (e.g., UnbatchedTensor) with shape-changing ops
-                # (indicated by batch_size being set) keep their payload unchanged
-                # but must expose the new TensorDict-facing batch metadata.
-                # For other ops (data ops like zero_), apply the function normally.
-                if _is_unbatched(item) and batch_size is not None:
-                    item_trsf = item._with_batch_size(batch_size)
-                else:
-                    _others = [
-                        _other._get_str(key, default=default) for _other in others
-                    ]
-                    if named:
-                        if nested_keys:
-                            item_trsf = fn(
-                                prefix + (key,) if prefix != () else key, item, *_others
-                            )
-                        else:
-                            item_trsf = fn(key, item, *_others)
-                    else:
-                        item_trsf = fn(item, *_others)
-            if item_trsf is not None:
-                if not any_set:
-                    if result is None:
-                        result = make_result()
-                    any_set = True
-                if isinstance(self, _SubTensorDict):
-                    result.set(key, item_trsf, inplace=inplace)
-                else:
-                    result._set_str(
-                        key,
-                        item_trsf,
-                        inplace=BEST_ATTEMPT_INPLACE if inplace else False,
-                        validated=checked,
-                        non_blocking=False,
-                    )
-
-        if filter_empty and not any_set:
-            return
-        elif filter_empty is None and not any_set and not self.is_empty():
-            # we raise the deprecation warning only if the tensordict wasn't already empty.
-            # After we introduce the new behaviour, we will have to consider what happens
-            # to empty tensordicts by default: will they disappear or stay?
-            return
-        if result is None:
-            result = make_result()
-
-        if not inplace and is_locked:
-            result.lock_()
-        return result
 
     # Functorch compatibility
     @cache  # noqa: B019
@@ -1768,18 +775,6 @@ class TensorDict(TensorDictBase):
         )
         return out
 
-    def _convert_to_tensordict(
-        self, dict_value: dict[str, Any], non_blocking: bool | None = None
-    ) -> Self:
-        return TensorDict(
-            dict_value,
-            batch_size=self.batch_size,
-            device=self.device,
-            names=self._maybe_names(),
-            lock=self.is_locked,
-            non_blocking=non_blocking,
-        )
-
     def _index_tensordict(
         self,
         index: IndexType,
@@ -1847,173 +842,6 @@ class TensorDict(TensorDictBase):
             result.lock_()
         return result
 
-    def expand(self, *args, **kwargs) -> Self:
-        tensordict_dims = self.batch_dims
-        shape = _get_shape_from_args(*args, **kwargs)
-
-        # new shape dim check
-        if len(shape) < len(self.shape):
-            raise RuntimeError(
-                f"the number of sizes provided ({len(shape)}) must be greater or equal to the number of "
-                f"dimensions in the TensorDict ({tensordict_dims})"
-            )
-
-        # new shape compatibility check
-        for old_dim, new_dim in zip(self.batch_size, shape[-tensordict_dims:]):
-            if old_dim != 1 and new_dim != old_dim:
-                raise RuntimeError(
-                    "Incompatible expanded shape: The expanded shape length at non-singleton dimension should be same "
-                    f"as the original length. target_shape = {shape}, existing_shape = {self.batch_size}"
-                )
-
-        if self._has_names():
-            names = [None] * (len(shape) - tensordict_dims) + self.names
-        else:
-            names = None
-
-        def _expand(tensor):
-            tensor_shape = tensor.shape
-            tensor_dims = len(tensor_shape)
-            last_n_dims = tensor_dims - tensordict_dims
-            if last_n_dims > 0:
-                new_shape = (*shape, *tensor_shape[-last_n_dims:])
-            else:
-                new_shape = shape
-            return tensor.expand(new_shape)
-
-        return self._fast_apply(
-            _expand,
-            batch_size=shape,
-            call_on_nested=True,
-            names=names,
-            propagate_lock=True,
-        )
-
-    def _unbind(self, dim: int):
-        batch_size = torch.Size([s for i, s in enumerate(self.batch_size) if i != dim])
-        names = None
-        if self._has_names():
-            names = [name for i, name in enumerate(self.names) if i != dim]
-            # We could use any() but dynamo doesn't like generators
-            for name in names:
-                if name is not None:
-                    break
-            else:
-                names = None
-        device = self.device
-
-        is_shared = self._is_shared
-        is_memmap = self._is_memmap
-
-        def empty(
-            batch_size=batch_size,
-            names=names,
-            device=device,
-            is_shared=is_shared,
-            is_memmap=is_memmap,
-        ):
-            result = self._new_unsafe(
-                {}, batch_size=batch_size, names=names, device=device
-            )
-            result._is_shared = is_shared
-            result._is_memmap = is_memmap
-            return result
-
-        tds = tuple(empty() for _ in range(self.batch_size[dim]))
-
-        def unbind(key, val, tds=tds):
-            if _is_unbatched(val):
-                for td in tds:
-                    td._set_str(
-                        key,
-                        val._with_batch_size(batch_size),
-                        validated=True,
-                        inplace=False,
-                        non_blocking=False,
-                    )
-                return
-            unbound = (
-                val.unbind(dim)
-                if not isinstance(val, TensorDictBase)
-                # tensorclass is also unbound using plain unbind
-                else val._unbind(dim)
-            )
-            for td, _val in _zip_strict(tds, unbound):
-                td._set_str(
-                    key, _val, validated=True, inplace=False, non_blocking=False
-                )
-
-        for key, val in self.items():
-            unbind(key, val)
-        return tds
-
-    def split(
-        self, split_size: int | list[int], dim: int = 0
-    ) -> tuple[TensorDictBase, ...]:
-        # we must use slices to keep the storage of the tensors
-        WRONG_TYPE = "split(): argument 'split_size' must be int or list of ints"
-        batch_size = self.batch_size
-        dim = _maybe_correct_neg_dim(dim, batch_size)
-        max_size = batch_size[dim]
-        if isinstance(split_size, int):
-            if split_size <= 0:
-                raise ValueError(
-                    f"TensorDict.split: split_size must be positive, got {split_size}."
-                )
-            split_size = min(split_size, max_size)
-            segments = _create_segments_from_int(split_size, max_size)
-            splits_list = [end - start for start, end in segments]
-            num_splits = len(splits_list)
-            splits = {
-                k: (v,) * num_splits if _is_unbatched(v) else v.split(splits_list, dim)
-                for k, v in self.items()
-            }
-        elif isinstance(split_size, (list, tuple)):
-            if len(split_size) == 0:
-                raise RuntimeError("Insufficient number of elements in split_size.")
-            if not all(isinstance(x, int) for x in split_size):
-                raise TypeError(WRONG_TYPE)
-            num_splits = len(split_size)
-            splits = {
-                k: (v,) * num_splits if _is_unbatched(v) else v.split(split_size, dim)
-                for k, v in self.items()
-            }
-            segments = _create_segments_from_list(split_size, max_size)
-        else:
-            raise TypeError(WRONG_TYPE)
-        names = self._maybe_names()
-        batch_sizes = [
-            torch.Size(
-                tuple(d if i != dim else end - start for i, d in enumerate(batch_size))
-            )
-            for start, end in segments
-        ]
-
-        splits = [
-            {k: v[ss] for k, v in splits.items()} for ss in range(len(batch_sizes))
-        ]
-        for split, bsz in _zip_strict(splits, batch_sizes):
-            for key, value in split.items():
-                if _is_unbatched(value):
-                    split[key] = value._with_batch_size(bsz)
-        device = self.device
-        is_shared = self._is_shared
-        is_memmap = self._is_memmap
-        is_locked = self.is_locked
-        result = tuple(
-            self._new_unsafe(
-                source=split,
-                batch_size=bsz,
-                names=names,
-                device=device,
-                lock=is_locked,
-                is_shared=is_shared,
-                is_memmap=is_memmap,
-            )
-            for split, bsz in _zip_strict(splits, batch_sizes)
-        )
-        return result
-
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
         if chunks < 1:
             raise ValueError(
@@ -2061,24 +889,6 @@ class TensorDict(TensorDictBase):
         )
         return result
 
-    def masked_select(self, mask: Tensor) -> Self:
-        d = {}
-        mask_expand = mask
-        while mask_expand.ndimension() > self.batch_dims:
-            mndim = mask_expand.ndimension()
-            mask_expand = mask_expand.squeeze(-1)
-            if mndim == mask_expand.ndimension():  # no more squeeze
-                break
-        dim = int(mask.sum().item())
-        other_dim = self.shape[mask.ndim :]
-        batch_size = torch.Size([dim, *other_dim])
-        for key, value in self.items():
-            if _is_unbatched(value):
-                d[key] = value._with_batch_size(batch_size)
-            else:
-                d[key] = value[mask_expand]
-        return TensorDict(device=self.device, source=d, batch_size=batch_size)
-
     def _view(
         self,
         *args,
@@ -2099,117 +909,6 @@ class TensorDict(TensorDictBase):
         )
         self._maybe_set_shared_attributes(result)
         return result
-
-    def reshape(
-        self,
-        *args,
-        **kwargs,
-    ) -> Self:
-        inplace = kwargs.pop("inplace", False)
-        shape = _get_shape_from_args(*args, **kwargs)
-        if any(dim < 0 for dim in shape):
-            shape = _infer_size_impl(shape, self.numel())
-            shape = torch.Size(shape)
-        if torch.Size(shape) == self.shape:
-            return self
-        batch_dims = self.batch_dims
-
-        def _reshape(tensor):
-            return tensor.reshape((*shape, *tensor.shape[batch_dims:]))
-
-        if inplace:
-
-            def nested_fn(nested):
-                nested.reshape(shape, inplace=True)
-
-            return self._inplace_rebind_leaves(_reshape, nested_fn, torch.Size(shape))
-        return self._fast_apply(
-            _reshape,
-            batch_size=shape,
-            call_on_nested=True,
-            propagate_lock=True,
-        )
-
-    def repeat_interleave(
-        self,
-        repeats: torch.Tensor | int,
-        dim: int | None = None,
-        *,
-        output_size: int | None = None,
-        inplace: bool = False,
-    ) -> Self:
-        if self.ndim == 0:
-            if inplace:
-                raise RuntimeError(
-                    "repeat_interleave(inplace=True) is not supported on a "
-                    "scalar tensordict because the operation changes ndim."
-                )
-            return self.unsqueeze(0).repeat_interleave(
-                repeats=repeats, dim=dim, output_size=output_size
-            )
-        if dim is None:
-            if inplace:
-                raise RuntimeError(
-                    "repeat_interleave(inplace=True) requires an explicit dim; "
-                    "the dim=None path reshapes the tensordict to 1D first, "
-                    "which would change ndim."
-                )
-            if self.ndim > 1:
-                return self.reshape(-1).repeat_interleave(repeats, dim=0)
-            return self.repeat_interleave(repeats, dim=0)
-        dim_corrected = dim if dim >= 0 else self.ndim + dim
-        if not (dim_corrected >= 0):
-            raise ValueError(
-                f"dim {dim} is out of range for tensordict with shape {self.shape}."
-            )
-        new_batch_size = []
-        for i, s in enumerate(self.batch_size):
-            if i == dim_corrected:
-                if isinstance(repeats, int):
-                    new_batch_size.append(s * repeats)
-                else:
-                    new_batch_size.append(repeats.sum().item())
-            else:
-                new_batch_size.append(s)
-        new_batch_size = torch.Size(new_batch_size)
-
-        def rep(leaf):
-            return leaf.repeat_interleave(
-                repeats=repeats, dim=dim_corrected, output_size=output_size
-            )
-
-        if inplace:
-
-            def nested_fn(nested):
-                nested.repeat_interleave(
-                    repeats=repeats,
-                    dim=dim_corrected,
-                    output_size=output_size,
-                    inplace=True,
-                )
-
-            return self._inplace_rebind_leaves(rep, nested_fn, new_batch_size)
-        return self._fast_apply(
-            rep,
-            batch_size=new_batch_size,
-            call_on_nested=True,
-            propagate_lock=True,
-            names=self._maybe_names(),
-        )
-
-    def _repeat(self, *repeats: int) -> TensorCollection:
-        new_batch_size = torch.Size([i * r for i, r in zip(self.batch_size, repeats)])
-
-        def rep(leaf):
-            return leaf.repeat(*repeats, *((1,) * (leaf.ndim - self.ndim)))
-
-        return self._fast_apply(
-            rep,
-            batch_size=new_batch_size,
-            call_on_nested=True,
-            propagate_lock=True,
-            names=self._maybe_names(),
-        )
 
     def _transpose(self, dim0, dim1):
         def _transpose(tensor):
@@ -2435,68 +1134,6 @@ class TensorDict(TensorDictBase):
             names=names if any(name is not None for name in names) else None,
         )
 
-    def from_dict_instance(
-        self,
-        input_dict,
-        *,
-        auto_batch_size: bool | None = None,
-        batch_size=None,
-        device=None,
-        batch_dims=None,
-        names=None,
-    ):
-        if batch_dims is not None and batch_size is not None:
-            raise ValueError(
-                "Cannot pass both batch_size and batch_dims to `from_dict`."
-            )
-        from tensordict import TensorDict
-
-        batch_size_set = torch.Size(()) if batch_size is None else batch_size
-        if is_compiling():
-            input_dict = type(input_dict)(input_dict)
-        else:
-            input_dict = copy(input_dict)
-        for key, value in list(input_dict.items()):
-            if isinstance(value, (dict,)):
-                cur_value = self.get(key)
-                if cur_value is not None:
-                    input_dict[key] = cur_value.from_dict_instance(
-                        value,
-                        device=device,
-                        auto_batch_size=False,
-                    )
-                    continue
-                else:
-                    # we don't know if another tensor of smaller size is coming
-                    # so we can't be sure that the batch-size will still be valid later
-                    input_dict[key] = TensorDict.from_dict(
-                        value,
-                        device=device,
-                        auto_batch_size=False,
-                    )
-            else:
-                input_dict[key] = TensorDict.from_any(
-                    value,
-                    auto_batch_size=False,
-                )
-
-        out = TensorDict.from_dict(
-            input_dict,
-            batch_size=batch_size_set,
-            device=device,
-            names=names,
-        )
-        if batch_size is None:
-            if auto_batch_size is None and batch_dims is None:
-                auto_batch_size = False
-            elif auto_batch_size is None:
-                auto_batch_size = True
-            if auto_batch_size:
-                _set_max_batch_size(out, batch_dims)
-        else:
-            out.batch_size = batch_size
-        return out
-
     @staticmethod
     def _parse_batch_size(
         source: T | dict | None,
@@ -2542,52 +1179,6 @@ class TensorDict(TensorDictBase):
         raise RuntimeError(
             f"Setting batch dims on {type(self).__name__} instances is not allowed."
         )
-
-    def _has_names(self):
-        return self._td_dim_names is not None
-
-    def _erase_names(self):
-        self._td_dim_names = None
-
-    @property
-    def names(self):
-        names = self._td_dim_names
-        if names is None:
-            return [None for _ in range(self.batch_dims)]
-        # assert len(names) == self.batch_dims, (names, self.batch_dims)
-        # Return a copy but don't use copy to make dynamo happy
-        return list(names)
-
-    @names.setter
-    def names(self, value):
-        self._set_names(value)
-
-    def _set_names(self, names: Sequence[str] | None):
-        # we don't run checks on types for efficiency purposes
-        if names is None:
-            self._rename_subtds(names)
-            self._erase_names()
-            return
-        value = list(names)
-        # Faster but incompatible with dynamo
-        # num_none = sum(v is None for v in value)
-        num_none = 0
-        for v in value:
-            num_none += v is None
-        if num_none == self.batch_dims:
-            self._set_names(None)
-            return
-        if num_none:
-            num_none -= 1
-        if len(set(value)) != len(value) - num_none:
-            raise ValueError(f"Some dimension names are non-unique: {value}.")
-        if len(value) != self.batch_dims:
-            raise ValueError(
-                "the length of the dimension names must equate the tensordict batch_dims attribute. "
-                f"Got {value} for batch_dims {self.batch_dims}."
-            )
-        self._rename_subtds(value)
-        self._td_dim_names = list(value)
 
     def _rename_subtds(self, names):
         if names is None:
@@ -2644,37 +1235,6 @@ class TensorDict(TensorDictBase):
 
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._batch_size = new_size
-
-    # Checks
-    def _check_is_shared(self) -> bool:
-        share_list = [_is_shared(value) for value in self.values()]
-        if any(share_list) and not all(share_list):
-            shared_str = ", ".join(
-                [f"{key}: {_is_shared(value)}" for key, value in self.items()]
-            )
-            raise RuntimeError(
-                f"tensors must be either all shared or not, but mixed "
-                f"features is not allowed. "
-                f"Found: {shared_str}"
-            )
-        return all(share_list) and len(share_list) > 0
-
-    def _check_device(self, *, raise_exception: bool = True) -> None | bool:
-        val = True
-        for value in self.values():
-            if _is_tensor_collection(type(value)):
-                val &= value._check_device(raise_exception=raise_exception)
-                if not val:
-                    return False
-            val &= self.device is None or (self.device == value.device)
-            if not val:
-                if raise_exception:
-                    raise RuntimeError(
-                        f"devices are incongruent, got value with device {value.device}, "
-                        f"-- expected {self.device}."
-                    )
-                return False
-        return val
 
     @lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
@@ -2885,7 +1445,14 @@ class TensorDict(TensorDictBase):
                     inplace=False,
                     ignore_lock=True,
                 )
-            is_diff = dest[idx].tolist() != value.tolist()
+            dest_data = dest[idx].tolist()
+            value_data = value.tolist()
+            try:
+                is_diff = bool(dest_data != value_data)
+            except Exception:
+                # Arrays, tensors and data frames compare elementwise, and the
+                # result has no single truth value: write the value anyway.
+                is_diff = True
             if is_diff:
                 dest_val = dest.maybe_to_stack()
                 dest_val[idx] = value
@@ -3126,19 +1693,6 @@ class TensorDict(TensorDictBase):
             return self._tensordict[key]
         except KeyError:
             return self._default_get(key, default)
-
-    def _get_tuple(self, key, default, **kwargs):
-        first = self._get_str(key[0], default, **kwargs)
-        if len(key) == 1 or first is default:
-            return first
-        try:
-            return first._get_tuple(key[1:], default=default, **kwargs)
-        except AttributeError as err:
-            if "has no attribute" in str(err):
-                raise ValueError(
-                    f"Expected a TensorDictBase instance but got {type(first)} instead"
-                    f" for key '{key[1:]}' in tensordict:\n{self}."
-                )
 
     def share_memory_(self) -> Self:
         if self.is_memmap():
@@ -4239,8 +2793,6 @@ class _SubTensorDict(TensorDictBase):
             raise RuntimeError(_LOCK_ERROR)
         return inplace
 
-    from_dict_instance = TensorDict.from_dict_instance
-
     def _set_str(
         self,
         key: NestedKey,
@@ -5062,27 +3614,7 @@ class _SubTensorDict(TensorDictBase):
         )
 
     # TODO: check these implementations
-    __eq__ = TensorDict.__eq__
-    __ne__ = TensorDict.__ne__
-    __ge__ = TensorDict.__ge__
-    __gt__ = TensorDict.__gt__
-    __le__ = TensorDict.__le__
-    __lt__ = TensorDict.__lt__
     __setitem__ = TensorDict.__setitem__
-    __xor__ = TensorDict.__xor__
-    __or__ = TensorDict.__or__
-    _check_device = TensorDict._check_device
-    _check_is_shared = TensorDict._check_is_shared
-    _to_module = TensorDict._to_module
-    _unbind = TensorDict._unbind
-    all = TensorDict.all
-    any = TensorDict.any
-    masked_select = TensorDict.masked_select
-    memmap_like = TensorDict.memmap_like
-    repeat_interleave = TensorDict.repeat_interleave
-    _repeat = TensorDict._repeat
-    reshape = TensorDict.reshape
-    split = TensorDict.split
 
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
         splits = -(self.batch_size[dim] // -chunks)
@@ -5118,13 +3650,6 @@ class _SubTensorDict(TensorDictBase):
         )
 
     _add_batch_dim = TensorDict._add_batch_dim
-
-    _apply_nest = TensorDict._apply_nest
-    _multithread_apply_flat = TensorDict._multithread_apply_flat
-    _multithread_rebuild = TensorDict._multithread_rebuild
-    _convert_to_tensordict = TensorDict._convert_to_tensordict
-
-    _get_names_idx = TensorDict._get_names_idx
 
     def _index_tensordict(
         self,
@@ -5337,193 +3862,6 @@ class _TensorDictKeysView:
         include_nested = f"include_nested={self.include_nested}"
         leaves_only = f"leaves_only={self.leaves_only}"
         return f"{type(self).__name__}({list(self)},\n{indent(include_nested, 4 * ' ')},\n{indent(leaves_only, 4 * ' ')})"
-
-
-_TO_MODULE_PRESERVE_MODULE_STATE_WARNING = (
-    "TensorDict.to_module() is replacing an existing nn.Parameter in the "
-    "destination module with a tensor leaf that is not an nn.Parameter. This "
-    "historical behavior can remove the key from module.state_dict(). Starting "
-    "with TensorDict 0.14, to_module() preserves existing module parameter and "
-    "buffer registrations by default. Passing preserve_module_state=None is "
-    "deprecated; pass False to request the historical replacement behavior or "
-    "True to preserve registrations explicitly. Support for None will be "
-    "removed in TensorDict 0.15."
-)
-
-
-def _warn_to_module_preserve_module_state(memo) -> None:
-    if memo is None:
-        warn(
-            _TO_MODULE_PRESERVE_MODULE_STATE_WARNING,
-            FutureWarning,
-            stacklevel=3,
-        )
-        return
-    if memo.get("preserve_module_state_warned", False):
-        return
-    memo["preserve_module_state_warned"] = True
-    warn(
-        _TO_MODULE_PRESERVE_MODULE_STATE_WARNING,
-        FutureWarning,
-        stacklevel=3,
-    )
-
-
-def _tracks_gradients(tensor: torch.Tensor) -> bool:
-    """Whether wrapping ``tensor`` in a new ``nn.Parameter`` would stop its gradients.
-
-    A new ``nn.Parameter`` is a new leaf, so gradients would no longer reach a
-    tensor that requires grad (a leaf or a computed tensor) or a ``vmap`` slice.
-    """
-    return not isinstance(tensor, torch.nn.Parameter) and (
-        tensor.requires_grad or is_batchedtensor(tensor)
-    )
-
-
-def _maybe_preserve_module_state(
-    module: torch.nn.Module,
-    name: str,
-    tensor: torch.Tensor,
-    *,
-    preserve_module_state: bool | None,
-    memo,
-) -> torch.Tensor:
-    if preserve_module_state is False or (
-        preserve_module_state is None and isinstance(tensor, torch.nn.Parameter)
-    ):
-        return tensor
-    try:
-        param = module._parameters.get(name, NO_DEFAULT)
-    except AttributeError:
-        param = NO_DEFAULT
-    if (
-        param is not NO_DEFAULT
-        and param is not None
-        and isinstance(tensor, torch.Tensor)
-    ):
-        if preserve_module_state is None and not isinstance(tensor, torch.nn.Parameter):
-            _warn_to_module_preserve_module_state(memo)
-        elif preserve_module_state and (
-            not isinstance(tensor, torch.nn.Parameter)
-            or tensor.requires_grad != param.requires_grad
-        ):
-            if _tracks_gradients(tensor):
-                # swap_tensor writes it to module._parameters as it is
-                return tensor
-            return torch.nn.Parameter(tensor, requires_grad=param.requires_grad)
-    elif (
-        preserve_module_state
-        and isinstance(tensor, torch.nn.Parameter)
-        and name in getattr(module, "_buffers", {})
-    ):
-        persistent = name not in module._non_persistent_buffers_set
-        return Buffer(tensor, persistent=persistent)
-    return tensor
-
-
-def _set_tensor_dict(  # noqa: F811
-    __dict__,
-    _parameters,
-    _buffers,
-    hooks,
-    module: torch.nn.Module,
-    name: str,
-    tensor: torch.Tensor,
-    inplace: bool,
-    *,
-    return_swap: bool,
-    preserve_module_state: bool | None,
-    memo,
-) -> None:
-    """Simplified version of torch.nn.utils._named_member_accessor."""
-    if (
-        not inplace
-        and not hooks
-        and type(_parameters) is dict
-        and type(_buffers) is dict
-    ):
-        if type(tensor) is nn.Parameter:
-            out = _parameters.get(name, NO_DEFAULT)
-            if (type(out) is nn.Parameter or out is None) and (
-                not preserve_module_state
-                or out is None
-                or tensor.requires_grad == out.requires_grad
-            ):
-                # Pop before setting to retain the registration order of the
-                # general path, including when updating only part of a module.
-                del _parameters[name]
-                _parameters[name] = tensor
-                return out
-        elif (
-            type(tensor) is Tensor
-            and not getattr(tensor, "_is_param", False)
-            and name not in _parameters
-            and name in _buffers
-        ):
-            out = _buffers.pop(name)
-            _buffers[name] = tensor
-            return out
-    was_buffer = False
-    keep_parameter_slot = False
-    out = _parameters.pop(name, NO_DEFAULT)  # type: ignore[assignment]
-    was_parameter = out is not NO_DEFAULT
-    if out is NO_DEFAULT:
-        out = _buffers.pop(name, NO_DEFAULT)
-        was_buffer = out is not NO_DEFAULT
-    if out is NO_DEFAULT:
-        # dynamo doesn't like pop...
-        out = __dict__.pop(name)
-    if inplace:
-        # swap tensor and out after updating out
-        out_tmp = out.clone() if return_swap else out
-        out.data.copy_(tensor.data)
-        tensor = out
-        out = out_tmp
-    elif (
-        preserve_module_state is not False
-        and was_parameter
-        and out is not None
-        and isinstance(tensor, torch.Tensor)
-    ):
-        if preserve_module_state is None and not isinstance(tensor, torch.nn.Parameter):
-            _warn_to_module_preserve_module_state(memo)
-        elif preserve_module_state and (
-            not isinstance(tensor, torch.nn.Parameter)
-            or tensor.requires_grad != out.requires_grad
-        ):
-            if _tracks_gradients(tensor):
-                keep_parameter_slot = True
-            else:
-                tensor = torch.nn.Parameter(tensor, requires_grad=out.requires_grad)
-    elif (
-        preserve_module_state is True
-        and was_buffer
-        and isinstance(tensor, torch.nn.Parameter)
-    ):
-        persistent = name not in module._non_persistent_buffers_set
-        tensor = Buffer(tensor, persistent=persistent)
-
-    if isinstance(tensor, torch.nn.Parameter):
-        for hook in hooks:
-            output = hook(module, name, tensor)
-            if output is not None:
-                tensor = output
-        _parameters[name] = tensor
-
-        if isinstance(tensor, UninitializedTensorMixin):
-            module.register_forward_pre_hook(
-                _add_batch_dim_pre_hook(), with_kwargs=True
-            )
-
-    elif keep_parameter_slot:
-        # keep the registration without making a new leaf, as
-        # torch.func.functional_call does
-        _parameters[name] = tensor
-    elif was_buffer and isinstance(tensor, torch.Tensor):
-        _buffers[name] = tensor
-    else:
-        __dict__[name] = tensor
-    return out
 
 
 def _value_at_new_dim(td: TensorDictBase, value):

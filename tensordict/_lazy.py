@@ -58,6 +58,7 @@ from tensordict.base import (
     _NESTED_TENSORS_AS_LISTS,
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
     _register_tensor_class,
+    _SELF_NESTING_ERROR,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
     is_tensor_collection,
@@ -2183,10 +2184,16 @@ class LazyStackedTensorDict(TensorDictBase):
     def _key_list(self):
         if not self.tensordicts:
             return []
-        keys = set(self.tensordicts[0].keys())
+        # dict.fromkeys lists the keys once: list() would call len() on the
+        # keys view, which lists the keys of a lazy stack again.
+        first_keys = dict.fromkeys(self.tensordicts[0].keys())
+        keys = set(first_keys)
         for td in self.tensordicts[1:]:
             keys = keys.intersection(td.keys())
-        return sorted(keys, key=str)
+        # Keep the insertion order of the first tensordict, as a dense
+        # tensordict and _iter_items_lazystack (keys(include_nested=True)) do,
+        # so that keys(), values() and items() agree.
+        return [key for key in first_keys if key in keys]
 
     @lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
@@ -2513,6 +2520,8 @@ class LazyStackedTensorDict(TensorDictBase):
             # try:
             index_unravel = _unravel_key_to_tuple(index)
             if index_unravel:
+                if value is self:
+                    raise ValueError(_SELF_NESTING_ERROR.format(index))
                 self._set_tuple(
                     index_unravel,
                     value,
@@ -3942,13 +3951,7 @@ class LazyStackedTensorDict(TensorDictBase):
     unlock_ = TensorDictBase.unlock_
     unlock = _renamed_inplace_method(unlock_)
 
-    _check_device = TensorDict._check_device
-    _check_is_shared = TensorDict._check_is_shared
-    _convert_to_tensordict = TensorDict._convert_to_tensordict
     _index_tensordict = TensorDict._index_tensordict
-    masked_select = TensorDict.masked_select
-    _to_module = TensorDict._to_module
-    from_dict_instance = TensorDict.from_dict_instance
 
 
 class _CustomOpTensorDict(TensorDictBase):
@@ -4627,38 +4630,12 @@ class _CustomOpTensorDict(TensorDictBase):
         splits = -(self.batch_size[dim] // -chunks)
         return self.split(splits, dim)
 
-    __xor__ = TensorDict.__xor__
-    __or__ = TensorDict.__or__
-    __eq__ = TensorDict.__eq__
-    __ne__ = TensorDict.__ne__
-    __ge__ = TensorDict.__ge__
-    __gt__ = TensorDict.__gt__
-    __le__ = TensorDict.__le__
-    __lt__ = TensorDict.__lt__
     __setitem__ = TensorDict.__setitem__
     _add_batch_dim = TensorDict._add_batch_dim
-    _check_device = TensorDict._check_device
-    _check_is_shared = TensorDict._check_is_shared
-    _convert_to_tensordict = TensorDict._convert_to_tensordict
     _index_tensordict = TensorDict._index_tensordict
 
-    _apply_nest = TensorDict._apply_nest
-    _get_names_idx = TensorDict._get_names_idx
     _maybe_remove_batch_dim = TensorDict._maybe_remove_batch_dim
-    _multithread_apply_flat = TensorDict._multithread_apply_flat
-    _multithread_rebuild = TensorDict._multithread_rebuild
     _remove_batch_dim = TensorDict._remove_batch_dim
-    _to_module = TensorDict._to_module
-    _unbind = TensorDict._unbind
-    all = TensorDict.all
-    any = TensorDict.any
-    expand = TensorDict.expand
-    from_dict_instance = TensorDict.from_dict_instance
-    masked_select = TensorDict.masked_select
-    _repeat = TensorDict._repeat
-    repeat_interleave = TensorDict.repeat_interleave
-    reshape = TensorDict.reshape
-    split = TensorDict.split
 
 
 class _UnsqueezedTensorDict(_CustomOpTensorDict):

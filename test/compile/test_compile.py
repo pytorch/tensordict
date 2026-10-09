@@ -8,8 +8,8 @@ import dataclasses
 import importlib.util
 import inspect
 import platform
-import sys
 import warnings
+import weakref
 from pathlib import Path
 from typing import Any, Callable
 
@@ -22,9 +22,8 @@ from packaging import version
 
 from tensordict import (
     assert_close,
+    from_dataclass,
     NonTensorData,
-    PYTREE_REGISTERED_LAZY_TDS,
-    PYTREE_REGISTERED_TDS,
     tensorclass,
     TensorDict,
     TensorDictParams,
@@ -41,11 +40,20 @@ from tensordict.nn import (
     TensorDictModule as Mod,
     TensorDictSequential as Seq,
 )
-from tensordict.nn.functional_modules import _exclude_td_from_pytree
+from tensordict.nn.functional_modules import (
+    _exclude_td_from_pytree,
+    PYTREE_REGISTERED_LAZY_TDS,
+    PYTREE_REGISTERED_TDS,
+)
 from tensordict.store._utils import _prepare_indexed_value
 
 from tensordict.tensorclass import TensorClass
-from tensordict.utils import unravel_keys
+from tensordict.utils import (
+    _unravel_key_to_tuple,
+    unravel_key,
+    unravel_key_list,
+    unravel_keys,
+)
 
 from torch._dynamo.testing import CompileCounterWithBackend
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
@@ -67,10 +75,27 @@ elif is_npu_available():
     cur_device = "npu"
     npu_device_count = torch.npu.device_count()
 
-pytestmark = pytest.mark.skipif(
-    sys.version_info >= (3, 14),
-    reason="torch.compile is not supported on python 3.14+ ",
-)
+
+@pytest.mark.parametrize("is_tensordict_module", [False, True])
+def test_cudagraph_module_is_released_without_gc(is_tensordict_module):
+    if is_tensordict_module:
+        module = TensorDictModule(lambda x: x, in_keys=["x"], out_keys=["y"])
+    else:
+
+        def module(x):
+            return x
+
+    with _exclude_td_from_pytree():
+        with (
+            pytest.warns(UserWarning)
+            if not torch.cuda.is_available()
+            else contextlib.nullcontext()
+        ):
+            wrapper = CudaGraphModule(module)
+
+        wrapper_ref = weakref.ref(wrapper)
+        del wrapper
+        assert wrapper_ref() is None
 
 
 @pytest.fixture(autouse=True)
@@ -120,6 +145,90 @@ def test_unravel_keys_compile(key):
     assert (
         eager == compiled
     ), f"unravel_keys mismatch for {key!r}: eager={eager!r}, compiled={compiled!r}"
+
+
+_UNRAVEL_VALID_KEYS = [
+    "a",
+    ("a",),
+    ("a", "b"),
+    (("a", "b"), "c"),
+    ("a", ("b", ("c",))),
+    ((("a",),),),
+]
+# These unravel to () in both modes.
+_UNRAVEL_INVALID_TUPLE_KEYS = [
+    ("a", 1),
+    (("a", 1), "b"),
+    ("a", ()),
+    (),
+    ((),),
+    (slice(None), 0),
+    (0, Ellipsis),
+]
+
+
+@pytest.mark.parametrize(
+    "fn", [_unravel_key_to_tuple, unravel_key], ids=lambda fn: fn.__name__
+)
+@pytest.mark.parametrize(
+    "key", _UNRAVEL_VALID_KEYS + _UNRAVEL_INVALID_TUPLE_KEYS, ids=repr
+)
+def test_unravel_key_fullgraph(fn, key):
+    eager = fn(key)
+    torch._dynamo.reset()
+
+    def f(x):
+        return x + 1, fn(key)
+
+    compiled = torch.compile(f, fullgraph=True, backend="eager")(torch.zeros(()))[1]
+    assert compiled == eager
+
+
+def test_unravel_key_list_fullgraph():
+    eager = unravel_key_list(_UNRAVEL_VALID_KEYS)
+    eager_keys = unravel_keys(*_UNRAVEL_VALID_KEYS)
+    torch._dynamo.reset()
+
+    def f(x):
+        return (
+            x + 1,
+            unravel_key_list(_UNRAVEL_VALID_KEYS),
+            unravel_keys(*_UNRAVEL_VALID_KEYS),
+        )
+
+    _, compiled, compiled_keys = torch.compile(f, fullgraph=True, backend="eager")(
+        torch.zeros(())
+    )
+    assert compiled == eager
+    assert compiled_keys == eager_keys
+
+
+@pytest.mark.parametrize(
+    "fn,key",
+    [
+        (unravel_key, 1),
+        (unravel_key, None),
+        (unravel_key_list, ["a", 1]),
+        (unravel_key_list, ["a", ("a", 1)]),
+        (unravel_key_list, ["a", ()]),
+    ],
+    ids=["unravel_key-int", "unravel_key-None", "list-int", "list-mixed", "list-empty"],
+)
+def test_unravel_key_invalid_fullgraph(fn, key):
+    msg = "key should be a Sequence<NestedKey>"
+    with pytest.raises(RuntimeError, match=msg):
+        fn(key)
+    torch._dynamo.reset()
+
+    def f(x):
+        try:
+            fn(key)
+        except RuntimeError as err:
+            return x + 1, str(err)
+        return x, None
+
+    _, compiled_msg = torch.compile(f, fullgraph=True, backend="eager")(torch.zeros(()))
+    assert compiled_msg == msg
 
 
 @pytest.mark.skipif(
@@ -1639,10 +1748,6 @@ class TestFunctional:
 
 
 @pytest.mark.skipif(not _v2_5, reason="Requires PT>=2.5")
-@pytest.mark.skipif(
-    sys.version_info >= (3, 14),
-    reason="torch.export has compatibility issues with Python 3.14 (networkx/dataclasses)",
-)
 class TestExport:
     def test_export_module(self):
         tdm = Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"])
@@ -2194,6 +2299,14 @@ class _FactoryDefaultTC:
     cache: torch.Tensor = dataclasses.field(default_factory=lambda: torch.zeros(3))
 
 
+@dataclasses.dataclass
+class _FactoryDefaultDataClass:
+    cache: torch.Tensor = dataclasses.field(default_factory=lambda: torch.zeros(3))
+
+
+_FactoryDefaultFromDataclassTC = from_dataclass(_FactoryDefaultDataClass)
+
+
 @tensorclass
 class _NoneDefaultTC:
     x: torch.Tensor
@@ -2239,6 +2352,16 @@ class TestTCDefaultsCompile:
             return _FactoryDefaultTC().cache
 
         torch.testing.assert_close(_FactoryDefaultTC().cache, torch.zeros(3))
+        torch.testing.assert_close(fn(), torch.zeros(3))
+
+    def test_from_dataclass_default_factory_under_compile(self):
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn():
+            return _FactoryDefaultFromDataclassTC().cache
+
+        torch.testing.assert_close(
+            _FactoryDefaultFromDataclassTC().cache, torch.zeros(3)
+        )
         torch.testing.assert_close(fn(), torch.zeros(3))
 
     def test_omitted_none_default_under_compile(self):

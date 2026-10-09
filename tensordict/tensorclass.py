@@ -24,10 +24,12 @@ from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
+from types import NoneType, UnionType
 from typing import (
     AbstractSet,
     Any,
     Callable,
+    Generic,
     get_args,
     get_origin,
     get_type_hints,
@@ -55,6 +57,7 @@ from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
     _register_tensor_class,
+    _TENSORDICTBASE_MIXINS,
     _UNSET,
     CompatibleType,
 )
@@ -113,13 +116,6 @@ except ImportError:
 T = TypeVar("T", bound=TensorCollection)
 # We use an abstract AnyType instead of Any because Any isn't recognised as a type for python < 3.10
 major, minor = sys.version_info[:2]
-if (major, minor) < (3, 10):
-    from typing import Union  # noqa
-
-    NonType = type(None)
-    UnionType = type(Union)
-else:
-    from types import NoneType, UnionType
 if (major, minor) < (3, 11):
 
     class _AnyType:
@@ -143,6 +139,8 @@ _TensorTypes = (
 _TENSOR_ONLY_TYPE_ERR = TypeError(
     "tensor_only requires types to be Tensor, Tensor-subtrypes or None."
 )
+# flags accepted by the bracket form TensorClass["autocast", ...]
+_TENSORCLASS_FLAGS = ("autocast", "nocast", "frozen", "tensor_only", "shadow")
 # methods where non_tensordict data should be cleared in the return value
 _CLEAR_METADATA = {"all", "any"}
 # torch functions where we can wrap the corresponding TensorDict version
@@ -1059,6 +1057,17 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     for name in inherited_reserved_fields:
         setattr(cls, name, dataclasses.field())
 
+    # If cls is already a dataclass, its first dataclass() pass removed the Field
+    # declarations (default factories, init/repr/compare/kw_only flags, metadata)
+    # from the class namespace, from which the call below rebuilds the fields.
+    # Put copies back, except for the fields reset above, whose first-pass
+    # default can be the inherited attribute.
+    if "__dataclass_fields__" in cls.__dict__:
+        own_names = set(_own_annotation_names(cls)) - set(inherited_reserved_fields)
+        for field in dataclasses.fields(cls):
+            if field.name in own_names:
+                setattr(cls, field.name, copy(field))
+
     # Breaks some tests, don't do that:
     # if not dataclasses.is_dataclass(cls):
     cls = dataclass(cls, frozen=frozen)
@@ -1118,6 +1127,10 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         cls.__torch_function__ = classmethod(__torch_function__)
     cls.__getstate__ = _getstate
     cls.__setstate__ = _setstate
+    if not hasattr(cls, "__copy__"):
+        cls.__copy__ = _copy
+    if not hasattr(cls, "__deepcopy__"):
+        cls.__deepcopy__ = _deepcopy
 
     if tensor_only:
         cls.__getattr__ = _getattr_tensor_only
@@ -1242,7 +1255,10 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     ):
         cls.from_dict_instance = _from_dict_instance
 
-    for attr in set(TensorDict.__dict__.keys()).union(TensorDictBase.__dict__.keys()):
+    td_attrs = set(TensorDict.__dict__).union(
+        TensorDictBase.__dict__, *(mixin.__dict__ for mixin in _TENSORDICTBASE_MIXINS)
+    )
+    for attr in td_attrs:
         if attr in ("__torch_function__",):
             continue
         func = getattr(TensorDict, attr)
@@ -1511,10 +1527,13 @@ def _init_wrapper(
         _missing_type = getattr(dataclasses, "_MISSING_TYPE", type(dataclasses.MISSING))
         for key, field in type(self).__dataclass_fields__.items():
             # Only process fields that are in __expected_keys__ (excludes ClassVar fields)
-            if key in self.__expected_keys__:
+            if key in self.__expected_keys__ and key not in kwargs:
                 if field.default_factory is not dataclasses.MISSING and not isinstance(
                     field.default_factory, _missing_type
                 ):
+                    if _has_custom_setattr and not field.init:
+                        # The dataclass __init__ calls this factory itself.
+                        continue
                     default = field.default_factory()
                 else:
                     default = field.default
@@ -2122,6 +2141,16 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
     else:
         self._tensordict = state.get("tensordict")
         self._non_tensordict = state.get("non_tensordict")
+
+
+def _copy(self) -> Any:
+    """Copies the tensorclass without cloning its tensors, like ``self.copy()``."""
+    return self.copy()
+
+
+def _deepcopy(self, memo: dict[int, Any]) -> Any:
+    """Copies the tensorclass and clones its tensors, like ``self.clone()``."""
+    return self.clone()
 
 
 def _getattr_tensor_only(self, item: str, **kwargs) -> Any:
@@ -2883,8 +2912,11 @@ def _set(
                 self._non_tensordict[key] = value
                 return self
             if non_tensor:
+                # Read the metadata from the TensorDict: with shadow=True,
+                # self.batch_size and self.device can be fields.
+                td = self._tensordict
                 value = NonTensorData(
-                    data=value, batch_size=self.batch_size, device=self.device
+                    data=value, batch_size=td.batch_size, device=td.device
                 )
             if key in self._non_tensordict:
                 del self._non_tensordict[key]
@@ -3178,16 +3210,6 @@ def _grad(self):
     if grad is None:
         return None
     return self._from_tensordict(self._tensordict.grad, self._non_tensordict)
-
-
-def _names_setter(self, names: str) -> None:  # noqa: D417
-    """Set the value of ``tensorclass.names``.
-
-    Args:
-        names (sequence of str)
-
-    """
-    self._tensordict.names = names
 
 
 def _state_dict(
@@ -3757,6 +3779,19 @@ class _TensorClassMeta(abc.ABCMeta):
     def __getitem__(cls, item: IndexType) -> Self:
         if not isinstance(item, tuple):
             item = (item,)
+        if not all(
+            isinstance(_item, str) and _item in _TENSORCLASS_FLAGS for _item in item
+        ):
+            # Type arguments of a generic class, as in
+            # ``class Foo(TensorClass, Generic[T])`` or ``class Foo[T](TensorClass)``.
+            # This metaclass __getitem__ hides Generic.__class_getitem__, so we
+            # call it explicitly.
+            if issubclass(cls, Generic):
+                return Generic.__dict__["__class_getitem__"].__get__(None, cls)(item)
+            raise TypeError(
+                f"{cls.__name__} is not a generic class, so {cls.__name__}[...] only "
+                f"accepts the flags {_TENSORCLASS_FLAGS}. Got {item}."
+            )
         name = "_".join(item)  # type: ignore
         cls_name = f"TensorClass_{name}"
         bases = (cls,)
@@ -5265,6 +5300,83 @@ class NonTensorStack(LazyStackedTensorDict):
         # the parent implementation would materialize it into an empty
         # TensorDict, silently dropping the data.
         return self
+
+    # flip, roll, rot90, tile, narrow and broadcast_to are inherited from
+    # TensorDictBase, which builds the result from the tensor leaves, and
+    # reshape falls back to the same code when the new shape is not a flatten
+    # or unflatten of the stack. A stack of non-tensor entries has no tensor
+    # leaves, so the result used to be an empty TensorDict. The overrides below
+    # move the entries instead: they run the operation on a tensor holding the
+    # flat position of each entry, then pick the entries at the resulting
+    # positions.
+    def _positions(self) -> torch.Tensor:
+        return torch.arange(self.batch_size.numel()).reshape(self.batch_size)
+
+    def _select_positions(self, positions: torch.Tensor) -> NonTensorStack:
+        index = []
+        for size in reversed(self.batch_size):
+            index.append(positions % size)
+            positions = torch.div(positions, size, rounding_mode="floor")
+        index = tuple(reversed(index))
+        stack = self
+        if self.stack_dim != 0:
+            # Advanced indexing of a lazy stack expects the stack dim first, so
+            # bring it to the front and reorder the index accordingly. The
+            # result shape only depends on the index tensors, not on this
+            # permutation.
+            dims = [self.stack_dim] + [
+                d for d in range(self.ndim) if d != self.stack_dim
+            ]
+            stack = self.permute(dims)
+            index = tuple(index[d] for d in dims)
+        # advanced indexing copies the selected entries
+        return stack[index]
+
+    def flip(self, dims: int | tuple[int, ...]) -> NonTensorStack:
+        return self._select_positions(self._positions().flip(dims))
+
+    def roll(
+        self,
+        shifts: int | tuple[int, ...],
+        dims: int | tuple[int, ...] | None = None,
+        *,
+        inplace: bool = False,
+    ) -> NonTensorStack:
+        result = self._select_positions(self._positions().roll(shifts, dims))
+        if inplace:
+            return self.update_(result)
+        return result
+
+    def rot90(self, k: int = 1, dims: tuple[int, int] = (0, 1)) -> NonTensorStack:
+        return self._select_positions(self._positions().rot90(k, dims))
+
+    def tile(self, dims: tuple[int, ...]) -> NonTensorStack:
+        return self._select_positions(self._positions().tile(dims))
+
+    def narrow(self, dim: int, start: int, length: int) -> NonTensorStack:
+        # Let torch check the arguments, then select a slice, which shares the
+        # entries the same way narrowing a tensor returns a view.
+        self._positions().narrow(dim, start, length)
+        dim = dim % self.ndim
+        if start < 0:
+            start += self.batch_size[dim]
+        return self[(slice(None),) * dim + (slice(start, start + length),)]
+
+    def broadcast_to(self, shape: tuple[int, ...]) -> NonTensorStack:
+        return self.expand(shape)
+
+    def reshape(self, *args, **kwargs) -> NonTensorStack:
+        if kwargs.get("inplace", False):
+            return super().reshape(*args, **kwargs)
+        kwargs.pop("inplace", None)
+        positions = self._positions().reshape(_get_shape_from_args(*args, **kwargs))
+        if positions.shape == self.batch_size:
+            return self
+        try:
+            # regrouping the stack shares the entries, like a view
+            return self._view(positions.shape)
+        except RuntimeError:
+            return self._select_positions(positions)
 
     def _memmap_(
         self,

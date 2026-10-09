@@ -4,7 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import functools
 import importlib
+import io
 import pickle
 
 import numpy as np
@@ -20,6 +22,9 @@ _has_redis = importlib.util.find_spec("redis", None) is not None
 _BACKEND_PORTS = {"redis": 6379, "dragonfly": 6380}
 
 
+# Probe each server once: redis-py retries a refused connection for about
+# 5 s, and the backend fixture runs for every store test.
+@functools.cache
 def _server_available(host: str, port: int) -> bool:
     """Check if a Redis-protocol server is reachable at *host*:*port*."""
     if not _has_redis:
@@ -1897,6 +1902,18 @@ class TestNonTensorIndexing:
         finally:
             store.clear_redis()
             store.close()
+
+
+def test_lazy_store_pickle_path():
+    # LazyStackedTensorDictStore moved from tensordict.store._store to
+    # tensordict.store._lazy. Pickles made before the move name the old module,
+    # and unpickling looks the classes up there.
+    import tensordict.store._lazy as lazy_module
+
+    unpickler = pickle.Unpickler(io.BytesIO())
+    for name in ("LazyStackedTensorDictStore", "_StoreStackElementView"):
+        cls = unpickler.find_class("tensordict.store._store", name)
+        assert cls is getattr(lazy_module, name)
 
 
 if __name__ == "__main__":

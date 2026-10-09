@@ -4,6 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import collections
+import random
+import sys
 
 import numpy as np
 import pytest
@@ -18,7 +21,6 @@ from tensordict import (
     unravel_key,
     unravel_key_list,
 )
-from tensordict._C import _unravel_key_to_tuple
 from tensordict._indexing import _traceable_slice_length
 from tensordict.utils import (
     _check_recursive_properties,
@@ -26,10 +28,12 @@ from tensordict.utils import (
     _getitem_batch_size,
     _make_cache_key,
     _TensorDictPropertyError,
+    _unravel_key_to_tuple,
     convert_ellipsis_to_idx,
     isin,
     parse_tensor_dict_string,
     remove_duplicates,
+    unravel_keys,
 )
 
 
@@ -399,6 +403,32 @@ def test_check_recursive_properties_lazy_stack_unbatched_metadata():
     assert _check_recursive_properties(result)
 
 
+# (key, unravel_key(key))
+_VALID_KEYS = [
+    ("a", "a"),
+    (("a",), "a"),
+    (("a", "b"), ("a", "b")),
+    ((("a", "b"), "c"), ("a", "b", "c")),
+    (("a", ("b", ("c",))), ("a", "b", "c")),
+    ((("a",),), "a"),
+]
+# Tuples with a part that is neither a str nor a tuple of str unravel to ().
+# TorchRL's Composite.__getitem__ relies on index tuples such as
+# (slice(None), 0) unravelling to ().
+_INVALID_TUPLE_KEYS = [
+    ("a", 1),
+    (("a", 1), "b"),
+    ("a", ()),
+    (),
+    ((),),
+    ("a", (1,), ("b",)),
+    ("a", (slice(None),), ("b",)),
+    (slice(None), 0),
+    (0, Ellipsis),
+]
+_NON_TUPLE_INVALID_KEYS = [1, None, ["a"]]
+
+
 @pytest.mark.parametrize("listtype", (list, tuple))
 def test_unravel_key_list(listtype):
     keys_in = listtype(["a0", ("b0",), ("c0", ("d",))])
@@ -406,18 +436,126 @@ def test_unravel_key_list(listtype):
     assert keys_out == ["a0", "b0", ("c0", "d")]
 
 
-def test_unravel_key():
-    keys_in = ["a0", ("b0",), ("c0", ("d",))]
-    keys_out = [unravel_key(key_in) for key_in in keys_in]
-    assert keys_out == ["a0", "b0", ("c0", "d")]
+@pytest.mark.parametrize("key", _INVALID_TUPLE_KEYS + _NON_TUPLE_INVALID_KEYS)
+def test_unravel_key_list_invalid(key):
+    with pytest.raises(RuntimeError, match="key should be a Sequence<NestedKey>"):
+        unravel_key_list(["a", key])
 
 
-def test_unravel_key_to_tuple():
-    keys_in = ["a", ("b",), ("c", ("d",))]
-    keys_out = [_unravel_key_to_tuple(key_in) for key_in in keys_in]
-    assert keys_out == [("a",), ("b",), ("c", "d")]
-    assert not _unravel_key_to_tuple(("a", (1,), ("b",)))
-    assert not _unravel_key_to_tuple(("a", (slice(None),), ("b",)))
+@pytest.mark.parametrize("key,expected", _VALID_KEYS)
+def test_unravel_key(key, expected):
+    assert unravel_key(key) == expected
+
+
+@pytest.mark.parametrize("key", _INVALID_TUPLE_KEYS)
+def test_unravel_key_invalid_tuple(key):
+    assert unravel_key(key) == ()
+
+
+@pytest.mark.parametrize("key", _NON_TUPLE_INVALID_KEYS)
+def test_unravel_key_invalid(key):
+    with pytest.raises(RuntimeError, match="key should be a Sequence<NestedKey>"):
+        unravel_key(key)
+
+
+def test_unravel_keys():
+    assert unravel_keys(("a",)) == "a"
+    assert unravel_keys("a", ("b", ("c",)), ("d",)) == ("a", ("b", "c"), "d")
+
+
+@pytest.mark.parametrize("key,expected", _VALID_KEYS)
+def test_unravel_key_to_tuple(key, expected):
+    expected = (expected,) if isinstance(expected, str) else expected
+    assert _unravel_key_to_tuple(key) == expected
+
+
+@pytest.mark.parametrize("key", _INVALID_TUPLE_KEYS + _NON_TUPLE_INVALID_KEYS)
+def test_unravel_key_to_tuple_invalid(key):
+    assert _unravel_key_to_tuple(key) == ()
+
+
+def _reference_unravel_key_to_tuple(key):
+    # What _unravel_key_to_tuple computes, written for clarity rather than speed.
+    if isinstance(key, str):
+        return (key,)
+    if not isinstance(key, tuple):
+        return ()
+    parts = []
+    for subkey in key:
+        subkey = _reference_unravel_key_to_tuple(subkey)
+        if not subkey:
+            return ()
+        parts.extend(subkey)
+    return tuple(parts)
+
+
+class _StrKey(str):
+    pass
+
+
+_KeyPair = collections.namedtuple("_KeyPair", ["first", "second"])
+_VALID_LEAVES = ["a", "b", "", _StrKey("c")]
+_INVALID_LEAVES = [0, None, slice(None), Ellipsis, (), ["a"]]
+
+
+def _random_key(rng, depth=0):
+    if depth == 3 or rng.random() < 0.4:
+        if rng.random() < 0.85:
+            return rng.choice(_VALID_LEAVES)
+        return rng.choice(_INVALID_LEAVES)
+    parts = tuple(_random_key(rng, depth + 1) for _ in range(rng.randint(1, 3)))
+    if len(parts) == 2 and rng.random() < 0.2:
+        return _KeyPair(*parts)
+    return parts
+
+
+def test_unravel_key_matches_reference():
+    rng = random.Random(0)
+    for _ in range(3000):
+        key = _random_key(rng)
+        expected = _reference_unravel_key_to_tuple(key)
+        result = _unravel_key_to_tuple(key)
+        assert result == expected, key
+        assert type(result) is tuple, key
+        # str subclasses are kept, as the C++ extension kept them
+        assert [type(part) for part in result] == [type(part) for part in expected]
+        if isinstance(key, (str, tuple)):
+            expected_key = expected[0] if len(expected) == 1 else expected
+            if isinstance(key, str):
+                expected_key = key
+            assert unravel_key(key) == expected_key, key
+        else:
+            with pytest.raises(RuntimeError, match="Sequence<NestedKey>"):
+                unravel_key(key)
+
+
+def test_unravel_key_tuple_subclass():
+    key = _KeyPair("a", ("b", "c"))
+    assert _unravel_key_to_tuple(key) == ("a", "b", "c")
+    flat = _KeyPair("a", "b")
+    assert _unravel_key_to_tuple(flat) == ("a", "b")
+    assert type(_unravel_key_to_tuple(flat)) is tuple
+
+
+@pytest.mark.parametrize("keys", ["ab", iter(["a"]), {"a"}], ids=["str", "iter", "set"])
+def test_unravel_key_list_rejects_non_sequences(keys):
+    # "incompatible function arguments" is the C++ binding's wording, which
+    # TorchRL's tests match.
+    with pytest.raises(
+        TypeError, match="incompatible function arguments.*list or a tuple of keys"
+    ):
+        unravel_key_list(keys)
+
+
+def test_C_module_is_deprecated():
+    sys.modules.pop("tensordict._C", None)
+    with pytest.warns(DeprecationWarning, match="tensordict._C is deprecated"):
+        import tensordict._C as _C
+    assert _C.unravel_key is unravel_key
+    assert _C.unravel_key_list is unravel_key_list
+    assert _C._unravel_key_to_tuple is _unravel_key_to_tuple
+    # the C++ binding took a single key
+    assert _C.unravel_keys(("a", ("b",))) == ("a", "b")
 
 
 @pytest.mark.parametrize("key", ("tensor1", "tensor3"))
