@@ -332,7 +332,6 @@ class _DeviceOps:
         self._fast_apply(record, filter_empty=True)
         return self
 
-    # Checks
     def _check_is_shared(self) -> bool:
         share_list = [_is_shared(value) for value in self.values()]
         if any(share_list) and not all(share_list):

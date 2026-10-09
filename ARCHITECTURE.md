@@ -166,10 +166,10 @@ the comparison operators, which a class overrides only when it can do better.
 
 The implementations also reuse code in two ways:
 
-- A few class-level aliases still borrow TensorDict's code where it is
-  specific to dense storage, for example
-  `_load_memmap = TensorDict._load_memmap`, which binds the classmethod to
-  `TensorDict` so that a store or a `PersistentTensorDict` loads a memmap as
+- A few class-level aliases still borrow TensorDict's code, where it is
+  specific to dense storage or has not been moved to `TensorDictBase` yet. For
+  example, `_load_memmap = TensorDict._load_memmap` binds the classmethod to
+  `TensorDict`, so that a store or a `PersistentTensorDict` loads a memmap as
   a `TensorDict`.
 - `TensorDictParams` forwards most calls to the tensordict it wraps
   (`_param_td`), through the `_fallback` decorators in `nn/params.py`.
