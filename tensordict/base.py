@@ -27,7 +27,6 @@ from typing import (
     Any,
     Callable,
     Dict,
-    Generator,
     Iterator,
     List,
     overload,
@@ -825,11 +824,21 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             string = "..."
         return f"{type(self).__name__}(\n{string})"
 
-    def __iter__(self) -> Generator:
-        """Iterates over the first shape-dimension of the tensordict."""
+    def __iter__(self) -> Iterator:
+        """Iterates over the first batch dimension of the tensordict.
+
+        Raises:
+            TypeError: if the tensordict has no batch dimensions, as ``iter()``
+                does for a 0-d tensor.
+        """
+        # Not a generator function, so that iter(td) raises at once, as
+        # Tensor.__iter__ does.
         if not self.batch_dims:
-            raise StopIteration
-        yield from self.unbind(0)
+            raise TypeError(
+                "iteration over a 0-d tensordict. Use keys(), values() or items() "
+                "to iterate over its entries."
+            )
+        return iter(self.unbind(0))
 
     def __len__(self) -> int:
         """Returns the length of first dimension, if there is, otherwise 0."""

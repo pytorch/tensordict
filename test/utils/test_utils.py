@@ -1035,6 +1035,10 @@ _NOT_IN_ALL_PENDING = {
 
 # Public functions and classes that stay out of ``__all__`` on purpose.
 _NOT_IN_ALL = {
+    # Python < 3.11 has no typing.dataclass_transform, so these modules define a
+    # fallback with that name. On Python >= 3.11 the name is imported from typing.
+    "tensordict.tensorclass": {"dataclass_transform"},
+    "tensordict.typedtensordict": {"dataclass_transform"},
     # The names in ``discrete.__all__`` are the classes of
     # ``tensordict.nn.distributions.distributions_maps``. rand_one_hot is
     # public through ``tensordict.nn``.
