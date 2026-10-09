@@ -86,15 +86,38 @@ test_status=0
 # it). --dist loadgroup keeps each xdist_group in one worker; see
 # test/distributed/test_distributed.py.
 python -m pytest --runslow -n "${TD_TEST_WORKERS:-4}" --dist loadgroup \
+    --ignore test/utils/test_setup.py \
     --instafail -v --durations 20 --timeout 120 \
     --junitxml="$JUNIT_DIR/junit-tests.xml" || test_status=$?
+# test_setup.py reinstalls tensordict from this checkout, and its editable
+# installs rewrite tensordict/_C.so. Run it alone, so that no other test
+# imports tensordict while that file is half written.
+python -m pytest --runslow test/utils/test_setup.py \
+    --instafail -v --durations 20 --timeout 120 \
+    --junitxml="$JUNIT_DIR/junit-tests-setup.xml" || test_status=$?
 
 if [ "$test_status" -ne 0 ]; then
-    # Record same-commit evidence without hiding the original CI failure.
-    # The rerun is serial, so a failure that only shows under xdist passes here.
-    python -m pytest --runslow --last-failed --last-failed-no-failures none \
-        --instafail -v --durations 20 --timeout 120 \
-        --junitxml="$JUNIT_DIR/junit-tests-rerun.xml" || true
+    # Record same-commit evidence without hiding the original CI failure:
+    # rerun the failed tests, one at a time. Under --dist loadgroup the IDs of
+    # grouped tests end in @<group>, which --last-failed cannot match, so pass
+    # the IDs without that suffix.
+    python - "$root_dir/.pytest_cache/v/cache/lastfailed" \
+        > "$JUNIT_DIR/failed-tests.txt" <<'EOF'
+import json
+import pathlib
+import re
+import sys
+
+path = pathlib.Path(sys.argv[1])
+failed = json.loads(path.read_text()) if path.exists() else {}
+for nodeid in sorted({re.sub(r"@[\w.-]+$", "", nodeid) for nodeid in failed}):
+    print(nodeid)
+EOF
+    if [ -s "$JUNIT_DIR/failed-tests.txt" ]; then
+        python -m pytest --runslow @"$JUNIT_DIR/failed-tests.txt" \
+            --instafail -v --durations 20 --timeout 120 \
+            --junitxml="$JUNIT_DIR/junit-tests-rerun.xml" || true
+    fi
     if [ -n "$RUNNER_TEST_RESULTS_DIR" ]; then
         cp "$JUNIT_DIR"/junit-*.xml "$RUNNER_TEST_RESULTS_DIR/" 2>/dev/null || true
     fi
