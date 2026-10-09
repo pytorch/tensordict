@@ -517,7 +517,7 @@ def _set_item(
         ):
             return tensor
         elif isinstance(tensor, NonTensorData):
-            tensor = NonTensorStack.from_nontensordata(tensor)
+            tensor = NonTensorStack._from_nontensordata(tensor)
         if tensor.stack_dim != 0:
             tensor = NonTensorStack(*tensor.unbind(0), stack_dim=0)
         tensor[index] = value

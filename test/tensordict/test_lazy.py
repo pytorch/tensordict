@@ -247,6 +247,104 @@ class TestLazyStackedTensorDict:
         for value in std.values(True, True):
             assert (value == 0).all()
 
+    def test_hooks_are_deprecated(self):
+        td = LazyStackedTensorDict(
+            TensorDict({"a": torch.zeros(3)}, [3]),
+            TensorDict({"a": torch.ones(3)}, [3]),
+        )
+        assert td._hook_out is None
+        assert td._hook_in is None
+
+        def hook(x):
+            return x + 1
+
+        for name in ("hook_out", "hook_in"):
+            match = (
+                rf"^LazyStackedTensorDict\.{name} is deprecated and will be removed "
+                r"in TensorDict 0\.17\.$"
+            )
+            with pytest.warns(DeprecationWarning, match=match) as record:
+                assert getattr(td, name) is None
+            assert record[0].filename == __file__
+            with pytest.warns(DeprecationWarning, match=match) as record:
+                setattr(td, name, hook)
+            assert record[0].filename == __file__
+            assert getattr(td, f"_{name}") is hook
+        for name in ("hook_out", "hook_in"):
+            with pytest.warns(
+                DeprecationWarning,
+                match=rf"^LazyStackedTensorDict\({name}=\.\.\.\) is deprecated and "
+                r"will be removed in TensorDict 0\.17\.$",
+            ) as record:
+                td2 = LazyStackedTensorDict(*td.tensordicts, **{name: hook})
+            assert record[0].filename == __file__
+            assert getattr(td2, f"_{name}") is hook
+            if name == "hook_out":
+                # hook_out still applies to the values that get returns
+                assert (td2.get("a") == torch.tensor([[1.0], [2.0]])).all()
+
+    def test_setstate_hooks_of_old_pickles(self):
+        # TensorDict 0.14 pickled the hooks under their public names
+        td = lazy_stack(
+            [
+                TensorDict({"a": torch.zeros(3)}, [3]),
+                TensorDict({"a": torch.ones(3)}, [3]),
+            ]
+        )
+        state = td.__getstate__()
+        state["hook_out"] = state.pop("_hook_out")
+        state["hook_in"] = state.pop("_hook_in")
+        loaded = LazyStackedTensorDict.__new__(LazyStackedTensorDict)
+        loaded.__setstate__(state)
+        assert "hook_out" not in vars(loaded)
+        assert "hook_in" not in vars(loaded)
+        assert loaded._hook_out is None
+        assert loaded._hook_in is None
+        assert (loaded == td).all()
+        loaded = pickle.loads(pickle.dumps(td))
+        assert loaded._hook_out is None
+        assert (loaded == td).all()
+
+    def test_valid_keys_is_deprecated(self):
+        td = lazy_stack(
+            [
+                TensorDict({"a": torch.zeros(3), "b": {"c": torch.zeros(3)}}, [3]),
+                TensorDict({"a": torch.ones(3), "b": {"c": torch.ones(3)}}, [3]),
+            ]
+        )
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^LazyStackedTensorDict\.valid_keys\(\) is deprecated and will be "
+            r"removed in TensorDict 0\.17\. Use keys\(\) instead\.$",
+        ) as record:
+            keys = td.valid_keys(True, True)
+        assert record[0].filename == __file__
+        assert set(keys) == set(td.keys(True, True)) == {"a", ("b", "c")}
+
+    def test_get_nestedtensor_is_deprecated(self):
+        td = lazy_stack(
+            [
+                TensorDict({"a": torch.zeros(4), "n": {"c": torch.zeros(2)}}, []),
+                TensorDict({"a": torch.ones(5), "n": {"c": torch.ones(3)}}, []),
+            ]
+        )
+        for key in ("a", ("n", "c")):
+            with pytest.warns(
+                DeprecationWarning,
+                match=r"^LazyStackedTensorDict\.get_nestedtensor\(\) is deprecated "
+                r"and will be removed in TensorDict 0\.17\. Use "
+                r"get\(key, as_nested_tensor=True\) instead\.$",
+            ) as record:
+                nested = td.get_nestedtensor(key)
+            # one warning, also for nested keys
+            record = [w for w in record if w.category is DeprecationWarning]
+            assert len(record) == 1
+            assert record[0].filename == __file__
+            assert nested.layout == torch.strided
+            expected = td.get(key, as_nested_tensor=True, layout=torch.strided)
+            for t1, t2 in zip(nested.unbind(), expected.unbind()):
+                assert (t1 == t2).all()
+
     @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
     def test_to_mds(self, tmpdir):
         td = LazyStackedTensorDict(

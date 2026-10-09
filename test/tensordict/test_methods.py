@@ -2235,18 +2235,17 @@ class TestTensorDicts(TestTensorDictsBase):
             td_stack[key]
         if dim in (0, -5):
             # this will work if stack_dim is 0 (or equivalently -self.batch_dims)
-            # it is the proper way to get that entry
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                td_stack.get_nestedtensor(key)
+                td_stack._get_nestedtensor(key)
         else:
-            # if the stack_dim is not zero, then calling get_nestedtensor is disallowed
+            # if the stack_dim is not zero, then calling _get_nestedtensor is disallowed
             with pytest.raises(
                 RuntimeError,
                 match="LazyStackedTensorDict.get_nestedtensor can only be called "
                 "when the stack_dim is 0.",
             ):
-                td_stack.get_nestedtensor(key)
+                td_stack._get_nestedtensor(key)
         with pytest.raises(
             RuntimeError, match="Failed to stack tensors within a tensordict"
         ):

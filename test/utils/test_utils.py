@@ -564,6 +564,21 @@ def test_C_module_is_deprecated():
     assert _C.unravel_keys(("a", ("b",))) == ("a", "b")
 
 
+def test_testing_module_is_deprecated():
+    import tensordict._testing
+    import tensordict.testing
+
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"^tensordict\.testing\.MyDistData is deprecated and will be removed "
+        r"in TensorDict 0\.17\.$",
+    ) as record:
+        from tensordict.testing import MyDistData
+    assert record[0].filename == __file__
+    assert MyDistData is tensordict._testing.MyDistData
+    assert MyDistData.__module__ == "tensordict._testing"
+
+
 class TestDeprecationHelpers:
     def test_warn_deprecated(self):
         with pytest.warns(

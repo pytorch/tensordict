@@ -30,6 +30,7 @@ from tensordict._archive import (
     is_memmap_archive,
     TENSORDICT_ARCHIVE_SUFFIX,
 )
+from tensordict._deprecation import deprecated
 from tensordict._nestedkey import NestedKey
 from tensordict.base import (
     _is_tensor_collection,
@@ -1325,10 +1326,14 @@ class _Serialization:
         """
         return cls.load_memmap(prefix, *args, **kwargs)
 
+    @deprecated("TensorDictBase.load_()", removal="0.17", replacement="load_memmap_()")
     def load_(self, prefix: str | Path, *args, **kwargs):
         """Loads a tensordict from disk within the current tensordict.
 
         This class method is a proxy to :meth:`~.load_memmap_`.
+
+        .. deprecated:: 0.15
+            Use :meth:`~.load_memmap_` instead.
         """
         return self.load_memmap_(prefix, *args, **kwargs)
 

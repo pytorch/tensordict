@@ -382,6 +382,28 @@ class TestPyTreeNamespace:
         )
 
 
+def test_is_batchedtensor_is_deprecated():
+    assert "is_batchedtensor" not in vars(tensordict)
+    assert "is_batchedtensor" not in tensordict.__all__
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"^tensordict\.is_batchedtensor is deprecated and will be removed in "
+        r"TensorDict 0\.17\. Use torch\._C\._functorch\.is_batchedtensor instead\.$",
+    ) as record:
+        from tensordict import is_batchedtensor
+    assert record[0].filename == __file__
+    assert is_batchedtensor is torch._C._functorch.is_batchedtensor
+    assert not is_batchedtensor(torch.zeros(3))
+    seen = []
+
+    def func(x):
+        seen.append(is_batchedtensor(x))
+        return x
+
+    vmap(func)(torch.zeros(2, 3))
+    assert seen == [True]
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

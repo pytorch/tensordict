@@ -45,6 +45,7 @@ from typing import (
 import numpy as np
 import tensordict as tensordict_lib
 import torch
+from tensordict._deprecation import deprecated
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._pytree import _register_td_node
@@ -5231,7 +5232,25 @@ class NonTensorStack(LazyStackedTensorDict):
     _stack_non_tensor = NonTensorData._stack_non_tensor
 
     @classmethod
+    @deprecated(
+        "NonTensorStack.from_nontensordata()",
+        removal="0.17",
+        replacement="NonTensorData.maybe_to_stack()",
+    )
     def from_nontensordata(cls, non_tensor: NonTensorData):
+        """Expands a :class:`NonTensorData` into a stack of copies of it.
+
+        .. deprecated:: 0.15
+            Use :meth:`NonTensorData.maybe_to_stack` instead. It differs in
+            two ways: its elements share the data object of ``non_tensor``,
+            whereas this method copies it into every element; and when
+            ``non_tensor`` has an empty batch size, it returns ``non_tensor``
+            itself, whereas this method returns a copy.
+        """
+        return cls._from_nontensordata(non_tensor)
+
+    @classmethod
+    def _from_nontensordata(cls, non_tensor: NonTensorData):
         data = non_tensor.data
         prev = NonTensorData(data=data, batch_size=[], device=non_tensor.device)
         for dim in reversed(non_tensor.shape):

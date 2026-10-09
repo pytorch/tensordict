@@ -8,6 +8,7 @@ import os
 import pickle
 import stat
 from contextlib import nullcontext
+from multiprocessing.reduction import ForkingPickler
 from pathlib import Path
 
 import pytest
@@ -330,7 +331,7 @@ class TestConstructors:
         if filename is not None:
             t2 = MemoryMappedTensor.from_filename(filename, dtype=dtype, shape=shape)
         else:
-            t2 = MemoryMappedTensor.from_handler(
+            t2 = MemoryMappedTensor._from_handler(
                 t._handler, dtype=dtype, shape=shape, index=None
             )
         torch.testing.assert_close(t, t2)
@@ -609,6 +610,79 @@ def test_handler():
     assert mt2._handler is mt._handler
 
 
+def test_index_and_parent_shape_are_deprecated():
+    mt = MemoryMappedTensor.from_tensor(torch.zeros(4, 3))[1:]
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"^MemoryMappedTensor\.index is deprecated and will be removed in "
+        r"TensorDict 0\.17\.$",
+    ) as record:
+        assert mt.index == slice(1, None)
+    assert record[0].filename == __file__
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"^MemoryMappedTensor\.parent_shape is deprecated and will be removed "
+        r"in TensorDict 0\.17\.$",
+    ) as record:
+        assert mt.parent_shape == torch.Size([4, 3])
+    assert record[0].filename == __file__
+
+
+def test_from_handler_is_deprecated():
+    mt = MemoryMappedTensor.from_tensor(torch.arange(6.0).view(2, 3))
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"^MemoryMappedTensor\.from_handler\(\) is deprecated and will be "
+        r"removed in TensorDict 0\.17\.$",
+    ) as record:
+        mt2 = MemoryMappedTensor.from_handler(mt._handler, torch.float32, [2, 3], 1)
+    assert record[0].filename == __file__
+    assert isinstance(mt2, MemoryMappedTensor)
+    assert mt2._handler is mt._handler
+    assert (mt2 == mt[1]).all()
+
+
+class _OldHandlerPickle:
+    # Pickles like a MemoryMappedTensor did with TensorDict 0.14.
+    def __init__(self, args):
+        self.args = args
+
+    def __reduce__(self):
+        return MemoryMappedTensor.from_handler, self.args
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the handler pickles through a fd")
+def test_pickle_handler():
+    mt = MemoryMappedTensor.from_tensor(torch.arange(6.0).view(2, 3))[1]
+    func, args = mt.__reduce__()
+    assert func == MemoryMappedTensor._from_handler
+    loaded = pickle.loads(ForkingPickler.dumps(mt))
+    assert isinstance(loaded, MemoryMappedTensor)
+    assert loaded._index == 1
+    assert loaded._parent_shape == torch.Size([2, 3])
+    assert (loaded == mt).all()
+    # pickles made with TensorDict 0.14 call the deprecated from_handler
+    payload = ForkingPickler.dumps(_OldHandlerPickle(args))
+    with pytest.warns(DeprecationWarning, match="from_handler"):
+        loaded = pickle.loads(payload)
+    assert isinstance(loaded, MemoryMappedTensor)
+    assert (loaded == mt).all()
+
+
+def test_pickle_filename(tmp_path):
+    mt = MemoryMappedTensor.from_tensor(
+        torch.arange(6.0).view(2, 3), filename=tmp_path / "tensor.memmap"
+    )[1:]
+    state = mt.__getstate__()
+    assert set(state) == {"filename", "dtype", "shape", "index", "mode"}
+    assert state["index"] == slice(1, None)
+    assert state["shape"] == torch.Size([2, 3])
+    loaded = pickle.loads(pickle.dumps(mt))
+    assert loaded._index == slice(1, None)
+    assert loaded._parent_shape == torch.Size([2, 3])
+    assert (loaded == mt).all()
+
+
 def test_memmap_from_memmap():
     mt = MemoryMappedTensor.from_tensor(torch.zeros(()).expand(4, 3, 2, 1))
     mt2 = MemoryMappedTensor.from_tensor(mt)
@@ -733,7 +807,7 @@ class TestNestedTensor:
             assert t1.dtype == t2.dtype
             assert (t1 == t2).all()
 
-        memmap_tensor2 = MemoryMappedTensor.from_handler(
+        memmap_tensor2 = MemoryMappedTensor._from_handler(
             memmap_tensor._handler, dtype=memmap_tensor.dtype, shape=self.shape
         )
         assert type(memmap_tensor2) is MemoryMappedTensor
