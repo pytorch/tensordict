@@ -5551,7 +5551,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     value = value.clone(False).refine_names(*self.names)
             else:
                 if value._has_names():
-                    self._set_names(value.names[: self.batch_dims])
+                    names = value.names[: self.batch_dims]
+                    # an all-None prefix would re-walk every child for nothing
+                    if any(name is not None for name in names):
+                        self._set_names(names)
         return value
 
     def _validate_value_batchfree(
@@ -5648,7 +5651,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     )
             else:
                 if value._has_names():
-                    self._set_names(value.names[: self.batch_dims])
+                    names = value.names[: self.batch_dims]
+                    # an all-None prefix would re-walk every child for nothing
+                    if any(name is not None for name in names):
+                        self._set_names(names)
         return value
 
     def _validate_value_batchfree_devicefree(

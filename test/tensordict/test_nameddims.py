@@ -545,6 +545,26 @@ class TestNamedDims(TestTensorDictsBase):
         td.names = ["time"]
         assert td["agents"].names == ["time", "batch"]
 
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    def test_init_unnamed_parent_skips_rename(self, device, monkeypatch):
+        # children whose shared dims are unnamed must not make the parent
+        # re-walk every child once per child
+        source = {
+            f"k{i}": TensorDict({}, [2, 3], names=[None, "agent"]) for i in range(10)
+        }
+        rename_calls = [0]
+        orig_rename_subtds = TensorDict._rename_subtds
+
+        def _spy(self, names):
+            rename_calls[0] += 1
+            return orig_rename_subtds(self, names)
+
+        monkeypatch.setattr(TensorDict, "_rename_subtds", _spy)
+        td = TensorDict(source, [2], device=device)
+        # only the constructor's own _set_names(None)
+        assert rename_calls[0] <= 1
+        assert td["k0"].names == [None, "agent"]
+
     def test_split(self):
         td = TensorDict(
             {}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"], lock=True
