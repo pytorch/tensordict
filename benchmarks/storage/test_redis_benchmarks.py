@@ -13,7 +13,6 @@ import importlib
 
 import pytest
 import torch
-
 from tensordict import TensorDict
 
 _has_redis_pkg = importlib.util.find_spec("redis", None) is not None

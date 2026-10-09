@@ -208,8 +208,7 @@ class _StoreStackElementView(TensorDictBase):
             )
         except (ValueError, TypeError):
             raise TypeError(
-                f"{type(self).__name__} only supports tensor values, "
-                f"got {type(value)}"
+                f"{type(self).__name__} only supports tensor values, got {type(value)}"
             )
         return self
 

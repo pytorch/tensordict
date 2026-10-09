@@ -74,8 +74,8 @@ from tensordict.tensorclass import (
     NonTensorDataBase,
     NonTensorStack,
     TensorAttrs,
-    tensorclass,
     TensorClass,
+    tensorclass,
 )
 from tensordict.typedtensordict import TypedTensorDict
 from tensordict.utils import (

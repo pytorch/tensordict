@@ -7,19 +7,15 @@ import contextlib
 # This is a copy from https://github.com/pytorch/pytorch/blob/main/torch/utils/_contextlib.py#L120
 # We use it for compatibility with torch >= 1.10 where the implementation fails
 # for some tests in torchrl.
-
 # Extra utilities for working with context managers that should have been
 # in the standard library but are not
-
 import functools
 import inspect
 import sys
 from typing import Any, Callable, cast, TypeVar
 
 import numpy as np
-
 from torch.compiler import is_compiling
-
 
 # Used for annotating the decorator usage of _DecoratorContextManager (e.g.,
 # 'no_grad' and 'enable_grad').

@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import functools
-
 import mmap
 import os
 import re
@@ -31,6 +30,8 @@ if TYPE_CHECKING:
     from typing import Self
 else:
     Self = Any
+
+__all__ = ["MemoryMappedTensor"]
 
 
 def _prepare_memmap_file(
@@ -1121,8 +1122,7 @@ else:
     def _reduce_handler(handler):
         if handler.fd == -1:
             raise ValueError(
-                "Handler is unpicklable because "
-                "forking was enabled when it was created"
+                "Handler is unpicklable because forking was enabled when it was created"
             )
         return _rebuild_handler, (handler.size, reduction.DupFd(handler.fd))
 

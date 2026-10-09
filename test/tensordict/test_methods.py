@@ -571,7 +571,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert item.device == device_cast
 
         assert td_device.device == device_cast, (
-            f"td_device first tensor device is " f"{next(td_device.items())[1].device}"
+            f"td_device first tensor device is {next(td_device.items())[1].device}"
         )
         assert td_device.clone().device == device_cast
         if device_cast != td.device:

@@ -15,7 +15,6 @@ import pytest
 import torch
 from _utils_internal import get_available_devices
 from tensordict import TensorDict
-
 from tensordict.memmap import _is_writable, MemoryMappedTensor
 from torch import multiprocessing as mp
 
