@@ -14,7 +14,6 @@ from textwrap import indent
 from typing import Any, Callable, List
 
 import torch
-
 from tensordict._nestedkey import NestedKey
 from tensordict.base import is_tensor_collection, TensorDictBase
 from tensordict.nn.common import dispatch
@@ -25,7 +24,6 @@ from tensordict.nn.functional_modules import (
 )
 from tensordict.utils import _zip_strict, logger as tensordict_logger, strtobool
 from torch import Tensor
-
 from torch.utils._pytree import (
     SUPPORTED_NODES,
     tree_flatten,
@@ -33,6 +31,8 @@ from torch.utils._pytree import (
     tree_map,
     tree_unflatten,
 )
+
+__all__ = ["CudaGraphModule"]
 
 
 class CudaGraphModule:

@@ -21,7 +21,6 @@ import struct
 
 import pytest
 import torch
-
 from tensordict import TensorDict
 
 # Protocol helpers and classes are importable even without ucxx installed

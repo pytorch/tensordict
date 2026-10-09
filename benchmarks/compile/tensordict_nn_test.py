@@ -10,11 +10,8 @@ import sys
 
 import pytest
 import torch
-
 from tensordict import TensorDict, TensorDictParams
-
 from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
-
 
 sys.setrecursionlimit(10000)
 

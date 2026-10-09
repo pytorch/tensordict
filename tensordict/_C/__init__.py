@@ -10,16 +10,14 @@ They are written in Python in :mod:`tensordict.utils` now. This module keeps
 
 from __future__ import annotations
 
-import warnings
-
+from tensordict._deprecation import warn_deprecated
 from tensordict.utils import _unravel_key_to_tuple, unravel_key, unravel_key_list
 
-warnings.warn(
-    "tensordict._C is deprecated and will be removed in TensorDict 0.17. "
-    "Import unravel_key, unravel_key_list and _unravel_key_to_tuple from "
-    "tensordict.utils instead.",
-    category=DeprecationWarning,
-    stacklevel=2,
+warn_deprecated(
+    "tensordict._C",
+    removal="0.17",
+    replacement="unravel_key, unravel_key_list and _unravel_key_to_tuple "
+    "from tensordict.utils",
 )
 
 # The C++ binding took a single key, as unravel_key does.
