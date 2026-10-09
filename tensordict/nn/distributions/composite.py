@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
+__all__ = ["CompositeDistribution"]
+
 
 class CompositeDistribution(d.Distribution, Mapping):
     """A composite distribution that groups multiple distributions together using the TensorDict interface.
@@ -345,9 +347,7 @@ class CompositeDistribution(d.Distribution, Mapping):
             shape + self.batch_shape,
         )
 
-    def log_prob(
-        self, sample: TensorDictBase
-    ) -> torch.Tensor | TensorDictBase:  # noqa: D417
+    def log_prob(self, sample: TensorDictBase) -> torch.Tensor | TensorDictBase:  # noqa: D417
         """Compute the summed log-probability of a given sample.
 
         Args:

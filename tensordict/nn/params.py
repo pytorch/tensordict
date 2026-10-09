@@ -32,7 +32,6 @@ from tensordict._nestedkey import NestedKey
 from tensordict._td import _SubTensorDict, TensorDict
 from tensordict._tensorcollection import TensorCollection
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
-
 from tensordict.base import (
     _default_is_leaf,
     _is_tensor_collection,
@@ -42,7 +41,6 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
-
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _LOCK_ERROR,
@@ -71,6 +69,8 @@ if TYPE_CHECKING:
     from typing import Self
 else:
     Self = Any
+
+__all__ = ["TensorDictParams"]
 
 
 def _apply_leaves(data, fn):
@@ -290,7 +290,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     - Automatic Conversion: Any tensor set in the tensordict is automatically converted to a :class:`torch.nn.Parameter`,
       unless specified otherwise through the :attr:`no_convert` keyword argument.
 
-    Args
+    Args:
         parameters (TensorDictBase or dict): The tensordict to represent as parameters. Values are converted to
             parameters unless `no_convert=True`. If a `dict` is provided, it is wrapped in a `TensorDict` instance.
             Keyword arguments can also be used.
@@ -311,7 +311,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
         **kwargs: Key-value pairs to populate the `TensorDictParams`. Exclusive with the `parameters` input.
 
-    Examples
+    Examples:
         >>> from torch import nn
         >>> from tensordict import TensorDict
         >>> module = nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 4))

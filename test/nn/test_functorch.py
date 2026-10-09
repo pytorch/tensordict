@@ -11,13 +11,10 @@ import pytest
 import tensordict
 import tensordict.nn.functional_modules
 import torch
-
 from _utils_internal import expand_list, get_available_devices, TestTensorDictsBase
-
 from functorch import (
     make_functional_with_buffers as functorch_make_functional_with_buffers,
 )
-
 from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn, vmap
@@ -25,7 +22,6 @@ from torch.utils._pytree import tree_map
 
 
 class TestVmap:
-
     @pytest.mark.parametrize(
         "moduletype,batch_params",
         [
