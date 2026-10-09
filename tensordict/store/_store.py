@@ -39,6 +39,7 @@ from tensordict.utils import (
     _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
+    expand_as_right,
     is_non_tensor,
     NestedKey,
     unravel_key,
@@ -2336,7 +2337,7 @@ class TensorDictStore(TensorDictBase):
     def masked_fill_(self, mask, value):
         for key in self.keys(include_nested=True, leaves_only=True):
             tensor = self.get(key)
-            tensor = tensor.masked_fill(mask, value)
+            tensor = tensor.masked_fill(expand_as_right(mask, tensor), value)
             self.set_(key, tensor)
         return self
 
