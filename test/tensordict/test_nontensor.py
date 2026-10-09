@@ -689,6 +689,18 @@ class TestNonTensorData:
         assert [x.tolist() for x in td.get("a").tolist()] == [[6, 7], [6, 7], [4, 5]]
         assert td["b"].tolist() == [1.0, 1.0, 1.0]
 
+    @pytest.mark.parametrize("batch_size", [(), (3,), (3, 2)])
+    def test_set_at_empty_index(self, batch_size):
+        # The index () selects the whole entry, as for a tensor entry. A
+        # NonTensorData cannot be indexed with it, which used to raise.
+        expected = TensorDict(a="s1", batch_size=batch_size).get("a").tolist()
+        td = TensorDict(a="s0", batch_size=batch_size)
+        assert td.set_at_("a", "s1", ()) is td
+        assert td.get("a").tolist() == expected
+        td = TensorDict(a="s0", batch_size=batch_size)
+        td[()] = TensorDict(a="s1", batch_size=batch_size)
+        assert td.get("a").tolist() == expected
+
     def test_setitem_edge_case(self):
         s = NonTensorStack("a string")
         t = NonTensorStack("another string")

@@ -2352,6 +2352,18 @@ class TestLazyStackedTensorDict:
         assert empty.clone().get("b").batch_size == empty.batch_size
         assert empty["b"] == []
 
+    @pytest.mark.parametrize("member_batch_size", [(), (2,)])
+    @pytest.mark.parametrize("index", [1, slice(0, 2), torch.tensor([0, 2])])
+    def test_lazy_set_at_non_tensor(self, member_batch_size, index):
+        # An index along the stack dim writes whole members, with the index ()
+        lazy = LazyStackedTensorDict.lazy_stack(
+            [TensorDict(a="s0", batch_size=member_batch_size) for _ in range(3)]
+        )
+        dense = TensorDict(a="s0", batch_size=(3, *member_batch_size))
+        lazy.set_at_("a", "s1", index)
+        dense.set_at_("a", "s1", index)
+        assert lazy.get("a").tolist() == dense.get("a").tolist()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
