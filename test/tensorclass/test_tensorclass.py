@@ -923,6 +923,40 @@ class TestTensorClass:
         with pytest.raises(RuntimeError, match="batch dimension mismatch"):
             MyData(batch_size=[4])
 
+    def test_defaultfactory_given_value(self):
+        calls = []
+
+        def factory():
+            calls.append(None)
+            return torch.ones(3)
+
+        @tensorclass
+        class MyData:
+            X: torch.Tensor = dataclasses.field(default_factory=factory)
+
+        assert (MyData(X=torch.zeros(3)).X == 0).all()
+        assert MyData(X=None).X is None
+        assert not calls
+        assert (MyData().X == 1).all()
+        assert len(calls) == 1
+
+    @pytest.mark.parametrize("pre_dataclass", [False, True])
+    def test_defaultfactory_init_false_setattr(self, pre_dataclass):
+        # With a custom __setattr__, the dataclass __init__ sets the fields. It
+        # calls the default factories of init=False fields itself.
+        class MyData:
+            X: torch.Tensor = dataclasses.field(
+                init=False, default_factory=lambda: torch.ones(3)
+            )
+
+            def __setattr__(self, key, value):
+                super().__setattr__(key, value)
+
+        if pre_dataclass:
+            MyData = dataclasses.dataclass(MyData)
+        MyData = tensorclass(MyData)
+        torch.testing.assert_close(MyData().X, torch.ones(3))
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_device(self, device):
         data = MyData(
@@ -1092,6 +1126,36 @@ class TestTensorClass:
         assert isinstance(x.a, torch.Tensor)
         assert isinstance(x.b, torch.Tensor)
         assert isinstance(x.c, torch.Tensor)
+
+    @pytest.mark.parametrize(
+        "conversion", ["from_dataclass", "inplace", "from_instance", "decorator"]
+    )
+    def test_from_dataclass_fields(self, conversion):
+        # The tensorclass keeps the field() declarations of the dataclass.
+        @dataclasses.dataclass
+        class MyFieldsDataClass:
+            a: torch.Tensor = dataclasses.field(
+                default_factory=lambda: torch.ones(3), repr=False, metadata={"c": 0}
+            )
+            b: torch.Tensor = dataclasses.field(default=None, kw_only=True)
+
+        if conversion == "from_dataclass":
+            cls = from_dataclass(MyFieldsDataClass)
+        elif conversion == "inplace":
+            cls = from_dataclass(MyFieldsDataClass, inplace=True)
+        elif conversion == "from_instance":
+            cls = type(from_dataclass(MyFieldsDataClass()))
+        else:
+            cls = tensorclass(MyFieldsDataClass)
+
+        data0, data1 = cls(), cls()
+        torch.testing.assert_close(data0.a, torch.ones(3))
+        assert data0.a is not data1.a
+        assert data0.b is None
+        a, b = dataclasses.fields(cls)
+        assert not a.repr
+        assert a.metadata == {"c": 0}
+        assert b.kw_only
 
     def test_from_dict(self):
         td = TensorDict(
