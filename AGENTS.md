@@ -102,6 +102,13 @@ in `0.(X+2)`. Use `DeprecationWarning` for removals, `FutureWarning` for
 upcoming default changes, and **state the target version explicitly** in the
 message.
 
+Deprecate a name with the helpers in `tensordict/_deprecation.py`:
+`deprecated` for a function, method or property, `deprecated_attributes` for
+a module attribute (it returns the module's `__getattr__`), and
+`warn_deprecated` for anything else, such as an argument value. They write
+the message, and `test_deprecation_deadlines` fails once `version.txt`
+reaches the removal release.
+
 ## PR labels
 
 Prefix the PR title with one of the canonical tags:

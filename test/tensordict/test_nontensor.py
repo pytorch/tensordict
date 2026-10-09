@@ -22,8 +22,8 @@ from tensordict import (
     lazy_stack,
     LazyStackedTensorDict,
     set_capture_non_tensor_stack,
-    tensorclass,
     TensorClass,
+    tensorclass,
     TensorDict,
     UnbatchedTensor,
 )
@@ -43,6 +43,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         DummyPicklableClass,
         get_available_devices,
         is_npu_available,
+        legacy_lazy_mode,
     )
 else:
     IS_FB = False
@@ -50,6 +51,7 @@ else:
         DummyPicklableClass,
         get_available_devices,
         is_npu_available,
+        legacy_lazy_mode,
     )
 
 
@@ -283,6 +285,15 @@ class TestNonTensorData:
         assert result.get("query").tolist() == expected.tolist()
         assert (result.get("x") == expected).all()
 
+    def test_shape_ops_non_tensor_stack_legacy_lazy(self):
+        # the entries move in the legacy lazy mode too, where permute is lazy
+        values = [[0, 1, 2], [3, 4, 5]]
+        columns = [NonTensorStack.from_list(list(col)) for col in zip(*values)]
+        stack = torch.stack(columns, dim=1)
+        assert stack.stack_dim == 1
+        with legacy_lazy_mode():
+            assert stack.flip(1).tolist() == torch.tensor(values).flip(1).tolist()
+
     def test_shape_ops_non_tensor_stack_semantics(self):
         stack = NonTensorStack("walk", "jump", "stand")
         # flip copies the entries, as it copies tensors
@@ -341,6 +352,114 @@ class TestNonTensorData:
         assert not (non_tensor_data != non_tensor_data).get_non_tensor(
             ("nested", "bool")
         )
+
+    @pytest.mark.parametrize("dest", ["data", "stack"])
+    def test_gather_non_tensor_data_out(self, dest):
+        td = TensorDict(x=torch.zeros(2, 3), batch_size=[2, 3])
+        td["query"] = NonTensorData("new", batch_size=[2, 3])
+        out = TensorDict(x=torch.zeros(2, 3), batch_size=[2, 3])
+        if dest == "data":
+            out["query"] = NonTensorData("old", batch_size=[2, 3])
+        else:
+            out["query"] = NonTensorStack.from_list([["old"] * 3] * 2)
+        td.gather(1, torch.tensor([[1, 0, 1], [0, 0, 1]]), out=out)
+        assert out.get("query").tolist() == [["new"] * 3] * 2
+
+    @pytest.mark.parametrize("capture", [False, True])
+    @pytest.mark.parametrize("dim", [0, 1, -1])
+    @pytest.mark.parametrize("layout", ["dense", "lazy", "stack_dim1"])
+    @pytest.mark.parametrize("with_out", [False, True])
+    def test_gather_preserves_non_tensor_values(self, capture, dim, layout, with_out):
+        values = [[0, 1, 2], [3, 4, 5]]
+        if dim == 0:
+            index = torch.tensor([[1, 0, 1], [0, 0, 1]])
+        else:
+            index = torch.tensor([[2, 0, 1], [1, 1, 0]])
+        expected = torch.gather(torch.tensor(values), dim, index)
+        with set_capture_non_tensor_stack(capture):
+            if layout == "lazy":
+                td = lazy_stack(
+                    [
+                        TensorDict(
+                            query=NonTensorStack.from_list(row),
+                            x=torch.tensor(row),
+                            batch_size=[3],
+                        )
+                        for row in values
+                    ]
+                )
+            elif layout == "stack_dim1":
+                # stacking the columns along dim=1 gives a non-tensor stack
+                # whose stack_dim is not the first dimension
+                td = torch.stack(
+                    [
+                        TensorDict(
+                            query=NonTensorStack.from_list(list(col)),
+                            x=torch.tensor(col),
+                            batch_size=[2],
+                        )
+                        for col in zip(*values)
+                    ],
+                    dim=1,
+                )
+                assert td.get("query").stack_dim == 1
+            else:
+                td = TensorDict(
+                    query=NonTensorStack.from_list(values),
+                    x=torch.tensor(values),
+                    batch_size=[2, 3],
+                )
+            out = None
+            if with_out:
+                out = TensorDict(
+                    query=NonTensorStack.from_list(
+                        torch.full_like(expected, -1).tolist()
+                    ),
+                    x=torch.full_like(expected, -1),
+                    batch_size=expected.shape,
+                )
+                out_query = out.get("query")
+            result = td.gather(dim, index, out=out)
+        if with_out:
+            assert result is out
+            # the entries are written into the destination stack, as the
+            # tensors are written into the destination storage
+            assert result.get("query") is out_query
+        assert isinstance(result.get("query"), NonTensorStack)
+        assert result.get("query").tolist() == expected.tolist()
+        assert (result.get("x") == expected).all()
+
+    @pytest.mark.parametrize("with_out", [False, True])
+    def test_gather_non_tensor_stack_copies(self, with_out):
+        stack = NonTensorStack("walk", "jump", "stand")
+        out = NonTensorStack("", "", "") if with_out else None
+        gathered = torch.gather(stack, 0, torch.tensor([1, 0, 0]), out=out)
+        if with_out:
+            assert gathered is out
+        assert gathered.tolist() == ["jump", "walk", "walk"]
+        # the gathered entries are copies, as with advanced indexing
+        gathered[1] = "hop"
+        assert gathered.tolist() == ["jump", "hop", "walk"]
+        assert stack.tolist() == ["walk", "jump", "stand"]
+
+    @pytest.mark.parametrize("invalid", [-1, 3])
+    def test_gather_non_tensor_stack_invalid_index(self, invalid):
+        # torch.gather rejects negative and out-of-range indices
+        stack = NonTensorStack.from_list([[0, 1, 2], [3, 4, 5]])
+        index = torch.tensor([[invalid, 0, 1], [0, 0, 0]])
+        with pytest.raises(RuntimeError, match="out of bounds"):
+            torch.gather(stack, 1, index)
+
+    def test_gather_non_tensor_stack_smaller_index(self):
+        # as with torch.gather, the index may be smaller than the input on the
+        # dims that are not gathered
+        values = [[0, 1, 2], [3, 4, 5]]
+        stack = NonTensorStack.from_list(values)
+        for dim, index in ((1, torch.tensor([[2, 0]])), (0, torch.tensor([[1, 0]]))):
+            expected = torch.gather(torch.tensor(values), dim, index)
+            gathered = torch.gather(stack, dim, index)
+            assert gathered.batch_size == expected.shape
+            assert gathered.tolist() == expected.tolist()
 
     @pytest.mark.parametrize("capture", [False, True])
     @pytest.mark.parametrize("dim", [0, 1, -1])
@@ -1105,15 +1224,15 @@ class TestNonTensorData:
 
         data[0, 0] = NonTensorData(data=99)
         assert data.tolist() == [[99, 7], [7, 7], [7, 7]]
-        assert (
-            data.tolist() == TensorDict.load_memmap(tmpdir).tolist()
-        ), TensorDict.load_memmap(tmpdir).tolist()
+        assert data.tolist() == TensorDict.load_memmap(tmpdir).tolist(), (
+            TensorDict.load_memmap(tmpdir).tolist()
+        )
 
         data.update_at_(NonTensorData(data=99), (0, 1))
         assert data.tolist() == [[99, 99], [7, 7], [7, 7]], data.tolist()
-        assert (
-            data.tolist() == TensorDict.load_memmap(tmpdir).tolist()
-        ), TensorDict.load_memmap(tmpdir).tolist()
+        assert data.tolist() == TensorDict.load_memmap(tmpdir).tolist(), (
+            TensorDict.load_memmap(tmpdir).tolist()
+        )
 
     def test_shared_limitations(self):
         # Sharing a special type works but it's locked for writing

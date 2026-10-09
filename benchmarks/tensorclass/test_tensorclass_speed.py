@@ -9,11 +9,10 @@ from dataclasses import make_dataclass
 
 import pytest
 import torch
-
 from tensordict import (
     NonTensorData,
-    tensorclass,
     TensorClass,
+    tensorclass,
     TensorDict,
     TypedTensorDict,
 )
