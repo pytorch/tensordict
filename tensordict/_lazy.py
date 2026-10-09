@@ -49,6 +49,7 @@ from tensordict.base import (
     _NESTED_TENSORS_AS_LISTS,
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
     _register_tensor_class,
+    _SELF_NESTING_ERROR,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
     is_tensor_collection,
@@ -2201,10 +2202,16 @@ class LazyStackedTensorDict(TensorDictBase):
     def _key_list(self):
         if not self.tensordicts:
             return []
-        keys = set(self.tensordicts[0].keys())
+        # dict.fromkeys lists the keys once: list() would call len() on the
+        # keys view, which lists the keys of a lazy stack again.
+        first_keys = dict.fromkeys(self.tensordicts[0].keys())
+        keys = set(first_keys)
         for td in self.tensordicts[1:]:
             keys = keys.intersection(td.keys())
-        return sorted(keys, key=str)
+        # Keep the insertion order of the first tensordict, as a dense
+        # tensordict and _iter_items_lazystack (keys(include_nested=True)) do,
+        # so that keys(), values() and items() agree.
+        return [key for key in first_keys if key in keys]
 
     @lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
@@ -2531,6 +2538,8 @@ class LazyStackedTensorDict(TensorDictBase):
             # try:
             index_unravel = _unravel_key_to_tuple(index)
             if index_unravel:
+                if value is self:
+                    raise ValueError(_SELF_NESTING_ERROR.format(index))
                 self._set_tuple(
                     index_unravel,
                     value,

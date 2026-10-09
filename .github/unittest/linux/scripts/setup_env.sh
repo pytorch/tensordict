@@ -92,7 +92,7 @@ if [ "${PYTHON_VERSION}" == "3.14t" ]; then
     # Install test dependencies (mirrors environment.yml)
     pip install numpy expecttest pyyaml hypothesis future cloudpickle \
         pytest pytest-benchmark pytest-mock pytest-instafail \
-        pytest-rerunfailures pytest-timeout protobuf redis mypy
+        pytest-rerunfailures pytest-timeout pytest-xdist protobuf redis mypy
     # h5py, orjson and mosaicml-streaming may not be available for 3.14t yet
     pip install h5py || echo "h5py not available for Python 3.14t, skipping"
     pip install orjson || echo "orjson not available for Python 3.14t, skipping"
