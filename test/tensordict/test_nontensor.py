@@ -1193,6 +1193,22 @@ class TestNonTensorData:
             TensorDict.load_memmap(tmpdir).tolist()
         )
 
+    def test_from_nontensordata_is_deprecated(self):
+        data = NonTensorData(data={"x": 1}, batch_size=[2, 3])
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^NonTensorStack\.from_nontensordata\(\) is deprecated and will be "
+            r"removed in TensorDict 0\.17\. Use NonTensorData\.maybe_to_stack\(\) "
+            r"instead\.$",
+        ) as record:
+            stack = NonTensorStack.from_nontensordata(data)
+        assert record[0].filename == __file__
+        assert isinstance(stack, NonTensorStack)
+        assert stack.batch_size == torch.Size([2, 3])
+        assert stack.tolist() == data.maybe_to_stack().tolist()
+        # every element holds its own copy of the data
+        assert stack[0, 0].data is not stack[0, 1].data
+
     def test_shared_limitations(self):
         # Sharing a special type works but it's locked for writing
         @dataclass
