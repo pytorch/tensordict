@@ -545,6 +545,30 @@ class TestNamedDims(TestTensorDictsBase):
         td.names = ["time"]
         assert td["agents"].names == ["time", "batch"]
 
+    def test_names_setter_clash_leaves_names_unchanged(self):
+        td = TensorDict(
+            {
+                "a": TensorDict({}, [2, 3], names=[None, "x"]),
+                "b": TensorDict({}, [2, 3], names=[None, "batch"]),
+            },
+            [2],
+        )
+        with pytest.raises(ValueError, match=r"at key \('b',\)"):
+            td.names = ["batch"]
+        assert td.names == [None]
+        assert td["a"].names == [None, "x"]
+        assert td["b"].names == [None, "batch"]
+
+        # a clash in a grandchild leaves the child unchanged too
+        gc = TensorDict({}, [2, 3, 4], names=[None, None, "batch"])
+        child = TensorDict({"gc": gc}, [2, 3], names=["time", "agent"])
+        td = TensorDict({"c": child}, [2], names=["time"])
+        with pytest.raises(ValueError, match=r"at key \('c', 'gc'\)"):
+            td.names = ["batch"]
+        assert td.names == ["time"]
+        assert td["c"].names == ["time", "agent"]
+        assert td["c", "gc"].names == ["time", "agent", "batch"]
+
     @pytest.mark.parametrize("device", [None, "cpu"])
     def test_init_unnamed_parent_skips_rename(self, device, monkeypatch):
         # children whose shared dims are unnamed must not make the parent
