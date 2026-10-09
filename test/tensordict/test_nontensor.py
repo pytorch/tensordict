@@ -423,6 +423,28 @@ class TestNonTensorData:
             == "another string!"
         )
 
+    @pytest.mark.parametrize("stacked", [False, True])
+    @pytest.mark.parametrize("array", [np.array, torch.tensor], ids=["numpy", "torch"])
+    def test_set_at_array_data(self, array, stacked):
+        # Arrays and tensors compare elementwise, so comparing the old and new
+        # contents does not give a bool. Writing them used to raise.
+        if stacked:
+            data = NonTensorStack(*[NonTensorData(array([0, 0])) for _ in range(3)])
+        else:
+            data = NonTensorData(array([0, 0]), batch_size=[3])
+        td = TensorDict(a=data, b=torch.zeros(3), batch_size=[3])
+        td.set_at_("a", NonTensorData(array([0, 0])), 0)
+        td.set_at_("a", NonTensorData(array([1, 2, 3])), 1)
+        td[2] = TensorDict(a=NonTensorData(array([4, 5])), b=torch.ones(()))
+        assert [x.tolist() for x in td.get("a").tolist()] == [[0, 0], [1, 2, 3], [4, 5]]
+        td[:2] = TensorDict(
+            a=NonTensorData(array([6, 7]), batch_size=[2]),
+            b=torch.ones(2),
+            batch_size=[2],
+        )
+        assert [x.tolist() for x in td.get("a").tolist()] == [[6, 7], [6, 7], [4, 5]]
+        assert td["b"].tolist() == [1.0, 1.0, 1.0]
+
     def test_setitem_edge_case(self):
         s = NonTensorStack("a string")
         t = NonTensorStack("another string")
