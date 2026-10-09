@@ -3973,6 +3973,11 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
         return _TensorClassMeta.__getitem__(cls, item)
 
 
+# _TensorClassMeta does not pass the base class itself to tensorclass(), which
+# registers every subclass.
+_register_tensor_class(TensorClass)
+
+
 def _check_equal(a, b):
     # A util to check that two non-tensor data match
     #  We're replacing this by an identity match, not a value check (which will be faster and easier to handle).

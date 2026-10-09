@@ -2749,6 +2749,32 @@ class TestGuardCount:
         compiled(obj)
         assert cnt.frame_count == 1, f"Recompilation detected: {cnt.frame_count}"
 
+    def test_autocast_tensorclass_annotation_eager_and_compiled(self):
+        # The bare TensorClass base is an accepted class in eager mode as under
+        # compile, so a field annotated with it stores the instance in both.
+        class Inner(TensorClass):
+            x: torch.Tensor
+
+        @tensorclass(autocast=True)
+        class Outer:
+            inner: TensorClass
+            y: torch.Tensor
+
+        def fn(obj, value):
+            obj.inner = value
+            return obj.y + 1
+
+        for compiled in (False, True):
+            obj = Outer(inner=Inner(x=torch.zeros(3)), y=torch.zeros(3))
+            value = Inner(x=torch.ones(3))
+            if compiled:
+                torch._dynamo.reset_code_caches()
+                torch.compile(fn, backend="eager", fullgraph=True)(obj, value)
+            else:
+                fn(obj, value)
+            assert obj.inner is value
+            assert "inner" in obj._tensordict.keys()
+
     def test_eager_flatten_of_new_td_type_no_recompile(self):
         # The pytree flatten of a td picks its constructor without a module-level
         # dict that eager flattens of new td types would grow.
