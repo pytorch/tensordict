@@ -2022,16 +2022,6 @@ def _clone_value(value, recurse: bool):
         return value
 
 
-def _is_number(item):
-    if isinstance(item, (Number, ftdim.Dim)):
-        return True
-    if isinstance(item, Tensor) and item.ndim == 0:
-        return True
-    if isinstance(item, np.ndarray) and item.ndim == 0:
-        return True
-    return False
-
-
 def _renamed_inplace_method(fn):
     def wrapper(*args, **kwargs):
         raise RuntimeError(
@@ -2039,22 +2029,6 @@ def _renamed_inplace_method(fn):
         )
 
     return wrapper
-
-
-def _broadcast_tensors(index):
-    # tensors and range need to be broadcast
-    tensors = {
-        i: torch.as_tensor(tensor)
-        for i, tensor in enumerate(index)
-        if isinstance(tensor, (range, list, np.ndarray, Tensor))
-    }
-    if tensors:
-        shape = torch.broadcast_shapes(*[tensor.shape for tensor in tensors.values()])
-        tensors = {i: tensor.expand(shape) for i, tensor in tensors.items()}
-        index = tuple(
-            idx if i not in tensors else tensors[i] for i, idx in enumerate(index)
-        )
-    return index
 
 
 def _get_shape_from_args(*args, kwarg_name="size", **kwargs):
