@@ -615,7 +615,7 @@ class _Serialization:
         else:
             # Convert the dict to json
             try:
-                from tensordict.utils import json_dumps
+                from tensordict._utils_key_json import json_dumps
 
                 metadata_dict_json = json_dumps(metadata_dict)
             except TypeError as e:

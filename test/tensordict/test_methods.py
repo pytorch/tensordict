@@ -40,6 +40,7 @@ from tensordict import (
     unpack_memmap,
 )
 from tensordict._archive import _ArchiveReader
+from tensordict._indexing import convert_ellipsis_to_idx
 from tensordict._lazy import _CustomOpTensorDict
 from tensordict._td import _str_to_index, _SubTensorDict, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
@@ -52,7 +53,6 @@ from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
     assert_allclose_td,
-    convert_ellipsis_to_idx,
     is_non_tensor,
     set_lazy_legacy,
 )

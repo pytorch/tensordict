@@ -40,21 +40,21 @@ from tensordict.base import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
+    _cache_while_locked,
     _CloudpickleWrapper,
+    _erase_cache_first,
     _KEY_ERROR,
+    _lock_blocked,
     _LOCK_ERROR,
+    _NUMPY_TO_TORCH_DTYPE_DICT,
     _parse_to,
     _proc_init,
     _split_tensordict,
     _zip_strict,
-    cache,
-    erase_cache,
     expand_right,
     IndexType,
     is_non_tensor,
-    lock_blocked,
     NestedKey,
-    NUMPY_TO_TORCH_DTYPE_DICT,
     unravel_key,
 )
 from torch import multiprocessing as mp, Tensor
@@ -271,7 +271,7 @@ class _H5Backend(_PersistentBackend):
         return _is_non_tensor_h5(node)
 
     def is_non_tensor_meta(self, node) -> bool:
-        return node.dtype not in NUMPY_TO_TORCH_DTYPE_DICT
+        return node.dtype not in _NUMPY_TO_TORCH_DTYPE_DICT
 
     def node_dtype(self, node):
         return node.dtype
@@ -512,7 +512,7 @@ class _ZarrBackend(_PersistentBackend):
     def is_non_tensor(self, node) -> bool:
         if self._non_tensor_marker(node) is not None:
             return True
-        return self.node_dtype(node) not in NUMPY_TO_TORCH_DTYPE_DICT
+        return self.node_dtype(node) not in _NUMPY_TO_TORCH_DTYPE_DICT
 
     def is_non_tensor_meta(self, node) -> bool:
         return self.is_non_tensor(node)
@@ -1113,7 +1113,7 @@ class PersistentTensorDict(TensorDictBase):
                 out = self._make_nested(key, array)
             return out
 
-    @cache  # noqa: B019
+    @_cache_while_locked  # noqa: B019
     def _get_str(self, key: NestedKey, default, **kwargs):
         key = _unravel_key_to_tuple(key)
         array = self._get_array(key, default)
@@ -1194,7 +1194,7 @@ class PersistentTensorDict(TensorDictBase):
         ):
             shape = torch.Size(array.shape)
             return {
-                "dtype": NUMPY_TO_TORCH_DTYPE_DICT[self._backend.node_dtype(array)],
+                "dtype": _NUMPY_TO_TORCH_DTYPE_DICT[self._backend.node_dtype(array)],
                 "shape": shape,
                 "dim": len(shape),
                 "array": True,
@@ -1268,7 +1268,7 @@ class PersistentTensorDict(TensorDictBase):
                 ) from err
         sub_td.update(value, inplace=True)
 
-    # @cache  # noqa: B019
+    # @_cache_while_locked  # noqa: B019
     def keys(
         self,
         include_nested: bool = False,
@@ -1336,7 +1336,7 @@ class PersistentTensorDict(TensorDictBase):
             out = out.contiguous(canonical=True)
         return out
 
-    @lock_blocked
+    @_lock_blocked
     def del_(self, key):
         key = self._process_key(key)
         self._backend.delete(self.file, key)
@@ -1402,7 +1402,7 @@ class PersistentTensorDict(TensorDictBase):
         for _td in self._nested_tensordicts.values():
             _td._propagate_lock(lock_parents_weakrefs, is_compiling=is_compiling)
 
-    @erase_cache
+    @_erase_cache_first
     def _propagate_unlock(self):
         # if we end up here, we can clear the graph associated with this td
         self._is_locked = False
@@ -1552,7 +1552,7 @@ class PersistentTensorDict(TensorDictBase):
                 }
             )
             with open(filepath, "wb") as json_metadata:
-                from tensordict.utils import json_dumps
+                from tensordict._utils_key_json import json_dumps
 
                 json_str = json_dumps(metadata)
                 # Ensure we write bytes to the binary file
@@ -1655,7 +1655,7 @@ class PersistentTensorDict(TensorDictBase):
             f"Cannot pin memory of a {type(self).__name__}. Call to_tensordict() before making this call."
         )
 
-    @lock_blocked
+    @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         raise NotImplementedError(
             f"popitem not implemented for class {type(self).__name__}."
