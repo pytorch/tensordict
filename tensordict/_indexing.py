@@ -23,15 +23,11 @@ Torch reads the elements of an index from the first dim on:
   block takes the place of the first advanced index, unless a slice or
   ``None`` separates two advanced indices, in which case it goes first.
 """
+
 from __future__ import annotations
 
 import numpy as np
 import torch
-
-try:
-    from torch.compiler import is_compiling
-except ImportError:  # torch 2.0
-    from torch._dynamo import is_compiling
 
 # The kinds of index elements, see _read_element
 _INT = 0
@@ -259,6 +255,7 @@ def _getitem_batch_size(batch_size, index):
 
     This function is aimed to be used when indexing is an
     expensive operation.
+
     Args:
         shape (torch.Size): Input shape
         items (index): Index of the hypothetical tensor
@@ -358,34 +355,4 @@ def _advanced_ndim(kind, element):
 
 def _slice_length(index: slice, size: int) -> int:
     """The length of ``range(size)[index]``."""
-    if is_compiling():
-        # torch.compile cannot trace slice.indices before torch 2.13
-        return _traceable_slice_length(index, size)
     return len(range(*index.indices(size)))
-
-
-def _traceable_slice_length(index: slice, size: int) -> int:
-    """``len(range(*index.indices(size)))``, computed as CPython does."""
-    step = 1 if index.step is None else index.step
-    if step == 0:
-        raise ValueError("slice step cannot be zero")
-    if step > 0:
-        lower, upper = 0, size
-    else:
-        lower, upper = -1, size - 1
-    start, stop = index.start, index.stop
-    if start is None:
-        start = lower if step > 0 else upper
-    elif start < 0:
-        start = max(start + size, lower)
-    else:
-        start = min(start, upper)
-    if stop is None:
-        stop = upper if step > 0 else lower
-    elif stop < 0:
-        stop = max(stop + size, lower)
-    else:
-        stop = min(stop, upper)
-    if step > 0:
-        return max(0, (stop - start + step - 1) // step)
-    return max(0, (start - stop - step - 1) // -step)
