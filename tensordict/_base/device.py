@@ -16,7 +16,7 @@ from __future__ import annotations
 import queue
 import warnings
 from threading import Thread
-from typing import Callable, overload, TYPE_CHECKING
+from typing import Callable, overload
 
 import torch
 from tensordict.base import (
@@ -38,13 +38,11 @@ from tensordict.utils import (
     _PIN_MEM_TIMEOUT,
     _zip_strict,
     cache,
+    DeviceType,
 )
 from torch import Tensor
 from torch._utils import _get_available_device_type, _get_device_module
 from torch.nn.parameter import Parameter
-
-if TYPE_CHECKING:
-    from torch import device
 
 
 class _DeviceOps:
@@ -367,7 +365,7 @@ class _DeviceOps:
     @overload
     def to(
         self: T,
-        device: int | device | None = ...,
+        device: DeviceType | None = ...,
         dtype: torch.dtype | None = ...,
         non_blocking: bool = ...,
         inplace: bool = False,

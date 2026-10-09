@@ -23,7 +23,17 @@ from dataclasses import field
 from multiprocessing import Pool
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, ClassVar, Generic, get_origin, Optional, Tuple, TypeVar, Union
+from typing import (
+    Any,
+    ClassVar,
+    Generic,
+    get_args,
+    get_origin,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 import numpy as np
 import pytest
@@ -292,6 +302,37 @@ def test_tensorclass_instance_methods(form):
         str(_TENSORDICT_DIR / "tensorclass.pyi"), "TensorClass"
     )
     _check_stub_class(stub_attrs, X, exclusions)
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.parametrize(
+    "path,class_name",
+    [
+        ("_tensorcollection.pyi", "TensorCollection"),
+        ("tensorclass.pyi", "TensorClass"),
+        ("_base/device.py", "_DeviceOps"),
+    ],
+)
+def test_to_overloads_accept_str_device(path, class_name):
+    # Type checkers must accept td.to("cpu") and td.to(device="cuda").
+    with open(_TENSORDICT_DIR / path, "r") as f:
+        tree = ast.parse(f.read())
+    (class_node,) = (
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == class_name
+    )
+    device_annotations = [
+        arg.annotation
+        for node in class_node.body
+        if isinstance(node, ast.FunctionDef) and node.name == "to"
+        for arg in node.args.args + node.args.kwonlyargs
+        if arg.arg == "device"
+    ]
+    assert device_annotations
+    for annotation in device_annotations:
+        device_type = eval(ast.unparse(annotation), vars(tensordict.utils))
+        assert str in get_args(device_type), ast.unparse(annotation)
 
 
 def test_sorted_methods():
