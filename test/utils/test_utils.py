@@ -5,11 +5,15 @@
 
 import argparse
 import collections
+import importlib
+import inspect
+import pkgutil
 import random
 import sys
 
 import numpy as np
 import pytest
+import tensordict
 import tensordict._td
 import torch
 from _utils_internal import get_available_devices
@@ -770,6 +774,114 @@ def test_get_shared_executor():
     td = TensorDict({"a": torch.zeros(2), "b": torch.ones(3)})
     td.consolidate(num_threads=2)
     assert executor.submit(lambda: 2).result() == 2
+
+
+# Modules that another change turns into deprecated shims over private modules.
+_NOT_PUBLIC_MODULES = {"tensordict.tabular", "tensordict.testing"}
+
+# Public functions and classes that other changes of the API cleanup remove or
+# make private, and so are left out of ``__all__``. Remove the entries as those
+# changes land; entries for names that no longer exist are ignored.
+_NOT_IN_ALL_PENDING = {
+    "tensordict.base": {"from_list"},
+    "tensordict.memmap": {"implements_for_memmap"},
+    "tensordict.nn.distributions.continuous": {"NormalParamWrapper"},
+    "tensordict.nn.functional_modules": {
+        "extract_weights_and_buffers",
+        "get_functional",
+        "is_functional",
+        "make_functional",
+        "repopulate_module",
+        "set_tensor",
+        "set_tensor_dict",
+    },
+    "tensordict.nn.params": {"implements_for_tdparam"},
+    "tensordict.nn.utils": {"StrEnum"},
+    "tensordict.utils": {
+        "BufferLegacy",
+        "KeyDependentDefaultDict",
+        "cache",
+        "erase_cache",
+        "get_json_backend",
+        "infer_size_impl",
+        "int_generator",
+        "is_namedtuple",
+        "is_namedtuple_class",
+        "is_nested_key",
+        "is_seq_of_nested_key",
+        "json_dumps",
+        "lock_blocked",
+        "prod",
+        "set_json_backend",
+        "strtobool",
+        "unravel_keys",
+    },
+}
+
+# Public functions and classes that stay out of ``__all__`` on purpose.
+_NOT_IN_ALL = {
+    # The names in ``discrete.__all__`` are the classes of
+    # ``tensordict.nn.distributions.distributions_maps``. rand_one_hot is
+    # public through ``tensordict.nn``.
+    "tensordict.nn.distributions.discrete": {"rand_one_hot"},
+}
+
+
+def _public_module_names(package=tensordict):
+    yield package.__name__
+    for info in pkgutil.iter_modules(package.__path__, package.__name__ + "."):
+        if info.name.rsplit(".", 1)[-1].startswith("_"):
+            continue
+        if info.name in _NOT_PUBLIC_MODULES:
+            continue
+        if info.ispkg:
+            yield from _public_module_names(importlib.import_module(info.name))
+        else:
+            yield info.name
+
+
+@pytest.mark.parametrize("module_name", sorted(_public_module_names()))
+def test_public_module_all(module_name):
+    # Import by name: ``tensordict.memmap`` and ``tensordict.tensorclass`` are
+    # a function and a decorator as attributes of the package.
+    module = importlib.import_module(module_name)
+    namespace = vars(module)
+    assert "__all__" in namespace, f"{module_name} does not define __all__"
+    module_all = namespace["__all__"]
+    assert isinstance(module_all, (list, tuple))
+    assert all(isinstance(name, str) for name in module_all)
+    assert len(set(module_all)) == len(module_all), "__all__ has duplicates"
+    # A name served by a module __getattr__ is not in vars(module).
+    undefined = [name for name in module_all if name not in namespace]
+    assert not undefined, f"{module_name}.__all__ lists undefined names: {undefined}"
+    exempt = _NOT_IN_ALL_PENDING.get(module_name, set()) | _NOT_IN_ALL.get(
+        module_name, set()
+    )
+    missing = sorted(
+        name
+        for name, obj in namespace.items()
+        if not name.startswith("_")
+        and (inspect.isfunction(obj) or inspect.isclass(obj))
+        and obj.__module__ == module_name
+        and name not in module_all
+        and name not in exempt
+    )
+    assert not missing, f"{module_name}.__all__ misses public names: {missing}"
+
+
+def test_public_module_names():
+    module_names = set(_public_module_names())
+    for module_name in (
+        "tensordict",
+        "tensordict.memmap",
+        "tensordict.nn.distributions.truncated_normal",
+        "tensordict.prototype.fx",
+        "tensordict.tensorclass",
+    ):
+        assert module_name in module_names
+    assert not any(
+        part.startswith("_") for name in module_names for part in name.split(".")
+    )
 
 
 if __name__ == "__main__":

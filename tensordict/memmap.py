@@ -30,6 +30,8 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
+__all__ = ["MemoryMappedTensor"]
+
 
 def _prepare_memmap_file(
     filename: Path | str, *, existsok: bool, reserve: bool = True

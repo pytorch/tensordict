@@ -48,7 +48,13 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
-__all__ = ["ProbabilisticTensorDictModule", "ProbabilisticTensorDictSequential"]
+__all__ = [
+    "InteractionType",
+    "ProbabilisticTensorDictModule",
+    "ProbabilisticTensorDictSequential",
+    "interaction_type",
+    "set_interaction_type",
+]
 
 
 class InteractionType(StrEnum):
