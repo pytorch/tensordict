@@ -2401,10 +2401,12 @@ _FOREACH_PER_TENSOR_OPS = {
 def _foreach(name: str, tensors, *args, **kwargs):
     """Calls ``torch._foreach_<name>(tensors, *args, **kwargs)``, one tensor at a time under torch.func.
 
-    functorch has no batching rule for the ``_foreach`` ops, so inside a
-    ``torch.func`` transform (``vmap``, or ``grad`` within ``vmap``) each
-    tensor goes through ``torch.Tensor.<name>``. A list or tuple in ``args``
-    gives one value per tensor; any other value is used for every tensor.
+    functorch has no batching rule for the ``_foreach`` ops, so inside any
+    ``torch.func`` transform (``vmap``, ``grad``, ``jacrev``, ``functionalize``,
+    ...) each tensor goes through ``torch.Tensor.<name>``. Under a transform
+    without ``vmap``, such as ``grad`` alone, the ``_foreach`` ops would work,
+    but they also run one op per tensor. A list or tuple in ``args`` gives one
+    value per tensor; any other value is used for every tensor.
     """
     # Dynamo folds the depth to a guarded constant. Do not test
     # ``peek_interpreter_stack() is None``: Dynamo evaluates it as False.

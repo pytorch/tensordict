@@ -2096,6 +2096,7 @@ class _PointwiseOps:
                     "Attempted to execute _foreach_clamp_max_ with a differentiable tensor. "
                     "Use `td.apply(lambda x: x.clamp_max_(val)` instead."
                 )
+            raise
         return self
 
     @_maybe_broadcast_other("clamp_max")
@@ -2146,6 +2147,7 @@ class _PointwiseOps:
                     "Attempted to execute _foreach_clamp_max with a differentiable tensor. "
                     "Use `td.apply(lambda x: x.clamp_max(val)` instead."
                 )
+            raise
         items = dict(zip(keys, vals))
 
         def pop(name, val):
@@ -2194,6 +2196,7 @@ class _PointwiseOps:
                     "Attempted to execute _foreach_clamp_min_ with a differentiable tensor. "
                     "Use `td.apply(lambda x: x.clamp_min_(val)` instead."
                 )
+            raise
 
         return self
 
@@ -2244,6 +2247,7 @@ class _PointwiseOps:
                     "Attempted to execute _foreach_clamp_min with a differentiable tensor. "
                     "Use `td.apply(lambda x: x.clamp_min(val)` instead."
                 )
+            raise
 
         items = dict(zip(keys, vals))
 

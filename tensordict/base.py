@@ -3186,7 +3186,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     vals = dict(zip(keys, vals))
                     vals = [vals[k] for k in new_keys]
                 # _foreach_copy_compiled cannot run under a torch.func transform
-                # (vmap), _foreach can.
+                # (vmap), _foreach can. Same check as in _foreach, which explains it.
                 if (
                     is_compiling()
                     and torch._C._functorch.get_dynamic_layer_stack_depth() == 0

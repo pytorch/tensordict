@@ -31,6 +31,9 @@ VMAP_TD_OPS = {
     "maximum": lambda t: t.maximum(t.exp()),
     "maximum_scalar": lambda t: t.maximum(0.0),
     "clamp_min": lambda t: t.clamp_min(0.0),
+    "clamp_max": lambda t: t.clamp_max(0.0),
+    "clamp_min_": lambda t: t.clone().clamp_min_(0.0),
+    "clamp_max_": lambda t: t.clone().clamp_max_(0.0),
     "lerp": lambda t: t.lerp(t.exp(), 0.5),
     "addcmul": lambda t: t.addcmul(t, t, value=2),
     "norm": lambda t: t.norm(),
@@ -261,6 +264,13 @@ class TestNativeFunctorch:
         expected = td * 2
         vmap(lambda t: t.mul_(2))(td)
         assert_close(td, expected)
+
+    @pytest.mark.parametrize("name", ["clamp_min_", "clamp_max_"])
+    def test_vmap_td_clamp_inplace_error(self, name):
+        # Writing a batched value into a closed-over td raises, as for a tensor
+        td = TensorDict(a=-torch.ones(4, 3), batch_size=[4])
+        with pytest.raises(RuntimeError, match="inplace arithmetic"):
+            vmap(lambda x: getattr(td, name)(x))(torch.zeros(2, 4, 3))
 
     def test_vmap_grad_td(self):
         td = TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4, 2)}, batch_size=[4])
