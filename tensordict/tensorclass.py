@@ -44,12 +44,14 @@ from typing import (
 
 import numpy as np
 import torch
+from tensordict._deprecation import deprecated
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._pytree import _register_td_node
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._tensorcollection import TensorCollection
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
+from tensordict._utils_options import _set_capture_non_tensor_stack
 from tensordict.base import (
     _GET_DEFAULTS_TO_NONE,
     _is_accepted_class,
@@ -78,7 +80,6 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     is_tensorclass,
     LinkedList,
     list_to_stack,
-    set_capture_non_tensor_stack,
 )
 from torch import multiprocessing as mp, Tensor
 from torch.compiler import is_compiling, is_dynamo_compiling
@@ -5003,7 +5004,7 @@ class NonTensorData(NonTensorDataBase):
             if out.batch_size != result.batch_size:
                 raise RuntimeError("out.batch_size and cat batch size must match.")
             if isinstance(out, NonTensorData) and isinstance(result, NonTensorStack):
-                with set_capture_non_tensor_stack(True):
+                with _set_capture_non_tensor_stack(True):
                     result = cls._stack_non_tensor(values, dim=dim)
             out.update_(result)
             return out
@@ -5368,7 +5369,25 @@ class NonTensorStack(LazyStackedTensorDict):
     _stack_non_tensor = NonTensorData._stack_non_tensor
 
     @classmethod
+    @deprecated(
+        "NonTensorStack.from_nontensordata()",
+        removal="0.17",
+        replacement="NonTensorData.maybe_to_stack()",
+    )
     def from_nontensordata(cls, non_tensor: NonTensorData):
+        """Expands a :class:`NonTensorData` into a stack of copies of it.
+
+        .. deprecated:: 0.15
+            Use :meth:`NonTensorData.maybe_to_stack` instead. It differs in
+            two ways: its elements share the data object of ``non_tensor``,
+            whereas this method copies it into every element; and when
+            ``non_tensor`` has an empty batch size, it returns ``non_tensor``
+            itself, whereas this method returns a copy.
+        """
+        return cls._from_nontensordata(non_tensor)
+
+    @classmethod
+    def _from_nontensordata(cls, non_tensor: NonTensorData):
         data = non_tensor.data
         prev = NonTensorData(data=data, batch_size=[], device=non_tensor.device)
         for dim in reversed(non_tensor.shape):
@@ -5839,7 +5858,7 @@ class NonTensorStack(LazyStackedTensorDict):
         Raises a ValueError if there is more than one unique value.
         """
         try:
-            with set_capture_non_tensor_stack(True):
+            with _set_capture_non_tensor_stack(True):
                 nt = NonTensorData._stack_non_tensor(
                     self.tensordicts, raise_if_non_unique=True
                 )
