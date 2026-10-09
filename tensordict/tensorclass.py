@@ -83,7 +83,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     set_capture_non_tensor_stack,
 )
 from torch import multiprocessing as mp, Tensor
-from torch.compiler import is_compiling
+from torch.compiler import is_compiling, is_dynamo_compiling
 from torch.multiprocessing import Manager
 from torch.utils._pytree import tree_map
 
@@ -2399,7 +2399,10 @@ def _setattr(self, key: str, value: Any) -> None:  # noqa: D417
 
 
 def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
-    if not is_compiling():
+    # ``is_compiling()`` stays true in every thread while any thread compiles,
+    # so code that runs eagerly (such as unpickling in a DataLoader's
+    # pin-memory thread) must not take the branch meant for Dynamo tracing.
+    if not is_dynamo_compiling():
         __dict__ = self.__dict__
         if (
             "_tensordict" not in __dict__
