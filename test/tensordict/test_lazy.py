@@ -23,6 +23,7 @@ from tensordict import (
     TensorDict,
     UnbatchedTensor,
 )
+from tensordict._indexing import _getitem_batch_size
 from tensordict._reductions import _reduce_td
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _NESTED_TENSORS_AS_LISTS, TensorDictBase
@@ -1309,6 +1310,112 @@ class TestLazyStackedTensorDict:
         else:
             lazy.set_at_("a", value["a"], index)
             dense.set_at_("a", value["a"], index)
+        assert (lazy.to_tensordict() == dense).all()
+
+    @staticmethod
+    def _lazy_mask_op(td, index, op):
+        value = TensorDict(a=-1.0, nested=TensorDict(b=-1.0)).expand(
+            _getitem_batch_size(td.batch_size, index)
+        )
+        if op == "getitem":
+            return td[index]
+        if op == "get_at":
+            return td.get_at("nested", index)
+        if op == "setitem":
+            td[index] = -1.0
+        elif op == "setitem_td":
+            td[index] = value
+        elif op == "set_at_":
+            td.set_at_("a", value["a"], index)
+        else:
+            td.update_at_(value, index)
+
+    @staticmethod
+    def _lazy_mask_tds(stack_dim):
+        batch_size = (4, 3)
+        dense = TensorDict(
+            a=torch.arange(12.0).view(batch_size),
+            nested=TensorDict(
+                b=torch.arange(12.0).view(batch_size), batch_size=batch_size
+            ),
+            batch_size=batch_size,
+        )
+        lazy = LazyStackedTensorDict.lazy_stack(
+            dense.clone().unbind(stack_dim), stack_dim
+        )
+        return dense, lazy
+
+    _LAZY_MASK_OPS = [
+        "getitem",
+        "get_at",
+        "setitem",
+        "setitem_td",
+        "set_at_",
+        "update_at_",
+    ]
+
+    @pytest.mark.parametrize(
+        "index",
+        [
+            torch.tensor([True, False, True]),
+            torch.tensor([True, False, True, False, True]),
+            (slice(None), torch.tensor([True, False])),
+            (slice(None), torch.tensor([True, False, True, True])),
+            torch.ones(4, 2, dtype=torch.bool),
+            torch.ones(3, 3, dtype=torch.bool),
+            (torch.tensor([0, 2]), torch.tensor([True, False])),
+            (torch.tensor([True, False, True]), torch.tensor([0, 2])),
+            (Ellipsis, torch.tensor([True, True])),
+        ],
+        ids=[
+            "dim0-short",
+            "dim0-long",
+            "dim1-short",
+            "dim1-long",
+            "2d-dim1-short",
+            "2d-dim0-short",
+            "index-and-dim1-short",
+            "dim0-short-and-index",
+            "ellipsis-dim1-short",
+        ],
+    )
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("op", _LAZY_MASK_OPS)
+    def test_lazy_mask_wrong_shape(self, index, stack_dim, op):
+        # a mask that does not have the shape of the dims it indexes raises as
+        # in torch, along the stack dim and along the dims of the members
+        dense, lazy = self._lazy_mask_tds(stack_dim)
+        with pytest.raises(IndexError) as torch_error:
+            torch.zeros(dense.batch_size)[index]
+        with pytest.raises(IndexError) as error:
+            self._lazy_mask_op(lazy, index, op)
+        assert str(error.value) == str(torch_error.value)
+        # nothing was written
+        assert (lazy.to_tensordict() == dense).all()
+
+    @pytest.mark.parametrize(
+        "index",
+        [
+            torch.tensor([True, False, True, False]),
+            (slice(None), torch.tensor([True, False, True])),
+            torch.tensor([[True, False, True]] * 2 + [[False, True, False]] * 2),
+            (torch.tensor([0, 2]), torch.tensor([True, False, True])),
+            (torch.tensor([True, False, True, False]), torch.tensor([0, 2])),
+            (Ellipsis, torch.tensor([True, True, False])),
+        ],
+        ids=["dim0", "dim1", "2d", "index-and-dim1", "dim0-and-index", "ellipsis-dim1"],
+    )
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("op", _LAZY_MASK_OPS)
+    def test_lazy_mask_right_shape(self, index, stack_dim, op):
+        # a mask that has the shape of the dims it indexes behaves as in the
+        # dense TensorDict
+        dense, lazy = self._lazy_mask_tds(stack_dim)
+        result = self._lazy_mask_op(lazy, index, op)
+        expected = self._lazy_mask_op(dense, index, op)
+        if result is not None:
+            assert result.batch_size == expected.batch_size
+            assert (result == expected).all()
         assert (lazy.to_tensordict() == dense).all()
 
     @pytest.mark.parametrize("batch_size", [(), (32,), (32, 4)])
