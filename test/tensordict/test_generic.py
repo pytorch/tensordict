@@ -1922,7 +1922,7 @@ class TestGeneric:
     @pytest.mark.parametrize("leaves_only", [False, True])
     @pytest.mark.parametrize("is_leaf", ["default", "nontensor", "custom"])
     def test_keys_view_iteration(
-        self, stack, sort, include_nested, leaves_only, is_leaf
+        self, stack, sort, include_nested, leaves_only, is_leaf, request
     ):
         @tensorclass
         class MyClass:
@@ -1941,9 +1941,13 @@ class TestGeneric:
         )
         if stack:
             if not include_nested and leaves_only and is_leaf != "default":
-                pytest.skip(
-                    "LazyStackedTensorDict.entry_class gives LazyStackedTensorDict "
-                    "for tensorclass and non-tensor entries"
+                request.applymarker(
+                    pytest.mark.xfail(
+                        strict=True,
+                        reason="LazyStackedTensorDict.entry_class gives "
+                        "LazyStackedTensorDict for tensorclass and non-tensor "
+                        "entries, so flat leaves_only views drop them",
+                    )
                 )
             td = lazy_stack([td[0], td[1]])
         leaves = {"a", ("nested", "b"), ("nested", "c", "d"), ("tc", "x")}
@@ -1976,6 +1980,8 @@ class TestGeneric:
                 expected,
                 key=lambda key: ".".join(key) if isinstance(key, tuple) else key,
             )
+        # len() of nested and leaves_only lazy-stack views counts only the
+        # top-level keys: the lazy-keys-len branch fixes it.
         if not stack:
             assert len(keys) == len(expected)
 
