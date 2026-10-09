@@ -74,7 +74,10 @@ name = "tensordict"
 dynamic = ["version"]
 description = "TensorDict is a pytorch dedicated tensor container."
 authors = [
-  { name="Vincent Moens", email="vincentmoens@gmail.com" }
+  { name="Vincent Moens", email="vincentmoens@gmail.com" },
+  { name="Peter Sharpe", email="peterdsharpe@gmail.com" },
+  { name="Ben Sprenger", email="ben.sprenger@rogers.com" },
+  { name="Achintya Paningapalli", email="apaninga@berkeley.edu" }
 ]
 readme = "README.md"
 license = { text = "MIT" }

@@ -67,7 +67,7 @@ Persistence and serialization:
   h5py) and a zarr backend (`_ZarrBackend`).
 - `_utils_key_json.py`: encodes keys into file names, and selects the JSON
   backend (`json` or `orjson`).
-- `tabular.py`: pandas, CSV, Parquet and JSON import and export.
+- `_tabular.py`: pandas, CSV, Parquet and JSON import and export.
 - `_datasets.py`: `to_mds`, which writes a MosaicML streaming dataset.
 
 Typed containers:
@@ -122,7 +122,7 @@ Options and utilities:
   name, and `test_deprecation_deadlines` fails once `version.txt` reaches it.
 - `_ucxx.py`: `TensorDictPipe` and `TensorDictServer`, transport over UCXX.
 - `prototype/fx.py`: `symbolic_trace` for tensordict modules.
-- `testing.py`: tensorclasses that the distributed tests import by name.
+- `_testing.py`: tensorclasses that the distributed tests import by name.
 
 `tensordict` is pure Python. `_C/` keeps the module path `tensordict._C`,
 which was a C++ extension, as a deprecated re-export of the nested-key
@@ -230,7 +230,13 @@ touches these places:
    each backend needs its own code. Abstract methods, properties,
    `implement_for` overloads and methods that read a global that `base.py`
    rebinds stay in `base.py`. The comment above the mixin imports in
-   `base.py` gives the rules for code in a mixin.
+   `base.py` gives the rules for code in a mixin. In particular, a mixin
+   imports `TensorDictBase` under `TYPE_CHECKING` only, and `base.py` binds
+   it into the mixin modules once the class exists, so that annotations
+   that name it resolve. Code that runs at import time, such as decorators
+   and default values, cannot use it, and a method that uses it at run time
+   imports it locally (ruff's TC004 flags a run-time use of the
+   `TYPE_CHECKING` import).
 2. If it is abstract: an implementation in each class of the hierarchy
    above (or a raise), and the name in one of the `_*_DELEGATES` lists of
    `typedtensordict.py`.

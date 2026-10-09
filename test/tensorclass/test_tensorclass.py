@@ -24,7 +24,17 @@ from dataclasses import field
 from multiprocessing import Pool
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, ClassVar, Generic, get_origin, Optional, Tuple, TypeVar, Union
+from typing import (
+    Any,
+    ClassVar,
+    Generic,
+    get_args,
+    get_origin,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 import numpy as np
 import pytest
@@ -48,6 +58,7 @@ from tensordict import (
 )
 from tensordict._lazy import _PermutedTensorDict, _ViewedTensorDict
 from tensordict._td import lazy_stack
+from tensordict._utils_options import _set_capture_non_tensor_stack, _set_list_to_stack
 from tensordict.base import _GENERIC_NESTED_ERR
 from tensordict.tensorclass import from_dataclass
 from tensordict.utils import _check_recursive_properties
@@ -433,6 +444,37 @@ Obs(a=torch.Tensor(), non_blocking=True)
     assert 'Signature of "__post_init__" incompatible with supertype' in errors
 
 
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.parametrize(
+    "path,class_name",
+    [
+        ("_tensorcollection.pyi", "TensorCollection"),
+        ("tensorclass.pyi", "TensorClass"),
+        ("_base/device.py", "_DeviceOps"),
+    ],
+)
+def test_to_overloads_accept_str_device(path, class_name):
+    # Type checkers must accept td.to("cpu") and td.to(device="cuda").
+    with open(_TENSORDICT_DIR / path, "r") as f:
+        tree = ast.parse(f.read())
+    (class_node,) = (
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == class_name
+    )
+    device_annotations = [
+        arg.annotation
+        for node in class_node.body
+        if isinstance(node, ast.FunctionDef) and node.name == "to"
+        for arg in node.args.args + node.args.kwonlyargs
+        if arg.arg == "device"
+    ]
+    assert device_annotations
+    for annotation in device_annotations:
+        device_type = eval(ast.unparse(annotation), vars(tensordict.utils))
+        assert str in get_args(device_type), ast.unparse(annotation)
+
+
 def test_sorted_methods():
     from tensordict.tensorclass import (
         _FALLBACK_METHOD_FROM_TD,
@@ -753,7 +795,7 @@ class TestTensorClass:
         data3 = MyData(D, B, A, C=C, E=E, batch_size=[3, 4])
         data4 = MyData(D, B, A, C, E=E, batch_size=[3, 4])
         data5 = MyData(D, B, A, C, E, batch_size=[3, 4])
-        with set_capture_non_tensor_stack(True):
+        with _set_capture_non_tensor_stack(True):
             data = torch.stack([data1, data2, data3, data4, data5], 0)
         assert (data.A == A).all()
         assert (data.B == B).all()
@@ -1520,7 +1562,7 @@ class TestTensorClass:
 
     @pytest.mark.parametrize("list_to_stack", [True, False])
     def test_indexing(self, list_to_stack):
-        with set_list_to_stack(list_to_stack):
+        with _set_list_to_stack(list_to_stack):
 
             @tensorclass
             class MyDataNested:
@@ -2260,7 +2302,7 @@ class TestTensorClass:
         z = ["a", "b", "c"]
         batch_size = [3, 4]
         with (
-            set_list_to_stack(list_to_stack),
+            _set_list_to_stack(list_to_stack),
             (
                 pytest.raises(RuntimeError, match="batch dimension mismatch")
                 if list_to_stack
@@ -2300,7 +2342,7 @@ class TestTensorClass:
         z = ["a", "b", "c"]
         batch_size = [3, 4]
         with (
-            set_list_to_stack(list_to_stack),
+            _set_list_to_stack(list_to_stack),
             (
                 pytest.raises(RuntimeError, match="batch dimension mismatch")
                 if list_to_stack
@@ -2611,7 +2653,7 @@ class TestTensorClass:
         elif lazy == "maybe":
             stacked_tc = LazyStackedTensorDict.maybe_dense_stack([data1, data2], 0)
         else:
-            with set_capture_non_tensor_stack(True):
+            with _set_capture_non_tensor_stack(True):
                 stacked_tc = torch.stack([data1, data2], 0)
         assert type(stacked_tc) is type(data1)
         assert isinstance(stacked_tc.y, type(data1.y))
@@ -3078,7 +3120,7 @@ class TestTensorClass:
         y1 = Y(weakref.ref(obj), batch_size=[1])
         y = torch.cat([y0, y1])
         assert y.z.shape == torch.Size(())
-        with set_capture_non_tensor_stack(True):
+        with _set_capture_non_tensor_stack(True):
             y = torch.stack([y0, y1])
         assert y.z.shape == torch.Size(())
 
@@ -3476,7 +3518,7 @@ class TestNesting:
     def get_nested(self):
         c = self.TensorClass(torch.ones(1), ("a", "b", "c"), "Hello", batch_size=[])
 
-        with set_capture_non_tensor_stack(True):
+        with _set_capture_non_tensor_stack(True):
             td = torch.stack(
                 [
                     TensorDict({"t": torch.ones(1), "c": c}, batch_size=[])

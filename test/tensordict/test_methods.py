@@ -1376,16 +1376,20 @@ class TestTensorDicts(TestTensorDictsBase):
         index = torch.tensor([[0, 1, 2], [1, 2, 0], [2, 0, 1]])
         if npy:
             index = index.numpy()
+        # the index varies along both dims of the block, which can't both
+        # take the name of the indexed dim: names are unique
         td_idx = td[:, index]
         assert tensor_example[:, index].shape == td_idx.shape
-        # TODO: this multiple dims with identical names should not be allowed
-        assert td_idx.names == [names[0], names[1], names[1], *names[2:]]
+        assert td_idx.names == [names[0], None, None, *names[2:]]
         td_idx = td[0, index]
         assert tensor_example[0, index].shape == td_idx.shape
-        assert td_idx.names == [names[1], names[1], *names[2:]]
+        assert td_idx.names == [None, None, *names[2:]]
         td_idx = td[..., index, :, :]
         assert tensor_example[..., index, :, :].shape == td_idx.shape
-        assert td_idx.names == [names[0], names[1], names[1], *names[2:]]
+        assert td_idx.names == [names[0], None, None, *names[2:]]
+        # along a dim of size 1, the index does not vary
+        td_idx = td[:, index[:1]]
+        assert td_idx.names == [names[0], None, names[1], *names[2:]]
 
     def test_inferred_view_size(self, td_name, device):
         if td_name in ("permute_td", "sub_td2"):
@@ -2260,18 +2264,17 @@ class TestTensorDicts(TestTensorDictsBase):
             td_stack[key]
         if dim in (0, -5):
             # this will work if stack_dim is 0 (or equivalently -self.batch_dims)
-            # it is the proper way to get that entry
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                td_stack.get_nestedtensor(key)
+                td_stack._get_nestedtensor(key)
         else:
-            # if the stack_dim is not zero, then calling get_nestedtensor is disallowed
+            # if the stack_dim is not zero, then calling _get_nestedtensor is disallowed
             with pytest.raises(
                 RuntimeError,
                 match="LazyStackedTensorDict.get_nestedtensor can only be called "
                 "when the stack_dim is 0.",
             ):
-                td_stack.get_nestedtensor(key)
+                td_stack._get_nestedtensor(key)
         with pytest.raises(
             RuntimeError, match="Failed to stack tensors within a tensordict"
         ):
