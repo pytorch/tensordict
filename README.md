@@ -257,7 +257,7 @@ build requirement `setuptools_scm` is installed by pip unless you pass
 install them first:
 
 ```bash
-pip install numpy cloudpickle packaging importlib_metadata orjson "pyvers>=0.2,<0.3"
+pip install numpy cloudpickle packaging orjson "pyvers>=0.2,<0.3"
 pip install -e . --no-deps
 ```
 

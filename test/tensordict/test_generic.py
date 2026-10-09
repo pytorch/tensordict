@@ -4565,10 +4565,6 @@ class TestGeneric:
         assert td_new["a"].device.type == "cpu"
         assert td_new["b"].device.type == "cpu"
 
-    # Not working on python 3.9 and below
-    @pytest.mark.skipif(
-        sys.version_info < (3, 10), reason="Not working on python 3.9 and below"
-    )
     @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
     def test_to_mds(self, tmpdir):
         td = TensorDict(
