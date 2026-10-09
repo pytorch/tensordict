@@ -354,7 +354,9 @@ jobs:
           echo ""
           echo "Total wheels: $(ls wheels/*.whl 2>/dev/null | wc -l)"
           # tensordict is pure Python: expect exactly one py3-none-any wheel
-          if [[ $(ls wheels/*.whl | wc -l) -ne 1 ]] || ! ls wheels/*-py3-none-any.whl > /dev/null 2>&1; then
+          WHEEL_COUNT=$(find wheels -name "*.whl" -type f | wc -l)
+          PURE_COUNT=$(find wheels -name "*-py3-none-any.whl" -type f | wc -l)
+          if [[ "$WHEEL_COUNT" -ne 1 || "$PURE_COUNT" -ne 1 ]]; then
             echo "::error::Expected exactly one py3-none-any wheel"
             exit 1
           fi
