@@ -45,6 +45,7 @@ from typing import (
 import numpy as np
 import tensordict as tensordict_lib
 import torch
+from tensordict import base as _td_base
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._pytree import _register_td_node
@@ -3126,7 +3127,7 @@ def _get(self, key: NestedKey, *args, **kwargs):
         default = kwargs.pop("default")
         if args:
             raise TypeError("'default' arg was passed twice.")
-    elif tensordict_lib.base._GET_DEFAULTS_TO_NONE:
+    elif _td_base._GET_DEFAULTS_TO_NONE:
         default = None
     else:
         default = NO_DEFAULT
@@ -3168,7 +3169,7 @@ def _get_at(self, key: NestedKey, *args, **kwargs):
         default = kwargs.pop("default")
         if args or kwargs:
             raise TypeError("only one (keyword) argument is allowed.")
-    elif tensordict_lib.base._GET_DEFAULTS_TO_NONE:
+    elif _td_base._GET_DEFAULTS_TO_NONE:
         default = None
     else:
         default = NO_DEFAULT
