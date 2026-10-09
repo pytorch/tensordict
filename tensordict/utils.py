@@ -235,16 +235,15 @@ _LOCK_ERROR = (
 )
 
 
-LOGGING_LEVEL = os.environ.get("TD_LOGGING_LEVEL", "DEBUG")
+LOGGING_LEVEL = os.environ.get("TD_LOGGING_LEVEL", "INFO")
 logger = logging.getLogger("tensordict")
-logger.setLevel(getattr(logging, LOGGING_LEVEL))
+logger.setLevel(LOGGING_LEVEL.upper())
 # Disable propagation to the root logger
 logger.propagate = False
 # Remove all attached handlers
 while logger.hasHandlers():
     logger.removeHandler(logger.handlers[0])
 console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s [%(name)s][%(levelname)s] %(message)s")
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
