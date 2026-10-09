@@ -12,7 +12,6 @@ from copy import deepcopy
 import pytest
 import torch
 from functorch import make_functional_with_buffers as functorch_make_functional
-
 from tensordict import TensorDict
 from tensordict.nn import (
     ProbabilisticTensorDictModule,
@@ -21,7 +20,6 @@ from tensordict.nn import (
     TensorDictModuleBase,
     TensorDictSequential,
 )
-
 from torch import nn, vmap
 
 

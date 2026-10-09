@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-import functools
-
 import mmap
 import os
 import re
@@ -14,22 +12,24 @@ import sys
 import tempfile
 from multiprocessing import reduction, util
 from pathlib import Path
-from typing import Any, Callable, overload, TYPE_CHECKING
+from typing import Any, overload, TYPE_CHECKING
 
 import numpy as np
 import torch
 from tensordict.utils import (
     _maybe_correct_neg_dim,
+    _NESTED_TENSOR_ERR,
     _shape,
     _zip_strict,
     IndexType,
-    NESTED_TENSOR_ERR,
 )
 
 if TYPE_CHECKING:
     from typing import Self
 else:
     Self = Any
+
+__all__ = ["MemoryMappedTensor"]
 
 
 def _prepare_memmap_file(
@@ -271,7 +271,7 @@ class MemoryMappedTensor(torch.Tensor):
                 if func_offset_stride is not None:
                     offsets_strides = func_offset_stride(shape)
                 else:
-                    raise RuntimeError(NESTED_TENSOR_ERR)
+                    raise RuntimeError(_NESTED_TENSOR_ERR)
                 result = torch.frombuffer(memoryview(handler.buffer), dtype=input.dtype)
                 if copy_data:
                     result.untyped_storage().copy_(input.untyped_storage())
@@ -302,7 +302,7 @@ class MemoryMappedTensor(torch.Tensor):
                 if func_offset_stride is not None:
                     offsets_strides = func_offset_stride(shape)
                 else:
-                    raise RuntimeError(NESTED_TENSOR_ERR)
+                    raise RuntimeError(_NESTED_TENSOR_ERR)
                 if copy_data:
                     result.untyped_storage().copy_(input.untyped_storage())
                 result = torch._nested_view_from_buffer(
@@ -633,7 +633,7 @@ class MemoryMappedTensor(torch.Tensor):
                 if func_offset_stride is not None:
                     offsets_strides = func_offset_stride(shape)
                 else:
-                    raise RuntimeError(NESTED_TENSOR_ERR)
+                    raise RuntimeError(_NESTED_TENSOR_ERR)
                 result = torch.frombuffer(memoryview(handler.buffer), dtype=dtype)
                 result = torch._nested_view_from_buffer(
                     result,
@@ -661,7 +661,7 @@ class MemoryMappedTensor(torch.Tensor):
                 if func_offset_stride is not None:
                     offsets_strides = func_offset_stride(shape)
                 else:
-                    raise RuntimeError(NESTED_TENSOR_ERR)
+                    raise RuntimeError(_NESTED_TENSOR_ERR)
                 result = torch._nested_view_from_buffer(
                     result,
                     shape,
@@ -672,45 +672,6 @@ class MemoryMappedTensor(torch.Tensor):
                 return result
             return result
 
-        if shape:
-            if isinstance(shape[0], (list, tuple)) and len(shape) == 1:
-                shape = torch.Size(shape[0])
-            else:
-                shape = torch.Size(shape)
-            result = result.expand(shape)
-        result = cls.from_tensor(
-            result,
-            filename=filename,
-            copy_data=False,
-            existsok=kwargs.pop("existsok", False),
-        )
-        return result
-
-    @classmethod
-    def empty_nested(cls, *args, **kwargs):
-        # noqa: D417
-        """Creates a tensor with empty content, specific shape, dtype and filename.
-
-        Args:
-            shape (nested_shape): the shapes of the tensors.
-
-        Keyword Args:
-            dtype (torch.dtype): the dtype of the tensor.
-            device (torch.device): the device of the tensor. Only `None` and `"cpu"`
-                are accepted, any other device will raise an exception.
-            filename (path or equivalent): the path to the file, if any. If none
-                is provided, a handler is used.
-            existsok (bool, optional): whether it is ok to overwrite an existing file.
-                Defaults to ``False``.
-        """
-        shape = kwargs.pop("shape", args[0])
-        args = (torch.Size([]), *args)
-        _, device, dtype, _, filename = _proc_args_const(*args, **kwargs)
-        if device is not None:
-            device = torch.device(device)
-            if device.type != "cpu":
-                raise RuntimeError("Only CPU tensors are supported.")
-        result = torch.zeros((), dtype=dtype, device=device)
         if shape:
             if isinstance(shape[0], (list, tuple)) and len(shape) == 1:
                 shape = torch.Size(shape[0])
@@ -889,13 +850,6 @@ class MemoryMappedTensor(torch.Tensor):
         out.index = index
         out.parent_shape = shape
         return out
-
-    @property
-    def _tensor(self):
-        raise RuntimeError(
-            "_tensor property has been removed. MemoryMappedTensor is now a tensor subclass "
-            "and can be used directly without accessing _tensor."
-        )
 
     def __setstate__(self, state):
         if "filename" in state:
@@ -1091,8 +1045,7 @@ else:
     def _reduce_handler(handler):
         if handler.fd == -1:
             raise ValueError(
-                "Handler is unpicklable because "
-                "forking was enabled when it was created"
+                "Handler is unpicklable because forking was enabled when it was created"
             )
         return _rebuild_handler, (handler.size, reduction.DupFd(handler.fd))
 
@@ -1133,32 +1086,6 @@ def _proc_args_const(*args, **kwargs):
         kwargs.pop("fill_value", None),
         kwargs.pop("filename", None),
     )
-
-
-# Torch functions
-
-MEMMAP_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
-
-
-def implements_for_memmap(torch_function: Callable) -> Callable[[Callable], Callable]:
-    """Register a torch function override for MemoryMappedTensor."""
-
-    @functools.wraps(torch_function)
-    def decorator(func: Callable) -> Callable:
-        MEMMAP_HANDLED_FUNCTIONS[torch_function] = func
-        return func
-
-    return decorator
-
-
-@implements_for_memmap(torch.unbind)
-def _unbind(tensor, dim):
-    return tensor.unbind(dim)
-
-
-@implements_for_memmap(torch.chunk)
-def _chunk(input, chunks, dim=0):
-    return input.chunk(chunks, dim=dim)
 
 
 def _is_writable(file_path):

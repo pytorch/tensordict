@@ -126,7 +126,3 @@ def set_json_backend(backend):
 def get_json_backend():
     """Get the current JSON backend."""
     return importlib.import_module(_JSON_BACKEND)
-
-
-for _name in __all__:
-    globals()[_name].__module__ = "tensordict.utils"

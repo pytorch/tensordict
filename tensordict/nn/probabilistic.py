@@ -14,12 +14,11 @@ from textwrap import indent
 from typing import Any, Callable, Dict, List, OrderedDict, overload, TYPE_CHECKING
 
 import torch
-
+from tensordict._deprecation import deprecated, deprecated_attributes, warn_deprecated
 from tensordict._nestedkey import NestedKey
 from tensordict._td import TensorDict
 from tensordict.base import is_tensor_collection
 from tensordict.nn.common import dispatch, TensorDictModuleBase
-
 from tensordict.nn.distributions.composite import _add_suffix, CompositeDistribution
 from tensordict.nn.distributions.continuous import Delta
 from tensordict.nn.distributions.discrete import OneHotCategorical
@@ -37,21 +36,26 @@ from tensordict.tensorclass import is_non_tensor
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import _ContextManager, _zip_strict, unravel_key
 from torch import distributions as D, Tensor
-
 from torch.compiler import is_compiling
 from torch.utils._contextlib import _DecoratorContextManager
 
 try:
     from enum import StrEnum
 except ImportError:
-    from .utils import StrEnum
+    from .utils import _StrEnum as StrEnum
 
 if TYPE_CHECKING:
     from typing import Self
 else:
     Self = Any
 
-__all__ = ["ProbabilisticTensorDictModule", "ProbabilisticTensorDictSequential"]
+__all__ = [
+    "InteractionType",
+    "ProbabilisticTensorDictModule",
+    "ProbabilisticTensorDictSequential",
+    "interaction_type",
+    "set_interaction_type",
+]
 
 
 class InteractionType(StrEnum):
@@ -94,28 +98,30 @@ class InteractionType(StrEnum):
 _interaction_type = _ContextManager()
 
 
-DETERMINISTIC_REGISTER = {}
+def _torch_deterministic_register() -> dict[type, InteractionType]:
+    register = {}
+    # Iterate over all distribution classes in torch.distributions
+    for dist_name in dir(D):
+        dist_cls = getattr(D, dist_name)
 
-dist_has_enum_support = {}
-# Iterate over all distribution classes in torch.distributions
-for dist_name in dir(D):
-    dist_cls = getattr(D, dist_name)
-
-    # Check if it's a class (not a function or variable) and is a subclass of Distribution
-    if isinstance(dist_cls, type) and issubclass(dist_cls, D.Distribution):
-        if dist_cls is D.LogisticNormal:
-            DETERMINISTIC_REGISTER[dist_cls] = InteractionType.DETERMINISTIC
-        elif getattr(dist_cls, "has_enumerate_support", False):
-            DETERMINISTIC_REGISTER[dist_cls] = InteractionType.MODE
-        else:
-            DETERMINISTIC_REGISTER[dist_cls] = InteractionType.MEAN
+        # Check if it's a class (not a function or variable) and is a subclass of Distribution
+        if isinstance(dist_cls, type) and issubclass(dist_cls, D.Distribution):
+            if dist_cls is D.LogisticNormal:
+                register[dist_cls] = InteractionType.DETERMINISTIC
+            elif getattr(dist_cls, "has_enumerate_support", False):
+                register[dist_cls] = InteractionType.MODE
+            else:
+                register[dist_cls] = InteractionType.MEAN
+    return register
 
 
-DETERMINISTIC_REGISTER[Delta] = InteractionType.DETERMINISTIC
-DETERMINISTIC_REGISTER[OneHotCategorical] = InteractionType.MODE
+_DETERMINISTIC_REGISTER = _torch_deterministic_register()
 
-DETERMINISTIC_REGISTER[TruncatedNormal] = InteractionType.MEAN
-DETERMINISTIC_REGISTER[TruncatedStandardNormal] = InteractionType.MEAN
+_DETERMINISTIC_REGISTER[Delta] = InteractionType.DETERMINISTIC
+_DETERMINISTIC_REGISTER[OneHotCategorical] = InteractionType.MODE
+
+_DETERMINISTIC_REGISTER[TruncatedNormal] = InteractionType.MEAN
+_DETERMINISTIC_REGISTER[TruncatedStandardNormal] = InteractionType.MEAN
 
 
 def interaction_type() -> InteractionType | None:
@@ -288,13 +294,12 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
             .. note:: When there is more than one sample, this is only available when :func:`~tensordict.nn.composite_lp_aggregate` is set to ``True``.
 
-        cache_dist (bool, optional): keyword-only argument.
-            EXPERIMENTAL: if ``True``, the parameters of the
-            distribution (i.e. the output of the module) will be written to the
-            tensordict along with the sample. Those parameters can be used to re-compute
-            the original distribution later on (e.g. to compute the divergence between
-            the distribution used to sample the action and the updated distribution in
-            PPO). Default is ``False``.
+        cache_dist (bool, optional): keyword-only argument. Has no effect.
+            Default is ``False``.
+
+            .. deprecated:: 0.15
+                Passing ``cache_dist=True`` warns, and the argument will be
+                removed in TensorDict 0.17. Do not pass it.
         n_empirical_estimate (int, optional): keyword-only argument.
             Number of samples to compute the empirical
             mean when it is not available. Defaults to 1000.
@@ -332,7 +337,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         ...     TensorDictModule,
         ... )
         >>> from tensordict.nn.distributions import NormalParamExtractor
-        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch.distributions import Normal, Independent
         >>> td = TensorDict(
         ...     {"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3]
@@ -485,13 +489,17 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         self.default_interaction_type = InteractionType(default_interaction_type)
 
         if isinstance(distribution_class, str):
-            from tensordict.nn.distributions import distributions_maps
+            from tensordict.nn.distributions import _distributions_maps
 
-            distribution_class = distributions_maps.get(distribution_class.lower())
+            distribution_class = _distributions_maps.get(distribution_class.lower())
         self.distribution_class = distribution_class
         self.distribution_kwargs = distribution_kwargs
         self.n_empirical_estimate = n_empirical_estimate
         self._dist = None
+        if cache_dist:
+            warn_deprecated(
+                "ProbabilisticTensorDictModule(cache_dist=True)", removal="0.17"
+            )
         self.cache_dist = cache_dist if hasattr(distribution_class, "update") else False
         self.return_log_prob = return_log_prob
         if isinstance(num_samples, (int, torch.SymInt)):
@@ -669,12 +677,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             if lp_key != lp_key_expected:
                 lp.rename_key_(lp_key_expected, lp_key)
 
-    @property
-    def SAMPLE_LOG_PROB_KEY(self):
-        raise RuntimeError(
-            "SAMPLE_LOG_PROB_KEY is fully deprecated. Use `obj.log_prob_key` instead."
-        )
-
     @dispatch(auto_batch_size=False)
     @_set_skip_existing_None()
     def forward(
@@ -839,7 +841,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 tdist = type(dist)
                 if issubclass(tdist, D.Independent):
                     tdist = type(dist.base_dist)
-                interaction_type = DETERMINISTIC_REGISTER.get(tdist)
+                interaction_type = _DETERMINISTIC_REGISTER.get(tdist)
                 if interaction_type is None:
                     try:
                         support = dist.support
@@ -1246,7 +1248,18 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
     _dist_sample = ProbabilisticTensorDictModule._dist_sample
 
     @property
+    @deprecated(
+        "ProbabilisticTensorDictSequential.det_part",
+        removal="0.17",
+        replacement="ProbabilisticTensorDictSequential.get_dist_params()",
+    )
     def det_part(self):
+        """The modules that compute the distribution parameters.
+
+        .. deprecated:: 0.15
+            This property will be removed in TensorDict 0.17. Use
+            :meth:`get_dist_params` to compute the distribution parameters.
+        """
         return self._det_part
 
     def get_dist_params(
@@ -1274,7 +1287,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
 
         .. note:: The interaction type is temporarily set to the specified value during the execution of this method.
         """
-        tds = self.det_part
+        tds = self._det_part
         type = interaction_type()
         if type is None:
             for m in reversed(list(self._module_iter())):
@@ -1584,3 +1597,15 @@ def _dynamo_friendly_to_dict(data):
                 items[k] = v.data
         return items
     return data
+
+
+__getattr__ = deprecated_attributes(
+    __name__,
+    {
+        "DETERMINISTIC_REGISTER": (
+            _DETERMINISTIC_REGISTER,
+            "a deterministic_sample attribute on the distribution",
+        ),
+    },
+    removal="0.17",
+)

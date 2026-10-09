@@ -9,8 +9,7 @@ from dataclasses import make_dataclass
 
 import pytest
 import torch
-
-from tensordict import tensorclass, TensorClass, TensorDict, TypedTensorDict
+from tensordict import TensorClass, tensorclass, TensorDict, TypedTensorDict
 
 
 @tensorclass

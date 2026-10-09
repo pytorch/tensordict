@@ -12,20 +12,28 @@ from enum import Enum
 from typing import Any, Callable
 
 import torch
+from tensordict._deprecation import deprecated_attributes
 from tensordict._nestedkey import NestedKey
-from tensordict.utils import _ContextManager, strtobool, unravel_key_list
+from tensordict.utils import _ContextManager, _strtobool, unravel_key_list
 from torch import nn
-
 from torch.compiler import is_compiling
-
 from torch.utils._contextlib import _DecoratorContextManager
 
-
 _dispatch_tdnn_modules = _ContextManager(
-    default=strtobool(os.environ.get("DISPATCH_TDNN_MODULES", "True"))
+    default=_strtobool(os.environ.get("DISPATCH_TDNN_MODULES", "True"))
 )
 
-__all__ = ["mappings", "inv_softplus", "biased_softplus"]
+__all__ = [
+    "mappings",
+    "inv_softplus",
+    "biased_softplus",
+    "expln",
+    "add_custom_mapping",
+    "set_skip_existing",
+    "skip_existing",
+    "composite_lp_aggregate",
+    "set_composite_lp_aggregate",
+]
 
 _skip_existing = _ContextManager(default=False)
 
@@ -433,7 +441,7 @@ class _set_dispatch_td_nn_modules(_DecoratorContextManager):
 # Reproduce StrEnum for python<3.11
 
 
-class StrEnum(str, Enum):  # noqa
+class _StrEnum(str, Enum):  # noqa
     def __new__(cls, *values):
         if len(values) > 3:
             raise TypeError("too many arguments for str(): %r" % (values,))
@@ -460,7 +468,7 @@ class StrEnum(str, Enum):  # noqa
 
 _composite_lp_aggregate = _ContextManager(
     default=(
-        strtobool(os.getenv("COMPOSITE_LP_AGGREGATE"))
+        _strtobool(os.getenv("COMPOSITE_LP_AGGREGATE"))
         if os.getenv("COMPOSITE_LP_AGGREGATE") is not None
         else None
     )
@@ -549,3 +557,8 @@ class set_composite_lp_aggregate(_DecoratorContextManager):
 
     def unset(self):
         return self.__exit__(None, None, None)
+
+
+__getattr__ = deprecated_attributes(
+    __name__, {"StrEnum": (_StrEnum, None)}, removal="0.17"
+)
