@@ -342,6 +342,18 @@ class TestNonTensorData:
             ("nested", "bool")
         )
 
+    @pytest.mark.parametrize("dest", ["data", "stack"])
+    def test_gather_non_tensor_data_out(self, dest):
+        td = TensorDict(x=torch.zeros(2, 3), batch_size=[2, 3])
+        td["query"] = NonTensorData("new", batch_size=[2, 3])
+        out = TensorDict(x=torch.zeros(2, 3), batch_size=[2, 3])
+        if dest == "data":
+            out["query"] = NonTensorData("old", batch_size=[2, 3])
+        else:
+            out["query"] = NonTensorStack.from_list([["old"] * 3] * 2)
+        td.gather(1, torch.tensor([[1, 0, 1], [0, 0, 1]]), out=out)
+        assert out.get("query").tolist() == [["new"] * 3] * 2
+
     @pytest.mark.parametrize("capture", [False, True])
     @pytest.mark.parametrize("dim", [0, 1, -1])
     @pytest.mark.parametrize("layout", ["dense", "lazy", "stack_dim1"])

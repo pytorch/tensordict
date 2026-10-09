@@ -251,8 +251,8 @@ def _gather(
                 inplace=False,
                 non_blocking=False,
             )
-        elif _is_non_tensor_stack(value):
-            gathered = _gather_non_tensor_stack(value)
+        elif is_non_tensor(value):
+            gathered = _process_gather_value(value)
             dest = out._get_str(key, default=None)
             if _is_non_tensor_stack(dest) and dest.batch_size == gathered.batch_size:
                 # write into the destination stack, as tensors are written into
