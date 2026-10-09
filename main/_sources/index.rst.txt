@@ -39,8 +39,8 @@ Installation
 ============
 
 Tensordict releases are synced with PyTorch, so make sure you always enjoy the latest
-features of the library with the `most recent version of PyTorch <https://pytorch.org/get-started/locally/>`__ (although core features
-are guaranteed to be backward compatible with pytorch>=1.13).
+features of the library with the `most recent version of PyTorch <https://pytorch.org/get-started/locally/>`__.
+Tensordict requires PyTorch 2.13 or later.
 Nightly releases can be installed via
 
 .. code-block::
