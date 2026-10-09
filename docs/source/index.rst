@@ -61,6 +61,8 @@ or via a `git clone` if you're willing to contribute to the library:
   If you're using **uv** with a **PyTorch nightly** installed from the PyTorch nightly wheel index,
   prefer installing tensordict editable with ``--no-deps`` (or configure uv to use the nightly wheel index),
   otherwise uv may re-resolve and replace the existing nightly ``torch`` with a stable build from PyPI.
+  ``--no-deps`` also skips tensordict's other runtime dependencies (listed in ``pyproject.toml``),
+  so install those first.
 
 Tutorials
 =========

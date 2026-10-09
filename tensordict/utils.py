@@ -13,7 +13,6 @@ import logging
 import math
 import os
 import re
-import sys
 import threading
 import time
 import warnings
@@ -21,13 +20,13 @@ import weakref
 from collections import defaultdict
 from collections.abc import KeysView
 from contextlib import nullcontext
+from dataclasses import is_dataclass
 from functools import wraps
 from numbers import Number
 from textwrap import indent
 from typing import (
     Any,
     Callable,
-    Iterator,
     List,
     NamedTuple,
     Sequence,
@@ -41,13 +40,10 @@ import numpy as np
 import torch
 from pyvers import implement_for
 
-from tensordict._C import (  # noqa: F401  # @manual=//pytorch/tensordict:_C
-    _unravel_key_to_tuple as _unravel_key_to_tuple_cpp,
-    unravel_key as unravel_key_cpp,
-    unravel_key_list as unravel_key_list_cpp,
-    unravel_keys as unravel_keys_cpp,
+from tensordict._indexing import (  # noqa: F401
+    _getitem_batch_size,
+    convert_ellipsis_to_idx,
 )
-
 from tensordict._nestedkey import NestedKey
 
 from torch import Tensor
@@ -74,27 +70,14 @@ if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
     from tensordict.tensorclass import NonTensorStack
 
-try:
-    from dataclasses import GenericAlias
-except ImportError:
-    # python < 3.9
-    class GenericAlias:
-        """Placeholder."""
-
-        ...
-
 
 try:
     try:
-        from torch._C._functorch import (  # @manual=fbcode//caffe2:torch
-            get_unwrapped,
-            is_batchedtensor,
-        )
+        from torch._C._functorch import is_batchedtensor  # @manual=fbcode//caffe2:torch
     except ImportError:
-        from functorch._C import (  # @manual=fbcode//caffe2/functorch:_C  # noqa
-            get_unwrapped,
+        from functorch._C import (  # noqa: F401
             is_batchedtensor,
-        )
+        )  # @manual=fbcode//caffe2/functorch:_C
 except ImportError:
     pass
 
@@ -295,75 +278,6 @@ def _sub_index(tensor: Tensor, idx: IndexType) -> Tensor:
     return tensor[idx]
 
 
-def convert_ellipsis_to_idx(
-    idx: tuple[int | Ellipsis] | Ellipsis, batch_size: list[int]
-) -> tuple[int, ...]:
-    """Given an index containing an ellipsis or just an ellipsis, converts any ellipsis to slice(None).
-
-    Example:
-        >>> idx = (..., 0)
-        >>> batch_size = [1,2,3]
-        >>> new_index = convert_ellipsis_to_idx(idx, batch_size)
-        >>> print(new_index)
-        (slice(None, None, None), slice(None, None, None), 0)
-
-    Args:
-        idx (tuple, Ellipsis): Input index
-        batch_size (list): Shape of tensor to be indexed
-
-    Returns:
-        new_index (tuple): Output index
-    """
-    istuple = isinstance(idx, tuple)
-    if (not istuple and idx is not Ellipsis) or (
-        istuple and all(_idx is not Ellipsis for _idx in idx)
-    ):
-        return idx
-    new_index = ()
-    num_dims = len(batch_size)
-
-    if idx is Ellipsis:
-        idx = (...,)
-
-    num_ellipsis = sum(_idx is Ellipsis for _idx in idx)
-    if num_dims < (len(idx) - num_ellipsis - sum(item is None for item in idx)):
-        raise RuntimeError("Not enough dimensions in TensorDict for index provided.")
-
-    start_pos, after_ellipsis_length = None, 0
-    for i, item in enumerate(idx):
-        if item is Ellipsis:
-            if start_pos is not None:
-                raise RuntimeError("An index can only have one ellipsis at most.")
-            else:
-                start_pos = i
-        if item is not Ellipsis and start_pos is not None:
-            after_ellipsis_length += 1
-        if item is None:
-            # unsqueeze
-            num_dims += 1
-
-    before_ellipsis_length = start_pos
-    if start_pos is None:
-        return idx
-    else:
-        ellipsis_length = num_dims - after_ellipsis_length - before_ellipsis_length
-
-    new_index += idx[:start_pos]
-
-    ellipsis_start = start_pos
-    ellipsis_end = start_pos + ellipsis_length
-    new_index += (slice(None),) * (ellipsis_end - ellipsis_start)
-
-    new_index += idx[start_pos + 1 : start_pos + 1 + after_ellipsis_length]
-
-    if len(new_index) != num_dims:
-        raise RuntimeError(
-            f"The new index {new_index} is incompatible with the dimensions of the batch size {num_dims}."
-        )
-
-    return new_index
-
-
 def _copy(self: list[int]) -> list[int]:
     return list(self)
 
@@ -396,20 +310,6 @@ def infer_size_impl(shape: list[int], numel: int) -> list[int]:
     if infer_dim is not None:
         out[infer_dim] = numel // newsize
     return out
-
-
-def _unwrap_value(value: Tensor) -> Tensor:
-    # batch_dims = value.ndimension()
-    if not isinstance(value, Tensor):
-        out = value
-    elif is_batchedtensor(value):
-        out = get_unwrapped(value)
-    else:
-        out = value
-    return out
-    # batch_dims = out.ndimension() - batch_dims
-    # batch_size = out.shape[:batch_dims]
-    # return out, batch_size
 
 
 if hasattr(math, "prod"):  # Python 3.8+
@@ -450,7 +350,7 @@ def expand_as_right(
         >>> tensor = torch.zeros(3,4)
         >>> dest = torch.zeros(3,4,5)
         >>> print(expand_as_right(tensor, dest).shape)
-        torch.Size([3,4,5])
+        torch.Size([3, 4, 5])
 
     """
     if dest.ndimension() < tensor.ndimension():
@@ -487,7 +387,7 @@ def expand_right(tensor: Tensor, shape: Sequence[int]) -> Tensor:
         >>> tensor = torch.zeros(3,4)
         >>> shape = (3,4,5)
         >>> print(expand_right(tensor, shape).shape)
-        torch.Size([3,4,5])
+        torch.Size([3, 4, 5])
 
     """
     tensor_expand = tensor
@@ -532,13 +432,6 @@ def is_seq_of_nested_key(seq: Sequence[NestedKey]) -> bool:
         # we allow empty inputs
         return True
     return False
-
-
-def _ndimension(tensor: Tensor) -> int:
-    if isinstance(tensor, Tensor):
-        return tensor.ndimension()
-    else:
-        return tensor.ndimension()
 
 
 def _shape(tensor: Tensor, nested_shape=False) -> torch.Size:
@@ -606,13 +499,6 @@ def _is_shared(tensor: Tensor) -> bool:
         return tensor.is_shared()
 
 
-def _is_meta(tensor: Tensor) -> bool:
-    if isinstance(tensor, Tensor):
-        return tensor.is_meta
-    else:
-        return tensor.is_meta
-
-
 def _dtype(tensor: Tensor) -> torch.dtype:
     if isinstance(tensor, Tensor):
         return tensor.dtype
@@ -664,13 +550,6 @@ def _set_item(
     else:
         tensor[index] = value
         return tensor
-
-
-def _requires_grad(tensor: Tensor) -> bool:
-    if isinstance(tensor, Tensor):
-        return tensor.requires_grad
-    else:
-        return tensor.requires_grad
 
 
 class timeit:
@@ -1218,18 +1097,6 @@ class _ErrorInteceptor:
             exc_value.args = (self._add_key_to_error_msg(str(exc_value)),)
 
 
-def _nested_keys_to_dict(keys: Iterator[NestedKey]) -> dict[str, Any]:
-    nested_keys = {}
-    for key in keys:
-        if isinstance(key, str):
-            nested_keys.setdefault(key, {})
-        else:
-            d = nested_keys
-            for subkey in key:
-                d = d.setdefault(subkey, {})
-    return nested_keys
-
-
 def _dict_to_nested_keys(
     nested_keys: dict[NestedKey, NestedKey], prefix: tuple[str, ...] = ()
 ) -> tuple[str, ...]:
@@ -1240,19 +1107,6 @@ def _dict_to_nested_keys(
             yield (*prefix, key)
         else:
             yield key
-
-
-def _default_hook(td: T, key: tuple[str, ...]) -> None:
-    """Used to populate a tensordict.
-
-    For example, ``td.set(("a", "b"))`` may require to create ``"a"``.
-
-    """
-    out = td.get(key[0])
-    if out is None:
-        td._create_nested_str(key[0])
-        out = td._get_str(key[0], None)
-    return out
 
 
 def _get_leaf_tensordict(
@@ -2097,15 +1951,6 @@ def _is_number(item):
     return False
 
 
-def _expand_index(index, batch_size):
-    len_index = sum(True for idx in index if idx is not None)
-    if len_index > len(batch_size):
-        raise ValueError
-    if len_index < len(batch_size):
-        index = index + (slice(None),) * (len(batch_size) - len_index)
-    return index
-
-
 def _renamed_inplace_method(fn):
     def wrapper(*args, **kwargs):
         raise RuntimeError(
@@ -2128,15 +1973,6 @@ def _broadcast_tensors(index):
         index = tuple(
             idx if i not in tensors else tensors[i] for i, idx in enumerate(index)
         )
-    return index
-
-
-def _reduce_index(index):
-    if all(
-        idx is Ellipsis or (isinstance(idx, slice) and idx == slice(None))
-        for idx in index
-    ):
-        index = ()
     return index
 
 
@@ -2209,98 +2045,6 @@ class BufferLegacy(_parent_buffer_cls):
         t.persistent = persistent
         t._is_buffer = True
         return t
-
-
-def _getitem_batch_size(batch_size, index):
-    """Given an input shape and an index, returns the size of the resulting indexed tensor.
-
-    This function is aimed to be used when indexing is an
-    expensive operation.
-    Args:
-        shape (torch.Size): Input shape
-        items (index): Index of the hypothetical tensor
-
-    Returns:
-        Size of the resulting object (tensor or tensordict)
-
-    Examples:
-        >>> idx = (None, ..., None)
-        >>> torch.zeros(4, 3, 2, 1)[idx].shape
-        torch.Size([1, 4, 3, 2, 1, 1])
-        >>> _getitem_batch_size([4, 3, 2, 1], idx)
-        torch.Size([1, 4, 3, 2, 1, 1])
-    """
-    if not isinstance(index, tuple):
-        if isinstance(index, int):
-            return batch_size[1:]
-        if isinstance(index, slice) and index == slice(None):
-            return batch_size
-        index = (index,)
-    # index = convert_ellipsis_to_idx(index, batch_size)
-    # broadcast shapes
-    shapes_dict = {}
-    look_for_disjoint = False
-    disjoint = False
-    bools = []
-    for i, idx in enumerate(index):
-        boolean = False
-        if isinstance(idx, (range, list)):
-            shape = len(idx)
-        elif isinstance(idx, torch.Tensor):
-            if idx.dtype == torch.bool:
-                shape = torch.Size([idx.sum()])
-                boolean = True
-            else:
-                shape = idx.shape
-        elif isinstance(idx, np.ndarray):
-            if idx.dtype == np.dtype("bool"):
-                shape = torch.Size([idx.sum()])
-                boolean = True
-            else:
-                shape = idx.shape
-        elif isinstance(idx, slice):
-            look_for_disjoint = not disjoint and (len(shapes_dict) > 0)
-            shape = None
-        else:
-            shape = None
-        if shape is not None:
-            if look_for_disjoint:
-                disjoint = True
-            shapes_dict[i] = shape
-        bools.append(boolean)
-    bs_shape = None
-    if shapes_dict:
-        bs_shape = torch.broadcast_shapes(*shapes_dict.values())
-    out = []
-    count = -1
-    for i, idx in enumerate(index):
-        if idx is True or idx is None:
-            out.append(1)
-            continue
-        count += 1 if not bools[i] else idx.ndim
-        if i in shapes_dict:
-            if bs_shape is not None:
-                if disjoint:
-                    # the indices will be put at the beginning
-                    out = list(bs_shape) + out
-                else:
-                    # if there is a single tensor or similar, we just extend
-                    out.extend(bs_shape)
-                bs_shape = None
-            continue
-        elif isinstance(idx, (int, ftdim.Dim)):
-            # could be spared for efficiency
-            continue
-        elif isinstance(idx, slice):
-            batch = batch_size[count]
-            if is_compiling():
-                out.append(len(range(*_slice_indices(idx, batch))))
-            else:
-                out.append(len(range(*idx.indices(batch))))
-    count += 1
-    if batch_size[count:]:
-        out.extend(batch_size[count:])
-    return torch.Size(out)
 
 
 from tensordict._utils_options import (  # noqa: F401
@@ -2616,17 +2360,17 @@ def remove_duplicates(
         output (TensorDictBase): input tensordict with the indices corrsponding to duplicated elements
             in tensor `key` along dimension `dim` removed.
         unique_indices (torch.Tensor, optional): The indices of the first occurrences of the unique elements in the
-            input tensordict for the specified `key` along the specified `dim`. Only provided if return_index is True.
+            input tensordict for the specified `key` along the specified `dim`. Only provided if `return_indices` is True.
 
     Example:
         >>> td = TensorDict(
         ...     {
         ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
         ...         "tensor2": torch.tensor([[10, 20], [30, 40], [40, 50], [50, 60]]),
-        ...     }
+        ...     },
         ...     batch_size=[4],
         ... )
-        >>> output_tensordict = remove_duplicate_elements(td, key="tensor1", dim=0)
+        >>> output_tensordict = remove_duplicates(td, key="tensor1", dim=0)
         >>> expected_output = TensorDict(
         ...     {
         ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]]),
@@ -2634,7 +2378,7 @@ def remove_duplicates(
         ...     },
         ...     batch_size=[3],
         ... )
-        >>> assert (td == expected_output).all()
+        >>> assert (output_tensordict == expected_output).all()
     """
     tensor = input.get(key)
 
@@ -2771,6 +2515,50 @@ def _is_unbatched(data) -> bool:
     return out
 
 
+# Set the TD_CHECK_INVARIANTS environment variable (as the CI does) to check the
+# tensordicts that are built without validation, see _check_invariants.
+_CHECK_INVARIANTS = bool(strtobool(os.environ.get("TD_CHECK_INVARIANTS", "0")))
+
+
+def _check_invariants(td) -> None:
+    """Raise an ``AssertionError`` if the batch size, entries or dim names of ``td`` disagree.
+
+    ``TensorDict._new_unsafe`` does not validate its inputs. When
+    ``TD_CHECK_INVARIANTS`` is set, it calls this function, so that code that
+    builds a tensordict with a wrong batch size or wrong dim names fails where
+    the error is made. The ``except RuntimeError`` fallbacks of the library do
+    not catch an ``AssertionError``.
+    """
+    from tensordict.base import _is_tensor_collection
+
+    batch_size = td._batch_size
+    if type(batch_size) is not torch.Size:
+        raise AssertionError(
+            f"The batch size {batch_size!r} is a {type(batch_size).__name__}, "
+            f"not a torch.Size."
+        )
+    batch_dims = len(batch_size)
+    for key, value in td._tensordict.items():
+        if not isinstance(value, Tensor) and not _is_tensor_collection(type(value)):
+            # other values have no batch dims (e.g. the tuples that torch.func
+            # puts in a pytree)
+            continue
+        if _is_unbatched(value):
+            # unbatched entries do not follow the batch size
+            continue
+        shape = _shape(value)
+        if shape[:batch_dims] != batch_size:
+            raise AssertionError(
+                f"The entry {key!r} has shape {shape}, which does not start with "
+                f"the batch size {batch_size}."
+            )
+    names = td._td_dim_names
+    if names is not None and len(names) != batch_dims:
+        raise AssertionError(
+            f"The dim names {names} do not match the batch size {batch_size}."
+        )
+
+
 _NON_TENSOR_MEMO = {}
 
 
@@ -2853,42 +2641,69 @@ def _make_dtype_promotion(func):
 
 
 def _unravel_key_to_tuple(key):
-    if not is_compiling():
-        return _unravel_key_to_tuple_cpp(key)
+    """Return ``key`` as a flat tuple of str, or ``()`` if it is not a key."""
     if isinstance(key, str):
         return (key,)
     if not isinstance(key, tuple):
         return ()
-    return tuple(subk for k in key for subk in _unravel_key_to_tuple(k))
+    for subkey in key:
+        if not isinstance(subkey, str):
+            break
+    else:
+        # A flat tuple of str, the most common nested key.
+        return key if type(key) is tuple else tuple(key)
+    result = []
+    if not _append_key_parts(key, result):
+        return ()
+    return tuple(result)
+
+
+def _append_key_parts(key: tuple, result: list) -> bool:
+    """Append the str parts of the nested ``key`` to ``result``.
+
+    Returns ``False`` if a part is neither a str nor a non-empty tuple of keys.
+    """
+    for subkey in key:
+        if isinstance(subkey, str):
+            result.append(subkey)
+        elif (
+            not isinstance(subkey, tuple)
+            or not subkey
+            or not _append_key_parts(subkey, result)
+        ):
+            return False
+    return True
 
 
 def unravel_key(key):
     """Unravel a nested key.
 
+    A tuple with a part that is neither a str nor a tuple of str unravels to
+    ``()``. A key that is neither a str nor a tuple raises a ``RuntimeError``.
+
     Examples:
         >>> unravel_key("a")
-        "a"
+        'a'
         >>> unravel_key(("a",))
-        "a"
+        'a'
         >>> unravel_key((("a", ("b",))))
-        ("a", "b")
+        ('a', 'b')
+        >>> unravel_key(("a", 1))
+        ()
 
     """
-    if not is_compiling():
-        return unravel_key_cpp(key)
     if isinstance(key, str):
         return key
-    if isinstance(key, tuple):
-        if len(key) == 1:
-            return unravel_key(key[0])
-        return tuple(unravel_key(_key) for _key in key)
-    raise ValueError("the key must be a str or a tuple of str")
+    if not isinstance(key, tuple):
+        raise RuntimeError("key should be a Sequence<NestedKey>")
+    key = _unravel_key_to_tuple(key)
+    if len(key) == 1:
+        return key[0]
+    return key
 
 
 def unravel_keys(*keys):
     """Unravels a sequence of keys."""
-    if not is_compiling():
-        return unravel_keys_cpp(*keys)
     if len(keys) == 1:
         return unravel_key(keys[0])
     return tuple(unravel_key(key) for key in keys)
@@ -2896,9 +2711,20 @@ def unravel_keys(*keys):
 
 def unravel_key_list(keys):
     """Unravels a list of keys."""
-    if not is_compiling():
-        return unravel_key_list_cpp(keys)
-    return [unravel_key(key) for key in keys]
+    if not isinstance(keys, (list, tuple)):
+        # pybind11's wording when this was a C++ function, which TorchRL's
+        # tests match.
+        raise TypeError(
+            "unravel_key_list(): incompatible function arguments. Expected a "
+            f"list or a tuple of keys, got {type(keys)}."
+        )
+    result = []
+    for key in keys:
+        key = unravel_key(key)
+        if key == ():
+            raise RuntimeError("key should be a Sequence<NestedKey>")
+        result.append(key)
+    return result
 
 
 from tensordict._utils_key_json import (  # noqa: F401
@@ -2908,36 +2734,6 @@ from tensordict._utils_key_json import (  # noqa: F401
     _get_robust_key_setting_with_warning,
     _is_safe_legacy_key,
 )
-
-
-def _slice_indices(index: slice, len: int):
-    """A pure python implementation of slice.indices(len) since torch.compile doesn't recognise it."""
-    step = index.step
-    if step is None:
-        step = 1
-    elif step == 0:
-        raise ValueError("Step cannot be zero.")
-
-    start = index.start
-    stop = index.stop
-    if start is None:
-        if step > 0:
-            start = 0
-        else:
-            start = len - 1
-    elif start < 0:
-        start = max(0, len + start)
-
-    if stop is None:
-        if step > 0:
-            stop = len
-        else:
-            stop = -1
-    elif stop > 0:
-        stop = min(len, stop)
-    elif step < 0 or (step > 0 and start >= 0):
-        stop = len + stop
-    return start, stop, step
 
 
 assert_allclose_td = assert_close
@@ -2983,17 +2779,7 @@ def _check_inbuild():
 
 _check_inbuild = assume_constant_result(_check_inbuild)
 
-if sys.version_info >= (3, 10):
-    _zip_strict = functools.partial(zip, strict=True)
-else:
-
-    def _zip_strict(*iterables):
-        iterables = tuple(tuple(it) for it in iterables)
-        lengths = {len(it) for it in iterables}
-        if len(lengths) > 1:
-            raise ValueError("lengths of iterables differ.")
-
-        return zip(*iterables)
+_zip_strict = functools.partial(zip, strict=True)
 
 
 def _pin_mem(q_in, q_out):
@@ -3183,18 +2969,7 @@ def _mismatch_keys(keys1, keys2):
 
 def _is_dataclass(obj):
     """Check if an object is a dataclass."""
-    try:
-        from dataclasses import is_dataclass
-
-        return is_dataclass(obj)
-    except ImportError:
-        # Fallback for older Python versions
-        cls = (
-            obj
-            if isinstance(obj, type) and not isinstance(obj, GenericAlias)
-            else type(obj)
-        )
-        return hasattr(cls, "__dataclass_fields__")
+    return is_dataclass(obj)
 
 
 def _is_list_tensor_compatible(t) -> Tuple[bool, tuple | None, type | None]:

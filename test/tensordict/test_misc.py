@@ -43,10 +43,15 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.tensordict.test._utils_internal import (
         get_available_devices,
         is_npu_available,
+        legacy_lazy_mode,
     )
 else:
     IS_FB = False
-    from _utils_internal import get_available_devices, is_npu_available
+    from _utils_internal import (
+        get_available_devices,
+        is_npu_available,
+        legacy_lazy_mode,
+    )
 
 
 _has_streaming = importlib.util.find_spec("streaming", None) is not None
@@ -994,7 +999,7 @@ class TestTensorDictsRequiresGrad:
         td.batch_size = torch.Size([3, 1])
         return td
 
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def unsqueezed_td(self, device):
         return self.td(device).unsqueeze(0)
 

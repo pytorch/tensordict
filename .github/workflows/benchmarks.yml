@@ -28,17 +28,30 @@ concurrency:
 jobs:
   benchmark:
     name: ${{ matrix.device }} Pytest benchmark
-    runs-on: linux.g5.4xlarge.nvidia.gpu
+    # On pull requests, Continuous Benchmark (PR) benchmarks the head against
+    # its base. Run this workflow on a pull request only to upload its
+    # results, which needs the benchmarks/upload label.
+    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'benchmarks/upload') }}
+    # The CPU benchmarks run on a runner without a GPU: they measure the CPU
+    # only, and the GPU runner stays free for the GPU benchmarks.
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
-        device: [CPU, GPU]
-        python-version: ['3.12']
+        include:
+          - device: CPU
+            runner: mt-l-x86iavx512-48-384
+            container-options: ""
+            python-version: '3.12'
+          - device: GPU
+            runner: mt-l-x86aavx2-11-41-a10g
+            container-options: --gpus all
+            python-version: '3.12'
     defaults:
       run:
         shell: bash -l {0}
     container:
       image: nvidia/cuda:12.8.0-runtime-ubuntu22.04
-      options: --gpus all
+      options: ${{ matrix.container-options }}
     steps:
       - name: Who triggered this?
         run: |
@@ -84,12 +97,11 @@ jobs:
           uv --version
           uv pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128
           uv pip install "pybind11[global]" "setuptools" "wheel" "ninja"
-          uv pip install pytest pytest-benchmark "zarr>=3.0"
+          uv pip install pytest pytest-benchmark "zarr>=3.0" h5py
           # Do not resolve runtime dependencies here: we want to keep the PyTorch build (nightly)
           # that was explicitly installed above, and avoid any solver replacing it.
           uv pip install -e . --no-deps
           uv run --active python -c "import torch; print(torch.__version__)"
-          ${{ matrix.device == 'CPU' && 'export CUDA_VISIBLE_DEVICES=' || '' }}
       - name: check GPU presence
         if: matrix.device == 'GPU'
         run: |
@@ -127,6 +139,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: benchmark
     if: ${{ !inputs.skip-upload && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmarks/upload'))) }}
+    # Every job that pushes to gh-pages joins this group, so they push one at a
+    # time. With `queue: max`, later jobs wait instead of being cancelled.
+    concurrency:
+      group: gh-pages
+      queue: max
     steps:
       - name: Show upload trigger reason
         run: |

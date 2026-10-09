@@ -16,7 +16,13 @@ from pathlib import Path
 import pytest
 import torch
 from packaging import version
-from tensordict import lazy_stack, LazyStackedTensorDict, TensorClass, TensorDict
+from tensordict import (
+    lazy_stack,
+    LazyStackedTensorDict,
+    NonTensorStack,
+    TensorClass,
+    TensorDict,
+)
 from tensordict._reductions import _reduce_td
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _NESTED_TENSORS_AS_LISTS, TensorDictBase
@@ -247,10 +253,6 @@ class TestLazyStackedTensorDict:
         for value in std.values(True, True):
             assert (value == 0).all()
 
-    # Not working on python 3.9 and below
-    @pytest.mark.skipif(
-        sys.version_info < (3, 10), reason="Not working on python 3.9 and below"
-    )
     @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
     def test_to_mds(self, tmpdir):
         td = LazyStackedTensorDict(
@@ -493,7 +495,8 @@ class TestLazyStackedTensorDict:
         assert len(res.tensordicts) == 2
         assert assert_allclose_td(res, td_lazy)
 
-        res = torch.cat([td_dense_empty, td_lazy[:0]], dim=0)
+        td_lazy_empty = LazyStackedTensorDict(stack_dim=0, batch_size=[2])
+        res = torch.cat([td_dense_empty, td_lazy_empty], dim=0)
         assert isinstance(res, LazyStackedTensorDict)
         assert res.batch_size == torch.Size([0, 2])
         assert len(res.tensordicts) == 0
@@ -741,6 +744,9 @@ class TestLazyStackedTensorDict:
         td = LazyStackedTensorDict(stack_dim=1, batch_size=[1, 2], device="cpu")
         assert td.device == torch.device("cpu")
         assert td.shape == torch.Size([1, 0, 2])
+        for clone in (td.clone(), td.clone(recurse=False)):
+            assert clone.shape == torch.Size([1, 0, 2])
+            assert clone.device == torch.device("cpu")
 
     def test_densify(self):
         td0 = TensorDict(
@@ -990,6 +996,110 @@ class TestLazyStackedTensorDict:
         td[index] = tdset
         assert (td["a"][index] == tdset["a"]).all()
         assert (td["a"][index] == tdset["a"]).all()
+
+    @pytest.mark.parametrize(
+        "batch_size,index",
+        [
+            # the examples of issue #1834
+            ((3, 4), (torch.tensor([True, False, True]), torch.tensor([0, 3]))),
+            ((3, 4), (torch.tensor([0, 2]), torch.tensor([True, False, True, False]))),
+            ((2, 2), (torch.tensor([True, True]), torch.tensor([1, 0]))),
+            # int list and second mask as the other advanced index
+            ((3, 4, 2), (torch.tensor([True, False, True]), [3, 1])),
+            (
+                (3, 4, 2),
+                (
+                    torch.tensor([True, False, True]),
+                    torch.tensor([False, True, False, True]),
+                ),
+            ),
+            # mask on a middle dim, after a slice, an int or an ellipsis
+            (
+                (3, 4, 2),
+                (
+                    slice(None),
+                    torch.tensor([True, False, True, True]),
+                    torch.tensor([1, 0, 1]),
+                ),
+            ),
+            (
+                (3, 4, 2),
+                (0, torch.tensor([True, False, True, True]), torch.tensor([1, 0, 1])),
+            ),
+            (
+                (3, 4, 2),
+                (
+                    Ellipsis,
+                    torch.tensor([True, False, True, True]),
+                    torch.tensor([1, 0, 1]),
+                ),
+            ),
+            # an int between the mask and the other advanced index
+            ((3, 4, 2), (torch.tensor([True, False, True]), 0, torch.tensor([1, 0]))),
+            # three advanced indices, two of them masks
+            (
+                (3, 4, 2),
+                (
+                    torch.tensor([True, False, True]),
+                    torch.tensor([1]),
+                    torch.tensor([False, True]),
+                ),
+            ),
+            # 2-dim masks before and after the other advanced index
+            (
+                (3, 4, 2),
+                (
+                    torch.tensor(
+                        [
+                            [True, False, False, True],
+                            [False, False, False, False],
+                            [False, True, False, False],
+                        ]
+                    ),
+                    torch.tensor([0, 1, 1]),
+                ),
+            ),
+            (
+                (3, 4, 2),
+                (
+                    torch.tensor([2, 0]),
+                    torch.tensor(
+                        [[False, True], [False, False], [True, False], [False, False]]
+                    ),
+                ),
+            ),
+        ],
+    )
+    @pytest.mark.parametrize("stack_dim", [0, 1, -1])
+    @pytest.mark.parametrize("op", ["getitem", "setitem", "set_at_"])
+    def test_lazy_mask_with_advanced_index(self, batch_size, index, stack_dim, op):
+        # a mask combined with other advanced indices must behave like its
+        # nonzero() indices, as in torch and in the dense TensorDict
+        numel = torch.Size(batch_size).numel()
+        dense = TensorDict(
+            {
+                "a": torch.arange(numel).view(batch_size),
+                "b": torch.arange(numel * 2).view(*batch_size, 2),
+            },
+            batch_size,
+        )
+        lazy = LazyStackedTensorDict.lazy_stack(
+            dense.clone().unbind(stack_dim), stack_dim
+        )
+        if op == "getitem":
+            result = lazy[index]
+            expected = dense[index]
+            assert result.batch_size == expected.batch_size
+            assert (result == expected).all()
+            return
+        value = dense[index].apply(lambda x: -x - 1)
+        if op == "setitem":
+            lazy[index] = value
+            dense[index] = value
+        else:
+            lazy.set_at_("a", value["a"], index)
+            dense.set_at_("a", value["a"], index)
+        assert (lazy.to_tensordict() == dense).all()
 
     @pytest.mark.parametrize("batch_size", [(), (32,), (32, 4)])
     def test_lazy_stack_stack(self, batch_size):
@@ -1414,6 +1524,22 @@ class TestLazyStackedTensorDict:
         assert "e" in td.keys()  # now all tds have the key c
         td.get("e")
 
+    def test_stack_keys_order(self):
+        # The keys follow the insertion order of the first tensordict, as for a
+        # dense tensordict, whatever the order in the other tensordicts.
+        td0 = TensorDict(x=0.0, R=1.0, n=TensorDict(b=2.0, a=3.0))
+        td1 = TensorDict(R=1.0, x=0.0, n=TensorDict(a=3.0, b=2.0))
+        td = lazy_stack([td0, td1])
+        for args in ((), (False, True), (True,), (True, True)):
+            assert list(td.keys(*args)) == list(td0.keys(*args))
+            assert [key for key, _ in td.items(*args)] == [
+                key for key, _ in td0.items(*args)
+            ]
+        assert list(td.flatten_keys().keys()) == ["x", "R", "n.b", "n.a"]
+        # values() follows the same order, so it can be zipped with keys()
+        for key, value in zip(td.keys(True, True), td.values(True, True)):
+            assert (value == td.get(key)).all()
+
     @pytest.mark.parametrize("unsqueeze_dim", [0, 1, -1, -2])
     def test_stack_unsqueeze(self, unsqueeze_dim):
         td = TensorDict({("a", "b"): torch.ones(3, 4, 5)}, [3, 4])
@@ -1764,8 +1890,9 @@ class TestLazyStackedTensorDict:
         assert lst[0:0].batch_size == torch.Size([0, 2])
         # all-False mask used to return batch_size [0, 0, 2]
         assert lst[torch.zeros(3, dtype=torch.bool)].batch_size == torch.Size([0, 2])
-        # the empty result keeps the lazy type so cat with siblings still works
+        # the empty result is dense, and cat with siblings still gives a lazy stack
         recat = torch.cat([lst[0:1], lst[0:0], lst[1:]], 0)
+        assert isinstance(recat, LazyStackedTensorDict)
         assert recat.batch_size == torch.Size([3, 2])
         assert (recat == lst).all()
         # zero-size in a non-leading position
@@ -1775,6 +1902,98 @@ class TestLazyStackedTensorDict:
         )
         empty = lst_sd1[:, torch.zeros(2, dtype=torch.bool)]
         assert empty.batch_size == torch.Size([3, 0])
+        # with an Ellipsis before the empty selection
+        assert lst_sd1[..., 1:1].batch_size == torch.Size([3, 0])
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize(
+        "selection",
+        ["slice", "mask", "index tensor", "list", "slice and int", "2-D mask", "masks"],
+    )
+    def test_lazy_empty_selection_matches_dense(self, stack_dim, selection):
+        # An index that keeps no element along the stack dim gives what the
+        # dense copy gives, keys and names included
+        lazy = LazyStackedTensorDict(
+            *[
+                TensorDict(
+                    {"a": torch.zeros(4, 2), "nested": {"b": torch.zeros(4)}},
+                    [4],
+                    names=["r"],
+                )
+                for _ in range(3)
+            ],
+            stack_dim=stack_dim,
+            stack_dim_name="s",
+        )
+        none3 = torch.zeros(3, dtype=torch.bool)
+        none4 = torch.zeros(4, dtype=torch.bool)
+        # the index for a stack along dim 0 and along dim 1
+        index = {
+            "slice": (slice(1, 1), (slice(None), slice(1, 1))),
+            "mask": (none3, (slice(None), none3)),
+            "index tensor": (
+                torch.zeros(0, dtype=torch.long),
+                (slice(None), torch.zeros(0, dtype=torch.long)),
+            ),
+            "list": ([], (slice(None), [])),
+            "slice and int": ((slice(1, 1), 0), (0, slice(1, 1))),
+            "2-D mask": (
+                torch.zeros(3, 4, dtype=torch.bool),
+                torch.zeros(4, 3, dtype=torch.bool),
+            ),
+            "masks": ((none3, none4), (none4, none3)),
+        }[selection][stack_dim]
+        expected = lazy.to_tensordict()[index]
+        result = lazy[index]
+        assert type(result) is TensorDict
+        assert result.batch_size == expected.batch_size
+        assert result.names == expected.names
+        assert set(result.keys(True)) == set(expected.keys(True))
+        assert (result == expected).all()
+
+    def test_lazy_empty_selection_heterogeneous(self):
+        # Members that differ: the result has the keys that all members share,
+        # as the dense copy does, with the shapes of the first member
+        lazy = LazyStackedTensorDict(
+            TensorDict({"a": torch.zeros(4, 1), "b": torch.zeros(4)}, [4]),
+            TensorDict({"a": torch.zeros(4, 2), "c": torch.zeros(4)}, [4]),
+            stack_dim=0,
+        )
+        empty = lazy[torch.zeros(2, dtype=torch.bool)]
+        assert set(empty.keys()) == {"a"}
+        assert empty["a"].shape == torch.Size([0, 4, 1])
+        recat = torch.cat([lazy[:1], empty, lazy[1:]], 0)
+        assert isinstance(recat, LazyStackedTensorDict)
+        assert len(recat.tensordicts) == 2
+        assert all(a is b for a, b in zip(recat.tensordicts, lazy.tensordicts))
+
+    def test_lazy_empty_selection_non_tensor(self):
+        # A non-tensor stack keeps returning a non-tensor stack without members
+        stack = NonTensorStack("a", "b", "c")
+        empty = stack[torch.zeros(3, dtype=torch.bool)]
+        assert isinstance(empty, NonTensorStack)
+        assert empty.batch_size == torch.Size([0])
+        assert empty.tolist() == []
+        # a mask copies the selection, and the copy keeps the batch size
+        stack = NonTensorStack(*[NonTensorStack("a", "b") for _ in range(3)])
+        empty = stack[torch.zeros(3, dtype=torch.bool)]
+        assert empty.batch_size == torch.Size([0, 2])
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_lazy_empty_selection_non_tensor_entries(self, stack_dim):
+        # Members with a non-tensor entry: the entry follows the batch size
+        lazy = LazyStackedTensorDict(
+            *[
+                TensorDict({"a": torch.zeros(4), "b": f"string {i}"}, [4])
+                for i in range(3)
+            ],
+            stack_dim=stack_dim,
+        )
+        index = (slice(None),) * stack_dim + (torch.zeros(3, dtype=torch.bool),)
+        empty = lazy[index]
+        assert empty.get("b").batch_size == empty.batch_size
+        assert empty.clone().get("b").batch_size == empty.batch_size
+        assert empty["b"] == []
 
 
 if __name__ == "__main__":

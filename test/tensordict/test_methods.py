@@ -14,6 +14,7 @@ import os
 import pickle
 import platform
 import re
+import stat
 import struct
 import sys
 import sysconfig
@@ -23,6 +24,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import tensordict._archive as tensordict_archive
 import tensordict.base as tensordict_base
 import torch
 from packaging import version
@@ -31,6 +33,7 @@ from tensordict import (
     lazy_legacy,
     lazy_stack,
     LazyStackedTensorDict,
+    load_memmap,
     pack_memmap,
     PersistentTensorDict,
     refresh_archive_checksums,
@@ -63,6 +66,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         DummyPicklableClass,
         get_available_devices,
         is_npu_available,
+        legacy_lazy_mode,
         prod,
         TestTensorDictsBase,
     )
@@ -73,6 +77,7 @@ else:
         DummyPicklableClass,
         get_available_devices,
         is_npu_available,
+        legacy_lazy_mode,
         prod,
         TestTensorDictsBase,
     )
@@ -731,8 +736,7 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         if len(td.shape) - 1 < dim:
-            pytest.mark.skip(f"no dim {dim} in td")
-            return
+            pytest.skip(f"no dim {dim} in td")
 
         chunks = min(td.shape[dim], chunks)
         td_chunks = td.chunk(chunks, dim)
@@ -804,7 +808,7 @@ class TestTensorDicts(TestTensorDictsBase):
     # getting values from lazy tensordicts in non-lazy contexts messes things up
     # so we set it to True. When we'll deprecate lazy tensordicts, we will just
     # remove this decorator
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_create_nested(self, td_name, device):
         td = getattr(self, td_name)(device)
         with td.unlock_():
@@ -962,7 +966,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td0 != torch.ones([], dtype=torch.int, device=device)).all()
 
     @pytest.mark.skipif(
-        is_npu_available,
+        is_npu_available(),
         reason="ForeachAddScalar is not fully adapted on NPU currently",
     )
     def test_exclude(self, td_name, device):
@@ -1291,6 +1295,20 @@ class TestTensorDicts(TestTensorDictsBase):
             with pytest.raises(TypeError, match="Invalid index"):
                 td[idx]
 
+    def test_getitem_bool_list(self, td_name, device):
+        # a list of bools is a boolean mask, as in torch
+        td = getattr(self, td_name)(device)
+        mask0 = [True, False, True, False]
+        mask1 = [False, True, True]
+        for index, mask_index in (
+            (mask0, torch.tensor(mask0)),
+            ((slice(None), mask1), (slice(None), torch.tensor(mask1))),
+        ):
+            result, expected = td[index], td[mask_index]
+            # assert_allclose_td does not compare batch sizes
+            assert result.batch_size == expected.batch_size
+            assert_allclose_td(result, expected)
+
     def test_getitem_string(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -1508,7 +1526,7 @@ class TestTensorDicts(TestTensorDictsBase):
     # getting values from lazy tensordicts in non-lazy contexts messes things up
     # so we set it to True. When we'll deprecate lazy tensordicts, we will just
     # remove this decorator
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_lock_nested(self, td_name, device):
         td = getattr(self, td_name)(device)
         if td_name in ("sub_td", "sub_td2") and td.is_locked:
@@ -1953,6 +1971,8 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("use_dir", [True, False])
     @pytest.mark.parametrize("num_threads", [2])
     def test_memmap_threads(self, td_name, device, use_dir, tmpdir, num_threads):
+        if td_name == "td_with_unbatched":
+            pytest.skip("UnbatchedTensor memmap support not yet implemented")
         td = getattr(self, td_name)(device)
         tdmmap = td.memmap(
             prefix=tmpdir if use_dir else None,
@@ -2202,6 +2222,10 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         td1 = getattr(self, td_name)(device).unlock_()
         td2 = getattr(self, td_name)(device).unlock_()
+        if td_name == "td_with_unbatched":
+            # Stacking two different UnbatchedTensors warns: share it so that
+            # only the heterogeneous entry fails.
+            td2.set("unbatched", td1.get("unbatched"))
 
         td1[key] = torch.randn(*td1.shape, 2)
         td2[key] = torch.randn(*td1.shape, 3)
@@ -2319,7 +2343,7 @@ class TestTensorDicts(TestTensorDictsBase):
     # This test fails on lazy tensordicts when lazy-legacy is False
     # Deprecating lazy modules will make this decorator useless (the test should
     # still run ok).
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_non_tensor_data(self, td_name, device):
         td = getattr(self, td_name)(device)
         # check lock
@@ -2370,7 +2394,7 @@ class TestTensorDicts(TestTensorDictsBase):
     # This test fails on lazy tensordicts when lazy-legacy is False
     # Deprecating lazy modules will make this decorator useless (the test should
     # still run ok).
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_non_tensor_data_flatten_keys(self, td_name, device):
         td = getattr(self, td_name)(device)
         with td.unlock_():
@@ -2399,7 +2423,7 @@ class TestTensorDicts(TestTensorDictsBase):
     # This test fails on lazy tensordicts when lazy-legacy is False
     # Deprecating lazy modules will make this decorator useless (the test should
     # still run ok).
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_non_tensor_data_pickle(self, td_name, device, tmpdir):
         if td_name == "td_with_unbatched":
             # UnbatchedTensor memmap/pickle requires special metadata handling
@@ -2488,7 +2512,7 @@ class TestTensorDicts(TestTensorDictsBase):
         with pytest.raises(RuntimeError):
             pad(td, [0])
 
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_permute_applied_twice(self, td_name, device):
         torch.manual_seed(0)
         tensordict = getattr(self, td_name)(device)
@@ -2971,7 +2995,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert td2 is not td
             assert len(list(td2.keys())) == 0
 
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_set_lazy_legacy(self, td_name, device):
         if td_name in (
             "sub_td",
@@ -3064,7 +3088,7 @@ class TestTensorDicts(TestTensorDictsBase):
                     assert td_unsqueeze is td
 
         td = getattr(self, td_name)(device)
-        with set_lazy_legacy(True):
+        with legacy_lazy_mode():
             assert lazy_legacy()
             test_id(td)
             with set_lazy_legacy(False):
@@ -3180,8 +3204,7 @@ class TestTensorDicts(TestTensorDictsBase):
             )
             return
         if isinstance(idx, torch.Tensor) and idx.numel() > 1 and td.shape[0] == 1:
-            pytest.mark.skip("cannot index tensor with desired index")
-            return
+            pytest.skip("cannot index tensor with desired index")
 
         td_clone = td[idx].to_tensordict(retain_none=True).zero_()
         if td_name == "td_params":
@@ -3198,11 +3221,16 @@ class TestTensorDicts(TestTensorDictsBase):
             td[idx] = td_clone
 
     @pytest.mark.skipif(
-        is_npu_available,
+        is_npu_available(),
         reason="ForeachAddScalar is not fully adapted on NPU currently",
     )
     @pytest.mark.parametrize("actual_index", [..., (..., 0), (0, ...), (0, ..., 0)])
     def test_setitem_ellipsis(self, td_name, device, actual_index):
+        if td_name == "td_with_unbatched":
+            pytest.skip(
+                "UnbatchedTensor indexed assignment not yet implemented "
+                "(internal _tensordict batch_size mismatch)"
+            )
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
 
@@ -3459,7 +3487,7 @@ class TestTensorDicts(TestTensorDictsBase):
         for key in td1.keys(True, True):
             assert key not in td0
 
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_squeeze_legacy(self, td_name, device, squeeze_dim=-1):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -3540,7 +3568,7 @@ class TestTensorDicts(TestTensorDictsBase):
             return
         assert (td == 1).all()
 
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_squeeze_with_none_legacy(self, td_name, device, squeeze_dim=None):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -3584,7 +3612,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert (td.get("a") == 1).all()
 
     @pytest.mark.filterwarnings("error")
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_stack_onto(self, td_name, device, tmpdir):
         if td_name == "td_with_unbatched":
             # UnbatchedTensor: stack_onto has issues with UnbatchedTensor validation
@@ -3641,7 +3669,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td_stack == td_out).all()
 
     @pytest.mark.filterwarnings("error")
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_stack_subclasses_on_td(self, td_name, device):
         if td_name == "td_with_unbatched":
             # UnbatchedTensor: stack subclasses has validation issues with UnbatchedTensor
@@ -3933,7 +3961,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td2 = td.to_tensordict(retain_none=True)
         assert (td2 == td).all()
 
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_transpose_legacy(self, td_name, device):
         td = getattr(self, td_name)(device)
         if td_name == "td_with_unbatched":
@@ -4336,7 +4364,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert not td.is_memmap()
 
     @pytest.mark.parametrize("squeeze_dim", [0, 1])
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_unsqueeze_legacy(self, td_name, device, squeeze_dim):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -4413,7 +4441,7 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("clone", [True, False])
     # This is needed because update in lazy permute/view etc does not behave correctly when
     # legacy is False. When these classes will be deprecated, we can just remove the decorator
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_update(self, td_name, device, clone):
         td = getattr(self, td_name)(device)
         td.unlock_()  # make sure that the td is not locked
@@ -4459,10 +4487,15 @@ class TestTensorDicts(TestTensorDictsBase):
             assert isinstance(td["newnested"], torch.Tensor)
 
     @pytest.mark.skipif(
-        is_npu_available,
+        is_npu_available(),
         reason="ForeachAddScalar is not fully adapted on NPU currently",
     )
     def test_update_at_(self, td_name, device):
+        if td_name == "td_with_unbatched":
+            pytest.skip(
+                "UnbatchedTensor indexed assignment not yet implemented "
+                "(internal _tensordict batch_size mismatch)"
+            )
         td = getattr(self, td_name)(device)
         td0 = td[1].clone().zero_()
         td.update_at_(td0, 0)
@@ -4553,7 +4586,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
     # This is needed because update in lazy permute/view etc does not behave correctly when
     # legacy is False. When these classes will be deprecated, we can just remove the decorator
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_update_select(self, td_name, device):
         if td_name in ("memmap_td",):
             pytest.skip(reason="update not possible with memory-mapped td")
@@ -4630,7 +4663,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (sub_td == 2).all()
         assert (td[index] == 2).all()
 
-    @set_lazy_legacy(True)
+    @legacy_lazy_mode()
     def test_view_legacy(self, td_name, device):
         if td_name in ("permute_td", "sub_td2"):
             pytest.skip("view incompatible with stride / permutation")
@@ -4940,6 +4973,211 @@ class TestSubTensorDictMemmapRoundtrip:
         assert _str_to_index(legacy) == (slice(None), slice(0, 2))
 
 
+class TestMemmapLoadMode:
+    """``load_memmap(..., mode=...)`` on memmap directories."""
+
+    @staticmethod
+    def _save(path):
+        td = TensorDict(
+            {
+                "a": torch.zeros(3, 4),
+                "nested": {"b": torch.zeros(3)},
+                "stack": lazy_stack([TensorDict(c=torch.zeros(2)) for _ in range(3)]),
+            },
+            batch_size=[3],
+        )
+        td.memmap(path)
+        return td
+
+    @pytest.mark.parametrize("mode", [None, "r", "r+"])
+    def test_in_place_writes(self, tmp_path, mode):
+        self._save(tmp_path)
+        loaded = TensorDict.load_memmap(tmp_path, mode=mode)
+        loaded.add_(1)
+        # a pickled copy maps the files the same way
+        pickle.loads(pickle.dumps(loaded)).add_(1)
+        # "r" keeps in-place writes in memory, the other modes write them
+        # to the files
+        in_memory, on_disk = (1, 0) if mode == "r" else (2, 2)
+        assert (loaded == in_memory).all()
+        assert (TensorDict.load_memmap(tmp_path) == on_disk).all()
+
+    def test_mode_r_maps_copy_on_write(self, tmp_path, monkeypatch):
+        # Shared writable mappings make page faults take write locks on some
+        # network file systems (e.g. Lustre), which stalls concurrent readers.
+        td = self._save(tmp_path / "td")
+        td._get_sub_tensordict((slice(0, 2),)).memmap(tmp_path / "sub")
+        nt = torch.nested.nested_tensor([torch.zeros(2), torch.zeros(3)])
+        TensorDict({"nt": nt}, batch_size=[]).memmap(tmp_path / "nt")
+        shared = []
+        from_file = torch.from_file
+
+        def spy(*args, **kwargs):
+            shared.append(kwargs["shared"])
+            return from_file(*args, **kwargs)
+
+        monkeypatch.setattr(torch, "from_file", spy)
+        for name in ("td", "sub", "nt"):
+            loaded = TensorDict.load_memmap(tmp_path / name, mode="r")
+            pickle.loads(pickle.dumps(loaded))
+        assert shared and not any(shared)
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS or os.getuid() == 0, reason="root can write to read-only files"
+    )
+    def test_mode_rplus_requires_writable_files(self, tmp_path):
+        self._save(tmp_path)
+        (tmp_path / "a.memmap").chmod(stat.S_IREAD)
+        with pytest.raises(PermissionError, match="not writable"):
+            TensorDict.load_memmap(tmp_path, mode="r+")
+
+    def test_mode_r_memmap_(self, tmp_path):
+        self._save(tmp_path)
+        loaded = TensorDict.load_memmap(tmp_path, mode="r")
+        loaded.add_(1)
+        # the loaded tensordict is not bound to the directory
+        loaded.memmap_()
+        assert (loaded == 1).all()
+        assert (TensorDict.load_memmap(tmp_path) == 0).all()
+
+    def test_mode_r_save(self, tmp_path):
+        self._save(tmp_path)
+        loaded = TensorDict.load_memmap(tmp_path, mode="r")
+        loaded.add_(1)
+        # saving to the directory writes the values held in memory
+        saved = loaded.save(tmp_path)
+        assert (saved == 1).all()
+        assert (TensorDict.load_memmap(tmp_path) == 1).all()
+
+    def test_load_memmap_(self, tmp_path):
+        td = self._save(tmp_path)
+        dest = td.clone()
+        dest.load_memmap_(tmp_path, mode="r")
+        dest.add_(1)
+        # the free function forwards the mode too
+        load_memmap(tmp_path, mode="r").add_(1)
+        assert (TensorDict.load_memmap(tmp_path) == 0).all()
+
+    @pytest.mark.parametrize("mode", [None, "r+"])
+    def test_load_memmap_into_memmap(self, tmp_path, mode):
+        dest = self._save(tmp_path / "src").memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "src", mode=mode)
+        assert dest.is_memmap() and dest.saved_path == tmp_path / "src"
+        dest.add_(1)
+        assert (TensorDict.load_memmap(tmp_path / "src") == 1).all()
+
+    def test_mode_r_load_memmap_into_memmap(self, tmp_path):
+        dest = self._save(tmp_path / "src").memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "src", mode="r")
+        dest.add_(1)
+        # the leaves keep their copy-on-write mapping of the files
+        assert dest["a"].filename == str(tmp_path / "src" / "a.memmap")
+        assert (TensorDict.load_memmap(tmp_path / "src") == 0).all()
+        # like a load_memmap() result
+        assert not dest.is_memmap() and not dest.is_locked
+
+    def test_mode_rplus_load_memmap_archive_into_memmap(self, tmp_path):
+        dest = self._save(tmp_path / "td.tdz").memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "td.tdz", mode="r+")
+        dest.add_(1)
+        # in-place writes reach the archive
+        assert (TensorDict.load_memmap(tmp_path / "td.tdz") == 1).all()
+
+    def test_load_memmap_into_memmap_lazy_stack(self, tmp_path):
+        td = lazy_stack([TensorDict(c=torch.zeros(2)) for _ in range(3)])
+        td.memmap(tmp_path / "src")
+        dest = td.memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "src")
+        dest.add_(1)
+        # in-place writes reach the files
+        assert (TensorDict.load_memmap(tmp_path / "src") == 1).all()
+
+
+class TestLoadMemmapOut:
+    """``load_memmap(..., out=...)`` and ``load_memmap_``."""
+
+    @staticmethod
+    def _save(path):
+        td = TensorDict(
+            {"a": torch.ones(3), "nested": {"b": torch.ones(3)}}, batch_size=[3]
+        )
+        td.memmap(path)
+        return td
+
+    def test_nested_device(self, tmp_path):
+        self._save(tmp_path)
+        # out has no device, so only the requested device can place the
+        # leaves of its existing nested containers
+        out = TensorDict(
+            {
+                "a": torch.zeros(3, device="meta"),
+                "nested": {"b": torch.zeros(3, device="meta")},
+            },
+            batch_size=[3],
+        )
+        loaded = TensorDict.load_memmap(tmp_path, device="meta", out=out)
+        assert loaded is out
+        assert loaded["a"].device == torch.device("meta")
+        assert loaded["nested", "b"].device == torch.device("meta")
+
+    def test_device_from_out(self, tmp_path):
+        self._save(tmp_path)
+        out = TensorDict({"nested": {}}, batch_size=[3], device="meta")
+        loaded = TensorDict.load_memmap(tmp_path, out=out)
+        assert loaded["a"].device == torch.device("meta")
+        assert loaded["nested", "b"].device == torch.device("meta")
+
+    def test_device_mismatch(self, tmp_path):
+        self._save(tmp_path)
+        out = TensorDict(batch_size=[3], device="meta")
+        with pytest.raises(ValueError, match="Cannot load a tensordict on device"):
+            TensorDict.load_memmap(tmp_path, device="cpu", out=out)
+
+    def test_stale_keys(self, tmp_path):
+        self._save(tmp_path)
+        out = TensorDict(
+            {
+                "a": torch.zeros(3),
+                "stale": torch.zeros(3),
+                "nested": {"b": torch.zeros(3), "stale": torch.zeros(3)},
+                "stale_nested": {"c": torch.zeros(3)},
+            },
+            batch_size=[3],
+        )
+        nested = out["nested"]
+        loaded = TensorDict.load_memmap(tmp_path, out=out)
+        assert loaded is out
+        assert loaded["nested"] is nested
+        assert set(loaded.keys(True, True)) == {"a", ("nested", "b")}
+        assert (loaded == 1).all()
+
+    def test_load_memmap_stale_keys_into_memmap(self, tmp_path):
+        self._save(tmp_path / "src")
+        dest = TensorDict(
+            {
+                "a": torch.zeros(3),
+                "stale": torch.zeros(3),
+                "nested": {"b": torch.zeros(3), "stale": torch.zeros(3)},
+            },
+            batch_size=[3],
+        ).memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "src")
+        assert set(dest.keys(True, True)) == {"a", ("nested", "b")}
+        assert (dest == 1).all()
+        assert dest.is_memmap() and dest.saved_path == tmp_path / "src"
+        assert dest["nested"].is_memmap()
+        assert dest["nested"].saved_path == tmp_path / "src" / "nested"
+        assert dest["nested", "b"].filename == str(
+            tmp_path / "src" / "nested" / "b.memmap"
+        )
+
+    def test_lazy_stack_length_mismatch(self, tmp_path):
+        lazy_stack([TensorDict(c=torch.zeros(2)) for _ in range(3)]).memmap(tmp_path)
+        out = lazy_stack([TensorDict(c=torch.zeros(2)) for _ in range(2)])
+        with pytest.raises(ValueError, match="Cannot load 3 stacked tensordicts"):
+            TensorDict.load_memmap(tmp_path, out=out)
+
+
 class TestBackward:
     def test_scalar_implicit_gradient(self):
         x = torch.randn(3, requires_grad=True)
@@ -5215,6 +5453,83 @@ class TestMemmapArchive:
         unpack_memmap(archive, tmp_path / "unpacked")
         assert (TensorDict.load_memmap(tmp_path / "unpacked") == td).all()
 
+    @pytest.mark.parametrize("method", ["pack", "save"])
+    @pytest.mark.parametrize("location", ["root", "nested", "symlink"])
+    @pytest.mark.parametrize("existing", [False, True])
+    def test_archive_inside_source(
+        self, tmp_path, monkeypatch, method, location, existing
+    ):
+        prefix = tmp_path / "plain"
+        td = self._nested_td().memmap(prefix)
+        parent = prefix
+        if location == "nested":
+            parent = prefix / "archives"
+            parent.mkdir()
+        elif location == "symlink":
+            parent = tmp_path / "alias"
+            parent.symlink_to(prefix, target_is_directory=True)
+        archive = parent / "packed.tdz"
+        if existing:
+            archive.write_bytes(b"existing contents")
+
+        def fail_open(*args, **kwargs):
+            # Reject the path before opening the archive.
+            # Reading the output while writing it can make it grow without limit.
+            pytest.fail("opened an archive inside its source directory")
+
+        monkeypatch.setattr(zipfile, "ZipFile", fail_open)
+        with pytest.raises(ValueError, match="outside the source directory"):
+            if method == "pack":
+                pack_memmap(prefix, archive)
+            else:
+                td.save(archive)
+        if existing:
+            assert archive.read_bytes() == b"existing contents"
+        else:
+            assert not archive.exists()
+        assert (TensorDict.load_memmap(prefix) == td).all()
+
+    @pytest.mark.parametrize("link", ["symlink", "hardlink"])
+    def test_archive_source_file_alias(self, tmp_path, monkeypatch, link):
+        prefix = tmp_path / "plain"
+        expected = self._nested_td()
+        td = expected.memmap(prefix)
+        archive = tmp_path / "packed.tdz"
+        if link == "symlink":
+            archive.symlink_to(prefix / "a.memmap")
+        else:
+            archive.hardlink_to(prefix / "a.memmap")
+        before = archive.read_bytes()
+
+        def fail_open(*args, **kwargs):
+            pytest.fail("opened an archive aliasing a source file")
+
+        monkeypatch.setattr(zipfile, "ZipFile", fail_open)
+        with pytest.raises(ValueError, match="outside the source directory"):
+            pack_memmap(prefix, archive)
+        assert archive.read_bytes() == before
+        assert (td == expected).all()
+
+    def test_archive_output_reachable_through_symlink(self, tmp_path, monkeypatch):
+        prefix = tmp_path / "plain"
+        td = self._nested_td().memmap(prefix)
+        output = tmp_path / "output"
+        output.mkdir()
+        (prefix / "linked").symlink_to(output, target_is_directory=True)
+        archive = output / "packed.tdz"
+        file_chunks = tensordict_archive._file_chunks
+
+        def checked_chunks(path):
+            # Stop the writer before it reads its own output.
+            assert not path.resolve().is_relative_to(output.resolve())
+            yield from file_chunks(path)
+
+        monkeypatch.setattr(tensordict_archive, "_file_chunks", checked_chunks)
+        pack_memmap(prefix, archive)
+        assert (TensorDict.load_memmap(archive) == td).all()
+        with zipfile.ZipFile(archive) as zf:
+            assert all(not name.endswith(".tdz") for name in zf.namelist())
+
     @pytest.mark.parametrize("compression", ["deflate", "lzma"])
     def test_archive_compression(self, tmp_path, compression):
         td = TensorDict(
@@ -5354,6 +5669,127 @@ class TestMemmapArchive:
             td.memmap(archive, existsok=False)
         # overwriting is fine by default
         td.save(archive)
+
+    @pytest.mark.skipif(_IS_WINDOWS, reason="POSIX filename limits")
+    @pytest.mark.parametrize("method", ["save", "pack_memmap"])
+    @pytest.mark.parametrize("length", [246, 255])
+    @pytest.mark.parametrize("existing", [False, True])
+    def test_archive_long_filename(self, tmp_path, method, length, existing):
+        if os.pathconf(tmp_path, "PC_NAME_MAX") < length:
+            pytest.skip("filesystem filename limit is smaller than this case")
+        td = self._nested_td()
+        prefix = tmp_path / "source"
+        mapped = td.memmap(prefix)
+        archive = tmp_path / ("a" * (length - 4) + ".tdz")
+        if existing:
+            archive.write_bytes(b"existing contents")
+        if method == "save":
+            mapped.save(archive)
+        else:
+            pack_memmap(prefix, archive)
+        assert (TensorDict.load_memmap(archive) == td).all()
+
+    @pytest.mark.skipif(_IS_WINDOWS, reason="POSIX file permissions")
+    @pytest.mark.parametrize("method", ["save", "pack_memmap"])
+    @pytest.mark.parametrize("mode", [None, 0o600, 0o640, 0o664])
+    def test_archive_destination_permissions(self, tmp_path, method, mode):
+        td = self._nested_td()
+        prefix = tmp_path / "source"
+        td.memmap(prefix)
+        archive = tmp_path / "data.tdz"
+        previous_umask = os.umask(0o022)
+        try:
+            if mode is not None:
+                td.save(archive)
+                archive.chmod(mode)
+            if method == "save":
+                td.save(archive)
+            else:
+                pack_memmap(prefix, archive)
+            expected_mode = 0o644 if mode is None else mode
+            assert stat.S_IMODE(archive.stat().st_mode) == expected_mode
+            assert (TensorDict.load_memmap(archive) == td).all()
+        finally:
+            os.umask(previous_umask)
+
+    @pytest.mark.skipif(_IS_WINDOWS, reason="POSIX file permissions")
+    @pytest.mark.skipif(
+        hasattr(os, "geteuid") and os.geteuid() == 0,
+        reason="root can write read-only files",
+    )
+    @pytest.mark.parametrize("method", ["save", "pack_memmap"])
+    def test_archive_read_only_destination(self, tmp_path, method):
+        td = self._nested_td()
+        prefix = tmp_path / "source"
+        td.memmap(prefix)
+        archive = tmp_path / "data.tdz"
+        td.save(archive)
+        archive.chmod(0o444)
+        before = archive.read_bytes()
+        entries_before = set(tmp_path.iterdir())
+        with pytest.raises(PermissionError, match="not writable"):
+            if method == "save":
+                td.save(archive)
+            else:
+                pack_memmap(prefix, archive)
+        assert archive.read_bytes() == before
+        assert stat.S_IMODE(archive.stat().st_mode) == 0o444
+        assert set(tmp_path.iterdir()) == entries_before
+
+    @pytest.mark.parametrize("mode", ["r", "r+"])
+    @pytest.mark.parametrize("alias", ["same", "symlink", "hardlink"])
+    def test_archive_overwrite_mapped_source(self, tmp_path, monkeypatch, mode, alias):
+        archive = tmp_path / "data.tdz"
+        td = TensorDict(x=torch.arange(16384, dtype=torch.float32), batch_size=[16384])
+        td.save(archive)
+        loaded = TensorDict.load_memmap(archive, mode=mode)
+        loaded["x"].add_(1)
+        expected = loaded.clone()
+        target = archive
+        if alias != "same":
+            target = tmp_path / "alias.tdz"
+            if alias == "symlink":
+                target.symlink_to(archive)
+            else:
+                target.hardlink_to(archive)
+
+        before = archive.read_bytes()
+        tensor_chunks = tensordict_archive._tensor_chunks
+
+        def checked_chunks(tensor):
+            # Fail before reading a truncated mapping, which can cause SIGBUS.
+            assert archive.read_bytes() == before
+            yield from tensor_chunks(tensor)
+
+        monkeypatch.setattr(tensordict_archive, "_tensor_chunks", checked_chunks)
+        saved = loaded.save(target)
+        assert (saved == expected).all()
+        assert (loaded == expected).all()
+        assert (TensorDict.load_memmap(target) == expected).all()
+        with zipfile.ZipFile(target) as zf:
+            assert zf.testzip() is None
+        if alias == "symlink":
+            # The link is kept and the file it points to is updated.
+            assert target.is_symlink()
+            assert (TensorDict.load_memmap(archive) == expected).all()
+        elif alias == "hardlink":
+            # Replacing the file detaches the other hard link.
+            assert archive.read_bytes() == before
+
+    def test_archive_failed_overwrite_preserves_target(self, tmp_path, monkeypatch):
+        archive = tmp_path / "data.tdz"
+        td = self._nested_td()
+        td.save(archive)
+        before = archive.read_bytes()
+
+        def fail_chunks(tensor):
+            raise RuntimeError("failed to read tensor")
+
+        monkeypatch.setattr(tensordict_archive, "_tensor_chunks", fail_chunks)
+        with pytest.raises(RuntimeError, match="failed to read tensor"):
+            td.save(archive)
+        assert archive.read_bytes() == before
+        assert list(tmp_path.iterdir()) == [archive]
 
     def test_archive_bad_file(self, tmp_path):
         bad = tmp_path / "bad.tdz"

@@ -10,6 +10,7 @@ import pytest
 import torch
 
 from tensordict import is_tensor_collection, TensorDict
+from tensordict.utils import _unravel_key_to_tuple, unravel_key
 
 
 @pytest.fixture
@@ -505,7 +506,21 @@ def test_clone(benchmark, td):
     benchmark(td.clone)
 
 
-@pytest.mark.parametrize("index", ["int", "slice_int", "range", "tuple", "list"])
+@pytest.mark.parametrize(
+    "index",
+    [
+        "int",
+        "slice_int",
+        "range",
+        "tuple",
+        "list",
+        "tensor",
+        "mask",
+        "ellipsis",
+        "none",
+        "separated_tensors",
+    ],
+)
 def test_getitem(benchmark, td, c, index):
     if index == "int":
         index = 1
@@ -517,6 +532,16 @@ def test_getitem(benchmark, td, c, index):
         index = (2, 1)
     elif index == "list":
         index = [0, 1]
+    elif index == "tensor":
+        index = torch.tensor([0, 2])
+    elif index == "mask":
+        index = torch.tensor([True, False, True])
+    elif index == "ellipsis":
+        index = (..., 1)
+    elif index == "none":
+        index = (None, slice(None), 1)
+    elif index == "separated_tensors":
+        index = (torch.tensor([0, 2]), None, torch.tensor([1, 0]))
     else:
         raise NotImplementedError
 
@@ -672,6 +697,37 @@ def test_set_nested_new(benchmark, td, c):
         tdc["c", "c", "c"] = c
 
     benchmark(exec_set_nested_new)
+
+
+_KEYS = {
+    "str": "x",
+    "tuple": ("a", "b", "c"),
+    "nested_tuple": ("next", ("agents", "reward")),
+}
+
+
+@pytest.mark.parametrize("kind", list(_KEYS))
+def test_unravel_key(benchmark, kind):
+    benchmark(unravel_key, _KEYS[kind])
+
+
+@pytest.mark.parametrize("kind", list(_KEYS))
+def test_unravel_key_to_tuple(benchmark, kind):
+    benchmark(_unravel_key_to_tuple, _KEYS[kind])
+
+
+@pytest.mark.parametrize("kind", list(_KEYS))
+def test_get_by_key(benchmark, kind):
+    value = torch.zeros(3)
+    td = TensorDict(
+        {
+            "x": value,
+            ("a", "b", "c"): value,
+            ("next", "agents", "reward"): value,
+        },
+        batch_size=[3],
+    )
+    benchmark(td.get, _KEYS[kind])
 
 
 def test_select(benchmark, td, c):

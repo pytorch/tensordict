@@ -134,6 +134,20 @@ class TestErrorMessage:
             td.pop(key)
         assert list(td.keys()) == ["a"]
 
+    @staticmethod
+    @pytest.mark.parametrize("td_type", ["td", "lazy_stack", "sub_td"])
+    def test_set_self_error(td_type):
+        td = TensorDict({"a": torch.zeros(3, 2)}, [3, 2])
+        if td_type == "lazy_stack":
+            td = LazyStackedTensorDict(*td.unbind(0), stack_dim=0)
+        elif td_type == "sub_td":
+            td = td._get_sub_tensordict(0)
+        with pytest.raises(ValueError, match="Cannot set a tensordict inside itself"):
+            td["self"] = td
+        with pytest.raises(ValueError, match="Cannot set a tensordict inside itself"):
+            td.set(("nested", "self"), td)
+        assert set(td.keys()) == {"a"}
+
 
 class TestErrors:
     def test_error_get(self):
