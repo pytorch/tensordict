@@ -9,6 +9,7 @@ import sys
 
 import pytest
 import tensordict
+import tensordict.nn.functional_modules
 import torch
 from _utils_internal import expand_list, get_available_devices, TestTensorDictsBase
 from functorch import (
@@ -226,6 +227,58 @@ class TestNativeFunctorch:
         assert out[0]["a"].shape == torch.Size([4, 3, 1])
 
 
+class TestSetTensor:
+    def test_set_tensor_deprecation(self):
+        module = nn.Linear(2, 3)
+        module.register_buffer("buf", torch.zeros(()))
+        weight = nn.Parameter(torch.ones(3, 2))
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^tensordict\.nn\.functional_modules\.set_tensor\(\) is "
+            r"deprecated and will be removed in TensorDict 0\.17\.$",
+        ) as record:
+            tensordict.nn.functional_modules.set_tensor(module, "weight", weight)
+        assert record[0].filename == __file__
+        assert module._parameters["weight"] is weight
+        buf = torch.ones(())
+        with pytest.warns(DeprecationWarning, match="set_tensor"):
+            tensordict.nn.functional_modules.set_tensor(module, "buf", buf)
+        assert module._buffers["buf"] is buf
+        bias = torch.zeros(3)
+        with pytest.warns(DeprecationWarning, match="set_tensor"):
+            tensordict.nn.functional_modules.set_tensor(module, "bias", bias)
+        assert "bias" not in module._parameters
+        assert module.__dict__["bias"] is bias
+
+    def test_set_tensor_dict_deprecation(self):
+        module = nn.Linear(2, 3)
+        module.register_buffer("buf", torch.zeros(()))
+        weight = nn.Parameter(torch.ones(3, 2))
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^tensordict\.nn\.functional_modules\.set_tensor_dict\(\) is "
+            r"deprecated and will be removed in TensorDict 0\.17\.$",
+        ) as record:
+            tensordict.nn.functional_modules.set_tensor_dict(
+                module.__dict__, module, "weight", weight
+            )
+        assert record[0].filename == __file__
+        assert module._parameters["weight"] is weight
+        buf = torch.ones(())
+        with pytest.warns(DeprecationWarning, match="set_tensor_dict"):
+            tensordict.nn.functional_modules.set_tensor_dict(
+                module.__dict__, module, "buf", buf
+            )
+        assert module._buffers["buf"] is buf
+        bias = torch.zeros(3)
+        with pytest.warns(DeprecationWarning, match="set_tensor_dict"):
+            tensordict.nn.functional_modules.set_tensor_dict(
+                module.__dict__, module, "bias", bias
+            )
+        assert "bias" not in module._parameters
+        assert module.__dict__["bias"] is bias
+
+
 class TestPyTree(TestTensorDictsBase):
     def test_pytree_map(self):
         td = TensorDict({"a": {"b": {"c": 1}, "d": 1}, "e": 1}, [])
@@ -394,6 +447,28 @@ class TestPyTreeNamespace:
             ],
             check=True,
         )
+
+
+def test_is_batchedtensor_is_deprecated():
+    assert "is_batchedtensor" not in vars(tensordict)
+    assert "is_batchedtensor" not in tensordict.__all__
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"^tensordict\.is_batchedtensor is deprecated and will be removed in "
+        r"TensorDict 0\.17\. Use torch\._C\._functorch\.is_batchedtensor instead\.$",
+    ) as record:
+        from tensordict import is_batchedtensor
+    assert record[0].filename == __file__
+    assert is_batchedtensor is torch._C._functorch.is_batchedtensor
+    assert not is_batchedtensor(torch.zeros(3))
+    seen = []
+
+    def func(x):
+        seen.append(is_batchedtensor(x))
+        return x
+
+    vmap(func)(torch.zeros(2, 3))
+    assert seen == [True]
 
 
 if __name__ == "__main__":

@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import functools
 import mmap
 import os
 import re
@@ -13,16 +12,17 @@ import sys
 import tempfile
 from multiprocessing import reduction, util
 from pathlib import Path
-from typing import Any, Callable, overload, TYPE_CHECKING
+from typing import Any, overload, TYPE_CHECKING
 
 import numpy as np
 import torch
+from tensordict._deprecation import deprecated
 from tensordict.utils import (
     _maybe_correct_neg_dim,
+    _NESTED_TENSOR_ERR,
     _shape,
     _zip_strict,
     IndexType,
-    NESTED_TENSOR_ERR,
 )
 
 if TYPE_CHECKING:
@@ -111,8 +111,8 @@ class MemoryMappedTensor(torch.Tensor):
     _handler: _FileHandler = None
     _mode: str | None = None
     _clear: bool
-    index: Any
-    parent_shape: torch.Size
+    _index: Any
+    _parent_shape: torch.Size
 
     def __new__(
         cls,
@@ -156,7 +156,7 @@ class MemoryMappedTensor(torch.Tensor):
                 filename=filename,
             )
         elif handler is not None:
-            return cls.from_handler(
+            return cls._from_handler(
                 handler,
                 dtype,
                 shape,
@@ -272,7 +272,7 @@ class MemoryMappedTensor(torch.Tensor):
                 if func_offset_stride is not None:
                     offsets_strides = func_offset_stride(shape)
                 else:
-                    raise RuntimeError(NESTED_TENSOR_ERR)
+                    raise RuntimeError(_NESTED_TENSOR_ERR)
                 result = torch.frombuffer(memoryview(handler.buffer), dtype=input.dtype)
                 if copy_data:
                     result.untyped_storage().copy_(input.untyped_storage())
@@ -303,7 +303,7 @@ class MemoryMappedTensor(torch.Tensor):
                 if func_offset_stride is not None:
                     offsets_strides = func_offset_stride(shape)
                 else:
-                    raise RuntimeError(NESTED_TENSOR_ERR)
+                    raise RuntimeError(_NESTED_TENSOR_ERR)
                 if copy_data:
                     result.untyped_storage().copy_(input.untyped_storage())
                 result = torch._nested_view_from_buffer(
@@ -316,8 +316,8 @@ class MemoryMappedTensor(torch.Tensor):
             result = cls(result)
         result._handler = handler
         result.filename = filename
-        result.index = None
-        result.parent_shape = shape
+        result._index = None
+        result._parent_shape = shape
         if copy_data:
             if hasattr(input, "full_tensor"):
                 # for DTensors, cheaper than importing DTensor every time
@@ -634,7 +634,7 @@ class MemoryMappedTensor(torch.Tensor):
                 if func_offset_stride is not None:
                     offsets_strides = func_offset_stride(shape)
                 else:
-                    raise RuntimeError(NESTED_TENSOR_ERR)
+                    raise RuntimeError(_NESTED_TENSOR_ERR)
                 result = torch.frombuffer(memoryview(handler.buffer), dtype=dtype)
                 result = torch._nested_view_from_buffer(
                     result,
@@ -662,7 +662,7 @@ class MemoryMappedTensor(torch.Tensor):
                 if func_offset_stride is not None:
                     offsets_strides = func_offset_stride(shape)
                 else:
-                    raise RuntimeError(NESTED_TENSOR_ERR)
+                    raise RuntimeError(_NESTED_TENSOR_ERR)
                 result = torch._nested_view_from_buffer(
                     result,
                     shape,
@@ -673,45 +673,6 @@ class MemoryMappedTensor(torch.Tensor):
                 return result
             return result
 
-        if shape:
-            if isinstance(shape[0], (list, tuple)) and len(shape) == 1:
-                shape = torch.Size(shape[0])
-            else:
-                shape = torch.Size(shape)
-            result = result.expand(shape)
-        result = cls.from_tensor(
-            result,
-            filename=filename,
-            copy_data=False,
-            existsok=kwargs.pop("existsok", False),
-        )
-        return result
-
-    @classmethod
-    def empty_nested(cls, *args, **kwargs):
-        # noqa: D417
-        """Creates a tensor with empty content, specific shape, dtype and filename.
-
-        Args:
-            shape (nested_shape): the shapes of the tensors.
-
-        Keyword Args:
-            dtype (torch.dtype): the dtype of the tensor.
-            device (torch.device): the device of the tensor. Only `None` and `"cpu"`
-                are accepted, any other device will raise an exception.
-            filename (path or equivalent): the path to the file, if any. If none
-                is provided, a handler is used.
-            existsok (bool, optional): whether it is ok to overwrite an existing file.
-                Defaults to ``False``.
-        """
-        shape = kwargs.pop("shape", args[0])
-        args = (torch.Size([]), *args)
-        _, device, dtype, _, filename = _proc_args_const(*args, **kwargs)
-        if device is not None:
-            device = torch.device(device)
-            if device.type != "cpu":
-                raise RuntimeError("Only CPU tensors are supported.")
-        result = torch.zeros((), dtype=dtype, device=device)
         if shape:
             if isinstance(shape[0], (list, tuple)) and len(shape) == 1:
                 shape = torch.Size(shape[0])
@@ -841,14 +802,18 @@ class MemoryMappedTensor(torch.Tensor):
         out.filename = filename
         out._handler = None
         out._mode = mode
-        out.index = index
-        out.parent_shape = shape
+        out._index = index
+        out._parent_shape = shape
         return out
 
     @classmethod
+    @deprecated("MemoryMappedTensor.from_handler()", removal="0.17")
     def from_handler(cls, handler, dtype, shape, index=None):
         # noqa: D417
         """Loads a MemoryMappedTensor from a given handler.
+
+        .. deprecated:: 0.15
+            The handler is private, and this method has no replacement.
 
         Args:
             handler (compatible file handler): the handler for the tensor.
@@ -860,6 +825,11 @@ class MemoryMappedTensor(torch.Tensor):
                 tensor.
 
         """
+        # Pickles made with TensorDict 0.14 and earlier call this method.
+        return cls._from_handler(handler, dtype, shape, index)
+
+    @classmethod
+    def _from_handler(cls, handler, dtype, shape, index=None):
         out = torch.frombuffer(memoryview(handler.buffer), dtype=dtype)
         if isinstance(shape, torch.Tensor):
             func_offset_stride = getattr(
@@ -887,37 +857,30 @@ class MemoryMappedTensor(torch.Tensor):
         out = cls(out)
         out.filename = None
         out._handler = handler
-        out.index = index
-        out.parent_shape = shape
+        out._index = index
+        out._parent_shape = shape
         return out
-
-    @property
-    def _tensor(self):
-        raise RuntimeError(
-            "_tensor property has been removed. MemoryMappedTensor is now a tensor subclass "
-            "and can be used directly without accessing _tensor."
-        )
 
     def __setstate__(self, state):
         if "filename" in state:
             self.__dict__ = type(self).from_filename(**state).__dict__
         else:
-            self.__dict__ = type(self).from_handler(**state).__dict__
+            self.__dict__ = type(self)._from_handler(**state).__dict__
 
     def __getstate__(self):
         if getattr(self, "_handler", None) is not None:
             return {
                 "handler": self._handler,
                 "dtype": self.dtype,
-                "shape": list(self.parent_shape),
-                "index": self.index,
+                "shape": list(self._parent_shape),
+                "index": self._index,
             }
         elif getattr(self, "_filename", None) is not None:
             return {
                 "filename": self._filename,
                 "dtype": self.dtype,
-                "shape": self.parent_shape,
-                "index": self.index,
+                "shape": self._parent_shape,
+                "index": self._index,
                 "mode": self._mode,
             }
         else:
@@ -928,20 +891,40 @@ class MemoryMappedTensor(torch.Tensor):
 
     def __reduce__(self):
         if getattr(self, "_handler", None) is not None:
-            return type(self).from_handler, (
+            return type(self)._from_handler, (
                 self._handler,
                 self.dtype,
-                self.parent_shape,
-                self.index,
+                self._parent_shape,
+                self._index,
             )
         elif getattr(self, "_filename", None) is not None:
-            args = (self._filename, self.dtype, self.parent_shape, self.index)
+            args = (self._filename, self.dtype, self._parent_shape, self._index)
             if self._mode is not None:
                 # Only when set, so that earlier versions can load other pickles.
                 args += (self._mode,)
             return type(self).from_filename, args
         else:
             raise RuntimeError("Could not find handler or filename.")
+
+    @property
+    @deprecated("MemoryMappedTensor.index", removal="0.17")
+    def index(self) -> Any:
+        """The index of this tensor in the tensor that it was built from.
+
+        .. deprecated:: 0.15
+            This is internal to pickling and has no replacement.
+        """
+        return self._index
+
+    @property
+    @deprecated("MemoryMappedTensor.parent_shape", removal="0.17")
+    def parent_shape(self) -> torch.Size:
+        """The shape of the tensor that this tensor was built from.
+
+        .. deprecated:: 0.15
+            This is internal to pickling and has no replacement.
+        """
+        return self._parent_shape
 
     def __getitem__(self, item: IndexType) -> Self | torch.Tensor:
         try:
@@ -975,8 +958,8 @@ class MemoryMappedTensor(torch.Tensor):
         tensor._handler = getattr(self, "_handler", None)
         tensor.filename = getattr(self, "_filename", None)
         tensor._mode = self._mode
-        tensor.index = item
-        tensor.parent_shape = getattr(self, "parent_shape", None)
+        tensor._index = item
+        tensor._parent_shape = getattr(self, "_parent_shape", None)
         return tensor
 
     def unbind(self, dim):
@@ -1133,32 +1116,6 @@ def _proc_args_const(*args, **kwargs):
         kwargs.pop("fill_value", None),
         kwargs.pop("filename", None),
     )
-
-
-# Torch functions
-
-MEMMAP_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
-
-
-def implements_for_memmap(torch_function: Callable) -> Callable[[Callable], Callable]:
-    """Register a torch function override for MemoryMappedTensor."""
-
-    @functools.wraps(torch_function)
-    def decorator(func: Callable) -> Callable:
-        MEMMAP_HANDLED_FUNCTIONS[torch_function] = func
-        return func
-
-    return decorator
-
-
-@implements_for_memmap(torch.unbind)
-def _unbind(tensor, dim):
-    return tensor.unbind(dim)
-
-
-@implements_for_memmap(torch.chunk)
-def _chunk(input, chunks, dim=0):
-    return input.chunk(chunks, dim=dim)
 
 
 def _is_writable(file_path):

@@ -25,6 +25,7 @@ from typing import (
 )
 
 import torch
+from tensordict._deprecation import deprecated_attributes
 from tensordict._lazy import _CustomOpTensorDict, LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._td import _SubTensorDict, TensorDict
@@ -41,13 +42,13 @@ from tensordict.base import (
 )
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
+    _BufferLegacy,
+    _erase_cache_first,
+    _lock_blocked,
     _LOCK_ERROR,
     _zip_strict,
-    BufferLegacy,
-    erase_cache,
     IndexType,
     is_batchedtensor,
-    lock_blocked,
 )
 from torch import multiprocessing as mp, nn, Tensor
 from torch.compiler import is_compiling
@@ -115,7 +116,7 @@ def _get_args_dict(func, args, kwargs):
 
 def _maybe_make_param(tensor):
     if isinstance(tensor, (Tensor, ftdim.Tensor)) and not isinstance(
-        tensor, (nn.Parameter, Buffer, BufferLegacy)
+        tensor, (nn.Parameter, Buffer, _BufferLegacy)
     ):
         if tensor.dtype in (torch.float, torch.double, torch.half):
             tensor = nn.Parameter(tensor)
@@ -125,7 +126,7 @@ def _maybe_make_param(tensor):
             tensor = Buffer(tensor)
         else:
             # We want to keep the grad_fn of tensors, e.g. param.expand(10) should point to the original param
-            tensor = BufferLegacy(tensor)
+            tensor = _BufferLegacy(tensor)
     return tensor
 
 
@@ -139,7 +140,7 @@ def _maybe_make_param_or_buffer(tensor):
             tensor = Buffer(tensor)
         else:
             # We want to keep the grad_fn of tensors, e.g. param.expand(10) should point to the original param
-            tensor = BufferLegacy(tensor)
+            tensor = _BufferLegacy(tensor)
 
         # assert tensor.data.data_ptr() == dataptr
     return tensor
@@ -441,7 +442,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         return self
 
     def __iter__(self):
-        yield from self._param_td.__iter__()
+        return iter(self._param_td)
 
     def register_get_post_hook(self, hook):
         """Register a hook to be called after any get operation on leaf tensors."""
@@ -497,7 +498,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     ) -> Callable:
         if kwargs is None:
             kwargs = {}
-        if func not in TDPARAM_HANDLED_FUNCTIONS or not all(
+        if func not in _TDPARAM_HANDLED_FUNCTIONS or not all(
             issubclass(t, (Tensor, ftdim.Tensor, TensorDictBase)) for t in types
         ):
             from torch._ops import HigherOrderOperator
@@ -506,9 +507,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 with torch._C.DisableTorchFunctionSubclass():
                     return func(*args, **kwargs)
             return NotImplemented
-        return TDPARAM_HANDLED_FUNCTIONS[func](*args, **kwargs)
+        return _TDPARAM_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
-    @lock_blocked
+    @_lock_blocked
     @_unlock_and_set
     def __setitem__(  # type: ignore[misc]
         self,
@@ -516,13 +517,13 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         value: Any,
     ) -> None: ...
 
-    @lock_blocked
+    @_lock_blocked
     @_unlock_and_set
     def set(
         self, key: NestedKey, item: CompatibleType, inplace: bool = False, **kwargs: Any
     ) -> TensorDictBase: ...
 
-    @lock_blocked
+    @_lock_blocked
     def update(
         self,
         input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
@@ -557,15 +558,15 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             self._reset_params()
         return self
 
-    @lock_blocked
+    @_lock_blocked
     @_unlock_and_set
     def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType: ...
 
-    @lock_blocked
+    @_lock_blocked
     @_unlock_and_set
     def popitem(self): ...
 
-    @lock_blocked
+    @_lock_blocked
     @_unlock_and_set
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
@@ -881,7 +882,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback
     def contiguous(self, *args, **kwargs): ...
 
-    @lock_blocked
+    @_lock_blocked
     @_unlock_and_set
     def del_(self, *args, **kwargs): ...
 
@@ -1009,7 +1010,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 _lock_parents_weakrefs, is_compiling=is_compiling
             )
 
-    @erase_cache
+    @_erase_cache_first
     def _propagate_unlock(self):
         # if we end up here, we can clear the graph associated with this td
         self._is_locked = False
@@ -1342,21 +1343,21 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         return out
 
 
-TDPARAM_HANDLED_FUNCTIONS = copy(TD_HANDLED_FUNCTIONS)
+_TDPARAM_HANDLED_FUNCTIONS = copy(TD_HANDLED_FUNCTIONS)
 
 
-def implements_for_tdparam(torch_function: Callable) -> Callable[[Callable], Callable]:
+def _implements_for_tdparam(torch_function: Callable) -> Callable[[Callable], Callable]:
     """Register a torch function override for TensorDictParams."""
 
     @functools.wraps(torch_function)
     def decorator(func: Callable) -> Callable:
-        TDPARAM_HANDLED_FUNCTIONS[torch_function] = func
+        _TDPARAM_HANDLED_FUNCTIONS[torch_function] = func
         return func
 
     return decorator
 
 
-@implements_for_tdparam(torch.empty_like)
+@_implements_for_tdparam(torch.empty_like)
 def _empty_like(td: TensorDictBase, *args, **kwargs) -> TensorDictBase:
     return td.apply(
         lambda x: torch.empty_like(x, *args, **kwargs),
@@ -1365,3 +1366,13 @@ def _empty_like(td: TensorDictBase, *args, **kwargs) -> TensorDictBase:
 
 
 _register_tensor_class(TensorDictParams)
+
+
+__getattr__ = deprecated_attributes(
+    __name__,
+    {
+        "TDPARAM_HANDLED_FUNCTIONS": (_TDPARAM_HANDLED_FUNCTIONS, None),
+        "implements_for_tdparam": (_implements_for_tdparam, None),
+    },
+    removal="0.17",
+)

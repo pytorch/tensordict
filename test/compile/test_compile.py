@@ -45,9 +45,9 @@ from tensordict.store._utils import _prepare_indexed_value
 from tensordict.tensorclass import TensorClass
 from tensordict.utils import (
     _unravel_key_to_tuple,
+    _unravel_keys,
     unravel_key,
     unravel_key_list,
-    unravel_keys,
 )
 from torch._dynamo.testing import CompileCounterWithBackend
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
@@ -130,9 +130,9 @@ def test_vmap_compile():
 )
 def test_unravel_keys_compile(key):
     """Test that unravel_keys returns consistent results under torch.compile."""
-    eager = unravel_keys(key)
+    eager = _unravel_keys(key)
     torch._dynamo.reset()
-    compiled = torch.compile(unravel_keys, backend="eager")(key)
+    compiled = torch.compile(_unravel_keys, backend="eager")(key)
     assert eager == compiled, (
         f"unravel_keys mismatch for {key!r}: eager={eager!r}, compiled={compiled!r}"
     )
@@ -177,14 +177,14 @@ def test_unravel_key_fullgraph(fn, key):
 
 def test_unravel_key_list_fullgraph():
     eager = unravel_key_list(_UNRAVEL_VALID_KEYS)
-    eager_keys = unravel_keys(*_UNRAVEL_VALID_KEYS)
+    eager_keys = _unravel_keys(*_UNRAVEL_VALID_KEYS)
     torch._dynamo.reset()
 
     def f(x):
         return (
             x + 1,
             unravel_key_list(_UNRAVEL_VALID_KEYS),
-            unravel_keys(*_UNRAVEL_VALID_KEYS),
+            _unravel_keys(*_UNRAVEL_VALID_KEYS),
         )
 
     _, compiled, compiled_keys = torch.compile(f, fullgraph=True, backend="eager")(
@@ -2352,6 +2352,88 @@ class TestTCDefaultsCompile:
         inp = torch.ones(3)
         assert _NoneDefaultTC(x=inp).y is None
         assert fn(inp) is None
+
+
+class TestTCCustomInitCompile:
+    """A user-defined __init__ runs under torch.compile (gh-1822)."""
+
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_custom_init(self, tensor_only):
+        class Data(TensorClass, tensor_only=tensor_only):
+            x: torch.Tensor
+
+            def __init__(self, x, **options):
+                self.x = x * options["scale"]
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(x):
+            return Data(x, scale=2.0, batch_size=[3]).x + Data(x=x, scale=3.0).x
+
+        inp = torch.ones(3)
+        torch.testing.assert_close(fn(inp), inp * 5)
+
+    def test_custom_init_inherited(self):
+        class Parent(TensorClass):
+            x: torch.Tensor
+
+            def __init__(self, x):
+                self.x = x * 2
+
+        class Child(Parent):
+            y: torch.Tensor = None
+            z: torch.Tensor = torch.zeros(3)
+            w: torch.Tensor = dataclasses.field(default_factory=lambda: torch.ones(3))
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(x):
+            child = Child(x, batch_size=[3])
+            return child.x, child.y, child.z, child.w
+
+        inp = torch.ones(3)
+        x, y, z, w = fn(inp)
+        torch.testing.assert_close(x, inp * 2)
+        assert y is None
+        torch.testing.assert_close(z, torch.zeros(3))
+        torch.testing.assert_close(w, torch.ones(3))
+
+    def test_custom_init_super(self):
+        class Base(TensorClass):
+            x: torch.Tensor
+
+        class Child(Base):
+            y: torch.Tensor
+
+            def __init__(self, x):
+                self.y = x + 1
+                super().__init__(x=x, batch_size=x.shape[:1])
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(x):
+            child = Child(x)
+            return child.x + child.y, child.batch_size
+
+        inp = torch.ones(3)
+        out, batch_size = fn(inp)
+        torch.testing.assert_close(out, inp * 3)
+        assert batch_size == torch.Size([3])
+
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_custom_init_frozen(self, tensor_only):
+        class Data(TensorClass, frozen=True, tensor_only=tensor_only):
+            x: torch.Tensor
+
+            def __init__(self, x):
+                object.__setattr__(self, "x", x * 2)
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(x):
+            return Data(x, batch_size=[3])
+
+        inp = torch.ones(3)
+        data = fn(inp)
+        torch.testing.assert_close(data.to_tensordict()["x"], inp * 2)
+        assert "x" not in data.__dict__
+        assert data.is_locked
 
 
 def _count_compiles(fn, *args):

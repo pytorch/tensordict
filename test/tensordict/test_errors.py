@@ -10,6 +10,7 @@ import importlib.util
 import os
 import platform
 import re
+import subprocess
 import sys
 import warnings
 
@@ -21,6 +22,7 @@ from tensordict import (
     set_get_defaults_to_none,
     TensorDict,
 )
+from tensordict.base import _get_defaults_to_none, _set_get_defaults_to_none
 from tensordict.nn import TensorDictParams
 from tensordict.utils import _GENERIC_NESTED_ERR, _LOCK_ERROR
 from torch import nn
@@ -142,16 +144,34 @@ class TestErrorMessage:
             td.set(("nested", "self"), td)
         assert set(td.keys()) == {"a"}
 
+    @staticmethod
+    @pytest.mark.parametrize("td_type", ["td", "sub_td", "params"])
+    def test_iter_0d(td_type):
+        td = TensorDict({"a": torch.zeros(2, 3)}, [2])
+        if td_type == "sub_td":
+            td = td._get_sub_tensordict(0)
+        else:
+            td = td[0]
+            if td_type == "params":
+                td = TensorDictParams(td)
+        assert td.batch_dims == 0
+        err = "iteration over a 0-d tensordict"
+        # iter() raises at once, as it does for a 0-d tensor
+        with pytest.raises(TypeError, match=err):
+            iter(td)
+        with pytest.raises(TypeError, match=err):
+            list(td)
+
 
 class TestErrors:
     def test_error_get(self):
         td = TensorDict({"a": 0, "b": {"c": 1}})
 
         def run_assertions():
-            if get_defaults_to_none():
+            if _get_defaults_to_none():
                 assert td.get("c") is None
                 assert td.get(("b", "d")) is None
-            elif get_defaults_to_none() is None:
+            elif _get_defaults_to_none() is None:
                 with pytest.raises(KeyError), pytest.warns(DeprecationWarning):
                     td.get("c")
                 with pytest.raises(KeyError), pytest.warns(DeprecationWarning):
@@ -162,20 +182,20 @@ class TestErrors:
                 with pytest.raises(KeyError), warnings.catch_warnings():
                     td.get(("b", "d"))
 
-        set_back = get_defaults_to_none()
+        set_back = _get_defaults_to_none()
         try:
             run_assertions()
-            set_get_defaults_to_none(False)
-            assert not get_defaults_to_none()
+            _set_get_defaults_to_none(False)
+            assert not _get_defaults_to_none()
             run_assertions()
-            set_get_defaults_to_none(True)
-            assert get_defaults_to_none()
+            _set_get_defaults_to_none(True)
+            assert _get_defaults_to_none()
             run_assertions()
-            set_get_defaults_to_none(None)
-            assert get_defaults_to_none() is False
+            _set_get_defaults_to_none(None)
+            assert _get_defaults_to_none() is False
             run_assertions()
         finally:
-            set_get_defaults_to_none(set_back)
+            _set_get_defaults_to_none(set_back)
 
     def test_getitem(self):
         td = TensorDict({"a": 0, "b": {"c": 1}})
@@ -186,20 +206,20 @@ class TestErrors:
             with pytest.raises(KeyError), warnings.catch_warnings():
                 td["b", "d"]
 
-        set_back = get_defaults_to_none()
+        set_back = _get_defaults_to_none()
         try:
             run_assertions()
-            set_get_defaults_to_none(False)
-            assert not get_defaults_to_none()
+            _set_get_defaults_to_none(False)
+            assert not _get_defaults_to_none()
             run_assertions()
-            set_get_defaults_to_none(True)
-            assert get_defaults_to_none()
+            _set_get_defaults_to_none(True)
+            assert _get_defaults_to_none()
             run_assertions()
-            set_get_defaults_to_none(None)
-            assert get_defaults_to_none() is False
+            _set_get_defaults_to_none(None)
+            assert _get_defaults_to_none() is False
             run_assertions()
         finally:
-            set_get_defaults_to_none(set_back)
+            _set_get_defaults_to_none(set_back)
 
     def test_rename(self):
         td = TensorDict({"a": 0, "b": {"c": 1}})
@@ -213,20 +233,20 @@ class TestErrors:
                 td.rename_key_(("b", "d"), "c")
             assert (td == tdclone).all()
 
-        set_back = get_defaults_to_none()
+        set_back = _get_defaults_to_none()
         try:
             run_assertions()
-            set_get_defaults_to_none(False)
-            assert not get_defaults_to_none()
+            _set_get_defaults_to_none(False)
+            assert not _get_defaults_to_none()
             run_assertions()
-            set_get_defaults_to_none(True)
-            assert get_defaults_to_none()
+            _set_get_defaults_to_none(True)
+            assert _get_defaults_to_none()
             run_assertions()
-            set_get_defaults_to_none(None)
-            assert get_defaults_to_none() is False
+            _set_get_defaults_to_none(None)
+            assert _get_defaults_to_none() is False
             run_assertions()
         finally:
-            set_get_defaults_to_none(set_back)
+            _set_get_defaults_to_none(set_back)
 
     def test_del(self):
         td = TensorDict({"a": 0, "b": {"c": 1}})
@@ -240,20 +260,20 @@ class TestErrors:
                 td.del_(("b", "d"))
             assert (td == tdclone).all()
 
-        set_back = get_defaults_to_none()
+        set_back = _get_defaults_to_none()
         try:
             run_assertions()
-            set_get_defaults_to_none(False)
-            assert not get_defaults_to_none()
+            _set_get_defaults_to_none(False)
+            assert not _get_defaults_to_none()
             run_assertions()
-            set_get_defaults_to_none(True)
-            assert get_defaults_to_none()
+            _set_get_defaults_to_none(True)
+            assert _get_defaults_to_none()
             run_assertions()
-            set_get_defaults_to_none(None)
-            assert get_defaults_to_none() is False
+            _set_get_defaults_to_none(None)
+            assert _get_defaults_to_none() is False
             run_assertions()
         finally:
-            set_get_defaults_to_none(set_back)
+            _set_get_defaults_to_none(set_back)
 
     def test_select(self):
         td = TensorDict({"a": 0, "b": {"c": 1}})
@@ -267,20 +287,20 @@ class TestErrors:
                 td.select(("b", "d"))
             assert (td == tdclone).all()
 
-        set_back = get_defaults_to_none()
+        set_back = _get_defaults_to_none()
         try:
             run_assertions()
-            set_get_defaults_to_none(False)
-            assert not get_defaults_to_none()
+            _set_get_defaults_to_none(False)
+            assert not _get_defaults_to_none()
             run_assertions()
-            set_get_defaults_to_none(True)
-            assert get_defaults_to_none()
+            _set_get_defaults_to_none(True)
+            assert _get_defaults_to_none()
             run_assertions()
-            set_get_defaults_to_none(None)
-            assert get_defaults_to_none() is False
+            _set_get_defaults_to_none(None)
+            assert _get_defaults_to_none() is False
             run_assertions()
         finally:
-            set_get_defaults_to_none(set_back)
+            _set_get_defaults_to_none(set_back)
 
     def test_split_keys(self):
         td = TensorDict({"a": 0, "b": {"c": 1}})
@@ -294,20 +314,92 @@ class TestErrors:
                 td.split_keys([("b", "d")])
             assert (td == tdclone).all()
 
-        set_back = get_defaults_to_none()
+        set_back = _get_defaults_to_none()
         try:
             run_assertions()
-            set_get_defaults_to_none(False)
-            assert not get_defaults_to_none()
+            _set_get_defaults_to_none(False)
+            assert not _get_defaults_to_none()
             run_assertions()
-            set_get_defaults_to_none(True)
-            assert get_defaults_to_none()
+            _set_get_defaults_to_none(True)
+            assert _get_defaults_to_none()
             run_assertions()
-            set_get_defaults_to_none(None)
-            assert get_defaults_to_none() is False
+            _set_get_defaults_to_none(None)
+            assert _get_defaults_to_none() is False
             run_assertions()
         finally:
-            set_get_defaults_to_none(set_back)
+            _set_get_defaults_to_none(set_back)
+
+    def test_set_get_defaults_to_none_is_deprecated(self):
+        td = TensorDict({"a": 0})
+        message = (
+            "set_get_defaults_to_none() is deprecated and will be removed in "
+            "TensorDict 0.17. Use td[key] to raise a KeyError for a missing key "
+            "instead."
+        )
+        set_back = _get_defaults_to_none()
+        try:
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                set_get_defaults_to_none(False)
+            assert len(record) == 1
+            assert record[0].category is DeprecationWarning
+            assert str(record[0].message) == message
+            assert record[0].filename == __file__
+            # the function still works
+            assert _get_defaults_to_none() is False
+            with pytest.raises(KeyError):
+                td.get("b")
+            with pytest.warns(DeprecationWarning, match=re.escape(message)):
+                set_get_defaults_to_none(True)
+            assert td.get("b") is None
+        finally:
+            _set_get_defaults_to_none(set_back)
+
+    def test_get_defaults_to_none_is_deprecated(self):
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            result = get_defaults_to_none()
+        assert len(record) == 1
+        assert record[0].category is DeprecationWarning
+        assert str(record[0].message) == (
+            "get_defaults_to_none() is deprecated and will be removed in "
+            "TensorDict 0.17. Use td[key] to raise a KeyError for a missing key "
+            "instead."
+        )
+        assert record[0].filename == __file__
+        assert result == _get_defaults_to_none()
+
+    @pytest.mark.parametrize("value", ["0", "1"])
+    def test_get_defaults_to_none_env_var(self, value):
+        # TD_GET_DEFAULTS_TO_NONE=0 warns once at import, the default (1) does not
+        code = (
+            "import warnings\n"
+            "with warnings.catch_warnings(record=True) as caught:\n"
+            "    warnings.simplefilter('always')\n"
+            "    import tensordict\n"
+            "    from tensordict import TensorDict\n"
+            "for w in caught:\n"
+            "    if 'TD_GET_DEFAULTS_TO_NONE' in str(w.message):\n"
+            "        print(w.category.__name__, w.message)\n"
+            "try:\n"
+            "    print('get:', TensorDict().get('missing'))\n"
+            "except KeyError:\n"
+            "    print('get: KeyError')\n"
+        )
+        env = {**os.environ, "TD_GET_DEFAULTS_TO_NONE": value}
+        result = subprocess.run(
+            [sys.executable, "-c", code], env=env, capture_output=True, text=True
+        )
+        assert result.returncode == 0, result.stderr
+        if value == "0":
+            assert result.stdout.splitlines() == [
+                "DeprecationWarning TD_GET_DEFAULTS_TO_NONE=0 is deprecated and will "
+                "be removed in TensorDict 0.17. Use td[key] to raise a KeyError for "
+                "a missing key instead.",
+                "get: KeyError",
+            ]
+        else:
+            assert result.stdout.splitlines() == ["get: None"]
 
 
 class TestLock:
