@@ -129,7 +129,8 @@ The table below summarises which operations work on each combination.
    is a tensordict, ``from_tensordict`` builds a ``Pose`` from that entry,
    recursively. The ``Pose`` is set in a shallow copy of the input: the leaves
    are shared, but the input keeps its tensordict entry and does not see the
-   entries set later on the tensorclass. Other backends are wrapped as they
+   entries set later on the tensorclass. An entry with keys that ``Pose``
+   does not declare stays a tensordict. Other backends are wrapped as they
    are and the nested entry stays a tensordict, since setting a tensorclass
    in them would write to their storage.
 

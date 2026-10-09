@@ -3417,6 +3417,30 @@ class NestedObsDeep(TensorClass):
     y: torch.Tensor
 
 
+class NestedPoseDerived(NestedPose):
+    extra: torch.Tensor
+
+
+class NestedAnyTensorClass(TensorClass):
+    a: TensorClass
+
+
+class NestedLabeled(TensorClass):
+    x: torch.Tensor
+    label: NonTensorData
+
+
+_NestedT = TypeVar("_NestedT")
+
+
+class NestedGenericPose(TensorClass, Generic[_NestedT]):
+    q: torch.Tensor
+
+
+class NestedObsGeneric(TensorClass):
+    a: NestedGenericPose[int]
+
+
 def _nested_obs_td():
     return TensorDict(
         a=TensorDict(q=torch.randn(5, 4), batch_size=[5]),
@@ -3482,6 +3506,65 @@ class TestFromTensorDictNested:
     def test_from_dict_nested(self):
         obs = NestedObs.from_dict(_nested_obs_td().to_dict(), batch_size=[5])
         assert type(obs.a) is NestedPose
+
+    def test_from_tensordict_nested_generic(self):
+        obs = NestedObsGeneric.from_tensordict(_nested_obs_td().exclude("x"))
+        assert type(obs.a) is NestedGenericPose
+
+    def test_from_tensordict_deep_copies_once(self, monkeypatch):
+        deep = NestedObsDeep(
+            obs=NestedObs(
+                a=NestedPose(q=torch.randn(5, 4), batch_size=[5]),
+                x=torch.zeros(5),
+                batch_size=[5],
+            ),
+            y=torch.ones(5),
+            batch_size=[5],
+        )
+        copies = []
+        copy = TensorDict.copy
+
+        def counting_copy(self):
+            copies.append(self)
+            return copy(self)
+
+        monkeypatch.setattr(TensorDict, "copy", counting_copy)
+        back = NestedObsDeep.from_tensordict(deep.to_tensordict())
+        assert type(back.obs.a) is NestedPose
+        assert len(copies) == 1
+
+    def test_from_tensordict_undeclared_keys(self):
+        # A field annotated with NestedPose holds a subclass with more fields:
+        # the entry stays a TensorDict.
+        obs = NestedObs(
+            a=NestedPoseDerived(
+                q=torch.zeros(5, 4), extra=torch.ones(5), batch_size=[5]
+            ),
+            x=torch.zeros(5),
+            batch_size=[5],
+        )
+        back = NestedObs.from_tensordict(obs.to_tensordict())
+        assert type(back.a) is TensorDict
+        assert (back.a["extra"] == 1).all()
+        auto = NestedObsAutocast(a=back.a, x=torch.zeros(5), batch_size=[5])
+        assert type(auto.a) is TensorDict
+
+    def test_from_tensordict_base_tensorclass_annotation(self):
+        # TensorClass declares no fields: the entry stays a TensorDict.
+        td = _nested_obs_td().exclude("x")
+        obs = NestedAnyTensorClass.from_tensordict(td)
+        assert obs._tensordict is td
+        assert type(obs.a) is TensorDict
+
+    def test_from_tensordict_non_tensor_stack(self):
+        stacked = torch.stack(
+            [
+                NestedLabeled(x=torch.zeros(()), label="a"),
+                NestedLabeled(x=torch.zeros(()), label="b"),
+            ]
+        )
+        back = NestedLabeled.from_tensordict(stacked.to_tensordict())
+        assert back.label == ["a", "b"]
 
 
 @tensorclass(autocast=True)

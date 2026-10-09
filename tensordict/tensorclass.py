@@ -1934,15 +1934,35 @@ def _is_tensordict_annotation(type_hint: Any) -> bool:
 
 
 def _tensorclass_annotation(type_hint: Any) -> type | None:
-    """Return the tensorclass of a ``T`` or ``Optional[T]`` annotation, else ``None``."""
+    """Return the tensorclass of a ``T``, ``T[...]`` or ``Optional[T]`` annotation, else ``None``.
+
+    The base ``TensorClass``, which declares no fields, and the non-tensor classes
+    (``NonTensorData``, ``MetaData``) do not count.
+    """
     if get_origin(type_hint) in (Union, UnionType):
         args = [arg for arg in get_args(type_hint) if arg is not NoneType]
         if len(args) != 1:
             return None
         type_hint = args[0]
-    if isinstance(type_hint, type) and _is_tensorclass(type_hint):
+    origin = get_origin(type_hint)
+    if origin is not None:
+        type_hint = origin
+    if (
+        isinstance(type_hint, type)
+        and _is_tensorclass(type_hint)
+        and "__expected_keys__" in vars(type_hint)
+        and not getattr(type_hint, "_is_non_tensor", False)
+    ):
         return type_hint
     return None
+
+
+def _fits_tensorclass(tensorclass_type: type, entry: Any) -> bool:
+    """Return whether ``entry`` is a tensordict whose keys are all fields of ``tensorclass_type``."""
+    if not isinstance(entry, TensorDictBase) or is_non_tensor(entry):
+        return False
+    expected_keys = tensorclass_type.__expected_keys__
+    return all(key in expected_keys for key in entry.keys())
 
 
 def _set_tensorclass_type_hints(cls: type, type_hints: dict[str, Any]) -> None:
@@ -2071,43 +2091,79 @@ def _from_tensordict(
     return tc
 
 
+def _tensorclass_keys(cls, tensordict: TensorDict) -> list[str]:
+    """Return the tensorclass fields of ``cls`` whose entry in ``tensordict`` fits their class."""
+    return [
+        key
+        for key, tensorclass_type in cls._tensorclass_fields.items()
+        if _fits_tensorclass(tensorclass_type, tensordict._get_str(key, None))
+    ]
+
+
+def _set_tensorclass_entries(cls, tensordict: TensorDict, keys: list[str]) -> None:
+    """Replace the entries ``keys`` of ``tensordict`` with the tensorclasses of these fields of ``cls``.
+
+    ``tensordict`` must own its nested TensorDicts (a ``copy()``): they are modified in place.
+    """
+    for key in keys:
+        tensorclass_type = cls._tensorclass_fields[key]
+        entry = tensordict._get_str(key, None)
+        if tensorclass_type._tensorclass_fields and isinstance(entry, TensorDict):
+            nested_keys = _tensorclass_keys(tensorclass_type, entry)
+            if nested_keys:
+                _set_tensorclass_entries(tensorclass_type, entry, nested_keys)
+        tensordict._set_str(
+            key,
+            tensorclass_type._from_tensordict(entry),
+            validated=True,
+            inplace=False,
+            non_blocking=False,
+        )
+
+
 def _from_tensordict_public(
     cls,
     tensordict: TensorDictBase,
     non_tensordict: dict | None = None,
     safe: bool = True,
 ) -> Self:
-    """``from_tensordict``: ``_from_tensordict`` that also builds the tensorclass fields.
+    """Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
 
-    In a :class:`~tensordict.TensorDict`, an entry for a field annotated with a
-    tensorclass (or ``Optional`` of one) that is a tensordict becomes an instance of
-    that tensorclass, recursively. Other backends are wrapped as they are: setting a
-    tensorclass in them would write to their storage (e.g. an H5 file). The
-    tensorclass ops rebuild their results with ``_from_tensordict``: their nested
-    entries are already tensorclasses.
+    If ``tensordict`` is a :class:`~tensordict.TensorDict`, the entries of the fields
+    annotated with a tensorclass (or ``Optional`` of one) that are tensordicts become
+    instances of that tensorclass, recursively. They are set in a shallow copy of
+    ``tensordict``, which keeps its own entries. An entry with keys that the annotated
+    class does not declare stays a tensordict. Other backends are wrapped as they are:
+    setting a tensorclass in them would write to their storage (e.g. an H5 file).
+
+    Args:
+        tensordict (TensorDictBase): the tensordict that holds the tensor fields.
+        non_tensordict (dict, optional): the values of the non-tensor fields. The
+            fields that neither argument holds are set to ``None``.
+        safe (bool, optional): if ``True``, raise an error when ``tensordict`` is not
+            a :class:`~tensordict.TensorDictBase`. Defaults to ``True``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorClass
+        >>> class Pose(TensorClass):
+        ...     q: torch.Tensor
+        >>> class Obs(TensorClass):
+        ...     a: Pose
+        >>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+        >>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+        'Pose'
     """
-    tensorclass_fields = cls._tensorclass_fields
-    if tensorclass_fields and isinstance(tensordict, TensorDict):
-        keys = [
-            key
-            for key in tensorclass_fields
-            if isinstance(tensordict._get_str(key, None), TensorDictBase)
-        ]
+    # The tensorclass ops rebuild their results with _from_tensordict: their
+    # nested entries are already tensorclasses.
+    if cls._tensorclass_fields and isinstance(tensordict, TensorDict):
+        keys = _tensorclass_keys(cls, tensordict)
         if keys:
-            # Set the tensorclasses in a shallow copy: the caller's tensordict
-            # keeps its tensordict entries.
+            # The copy owns its nested TensorDicts, so the tensorclasses can be
+            # set in them, at every level, without another copy.
             is_locked = tensordict.is_locked
             tensordict = tensordict.copy()
-            for key in keys:
-                tensordict._set_str(
-                    key,
-                    tensorclass_fields[key].from_tensordict(
-                        tensordict._get_str(key, None)
-                    ),
-                    validated=True,
-                    inplace=False,
-                    non_blocking=False,
-                )
+            _set_tensorclass_entries(cls, tensordict, keys)
             if is_locked:
                 tensordict.lock_()
     return cls._from_tensordict(tensordict, non_tensordict, safe)
@@ -3152,8 +3208,14 @@ def _set(
                     return self
                 elif type_hints is None:
                     warnings.warn(type(self)._set_dict_warn_msg)
-            elif isinstance(value, TensorDictBase) and _is_tensorclass(target_cls):
-                return set_tensor(value=target_cls.from_tensordict(value))
+            elif (
+                isinstance(value, TensorDictBase)
+                and _tensorclass_annotation(target_cls) is not None
+            ):
+                # A tensordict with keys that the class does not declare is kept.
+                if _fits_tensorclass(target_cls, value):
+                    value = target_cls.from_tensordict(value)
+                return set_tensor(value=value)
             elif value is not None and issubclass(
                 target_cls, tuple(tensordict_lib.base._ACCEPTED_CLASSES)
             ):

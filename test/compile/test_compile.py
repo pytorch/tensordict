@@ -1162,17 +1162,23 @@ class TestTC:
         assert compiled.a.b == 2
         assert add_self_c(data) is not data
 
-    def test_tc_from_tensordict_nested(self, mode):
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_tc_from_tensordict_nested(self, mode, locked):
         def from_td(td):
             return MyClass.from_tensordict(td)
 
         from_td_c = torch.compile(from_td, fullgraph=True, mode=mode)
         td = MyClass(
-            a=MyClass(a=None, b=torch.zeros(())), b=torch.ones(())
+            a=MyClass(a=MyClass(a=None, b=torch.zeros(())), b=torch.zeros(())),
+            b=torch.ones(()),
         ).to_tensordict()
+        if locked:
+            td.lock_()
         compiled = from_td_c(td)
         assert isinstance(compiled.a, MyClass)
+        assert isinstance(compiled.a.a, MyClass)
         assert compiled.a.b == 0
+        assert compiled.is_locked is locked
         assert isinstance(td["a"], TensorDict)
 
     @pytest.mark.parametrize("index_type", ["slice", "tensor", "int"])
