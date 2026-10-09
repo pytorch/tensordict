@@ -34,6 +34,7 @@ multithreaded save measurement for the formats that support it (memmap
 directory, consolidated, archive); note that archives are written
 sequentially and ``num_threads`` has no effect on them.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -46,7 +47,6 @@ import time
 from pathlib import Path
 
 import torch
-
 from tensordict import pack_memmap, TensorDict
 
 _has_matplotlib = importlib.util.find_spec("matplotlib") is not None

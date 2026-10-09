@@ -27,7 +27,6 @@ import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
 from functorch import FunctionalModule, FunctionalModuleWithBuffers
 from tensordict._td import TensorDict
-
 from tensordict.base import is_tensor_collection, NO_DEFAULT, TensorDictBase
 from tensordict.functional import make_tensordict
 from tensordict.nn.utils import _dispatch_td_nn_modules, _set_skip_existing_None

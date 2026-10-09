@@ -25,7 +25,6 @@ from pathlib import Path
 
 import pytest
 import torch
-
 from tensordict import MemoryMappedTensor, tensorclass
 from torch import multiprocessing as mp, nn
 

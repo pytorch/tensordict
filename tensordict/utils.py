@@ -9,7 +9,6 @@ import concurrent.futures
 import functools
 import itertools
 import logging
-
 import math
 import os
 import re
@@ -39,12 +38,10 @@ from typing import (
 import numpy as np
 import torch
 from pyvers import implement_for  # noqa: F401
-
 from tensordict import _indexing, _utils_key_json
 from tensordict._deprecation import deprecated_attributes
 from tensordict._indexing import _getitem_batch_size  # noqa: F401
 from tensordict._nestedkey import NestedKey
-
 from torch import Tensor
 from torch._C._functorch import (  # noqa: F401  # @manual=fbcode//caffe2:torch
     is_batchedtensor,
@@ -195,7 +192,7 @@ IndexType = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 DeviceType = Union[torch.device, str, int]
 
 
-_KEY_ERROR = 'key "{}" not found in {} with ' "keys {}"
+_KEY_ERROR = 'key "{}" not found in {} with keys {}'
 _LOCK_ERROR = (
     "Cannot modify locked TensorDict. For in-place modification, consider "
     "using the `set_()` method and make sure the key is present."
@@ -656,7 +653,7 @@ def _erase_cache_first(fun):
 
 _NON_STR_KEY_TUPLE_ERR = "Nested membership checks with tuples of strings is only supported when setting `include_nested=True`."
 _NON_STR_KEY_ERR = "TensorDict keys are always strings. Membership checks are only supported for strings or non-empty tuples of strings (for nested TensorDicts)"
-_GENERIC_NESTED_ERR = "Only NestedKeys are supported. Got key {}."
+_GENERIC_NESTED_ERR = "Only NestedKeys are supported: a key must be a string or a non-empty, possibly nested tuple of strings. Got key {!r}."
 
 
 class _StringKeys(KeysView):
@@ -993,7 +990,7 @@ class _ErrorInteceptor:
 
     def _add_key_to_error_msg(self, msg: str) -> str:
         if msg.startswith(self.prefix):
-            return f'{self.prefix} "{self.key}" /{msg[len(self.prefix):]}'
+            return f'{self.prefix} "{self.key}" /{msg[len(self.prefix) :]}'
         return f'{self.prefix} "{self.key}". {msg}'
 
     def __enter__(self):
@@ -2575,7 +2572,6 @@ from tensordict._utils_key_json import (  # noqa: F401
     _get_robust_key_setting_with_warning,
     _is_safe_legacy_key,
 )
-
 
 assert_allclose_td = assert_close
 
