@@ -10,15 +10,12 @@ import sys
 
 import pytest
 import torch
-
 from tensordict import TensorDict, TensorDictParams
-
 from tensordict.nn import (
     CudaGraphModule,
     TensorDictModule as Mod,
     TensorDictSequential as Seq,
 )
-
 
 sys.setrecursionlimit(10000)
 

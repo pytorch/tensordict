@@ -8,7 +8,6 @@ import argparse
 
 import pytest
 import torch
-
 from tensordict import tensorclass
 
 
