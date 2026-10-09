@@ -90,12 +90,15 @@ else:
 @dataclasses.dataclass(kw_only=True)
 class _TensorClassInitArgs:
     # Gives the constructor that dataclass_transform synthesizes for each
-    # subclass its keyword-only arguments, after the fields. InitVar keeps
-    # them apart from the batch_size, device and names properties.
-    batch_size: dataclasses.InitVar[Sequence[int] | torch.Size | int | None] = None
-    device: dataclasses.InitVar[DeviceType | None] = None
-    names: dataclasses.InitVar[Sequence[str] | None] = None
-    lock: dataclasses.InitVar[bool | None] = None
+    # subclass its keyword-only arguments, after the fields. These are plain
+    # fields, not InitVars, so that a subclass's __post_init__ need not take
+    # them: the runtime calls __post_init__() without arguments. The
+    # batch_size, device and names properties of TensorClass override them,
+    # with setters that take other types (type: ignore[override] there).
+    batch_size: Sequence[int] | torch.Size | int | None = None
+    device: DeviceType | None = None
+    names: Sequence[str] | None = None
+    lock: bool | None = None
 
 @dataclass_transform(eq_default=False)
 class TensorClass(_TensorClassInitArgs):
@@ -505,7 +508,7 @@ class TensorClass(_TensorClassInitArgs):
     def shape(self, value) -> torch.Size: ...
     @property
     def batch_size(self) -> torch.Size: ...
-    @batch_size.setter
+    @batch_size.setter  # type: ignore[override]
     def batch_size(self, new_size: Sequence[int] | torch.Size) -> None: ...
     def size(self, dim: int | None = None) -> torch.Size | int: ...
     @property
@@ -698,14 +701,14 @@ class TensorClass(_TensorClassInitArgs):
     def permute(self, dims: Sequence[int]) -> Self: ...
     @property
     def names(self) -> list[str]: ...
-    @names.setter
+    @names.setter  # type: ignore[override]
     def names(self, value: Sequence[str]) -> None: ...
     def refine_names(self, *names: str) -> Self: ...
     def rename(self, *names: str, **rename_map: str) -> Self: ...
     def rename_(self, *names: str, **rename_map: str) -> Self: ...
     @property
     def device(self) -> torch.device | None: ...
-    @device.setter
+    @device.setter  # type: ignore[override]
     def device(self, value: DeviceType) -> torch.device | None: ...
     def clear(self) -> Self: ...
     def clear_refs_for_compile_(self) -> Self: ...

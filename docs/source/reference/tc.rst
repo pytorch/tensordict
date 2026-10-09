@@ -437,25 +437,6 @@ The constructor casts lists, NumPy arrays and Python numbers passed to a
 ``torch.Tensor`` field, but a type checker expects a tensor there: pass
 ``torch.as_tensor(value)``.
 
-The stubs declare ``batch_size``, ``device``, ``names`` and ``lock`` as
-``dataclasses.InitVar`` fields, so type checkers expect ``__post_init__`` to
-take them as arguments. The constructor calls ``__post_init__()`` without
-arguments; give it a ``*args`` parameter so that the type checkers and the
-runtime agree:
-
-.. code-block::
-
-  >>> class Checked(TensorClass):
-  ...     a: torch.Tensor
-  ...
-  ...     def __post_init__(self, *args: object) -> None:
-  ...         self.a = self.a.float()
-
-With ``def __post_init__(self) -> None``, mypy reports ``Signature of
-"__post_init__" incompatible with supertype "dataclass"`` and pyright reports
-``Dataclass __post_init__ incorrect parameter count``; pyright also reports
-``def __post_init__(self)`` without annotations.
-
 Mypy reports any ``frozen=True`` tensorclass as "Frozen dataclass cannot
 inherit from a non-frozen dataclass".
 

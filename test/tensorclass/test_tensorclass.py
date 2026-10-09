@@ -395,6 +395,8 @@ ignore_missing_imports = True
         assert not stderr, stderr
         return [line for line in stdout.splitlines() if line.startswith("user.py:")]
 
+    # The runtime calls __post_init__() without arguments, so a plain
+    # __post_init__(self) must type-check.
     valid = """import torch
 from tensordict import TensorClass
 
@@ -408,7 +410,7 @@ class Child(Obs):
 class Post(TensorClass):
     a: torch.Tensor
 
-    def __post_init__(self, *args: object) -> None: ...
+    def __post_init__(self) -> None: ...
 
 t = torch.Tensor()
 Obs(t, "s", batch_size=[3], device="cpu", names=["n"], lock=False)
@@ -424,11 +426,6 @@ from tensordict import TensorClass
 class Obs(TensorClass):
     a: torch.Tensor
 
-class Post(TensorClass):
-    a: torch.Tensor
-
-    def __post_init__(self) -> None: ...
-
 Obs(batch_size=[3])
 Obs(a="not a tensor")
 Obs(a=torch.Tensor(), extra=1)
@@ -439,9 +436,6 @@ Obs(a=torch.Tensor(), non_blocking=True)
     assert 'incompatible type "str"' in errors
     assert 'Unexpected keyword argument "extra"' in errors
     assert 'Unexpected keyword argument "non_blocking"' in errors
-    # The InitVars make type checkers expect __post_init__ to take them,
-    # although the constructor calls __post_init__() without arguments.
-    assert 'Signature of "__post_init__" incompatible with supertype' in errors
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
