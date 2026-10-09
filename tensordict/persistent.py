@@ -66,6 +66,8 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
+__all__ = ["PersistentTensorDict"]
+
 
 class _Visitor:
     def __init__(self, fun=None):

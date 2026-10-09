@@ -4,16 +4,25 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import ast
 import collections
+import importlib
+import inspect
+import pkgutil
 import random
+import re
 import sys
+import types
+from pathlib import Path
 
 import numpy as np
 import pytest
+import tensordict
 import tensordict._td
 import torch
 from _utils_internal import get_available_devices
 from tensordict import (
+    _deprecation,
     lazy_stack,
     tensorclass,
     TensorDict,
@@ -21,7 +30,6 @@ from tensordict import (
     unravel_key,
     unravel_key_list,
 )
-from tensordict._indexing import _traceable_slice_length
 from tensordict.utils import (
     _check_recursive_properties,
     _get_shared_executor,
@@ -191,18 +199,6 @@ def test_getitem_batch_size_ellipsis(index):
     # the Ellipsis does not need to be converted first
     tensor = torch.zeros(3, 4, 5)
     assert _getitem_batch_size(tensor.shape, index) == tensor[index].shape
-
-
-def test_traceable_slice_length():
-    # what torch.compile uses instead of slice.indices
-    for size in range(5):
-        for start in (None, *range(-6, 7)):
-            for stop in (None, *range(-6, 7)):
-                for step in (None, -2, -1, 1, 2, 3):
-                    index = slice(start, stop, step)
-                    assert _traceable_slice_length(index, size) == len(
-                        range(size)[index]
-                    ), (index, size)
 
 
 @pytest.fixture
@@ -558,6 +554,91 @@ def test_C_module_is_deprecated():
     assert _C.unravel_keys(("a", ("b",))) == ("a", "b")
 
 
+class TestDeprecationHelpers:
+    def test_warn_deprecated(self):
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^old\(\) is deprecated and will be removed in TensorDict 0\.17\. "
+            r"Use new\(\) instead\.$",
+        ) as record:
+            _deprecation.warn_deprecated(
+                "old()", removal="0.17", replacement="new()", stacklevel=1
+            )
+        assert record[0].filename == __file__
+
+    def test_deprecated(self):
+        @_deprecation.deprecated("old()", removal="0.17")
+        def old(x):
+            """Adds one."""
+            return x + 1
+
+        assert old.__name__ == "old"
+        assert old.__doc__ == "Adds one."
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^old\(\) is deprecated and will be removed in TensorDict 0\.17\.$",
+        ) as record:
+            assert old(1) == 2
+        # The warning points to the caller of the deprecated function.
+        assert record[0].filename == __file__
+
+    def test_deprecated_attributes(self):
+        module = types.ModuleType("mod")
+        module.__getattr__ = _deprecation.deprecated_attributes(
+            "mod", {"old": (1, "mod.new")}, removal="0.17"
+        )
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^mod\.old is deprecated and will be removed in TensorDict 0\.17\. "
+            r"Use mod\.new instead\.$",
+        ) as record:
+            assert module.old == 1
+        assert record[0].filename == __file__
+        with pytest.raises(
+            AttributeError, match="module 'mod' has no attribute 'other'"
+        ):
+            module.other
+
+
+def _version_tuple(version):
+    return tuple(int(part) for part in version.split(".")[:2])
+
+
+def test_deprecation_deadlines():
+    # Every deprecation names the release that removes it, either as the
+    # removal= argument of a tensordict._deprecation helper or as "removed in
+    # TensorDict X.Y" in a message or docstring. Once version.txt reaches that
+    # release, the deprecated code has to go.
+    package = Path(tensordict.__file__).parent
+    version_file = package.parent / "version.txt"
+    if not version_file.exists():
+        pytest.skip("version.txt is only available in a source checkout")
+    current = _version_tuple(version_file.read_text().strip())
+    overdue = []
+    for path in sorted(package.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if (
+                isinstance(node, ast.keyword)
+                and node.arg == "removal"
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            ):
+                versions = [node.value.value]
+            elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+                versions = re.findall(r"removed in TensorDict (\d+\.\d+)", node.value)
+            else:
+                continue
+            overdue.extend(
+                f"{path.relative_to(package.parent)}:{node.lineno}: {version}"
+                for version in versions
+                if _version_tuple(version) <= current
+            )
+    assert not overdue, (
+        f"version.txt is {'.'.join(map(str, current))}; remove these deprecations:\n"
+        + "\n".join(overdue)
+    )
+
+
 @pytest.mark.parametrize("key", ("tensor1", "tensor3"))
 @pytest.mark.parametrize("dim", (0, 1, -1, -2))
 def test_isin_1dim(key, dim):
@@ -770,6 +851,118 @@ def test_get_shared_executor():
     td = TensorDict({"a": torch.zeros(2), "b": torch.ones(3)})
     td.consolidate(num_threads=2)
     assert executor.submit(lambda: 2).result() == 2
+
+
+# Modules that another change turns into deprecated shims over private modules.
+_NOT_PUBLIC_MODULES = {"tensordict.tabular", "tensordict.testing"}
+
+# Public functions and classes that other changes of the API cleanup remove or
+# make private, and so are left out of ``__all__``. Remove the entries as those
+# changes land; entries for names that no longer exist are ignored.
+_NOT_IN_ALL_PENDING = {
+    "tensordict.base": {"from_list"},
+    "tensordict.memmap": {"implements_for_memmap"},
+    "tensordict.nn.distributions.continuous": {"NormalParamWrapper"},
+    "tensordict.nn.functional_modules": {
+        "extract_weights_and_buffers",
+        "get_functional",
+        "is_functional",
+        "make_functional",
+        "repopulate_module",
+        "set_tensor",
+        "set_tensor_dict",
+    },
+    "tensordict.nn.params": {"implements_for_tdparam"},
+    "tensordict.nn.utils": {"StrEnum"},
+    "tensordict.utils": {
+        "BufferLegacy",
+        "KeyDependentDefaultDict",
+        "cache",
+        "erase_cache",
+        "get_json_backend",
+        "infer_size_impl",
+        "int_generator",
+        "is_namedtuple",
+        "is_namedtuple_class",
+        "is_nested_key",
+        "is_seq_of_nested_key",
+        "json_dumps",
+        "lock_blocked",
+        "prod",
+        "set_json_backend",
+        "strtobool",
+        "unravel_keys",
+    },
+}
+
+# Public functions and classes that stay out of ``__all__`` on purpose.
+_NOT_IN_ALL = {
+    # Python < 3.11 has no typing.dataclass_transform, so these modules define a
+    # fallback with that name. On Python >= 3.11 the name is imported from typing.
+    "tensordict.tensorclass": {"dataclass_transform"},
+    "tensordict.typedtensordict": {"dataclass_transform"},
+    # The names in ``discrete.__all__`` are the classes of
+    # ``tensordict.nn.distributions.distributions_maps``. rand_one_hot is
+    # public through ``tensordict.nn``.
+    "tensordict.nn.distributions.discrete": {"rand_one_hot"},
+}
+
+
+def _public_module_names(package=tensordict):
+    yield package.__name__
+    for info in pkgutil.iter_modules(package.__path__, package.__name__ + "."):
+        if info.name.rsplit(".", 1)[-1].startswith("_"):
+            continue
+        if info.name in _NOT_PUBLIC_MODULES:
+            continue
+        if info.ispkg:
+            yield from _public_module_names(importlib.import_module(info.name))
+        else:
+            yield info.name
+
+
+@pytest.mark.parametrize("module_name", sorted(_public_module_names()))
+def test_public_module_all(module_name):
+    # Import by name: ``tensordict.memmap`` and ``tensordict.tensorclass`` are
+    # a function and a decorator as attributes of the package.
+    module = importlib.import_module(module_name)
+    namespace = vars(module)
+    assert "__all__" in namespace, f"{module_name} does not define __all__"
+    module_all = namespace["__all__"]
+    assert isinstance(module_all, (list, tuple))
+    assert all(isinstance(name, str) for name in module_all)
+    assert len(set(module_all)) == len(module_all), "__all__ has duplicates"
+    # A name served by a module __getattr__ is not in vars(module).
+    undefined = [name for name in module_all if name not in namespace]
+    assert not undefined, f"{module_name}.__all__ lists undefined names: {undefined}"
+    exempt = _NOT_IN_ALL_PENDING.get(module_name, set()) | _NOT_IN_ALL.get(
+        module_name, set()
+    )
+    missing = sorted(
+        name
+        for name, obj in namespace.items()
+        if not name.startswith("_")
+        and (inspect.isfunction(obj) or inspect.isclass(obj))
+        and obj.__module__ == module_name
+        and name not in module_all
+        and name not in exempt
+    )
+    assert not missing, f"{module_name}.__all__ misses public names: {missing}"
+
+
+def test_public_module_names():
+    module_names = set(_public_module_names())
+    for module_name in (
+        "tensordict",
+        "tensordict.memmap",
+        "tensordict.nn.distributions.truncated_normal",
+        "tensordict.prototype.fx",
+        "tensordict.tensorclass",
+    ):
+        assert module_name in module_names
+    assert not any(
+        part.startswith("_") for name in module_names for part in name.split(".")
+    )
 
 
 if __name__ == "__main__":

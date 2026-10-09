@@ -66,6 +66,42 @@ if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
     from tensordict.tensorclass import NonTensorStack
 
+__all__ = [
+    # Types
+    "DeviceType",
+    "IndexType",
+    "NestedKey",
+    # Classes
+    "Buffer",
+    "LinkedList",
+    "TensorDictFuture",
+    "timeit",
+    # Functions
+    "assert_allclose_td",
+    "assert_close",
+    "expand_as_right",
+    "expand_right",
+    "is_non_tensor",
+    "is_tensorclass",
+    "isin",
+    "parse_tensor_dict_string",
+    "print_directory_tree",
+    "remove_duplicates",
+    "unravel_key",
+    "unravel_key_list",
+    # Configuration
+    "capture_non_tensor_stack",
+    "get_printoptions",
+    "lazy_legacy",
+    "list_to_stack",
+    "set_capture_non_tensor_stack",
+    "set_lazy_legacy",
+    "set_list_to_stack",
+    "set_printoptions",
+    # Logging
+    "logger",
+]
+
 
 # Utility function to wrap C++ functorch functions for torch.compile support
 def _wrap_functorch_function(func):
@@ -716,7 +752,7 @@ def erase_cache(fun):
 
 _NON_STR_KEY_TUPLE_ERR = "Nested membership checks with tuples of strings is only supported when setting `include_nested=True`."
 _NON_STR_KEY_ERR = "TensorDict keys are always strings. Membership checks are only supported for strings or non-empty tuples of strings (for nested TensorDicts)"
-_GENERIC_NESTED_ERR = "Only NestedKeys are supported. Got key {}."
+_GENERIC_NESTED_ERR = "Only NestedKeys are supported: a key must be a string or a non-empty, possibly nested tuple of strings. Got key {!r}."
 
 
 class _StringKeys(KeysView):

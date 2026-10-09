@@ -117,6 +117,9 @@ Options and utilities:
 - `_contextlib.py`: decorator context managers, and `LAST_OP_MAPS`, the
   functions that undo an operation at the end of a `with` block, as in
   `with td.permute(1, 0) as tdp:`.
+- `_deprecation.py`: the helpers that deprecate a function, a method, a
+  property or a module attribute. Each takes the release that removes the
+  name, and `test_deprecation_deadlines` fails once `version.txt` reaches it.
 - `_ucxx.py`: `TensorDictPipe` and `TensorDictServer`, transport over UCXX.
 - `prototype/fx.py`: `symbolic_trace` for tensordict modules.
 - `testing.py`: tensorclasses that the distributed tests import by name.
