@@ -1395,12 +1395,17 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                         if isinstance(sample, torch.Tensor):
                             sample = [sample]
                         td_copy.update(dict(_zip_strict(tdm.dist_sample_keys, sample)))
+                    elif isinstance(sample, torch.Tensor):
+                        # A nested sequence with return_composite=False gives the
+                        # distribution of its last module, whose keys come first in
+                        # dist_sample_keys
+                        td_copy.set(tdm.dist_sample_keys[0], sample)
                     else:
                         td_copy.update(sample)
                 if isinstance(dist, CompositeDistribution):
                     dists.update(dict(dist))
                 else:
-                    dists[tdm.out_keys[0]] = dist
+                    dists[tdm.dist_sample_keys[0]] = dist
             else:
                 td_copy = tdm(td_copy)
         if len(dists) == 0:
