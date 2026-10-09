@@ -68,6 +68,7 @@ from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
     _canonicalize_tensor,
+    _cast_scalar,
     _check_is_flatten,
     _check_is_unflatten,
     _get_shape_from_args,
@@ -1128,6 +1129,13 @@ class LazyStackedTensorDict(TensorDictBase):
         )
 
     def _set_at_str(self, key, value, index, *, validated, non_blocking: bool):
+        if not validated and not self._is_vmapped and isinstance(value, numbers.Number):
+            # each member writes a Python scalar in the dtype of its entry, as
+            # torch does
+            self._set_at_members(
+                key, value, index, validated=False, non_blocking=non_blocking
+            )
+            return self
         if not validated:
             value = self._validate_value(
                 value, check_shape=False, non_blocking=non_blocking
@@ -1151,7 +1159,18 @@ class LazyStackedTensorDict(TensorDictBase):
                 # the value is written to each entry of the nested tensordicts
                 self._get_str(key, NO_DEFAULT)[index] = value
                 return self
-            ndim = len(batch_size) + entry.ndim - entry_batch_dims
+            feature_ndim = entry.ndim
+            if not _is_unbatched(entry):
+                feature_ndim -= entry_batch_dims
+            if value.numel() == 1 or value.ndim <= feature_ndim:
+                # The value is the same for every element, so each member
+                # writes it as it is, as torch does. torch casts a value of one
+                # element to the dtype of the entry, but not an expanded one.
+                self._set_at_members(
+                    key, value, index, validated=validated, non_blocking=non_blocking
+                )
+                return self
+            ndim = len(batch_size) + feature_ndim
             # torch ignores the leading dims of size 1 of a value
             while value.ndim > ndim and value.shape[0] == 1:
                 value = value.squeeze(0)
@@ -1166,6 +1185,17 @@ class LazyStackedTensorDict(TensorDictBase):
                 non_blocking=non_blocking,
             )
         return self
+
+    def _set_at_members(self, key, value, index, *, validated, non_blocking: bool):
+        """Write ``value``, the same for every element, at ``index`` of each member that the index reaches."""
+        for member, member_index, _ in self._split_index(index).parts:
+            self.tensordicts[member]._set_at_str(
+                key,
+                value,
+                () if member_index is None else member_index,
+                validated=validated,
+                non_blocking=non_blocking,
+            )
 
     def _member_entry(self, key: str):
         """The entry ``key`` of the first member that has it and the batch dims of that member, or ``(None, None)``."""
@@ -4169,7 +4199,9 @@ class _CustomOpTensorDict(TensorDictBase):
             )
         if not validated:
             value = self._validate_value(
-                value, check_shape=False, non_blocking=non_blocking
+                _cast_scalar(value, transformed_tensor),
+                check_shape=False,
+                non_blocking=non_blocking,
             )
 
         transformed_tensor[idx] = value

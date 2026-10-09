@@ -61,6 +61,7 @@ from tensordict.utils import (
     _BatchedUninitializedBuffer,
     _BatchedUninitializedParameter,
     _canonicalize_tensor,
+    _cast_scalar,
     _CHECK_INVARIANTS,
     _check_invariants,
     _clone_value,
@@ -1438,12 +1439,21 @@ class TensorDict(TensorDictBase):
     )
 
     def _set_at_str(self, key, value, idx, *, validated, non_blocking: bool):
+        tensor_in = self._get_str(key, NO_DEFAULT)
         if not validated:
+            if (
+                isinstance(value, Number)
+                and is_tensor_collection(tensor_in)
+                and not is_non_tensor(tensor_in)
+            ):
+                # each entry of the nested tensordict casts the scalar
+                tensor_in[idx] = value
+                return self
+            value = _cast_scalar(value, tensor_in)
             value = self._validate_value(
                 value, check_shape=False, non_blocking=non_blocking
             )
             validated = True
-        tensor_in = self._get_str(key, NO_DEFAULT)
 
         if is_non_tensor(value) and not (self._is_shared or self._is_memmap):
             if isinstance(idx, tuple) and len(idx) == 1:
@@ -2911,7 +2921,9 @@ class _SubTensorDict(TensorDictBase):
         tensor_in = self._get_str(key, NO_DEFAULT)
         if not validated:
             value = self._validate_value(
-                value, check_shape=False, non_blocking=non_blocking
+                _cast_scalar(value, tensor_in),
+                check_shape=False,
+                non_blocking=non_blocking,
             )
             validated = True
         if isinstance(idx, tuple) and len(idx) and isinstance(idx[0], tuple):

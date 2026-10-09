@@ -21,6 +21,7 @@ from tensordict import (
     NonTensorStack,
     TensorClass,
     TensorDict,
+    UnbatchedTensor,
 )
 from tensordict._reductions import _reduce_td
 from tensordict._torch_func import _stack as stack_td
@@ -1006,6 +1007,8 @@ class TestLazyStackedTensorDict:
         dense = TensorDict(
             {
                 "a": torch.arange(24.0).view(3, 4, 2),
+                # torch casts a written scalar to the dtype of the entry
+                "c": torch.arange(24).view(3, 4, 2),
                 "nested": {"b": torch.arange(48.0).view(3, 4, 2, 2)},
             },
             [3, 4, 2],
@@ -1034,6 +1037,20 @@ class TestLazyStackedTensorDict:
             lazy.update_at_(value, index)
             dense.update_at_(value, index)
         assert (lazy.to_tensordict() == dense).all()
+
+    def test_lazy_setitem_scalar_unbatched(self):
+        # each member writes a scalar as it is, also into an entry that the
+        # batch dims don't index
+        tds = [
+            TensorDict({"a": torch.zeros(2), "u": UnbatchedTensor(torch.zeros(5))}, [2])
+            for _ in range(3)
+        ]
+        lazy = lazy_stack(tds)
+        lazy[1] = 5.0
+        lazy[[0, 2]] = torch.tensor(4.0)
+        for td, value in zip(tds, (4.0, 5.0, 4.0)):
+            assert (td["a"] == value).all()
+            assert (td["u"] == value).all()
 
     def test_lazy_mask_indexing_single(self):
         td = LazyStackedTensorDict(
