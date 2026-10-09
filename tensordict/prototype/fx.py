@@ -15,7 +15,7 @@ from tensordict.tensordict import TensorDictBase
 from tensordict.utils import _zip_strict, NestedKey
 from torch import fx, nn
 
-__all__ = ["symbolic_trace"]
+__all__ = ["TDGraphModule", "symbolic_trace"]
 
 
 class TDGraphModule(nn.Module):

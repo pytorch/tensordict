@@ -91,6 +91,25 @@ from torch.compiler import allow_in_graph, is_compiling
 from torch.nn.parameter import Buffer, UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
+__all__ = [
+    "NO_DEFAULT",
+    "TensorDictBase",
+    "from_any",
+    "from_csv",
+    "from_dict",
+    "from_h5",
+    "from_json",
+    "from_namedtuple",
+    "from_pandas",
+    "from_parquet",
+    "from_struct_array",
+    "from_tuple",
+    "from_zarr",
+    "get_defaults_to_none",
+    "is_tensor_collection",
+    "set_get_defaults_to_none",
+]
+
 _foreach_copy_compiled = allow_in_graph(_foreach_copy_)
 
 _has_h5 = importlib.util.find_spec("h5py") is not None

@@ -69,6 +69,8 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
+__all__ = ["TensorDictParams"]
+
 
 def _apply_leaves(data, fn):
     if isinstance(data, TensorDict):

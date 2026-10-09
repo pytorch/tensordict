@@ -19,6 +19,8 @@ from torch import nn
 from torch.nn.modules.module import _global_parameter_registration_hooks
 from torch.utils._pytree import SUPPORTED_NODES
 
+__all__ = []
+
 __base__setattr__ = nn.Module.__setattr__
 
 
