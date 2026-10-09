@@ -639,8 +639,13 @@ class LazyStackedTensorDict(TensorDictBase):
         return self._batch_size_setter(new_size)
 
     @property
-    @_cache_while_locked  # noqa
     def names(self):
+        return list(self._names())
+
+    @_cache_while_locked  # noqa: B019
+    def _names(self) -> tuple[str | None, ...]:
+        # The lock cache stores a tuple so that names can return a new list:
+        # a caller that changes that list cannot change the cache.
         names = list(self.tensordicts[0].names)
         for td in self.tensordicts[1:]:
             if names != td.names:
@@ -648,7 +653,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     f"Not all dim names match, got {names} and {td.names}."
                 )
         names.insert(self.stack_dim, self._td_dim_name)
-        return names
+        return tuple(names)
 
     @names.setter
     @_erase_cache_first  # a nested lazy stacked tensordict is not apparent to the root

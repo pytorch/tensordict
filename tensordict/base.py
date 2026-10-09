@@ -3846,7 +3846,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return out
 
     @property
-    @_cache_while_locked  # noqa: B019
     def sorted_keys(self) -> list[NestedKey]:
         """Returns the keys sorted in alphabetical order.
 
@@ -3856,7 +3855,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         is unlocked for faster execution.
 
         """
-        return sorted(self.keys())
+        return list(self._sorted_keys())
+
+    @_cache_while_locked  # noqa: B019
+    def _sorted_keys(self) -> tuple[NestedKey, ...]:
+        # The lock cache stores a tuple so that sorted_keys can return a new
+        # list: a caller that changes that list cannot change the cache.
+        return tuple(sorted(self.keys()))
 
     def _transform_keys(self, key_transform: Callable[[NestedKey], NestedKey]) -> Self:
         """Transform all keys using the provided function.

@@ -1296,6 +1296,24 @@ class TestLazyStackedTensorDict:
         assert set(x.keys(include_nested=True)) == {"b", ("b", "a")}
         assert set(x.keys(include_nested=True, leaves_only=True)) == {("b", "a")}
 
+    def test_lazy_stack_names_locked_returns_new_list(self):
+        # Changing the list that names returns on a locked lazy stack must not
+        # change the lock cache (#1946).
+        lazy = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(3), batch_size=[3], names=["x"])
+                for _ in range(2)
+            ]
+        )
+        lazy.lock_()
+        names = lazy.names
+        assert names == [None, "x"]
+        names.append("z")
+        new_names = lazy.names
+        assert isinstance(new_names, list)
+        assert new_names is not names
+        assert new_names == [None, "x"]
+
     @pytest.mark.parametrize("dim", range(2))
     @pytest.mark.parametrize("index", range(2))
     @pytest.mark.parametrize("device", get_available_devices())
