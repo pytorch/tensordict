@@ -2884,7 +2884,14 @@ class TensorDict(TensorDictBase):
                     inplace=False,
                     ignore_lock=True,
                 )
-            is_diff = dest[idx].tolist() != value.tolist()
+            dest_data = dest[idx].tolist()
+            value_data = value.tolist()
+            try:
+                is_diff = bool(dest_data != value_data)
+            except Exception:
+                # Arrays, tensors and data frames compare elementwise, and the
+                # result has no single truth value: write the value anyway.
+                is_diff = True
             if is_diff:
                 dest_val = dest.maybe_to_stack()
                 dest_val[idx] = value
