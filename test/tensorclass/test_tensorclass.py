@@ -16,13 +16,14 @@ import pathlib
 import pickle
 import re
 import sys
+import textwrap
 import weakref
 from collections import UserDict
 from dataclasses import field
 from multiprocessing import Pool
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, ClassVar, Optional, Tuple, Union
+from typing import Any, ClassVar, Generic, get_origin, Optional, Tuple, TypeVar, Union
 
 import numpy as np
 import pytest
@@ -3807,6 +3808,75 @@ class TestSubClassing:
         assert is_called
         assert (s.a == 0).all()
         assert (s.b == 2).all()
+
+    # Regression test for GitHub issue #1469: the metaclass __getitem__ used to
+    # read every subscript as a list of flags, so a generic TensorClass could not
+    # be subscripted with types.
+    def test_subclassing_generic(self):
+        T = TypeVar("T")
+
+        class Base(TensorClass, Generic[T]):
+            x: torch.Tensor
+
+        class Child(Base[T]):
+            y: torch.Tensor
+
+        class Concrete(Base[int]):
+            y: torch.Tensor
+
+        class Quoted(Base["int"]):
+            y: torch.Tensor
+
+        assert get_origin(Base[int]) is Base
+        assert Child.__parameters__ == (T,)
+        assert Concrete.__orig_bases__ == (Base[int],)
+        for cls in (Child, Child[float], Concrete, Quoted):
+            obj = cls(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+            assert isinstance(obj, Base)
+            assert (obj[0].y == 1).all()
+
+        # flags still configure the class
+        class NoCast(Base["nocast"]):
+            z: int
+
+        assert isinstance(NoCast(x=torch.zeros(()), z=1).z, int)
+
+        # other subscripts of a non-generic class are rejected
+        with pytest.raises(TypeError, match="only accepts the flags"):
+            TensorClass["autocst"]
+        with pytest.raises(TypeError, match="only accepts the flags"):
+            TensorClass[int]
+
+    @pytest.mark.skipif(
+        sys.version_info < (3, 12), reason="PEP 695 syntax requires Python 3.12"
+    )
+    def test_subclassing_generic_pep695(self):
+        # exec keeps this file parseable on Python < 3.12
+        namespace = {"__name__": __name__, "TensorClass": TensorClass, "torch": torch}
+        exec(
+            textwrap.dedent(
+                """
+                class Base[T: int](TensorClass):
+                    x: torch.Tensor
+
+                class Child[T: int](Base[T]):
+                    y: torch.Tensor
+
+                class Concrete(Base[int]):
+                    y: torch.Tensor
+
+                class Quoted(Base["int"]):
+                    y: torch.Tensor
+                """
+            ),
+            namespace,
+        )
+        Base, Child = namespace["Base"], namespace["Child"]
+        assert Child.__parameters__ == Child.__type_params__
+        for cls in (Child, Child[int], namespace["Concrete"], namespace["Quoted"]):
+            obj = cls(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+            assert isinstance(obj, Base)
+            assert (obj[0].y == 1).all()
 
 
 class TestTensorOnly:
