@@ -51,7 +51,6 @@ from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorD
 from tensordict._tensorcollection import TensorCollection
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 from tensordict.base import (
-    _ACCEPTED_CLASSES,
     _GET_DEFAULTS_TO_NONE,
     _is_accepted_class,
     _is_leaf_nontensor,
@@ -2969,8 +2968,7 @@ def _set(
             elif target_cls is _AnyType and _is_castable(value_type):
                 return set_tensor()
             non_tensor = not (
-                isinstance(value, _ACCEPTED_CLASSES)
-                or _is_tensor_collection(value_type)
+                _is_accepted_class(value_type) or _is_tensor_collection(value_type)
             )
         elif (
             issubclass(value_type, torch.Tensor)
@@ -3979,7 +3977,7 @@ def _check_equal(a, b):
     # A util to check that two non-tensor data match
     #  We're replacing this by an identity match, not a value check (which will be faster and easier to handle).
     try:
-        if isinstance(a, _ACCEPTED_CLASSES) or isinstance(b, _ACCEPTED_CLASSES):
+        if _is_accepted_class(type(a)) or _is_accepted_class(type(b)):
             iseq = (a == b).all() and a.shape == b.shape
         elif isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
             iseq = (a == b).all() and a.shape == b.shape

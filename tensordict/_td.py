@@ -44,6 +44,7 @@ from tensordict.base import (
     _expand_to_match_shape,
     _foreach_copy_,
     _foreach_copy_compiled,
+    _is_accepted_class,
     _is_leaf_nontensor,
     _is_tensor_collection,
     _load_metadata,
@@ -3158,7 +3159,7 @@ class _SubTensorDict(TensorDictBase):
                 for ktu in keys_to_update
             ):
                 continue
-            if not isinstance(value, tuple(_ACCEPTED_CLASSES)):
+            if not _is_accepted_class(type(value)):
                 raise TypeError(
                     f"Expected value to be one of types {_ACCEPTED_CLASSES} "
                     f"but got {type(value)}"

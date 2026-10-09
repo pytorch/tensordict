@@ -372,6 +372,23 @@ class TestNonTensorData:
             assert torch.cat(items, out=out) is out
         assert out.tolist() == ["value"] * 4
 
+    def test_cat_non_tensor_data_of_equal_tensorclasses(self):
+        # A tensorclass defined after tensordict is imported compares like any
+        # other accepted class, so equal data stays one NonTensorData.
+        @tensorclass
+        class Data:
+            x: torch.Tensor
+
+        data = Data(x=torch.zeros(3), batch_size=[3])
+        items = [
+            NonTensorData(data, batch_size=[2]),
+            NonTensorData(data.clone(), batch_size=[2]),
+        ]
+        result = torch.cat(items)
+        assert isinstance(result, NonTensorData)
+        assert result.batch_size == (4,)
+        assert (result.data == data).all()
+
     @pytest.mark.parametrize("capture", [False, True])
     def test_cat_pads_nested_non_tensor_values(self, capture):
         with set_capture_non_tensor_stack(capture):
