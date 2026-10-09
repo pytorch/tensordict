@@ -27,6 +27,7 @@ from tensordict import (
     TensorDict,
     UnbatchedTensor,
 )
+from tensordict._utils_options import _set_capture_non_tensor_stack
 from tensordict.tensorclass import MetaData, NonTensorData, NonTensorStack
 from tensordict.utils import (
     _check_recursive_properties,
@@ -376,7 +377,7 @@ class TestNonTensorData:
         else:
             index = torch.tensor([[2, 0, 1], [1, 1, 0]])
         expected = torch.gather(torch.tensor(values), dim, index)
-        with set_capture_non_tensor_stack(capture):
+        with _set_capture_non_tensor_stack(capture):
             if layout == "lazy":
                 td = lazy_stack(
                     [
@@ -476,7 +477,7 @@ class TestNonTensorData:
         ]
         expected = torch.cat([torch.tensor(item.tolist()) for item in items], dim)
         out = NonTensorStack.from_list(torch.full_like(expected, -1).tolist())
-        with set_capture_non_tensor_stack(capture):
+        with _set_capture_non_tensor_stack(capture):
             result = torch.cat(items, dim=dim, out=out if with_out else None)
         if with_out:
             assert result is out
@@ -487,13 +488,13 @@ class TestNonTensorData:
     def test_cat_non_tensor_data_out(self, capture):
         items = [NonTensorData("value", batch_size=[2])] * 2
         out = NonTensorData("old", batch_size=[4])
-        with set_capture_non_tensor_stack(capture):
+        with _set_capture_non_tensor_stack(capture):
             assert torch.cat(items, out=out) is out
         assert out.tolist() == ["value"] * 4
 
     @pytest.mark.parametrize("capture", [False, True])
     def test_cat_pads_nested_non_tensor_values(self, capture):
-        with set_capture_non_tensor_stack(capture):
+        with _set_capture_non_tensor_stack(capture):
             batch = lazy_stack(
                 [
                     TensorDict(
@@ -710,7 +711,12 @@ class TestNonTensorData:
         assert torch.stack([non_tensor_data, non_tensor_data], 0).get_non_tensor(
             ("nested", "int")
         ) == [3, 3]
-        with set_capture_non_tensor_stack(True):
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"set_capture_non_tensor_stack\(True\) is deprecated",
+        ):
+            capture = set_capture_non_tensor_stack(True)
+        with capture:
             assert capture_non_tensor_stack()
             assert (
                 torch.stack([non_tensor_data, non_tensor_data], 0).get_non_tensor(
