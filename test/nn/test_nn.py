@@ -5280,19 +5280,10 @@ class TestTensorClassModuleForward:
 
     def test_td_forward_nested_input_extra_keys(self) -> None:
         """Test that the wrapper ignores the entries next to nested input fields."""
-
-        class NestedSumModule(TensorClassModuleBase[OutputTensorClass, AddDiffResult]):
-            def forward(self, x: OutputTensorClass) -> AddDiffResult:
-                added = x.get(("input", "a")) + x.get(("result", "added"))
-                substracted = x.get(("input", "b")) - x.get(("result", "substracted"))
-                return AddDiffResult(
-                    added=added, substracted=substracted, batch_size=x.batch_size
-                )
-
         value = TestTensorClassModule()(InputTensorClass(a=10, b=5, batch_size=[]))
         td = value.to_tensordict()
         td["other"] = torch.zeros(())
-        td_output = NestedSumModule().as_td_module()(td)
+        td_output = NestedInputModule().as_td_module()(td)
         assert td_output["added"] == 25
         assert td_output["substracted"] == 0
 
