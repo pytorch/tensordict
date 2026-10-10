@@ -55,6 +55,7 @@ from tensordict._indexing import (
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
+    _default_is_leaf,
     _is_leaf_nontensor,
     _is_tensor_collection,
     _NESTED_TENSORS_AS_LISTS,
@@ -85,6 +86,7 @@ from tensordict.utils import (
     _lock_blocked,
     _maybe_correct_neg_dim,
     _parse_to,
+    _pass_through,
     _recursive_unbind_list,
     _REPR_OPTIONS,
     _resolve_expand_shape,
@@ -166,6 +168,150 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
 
     def __repr__(self):
         return f"{type(self).__name__}({tuple(self)})"
+
+    def _iter(self) -> Iterator[str | tuple[str, ...]]:
+        if self.include_nested and not is_compiling():
+            return self._iter_nested()
+        return super()._iter()
+
+    def _iter_nested(self) -> Iterator[str | tuple[str, ...]]:
+        # A generator, so that _iter_helper() reads the members when the
+        # iteration starts
+        yield from self._iter_helper(self.tensordict)
+
+    def _iter_helper(
+        self, tensordict: T, prefix: tuple | None = None
+    ) -> Iterator[str | tuple[str, ...]]:
+        # Yields the keys that _TensorDictKeysView._iter_helper() yields. For a
+        # lazy stack of TensorDict instances, it reads the entries of the
+        # members instead of building the lazy stack of every sub-tensordict,
+        # which is most of the cost of listing nested keys.
+        if is_compiling():
+            return super()._iter_helper(tensordict, prefix)
+        if (
+            type(tensordict) is LazyStackedTensorDict
+            # _key_list() and _get_str() cache their results while locked
+            and not tensordict.is_locked
+            and tensordict._hook_out is None
+            and tensordict._hook_in is None
+            and not tensordict._is_vmapped
+            and tensordict.stack_dim >= 0
+            and all(type(td) is TensorDict for td in tensordict.tensordicts)
+        ):
+            return self._iter_members(tensordict, (), tensordict.tensordicts, prefix)
+        view = _TensorDictKeysView(
+            self.tensordict, self.include_nested, self.leaves_only, self.is_leaf
+        )
+        return view._iter_helper(tensordict, prefix)
+
+    def _iter_members(
+        self,
+        root: LazyStackedTensorDict,
+        chain: tuple[list[TensorDict], ...],
+        tensordicts: list[TensorDict],
+        prefix: tuple | None,
+    ) -> Iterator[str | tuple[str, ...]]:
+        # tensordicts are the members of the lazy stack that root._get_str()
+        # returns along prefix, or of root if chain is empty. chain holds the
+        # members of each lazy stack from root to this one, see _stack_chain.
+        leaves_only = self.leaves_only
+        is_leaf = self.is_leaf
+        keys = _shared_keys(tensordicts) if chain else root._key_list()
+        for key in keys:
+            values = [td._tensordict.get(key) for td in tensordicts]
+            # As in _maybe_get_list(), the first entry that is missing or a
+            # tensor collection decides.
+            for value in values:
+                if type(value) is not Tensor and (
+                    value is None or _is_tensor_collection(type(value))
+                ):
+                    break
+            else:
+                # _maybe_get_list() returns the list of entries
+                cls = type(values[0])
+                if cls is list:
+                    yield from self._iter_entry(key, values, prefix)
+                elif not leaves_only or is_leaf(cls):
+                    yield key if prefix is None else prefix + (key,)
+                continue
+            if value is None:
+                # _maybe_get_list() returns None
+                continue
+            full_key = (key,) if prefix is None else prefix + (key,)
+            td0 = values[0]
+            if (
+                type(td0) is TensorDict
+                and root.stack_dim <= len(td0.batch_size)
+                and all(
+                    type(td) is TensorDict
+                    and td.device == td0.device
+                    and len(td.batch_size) == len(td0.batch_size)
+                    for td in values[1:]
+                )
+            ):
+                # _get_str() would return a lazy stack of values without
+                # raising (see _reset_batch_size), and _iter_helper() would
+                # recurse into it
+                yield from self._iter_members(root, chain + (values,), values, full_key)
+                if not leaves_only or is_leaf(LazyStackedTensorDict):
+                    yield key if prefix is None else full_key
+            else:
+                value = _stack_chain(root, chain)._get_str(key, NO_DEFAULT)
+                yield from self._iter_entry(key, value, prefix)
+
+    def _iter_entry(
+        self, key: str, value: Any, prefix: tuple | None
+    ) -> Iterator[str | tuple[str, ...]]:
+        # The loop body of _TensorDictKeysView._iter_helper, for one entry
+        leaves_only = self.leaves_only
+        is_leaf = self.is_leaf
+        cls = type(value)
+        if cls is Tensor:
+            if not leaves_only or is_leaf is _default_is_leaf or is_leaf(cls):
+                yield key if prefix is None else prefix + (key,)
+            return
+        full_key = (key,) if prefix is None else prefix + (key,)
+        while cls is list:
+            value = value[0]
+            cls = type(value)
+        if _is_tensor_collection(cls):
+            if not is_non_tensor(cls) and not _pass_through(value):
+                yield from self._iter_helper(value, prefix=full_key)
+        if not leaves_only or is_leaf(cls):
+            yield key if prefix is None else full_key
+
+
+def _shared_keys(tensordicts: list[TensorDict]) -> list[str]:
+    # LazyStackedTensorDict._key_list() for members that are TensorDict
+    # instances: the keys that every member has, in the order of the first one
+    first = tensordicts[0]._tensordict.keys()
+    for td in tensordicts[1:]:
+        if td._tensordict.keys() != first:
+            shared = set(first).intersection(
+                *(td._tensordict.keys() for td in tensordicts[1:])
+            )
+            return [key for key in first if key in shared]
+    return list(first)
+
+
+def _stack_chain(
+    root: LazyStackedTensorDict, chain: tuple[list[TensorDict], ...]
+) -> LazyStackedTensorDict:
+    # The lazy stack that _get_str() returns at the end of chain, built from
+    # the entries in chain, which _iter_members read as _get_str() would have.
+    # root has no hooks and is not vmapped (see
+    # _LazyStackedTensorDictKeysView._iter_helper), so _get_str() only
+    # changes the batch size of what lazy_stack() returns.
+    node = root
+    for tensordicts in chain:
+        nested = LazyStackedTensorDict.lazy_stack(
+            tensordicts, node.stack_dim, stack_dim_name=node._td_dim_name
+        )
+        nested._batch_size = (
+            node._batch_size + nested.batch_size[len(node._batch_size) :]
+        )
+        node = nested
+    return node
 
 
 # How an index reaches the members of a lazy stack, see
@@ -2411,6 +2557,8 @@ class LazyStackedTensorDict(TensorDictBase):
     def _key_list(self):
         if not self.tensordicts:
             return []
+        if all(type(td) is TensorDict for td in self.tensordicts):
+            return _shared_keys(self.tensordicts)
         # dict.fromkeys lists the keys once: list() would call len() on the
         # keys view, which lists the keys of a lazy stack again.
         first_keys = dict.fromkeys(self.tensordicts[0].keys())
