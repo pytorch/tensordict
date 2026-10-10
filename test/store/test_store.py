@@ -1445,6 +1445,36 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    # ---- empty ----
+
+    def test_empty_recurse(self, store_kwargs):
+        """empty(recurse=True) keeps the sub-tensordicts, as on a lazy stack."""
+        tds = [
+            TensorDict(
+                {
+                    "a": torch.randn(3),
+                    "b": {"c": torch.randn(3), "d": {"e": torch.randn(3, 2)}},
+                },
+                batch_size=[3],
+            )
+            for _ in range(4)
+        ]
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            # the store and the view of one element
+            for td in (store_td, store_td[1]):
+                empty = td.empty(recurse=True)
+                assert isinstance(empty, TensorDict)
+                assert set(empty.keys(True)) == {"b", ("b", "d")}
+                assert empty.batch_size == td.batch_size
+                assert empty["b", "d"].batch_size == td.batch_size
+                assert len(td.empty().keys()) == 0
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
 
 class TestBackendParam:
     """Tests for backend parameter."""
