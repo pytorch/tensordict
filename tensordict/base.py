@@ -290,17 +290,39 @@ class _RecordDeviceTransfer:
 _device_recorder = _RecordDeviceTransfer()
 
 
+def _holds_its_tensors(td: TensorDictBase) -> bool:
+    """Returns whether ``td`` reads its entries from a ``TensorDict``, which holds its tensors.
+
+    ``TensorDictParams``, ``TypedTensorDict`` and tensorclasses read through the
+    container that they wrap. h5 files, stores, lazy stacks, sub-tensordicts
+    and lazy views build their entries again on each read.
+    """
+    from tensordict._td import TensorDict
+
+    while not isinstance(td, TensorDict):
+        from tensordict.nn.params import TensorDictParams
+        from tensordict.typedtensordict import TypedTensorDict
+
+        if isinstance(td, TensorDictParams):
+            td = td._param_td
+        elif isinstance(td, TypedTensorDict):
+            td = td._source
+        elif _is_tensorclass(type(td)):
+            td = td._tensordict
+        else:
+            return False
+    return True
+
+
 def _holds_leaves_of(td: TensorDictBase, other: TensorDictBase) -> bool:
     """Returns whether each leaf of ``other`` is the tensor that ``td`` holds under the same key.
 
-    ``td`` is read one entry at a time, so a container that reads copies from
-    its storage (h5 files, stores) stops at its first entry.
+    Only containers that hold their tensors are read (see ``_holds_its_tensors``).
+    For the others, this returns ``False`` without reading any entry.
     """
-    # Lazy stacks and views build new tensors on each read, and a lazy stack
-    # of tensors that differ in shape cannot be read at all. A TypedTensorDict
-    # reads through its _source.
-    if (td._lazy or getattr(td, "_source", td)._lazy) and not is_non_tensor(td):
-        return False
+    if not _holds_its_tensors(td):
+        # A NonTensorStack holds no tensor for the op to write into
+        return is_non_tensor(td)
     for key, value in other.items():
         held = td._get_str(key, None)
         if value is held:

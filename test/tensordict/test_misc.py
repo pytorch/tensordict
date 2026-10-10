@@ -777,12 +777,18 @@ class TestPointwiseOps:
         class TypedX(TypedTensorDict):
             x: torch.Tensor
 
-        stack, source = make_stack(), make_stack()
+        stack, source, inner_source = make_stack(), make_stack(), make_stack()
         nested = TensorDict(a=torch.zeros(2, 3), s=make_stack(), batch_size=[2, 3])
         typed = TypedX.from_tensordict(source)
-        for td in (stack, nested, typed):
+        typed_twice = TypedX.from_tensordict(TypedX.from_tensordict(inner_source))
+        for td in (stack, nested, typed, typed_twice):
             td.add_(torch.ones(2, 3))
-        for members in (stack.tensordicts, nested["s"].tensordicts, source.tensordicts):
+        for members in (
+            stack.tensordicts,
+            nested["s"].tensordicts,
+            source.tensordicts,
+            inner_source.tensordicts,
+        ):
             assert all((member["x"] == 1).all() for member in members)
         assert (nested["a"] == 1).all()
 
