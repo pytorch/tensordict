@@ -3,14 +3,13 @@
 Getting started
 ===============
 
-This page is a first tour of tensordict for a new user. It shows the core
-ideas in the order that you need them, from the first
-:class:`~tensordict.TensorDict` to saving it and using it with a model. Each
-section links to the user guide page that gives the details. All the examples
-run on a CPU. Run them in order in one Python session: later examples use the
-names that earlier ones define.
+This tour takes about one hour. It starts with your first
+:class:`~tensordict.TensorDict` and ends with saving it and passing it to a
+model. Each section links to the user guide page that gives the details.
 
-If tensordict is not installed yet, read :ref:`installation` first.
+All the examples run on a CPU. Run them in order in one Python session,
+because later examples use names that earlier ones define. If tensordict is
+not installed yet, read :ref:`installation` first.
 
 .. figure:: _static/img/tensordict.png
    :alt: A nested TensorDict in the center, with arrows to the result of
@@ -48,7 +47,7 @@ as keyword arguments or as a ``dict``. TensorDict converts NumPy arrays and
 
 A TensorDict has the methods of a Python ``dict``: ``keys``, ``values``,
 ``items``, ``get``, ``update``, ``pop``, ``setdefault`` and others. Keys are
-strings, or tuples of strings for nested entries (see below).
+strings, or tuples of strings for nested entries.
 :meth:`~tensordict.TensorDict.select` keeps some entries and
 :meth:`~tensordict.TensorDict.exclude` removes them. Both return a new
 TensorDict:
@@ -66,13 +65,14 @@ Batch size and batch dimensions
 
 Every TensorDict has a batch size, ``batch_size``: the leading dimensions that
 all its tensors share. These dimensions are the batch dimensions. The tensors
-in a TensorDict are its leaves. A leaf can have more dimensions after the
-batch dimensions, and the leaves can have different dtypes:
+of a TensorDict are its leaves. A leaf can have more dimensions after the
+batch dimensions, and the leaves can have different dtypes. This TensorDict
+holds 4 time steps of 3 sensors, with 5 channels for each reading:
 
   >>> data = TensorDict(
   ...     {
-  ...         "obs": torch.ones(3, 4, 5),
-  ...         "done": torch.zeros(3, 4, dtype=torch.bool),
+  ...         "reading": torch.ones(3, 4, 5),
+  ...         "valid": torch.zeros(3, 4, dtype=torch.bool),
   ...     },
   ...     batch_size=[3, 4],
   ... )
@@ -85,10 +85,10 @@ batch dimensions, and the leaves can have different dtypes:
 tensor that you write must be equal to ``batch_size``. If they are not,
 TensorDict raises a ``RuntimeError``:
 
-  >>> data["reward"] = torch.zeros(2)
+  >>> data["offset"] = torch.zeros(2)
   Traceback (most recent call last):
   ...
-  RuntimeError: batch dimension mismatch, got self.batch_size=torch.Size([3, 4]) and value.shape=torch.Size([2]) for key 'reward'. The leading dimensions of a value must match the batch size.
+  RuntimeError: batch dimension mismatch, got self.batch_size=torch.Size([3, 4]) and value.shape=torch.Size([2]) for key 'offset'. The leading dimensions of a value must match the batch size.
 
 If you do not give ``batch_size``, it is ``torch.Size([])``: the TensorDict has
 no batch dimensions. TensorDict does not infer the batch size from the
@@ -97,16 +97,16 @@ tensors. To infer it, use :meth:`~tensordict.TensorDict.from_dict` with
 :meth:`~tensordict.TensorDict.auto_batch_size_`. Both set the batch size to
 the leading dimensions that all the leaves share:
 
-  >>> TensorDict(obs=torch.ones(3, 4, 5)).batch_size
+  >>> TensorDict(reading=torch.ones(3, 4, 5)).batch_size
   torch.Size([])
   >>> TensorDict.from_dict(
-  ...     {"obs": torch.ones(3, 4, 5), "done": torch.zeros(3, 4)},
+  ...     {"reading": torch.ones(3, 4, 5), "valid": torch.zeros(3, 4)},
   ...     auto_batch_size=True,
   ... ).batch_size
   torch.Size([3, 4])
 
-Because a TensorDict acts like a tensor, some ``dict`` operations act on the
-batch dimensions and not on the keys:
+A TensorDict acts like a tensor, so some ``dict`` operations act on the batch
+dimensions and not on the keys:
 
 - ``for x in data`` gives the sub-TensorDicts along the first batch dimension,
   like a loop over a tensor. To iterate over the keys, use ``data.keys()``.
@@ -114,7 +114,7 @@ batch dimensions and not on the keys:
 - ``data[0]`` indexes the batch. An integer is never a key.
 - ``bool(data)`` raises a ``RuntimeError``. To test for entries, use
   ``data.is_empty()``.
-- ``"obs" in data`` tests the keys, as for a ``dict``.
+- ``"reading" in data`` tests the keys, as for a ``dict``.
 
 For the ``data`` of this section:
 
@@ -122,7 +122,7 @@ For the ``data`` of this section:
   3
   >>> [x.batch_size for x in data][0]
   torch.Size([4])
-  >>> "obs" in data
+  >>> "reading" in data
   True
 
 :ref:`batch-size` explains the batch size in detail.
@@ -136,15 +136,15 @@ return a new TensorDict, with the same operation applied to every leaf:
   >>> sub = data[..., :2]
   >>> sub.batch_size
   torch.Size([3, 2])
-  >>> sub["obs"].shape
+  >>> sub["reading"].shape
   torch.Size([3, 2, 5])
-  >>> data[0, 1]["obs"].shape
+  >>> data[0, 1]["reading"].shape
   torch.Size([5])
   >>> data.reshape(-1).batch_size
   torch.Size([12])
   >>> data.unsqueeze(-1).batch_size
   torch.Size([3, 4, 1])
-  >>> data.permute(1, 0)["obs"].shape
+  >>> data.permute(1, 0)["reading"].shape
   torch.Size([4, 3, 5])
 
 A boolean mask over the batch dimensions selects elements, as for a tensor:
@@ -156,21 +156,67 @@ A boolean mask over the batch dimensions selects elements, as for a tensor:
 To write into a part of a TensorDict, index it on the left of ``=``:
 
   >>> data[0] = TensorDict(
-  ...     obs=torch.zeros(4, 5),
-  ...     done=torch.ones(4, dtype=torch.bool),
+  ...     reading=torch.zeros(4, 5),
+  ...     valid=torch.ones(4, dtype=torch.bool),
   ...     batch_size=[4],
   ... )
-  >>> data["done"][0]
+  >>> data["valid"][0]
   tensor([True, True, True, True])
 
 :ref:`batch-size` covers indexing and the shape operations.
+
+TensorClass: the class form
+---------------------------
+
+:class:`~tensordict.TensorClass` is the class form of a TensorDict. You
+declare the fields as class annotations, like a dataclass, and you add your
+own methods. A TensorClass has the tensor behavior of a TensorDict: the batch
+size, indexing, shape operations and the batch-size check. This class holds a
+batch of images and their labels:
+
+  >>> from tensordict import TensorClass
+  >>> class Batch(TensorClass):
+  ...     image: torch.Tensor
+  ...     label: torch.Tensor
+  ...
+  ...     def select_label(self, label):
+  ...         return self[self.label == label]
+  >>> _ = torch.manual_seed(0)
+  >>> images = Batch(
+  ...     image=torch.randn(6, 3, 8, 8),
+  ...     label=torch.tensor([0, 1, 0, 2, 1, 0]),
+  ...     batch_size=[6],
+  ... )
+  >>> images.select_label(0).batch_size
+  torch.Size([3])
+  >>> type(images[0]).__name__
+  'Batch'
+  >>> images.reshape(2, 3).image.shape
+  torch.Size([2, 3, 3, 8, 8])
+
+Use a TensorDict when you do not know the keys in advance, and a
+TensorClass for a fixed set of fields. Three other containers have the same
+operations:
+
+- :class:`~tensordict.TypedTensorDict` has typed fields on a
+  ``TensorDictBase``, with ``td["key"]`` access and class inheritance to add
+  fields. :ref:`typed-tensordict-guide` explains it.
+- :class:`~tensordict.LazyStackedTensorDict` holds elements of different
+  shapes. :func:`~tensordict.lazy_stack` makes one, as the stacking section
+  below shows.
+- :class:`~tensordict.PersistentTensorDict` reads its data from an HDF5 or
+  Zarr file on disk.
+
+:ref:`tensorclass-guide` explains TensorClass, and :ref:`choosing-a-container`
+compares the containers.
 
 Nested TensorDicts and tuple keys
 ---------------------------------
 
 A TensorDict can contain other TensorDicts. A ``dict`` value becomes a nested
 TensorDict with the batch size of its parent. To read or write a nested entry,
-use a tuple of keys:
+use a tuple of keys. In reinforcement learning, for example, a nested
+``"next"`` entry holds the data of the next step:
 
   >>> data = TensorDict(
   ...     {
@@ -208,29 +254,29 @@ Devices, dtypes and arithmetic
 ------------------------------
 
 :meth:`~tensordict.TensorDict.to` moves or casts every leaf with one call. A
-dtype casts every leaf, also the integer and boolean ones. If you set ``device`` when
-you create a TensorDict, TensorDict moves each tensor that you write to that
-device:
+dtype casts every leaf, the integer and boolean ones too. If you set
+``device`` when you create a TensorDict, TensorDict moves each tensor that
+you write to that device:
 
   >>> device = "cuda" if torch.cuda.is_available() else "cpu"
-  >>> data = TensorDict(obs=torch.ones(3, 4), step=torch.arange(3), batch_size=[3])
-  >>> data.to(device)["obs"].device.type == device
+  >>> data = TensorDict(pos=torch.ones(3, 4), step=torch.arange(3), batch_size=[3])
+  >>> data.to(device)["pos"].device.type == device
   True
   >>> data.to(torch.float64)["step"].dtype
   torch.float64
   >>> on_device = TensorDict(batch_size=[3], device=device)
-  >>> on_device["obs"] = torch.ones(3, 4)
-  >>> on_device["obs"].device.type == device
+  >>> on_device["pos"] = torch.ones(3, 4)
+  >>> on_device["pos"].device.type == device
   True
 
 Arithmetic and most pointwise functions apply to every leaf. Between two
 TensorDicts, they apply to the leaves with the same key:
 
-  >>> (data * 2)["obs"][0]
+  >>> (data * 2)["pos"][0]
   tensor([2., 2., 2., 2.])
   >>> (data + data)["step"]
   tensor([0, 2, 4])
-  >>> data.abs()["obs"].shape
+  >>> data.abs()["pos"].shape
   torch.Size([3, 4])
 
 If TensorDict has no method for an operation, use
@@ -238,7 +284,7 @@ If TensorDict has no method for an operation, use
 returns a new TensorDict. ``apply_`` writes the results into the same
 TensorDict:
 
-  >>> data.apply(lambda x: x.float().mean(-1) if x.ndim > 1 else x)["obs"]
+  >>> data.apply(lambda x: x.float().mean(-1) if x.ndim > 1 else x)["pos"]
   tensor([1., 1., 1.])
 
 :ref:`devices` explains devices, dtypes and ``non_blocking`` copies.
@@ -251,32 +297,33 @@ Stacking and concatenation
 stack or concatenate each leaf, and add or extend a batch dimension:
 
   >>> samples = [
-  ...     TensorDict(obs=torch.ones(4), reward=torch.zeros(()), batch_size=[])
+  ...     TensorDict(features=torch.ones(4), target=torch.zeros(()), batch_size=[])
   ...     for _ in range(3)
   ... ]
   >>> batch = torch.stack(samples)
   >>> batch.batch_size
   torch.Size([3])
-  >>> batch["obs"].shape
+  >>> batch["features"].shape
   torch.Size([3, 4])
   >>> torch.cat([batch, batch]).batch_size
   torch.Size([6])
 
-:func:`torch.stack` needs leaves with the same shape. If the shapes are not
-the same, use :func:`~tensordict.lazy_stack`. It keeps the TensorDicts as a
-list, in a :class:`~tensordict.LazyStackedTensorDict`, and stacks a leaf only
-when you read it. To read a leaf with different shapes, ask for a list or a
-padded tensor:
+:func:`torch.stack` needs leaves with the same shape. For data of different
+sizes, such as sentences or DNA reads of different lengths, use
+:func:`~tensordict.lazy_stack`. It keeps the TensorDicts as a list, in a
+:class:`~tensordict.LazyStackedTensorDict`, and stacks a leaf only when you
+read it. To read a leaf with different shapes, ask for a list or a padded
+tensor:
 
   >>> from tensordict import lazy_stack
-  >>> ragged = lazy_stack([TensorDict(obs=torch.ones(2)), TensorDict(obs=torch.ones(5))])
+  >>> ragged = lazy_stack([TensorDict(tokens=torch.arange(n)) for n in (2, 5)])
   >>> ragged.batch_size
   torch.Size([2])
-  >>> ragged[1]["obs"].shape
+  >>> ragged[1]["tokens"].shape
   torch.Size([5])
-  >>> [x.shape for x in ragged.get("obs", as_list=True)]
+  >>> [x.shape for x in ragged.get("tokens", as_list=True)]
   [torch.Size([2]), torch.Size([5])]
-  >>> ragged.get("obs", as_padded_tensor=True).shape
+  >>> ragged.get("tokens", as_padded_tensor=True).shape
   torch.Size([2, 5])
 
 :ref:`stacking` explains lazy stacks and the other ways to store data of
@@ -288,7 +335,7 @@ Non-tensor data
 A TensorDict can also hold values that are not tensors, such as strings.
 Reading one returns the value:
 
-  >>> data = TensorDict(obs=torch.ones(3), batch_size=[3])
+  >>> data = TensorDict(weight=torch.ones(3), batch_size=[3])
   >>> data["label"] = "cat"
   >>> data["label"]
   'cat'
@@ -321,17 +368,17 @@ are other names for the same two methods:
   >>> import tempfile
   >>> tmpdir = tempfile.TemporaryDirectory()
   >>> data = TensorDict(
-  ...     obs=torch.arange(6).reshape(3, 2),
-  ...     next=TensorDict(obs=torch.zeros(3, 2), batch_size=[3]),
+  ...     pos=torch.arange(6).reshape(3, 2),
+  ...     meta=TensorDict(scale=torch.zeros(3, 2), batch_size=[3]),
   ...     batch_size=[3],
   ... )
   >>> _ = data.memmap(tmpdir.name)
   >>> loaded = TensorDict.load_memmap(tmpdir.name)
   >>> loaded.batch_size
   torch.Size([3])
-  >>> loaded["obs"][1]
+  >>> loaded["pos"][1]
   MemoryMappedTensor([2, 3])
-  >>> loaded["next", "obs"].shape
+  >>> loaded["meta", "scale"].shape
   torch.Size([3, 2])
   >>> tmpdir.cleanup()
 
@@ -353,21 +400,21 @@ still write new values into the existing tensors with
 :meth:`~tensordict.TensorDict.set_` and :meth:`~tensordict.TensorDict.update_`.
 These methods copy the values into the same storage:
 
-  >>> data = TensorDict(obs=torch.zeros(3), batch_size=[3]).lock_()
-  >>> data["reward"] = torch.ones(3)
+  >>> data = TensorDict(pos=torch.zeros(3), batch_size=[3]).lock_()
+  >>> data["vel"] = torch.ones(3)
   Traceback (most recent call last):
   ...
   RuntimeError: Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method and make sure the key is present.
-  >>> _ = data.set_("obs", torch.ones(3))
-  >>> data["obs"]
+  >>> _ = data.set_("pos", torch.ones(3))
+  >>> data["pos"]
   tensor([1., 1., 1.])
 
 ``memmap`` and ``consolidate`` return a locked TensorDict.
-:meth:`~tensordict.TensorDict.unlock_` unlocks it. Use it as a context manager
-to unlock a TensorDict for some lines only:
+:meth:`~tensordict.TensorDict.unlock_` unlocks it. To unlock a TensorDict for
+some lines only, use ``unlock_`` as a context manager:
 
   >>> with data.unlock_():
-  ...     data["reward"] = torch.ones(3)
+  ...     data["vel"] = torch.ones(3)
   >>> data.is_locked
   True
 
@@ -394,11 +441,10 @@ restores the original parameters:
   >>> out
   tensor([0., 0.], grad_fn=<ViewBackward0>)
 
-Because each leaf has its own file, you can save the parameters with
-``memmap`` and load the parameters of one submodule only, from its
-subdirectory. To load memory-mapped parameters into a model, pass
-``inplace=True``. ``to_module`` then copies the values into the parameters of
-the model:
+Each leaf has its own file, so you can save the parameters with ``memmap``
+and load the parameters of one submodule only, from its subdirectory. To
+load memory-mapped parameters into a model, pass ``inplace=True``.
+``to_module`` then copies the values into the parameters of the model:
 
   >>> tmpdir = tempfile.TemporaryDirectory()
   >>> _ = params.memmap(tmpdir.name)
@@ -421,70 +467,19 @@ inputs from a TensorDict and writes its outputs into the same TensorDict.
 :class:`~tensordict.nn.TensorDictSequential` chains such modules:
 
   >>> from tensordict.nn import TensorDictModule, TensorDictSequential
-  >>> policy = TensorDictSequential(
-  ...     TensorDictModule(nn.Linear(3, 8), in_keys=["obs"], out_keys=["hidden"]),
-  ...     TensorDictModule(nn.Linear(8, 2), in_keys=["hidden"], out_keys=["action"]),
+  >>> net = TensorDictSequential(
+  ...     TensorDictModule(nn.Linear(3, 8), in_keys=["features"], out_keys=["hidden"]),
+  ...     TensorDictModule(nn.Linear(8, 2), in_keys=["hidden"], out_keys=["logits"]),
   ... )
-  >>> batch = TensorDict(obs=torch.randn(4, 3), batch_size=[4])
-  >>> _ = policy(batch)
-  >>> batch["action"].shape
+  >>> batch = TensorDict(features=torch.randn(4, 3), batch_size=[4])
+  >>> _ = net(batch)
+  >>> batch["logits"].shape
   torch.Size([4, 2])
 
-Because the model and the loss read and write the same TensorDict, one
-training loop works for data with different keys. :ref:`modules-guide`
-explains ``tensordict.nn``. :ref:`compile` covers ``torch.compile`` and
+The model and the loss read and write the same TensorDict, so one training
+loop works for data with different keys. :ref:`modules-guide` explains
+``tensordict.nn``. :ref:`compile` covers ``torch.compile`` and
 ``torch.vmap`` with parameter TensorDicts.
-
-Which container to use
-----------------------
-
-:class:`~tensordict.TensorDict` accepts any key. tensordict has other
-containers with the same operations:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 30 70
-
-   * - Container
-     - Use it when
-   * - :class:`~tensordict.TensorDict`
-     - The keys change from one program to the next, or you do not know them
-       in advance.
-   * - :class:`~tensordict.TensorClass`
-     - You want a fixed set of named fields, with types and your own methods,
-       like a dataclass.
-   * - :class:`~tensordict.TypedTensorDict`
-     - You want typed fields on a ``TensorDictBase``, with ``td["key"]``
-       access and class inheritance to add fields.
-   * - :class:`~tensordict.LazyStackedTensorDict`
-     - The elements of a batch have different shapes. ``lazy_stack`` makes
-       one.
-   * - :class:`~tensordict.PersistentTensorDict`
-     - The data is in an HDF5 or Zarr file, and you read it from disk.
-
-A :class:`~tensordict.TensorClass` declares its fields as class annotations:
-
-  >>> from tensordict import TensorClass
-  >>> class Batch(TensorClass):
-  ...     image: torch.Tensor
-  ...     label: torch.Tensor
-  ...
-  ...     def select_label(self, label):
-  ...         return self[self.label == label]
-  >>> _ = torch.manual_seed(0)
-  >>> images = Batch(
-  ...     image=torch.randn(6, 3, 8, 8),
-  ...     label=torch.tensor([0, 1, 0, 2, 1, 0]),
-  ...     batch_size=[6],
-  ... )
-  >>> images.select_label(0).batch_size
-  torch.Size([3])
-  >>> images.reshape(2, 3).image.shape
-  torch.Size([2, 3, 3, 8, 8])
-
-:ref:`choosing-a-container` compares the containers.
-:ref:`tensorclass-guide` and :ref:`typed-tensordict-guide` explain the two
-typed containers.
 
 Next steps
 ----------

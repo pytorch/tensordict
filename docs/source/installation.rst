@@ -3,48 +3,35 @@
 Installation
 ============
 
-This page tells you how to install tensordict: a release from PyPI or
-conda-forge, a nightly build, or the source code. It also lists the optional
-dependencies, and the tensordict version to use with TorchRL.
-
-Requirements
-------------
-
-tensordict requires Python 3.10 or later and PyTorch 2.13 or later. Each
-change to tensordict is tested with PyTorch 2.13, with the latest PyTorch
-release and with PyTorch nightly, on Python 3.10 to 3.14.
-
-tensordict is pure Python: it has no compiled extension. Install PyTorch
-first if you need a specific build of it, for example for CUDA or for a
-CPU-only machine. The `PyTorch Get Started page
-<https://pytorch.org/get-started/locally/>`__ gives the command for each
-build. If PyTorch is not installed, ``pip`` installs the default build from
-PyPI with tensordict.
-
-The other runtime dependencies are ``numpy``, ``cloudpickle``, ``packaging``,
-``pyvers`` and, on Python 3.12 and earlier, ``orjson``. ``pip`` and ``conda``
-install them with tensordict.
-
-Install a release
------------------
-
-With pip:
+Install the latest release from PyPI:
 
 .. code-block:: bash
 
    pip install tensordict
 
-With conda, from the conda-forge channel:
-
-.. code-block:: bash
-
-   conda install -c conda-forge tensordict
-
-To make sure that tensordict is installed, print its version:
+tensordict needs Python 3.10+ and PyTorch 2.13+. To make sure that the
+install worked, print the version:
 
 .. code-block:: bash
 
    python -c "import tensordict; print(tensordict.__version__)"
+
+Requirements
+------------
+
+tensordict is pure Python: it has no compiled extension. Each change is
+tested with PyTorch 2.13, the latest PyTorch release and PyTorch nightly, on
+Python 3.10 to 3.14 and the free-threaded 3.14t.
+
+If PyTorch is not installed, ``pip`` installs the default build from PyPI
+with tensordict. If you need a specific build, for example for CUDA or for a
+CPU-only machine, install PyTorch first. The `PyTorch Get Started page
+<https://pytorch.org/get-started/locally/>`__ gives the command for each
+build.
+
+The other runtime dependencies are ``numpy``, ``cloudpickle``, ``packaging``,
+``pyvers`` and, before Python 3.13, ``orjson``. ``pip`` and ``conda`` install
+them with tensordict.
 
 Optional dependencies
 ---------------------
@@ -67,8 +54,8 @@ Some features need other packages. Install them with an extra, for example
    * - ``zarr``
      - ``zarr>=3.0``
      - Zarr stores: :meth:`~tensordict.TensorDict.to_zarr` and
-       :meth:`~tensordict.TensorDict.from_zarr`. zarr 3 needs Python 3.11 or
-       later. On Python 3.10, this extra installs nothing.
+       :meth:`~tensordict.TensorDict.from_zarr`. zarr 3 needs Python 3.11+.
+       On Python 3.10, this extra installs nothing.
    * - ``pandas``
      - ``pandas>=1.5``
      - DataFrames and CSV files: :meth:`~tensordict.TensorDict.to_pandas`,
@@ -94,10 +81,10 @@ Install a nightly build
 -----------------------
 
 The ``tensordict-nightly`` package is built from the main branch every day.
-It installs the same ``tensordict`` directory as the release. If both are
-installed, the one installed last overwrites the files of the other, and
-uninstalling one of them deletes files that the other needs. So uninstall the
-release before you install the nightly build:
+It installs the same ``tensordict`` directory as the release. If both
+packages are installed, the one installed last overwrites the files of the
+other. Uninstalling one of them then deletes files that the other needs. So
+uninstall the release first:
 
 .. code-block:: bash
 
@@ -107,22 +94,31 @@ release before you install the nightly build:
 If both are already installed, uninstall both, then install one of them
 again.
 
-A nightly build of tensordict can use features that only PyTorch nightly has.
-Install them together. Recent PyTorch nightly builds need Python 3.11 or later.
-This example installs the CPU build of PyTorch nightly:
+A nightly build of tensordict can use features that only PyTorch nightly
+has, so install the two together. Recent PyTorch nightly builds need Python
+3.11+. This example installs the CPU build of PyTorch nightly:
 
 .. code-block:: bash
 
    pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
    pip install tensordict-nightly
 
+Install with conda
+------------------
+
+The conda-forge channel has the releases:
+
+.. code-block:: bash
+
+   conda install -c conda-forge tensordict
+
 Install from source
 -------------------
 
 Install from source to contribute to tensordict, or to use a change that is
-not in a nightly build yet. Because tensordict is pure Python, the build needs
-no compiler. ``pip`` installs the build requirements, ``setuptools>=77`` and
-``setuptools_scm``, unless you pass ``--no-build-isolation``.
+not in a nightly build yet. The build needs no compiler. ``pip`` installs the
+build requirements, ``setuptools>=77`` and ``setuptools_scm``, unless you
+pass ``--no-build-isolation``.
 
 .. code-block:: bash
 
@@ -159,10 +155,10 @@ install them first:
 tensordict and TorchRL versions
 -------------------------------
 
-`TorchRL <https://github.com/pytorch/rl>`__ uses tensordict, and each TorchRL
-release requires the tensordict release with the same minor version. For
-example, TorchRL 0.14 requires tensordict 0.14, and does not accept 0.15. The
-nightly package ``torchrl-nightly`` requires ``tensordict-nightly``.
+Each `TorchRL <https://github.com/pytorch/rl>`__ release requires the
+tensordict release with the same minor version. For example, TorchRL 0.14
+requires tensordict 0.14, and does not accept 0.15. The nightly package
+``torchrl-nightly`` requires ``tensordict-nightly``.
 
 To get a matching pair, install TorchRL and let ``pip`` choose tensordict:
 
