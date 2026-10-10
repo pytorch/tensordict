@@ -15,6 +15,7 @@ from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
 from copy import copy, deepcopy
 from functools import wraps
+from itertools import islice
 from pathlib import Path
 from textwrap import indent
 from typing import (
@@ -48,6 +49,7 @@ from tensordict._indexing import (
     _NONE,
     _read_element,
     _SLICE,
+    convert_ellipsis_to_idx,
 )
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict._tensorcollection import TensorCollection
@@ -125,6 +127,8 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
     tensordict: LazyStackedTensorDict
 
     def __len__(self) -> int:
+        if self.include_nested or self.leaves_only:
+            return super().__len__()
         return len(self._keys())
 
     def _keys(self) -> list[str]:
@@ -866,6 +870,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 value,
                 non_blocking=non_blocking,
                 check_shape=not (isinstance(value, list) and list_to_stack()),
+                key=key,
             )
             validated = True
         if self._is_vmapped:
@@ -921,7 +926,7 @@ class LazyStackedTensorDict(TensorDictBase):
         #         )
         #     inplace = has_key
         if not validated:
-            value = self._validate_value(value, non_blocking=non_blocking)
+            value = self._validate_value(value, non_blocking=non_blocking, key=key)
             validated = True
         if self._is_vmapped:
             value = self._hook_in(value)
@@ -1196,6 +1201,16 @@ class LazyStackedTensorDict(TensorDictBase):
         )
 
     def _set_at_str(self, key, value, index, *, validated, non_blocking: bool):
+        if not self._is_vmapped and self._ellipsis_covers_entry_dims(key, index):
+            # torch reads the index on the entry, where the Ellipsis also
+            # covers the dims after the batch dims: write through the stacked
+            # entry, as a tensordict writes to its entry
+            entry = self._get_str(key, NO_DEFAULT)
+            entry[index] = value
+            self._set_str(
+                key, entry, inplace=True, validated=True, non_blocking=non_blocking
+            )
+            return self
         if not validated and not self._is_vmapped and isinstance(value, numbers.Number):
             # each member writes a Python scalar in the dtype of its entry, as
             # torch does
@@ -1253,6 +1268,23 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return self
 
+    def _ellipsis_covers_entry_dims(self, key: str, index: IndexType) -> bool:
+        """Whether an Ellipsis of ``index`` covers dims of the tensor entry ``key`` after the batch dims.
+
+        Torch reads the Ellipsis on the whole entry, so if other elements come
+        after it, it covers the dims of the entry that follow the batch dims.
+        """
+        if not isinstance(index, tuple) or not any(
+            element is Ellipsis for element in index[:-1]
+        ):
+            return False
+        entry, entry_batch_dims = self._member_entry(key)
+        return (
+            isinstance(entry, Tensor)
+            and not _is_unbatched(entry)
+            and entry.ndim > entry_batch_dims
+        )
+
     def _set_at_members(self, key, value, index, *, validated, non_blocking: bool):
         """Write ``value``, the same for every element, at ``index`` of each member that the index reaches."""
         for member, member_index, _ in self._split_index(index).parts:
@@ -1287,13 +1319,15 @@ class LazyStackedTensorDict(TensorDictBase):
         td = LazyStackedTensorDict(*tds, stack_dim=self.stack_dim)
         td._hook_out = self._hook_out
         td._hook_in = self._hook_in
-        if not validated:
-            value = self._validate_value(
-                value, check_shape=False, non_blocking=non_blocking
-            )
-            validated = True
         if self._is_vmapped:
+            if not validated:
+                value = self._validate_value(
+                    value, check_shape=False, non_blocking=non_blocking
+                )
+                validated = True
             value = self._hook_in(value)
+        # otherwise the value is validated where it is written, which keeps a
+        # Python scalar for the members to cast to the dtype of their entry
         td._set_at_str(
             key[-1], value, idx, validated=validated, non_blocking=non_blocking
         )
@@ -1601,9 +1635,10 @@ class LazyStackedTensorDict(TensorDictBase):
             return first._get_tuple(key[1:], default=default, **kwargs)
         except AttributeError as err:
             if "has no attribute" in str(err):
+                rest = key[1] if len(key) == 2 else key[1:]
                 raise ValueError(
-                    f"Expected a TensorDictBase instance but got {type(first)} instead"
-                    f" for key '{key[1:]}' in tensordict:\n{self}."
+                    f"{key[0]!r} is a {type(first).__name__}, not a tensordict, "
+                    f"so it has no entry {rest!r}."
                 )
 
     @classmethod
@@ -2689,6 +2724,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 else:
                     td[member_index] = piece
         else:
+            # the Ellipsis covers the batch dims, where set_at_ would read it on
+            # the entries
+            index = convert_ellipsis_to_idx(index, self.batch_size)
             for key in self.keys():
                 self.set_at_(key, value, index)
 
@@ -3077,8 +3115,11 @@ class LazyStackedTensorDict(TensorDictBase):
             value = default
         else:
             raise KeyError(
-                f"You are trying to pop key `{key}` which is not in dict "
-                f"without providing default value."
+                _KEY_ERROR.format(
+                    key,
+                    type(self).__name__,
+                    sorted(self.keys(include_nested=isinstance(key, tuple)), key=str),
+                )
             )
         return value
 
@@ -3495,6 +3536,13 @@ class LazyStackedTensorDict(TensorDictBase):
         Returns:
             self
         """
+        if isinstance(index, tuple) and any(
+            element is Ellipsis for element in index[:-1]
+        ):
+            # each entry reads the Ellipsis on its own dims, as in set_at_
+            return TensorDictBase.update_at_(
+                self, input_dict_or_td, index, clone=clone, non_blocking=non_blocking
+            )
         indexed_bs = _getitem_batch_size(self.batch_size, index)
         if not _is_tensor_collection(type(input_dict_or_td)):
             input_dict_or_td = TensorDict.from_dict(
@@ -3510,11 +3558,43 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return self
 
+    def _innermost_tensordicts(self) -> list[TensorDictBase]:
+        """The members of the stack, with the members of its nested lazy stacks in their place."""
+        tds = []
+        for td in self.tensordicts:
+            if isinstance(td, LazyStackedTensorDict):
+                tds.extend(td._innermost_tensordicts())
+            else:
+                tds.append(td)
+        return tds
+
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> Self:
-        for td in self.tensordicts:
-            td.rename_key_(old_key, new_key, safe=safe)
+        old = _unravel_key_to_tuple(old_key)
+        new = _unravel_key_to_tuple(new_key)
+        # Check every tensordict before any renames the key, so that a call
+        # that raises leaves the stack unchanged: a tensordict that cannot
+        # rename it raises before it changes anything.
+        tds = []
+        for td in self._innermost_tensordicts():
+            keys = td.keys(include_nested=True)
+            if (
+                td.is_locked
+                or not (old and new)
+                or old not in keys
+                or (safe and new in keys)
+            ):
+                td.rename_key_(old_key, new_key, safe=safe)
+            else:
+                tds.append((td, keys))
+        for i, (td, keys) in enumerate(tds):
+            # A tensordict that is in the stack more than once is renamed the
+            # first time. It is found with `is`, not id(): torch.compile
+            # guards on the id of each member and would recompile for every
+            # new stack.
+            if old in keys or not any(td is other for other, _ in islice(tds, i)):
+                td.rename_key_(old_key, new_key, safe=safe)
         return self
 
     def where(
@@ -3531,16 +3611,23 @@ class LazyStackedTensorDict(TensorDictBase):
         if condition.ndim < self.ndim:
             condition = expand_right(condition, self.batch_size)
         condition = condition.unbind(self.stack_dim)
+        # A 0-dim tensor goes whole to each member, as a scalar does
         if _is_tensor_collection(type(other)) or (
             isinstance(other, Tensor)
+            and other.ndim > 0
             and other.shape[: self.stack_dim] == self.shape[: self.stack_dim]
         ):
             other = other.unbind(self.stack_dim)
 
             def where(td, cond, other, pad):
-                if cond.numel() > 1:
+                if cond.numel() > 1 or isinstance(other, Tensor):
                     return td.where(cond, other, pad=pad)
-                return other if not cond else td
+                # The condition selects a whole member. Copy its tensors so the
+                # result shares no memory with the inputs (clone would also
+                # deep-copy non-tensor data)
+                return (other if not cond else td).apply(
+                    torch.clone, filter_empty=False
+                )
 
             result = lazy_stack(
                 [
@@ -4081,8 +4168,6 @@ class LazyStackedTensorDict(TensorDictBase):
     lock_ = TensorDictBase.lock_
 
     unlock_ = TensorDictBase.unlock_
-
-    _index_tensordict = TensorDict._index_tensordict
 
 
 class _CustomOpTensorDict(TensorDictBase):
@@ -4760,9 +4845,7 @@ class _CustomOpTensorDict(TensorDictBase):
         splits = -(self.batch_size[dim] // -chunks)
         return self.split(splits, dim)
 
-    __setitem__ = TensorDict.__setitem__
     _add_batch_dim = TensorDict._add_batch_dim
-    _index_tensordict = TensorDict._index_tensordict
 
     _maybe_remove_batch_dim = TensorDict._maybe_remove_batch_dim
     _remove_batch_dim = TensorDict._remove_batch_dim
@@ -5130,7 +5213,9 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 def _iter_items_lazystack(
     tensordict: LazyStackedTensorDict, return_none_for_het_values: bool = False
 ) -> Iterator[tuple[str, CompatibleType]]:
-    for key in tensordict.tensordicts[0].keys():
+    # The keys of every member, as keys() lists them: a sub-tensordict that
+    # only some members have cannot be stacked.
+    for key in tensordict._key_list():
         values = tensordict._maybe_get_list(key)
         if values is not None:
             yield key, values
