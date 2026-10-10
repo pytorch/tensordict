@@ -3256,6 +3256,28 @@ class TestProbabilisticTensorDictModule:
         assert torch.equal(torch.get_rng_state(), state_before)
         assert torch.equal(sample, td["loc"])
 
+    @pytest.mark.parametrize("base", ["Delta", "LogisticNormal"])
+    def test_deterministic_sample_independent(self, base):
+        # Independent has no deterministic_sample, and the register maps its
+        # base to DETERMINISTIC: the module uses the base's deterministic_sample.
+        def distribution_class(param):
+            if base == "Delta":
+                base_dist = Delta(param)
+            else:
+                base_dist = distributions.LogisticNormal(param, torch.ones_like(param))
+            return distributions.Independent(base_dist, 1)
+
+        module = ProbabilisticTensorDictModule(
+            in_keys=["param"],
+            out_keys=["sample"],
+            distribution_class=distribution_class,
+            default_interaction_type=InteractionType.DETERMINISTIC,
+        )
+        td = TensorDict(param=torch.randn(3, 4, 2), batch_size=[3])
+        sample = module(td)["sample"]
+        expected = distribution_class(td["param"]).base_dist.deterministic_sample
+        torch.testing.assert_close(sample, expected)
+
     # ------------------------------------------------------------------
     # generator argument: Generator object, int seed, and tensordict-key forms
     # ------------------------------------------------------------------
@@ -4432,6 +4454,36 @@ class TestCompositeDist:
         assert sample.get("cont_icdf").requires_grad
         assert sample.get(("nested", "cont_icdf")).requires_grad
         torch.testing.assert_close(sample.get("cont"), sample.get("cont_icdf"))
+
+    def test_deterministic_sample_independent(self):
+        # Independent has no deterministic_sample: the base's one is used, as in
+        # ProbabilisticTensorDictModule.
+        params = TensorDict(
+            {
+                "delta": {"param": torch.randn(3, 4, 2)},
+                ("nested", "logistic"): {
+                    "loc": torch.randn(3, 4, 2),
+                    "scale": torch.ones(3, 4, 2),
+                },
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "delta": lambda param: distributions.Independent(Delta(param), 1),
+                ("nested", "logistic"): lambda loc, scale: distributions.Independent(
+                    distributions.LogisticNormal(loc, scale), 1
+                ),
+            },
+        )
+        sample = dist.deterministic_sample
+        assert sample.batch_size == params.batch_size
+        torch.testing.assert_close(sample["delta"], params["delta", "param"])
+        logistic = distributions.LogisticNormal(**params["nested", "logistic"])
+        torch.testing.assert_close(
+            sample["nested", "logistic"], logistic.deterministic_sample
+        )
 
     @pytest.mark.parametrize(
         "interaction", [InteractionType.MODE, InteractionType.MEAN]
