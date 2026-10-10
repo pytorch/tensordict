@@ -2489,6 +2489,20 @@ class TestNonTensorIndexing:
             store.clear_redis()
             store.close()
 
+    def test_non_tensor_pickle_read(self, store_kwargs):
+        """A value that JSON cannot encode is stored with pickle and reads
+        back as it was written."""
+        store = TensorDictStore(batch_size=[3], **store_kwargs)
+        try:
+            store["label"] = NonTensorData({1, 2})
+            assert store["label"] == {1, 2}
+            assert store[1]["label"] == {1, 2}
+            assert store.get_at("label", 1) == {1, 2}
+            assert store.to_tensordict()["label"] == {1, 2}
+        finally:
+            store.clear_redis()
+            store.close()
+
 
 def test_lazy_store_pickle_path():
     # LazyStackedTensorDictStore moved from tensordict.store._store to
