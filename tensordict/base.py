@@ -6677,6 +6677,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
         """Fills the values corresponding to the mask with the desired value.
 
+        The values are written into the existing leaves, which keep their
+        storage. See :ref:`inplace-conventions`.
+
         Args:
             mask (boolean torch.Tensor): mask of values to be filled. Shape
                 must match the tensordict batch-size.
@@ -6775,20 +6778,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             inplace (bool, optional): if ``True``, the resulting tensordict will
                 have the same identity as the one where the call has been made.
                 Defaults to ``False``.
-            is_leaf (callable, optional): a callable over a class type returning
-                a bool indicating if this class has to be considered as a leaf.
-
-                .. note:: The purpose of `is_leaf` is not to prevent recursive calls into nested tensordicts, but
-                    rather to mark certain types as "leaves" for the purpose of filtering when `leaves_only=True`.
-                    Even if `is_leaf(cls)` returns `True`, the nested structure of the tensordict will still be
-                    traversed if `include_nested=True`.
-                    In other words, `is_leaf` does not control the recursion depth, but rather provides a way to filter
-                    out certain types from the result when `leaves_only=True`. This means that a node in the tree can
-                    be both a leaf and a node with children.
-                    In practice, the default value of ``is_leaf`` does exclude tensordict and tensorclass instances
-                    from the leaf set.
-
-                .. seealso:: :meth:`~tensordict.is_leaf_nontensor` and :meth:`~tensordict.default_is_leaf`.
+            is_leaf (callable, optional): a function that takes a class and
+                returns ``True`` if values of that class count as leaves. Here
+                it stops the flattening: a sub-tensordict whose class is a
+                leaf is kept as one value under its key. By default,
+                tensordicts and tensorclasses are not leaves. See
+                :func:`~tensordict.is_leaf_nontensor` and
+                :func:`~tensordict.default_is_leaf`.
 
         Examples:
             >>> import torch
