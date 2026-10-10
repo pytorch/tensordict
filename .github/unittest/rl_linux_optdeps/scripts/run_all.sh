@@ -86,6 +86,7 @@ uv_pip_install \
   scipy \
   psutil \
   "hydra-core<1.4" \
+  tqdm \
   orjson \
   ninja \
   pyvers \
@@ -153,9 +154,12 @@ python -m torch.utils.collect_env
 
 # TorchRL validates its standalone Triton GRU numerics in its own CI. Keep this
 # reverse-dependency job focused on TensorDict interoperability.
+# torchvision is not installed here (it would have to match the torch nightly),
+# and this test fails instead of skipping without it.
 MUJOCO_GL=egl python -m pytest test --instafail -v --durations 20 \
   --ignore test/test_distributed.py \
   --ignore test/llm \
   --deselect test/modules/test_dreamer_components.py::test_public_block_gru_triton_gradient_parity \
   --deselect test/modules/test_dreamer_components.py::test_public_block_gru_triton_compile_recurrent_loss \
+  --deselect "test/test_helpers.py::test_transformed_env_constructor_with_state_dict[from_pixels1]" \
   --timeout=120
