@@ -1617,8 +1617,9 @@ class LazyStackedTensorDict(TensorDictBase):
             ...     TensorDict({"x": torch.ones(1,)}),
             ...     TensorDict({"x": torch.ones(2,) * 2}),
             ... ])
-            >>> td.get("x", as_nested_tensor=True)
-            NestedTensor(size=(2, j1), offsets=tensor([0, 1, 3]), contiguous=True)
+            >>> nested = td.get("x", as_nested_tensor=True)
+            >>> nested.is_nested, nested.offsets()
+            (True, tensor([0, 1, 3]))
             >>> td.get("x", as_padded_tensor=True)
             tensor([[1., 0.],
                     [2., 2.]])
@@ -2183,7 +2184,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
         Args:
             key (NestedKey): the entry to nest.
-            default (Any, optiona): the default value to return in case the key
+            default (Any, optional): the default value to return in case the key
                 isn't in all sub-tensordicts.
 
                 .. note::
@@ -2195,6 +2196,8 @@ class LazyStackedTensorDict(TensorDictBase):
             layout (torch.layout, optional): the layout for the nested tensor.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import LazyStackedTensorDict, TensorDict
             >>> td0 = TensorDict({"a": torch.zeros(4), "b": torch.zeros(4)}, [])
             >>> td1 = TensorDict({"a": torch.ones(5)}, [])
             >>> td = LazyStackedTensorDict.lazy_stack([td0, td1], 0)
