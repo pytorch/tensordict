@@ -1,126 +1,158 @@
-.. tensordict documentation master file, created by
-   sphinx-quickstart on Mon Mar  7 13:23:20 2022.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+tensordict: batched, nested dictionaries of PyTorch tensors
+===========================================================
 
-Welcome to the TensorDict Documentation!
-========================================
+A :class:`~tensordict.TensorDict` is a dictionary of tensors that you can use
+like one tensor. All its tensors share their leading dimensions, the
+``batch_size``, and indexing, shape operations, device moves and arithmetic
+apply to every tensor in it.
 
-`TensorDict` is a dictionary-like class that inherits properties from tensors,
-such as indexing, shape operations, casting to device etc.
+A TensorDict can contain other TensorDicts. This one holds a batch of 32
+transitions, with the next observation in a nested TensorDict:
 
-You can install tensordict directly from PyPI (see more about installation
-instructions in the dedicated section below):
+.. code-block:: text
 
-.. code-block::
+   TensorDict(batch_size=[32])
+   |-- obs:      Tensor[32, 128]
+   |-- action:   Tensor[32]
+   |-- reward:   Tensor[32]
+   `-- next:
+       `-- obs:  Tensor[32, 128]
 
-  $ pip install tensordict
+The code below builds it, then slices, moves, scales and stacks all the
+tensors with one call each:
 
+  >>> import torch
+  >>> from tensordict import TensorDict
+  >>> batch = TensorDict(
+  ...     {
+  ...         "obs": torch.randn(32, 128),
+  ...         "action": torch.randint(0, 4, (32,)),
+  ...         "reward": torch.randn(32),
+  ...         "next": {"obs": torch.randn(32, 128)},
+  ...     },
+  ...     batch_size=[32],
+  ... )
+  >>> mini = batch[:8]
+  >>> mini.shape
+  torch.Size([8])
+  >>> mini["next", "obs"].shape
+  torch.Size([8, 128])
+  >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+  >>> on_device = batch.to(device)
+  >>> scaled = batch * 0.5
+  >>> stacked = torch.stack([batch, batch], 0)
+  >>> stacked.shape
+  torch.Size([2, 32])
 
-The main purpose of TensorDict is to make code-bases more *readable* and *modular*
-by abstracting away tailored operations:
+Because a model and a loss can read and write the same TensorDict, one
+training loop works for data with different keys: classification,
+segmentation or reinforcement learning.
 
-  >>> for i, tensordict in enumerate(dataset):
-  ...     # the model reads and writes tensordicts
-  ...     tensordict = model(tensordict)
-  ...     loss = loss_module(tensordict)
-  ...     loss.backward()
-  ...     optimizer.step()
-  ...     optimizer.zero_grad()
+Where to go
+-----------
 
-With this level of abstraction, one can recycle a training loop for highly heterogeneous task.
-Each individual step of the training loop (data collection and transform, model
-prediction, loss computation etc.)
-can be tailored to the use case at hand without impacting the others.
-For instance, the above example can be easily used across classification and segmentation tasks, among many others.
+- :ref:`Getting started <getting-started>`: a one-hour tour of the main
+  features, with examples that you can run. Start here.
+- :ref:`User guide <overview>`: one page for each concept, such as the batch
+  size, keys, stacking, devices, non-tensor data and the typed containers.
+- :ref:`How-to guides <saving>`: one page for each task, such as saving a
+  TensorDict, storing a large dataset, loading data, distributed training and
+  :func:`torch.compile`.
+- :doc:`Tutorials <tutorials/tensordict_keys>`: scripts that you can run or
+  download as notebooks, in four groups (basics, storage, ``tensordict.nn``
+  and data loading).
+- :ref:`API reference <api-reference>`: every public class, function and
+  method.
 
+Install
+-------
 
-Installation
-============
+.. code-block:: bash
 
-Tensordict releases are synced with PyTorch, so make sure you always enjoy the latest
-features of the library with the `most recent version of PyTorch <https://pytorch.org/get-started/locally/>`__.
-Tensordict requires PyTorch 2.13 or later.
-Nightly releases can be installed via
+   pip install tensordict
 
-.. code-block::
-
-  $ pip install tensordict-nightly
-
-or via a `git clone` if you're willing to contribute to the library:
-
-.. code-block::
-
-  $ cd path/to/root
-  $ git clone https://github.com/pytorch/tensordict
-  $ cd tensordict
-  $ pip install -e .
-
-.. note::
-
-  If you're using **uv** with a **PyTorch nightly** installed from the PyTorch nightly wheel index,
-  prefer installing tensordict editable with ``--no-deps`` (or configure uv to use the nightly wheel index),
-  otherwise uv may re-resolve and replace the existing nightly ``torch`` with a stable build from PyPI.
-  ``--no-deps`` also skips tensordict's other runtime dependencies (listed in ``pyproject.toml``),
-  so install those first.
-
-Tutorials
-=========
-
-Basics
-------
+tensordict requires Python 3.10 or later and PyTorch 2.13 or later.
+:ref:`installation` covers conda-forge, nightly builds, the optional
+dependencies, source installs and the TorchRL versions.
 
 .. toctree::
-   :maxdepth: 1
+   :hidden:
+   :caption: Get started
 
-   tutorials/tensordict_shapes
-   tutorials/tensordict_slicing
+   installation
+   getting_started
+
+.. toctree::
+   :hidden:
+   :caption: User guide
+
+   overview
+   concepts/batch_size
+   concepts/keys
+   concepts/stacking
+   concepts/operations
+   concepts/devices
+   concepts/non_tensor
+   tensorclass
+   typed_tensordict
+   choosing_a_container
+   modules
+
+.. toctree::
+   :hidden:
+   :caption: How-to guides
+
+   saving
+   storage
+   data_loading
+   distributed
+   compile
+   printing
+   compatibility
+   fx
+
+.. toctree::
+   :hidden:
+   :caption: Tutorials: basics
+
    tutorials/tensordict_keys
+   tutorials/tensordict_slicing
+   tutorials/tensordict_shapes
    tutorials/tensordict_preallocation
-   tutorials/tensordict_memory
    tutorials/streamed_tensordict
-   tutorials/serialization_speed
-   tutorials/zarr_storage
-
-tensordict.nn
--------------
 
 .. toctree::
-   :maxdepth: 1
+   :hidden:
+   :caption: Tutorials: storage
+
+   tutorials/tensordict_memory
+   tutorials/zarr_storage
+   tutorials/serialization_speed
+
+.. toctree::
+   :hidden:
+   :caption: Tutorials: tensordict.nn
 
    tutorials/tensordict_module
    tutorials/functional
    tutorials/export
 
-Dataloading
------------
-
 .. toctree::
-   :maxdepth: 1
+   :hidden:
+   :caption: Tutorials: data loading
 
    tutorials/data_fashion
    tutorials/tensorclass_fashion
    tutorials/tensorclass_imagenet
 
-Contents
-========
-
 .. toctree::
-   :maxdepth: 3
+   :hidden:
+   :caption: API reference
 
-   overview
-   compatibility
-   distributed
-   compile
-   fx
-   saving
-   storage
-   printing
    reference/index
 
-Indices and tables
-==================
+Indices
+-------
 
 * :ref:`genindex`
-* :ref:`modindex`
 * :ref:`search`
