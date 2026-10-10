@@ -16,6 +16,7 @@ import struct
 import threading
 import uuid
 import weakref
+from numbers import Number
 from typing import Any, Callable, Sequence, Tuple, Type
 
 import torch
@@ -37,6 +38,7 @@ from tensordict.base import (
 from tensordict.store._store import _has_redis, _KEY_SEP, Self, STORE_BACKENDS
 from tensordict.store._utils import (
     _bytes_to_tensor,
+    _check_indexed_value,
     _compute_byte_ranges,
     _compute_covering_range,
     _decode_meta,
@@ -57,6 +59,7 @@ from tensordict.utils import (
     _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
+    expand_as_right,
     NestedKey,
     unravel_key,
 )
@@ -138,9 +141,9 @@ class _StoreStackElementView(TensorDictBase):
         all_keys = self._get_all_keys()
         key_path = key
 
-        # Nested prefix
+        # Nested prefix, in the order of the keys view
         prefix_check = key_path + _KEY_SEP
-        nested_keys = [k for k in all_keys if k.startswith(prefix_check)]
+        nested_keys = sorted(k for k in all_keys if k.startswith(prefix_check))
         if nested_keys:
             result = self._run_sync(
                 self._parent._abatch_get_element_keys(self._element_idx, nested_keys)
@@ -195,7 +198,7 @@ class _StoreStackElementView(TensorDictBase):
         non_blocking: bool = False,
     ):
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(value, check_shape=True, key=key)
         if self.is_locked and not ignore_lock and not inplace:
             raise RuntimeError(_LOCK_ERROR)
 
@@ -239,7 +242,7 @@ class _StoreStackElementView(TensorDictBase):
             )
         key_path = _KEY_SEP.join(key)
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(value, check_shape=True, key=key)
         if self.is_locked and not inplace:
             raise RuntimeError(_LOCK_ERROR)
         if isinstance(value, torch.Tensor):
@@ -268,16 +271,27 @@ class _StoreStackElementView(TensorDictBase):
         if index_unravel:
             return self.set(index_unravel, value, inplace=True)
 
-        if not isinstance(value, TensorDictBase):
-            value = TensorDict.from_dict(value, batch_size=[])
+        _check_indexed_value(self, value)
+        if isinstance(value, Number):
+            # a scalar is written to every entry, which casts it to its dtype
+            items = [
+                (key, value) for key in self.keys(include_nested=True, leaves_only=True)
+            ]
+        else:
+            if not isinstance(value, TensorDictBase):
+                value = TensorDict.from_dict(value, batch_size=[])
+            items = [
+                (key, value.get(key))
+                for key in value.keys(include_nested=True, leaves_only=True)
+            ]
 
-        for key in value.keys(include_nested=True, leaves_only=True):
+        for key, item in items:
             key_tuple = _unravel_key_to_tuple(key)
             key_path = _KEY_SEP.join(key_tuple)
             existing = (
                 self._get_str(key_tuple[0]) if len(key_tuple) == 1 else self.get(key)
             )
-            existing[index] = value.get(key)
+            existing[index] = item
             self._run_sync(
                 self._parent._aset_element_key(self._element_idx, key_path, existing)
             )
@@ -441,7 +455,7 @@ class _StoreStackElementView(TensorDictBase):
     def masked_fill_(self, mask, value):
         for key in self.keys(include_nested=True, leaves_only=True):
             tensor = self.get(key)
-            tensor = tensor.masked_fill(mask, value)
+            tensor = tensor.masked_fill(expand_as_right(mask, tensor), value)
             self.set_(key, tensor)
         return self
 
@@ -592,7 +606,9 @@ class _LazyStackedStoreKeysView(_TensorDictKeysView):
         td = self.tensordict
         all_keys = td._get_all_keys()
         seen = set()
-        for full_key in all_keys:
+        # Sorted as in _StoreTDKeysView. _get_str sorts the paths of a nested
+        # tensordict too, so that values() and items() follow this order.
+        for full_key in sorted(all_keys):
             parts = full_key.split(_KEY_SEP)
             if self.include_nested:
                 key = tuple(parts) if len(parts) > 1 else parts[0]
@@ -1502,6 +1518,14 @@ class LazyStackedTensorDictStore(TensorDictBase):
         if isinstance(index, list):
             index = torch.tensor(index)
 
+        _check_indexed_value(self, value)
+        if isinstance(value, Number):
+            # a scalar is written to every entry, in its dtype
+            self._run_sync(
+                self._abatch_set_at({kp: (value, index) for kp in self._get_all_keys()})
+            )
+            return
+
         # Integer assignment on stack dim: write element
         if (
             isinstance(index, int)
@@ -1528,9 +1552,9 @@ class LazyStackedTensorDictStore(TensorDictBase):
         key_path = key
         all_keys = self._get_all_keys()
 
-        # Check nested
+        # Check nested, in the order of the keys view
         prefix_check = key_path + _KEY_SEP
-        nested_keys = [k for k in all_keys if k.startswith(prefix_check)]
+        nested_keys = sorted(k for k in all_keys if k.startswith(prefix_check))
         if nested_keys:
             # Return full stacked tensor for each nested leaf, build TD
             result = self._run_sync(self._abatch_get_at(nested_keys, slice(None)))
@@ -1565,7 +1589,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
         non_blocking: bool = False,
     ):
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(value, check_shape=True, key=key)
         if self.is_locked and not ignore_lock and not inplace:
             raise RuntimeError(_LOCK_ERROR)
 
@@ -1622,7 +1646,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
             )
         key_path = _KEY_SEP.join(key)
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(value, check_shape=True, key=key)
         if self.is_locked and not inplace:
             raise RuntimeError(_LOCK_ERROR)
         if isinstance(value, torch.Tensor):
