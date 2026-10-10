@@ -80,11 +80,10 @@ tensordict for each sub-module:
   >>> sorted(p.name for p in (root / "checkpoint").iterdir())
   ['0', '2', 'meta.json']
 
-The loaded leaves are :class:`~tensordict.MemoryMappedTensor` instances. To
-load them into a model, call :meth:`~tensordict.TensorDictBase.to_module`
-with ``inplace=True``. It copies each value into the existing parameter of
-the model, so the parameters stay :class:`~torch.nn.parameter.Parameter`
-instances in memory:
+To load the checkpoint into a model, read it with ``load_memmap``, and call
+:meth:`~tensordict.TensorDictBase.to_module` with ``inplace=True``. It copies
+each value into the existing parameter of the model, so the parameters stay
+:class:`~torch.nn.parameter.Parameter` instances in memory:
 
   >>> new_model = nn.Sequential(nn.Linear(3, 4), nn.ReLU(), nn.Linear(4, 2))
   >>> loaded = TensorDict.load_memmap(root / "checkpoint")
@@ -92,10 +91,11 @@ instances in memory:
   >>> torch.equal(new_model[0].weight, model[0].weight)
   True
 
+The loaded leaves are :class:`~tensordict.MemoryMappedTensor` instances.
 Without ``inplace=True``, ``to_module`` tries to make a parameter from each
-memory-mapped leaf and raises ``RuntimeError: Creating a Parameter from an
-instance of type MemoryMappedTensor requires that detach() returns an
-instance of the same type``.
+of them, and raises ``RuntimeError: Creating a Parameter from an instance of
+type MemoryMappedTensor requires that detach() returns an instance of the
+same type``.
 
 To load one sub-module, pass its key as ``subpath``. tensordict then reads
 only that part of the tree. ``subpath`` takes a nested key, such as
@@ -111,6 +111,9 @@ it on the ``"meta"`` device:
 
   >>> TensorDict.load_memmap(root / "checkpoint", device="meta")["0", "weight"]
   tensor(..., device='meta', size=(4, 3))
+
+Options of save and load_memmap
+-------------------------------
 
 The methods have several names:
 
@@ -193,9 +196,9 @@ the default mode changes the file:
 If many nodes read the same files on a network file system, load with
 ``mode="r"``. On some of these file systems (for example Lustre), a page
 fault on a shared writable mapping takes a write lock. Readers on
-different nodes then block each other. On Linux, a copy-on-write mapping counts against the memory commit limit. If a file is
-larger than RAM plus swap, ``mode="r"`` can fail to map it. In that case,
-use the default mode.
+different nodes then block each other. On Linux, a copy-on-write mapping
+counts against the memory commit limit. If a file is larger than RAM plus
+swap, ``mode="r"`` can fail to map it. In that case, use the default mode.
 
 Save to one file
 ----------------
@@ -361,8 +364,8 @@ values, such as NumPy arrays or dates. For these, loading stops with an
   ...
   _pickle.UnpicklingError: Weights only load failed...Unsupported global: GLOBAL datetime.date was not an allowed global by default...
 
-If the file comes from a source that you trust, allowlist the class (for a
-tensorclass, the tensorclass itself):
+If the file comes from a source that you trust, allowlist the class. For a
+tensorclass, allowlist the tensorclass:
 
   >>> with torch.serialization.safe_globals([datetime.date]):
   ...     td = torch.load(root / "date.pt", weights_only=True)
