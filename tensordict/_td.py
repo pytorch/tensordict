@@ -36,12 +36,14 @@ from tensordict.base import (
     _default_is_leaf,
     _device_recorder,
     _expand_to_match_shape,
+    _flatten_nested_dicts,
     _foreach_copy_,
     _foreach_copy_compiled,
     _is_leaf_nontensor,
     _is_tensor_collection,
     _load_metadata,
     _register_tensor_class,
+    _select_entry,
     _UNSET,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
@@ -3038,15 +3040,17 @@ class _SubTensorDict(TensorDictBase):
         if keys_to_update is not None:
             if len(keys_to_update) == 0:
                 return self
-            keys_to_update = unravel_key_list(keys_to_update)
+            keys_to_update = [
+                _unravel_key_to_tuple(key) for key in unravel_key_list(keys_to_update)
+            ]
+        if isinstance(input_dict, dict):
+            input_dict = _flatten_nested_dicts(input_dict)
         for key, value in input_dict.items():
             key = _unravel_key_to_tuple(key)
-            firstkey, _ = key[0], key[1:]
-            if keys_to_update and not any(
-                firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
-                for ktu in keys_to_update
-            ):
-                continue
+            if keys_to_update:
+                value = _select_entry(key, value, keys_to_update)
+                if value is None:
+                    continue
             if not isinstance(value, tuple(_ACCEPTED_CLASSES)):
                 raise TypeError(
                     f"Expected value to be one of types {_ACCEPTED_CLASSES} "
