@@ -12,7 +12,13 @@ import pickle
 import numpy as np
 import pytest
 import torch
-from tensordict import is_tensor_collection, lazy_stack, NonTensorStack, TensorDict
+from tensordict import (
+    assert_allclose_td,
+    is_tensor_collection,
+    lazy_stack,
+    NonTensorStack,
+    TensorDict,
+)
 from tensordict.base import TensorDictBase
 from tensordict.store import LazyStackedTensorDictStore, TensorDictStore
 from tensordict.store._lazy import _StoreStackElementView
@@ -1612,6 +1618,69 @@ class TestLazyStackedTensorDictStore:
         for key in ("a", "b"):
             torch.testing.assert_close(store_td[1][key], expected[key])
             torch.testing.assert_close(store_td[0][key], tds[0][key])
+
+    def test_fill_zero_nested(self, store_kwargs):
+        """fill_ on a nested key and zero_ write nested entries, as on a lazy stack."""
+        lazy_td = lazy_stack(
+            [
+                TensorDict(
+                    a=torch.ones(3),
+                    n=TensorDict(
+                        b=torch.ones(3, 2),
+                        m=TensorDict(c=torch.ones(3), batch_size=[3]),
+                        batch_size=[3],
+                    ),
+                    batch_size=[3],
+                )
+                for _ in range(4)
+            ]
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            for td in (store_td, lazy_td):
+                assert td.fill_("n", 5.0) is td
+                view = td[1]
+                assert view.fill_(("n", "m"), 7.0) is view
+                td[2].zero_()
+            assert_allclose_td(store_td.to_tensordict(), lazy_td.to_tensordict())
+            assert store_td.zero_() is store_td
+            assert_allclose_td(
+                store_td.to_tensordict(), lazy_td.zero_().to_tensordict()
+            )
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_fill_zero_nested_heterogeneous(self, store_kwargs):
+        """fill_ and zero_ on the store skip heterogeneous nested entries.
+
+        Their elements differ in shape. Written as one tensor, every element
+        would get the shape of element 0 (#2030). The element views write each
+        element with its own shape.
+        """
+        tds = [
+            TensorDict(
+                n=TensorDict(b=torch.ones(3), h=torch.ones(3, 2 + i), batch_size=[3]),
+                batch_size=[3],
+            )
+            for i in range(2)
+        ]
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            store_td.fill_("n", 5.0)
+            torch.testing.assert_close(store_td["n", "b"], torch.full((2, 3), 5.0))
+            store_td.zero_()
+            torch.testing.assert_close(store_td["n", "b"], torch.zeros(2, 3))
+            for i in range(2):
+                torch.testing.assert_close(store_td[i]["n", "h"], tds[i]["n", "h"])
+            store_td[1].fill_("n", 5.0)
+            torch.testing.assert_close(store_td[1]["n", "h"], torch.full((3, 3), 5.0))
+            torch.testing.assert_close(store_td[0]["n", "h"], tds[0]["n", "h"])
+        finally:
+            store_td.clear_redis()
+            store_td.close()
 
     def test_view_shape_change_raises(self, store_stack):
         """Changing element shape through the view should raise."""
