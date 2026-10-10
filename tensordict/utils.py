@@ -18,7 +18,6 @@ import warnings
 import weakref
 from collections import defaultdict
 from collections.abc import KeysView
-from contextlib import nullcontext
 from dataclasses import is_dataclass
 from functools import wraps
 from numbers import Number
@@ -713,7 +712,7 @@ class _StringKeys(KeysView):
         return self.keys.__getitem__(key)
 
     def __iter__(self):
-        yield from self.keys
+        return iter(self.keys)
 
     def __repr__(self):
         return f"{type(self).__name__}({self.keys})"
@@ -1791,10 +1790,13 @@ def _check_keys(
 
     if not len(list_of_tensordicts):
         return set()
+    # is_leaf only filters nested or leaf keys: without it, TensorDict.keys()
+    # returns its cheap view of the dict keys.
+    is_leaf = _is_leaf_nontensor if include_nested or leaves_only else None
     keys = list_of_tensordicts[0].keys(
         include_nested=include_nested,
         leaves_only=leaves_only,
-        is_leaf=_is_leaf_nontensor,
+        is_leaf=is_leaf,
     )
     # TODO: compile doesn't like set() over an arbitrary object
     is_comp = is_compiling()
@@ -1802,11 +1804,11 @@ def _check_keys(
         keys_set = {k for k in keys}  # noqa: C416
     else:
         keys_set: set[str] = set(keys)
-    for td in list_of_tensordicts[1:]:
+    for i, td in enumerate(list_of_tensordicts[1:], 1):
         k = td.keys(
             include_nested=include_nested,
             leaves_only=leaves_only,
-            is_leaf=_is_leaf_nontensor,
+            is_leaf=is_leaf,
         )
         if not strict:
             keys_set = keys_set.intersection(k)
@@ -1817,7 +1819,9 @@ def _check_keys(
                 k = set(k)
             if k != keys_set:
                 raise KeyError(
-                    f"got keys {keys} and {set(td.keys())} which are incompatible"
+                    f"tensordict {i} has keys {sorted(k, key=str)} but tensordict 0 "
+                    f"has keys {sorted(keys_set, key=str)}; all tensordicts must have "
+                    f"the same keys"
                 )
     if strict:
         if is_comp:
@@ -2210,7 +2214,8 @@ def _index_preserve_data_ptr(index):
     # we can't use a list comprehension here because it fails with tensor indices
     if index is None or index is Ellipsis:
         return True
-    if isinstance(index, int):
+    # torch reads a bool as a 0-d mask, which copies
+    if isinstance(index, int) and not isinstance(index, bool):
         return True
     if isinstance(index, slice) and (index.start == 0 or index.start is None):
         return True
@@ -2381,6 +2386,8 @@ def _is_unbatched(data) -> bool:
     this only matches types that explicitly set ``_pass_through = True``.
     """
     cls = type(data)
+    if cls is Tensor:
+        return False
     is_dynamo = is_compiling()
     if not is_dynamo:
         out = _UNBATCHED_MEMO.get(cls)
@@ -2592,9 +2599,10 @@ def unravel_key_list(keys):
         )
     result = []
     for key in keys:
-        key = unravel_key(key)
-        if key == ():
-            raise RuntimeError("key should be a Sequence<NestedKey>")
+        if not isinstance(key, str):
+            key = unravel_key(key)
+            if key == ():
+                raise RuntimeError("key should be a Sequence<NestedKey>")
         result.append(key)
     return result
 
@@ -2677,12 +2685,16 @@ def _infer_size_impl(shape: List[int], numel: int) -> List[int]:
         elif shape[dim] >= 0:
             newsize *= shape[dim]
         else:
-            raise AssertionError("invalid shape dimensions")
+            raise AssertionError(
+                f"invalid shape dimensions in {list(shape)}: sizes must be non-negative or -1"
+            )
     if not (
         (infer_dim is None and numel == newsize)
         or (infer_dim is not None and newsize > 0 and numel % newsize == 0)
     ):
-        raise AssertionError("invalid shape")
+        raise AssertionError(
+            f"invalid shape {list(shape)} for a batch of {numel} elements"
+        )
     out = _copy(shape)
     if infer_dim is not None:
         out[infer_dim] = numel // newsize
@@ -2877,19 +2889,16 @@ def _is_list_tensor_compatible(t) -> Tuple[bool, tuple | None, type | None]:
 
 
 class _ContextManager:
+    # Reading or writing one attribute is atomic, so no lock is needed: the
+    # mode is read on every call of a tensordict.nn module.
     def __init__(self, default=None):
         self._mode: Any | None = default
-        self._lock = threading.Lock()
 
     def get_mode(self) -> Any | None:
-        cm = self._lock if not is_compiling() else nullcontext()
-        with cm:
-            return self._mode
+        return self._mode
 
     def set_mode(self, type: Any | None) -> None:
-        cm = self._lock if not is_compiling() else nullcontext()
-        with cm:
-            self._mode = type
+        self._mode = type
 
 
 def _maybe_correct_neg_dim(
