@@ -1242,6 +1242,20 @@ class TestNonTensorData:
         assert dest["nested", "data"] == "w2"
         assert dest.is_memmap()
 
+    def test_memmap_update_writes_json_only(self, tmp_path):
+        td = TensorDict(
+            x=torch.zeros(3), s=NonTensorData("hello"), batch_size=[3]
+        ).memmap(tmp_path / "src")
+        td.update_(TensorDict(s=NonTensorData("world"), batch_size=[3]))
+        assert sorted(os.listdir(tmp_path / "src" / "s")) == ["meta.json"]
+        loaded = TensorDict.load_memmap(tmp_path / "src", allow_pickle=False)
+        assert loaded["s"] == "world"
+
+        td.memmap(tmp_path / "dest", copy_existing=True)
+        assert sorted(os.listdir(tmp_path / "dest" / "s")) == ["meta.json"]
+        loaded = TensorDict.load_memmap(tmp_path / "dest", allow_pickle=False)
+        assert loaded["s"] == "world"
+
     @pytest.mark.parametrize("allow_pickle", [0, 1, np.bool_(False), np.bool_(True)])
     def test_memmap_pickle_policy_requires_bool(self, tmp_path, allow_pickle):
         td = TensorDict(
