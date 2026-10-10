@@ -1698,6 +1698,67 @@ class TestLazyStackedTensorDict:
         assert len(ltd4.tensordicts) == 4
         assert_allclose_td(ltd4, ltd)
 
+    def test_popitem(self):
+        tds = [
+            TensorDict(a=torch.zeros(2), b=TensorDict(c=torch.zeros(1))),
+            TensorDict(a=torch.ones(2), b=TensorDict(c=torch.ones(1))),
+        ]
+        lazy = lazy_stack(tds)
+        key, val = lazy.popitem()
+        assert key == "b"
+        assert type(val) is TensorDict
+        assert (val["c"] == torch.tensor([[0.0], [1.0]])).all()
+        key, val = lazy.popitem()
+        assert key == "a"
+        assert (val == torch.tensor([[0.0, 0.0], [1.0, 1.0]])).all()
+        assert all(td.is_empty() for td in tds)
+
+    @pytest.mark.parametrize("failure", ["ragged", "missing"])
+    def test_popitem_error_keeps_entries(self, failure):
+        # popitem takes "a" from the first member; the error must leave every
+        # member with the same entries, in the same order.
+        tds = [
+            TensorDict(b=torch.ones(1), a=torch.zeros(2)),
+            TensorDict(a=torch.zeros(2), b=torch.ones(1)),
+            TensorDict(b=torch.ones(1), a=torch.zeros(2)),
+        ]
+        if failure == "ragged":
+            tds[2]["a"] = torch.zeros(3)
+            match = "stack expects each tensor to be equal size"
+        else:
+            del tds[2]["a"]
+            match = "Could not find key a in all tensordicts"
+        entries = [list(td.items()) for td in tds]
+        with pytest.raises(RuntimeError, match=match):
+            lazy_stack(tds).popitem()
+        for td, td_entries in zip(tds, entries):
+            assert list(td.keys()) == [key for key, _ in td_entries]
+            assert all(td[key] is value for key, value in td_entries)
+
+    def test_popitem_repeated_member(self):
+        # A member that is stacked twice has no "a" left after it is popped the
+        # first time, so popitem raises as for a missing key.
+        td0 = TensorDict(b=torch.ones(1), a=torch.zeros(2))
+        td1 = TensorDict(b=torch.ones(1), a=torch.ones(2))
+        with pytest.raises(RuntimeError, match="Could not find key a in all"):
+            lazy_stack([td0, td1, td1]).popitem()
+        assert list(td0.keys()) == ["b", "a"]
+        assert list(td1.keys()) == ["b", "a"]
+
+    def test_popitem_shared_source(self):
+        # Two rows of one tensordict share its entries: deleting "a" from the
+        # first row deletes it from the second, so popitem raises as for a
+        # missing key and puts the values back.
+        td0 = TensorDict(b=torch.ones(1), a=torch.zeros(2))
+        src = TensorDict(b=torch.ones(2, 1), a=torch.ones(2, 2), batch_size=[2])
+        lazy = LazyStackedTensorDict(
+            td0, src._get_sub_tensordict(0), src._get_sub_tensordict(1)
+        )
+        with pytest.raises(RuntimeError, match="Could not find key a in all"):
+            lazy.popitem()
+        assert list(td0.keys()) == ["b", "a"]
+        assert (src["a"][0] == 1).all()
+
     @pytest.mark.parametrize(
         "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "prod"]
     )

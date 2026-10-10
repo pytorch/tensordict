@@ -2366,15 +2366,30 @@ class LazyStackedTensorDict(TensorDictBase):
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         key, val = self.tensordicts[0].popitem()
         vals = [val]
-        for i, td in enumerate(self.tensordicts[1:]):
-            val = td.pop(key, None)
-            if val is not None:
+        # Read and stack the other members' values before deleting them. If
+        # that fails (a member lacks the key, or the values have different
+        # shapes), put the first member's value back and raise. A member that
+        # appears twice lacks the key the second time, as when it was popped.
+        seen = {id(self.tensordicts[0])}
+        try:
+            for td in self.tensordicts[1:]:
+                val = None if id(td) in seen else td.get(key, None)
+                seen.add(id(td))
+                if val is None:
+                    raise RuntimeError(f"Could not find key {key} in all tensordicts.")
                 vals.append(val)
-            else:
-                for j in range(i + 1):
+            out = torch.stack(vals, dim=self.stack_dim)
+        except Exception:
+            self.tensordicts[0].set(key, vals[0])
+            raise
+        for i, td in enumerate(self.tensordicts[1:], 1):
+            if td.pop(key, None) is None:
+                # The member lost the key with an earlier one that shares its
+                # storage (e.g. two rows of one PersistentTensorDict).
+                for j in range(i):
                     self.tensordicts[j].set(key, vals[j])
                 raise RuntimeError(f"Could not find key {key} in all tensordicts.")
-        return key, torch.stack(vals, dim=self.stack_dim)
+        return key, out
 
     def entry_class(self, key: NestedKey) -> type:
         data_type = type(self.tensordicts[0].get(key))
