@@ -99,6 +99,19 @@ class TestH5Serialization:
         assert is_non_tensor(td_recover.get("f"))
         assert is_non_tensor(td_recover.get(("g", "h")))
 
+    def test_rename_key_missing(self, tmp_path):
+        # the error names the missing source key, not the free destination
+        td = TensorDict({"a": torch.zeros(3), ("b", "c"): torch.zeros(3)}, [3])
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        with pytest.raises(KeyError, match="key nope not found"):
+            h5td.rename_key_("nope", "x")
+        with pytest.raises(KeyError, match="key b/nope not found"):
+            h5td.rename_key_(("b", "nope"), "x")
+        with pytest.raises(KeyError, match="key a already present"):
+            h5td.rename_key_("nope", "a")
+        assert set(h5td.keys(True, True)) == {"a", ("b", "c")}
+        h5td.close()
+
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_auto_batch_size(tmpdir):
