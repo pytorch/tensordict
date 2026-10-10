@@ -144,10 +144,17 @@ def pad(
     if inplace:
         out = tensordict
     else:
+        try:
+            names = tensordict._maybe_names()
+        except (IndexError, ValueError):
+            # A lazy stack without members, or whose members have different
+            # names: leave the dims unnamed.
+            names = None
         out = TensorDict._new_unsafe(
             {},
             torch.Size(new_batch_size),
             device=tensordict.device,
+            names=names,
         )
 
     # Snapshot keys so mid-iteration rebinds on `out is tensordict` don't
@@ -295,6 +302,15 @@ def _pad_non_tensor(
     if all(left == 0 and right == 0 for left, right in pairs):
         return tensordict
     result = _pad_non_tensor_rec(tensordict, pairs)
+    try:
+        names = tensordict._maybe_names()
+        if names is not None:
+            # the pad slots are unnamed: give the whole result the input's names
+            result.names = names
+    except (IndexError, ValueError):
+        # A stack without members, or names that differ between its members
+        # or are used twice: leave the names as they are.
+        pass
     if not inplace:
         return result
     if not isinstance(tensordict, NonTensorStack):
@@ -656,9 +672,19 @@ def merge_tensordicts(
 
     out = tensordicts[0].empty(recurse=True)
     key_list = set()
+    # The keys of the non-tensor entries of the other tensordicts, which are
+    # added at the end, with the tensordicts that hold them
+    non_tensor = {}
+    current = None
 
     def func(name, *vals):
         nonlocal key_list
+        if type(vals[0]) is not torch.Tensor and is_non_tensor(vals[0]):
+            if current is not tensordicts[0]:
+                owners = non_tensor.setdefault(name, [])
+                if not owners or owners[-1] is not current:
+                    owners.append(current)
+            return
         if name in key_list:
             return
         key_list.add(name)
@@ -680,9 +706,53 @@ def merge_tensordicts(
             tds = tensordicts[i + 1 :] + tensordicts[:i]
         else:
             tds = tensordicts[1:]
+        current = tensordicts[i]
         tensordicts[i]._fast_apply(
-            func, *tds, named=True, nested_keys=True, filter_empty=True, default=None
+            func,
+            *tds,
+            named=True,
+            nested_keys=True,
+            filter_empty=True,
+            default=None,
+            is_leaf=_is_leaf_nontensor,
         )
+    # out has the non-tensor entries of tensordicts[0] (from empty()). Add those
+    # of the others where nothing is on their path in out yet, so that the first
+    # one wins and the entries set above stay. Lazy stacks (no entry for a key
+    # that only some members hold) and tensorclasses (only their fields) in out
+    # are left as they are.
+    for name, owners in non_tensor.items():
+        node, first = out, tensordicts[0]
+        for subkey in (name,) if isinstance(name, str) else name:
+            if is_tensorclass(node) or isinstance(node, LazyStackedTensorDict):
+                break
+            parent, node = node, node._get_str(subkey, None)
+            if _is_tensor_collection(type(first)):
+                first = first._get_str(subkey, None)
+            else:
+                first = None
+            if node is not None and node is first:
+                # empty() keeps the sub-tensordicts of tensordicts[0] that have
+                # no tensors: write into a copy, not into tensordicts[0]
+                if type(node) is not TensorDict:
+                    break
+                node = node._select(*node.keys())
+                parent.set(subkey, node)
+            if node is None or _is_leaf_nontensor(type(node)):
+                break
+        if node is None:
+            for td in owners:
+                # For a lazy stack, get() stacks the values of the members
+                val = td.get(name, None)
+                if val is not None:
+                    try:
+                        # As before, leave out a value that out cannot take
+                        # (a stack of another batch size, other dim names)
+                        val = parent._validate_value(val, check_shape=True)
+                    except (RuntimeError, ValueError):
+                        break
+                    out.set(name, val)
+                    break
     return out
 
 

@@ -23,7 +23,6 @@ from typing import (
 from warnings import warn
 
 import torch
-from tensordict import base as _td_base
 from tensordict._archive import _memmap_tensor_from_path
 from tensordict._indexing import (
     _entry_index,
@@ -39,6 +38,7 @@ from tensordict.base import (
     _flatten_nested_dicts,
     _foreach_copy_,
     _foreach_copy_compiled,
+    _is_accepted_class,
     _is_leaf_nontensor,
     _is_tensor_collection,
     _load_metadata,
@@ -3055,7 +3055,7 @@ class _SubTensorDict(TensorDictBase):
                 value = _select_entry(key, value, keys_to_update)
                 if value is None:
                     continue
-            if not isinstance(value, _td_base._ACCEPTED_CLASSES):
+            if not _is_accepted_class(type(value)):
                 raise TypeError(
                     "Expected value to be a Tensor, a TensorDictBase or a "
                     f"tensorclass but got {type(value)}"

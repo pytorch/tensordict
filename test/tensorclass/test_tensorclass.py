@@ -3335,6 +3335,22 @@ class TestTensorClass:
         assert (data.get_at("X", slice(3, 5)) == 1).all()
         assert (data.get_at(("y", "X"), slice(3, 5)) == 1).all()
 
+    def test_tensorclass_set_at_returns_self_keeps_unset_field(self):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            z: torch.Tensor = None
+
+        data = MyClass(x=torch.zeros(3), batch_size=[3])
+        # z is unset, so set_at_ has no entry to write into and raises. It used
+        # to delete the field first, after which reading data.z raised.
+        with pytest.raises(KeyError):
+            data.set_at_("z", torch.tensor(1.0), 0)
+        assert data.z is None
+        assert data.to_dict()["z"] is None
+        assert data.set_at_("x", torch.tensor(1.0), 0) is data
+        assert data.x.tolist() == [1.0, 0.0, 0.0]
+
     def test_to_tensordict(self):
         @tensorclass
         class MyClass:
