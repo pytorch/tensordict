@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4742+gf11b799fa.d20261010)
+                  main (0.14.0.dev4744+ge62b4290d.d20261010)
                 </div>
               
             
@@ -397,7 +397,9 @@ wrapped in <cite>CudaGraphModule</cite>:</p>
 </li>
 <li><p>The function must execute a code that can be exactly re-run using the same buffers. This means that
 dynamic shapes (changing shape in the input or during the code execution) is not supported. In other words,
-the input must have a constant shape.</p></li>
+the input must have a constant shape. After the capture, a tensor input with a different shape, or a
+tensordict input with a different batch size or an entry of a different shape, raises a <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>, and
+a tensordict input that lacks one of the <code class="docutils literal notranslate"><span class="pre">in_keys</span></code> raises a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>.</p></li>
 <li><p>The output of the function must be detached. If a call to the optimizers is required, put it in the input
 function. For instance, the following function is a valid operator:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">func</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
@@ -429,8 +431,11 @@ args and kwargs should not change. For instance, if the function receives a stri
 at any point, the module will silently execute the code with the string used during the capture of the cudagraph.
 The only supported keyword argument is <cite>tensordict_out</cite> in case the input is a tensordict.</p></li>
 <li><p>If the module is a <a class="reference internal" href="tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="tensordict.nn.TensorDictModuleBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code></a> instance and the output id matches the input
-id, then this identity will be preserved during a call to <code class="docutils literal notranslate"><span class="pre">CudaGraphModule</span></code>. In all other cases, the output
-will be cloned, irrespective of whether its elements match or do not match one of the inputs.</p></li>
+id, then this identity will be preserved during a call to <code class="docutils literal notranslate"><span class="pre">CudaGraphModule</span></code>, and the outputs written into
+the input are clones of the graph’s output buffers. In all other cases, the output will be cloned,
+irrespective of whether its elements match or do not match one of the inputs.</p></li>
+<li><p>In-place writes to the input tensors inside the function (e.g. <code class="docutils literal notranslate"><span class="pre">x.add_(1)</span></code>) do not reach the caller’s
+inputs once the graph is captured: the graph reads and writes its own copies of the inputs.</p></li>
 </ul>
 </div></blockquote>
 </div>
