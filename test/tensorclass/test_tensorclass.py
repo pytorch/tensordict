@@ -19,6 +19,7 @@ import pickle
 import re
 import sys
 import textwrap
+import warnings
 import weakref
 from collections import UserDict
 from dataclasses import field
@@ -281,8 +282,9 @@ def test_tensorclass_stub_methods():
 
 # Names on which the TensorClass stub and runtime tensorclasses differ on purpose.
 _TENSORCLASS_STUB_EXCLUSIONS = {
-    # Forwards to LazyStackedTensorDict.extend, so it works only when the
-    # tensorclass wraps a lazy stack; TensorDictBase has no extend.
+    # Deprecated (removed in TensorDict 0.17). It forwards to
+    # LazyStackedTensorDict.extend, so it works only when the tensorclass wraps
+    # a lazy stack; TensorDictBase has no extend.
     "extend",
 }
 
@@ -4608,6 +4610,83 @@ class TestShadow:
                 setattr(c, name, torch.full((3,), 2.0))
                 assert (getattr(c, name) == 2).all()
                 assert (c.get(name) == 2).all()
+
+
+class TestDeprecations:
+    @pytest.mark.parametrize("subclass", [False, True])
+    def test_fields(self, subclass):
+        if subclass:
+
+            class MyClass(TensorClass):
+                x: torch.Tensor
+
+        else:
+
+            @tensorclass
+            class MyClass:
+                x: torch.Tensor
+
+        c = MyClass(x=torch.zeros(3), batch_size=[3])
+        for obj in (MyClass, c):
+            with pytest.warns(
+                DeprecationWarning, match=r"fields\(\) .* removed in TensorDict 0\.17"
+            ) as record:
+                assert obj.fields() == dataclasses.fields(MyClass)
+            assert record[0].filename == __file__
+
+    def test_extend(self):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+
+        c = MyClass(x=torch.zeros(3), batch_size=[3])
+        stack = lazy_stack([c, c])
+        with pytest.warns(
+            DeprecationWarning, match=r"extend\(\) .* removed in TensorDict 0\.17"
+        ) as record:
+            stack.extend(lazy_stack([c])._tensordict)
+        assert record[0].filename == __file__
+        assert stack.batch_size == torch.Size([3, 3])
+
+    @pytest.mark.parametrize(
+        "args,kwargs", [((), {"safe": True}), ((None, False), {})], ids=["kw", "pos"]
+    )
+    def test_from_tensordict_safe(self, args, kwargs):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+
+        td = TensorDict(x=torch.zeros(3), batch_size=[3])
+        with pytest.warns(
+            DeprecationWarning, match=r"safe=\.\.\.\) .* removed in TensorDict 0\.17"
+        ) as record:
+            c = MyClass.from_tensordict(td, *args, **kwargs)
+        assert record[0].filename == __file__
+        assert c._tensordict is td
+
+    # The library code that builds and converts tensorclasses does not call the
+    # deprecated members.
+    @pytest.mark.parametrize(
+        "base", [None, TensorClass, TensorClass["tensor_only"], TensorClass["frozen"]]
+    )
+    def test_no_warning_internally(self, base):
+        from tensordict.nn.tensorclass_module import _tensor_class_keys
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            annotations = {"x": torch.Tensor, "y": torch.Tensor}
+            if base is None:
+                MyClass = tensorclass(
+                    type("MyClass", (), {"__annotations__": annotations})
+                )
+            else:
+                MyClass = type("MyClass", (base,), {"__annotations__": annotations})
+            td = TensorDict(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+            c = MyClass.from_tensordict(td)
+            MyClass._from_tensordict(td, safe=False)
+            MyClass.from_dict(td.to_dict(), auto_batch_size=True)
+            torch.stack([c, c])[0].clone()
+            assert _tensor_class_keys(MyClass) == [("x",), ("y",)]
 
 
 class TestVMAP:

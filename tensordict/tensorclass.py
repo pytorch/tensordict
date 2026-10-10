@@ -46,7 +46,7 @@ import numpy as np
 import tensordict as tensordict_lib
 import torch
 from tensordict import base as _td_base
-from tensordict._deprecation import deprecated
+from tensordict._deprecation import deprecated, warn_deprecated
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._pytree import _register_td_node
@@ -432,7 +432,6 @@ _FALLBACK_METHOD_FROM_TD = [
     "expand_as",
     "expm1",
     "expm1_",
-    "extend",
     "fill_",
     "filter_empty_",
     "filter_non_tensor_data",
@@ -1162,8 +1161,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             if _is_reserved_field_name(attr):
                 _raise_reserved_field_name(attr)
 
-    cls.fields = classmethod(dataclasses.fields)
-    for field in cls.fields():
+    cls.fields = classmethod(_fields)
+    for field in dataclasses.fields(cls):
         if hasattr(cls, field.name):
             # if we have used Cls(TensorClass["shadow"]), we have a subclass of Cls(TensorClass)
             #  so we cannot directly delete the attribute
@@ -1297,6 +1296,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         cls.update_ = _update_
     if not hasattr(cls, "update_at_") and "update_at_" not in expected_keys:
         cls.update_at_ = _update_at_
+    if not hasattr(cls, "extend"):
+        cls.extend = _extend
     for method_name in _METHOD_FROM_TD:
         if not hasattr(cls, method_name):
             setattr(cls, method_name, getattr(TensorDict, method_name))
@@ -1486,6 +1487,22 @@ def _tc_broadcast(self, src, *, group=None, device=None):
     if not isinstance(result, type(self)):
         return type(self)._from_tensordict(result)
     return result
+
+
+@deprecated(
+    "TensorClass.fields()", removal="0.17", replacement="dataclasses.fields(cls)"
+)
+def _fields(cls) -> tuple[dataclasses.Field, ...]:
+    return dataclasses.fields(cls)
+
+
+@deprecated(
+    "TensorClass.extend()",
+    removal="0.17",
+    replacement="lazy_stack or torch.cat to build a new instance",
+)
+def _extend(self, tensordict: list[TensorDictBase] | TensorDictBase) -> None:
+    self._tensordict.extend(tensordict)
 
 
 def _from_tensordict_with_copy(tc, tensordict):
@@ -2237,7 +2254,7 @@ def _from_tensordict_public(
     cls,
     tensordict: TensorDictBase,
     non_tensordict: dict | None = None,
-    safe: bool = True,
+    safe: bool | None = None,
 ) -> Self:
     """Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
 
@@ -2252,8 +2269,9 @@ def _from_tensordict_public(
         tensordict (TensorDictBase): the tensordict that holds the tensor fields.
         non_tensordict (dict, optional): the values of the non-tensor fields. The
             fields that neither argument holds are set to ``None``.
-        safe (bool, optional): if ``True``, raise an error when ``tensordict`` is not
-            a :class:`~tensordict.TensorDictBase`. Defaults to ``True``.
+        safe (bool, optional): Deprecated in 0.15, to be removed in TensorDict 0.17. Whether to
+            raise an error if ``tensordict`` is not a :class:`~tensordict.TensorDictBase`.
+            Without it, such a tensordict raises an error.
 
     Examples:
         >>> import torch
@@ -2266,6 +2284,10 @@ def _from_tensordict_public(
         >>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
         'Pose'
     """
+    if safe is None:
+        safe = True
+    else:
+        warn_deprecated("TensorClass.from_tensordict(safe=...)", removal="0.17")
     # The tensorclass ops rebuild their results with _from_tensordict: their
     # nested entries are already tensorclasses.
     if cls._tensorclass_fields and isinstance(tensordict, TensorDict):
@@ -4090,7 +4112,7 @@ def _patch_tc(cls):
     cls.grad = property(_grad)
 
     cls._from_tensordict = classmethod(_from_tensordict)
-    cls.from_tensordict = _from_tensordict
+    cls.from_tensordict = _from_tensordict_public
     cls._new_unsafe = classmethod(_new_unsafe)
     cls._load_memmap = classmethod(_load_memmap)
     cls.from_dict = classmethod(_from_dict)
