@@ -3179,19 +3179,12 @@ class LazyStackedTensorDict(TensorDictBase):
         # Use check-before-delete pattern for torch.compile compatibility
         key_tuple = _unravel_key_to_tuple(key)
         is_nested = len(key_tuple) > 1
-        ids = set()
-        cur_len = len(ids)
         is_deleted = False
         for td in self.tensordicts:
-            # checking that the td has not been processed yet.
-            # It could be that not all sub-tensordicts have the appropriate
-            # entry but one must have it (or an error is thrown).
-            tdid = id(td)
-            ids.add(tdid)
-            new_cur_len = len(ids)
-            if new_cur_len == cur_len:
-                continue
-            cur_len = new_cur_len
+            # Not all sub-tensordicts need to have the entry, but one must
+            # have it (or an error is thrown). A tensordict that appears twice
+            # in the stack no longer has the entry the second time (no id()
+            # check: under torch.compile it guards on the id of every member).
             if key_tuple[0] in td.keys():
                 if is_nested:
                     # For nested keys, check the full path exists

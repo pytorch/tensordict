@@ -951,6 +951,40 @@ class TestLazyStackedTensorDict:
             assert clone.shape == torch.Size([1, 0, 2])
             assert clone.device == torch.device("cpu")
 
+    @pytest.mark.parametrize("key", ["a", ("n", "x"), "n"])
+    @pytest.mark.parametrize("op", ["del", "pop"])
+    def test_del_repeated_member(self, key, op):
+        # A member that appears twice in the stack loses the entry once.
+        def make():
+            return TensorDict(
+                a=torch.zeros(3),
+                b=torch.zeros(3),
+                n=TensorDict(x=torch.zeros(3), y=torch.zeros(3), batch_size=[3]),
+                batch_size=[3],
+            )
+
+        def remove(td):
+            if op == "del":
+                del td[key]
+            else:
+                td.pop(key)
+
+        t, u = make(), make()
+        td = lazy_stack([t, t, u])
+        remove(td)
+        for member in (td, t, u):
+            assert key not in member.keys(True)
+        assert "b" in td.keys()
+
+        inner = lazy_stack([make(), make()])
+        td = lazy_stack([inner, inner, lazy_stack([make(), make()])])
+        remove(td)
+        for member in (td, inner, *inner.tensordicts):
+            assert key not in member.keys(True)
+
+        with pytest.raises(KeyError):
+            del td[key]
+
     def test_densify(self):
         td0 = TensorDict(
             a=torch.zeros((1,)),
