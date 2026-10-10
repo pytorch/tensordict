@@ -76,9 +76,8 @@ print(model(x=x))
 # --------------------------------------------------
 #
 # ``torch.export`` captures the graph of a module in a standard form, which
-# does not depend on ``tensordict``. Its main entry point is
-# :func:`~torch.export.export`, which returns an ``ExportedProgram``. This
-# object has the following attributes:
+# does not depend on ``tensordict``. The :func:`~torch.export.export`
+# function returns an ``ExportedProgram``, which has these attributes:
 #
 # - ``graph_module``: the FX graph that ``export`` captured.
 # - ``graph_signature``: the inputs and outputs of the graph.
@@ -199,8 +198,9 @@ print("module:", model_export.module())
 #
 # You can now export a ``tensordict.nn`` model with ``torch.export`` into a
 # program that takes and returns plain tensors. You can pass nested keys as
-# keyword arguments joined with ``"_"``, save the program to a ``.pt2`` file
-# and load it again, and select the outputs of the model before the export.
+# keyword arguments joined with ``"_"``, and save the program to a ``.pt2``
+# file and load it again. You can also select the outputs of the model before
+# the export.
 #
 # Further reading
 # ---------------

@@ -29,11 +29,11 @@ The zarr backend needs ``zarr>=3.0``. To install it, run
 # Why zarr?
 # ---------
 # For local checkpoints, the memory-mapped format (see the
-# :ref:`saving guide <saving>`) is faster. The difference is largest for
-# tensordicts with many small leaves (the tensors at the ends of the nested
-# keys), because zarr pays one store round trip per array. Use zarr when the
-# data must be on object storage, when xarray or dask must read it (both read
-# and write zarr), or when you need compression per chunk.
+# :ref:`saving guide <saving>`) is faster. A leaf is a tensor at the end of a
+# nested key. The difference is largest for tensordicts with many small
+# leaves, because zarr pays one store round trip per array. Use zarr when the
+# data must be on object storage, when you need compression per chunk, or when
+# xarray or dask must read it. Both libraries read and write zarr.
 
 import tempfile
 from pathlib import Path

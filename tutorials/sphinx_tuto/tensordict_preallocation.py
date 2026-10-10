@@ -3,9 +3,9 @@ Filling a TensorDict row by row
 ===============================
 **Author**: `Tom Begley <https://github.com/tcbegley>`_
 
-To collect the results of a loop, such as the positions and velocities of a
-simulation at each step, you usually allocate one tensor per quantity in
-advance, then write each step into it. A :class:`~tensordict.TensorDict` does the allocation for you:
+A simulation loop often stores results at each step, such as the positions
+and the velocities of its particles. To collect them, you usually allocate one
+tensor per quantity in advance, then write each step into it. A :class:`~tensordict.TensorDict` does the allocation for you:
 the first write with an index creates every tensor at its full size. This
 tutorial is for readers who fill a buffer one step at a time.
 

@@ -235,7 +235,7 @@ print(f"Tensorclass training done! time: {time.perf_counter() - t0: 4.4f} s")
 # You can now define a :class:`~tensordict.TensorClass` with typed fields, and
 # a ``from_dataset`` method that loads a dataset into memory-mapped tensors
 # once. You can pass the tensorclass to a ``DataLoader`` with
-# ``collate_fn=lambda x: x``, move each batch to the device with one call, and
+# ``collate_fn=lambda x: x``. One call moves each batch to the device, and you
 # read its fields as attributes.
 #
 # Further reading

@@ -11,7 +11,7 @@ different rates. To process a stream in batches, you group the incoming values
 into buckets, one for each fixed time window. The buckets have different
 lengths, so they do not fit in one tensor. This tutorial groups two streams,
 at 7 Hz and 3 Hz, into one-second buckets with a lazy stack of tensordicts. It
-is for readers who batch data whose size changes from one batch to the next.
+is for readers who batch data of variable size.
 
 What you will learn:
 
@@ -228,8 +228,8 @@ print("values per bucket of bucket0 (about 7)", td["bucket0"].offsets().diff())
 # Conclusion
 # ----------
 #
-# You can now batch data whose size changes from one batch to the next. Group
-# the tensordicts with :func:`~tensordict.lazy_stack`, grow the
+# You can now batch data of variable size. Group the tensordicts with
+# :func:`~tensordict.lazy_stack`, grow the
 # :class:`~tensordict.LazyStackedTensorDict` one bucket at a time with
 # ``append``, and convert it into nested tensors with ``densify``. The same
 # pattern works for any stream that you read in fixed time windows.

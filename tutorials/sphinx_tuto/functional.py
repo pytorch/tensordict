@@ -163,8 +163,8 @@ print("functional_call output:", y.shape)
 # ----------
 #
 # You can now extract the parameters of a module into a
-# :class:`~tensordict.TensorDict` with ``from_module``, and swap them for the
-# length of a ``with`` block with ``to_module``. You can stack parameters by
+# :class:`~tensordict.TensorDict` with ``from_module``. ``to_module`` swaps
+# them for the length of a ``with`` block. You can stack parameters by
 # hand or with ``from_modules``, and run the whole ensemble in one
 # :func:`torch.vmap` call. :class:`~tensordict.nn.EnsembleModule` builds such
 # an ensemble in one step. ``flatten_keys(".")`` gives the parameter names

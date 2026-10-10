@@ -232,10 +232,10 @@ plt.show()
 # The tensordict formats are the memmap directory, the consolidated file and
 # the ``.tdz`` zip archive.
 #
-# ``torch.save`` and safetensors use their fastest paths: a flat ``dict`` of
-# tensors, written with ``torch.save`` or ``save_file``, and opened with
-# ``torch.load(mmap=True, weights_only=True)`` or ``load_file``, which also
-# memory-maps the file. These formats do not store nested keys, so the
+# ``torch.save`` and safetensors use their fastest paths. The benchmark writes
+# a flat ``dict`` of tensors with ``torch.save`` or ``save_file``. It opens the
+# file with ``torch.load(mmap=True, weights_only=True)`` or with
+# ``load_file``, which also memory-maps the file. These formats do not store nested keys, so the
 # benchmark flattens the keys before it saves, and rebuilds the nesting when
 # it opens the file. zarr goes through
 # :meth:`~tensordict.TensorDictBase.to_zarr` and
@@ -471,9 +471,9 @@ plt.show()
 # ----------
 #
 # You can now run this benchmark on your own storage and read its two
-# figures: the effect of threads on each write path, and the save time and the
-# open time of each format. The results depend on the machine, so measure
-# before you choose a format.
+# figures. The first figure shows the effect of threads on each write path.
+# The second figure shows the save time and the open time of each format. The
+# results depend on the machine, so measure before you choose a format.
 #
 # Further reading
 # ---------------

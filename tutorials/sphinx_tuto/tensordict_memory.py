@@ -5,8 +5,8 @@ Devices and memory-mapped tensors
 
 One call moves all the tensors of a :class:`~tensordict.TensorDict` to a
 device, and one call stores them in memory-mapped files. This tutorial is for
-readers who move groups of tensors between the CPU and a GPU, or who work with
-datasets that do not fit in RAM.
+readers who move groups of tensors between the CPU and a GPU, or whose
+datasets do not fit in RAM.
 
 What you will learn:
 

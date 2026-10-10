@@ -233,8 +233,8 @@ print(flattened_tensordict.unflatten_keys(separator="."))
 ##############################################################################
 # ``unflatten_keys`` works on any flat key names with a separator. For
 # example, the parameter names of a :class:`torch.nn.Module` use ``"."``. This
-# code builds a :class:`~tensordict.TensorDict` whose structure is the structure
-# of the module:
+# code builds a :class:`~tensordict.TensorDict` with the structure of the
+# module:
 
 import torch.nn as nn
 

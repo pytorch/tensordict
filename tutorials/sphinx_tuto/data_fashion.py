@@ -3,7 +3,7 @@ Using TensorDict for datasets
 =============================
 
 A ``torchvision`` dataset applies its transform to each image again at every
-epoch, and the ``DataLoader`` reads the samples one by one to build a batch. A
+epoch. The ``DataLoader`` reads the samples one by one to build a batch. A
 :class:`~tensordict.TensorDict` of memory-mapped tensors stores the converted
 images once, and the ``DataLoader`` reads each batch from it with one index.
 This tutorial does this for FashionMNIST, with the model and the training loop
@@ -313,7 +313,7 @@ print(f"Training done! time: {time.perf_counter() - t0: 4.4f} s")
 # ----------
 #
 # You can now convert a dataset into a tensordict of memory-mapped tensors
-# once, and train a model from it with a ``DataLoader`` and
+# once. Then you train a model from it with a ``DataLoader`` and
 # ``collate_fn=lambda x: x``.
 #
 # The two training runs use the same model, the same initial parameters and

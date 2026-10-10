@@ -178,8 +178,8 @@ assert stacked_tensordict["a"].shape == torch.Size([2, 3, 4])
 # ^^^^^^^^^^^^^
 # Concatenation is never lazy. :func:`torch.cat` on a list of
 # :class:`~tensordict.TensorDict` instances returns a
-# :class:`~tensordict.TensorDict` whose entries are the concatenated entries
-# of the tensordicts of the list.
+# :class:`~tensordict.TensorDict`. Each of its entries concatenates the
+# entries with the same key in the tensordicts of the list.
 
 concatenated_tensordict = torch.cat([tensordict, cloned_tensordict], dim=0)
 assert isinstance(concatenated_tensordict, TensorDict)
@@ -236,8 +236,7 @@ assert squeezed_tensordict["a"].shape == torch.Size([3, 1, 4])
 # Viewing
 # -------
 # :meth:`~tensordict.TensorDictBase.view` returns a
-# :class:`~tensordict.TensorDict` whose entries are views of the original
-# entries.
+# :class:`~tensordict.TensorDict` of views of the original entries.
 
 tensordict = TensorDict({"a": torch.arange(12)}, [12])
 # the entries are viewed at this step
