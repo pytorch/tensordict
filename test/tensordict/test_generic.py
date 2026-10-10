@@ -3230,6 +3230,49 @@ class TestGeneric:
         assert out.a.shape == (4, 6)
         assert out.b.shape == (4, 6, 2)
 
+    def test_pad_keeps_names(self):
+        td = TensorDict(
+            a=torch.ones(3, 4),
+            nested=TensorDict(b=torch.ones(3, 4, 2), batch_size=[3, 4, 2]),
+            batch_size=[3, 4],
+            names=["t", "f"],
+        )
+        out = pad(td, [0, 1, 1, 0])
+        assert out.names == ["t", "f"]
+        assert out["nested"].names == ["t", "f", None]
+        assert out.names == pad(td.clone(), [0, 1, 1, 0], inplace=True).names
+        # a lazy stack of named tensordicts keeps the name of its stack dim too
+        lazy = lazy_stack([td[0], td[1]]).rename_("s", "f")
+        out = pad(lazy, [0, 1, 1, 0])
+        assert out.names == ["s", "f"]
+        assert out["nested"].names == ["s", "f", None]
+
+        @tensorclass
+        class _Sample:
+            a: torch.Tensor
+
+        s = _Sample(a=torch.ones(3, 4), batch_size=[3, 4], names=["t", "f"])
+        assert pad(s, [0, 1]).names == ["t", "f"]
+        # non-tensor values keep their names too, so the result can be used
+        # like the input
+        td = TensorDict(a=torch.ones(3, 4), batch_size=[3, 4], names=["t", "f"])
+        td.set_non_tensor("s", "x")
+        out = pad(td, [0, 1])
+        assert out.get("s").names == ["t", "f"]
+        out.apply(lambda x: x)
+        out.update(out.clone())
+        out.clone().set("s2", out.get("s"))
+        assert pad(td.clone(), [0, 1], inplace=True).get("s").names == ["t", "f"]
+        # a stack of non-tensor values with different names still pads
+        x, y = (NonTensorData("v", batch_size=[2], names=[name]) for name in "xy")
+        pad(NonTensorStack(x, y), [0, 1])
+        # a lazy stack whose members have different names, or that has no
+        # members, has no names to keep: the result is unnamed, as before
+        a, b = (TensorDict(batch_size=[2], names=[name]) for name in "ab")
+        assert pad(lazy_stack([a, b]), [0, 0, 0, 1]).names == [None, None]
+        empty = LazyStackedTensorDict(stack_dim=0, batch_size=[2])
+        assert pad(empty, [0, 0, 0, 1]).names == [None, None]
+
     def _build_nested_td(self, batch_size=(3, 4), feat=(5,)):
         return TensorDict(
             {
