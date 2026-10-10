@@ -2957,6 +2957,79 @@ class TestGeneric:
         assert ref() is None
 
     @pytest.mark.parametrize("inplace", [True, False])
+    def test_roll_feature_dims(self, inplace):
+        # dims are batch dims: negative dims and the default (flattened batch)
+        # must leave the feature dims of the leaves in place
+        a = torch.arange(24).view(2, 3, 4)
+        b = torch.arange(12).view(2, 3, 2)
+        td = TensorDict({"a": a, "nested": TensorDict({"b": b}, [2, 3, 2])}, [2, 3])
+
+        out = td.clone().roll(1, -1, inplace=inplace)
+        assert (out["a"] == a.roll(1, 1)).all()
+        assert (out["nested", "b"] == b.roll(1, 1)).all()
+
+        out = td.clone().roll(1, inplace=inplace)
+        assert (out["a"] == a.view(6, 4).roll(1, 0).view(2, 3, 4)).all()
+        assert (out["nested", "b"] == b.view(6, 2).roll(1, 0).view(2, 3, 2)).all()
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    @pytest.mark.parametrize("dims", [None, ()])
+    def test_roll_flat_batch_edge_cases(self, dims, inplace):
+        # empty dims roll the flattened batch like None, as in torch, and an
+        # empty feature dim does not make the flattened batch ambiguous
+        b = torch.arange(12).view(2, 3, 2)
+        td = TensorDict(
+            {"z": torch.zeros(2, 3, 0), "nested": TensorDict({"b": b}, [2, 3, 2])},
+            [2, 3],
+        )
+        out = td.clone().roll(1, dims, inplace=inplace)
+        assert out["z"].shape == (2, 3, 0)
+        assert (out["nested", "b"] == b.view(6, 2).roll(1, 0).view(2, 3, 2)).all()
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_roll_flat_batch_keeps_nested_names(self, inplace):
+        # rolling the flattened batch reshapes each nested tensordict, which
+        # must not drop its dim names
+        nested = TensorDict(
+            {"b": torch.zeros(2, 3, 2)}, [2, 3, 2], names=["x", "y", "z"]
+        )
+        td = TensorDict({"nested": nested}, [2, 3], names=["x", "y"])
+        out = td.roll(1, inplace=inplace)
+        assert out.names == ["x", "y"]
+        assert out["nested"].names == ["x", "y", "z"]
+
+    def test_roll_flat_batch_inplace_rebinds_nested(self):
+        # like the other in-place paths, roll(inplace=True) replaces the nested
+        # leaves instead of writing into them: a tensor the caller still holds
+        # is left untouched, and an expanded leaf can be rolled
+        b = torch.arange(12).view(2, 3, 2)
+        e = torch.arange(2).expand(2, 3, 2)
+        td = TensorDict({"nested": TensorDict({"b": b, "e": e}, [2, 3, 2])}, [2, 3])
+        td.roll(1, inplace=True)
+        assert (b == torch.arange(12).view(2, 3, 2)).all()
+        assert (td["nested", "b"] == b.view(6, 2).roll(1, 0).view(2, 3, 2)).all()
+        assert (td["nested", "e"] == e).all()
+
+    @pytest.mark.parametrize(
+        "dims,batch_size,leaf_reps",
+        [
+            ((2,), [2, 6], (1, 2, 1)),
+            ((2, 1), [4, 3], (2, 1, 1)),
+            ((3, 1, 1), [3, 2, 3], (3, 1, 1, 1)),
+        ],
+    )
+    def test_tile_feature_dims(self, dims, batch_size, leaf_reps):
+        # dims are aligned with the batch dims, feature dims are not tiled
+        a = torch.arange(24).view(2, 3, 4)
+        td = TensorDict(
+            {"a": a, "nested": TensorDict({"b": a.clone()}, [2, 3, 4])}, [2, 3]
+        )
+        out = td.tile(dims)
+        assert out.batch_size == torch.Size(batch_size)
+        assert (out["a"] == a.tile(leaf_reps)).all()
+        assert (out["nested", "b"] == a.tile(leaf_reps)).all()
+
+    @pytest.mark.parametrize("inplace", [True, False])
     def test_gather_inplace(self, inplace):
         td = self._build_nested_td(batch_size=(3, 4))
         index = torch.tensor([[0, 2], [1, 3], [2, 0]])
