@@ -1386,7 +1386,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 val.grad = None
             return self
         for val in self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
-            val.grad.zero_()
+            grad = val.grad
+            if grad is not None:
+                grad.zero_()
         return self
 
     @_cache_while_locked  # noqa

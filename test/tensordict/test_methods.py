@@ -4905,13 +4905,16 @@ class TestTensorDicts(TestTensorDictsBase):
             return
         tdr = td.float().requires_grad_()
         td1 = tdr + 1
-        sum(td1.sum().values(True, True)).backward()
+        # "a" is left out of the loss, so its grad stays None
+        sum(td1.exclude("a").sum().values(True, True)).backward()
         assert (tdr.grad == 1).all(), tdr.grad.to_dict()
+        assert "a" not in tdr.grad.keys()
         tdr.zero_grad(set_to_none=set_to_none)
         if set_to_none:
             assert tdr.filter_non_tensor_data().grad is None, (td, tdr, tdr.grad)
         else:
             assert (tdr.grad == 0).all()
+            assert "a" not in tdr.grad.keys()
 
     def test_autograd_grad(self, td_name, device):
         td = getattr(self, td_name)(device)
