@@ -226,6 +226,19 @@ def test_unravel_key_invalid_fullgraph(fn, key):
     assert compiled_msg == msg
 
 
+@pytest.mark.parametrize("values", ["aaaa", "abcd"])
+def test_tree_leaves_nontensor_stack(values):
+    # Flattening a tensordict does not read the data of its NonTensorStack
+    # entries, which Dynamo cannot trace.
+    def fn(td):
+        return [leaf + 1 for leaf in tree_leaves(td) if isinstance(leaf, torch.Tensor)]
+
+    td = TensorDict(a=torch.zeros(4, 3), batch_size=[4])
+    td.set("s", NonTensorStack(*values))
+    (out,) = torch.compile(fn, fullgraph=True, backend="eager")(td)
+    assert (out == 1).all()
+
+
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
     def test_tensor_output(self, mode):
@@ -2483,20 +2496,6 @@ class TestCompileNontensor:
 
     def test_nontensor_with_device_without_batch_size(self, data):
         torch.compile(self.fn_with_device_without_batch_size)(data)
-
-    @pytest.mark.parametrize("values", ["aaaa", "abcd"])
-    def test_tree_leaves_nontensor_stack(self, values):
-        # Flattening a tensordict does not read the data of its NonTensorStack
-        # entries, which Dynamo cannot trace.
-        def fn(td):
-            return [
-                leaf + 1 for leaf in tree_leaves(td) if isinstance(leaf, torch.Tensor)
-            ]
-
-        td = TensorDict(a=torch.zeros(4, 3), batch_size=[4])
-        td.set("s", NonTensorStack(*values))
-        (out,) = torch.compile(fn, fullgraph=True, backend="eager")(td)
-        assert (out == 1).all()
 
 
 class TestTCNonTensorInit:
