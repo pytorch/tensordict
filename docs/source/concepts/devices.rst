@@ -33,6 +33,8 @@ The value changes what happens to the entries that you add:
 - If ``device`` is ``None``, each entry keeps its device. The leaves can be
   on different devices.
 
+In this example, ``td`` has the ``meta`` device, and ``mixed`` has no device:
+
     >>> td = TensorDict(a=torch.zeros(3), batch_size=[3], device="meta")
     >>> td["b"] = torch.ones(3)  # a CPU tensor
     >>> td["b"].device
@@ -49,6 +51,8 @@ Two methods change the attribute and do not move any leaf:
 - :meth:`~tensordict.TensorDict.auto_device_` sets ``device`` to the device
   of the leaves if they are all on one device, and to ``None`` otherwise.
 - :meth:`~tensordict.TensorDict.clear_device_` sets ``device`` to ``None``.
+
+Here, all the leaves are on the CPU:
 
     >>> TensorDict(a=torch.zeros(3), batch_size=[3]).auto_device_().device
     device(type='cpu')
@@ -192,6 +196,8 @@ These rules apply:
   dtype. With ``fields=("dtype",)``, the spec changes only the dtypes.
 - ``non_blocking_pin=True`` is not supported with a spec. It raises
   ``NotImplementedError``.
+
+In this example, the spec has only the key ``"a"``, so ``"b"`` keeps its dtype:
 
     >>> partial = TensorDict(a=torch.zeros(3, dtype=torch.float16), batch_size=[3]).attrs()
     >>> out = source.to(partial)

@@ -169,6 +169,8 @@ argument for tensordicts with different keys:
   missing entry, on both sides. A Python number (``default=0``) raises a
   ``TypeError``.
 
+In this example, ``x`` and ``y`` share only the key ``"a"``:
+
     >>> x = TensorDict(a=torch.ones(2), b=torch.ones(2), batch_size=[2])
     >>> y = TensorDict(a=torch.ones(2), c=torch.ones(2), batch_size=[2])
     >>> x + y
@@ -209,6 +211,9 @@ are. These arguments change what ``apply`` does:
 - ``inplace=True``, or :meth:`~tensordict.TensorDict.apply_`: write the
   results into the existing leaves and return the same tensordict.
 - ``out=``: write the results into another tensordict.
+
+The next examples use another tensordict, ``batch_size=`` and a function that
+returns ``None``:
 
     >>> td.apply(lambda x, y: x + y, td)["a"][0, 0]
     tensor(2.)
@@ -361,6 +366,9 @@ Other methods follow neither of the two rules above:
   object, as for the other shape-changing operations. A leaf keeps its
   storage when the operation can return a view of it.
 
+For example, ``select(inplace=True)`` returns the same tensordict, with fewer
+keys:
+
     >>> td = TensorDict(a=torch.ones(2), b=TensorDict(c=torch.ones(2)))
     >>> td.select("a", inplace=True) is td, list(td.keys())
     (True, ['a'])
@@ -477,6 +485,8 @@ To avoid the error, do one of these:
 - Set ``batch_size=[]``, so that all the dimensions are feature dimensions.
 - Give the leaves a feature dimension of size 2 or more. A dimension of
   size 1 (``torch.randn(4, 1)``) does not help.
+
+With ``batch_size=[]``, the same function works:
 
     >>> jacrev(g)(TensorDict(a=torch.randn(4), batch_size=[]))["x", "a"].shape
     torch.Size([4, 4])

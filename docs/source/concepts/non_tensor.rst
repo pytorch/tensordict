@@ -39,6 +39,8 @@ When you set a value that is not a tensor, tensordict converts it:
 - Any other value, such as a string or ``None``, becomes a
   :class:`~tensordict.NonTensorData`.
 
+This example shows the type of each entry:
+
     >>> import torch
     >>> import numpy as np
     >>> from tensordict import MetaData, NonTensorData, NonTensorStack, TensorDict
