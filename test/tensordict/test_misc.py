@@ -22,10 +22,12 @@ from tensordict import (
     PersistentTensorDict,
     tensorclass,
     TensorDict,
+    TypedTensorDict,
 )
 from tensordict._td import is_tensor_collection
 from tensordict.base import TensorDictBase
 from tensordict.memmap import MemoryMappedTensor
+from tensordict.nn import TensorDictParams
 from tensordict.tensorclass import NonTensorData
 from tensordict.utils import (
     _decode_key_from_filesystem,
@@ -701,6 +703,100 @@ class TestPointwiseOps:
                 broadcast_shape
             ),
         )
+
+    @pytest.mark.parametrize("locked", [True, False])
+    @pytest.mark.parametrize("shape", [(4,), (3, 4)])
+    def test_inplace_broadcast_tensor(self, shape, locked):
+        # In-place ops with a tensor that broadcasts to the batch return self
+        td = TensorDict(
+            a=torch.ones(3, 4), b={"c": torch.ones(3, 4, 5)}, batch_size=(3, 4)
+        )
+        if locked:
+            td.lock_()
+        other = torch.full(shape, 2.0)
+        expected = td.clone()
+        for name, args in [
+            ("add_", (other,)),
+            ("sub_", (other,)),
+            ("mul_", (other,)),
+            ("div_", (other,)),
+            ("pow_", (other,)),
+            ("addcmul_", (other, other)),
+            ("addcdiv_", (other, other)),
+        ]:
+            assert getattr(td, name)(*args) is td
+            expected = getattr(expected, name[:-1])(*args)
+            assert_allclose_td(td, expected)
+        alias = td
+        td += other
+        td -= other
+        td *= other
+        td /= other
+        td **= other
+        assert td is alias
+        assert td.is_locked is locked
+        assert_allclose_td(td, ((expected + other - other) * other / other) ** other)
+        # Out-of-place ops and comparisons still return a new tensordict
+        assert td.add(other) is not td
+        assert (td == other) is not td
+
+    def test_inplace_broadcast_tensor_keeps_class(self):
+        other = torch.full((3, 4), 2.0)
+        params = TensorDictParams(TensorDict(a=torch.ones(3, 4), batch_size=(3, 4)))
+        alias = params
+        with torch.no_grad():
+            params *= other
+        assert params is alias
+        assert (params["a"] == 2).all()
+
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+
+        data = MyClass(x=torch.ones(3, 4), batch_size=(3, 4))
+        alias = data
+        data *= other
+        assert data is alias
+        assert (data.x == 2).all()
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not available")
+    def test_inplace_broadcast_tensor_h5(self, tmp_path):
+        # A PersistentTensorDict hands out copies of its datasets, so the result
+        # of the in-place op is the tensordict that it returns
+        td = TensorDict(a=torch.ones(3, 4), batch_size=(3, 4))
+        h5 = PersistentTensorDict.from_dict(td, filename=str(tmp_path / "td.h5"))
+        out = h5.add_(torch.full((3, 4), 2.0))
+        assert (out["a"] == 3).all()
+
+    def test_inplace_broadcast_tensor_lazy_hetero(self):
+        # The tensors of this lazy stack differ in shape, so they cannot be
+        # stacked: the in-place op still writes into the members
+        def make_stack():
+            return LazyStackedTensorDict(
+                *[
+                    TensorDict(x=torch.zeros(2, 3, i), batch_size=[2])
+                    for i in (1, 2, 3)
+                ],
+                stack_dim=1,
+            )
+
+        class TypedX(TypedTensorDict):
+            x: torch.Tensor
+
+        stack, source, inner_source = make_stack(), make_stack(), make_stack()
+        nested = TensorDict(a=torch.zeros(2, 3), s=make_stack(), batch_size=[2, 3])
+        typed = TypedX.from_tensordict(source)
+        typed_twice = TypedX.from_tensordict(TypedX.from_tensordict(inner_source))
+        for td in (stack, nested, typed, typed_twice):
+            td.add_(torch.ones(2, 3))
+        for members in (
+            stack.tensordicts,
+            nested["s"].tensordicts,
+            source.tensordicts,
+            inner_source.tensordicts,
+        ):
+            assert all((member["x"] == 1).all() for member in members)
+        assert (nested["a"] == 1).all()
 
 
 @pytest.mark.parametrize(

@@ -299,8 +299,56 @@ class _RecordDeviceTransfer:
 _device_recorder = _RecordDeviceTransfer()
 
 
+def _holds_its_tensors(td: TensorDictBase) -> bool:
+    """Returns whether ``td`` reads its entries from a ``TensorDict``, which holds its tensors.
+
+    ``TensorDictParams``, ``TypedTensorDict`` and tensorclasses read through the
+    container that they wrap. h5 files, stores, lazy stacks, sub-tensordicts
+    and lazy views build their entries again on each read.
+    """
+    from tensordict._td import TensorDict
+
+    while not isinstance(td, TensorDict):
+        from tensordict.nn.params import TensorDictParams
+        from tensordict.typedtensordict import TypedTensorDict
+
+        if isinstance(td, TensorDictParams):
+            td = td._param_td
+        elif isinstance(td, TypedTensorDict):
+            td = td._source
+        elif _is_tensorclass(type(td)):
+            td = td._tensordict
+        else:
+            return False
+    return True
+
+
+def _holds_leaves_of(td: TensorDictBase, other: TensorDictBase) -> bool:
+    """Returns whether each leaf of ``other`` is the tensor that ``td`` holds under the same key.
+
+    Only containers that hold their tensors are read (see ``_holds_its_tensors``).
+    For the others, this returns ``False`` without reading any entry.
+    """
+    if not _holds_its_tensors(td):
+        # A NonTensorStack holds no tensor for the op to write into
+        return is_non_tensor(td)
+    for key, value in other.items():
+        held = td._get_str(key, None)
+        if value is held:
+            continue
+        if not (
+            _is_tensor_collection(type(value))
+            and _is_tensor_collection(type(held))
+            and _holds_leaves_of(held, value)
+        ):
+            return False
+    return True
+
+
 def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Callable]:
     """Ensures that elementwise ops are broadcast when an nd tensor is passed."""
+    # add_, mul_, ... are in-place; __eq__, __lt__, ... also end with "_".
+    inplace = op.endswith("_") and not op.endswith("__")
 
     def wrap_func(func):
         @wraps(func)
@@ -335,7 +383,7 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     other = other.expand(shape)
                 others_map.append(other)
             if any(isinstance(other, torch.Tensor) for other in others_map):
-                return self_expand._fast_apply(
+                result = self_expand._fast_apply(
                     lambda x: getattr(x, op)(
                         *[
                             expand_as_right(other, x) if other is not None else None
@@ -345,6 +393,12 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                         **kwargs,
                     )
                 )
+                # Like torch, an in-place op returns self once it has written into
+                # the tensors that self holds. Containers that hand out copies of
+                # their storage (h5 files, stores) still return the new tensordict.
+                if inplace and self_expand is self and _holds_leaves_of(self, result):
+                    return self
+                return result
             return getattr(self_expand, op)(*others_map, *args, **kwargs)
 
         return new_func
