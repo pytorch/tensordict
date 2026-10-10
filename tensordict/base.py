@@ -157,6 +157,7 @@ NO_DEFAULT = _NoDefault.ZERO
 _UNSET = object()
 
 T = TypeVar("T", bound="TensorCollection")
+_F = TypeVar("_F", bound=Callable[..., Any])
 
 
 if TYPE_CHECKING:
@@ -347,7 +348,7 @@ def _holds_leaves_of(td: TensorDictBase, other: TensorDictBase) -> bool:
     return True
 
 
-def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Callable]:
+def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[_F], _F]:
     """Ensures that elementwise ops are broadcast when an nd tensor is passed."""
     # add_, mul_, ... are in-place; __eq__, __lt__, ... also end with "_".
     inplace = op.endswith("_") and not op.endswith("__")
@@ -975,7 +976,21 @@ def _select_entry(key: tuple, value: Any, keys_to_update: list[tuple]) -> Any:
         return value.to_tensordict().select(*leaves)
 
 
-class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
+# The mixins are listed by name, not unpacked from _TENSORDICTBASE_MIXINS:
+# mypy and pyright cannot follow a starred base, and then accept any
+# attribute name on the class.
+# test_tensordictbase_mixin_bases keeps the two in the same order.
+class TensorDictBase(
+    _PointwiseOps,
+    _Reductions,
+    _ShapeOps,
+    _DeviceOps,
+    _Serialization,
+    _Conversion,
+    _Distributed,
+    MutableMapping,
+    TensorCollection,
+):
     """TensorDictBase is an abstract parent class for TensorDicts, a torch.Tensor data container."""
 
     _safe: bool = False

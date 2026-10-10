@@ -71,10 +71,10 @@ class _Serialization:
     # Serialization functionality
     def state_dict(
         self,
-        destination=None,
-        prefix="",
-        keep_vars=False,
-        flatten=True,
+        destination: Any | None = None,
+        prefix: str = "",
+        keep_vars: bool = False,
+        flatten: bool = True,
     ) -> OrderedDict[str, Any]:
         """Produces a state_dict from the tensordict.
 
@@ -148,9 +148,9 @@ class _Serialization:
     def load_state_dict(
         self,
         state_dict: OrderedDict[str, Any],
-        strict=True,
-        assign=False,
-        from_flatten=None,
+        strict: bool = True,
+        assign: bool = False,
+        from_flatten: bool | None = None,
     ) -> Self:
         """Loads a state-dict, formatted as in :meth:`~.state_dict`, into the tensordict.
 
@@ -514,7 +514,7 @@ class _Serialization:
         self,
         filename: Path | str | None = None,
         *,
-        num_threads=0,
+        num_threads: int = 0,
         device: torch.device | None = None,
         non_blocking: bool = False,
         inplace: bool = False,
@@ -523,7 +523,7 @@ class _Serialization:
         share_memory: bool = False,
         pin_memory: bool = False,
         metadata: bool = False,
-    ) -> None:
+    ) -> Self:
         """Consolidates the tensordict content in a single storage for fast serialization.
 
         Args:

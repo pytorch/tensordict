@@ -21,6 +21,7 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _is_tensor_collection,
     _NESTED_TENSORS_AS_LISTS,
+    _NoDefault,
     NO_DEFAULT,
     Self,
 )
@@ -99,14 +100,14 @@ class _Reductions:
     @overload
     def amin(
         self,
-        dim: int | NO_DEFAULT = NO_DEFAULT,
+        dim: int | _NoDefault = NO_DEFAULT,
         keepdim: bool = False,
     ) -> Self: ...
 
     @overload
     def amin(
         self,
-        dim: int | NO_DEFAULT = NO_DEFAULT,
+        dim: int | _NoDefault = NO_DEFAULT,
         keepdim: bool = False,
         *,
         reduce: bool,
@@ -114,7 +115,7 @@ class _Reductions:
 
     def amin(
         self,
-        dim: int | NO_DEFAULT = NO_DEFAULT,
+        dim: int | _NoDefault = NO_DEFAULT,
         keepdim: bool = False,
         *,
         reduce: bool | None = None,
@@ -136,7 +137,7 @@ class _Reductions:
     @overload
     def min(
         self,
-        dim: int | NO_DEFAULT = NO_DEFAULT,
+        dim: int | _NoDefault = NO_DEFAULT,
         keepdim: bool = False,
         *,
         return_indices: bool = True,
@@ -145,7 +146,7 @@ class _Reductions:
     @overload
     def min(
         self,
-        dim: int | NO_DEFAULT = NO_DEFAULT,
+        dim: int | _NoDefault = NO_DEFAULT,
         keepdim: bool = False,
         *,
         reduce: bool,
@@ -154,7 +155,7 @@ class _Reductions:
 
     def min(
         self,
-        dim: int | NO_DEFAULT = NO_DEFAULT,
+        dim: int | _NoDefault = NO_DEFAULT,
         keepdim: bool = False,
         *,
         reduce: bool | None = None,
@@ -265,14 +266,14 @@ class _Reductions:
     @overload
     def amax(
         self,
-        dim: int | NO_DEFAULT = NO_DEFAULT,
+        dim: int | _NoDefault = NO_DEFAULT,
         keepdim: bool = False,
     ) -> Self: ...
 
     @overload
     def amax(
         self,
-        dim: int | NO_DEFAULT = NO_DEFAULT,
+        dim: int | _NoDefault = NO_DEFAULT,
         keepdim: bool = False,
         *,
         reduce: bool,
@@ -280,7 +281,7 @@ class _Reductions:
 
     def amax(
         self,
-        dim: int | NO_DEFAULT = NO_DEFAULT,
+        dim: int | _NoDefault = NO_DEFAULT,
         keepdim: bool = False,
         *,
         reduce: bool | None = None,
@@ -302,7 +303,7 @@ class _Reductions:
     @overload
     def max(
         self,
-        dim: int | NO_DEFAULT = NO_DEFAULT,
+        dim: int | _NoDefault = NO_DEFAULT,
         keepdim: bool = False,
         *,
         return_indices: bool = True,
@@ -311,7 +312,7 @@ class _Reductions:
     @overload
     def max(
         self,
-        dim: int | NO_DEFAULT = NO_DEFAULT,
+        dim: int | _NoDefault = NO_DEFAULT,
         keepdim: bool = False,
         *,
         reduce: bool,
@@ -320,7 +321,7 @@ class _Reductions:
 
     def max(
         self,
-        dim: int | NO_DEFAULT = NO_DEFAULT,
+        dim: int | _NoDefault = NO_DEFAULT,
         keepdim: bool = False,
         *,
         reduce: bool | None = None,
