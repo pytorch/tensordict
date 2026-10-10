@@ -144,10 +144,17 @@ def pad(
     if inplace:
         out = tensordict
     else:
+        try:
+            names = tensordict._maybe_names()
+        except (IndexError, ValueError):
+            # A lazy stack without members, or whose members have different
+            # names: leave the dims unnamed.
+            names = None
         out = TensorDict._new_unsafe(
             {},
             torch.Size(new_batch_size),
             device=tensordict.device,
+            names=names,
         )
 
     # Snapshot keys so mid-iteration rebinds on `out is tensordict` don't
@@ -295,6 +302,15 @@ def _pad_non_tensor(
     if all(left == 0 and right == 0 for left, right in pairs):
         return tensordict
     result = _pad_non_tensor_rec(tensordict, pairs)
+    try:
+        names = tensordict._maybe_names()
+        if names is not None:
+            # the pad slots are unnamed: give the whole result the input's names
+            result.names = names
+    except (IndexError, ValueError):
+        # A stack without members, or names that differ between its members
+        # or are used twice: leave the names as they are.
+        pass
     if not inplace:
         return result
     if not isinstance(tensordict, NonTensorStack):
