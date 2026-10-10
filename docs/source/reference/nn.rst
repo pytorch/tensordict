@@ -276,6 +276,7 @@ by default, the result of the sequence) only see those outputs, not the converte
     WrapModule
     InteractionType
     set_interaction_type
+    probabilistic.interaction_type
     set_composite_lp_aggregate
     composite_lp_aggregate
     as_tensordict_module
@@ -337,6 +338,7 @@ Distributions
     NormalParamExtractor
     OneHotCategorical
     TruncatedNormal
+    truncated_normal.TruncatedStandardNormal
 
 
 Utils
@@ -352,8 +354,25 @@ Utils
     dispatch
     inv_softplus
     biased_softplus
+    utils.expln
     set_skip_existing
     skip_existing
     add_custom_mapping
     mappings
     rand_one_hot
+
+FX tracing
+----------
+
+.. currentmodule:: tensordict.prototype.fx
+
+:func:`symbolic_trace` traces a :class:`~tensordict.nn.TensorDictModule` into
+a :class:`TDGraphModule`. This API is a prototype; see :doc:`/fx` for an
+example.
+
+.. autosummary::
+    :toctree: generated/
+    :template: td_template_noinherit.rst
+
+    symbolic_trace
+    TDGraphModule

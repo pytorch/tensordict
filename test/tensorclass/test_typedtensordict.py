@@ -169,10 +169,13 @@ class dtype: ...
         package.joinpath("__init__.pyi").write_text(
             "from .typedtensordict import TypedTensorDict as TypedTensorDict\n"
         )
+        package.joinpath("base.pyi").write_text("class TensorDictBase: ...\n")
         package.joinpath("_td.pyi").write_text(
             """from typing import Any
 
-class TensorDict:
+from tensordict.base import TensorDictBase
+
+class TensorDict(TensorDictBase):
     def __init__(self, *args: Any, **kwargs: Any) -> None: ...
 """
         )
@@ -199,6 +202,7 @@ ignore_missing_imports = True
         valid.write_text(
             """from typing_extensions import assert_type
 from tensordict import TypedTensorDict
+from tensordict._td import TensorDict
 
 class State(TypedTensorDict):
     observation: int
@@ -216,6 +220,7 @@ child = ChildState(observation=1, reward=2, done=0)
 assert_type(state.observation, int)
 assert_type(state.optional, int | None)
 assert_type(consume(child), int)
+assert_type(State.from_tensordict(TensorDict(), check=False), State)
 """
         )
         stdout, stderr, status = api.run(["--config-file", str(config), str(valid)])

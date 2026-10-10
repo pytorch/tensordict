@@ -489,8 +489,11 @@ API reference
     TensorClass
     tensorclass
     NonTensorData
+    NonTensorDataBase
     MetaData
     NonTensorStack
     TensorAttrs
     UnbatchedTensor
     from_dataclass
+    is_tensorclass
+    is_non_tensor

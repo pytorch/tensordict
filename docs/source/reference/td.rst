@@ -18,6 +18,7 @@ regular pytorch tensors.
     PersistentTensorDict
     TensorDictParams
     get_defaults_to_none
+    set_get_defaults_to_none
 
 Constructors and handlers
 -------------------------
@@ -141,6 +142,7 @@ See :ref:`storage` for their usage.
 
     TensorDictStore
     LazyStackedTensorDictStore
+    STORE_BACKENDS
 
 .. currentmodule:: tensordict
 
@@ -353,6 +355,16 @@ Utils
     utils.expand_right
     utils.isin
     utils.remove_duplicates
+    utils.Buffer
+    utils.DeviceType
+    utils.IndexType
+    utils.LinkedList
+    utils.TensorDictFuture
+    utils.print_directory_tree
+    utils.timeit
+    NestedKey
+    assert_allclose_td
+    assert_close
     capture_non_tensor_stack
     dense_stack_tds
     is_tensor_collection
@@ -368,3 +380,27 @@ Utils
     set_printoptions
     get_printoptions
     list_to_stack
+    unravel_key
+    unravel_key_list
+
+.. py:data:: NO_DEFAULT
+    :module: tensordict.base
+
+    The sentinel that marks an argument as not given where ``None`` is a valid
+    value, such as ``default`` in :meth:`~tensordict.TensorDictBase.get_non_tensor`
+    or ``device`` in :meth:`~tensordict.TensorDictBase.new_zeros`. It can also
+    be imported from ``tensordict.tensordict``.
+
+.. py:data:: logger
+    :module: tensordict.utils
+
+    The :class:`logging.Logger` named ``"tensordict"``, which tensordict uses
+    for its own messages. It does not propagate to the root logger. Its level
+    is read from the ``TD_LOGGING_LEVEL`` environment variable at import time
+    (``"DEBUG"`` if unset).
+
+.. py:data:: __version__
+
+    The version string of the installed tensordict package, or ``None`` if it
+    cannot be determined, for example when tensordict is imported from a source
+    tree that is not installed.

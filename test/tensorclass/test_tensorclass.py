@@ -51,6 +51,8 @@ from tensordict import (
     MemoryMappedTensor,
     MetaData,
     NonTensorData,
+    NonTensorDataBase,
+    NonTensorStack,
     set_capture_non_tensor_stack,
     set_get_defaults_to_none,
     set_list_to_stack,
@@ -312,6 +314,18 @@ def test_tensorclass_instance_methods(form):
         str(_TENSORDICT_DIR / "tensorclass.pyi"), "TensorClass"
     )
     _check_stub_class(stub_attrs, X, exclusions)
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.parametrize("cls", [NonTensorDataBase, NonTensorStack])
+def test_non_tensor_stub_maybe_to_stack(cls):
+    # The deprecation warning of NonTensorStack.from_nontensordata points to
+    # NonTensorData.maybe_to_stack.
+    assert hasattr(cls, "maybe_to_stack")
+    stub_attrs = _get_class_attrs_from_pyi(
+        str(_TENSORDICT_DIR / "tensorclass.pyi"), cls.__name__
+    )
+    assert "maybe_to_stack" in stub_attrs
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
