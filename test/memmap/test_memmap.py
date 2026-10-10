@@ -31,6 +31,8 @@ TIMEOUT = 100
         torch.uint8,
         torch.long,
         torch.bool,
+        torch.complex64,
+        torch.complex128,
     ],
 )
 @pytest.mark.parametrize("shape", [[2], [1, 2]])
@@ -668,6 +670,15 @@ def test_pickle_handler():
     assert (loaded == mt).all()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="the handler pickles through a fd")
+def test_pickle_handler_complex():
+    tensor = torch.complex(torch.arange(6.0), -torch.arange(6.0)).view(2, 3)
+    mt = MemoryMappedTensor.from_tensor(tensor)[1]
+    loaded = pickle.loads(ForkingPickler.dumps(mt))
+    assert loaded.dtype == torch.complex64
+    assert (loaded == tensor[1]).all()
+
+
 def test_pickle_filename(tmp_path):
     mt = MemoryMappedTensor.from_tensor(
         torch.arange(6.0).view(2, 3), filename=tmp_path / "tensor.memmap"
@@ -854,6 +865,14 @@ class TestNestedTensor:
         for i in range(2):
             for j in range(3):
                 assert (td[i, j] == tdsave[i, j]).all()
+
+    @pytest.mark.parametrize("fn", ["empty", "zeros", "ones"])
+    def test_complex_with_handler(self, fn):
+        tensor = getattr(MemoryMappedTensor, fn)(self.shape, dtype=torch.complex64)
+        assert type(tensor) is MemoryMappedTensor
+        assert tensor.dtype == torch.complex64
+        assert tensor._handler is not None
+        assert (tensor._nested_tensor_size() == self.shape).all()
 
 
 class TestReadWrite:

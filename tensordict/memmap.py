@@ -253,18 +253,7 @@ class MemoryMappedTensor(torch.Tensor):
         else:
             shape_numel = torch.Size(shape).numel()
         if filename is None:
-            if input.dtype.is_floating_point:
-                size = torch.finfo(input.dtype).bits // 8 * shape_numel
-            elif input.dtype.is_complex:
-                raise ValueError(
-                    "Complex-valued tensors are not supported by MemoryMappedTensor."
-                )
-            elif input.dtype == torch.bool:
-                size = shape_numel
-            else:
-                # assume integer
-                size = torch.iinfo(input.dtype).bits // 8 * shape_numel
-            handler = _FileHandler(size)
+            handler = _FileHandler(input.dtype.itemsize * shape_numel)
             if isinstance(shape, torch.Tensor):
                 func_offset_stride = getattr(
                     torch, "_nested_compute_contiguous_strides_offsets", None
@@ -614,18 +603,7 @@ class MemoryMappedTensor(torch.Tensor):
             existsok = kwargs.pop("existsok", False)
 
             if filename is None:
-                if dtype.is_floating_point:
-                    size = torch.finfo(dtype).bits // 8 * shape_numel
-                elif dtype.is_complex:
-                    raise ValueError(
-                        "Complex-valued tensors are not supported by MemoryMappedTensor."
-                    )
-                elif dtype == torch.bool:
-                    size = shape_numel
-                else:
-                    # assume integer
-                    size = torch.iinfo(dtype).bits // 8 * shape_numel
-                handler = _FileHandler(size)
+                handler = _FileHandler(dtype.itemsize * shape_numel)
 
                 # buffer
                 func_offset_stride = getattr(
