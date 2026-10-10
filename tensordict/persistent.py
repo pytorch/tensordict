@@ -1944,7 +1944,7 @@ class PersistentTensorDict(TensorDictBase):
         non_blocking: bool = False,
     ) -> PersistentTensorDict:
         if not validated:
-            value = self._validate_value(value, check_shape=idx is None)
+            value = self._validate_value(value, check_shape=idx is None, key=key)
         value = self._to_numpy(value)
         if not inplace:
             if idx is not None:
@@ -2222,8 +2222,6 @@ class PersistentTensorDict(TensorDictBase):
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
         splits = -(self.batch_size[dim] // -chunks)
         return self.split(splits, dim)
-
-    _index_tensordict = TensorDict._index_tensordict
 
 
 _register_tensor_class(PersistentTensorDict)

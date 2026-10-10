@@ -28,11 +28,13 @@ from tensordict import (
     TypedTensorDict,
 )
 from tensordict._unbatched import UnbatchedTensor
+from tensordict.base import _get_defaults_to_none, _set_get_defaults_to_none
 from tensordict.nn import (
     CudaGraphModule,
     InteractionType,
     ProbabilisticTensorDictModule as Prob,
     set_composite_lp_aggregate,
+    set_interaction_type,
     TensorDictModule,
     TensorDictModule as Mod,
     TensorDictSequential as Seq,
@@ -395,6 +397,14 @@ class TestTD:
         unbind_c = torch.compile(unbind, fullgraph=True, mode=mode)
         data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
         assert (unbind(data)[-1] == unbind_c(data)[-1]).all()
+
+    def test_iter(self, mode):
+        def iterate(td):
+            return torch.stack([t["a", "b"] + 1 for t in td])
+
+        iterate_c = torch.compile(iterate, fullgraph=True, mode=mode)
+        data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
+        assert (iterate(data) == iterate_c(data)).all()
 
     def test_items(self, mode):
         def items(td):
@@ -1163,6 +1173,25 @@ class TestTC:
         assert compiled.a.b == 2
         assert add_self_c(data) is not data
 
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_tc_from_tensordict_nested(self, mode, locked):
+        def from_td(td):
+            return MyClass.from_tensordict(td)
+
+        from_td_c = torch.compile(from_td, fullgraph=True, mode=mode)
+        td = MyClass(
+            a=MyClass(a=MyClass(a=None, b=torch.zeros(())), b=torch.zeros(())),
+            b=torch.ones(()),
+        ).to_tensordict()
+        if locked:
+            td.lock_()
+        compiled = from_td_c(td)
+        assert isinstance(compiled.a, MyClass)
+        assert isinstance(compiled.a.a, MyClass)
+        assert compiled.a.b == 0
+        assert compiled.is_locked is locked
+        assert isinstance(td["a"], TensorDict)
+
     @pytest.mark.parametrize("index_type", ["slice", "tensor", "int"])
     def test_tc_index(self, index_type, mode):
         if index_type == "slice":
@@ -1251,6 +1280,26 @@ class TestTC:
         )
         assert (reshape(data) == reshape_c(data)).all()
 
+    def test_tc_get_defaults_to_none(self, mode):
+        # The AttributeError is caught in the compiled function: with
+        # fullgraph=True, dynamo reports an uncaught one as Unsupported.
+        def get_missing(td):
+            try:
+                return td.get("missing")
+            except AttributeError:
+                return "AttributeError"
+
+        get_missing_c = torch.compile(get_missing, fullgraph=True, mode=mode)
+        data = MyClass(a=None, b=torch.zeros(()))
+        set_back = _get_defaults_to_none()
+        try:
+            _set_get_defaults_to_none(True)
+            assert get_missing_c(data) is None
+            _set_get_defaults_to_none(False)
+            assert get_missing_c(data) == "AttributeError"
+        finally:
+            _set_get_defaults_to_none(set_back)
+
     def test_tc_unbind(self, mode):
         def unbind(td):
             return td.unbind(0)
@@ -1260,6 +1309,16 @@ class TestTC:
             a=MyClass(a=None, b=torch.arange(4), batch_size=[4]), batch_size=[4]
         )
         assert (unbind(data)[-1] == unbind_c(data)[-1]).all()
+
+    def test_tc_iter(self, mode):
+        def iterate(tc):
+            return torch.stack([t.a.b + 1 for t in tc])
+
+        iterate_c = torch.compile(iterate, fullgraph=True, mode=mode)
+        data = MyClass(
+            a=MyClass(a=None, b=torch.arange(4), batch_size=[4]), batch_size=[4]
+        )
+        assert (iterate(data) == iterate_c(data)).all()
 
     @pytest.mark.parametrize("recurse", [True, False])
     def test_tc_clone(self, recurse, mode):
@@ -1576,6 +1635,26 @@ class TestNN:
         assert sample.shape == td["loc"].shape
         if not mean_raises:
             torch.testing.assert_close(sample, td["loc"])
+
+    def test_prob_module_interaction_type_change(self, mode):
+        # The interaction type is read from a global mode object: the compiled
+        # module must follow a change of that mode between calls.
+        prob_mod = Prob(
+            in_keys=["loc", "scale"],
+            out_keys=["sample"],
+            distribution_class=torch.distributions.Normal,
+        )
+        td = TensorDict(loc=torch.zeros(1000), scale=torch.ones(1000))
+        prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
+        with set_interaction_type(InteractionType.MEAN):
+            sample = prob_mod_c(td.copy())["sample"]
+        torch.testing.assert_close(sample, td["loc"])
+        with set_interaction_type(InteractionType.RANDOM):
+            sample = prob_mod_c(td.copy())["sample"]
+        assert (sample != td["loc"]).all()
+        with set_interaction_type(InteractionType.MEAN):
+            sample = prob_mod_c(td.copy())["sample"]
+        torch.testing.assert_close(sample, td["loc"])
 
 
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])

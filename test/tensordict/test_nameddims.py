@@ -264,6 +264,11 @@ class TestNamedDims(TestTensorDictsBase):
         assert td[rows, :, [1]].names == ["a", "b", "d"]
         assert td[rows, True].names == ["a", "b", "c", "d"]
         assert td[True, :, rows].names == ["b", "a", "c", "d"]
+        # an N-D index names only the dim of the block along which it varies,
+        # as a name can't be repeated
+        assert td[rows[None]].names == [None, "a", "b", "c", "d"]
+        assert td[torch.tensor([[0, 1], [1, 2]])].names == [None, None, "b", "c", "d"]
+        assert td[rows[None]].to_tensordict().names == [None, "a", "b", "c", "d"]
 
     @pytest.mark.parametrize("stack_dim", [None, 0, 1, 2])
     @pytest.mark.parametrize(
