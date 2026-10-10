@@ -3973,14 +3973,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def setdefault(
         self, key: NestedKey, default: CompatibleType | Any, inplace: bool = False
     ) -> CompatibleType:
-        """Insert the ``key`` entry with a value of ``default`` if ``key`` is not in the tensordict.
+        """Inserts the ``key`` entry with a value of ``default`` if ``key`` is not in the tensordict.
 
-        Return the value for ``key`` if ``key`` is in the tensordict, else ``default``.
+        Returns the value for ``key`` if ``key`` is in the tensordict, else ``default``.
 
         Args:
-            key (str or nested key): the name of the value.
+            key (NestedKey): the name of the value.
             default (torch.Tensor or compatible type, TensorDictBase): value
                 to be stored in the tensordict if the key is not already present.
+            inplace (bool, optional): passed to :meth:`~.set` when ``default``
+                is written. Defaults to ``False``.
 
         Returns:
             The value of key in the tensordict. Will be default if the key was not
@@ -4364,10 +4366,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Removes and returns a value from a tensordict.
 
         If the value is not present and no default value is provided, a KeyError
-        is thrown.
+        is thrown. A locked tensordict raises ``RuntimeError`` (see
+        :meth:`~.lock_`).
 
         Args:
-            key (str or nested key): the entry to look for.
+            key (NestedKey): the entry to look for. A tuple removes a nested
+                entry, and keeps the sub-tensordict that held it.
             default (Any, optional): the value to return if the key cannot be found.
 
         Examples:
@@ -4447,14 +4451,29 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     ) -> Self:
         """Renames a key with a new string and returns the same tensordict with the updated key name.
 
+        The value is not copied. A locked tensordict raises ``RuntimeError``
+        (see :meth:`~.lock_`).
+
         Args:
-            old_key (str or nested key): key to be renamed.
-            new_key (str or nested key): new name of the entry.
-            safe (bool, optional): if ``True``, an error is thrown when the new
-                key is already present in the TensorDict.
+            old_key (NestedKey): key to be renamed. A missing key raises
+                ``KeyError``.
+            new_key (NestedKey): new name of the entry.
+            safe (bool, optional): if ``True``, a ``KeyError`` is raised when
+                the new key is already present in the TensorDict. If
+                ``False``, the existing entry is overwritten. Defaults to
+                ``False``.
 
         Returns:
             self
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict({"a": torch.zeros(3), "b": {"c": torch.ones(3)}}, [3])
+            >>> td = td.rename_key_("a", "x")
+            >>> td = td.rename_key_(("b", "c"), ("b", "y"))
+            >>> list(td.keys(include_nested=True, leaves_only=True))
+            [('b', 'y'), 'x']
 
         """
         raise NotImplementedError
@@ -6377,16 +6396,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     ) -> Self:
         """Selects the keys of the tensordict and returns a new tensordict with only the selected keys.
 
-        The values are not copied: in-place modifications a tensor of either
-        of the original or new tensordict will result in a change in both
-        tensordicts.
+        The values are not copied. The result shares its tensors with the
+        original, so an in-place change to a tensor in one tensordict shows in
+        the other. A nested key selects one entry of a sub-tensordict, and a
+        key of a sub-tensordict selects the whole sub-tensordict. See
+        :ref:`keys`.
 
         Args:
-            *keys (str): keys to select
-            inplace (bool): if True, the tensordict is pruned in place.
+            *keys (NestedKey): keys to select.
+            inplace (bool): if ``True``, the other keys are removed from this
+                tensordict, and this tensordict is returned.
                 Default is ``False``.
-            strict (bool, optional): whether selecting a key that is not present
-                will return an error or not. Default: :obj:`True`.
+            strict (bool, optional): if ``True``, a missing key raises
+                ``KeyError``. If ``False``, missing keys are ignored.
+                Default: ``True``.
             as_tensordict (bool, optional): if ``True``, the result will be a
                 plain :class:`~tensordict.TensorDict` even when called on a
                 :class:`~tensordict.TensorClass` instance. This avoids the
@@ -6458,13 +6481,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def exclude(self, *keys: NestedKey, inplace: bool = False) -> Self:
         """Excludes the keys of the tensordict and returns a new tensordict without these entries.
 
-        The values are not copied: in-place modifications a tensor of either
-        of the original or new tensordict will result in a change in both
-        tensordicts.
+        The values are not copied. The result shares its tensors with the
+        original, so an in-place change to a tensor in one tensordict shows in
+        the other. Unlike :meth:`~.select`, a missing key is ignored: there is
+        no ``strict`` argument. See :ref:`keys`.
 
         Args:
-            *keys (str): keys to exclude.
-            inplace (bool): if True, the tensordict is pruned in place.
+            *keys (NestedKey): keys to exclude.
+            inplace (bool): if ``True``, the keys are removed from this
+                tensordict, and this tensordict is returned.
                 Default is ``False``.
 
         Returns:
@@ -6492,6 +6517,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 batch_size=torch.Size([]),
                 device=None,
                 is_shared=False)
+            >>> list(td.exclude("this key does not exist").keys())
+            ['a', 'b']
 
         """
         keys = unravel_key_list(keys)
@@ -6529,12 +6556,27 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Args:
             recurse (bool, optional): if ``True``, each tensor contained in the
                 TensorDict will be copied too. Otherwise only the TensorDict
-                tree structure will be copied. Defaults to ``True``.
+                tree structure is copied: the sub-tensordicts are new objects,
+                but the leaves are the same tensors as in ``self``. Defaults to
+                ``True``.
 
         .. note::
             Unlike many other ops (pointwise arithmetic, shape operations, ...) ``clone`` does not inherit the
             original lock attribute. This design choice is made such that a clone can be created to be modified,
             which is the most frequent usage.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict({"a": torch.zeros(3), "b": {"c": torch.ones(3)}}, [3])
+            >>> td_clone = td.clone()
+            >>> td_clone["a"] is td["a"]
+            False
+            >>> td_shallow = td.clone(recurse=False)
+            >>> td_shallow["a"] is td["a"], td_shallow["b"] is td["b"]
+            (True, False)
+            >>> td.lock_().clone().is_locked
+            False
 
         """
         result = self._clone(recurse=recurse, **kwargs)
@@ -6564,9 +6606,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     ) -> Self:  # noqa: D417
         """Returns a new, empty tensordict with the same device and batch size.
 
+        The result is not locked, even if ``self`` is.
+
         Args:
             recurse (bool, optional): if ``True``, the entire structure of the
-                ``TensorDict`` will be reproduced without content.
+                ``TensorDict`` will be reproduced without content: the result
+                has the sub-tensordicts of ``self``, without their leaves.
                 Otherwise, only the root will be duplicated.
                 Defaults to ``False``.
 
@@ -6574,6 +6619,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             batch_size (torch.Size, optional): a new batch-size for the tensordict.
             device (torch.device, optional): a new device.
             names (list of str, optional): dimension names.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict({"a": torch.zeros(3), "b": {"c": torch.ones(3)}}, [3])
+            >>> empty = td.empty()
+            >>> list(empty.keys()), empty.batch_size
+            ([], torch.Size([3]))
+            >>> list(td.empty(recurse=True).keys(include_nested=True))
+            ['b']
 
         """
         if not recurse:
