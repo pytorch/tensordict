@@ -297,6 +297,39 @@ class TestH5Indexing:
             assert h5td[idx].get(key).shape == expected.shape, key
             assert (h5td[idx].get(key) == expected).all(), key
 
+    @pytest.mark.parametrize(
+        "idx",
+        [
+            1,
+            slice(1, 3),
+            torch.tensor([0, 2]),
+            torch.tensor([True, False, True, False]),
+        ],
+    )
+    @pytest.mark.parametrize("value", [7, 0.1, True])
+    def test_index_setitem_scalar(self, tmp_path, idx, value):
+        # h5td[idx] = scalar writes the scalar into every tensor entry, in the
+        # dtype of the entry, and leaves the non-tensor entries as they are
+        td = TensorDict(
+            {
+                "a": torch.arange(8.0, dtype=torch.float64).view(4, 2),
+                "b": torch.zeros(4, dtype=torch.bool),
+                "nested": TensorDict(c=torch.arange(12).view(4, 3), batch_size=[4, 3]),
+                "s": "a string!",
+            },
+            batch_size=[4],
+        )
+        td.set_non_tensor("f", 1)
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        h5td[idx] = value
+        expected = td.exclude("s", "f")
+        expected[idx] = value
+        for key in expected.keys(True, True):
+            assert h5td.get(key).dtype == expected.get(key).dtype, key
+            assert (h5td.get(key) == expected.get(key)).all(), key
+        assert h5td["s"] == b"a string!"
+        assert h5td["f"] == 1
+
     @pytest.mark.parametrize("idx", [slice(0, 2), torch.tensor([1, 3])])
     def test_index_masked_fill_(self, tmp_path, idx):
         # h5td[idx] writes to the file: only the masked rows are filled
