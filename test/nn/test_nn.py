@@ -368,6 +368,22 @@ class TestTDModule:
 
         assert td["b"] == 4
 
+    @pytest.mark.parametrize("in_keys", [["obs"], {"x": "obs"}])
+    def test_get_kwargs(self, in_keys):
+        # get_kwargs reach get() whether in_keys is a list or a dict
+        td = TensorDict.lazy_stack(
+            [TensorDict(obs=torch.ones(2)), TensorDict(obs=torch.ones(3))]
+        )
+        module = TensorDictModule(
+            lambda x: x,
+            in_keys=in_keys,
+            out_keys=["y"],
+            get_kwargs={"as_padded_tensor": True, "padding_value": -1.0},
+        )
+        torch.testing.assert_close(
+            module(td)["y"], torch.tensor([[1.0, 1.0, -1.0], [1.0, 1.0, 1.0]])
+        )
+
     def test_repr(self):
         class MyModule(TensorDictModuleBase):
             in_keys = ["a"]
