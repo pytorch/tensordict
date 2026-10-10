@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4771+g1a09291fd.d20261010)
+                  main (0.14.0.dev4773+g9e0d97b7d.d20261010)
                 </div>
               
             
@@ -588,6 +588,9 @@ correctness hazard.</p>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">frozen</span></code> is inherited: a non-frozen subclass cannot inherit from a frozen
 base, and vice versa.</p>
+<p>A subclass of a frozen tensorclass is frozen even without the flag, but type
+checkers read it as non-frozen and report it: repeat <code class="docutils literal notranslate"><span class="pre">frozen=True</span></code> on the
+subclass (see <a class="reference internal" href="#tensorclass-static-typing"><span class="std std-ref">Static type checking</span></a> for mypy).</p>
 </section>
 </section>
 <section id="migrating-from-a-plain-dataclass">
@@ -744,6 +747,26 @@ storage is selected based on the value’s type.</p>
 </pre></div>
 </div>
 </section>
+<section id="static-type-checking">
+<span id="tensorclass-static-typing"></span><h2>Static type checking<a class="headerlink" href="#static-type-checking" title="Permalink to this heading">¶</a></h2>
+<p>Type checkers read the fields of a <a class="reference internal" href="generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> subclass
+as its constructor signature, as they do for a <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code>, followed by the
+keyword-only <code class="docutils literal notranslate"><span class="pre">batch_size</span></code>, <code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">names</span></code> and <code class="docutils literal notranslate"><span class="pre">lock</span></code> arguments. A
+missing field, an unknown keyword argument or a value of the wrong type is an
+error:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Obs</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">a</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">label</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"x"</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">obs</span> <span class="o">=</span> <span class="n">Obs</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>      <span class="c1"># accepted</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">obs</span> <span class="o">=</span> <span class="n">Obs</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">],</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>   <span class="c1"># list is not a Tensor</span>
+</pre></div>
+</div>
+<p>The constructor casts lists, NumPy arrays and Python numbers passed to a
+<code class="docutils literal notranslate"><span class="pre">torch.Tensor</span></code> field, but a type checker expects a tensor there: pass
+<code class="docutils literal notranslate"><span class="pre">torch.as_tensor(value)</span></code>.</p>
+<p>Mypy reports any <code class="docutils literal notranslate"><span class="pre">frozen=True</span></code> tensorclass as “Frozen dataclass cannot
+inherit from a non-frozen dataclass”.</p>
+</section>
 <section id="legacy-the-tensorclass-decorator">
 <span id="tensorclass-legacy-decorator"></span><h2>Legacy: the <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> decorator<a class="headerlink" href="#legacy-the-tensorclass-decorator" title="Permalink to this heading">¶</a></h2>
 <p>The <a class="reference internal" href="generated/tensordict.tensorclass.html#tensordict.tensorclass" title="tensordict.tensorclass"><code class="xref py py-func docutils literal notranslate"><span class="pre">tensorclass()</span></code></a> decorator is the original way to declare a
@@ -859,6 +882,7 @@ etc.</p>
 <li><a class="reference internal" href="#serialization">Serialization</a></li>
 <li><a class="reference internal" href="#edge-cases">Edge cases</a></li>
 <li><a class="reference internal" href="#pre-allocation">Pre-allocation</a></li>
+<li><a class="reference internal" href="#static-type-checking">Static type checking</a></li>
 <li><a class="reference internal" href="#legacy-the-tensorclass-decorator">Legacy: the <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> decorator</a></li>
 <li><a class="reference internal" href="#api-reference">API reference</a></li>
 </ul>
