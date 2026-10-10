@@ -453,7 +453,10 @@ after the tag push, open a PR on the feedstock that:
   from `host`;
 - requires `pytorch >=2.13` at run time instead, with the other run
   requirements taken from the `dependencies` of `pyproject.toml` (no
-  `importlib-metadata` since 0.15);
+  `importlib-metadata` since 0.15). A `noarch: python` recipe cannot express
+  the marker `python_version < "3.11"`, so it lists `typing_extensions`
+  without one, mirroring #2219. That is harmless on newer Pythons, and
+  conda-forge's pytorch already pulls it in;
 - keeps the version exact: keep the `sed` line of the build script, or set
   `SETUPTOOLS_SCM_PRETEND_VERSION`. conda-forge builds inside the feedstock's
   git checkout, and without either, `setup.py` appends that checkout's commit
@@ -463,9 +466,9 @@ after the tag push, open a PR on the feedstock that:
 The feedstock maintainers are `sugatoray` and `jan-janssen`. Ask them to merge
 this PR instead of the bot's. If the bot's PR has already merged, keep the
 version and set `number: 1`, so that the noarch build replaces the C++ one.
-Except for the `sed` line and the source, which was a local copy of the
-archive, this recipe was tested: rattler-build built 0.15.0 on linux-64, and
-its tests passed with conda-forge's pytorch 2.14.1.
+Except for the `sed` line, `typing_extensions` and the source, which was a
+local copy of the archive, this recipe was tested: rattler-build built 0.15.0
+on linux-64, and its tests passed with conda-forge's pytorch 2.14.1.
 
 ```bash
 curl -fsSL "https://github.com/pytorch/tensordict/archive/v$VERSION.tar.gz" | sha256sum   # the sha256
@@ -505,6 +508,7 @@ requirements:
     - packaging
     - orjson
     - pyvers >=0.2.0,<0.3.0
+    - typing_extensions
 
 tests:
   - python:
