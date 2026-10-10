@@ -1,9 +1,8 @@
 from __future__ import annotations
 
+import dataclasses
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
-from dataclasses import Field
-from typing import Any, cast, Generic, get_args, get_origin, TypeVar, Union
+from typing import cast, Generic, get_args, get_origin, TypeVar, Union
 
 from tensordict._td import TensorDict
 from tensordict.nn.common import dispatch, TensorDictModuleBase
@@ -23,7 +22,7 @@ def _tensor_class_keys(tensorclass_type: type[TensorClass]) -> list[tuple[str, .
         list[tuple[str, ...]]: A list of key tuples representing all fields in the TensorClass.
 
     """
-    fields = cast("Iterable[Field[Any]]", tensorclass_type.fields())
+    fields = dataclasses.fields(tensorclass_type)
     # field.type is a string under postponed annotations: use the resolved hints
     type_hints = getattr(tensorclass_type, "_type_hints", None) or {}
     keys: list[tuple[str, ...]] = []
@@ -91,7 +90,8 @@ class TensorClassModuleWrapper(TensorDictModuleBase):
         """Forward pass converting TensorDict to TensorClass and back.
 
         Args:
-            tensordict (TensorDict): Input tensordict.
+            tensordict (TensorDict): Input tensordict. Its entries that are not
+                fields of the input class are ignored.
             *args: Additional positional arguments.
             **kwargs: Additional keyword arguments.
 
@@ -99,9 +99,14 @@ class TensorClassModuleWrapper(TensorDictModuleBase):
             TensorDict: Output tensordict.
 
         """
-        return self.tc_module(
-            self.tc_module.input_type.from_tensordict(tensordict)
-        ).to_tensordict()
+        input_type = self.tc_module.input_type
+        # from_tensordict rejects the keys that are not fields of the input class
+        extra_keys = [
+            key for key in tensordict.keys() if key not in input_type.__expected_keys__
+        ]
+        if extra_keys:
+            tensordict = tensordict.exclude(*extra_keys)
+        return self.tc_module(input_type.from_tensordict(tensordict)).to_tensordict()
 
 
 InputClass = TypeVar("InputClass", bound=Union[TensorClass, Tensor])
