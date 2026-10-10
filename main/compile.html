@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev5000+g4b0f4335e.d20261010)
+                  main (0.14.0.dev5003+gc2d82ff74.d20261010)
                 </div>
               
             
@@ -609,10 +609,11 @@ list for a nested tensordict:</p>
 </pre></div>
 </div>
 <p>Without <code class="docutils literal notranslate"><span class="pre">dynamic_shapes</span></code>, a call with another batch size fails a guard of
-the exported program (<code class="docutils literal notranslate"><span class="pre">AssertionError:</span> <span class="pre">Guard</span> <span class="pre">failed</span></code>). Non-strict export
-does not support tensordicts with dimension names or non-tensor entries
-(pytorch/tensordict#2073, pytorch/tensordict#2074): use <code class="docutils literal notranslate"><span class="pre">strict=True</span></code> for
-them, and keep the non-tensor entries out of the output.
+the exported program (<code class="docutils literal notranslate"><span class="pre">AssertionError:</span> <span class="pre">Guard</span> <span class="pre">failed</span></code>). Both modes accept
+tensordicts with dimension names or non-tensor entries. With <code class="docutils literal notranslate"><span class="pre">strict=True</span></code>,
+the export of a function that returns a tensordict whose first entry is
+non-tensor data raises <code class="docutils literal notranslate"><span class="pre">batch</span> <span class="pre">dimension</span> <span class="pre">mismatch</span></code> (pytorch/tensordict#2207):
+put a tensor entry first, or use <code class="docutils literal notranslate"><span class="pre">strict=False</span></code>.
 To export a <a class="reference internal" href="reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> so that it takes and
 returns plain tensors, see the <a class="reference internal" href="tutorials/export.html"><span class="doc">Exporting tensordict modules</span></a> tutorial. If the process
 also creates a <a class="reference internal" href="reference/generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule" title="tensordict.nn.CudaGraphModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">CudaGraphModule</span></code></a>, see the warning in
