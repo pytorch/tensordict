@@ -1,10 +1,12 @@
 """
-Slicing, Indexing, and Masking
-==============================
+Slicing, indexing and masking
+=============================
 **Author**: `Tom Begley <https://github.com/tcbegley>`_
 
-This tutorial shows how to index, slice and mask a :class:`~tensordict.TensorDict`,
-and how to write values into it with an index.
+One index on a :class:`~tensordict.TensorDict` indexes every tensor in it in
+the same way. If you now index the images, the labels and the weights of a
+batch one by one, one index replaces these lines. This tutorial is for
+readers who know how to index a :class:`torch.Tensor`.
 
 What you will learn:
 
@@ -35,8 +37,8 @@ tensordict = TensorDict(
 print(tensordict[0])
 
 ##############################################################################
-# The syntax is the same as for tensors. For example, this index drops the
-# first row of each entry:
+# The syntax is the same as for tensors. This index drops the first row of
+# each entry:
 
 print(tensordict[1:])
 
@@ -108,10 +110,12 @@ assert masked_tensordict["a"].shape == torch.Size([6, 5])
 # Conclusion
 # ----------
 #
-# In this tutorial, you indexed, sliced and masked a
-# :class:`~tensordict.TensorDict`. An index or a mask applies to the batch
-# dimensions of every entry, and keeps the other dimensions. You also wrote a
-# tensordict into another one with an index.
+# You can now index, slice and mask a :class:`~tensordict.TensorDict` as you
+# do a tensor, and write a tensordict into another one with an index. An index
+# or a mask applies to the batch dimensions of every entry, and keeps the
+# other dimensions. The same indexing works on a
+# :class:`~tensordict.TensorClass`, the class form of a tensordict with typed
+# fields (see :ref:`tensorclass-guide`).
 #
 # Further reading
 # ---------------

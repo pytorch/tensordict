@@ -1,11 +1,14 @@
 """
-Pre-allocating memory with TensorDict
-=====================================
+Filling a TensorDict row by row
+===============================
 **Author**: `Tom Begley <https://github.com/tcbegley>`_
 
-This tutorial shows how to fill an empty :class:`~tensordict.TensorDict` row by
-row. The tensordict allocates the memory for all the rows when you write the
-first row.
+A simulation loop often stores results at each step, such as the positions
+and the velocities of its particles. To collect them, you usually allocate one
+tensor per quantity in advance, then write each step into it. A
+:class:`~tensordict.TensorDict` does the allocation for you: the first write
+with an index creates every tensor at its full size. This tutorial is for
+readers who fill a buffer one step at a time.
 
 What you will learn:
 
@@ -84,10 +87,10 @@ assert (tensordict[:2] != 0).all()
 # Conclusion
 # ----------
 #
-# In this tutorial, you created a :class:`~tensordict.TensorDict` with a batch
-# size and no keys, and you filled it one row at a time. The first write
-# allocates a zero-filled tensor for each key. The later writes go into the
-# same tensors.
+# You can now fill a :class:`~tensordict.TensorDict` one row at a time,
+# without allocating its tensors yourself. Create it with a batch size and no
+# keys. The first write allocates a zero-filled tensor for each key, at the
+# full batch size. The later writes go into the same tensors.
 #
 # To allocate all the keys in advance, from their shapes and dtypes, without a
 # first row, use :meth:`~tensordict.TensorDictBase.from_schema`. It can also

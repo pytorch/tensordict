@@ -4,9 +4,10 @@ Benchmarking TensorDict serialization speed
 
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
-This tutorial measures how long tensordict takes to write and open its
-serialization formats, and compares them with ``torch.save``, safetensors and
-zarr.
+The fastest way to save a tensordict depends on its layout and on your
+storage. This script times the write paths and the on-disk formats of
+tensordict against ``torch.save``, safetensors and zarr, and plots the
+results. It is for readers who choose a format for checkpoints or datasets.
 
 What you will learn:
 
@@ -15,31 +16,14 @@ What you will learn:
 - How the on-disk formats compare on save time and open time.
 - How to run the same benchmark on your own hardware.
 
-The script runs each measurement ``N_REPEATS`` times and plots the median,
-with the interquartile range (the 25th to 75th percentile) as error bars. The
-documentation build runs it, so the figures below come from the machine that
-built these docs. To measure your own hardware, download the script at the
-bottom of this page, or run ``python tutorials/sphinx_tuto/serialization_speed.py``
-from a tensordict checkout. The script needs ``matplotlib``, and uses
-``safetensors`` and ``zarr`` if they are installed.
-
-The first benchmark compares three write paths:
-
-- :meth:`~tensordict.TensorDictBase.consolidate` copies all the leaves into
-  one storage in memory.
-- :meth:`~tensordict.TensorDictBase.consolidate` with a ``filename`` copies
-  all the leaves into one memory-mapped file.
-- :meth:`~tensordict.TensorDictBase.save` writes one memory-mapped file per
-  leaf, in a directory tree.
-
-It times each path single-threaded and with 8 and 16 threads, on two layouts
-of the same number of bytes: a few large leaves, and many small leaves.
-
-The second benchmark compares the on-disk formats: the memmap directory, the
-consolidated file, the ``.tdz`` archive, ``torch.save``, safetensors and zarr.
-It times saving (single-threaded, and multithreaded where the format supports
-it) and opening. The ``.tdz`` archive is only in the second benchmark: its
-writer is sequential and takes no ``num_threads`` argument.
+The documentation build runs the script, so the figures below come from the
+machine that built these docs. To measure your own hardware, download the
+script at the bottom of this page, or run
+``python tutorials/sphinx_tuto/serialization_speed.py`` from a tensordict
+checkout. The script needs ``matplotlib``, and uses ``safetensors`` and
+``zarr`` if they are installed. It runs each measurement ``N_REPEATS`` times,
+and plots the median with the interquartile range (the 25th to 75th
+percentile) as error bars.
 """
 
 from __future__ import annotations
@@ -70,10 +54,12 @@ except ImportError:
 ##############################################################################
 # Benchmark configuration
 # -----------------------
-# The default payload is 128 MiB per layout, and each measurement runs 8
-# times after one warmup run. These values keep the documentation build
-# short. ``SCALE`` scales the payload linearly (``SCALE = 8`` for 1 GiB). For
-# smaller error bars, increase ``N_REPEATS``. The plots show the median and
+# The two layouts below hold the same number of bytes: 8 large leaves, and 512
+# small leaves. A leaf is a tensor at the end of a nested key. The default
+# payload is 128 MiB per layout, and each measurement runs 8 times after one
+# warmup run. These values keep the documentation build short. ``SCALE``
+# scales the payload linearly (``SCALE = 8`` for 1 GiB). For smaller error
+# bars, increase ``N_REPEATS``. The plots show the median and
 # not the mean. A disk write is sometimes much slower than the others
 # (page-cache writeback), and one slow write changes the mean.
 
@@ -104,10 +90,20 @@ def summarize(times):
 
 
 ##############################################################################
-# The serialization methods
-# -------------------------
-# Each method returns the path that it wrote (or ``None`` for the in-memory
-# path), so that the benchmark loop can remove it between runs.
+# The write paths
+# ---------------
+# The first benchmark compares three write paths:
+#
+# - :meth:`~tensordict.TensorDictBase.consolidate` copies all the leaves into
+#   one storage in memory.
+# - :meth:`~tensordict.TensorDictBase.consolidate` with a ``filename`` copies
+#   all the leaves into one memory-mapped file.
+# - :meth:`~tensordict.TensorDictBase.save` writes one memory-mapped file per
+#   leaf, in a directory tree.
+#
+# It times each path single-threaded, with 8 threads and with 16 threads, on
+# both layouts. Each method returns the path that it wrote (or ``None`` for
+# the in-memory path), so that the benchmark loop can remove it between runs.
 
 
 def make_methods(td, tmpdir):
@@ -236,12 +232,12 @@ plt.show()
 # The tensordict formats are the memmap directory, the consolidated file and
 # the ``.tdz`` zip archive.
 #
-# ``torch.save`` and safetensors use their fastest paths: a flat ``dict`` of
-# tensors, written with ``torch.save`` or ``save_file``, and opened with
-# ``torch.load(mmap=True, weights_only=True)`` or ``load_file``, which also
-# memory-maps the file. These formats do not store nested keys, so the
-# benchmark flattens the keys before it saves, and rebuilds the nesting when
-# it opens the file. zarr goes through
+# ``torch.save`` and safetensors use their fastest paths. The benchmark writes
+# a flat ``dict`` of tensors with ``torch.save`` or ``save_file``. It opens the
+# file with ``torch.load(mmap=True, weights_only=True)`` or with
+# ``load_file``, which also memory-maps the file. These formats do not store
+# nested keys, so the benchmark flattens the keys before it saves, and
+# rebuilds the nesting when it opens the file. zarr goes through
 # :meth:`~tensordict.TensorDictBase.to_zarr` and
 # :meth:`~tensordict.TensorDictBase.from_zarr`, with the default layout (one
 # uncompressed chunk per leaf). zarr does not memory-map its payload: opening
@@ -252,8 +248,9 @@ plt.show()
 # - *Save* writes a new artifact. Its removal is not timed. The memmap
 #   directory and the consolidated file take a ``num_threads`` argument, so
 #   they are timed single-threaded and with ``num_threads=8``. The ``.tdz``
-#   writer is sequential. ``torch.save``, safetensors and zarr are timed
-#   single-threaded only.
+#   writer is sequential and takes no ``num_threads`` argument, so the first
+#   benchmark does not include it. ``torch.save``, safetensors and zarr are
+#   timed single-threaded only.
 # - *Open* builds a lazy tensordict over an existing artifact. All formats
 #   except zarr memory-map their payload, so for them this time is the cost of
 #   reading metadata and building views. This page does not time bulk reads.
@@ -473,10 +470,10 @@ plt.show()
 # Conclusion
 # ----------
 #
-# In this tutorial, you timed the write paths of tensordict with and without
-# threads, and compared the on-disk formats on save time and open time. The
-# results depend on the machine, so run the script on your own hardware
-# before you choose a format.
+# You can now run this benchmark on your own storage and read its two
+# figures. The first figure shows the effect of threads on each write path.
+# The second figure shows the save time and the open time of each format. The
+# results depend on the machine, so measure before you choose a format.
 #
 # Further reading
 # ---------------

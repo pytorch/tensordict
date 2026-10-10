@@ -1,11 +1,14 @@
 """
-Functional Programming with TensorDict
-=======================================
+Functional calls and ensembles with TensorDict
+==============================================
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
-This tutorial uses a :class:`~tensordict.TensorDict` to hold the parameters
-of a :class:`~torch.nn.Module`, so that you can replace them, stack them and
-pass them to functional calls.
+The parameters of a :class:`~torch.nn.Module` form a tree of named tensors,
+which a :class:`~tensordict.TensorDict` holds with the same structure. With
+the parameters in a tensordict, one call replaces all the parameters of a
+module, stacks the parameters of several models, or passes them to
+:mod:`torch.func`. This tutorial is for readers who train ensembles of
+models, or who swap the parameters of a model at run time.
 
 What you will learn:
 
@@ -74,7 +77,7 @@ assert not (y_original == 0).all()
 # Model ensembling with ``torch.vmap``
 # -------------------------------------
 #
-# Parameter tensordicts can be stacked like any tensordict. The stack has a
+# You can stack parameter tensordicts like any tensordict. The stack has a
 # batch dimension, with one element per set of parameters.
 # :func:`~torch.vmap` then runs the model with each set of parameters in one
 # vectorized call.
@@ -159,12 +162,13 @@ print("functional_call output:", y.shape)
 # Conclusion
 # ----------
 #
-# In this tutorial, you extracted the parameters of a module into a
-# :class:`~tensordict.TensorDict` with ``from_module``, and swapped them with
-# ``to_module``. You stacked parameters, by hand and with ``from_modules``,
-# and you ran an ensemble with :func:`torch.vmap`. You also built an ensemble
-# with :class:`~tensordict.nn.EnsembleModule`, and passed the parameters to
-# :func:`torch.func.functional_call`.
+# You can now extract the parameters of a module into a
+# :class:`~tensordict.TensorDict` with ``from_module``. ``to_module`` swaps
+# them for the length of a ``with`` block. You can stack parameters by
+# hand or with ``from_modules``, and run the whole ensemble in one
+# :func:`torch.vmap` call. :class:`~tensordict.nn.EnsembleModule` builds such
+# an ensemble in one step. ``flatten_keys(".")`` gives the parameter names
+# that :func:`torch.func.functional_call` expects.
 #
 # Further reading
 # ---------------

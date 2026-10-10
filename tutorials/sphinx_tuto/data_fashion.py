@@ -2,11 +2,14 @@
 Using TensorDict for datasets
 =============================
 
-This tutorial loads the FashionMNIST dataset into a
-:class:`~tensordict.TensorDict` of memory-mapped tensors, and trains a model
-from it with a ``DataLoader``. It is based on the `PyTorch Quickstart
-Tutorial <https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html>`__,
-with the data loading changed to use ``TensorDict``.
+A ``torchvision`` dataset applies its transform to each image again at every
+epoch. The ``DataLoader`` reads the samples one by one to build a batch. A
+:class:`~tensordict.TensorDict` of memory-mapped tensors stores the converted
+images once, and the ``DataLoader`` reads each batch from it with one index.
+This tutorial does this for FashionMNIST, with the model and the training loop
+of the `PyTorch Quickstart Tutorial
+<https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html>`__. It
+is for readers who train a model from a map-style dataset.
 
 What you will learn:
 
@@ -309,6 +312,10 @@ print(f"Training done! time: {time.perf_counter() - t0: 4.4f} s")
 # Conclusion
 # ----------
 #
+# You can now convert a dataset into a tensordict of memory-mapped tensors
+# once. Then you train a model from it with a ``DataLoader`` and
+# ``collate_fn=lambda x: x``.
+#
 # The two training runs use the same model, the same initial parameters and
 # the same optimizer, so their times differ only by the data loading. The
 # one-pass timings before the training show the data loading alone. The
@@ -317,10 +324,6 @@ print(f"Training done! time: {time.perf_counter() - t0: 4.4f} s")
 # from the memory-mapped tensors with one index. The times above come from
 # the machine that built this page. They depend on the hardware and on the
 # load of the machine, so measure them on your own machine.
-#
-# In this tutorial, you converted a dataset into a tensordict of memory-mapped
-# tensors once, and trained a model from it with a ``DataLoader`` and
-# ``collate_fn=lambda x: x``.
 #
 # Further reading
 # ---------------

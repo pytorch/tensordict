@@ -1,14 +1,18 @@
 """
-TensorDictModule
-================
+Building models with TensorDictModule
+=====================================
 
 .. _tensordictmodule:
 
 **Author**: `Nicolas Dufour <https://github.com/nicolas-dufour>`_, `Vincent Moens <https://github.com/vmoens>`_
 
-In this tutorial, you build a small residual network from modules that read
-their inputs from a :class:`~tensordict.TensorDict` and write their outputs
-into it.
+The parts of a model often exchange many named tensors, such as observations,
+hidden states and the parameters of a distribution. You then write code that
+passes each tensor to the right layer. With
+:class:`~tensordict.nn.TensorDictModule`, each layer reads and writes named
+entries of one :class:`~tensordict.TensorDict`, and you chain the layers by
+these names. This tutorial builds a small residual network in this way. It is
+for readers who write PyTorch models.
 
 What you will learn:
 
@@ -249,9 +253,9 @@ for name, module in [
 # :func:`torch.compile` traces through the tensordict code, so the compiled
 # graph contains only the tensor operations: the same matrix products as the
 # eager ``Regular`` module. Each call of a compiled module also checks the
-# guards of the graph (the conditions under which the graph is valid) before
-# it runs the generated code. On the CPU build of this page, the compiled
-# versions are not faster than the eager ``Regular`` module.
+# guards of the graph before it runs the generated code. The guards are the
+# conditions under which the graph is valid. On the CPU build of this page,
+# the compiled versions are not faster than the eager ``Regular`` module.
 #
 # On a GPU, the cost to launch each kernel adds up. CUDA graphs replay all the
 # kernels of a call at once. Use ``torch.compile(module, mode="reduce-overhead")``
@@ -351,14 +355,15 @@ assert not (td_random["action"] == td_random["loc"]).all()
 # Conclusion
 # ----------
 #
-# In this tutorial, you wrapped modules and functions in
-# :class:`~tensordict.nn.TensorDictModule`, and chained them with
+# You can now wrap modules and functions in
+# :class:`~tensordict.nn.TensorDictModule`, and chain them with
 # :class:`~tensordict.nn.TensorDictSequential` by the names of their inputs
-# and outputs. You removed the intermediate outputs with
-# ``select_out_keys``, and you called the block with a tensor as a keyword
-# argument. You measured the cost of the tensordict reads and writes, in
-# eager mode and compiled. Last, you sampled from a distribution with
-# :class:`~tensordict.nn.ProbabilisticTensorDictModule`.
+# and outputs. You can drop the intermediate outputs with ``select_out_keys``,
+# and call a module with tensors as keyword arguments. In eager mode, each
+# module adds the cost of its tensordict reads and writes. A compiled graph
+# contains only the tensor operations. You can also sample from a
+# distribution with :class:`~tensordict.nn.ProbabilisticTensorDictModule`,
+# and choose a deterministic or a random sample.
 #
 # Further reading
 # ---------------

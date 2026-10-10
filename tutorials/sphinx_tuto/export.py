@@ -10,7 +10,8 @@ After you write a model with ``tensordict.nn``, you can export its
 computational graph with :func:`torch.export.export`. The exported program
 takes and returns plain tensors, and it does not need tensordict at run time.
 Use it to run the model on other hardware (robots, drones, edge devices), or
-to remove the dependency on tensordict.
+to remove the dependency on tensordict. This tutorial is for readers who
+deploy a ``tensordict.nn`` model.
 
 What you will learn:
 
@@ -22,10 +23,6 @@ What you will learn:
 
 Before you start, read the :ref:`TensorDictModule <tensordictmodule>`
 tutorial.
-
-PyTorch also has an ONNX exporter. In recent PyTorch versions,
-``torch.onnx.export(..., dynamo=True)`` is built on ``torch.export``. This
-tutorial covers ``torch.export`` only.
 """
 
 import tempfile
@@ -40,8 +37,8 @@ from tensordict.nn import (
 from torch import nn
 
 ##################################################
-# Designing the model
-# -------------------
+# Building the model
+# ------------------
 #
 # Build a small network with ``tensordict.nn``. The network has:
 #
@@ -79,9 +76,8 @@ print(model(x=x))
 # --------------------------------------------------
 #
 # ``torch.export`` captures the graph of a module in a standard form, which
-# does not depend on ``tensordict``. Its main entry point is
-# :func:`~torch.export.export`, which returns an ``ExportedProgram``. This
-# object has the following attributes:
+# does not depend on ``tensordict``. The :func:`~torch.export.export`
+# function returns an ``ExportedProgram``, which has these attributes:
 #
 # - ``graph_module``: the FX graph that ``export`` captured.
 # - ``graph_signature``: the inputs and outputs of the graph.
@@ -200,11 +196,11 @@ print("module:", model_export.module())
 # Conclusion
 # ----------
 #
-# In this tutorial, you called a ``tensordict.nn`` model with tensors as
-# keyword arguments, and you exported it with ``torch.export``. The exported
-# program takes and returns plain tensors. You passed nested keys as keyword
-# arguments joined with ``"_"``, saved the program to a ``.pt2`` file, and
-# selected the outputs of the model before the export.
+# You can now export a ``tensordict.nn`` model with ``torch.export`` into a
+# program that takes and returns plain tensors. You can pass nested keys as
+# keyword arguments joined with ``"_"``, and save the program to a ``.pt2``
+# file and load it again. You can also select the outputs of the model before
+# the export.
 #
 # Further reading
 # ---------------
@@ -219,7 +215,8 @@ print("module:", model_export.module())
 #   explain the exporter.
 # - The `ONNX tutorials
 #   <https://pytorch.org/tutorials/beginner/onnx/export_simple_model_to_onnx_tutorial.html>`_
-#   explain the ONNX exporter.
+#   explain the ONNX exporter. ``torch.onnx.export(..., dynamo=True)`` is
+#   built on ``torch.export``.
 # - To run PyTorch code on servers without Python, read the
 #   `AOTInductor <https://pytorch.org/docs/main/torch.compiler_aot_inductor.html>`_
 #   documentation.

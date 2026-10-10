@@ -2,11 +2,14 @@
 Using tensorclasses for datasets
 ================================
 
-This tutorial loads the FashionMNIST dataset into a tensorclass of
-memory-mapped tensors, and trains a model from it with a ``DataLoader``. It
-is based on the `PyTorch Quickstart Tutorial
-<https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html>`__,
-with the data loading changed to use a tensorclass.
+A :class:`~tensordict.TensorClass` is the class form of a tensordict. You
+declare its fields with types, and you write methods that run on one sample or
+on a batch. This tutorial stores FashionMNIST in a tensorclass with an
+``images`` field, a ``targets`` field and a method that loads a dataset into
+memory-mapped tensors. Then it trains the model of the `PyTorch Quickstart
+Tutorial <https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html>`__
+from it. It is for readers who want named, typed fields and methods for their
+data.
 
 What you will learn:
 
@@ -54,12 +57,11 @@ test_data = datasets.FashionMNIST(
 )
 
 ###############################################################################
-# A tensorclass is a dataclass whose fields are tensors. Like a
-# ``TensorDict``, it has a batch size, and you can index it, move it to a
-# device or memory-map it. Use a tensorclass when you know the fields of your
-# data in advance. To define one, subclass :class:`~tensordict.TensorClass`
-# and annotate its fields. The ``@tensorclass`` decorator is the older form of
-# the same thing.
+# Like a ``TensorDict``, a tensorclass has a batch size, and you can index it,
+# move it to a device or memory-map it. Use a tensorclass when you know the
+# fields of your data in advance. To define one, subclass
+# :class:`~tensordict.TensorClass` and annotate its fields. The
+# ``@tensorclass`` decorator is the older form of the same thing.
 #
 # A tensorclass can also have methods. The ``from_dataset`` class method below
 # takes a dataset and returns a tensorclass that holds all its data in
@@ -230,11 +232,11 @@ print(f"Tensorclass training done! time: {time.perf_counter() - t0: 4.4f} s")
 # Conclusion
 # ----------
 #
-# In this tutorial, you defined a :class:`~tensordict.TensorClass` with an
-# ``images`` field and a ``targets`` field, and a ``from_dataset`` method that
-# loads a dataset into memory-mapped tensors once. You passed the tensorclass
-# to a ``DataLoader`` with ``collate_fn=lambda x: x``, moved each batch to the
-# device with one call, and read its fields as attributes.
+# You can now define a :class:`~tensordict.TensorClass` with typed fields, and
+# a ``from_dataset`` method that loads a dataset into memory-mapped tensors
+# once. You can pass the tensorclass to a ``DataLoader`` with
+# ``collate_fn=lambda x: x``. One call moves each batch to the device, and you
+# read its fields as attributes.
 #
 # Further reading
 # ---------------

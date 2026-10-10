@@ -1,10 +1,13 @@
 """
-Manipulating the keys of a TensorDict
-=====================================
+Getting, setting and nesting keys
+=================================
 **Author**: `Tom Begley <https://github.com/tcbegley>`_
 
-This tutorial shows how to read, write, rename and delete the keys of a
-:class:`~tensordict.TensorDict`, and how to work with nested keys.
+A :class:`~tensordict.TensorDict` stores tensors under string keys, as a
+Python ``dict`` does, and a value can be another ``TensorDict``. If you know
+``dict``, most of this tutorial is familiar. It shows where a ``TensorDict``
+is different: what a missing key returns, what a ``for`` loop gives, and how
+tuples of strings address nested entries.
 
 What you will learn:
 
@@ -61,8 +64,8 @@ except KeyError:
     print("tensordict['banana'] raises a KeyError")
 
 ##############################################################################
-# You can also give ``get`` a default value, which it returns if the key is
-# not found:
+# If you give ``get`` a default value, it returns this value for a missing
+# key:
 
 assert tensordict.get("banana", a) is a
 
@@ -94,7 +97,7 @@ assert (tensordict.get("a") == 0).all()
 # but it is still the same tensor as before
 assert tensordict.get("a") is a
 
-# we can achieve the same with set_
+# set_ does the same
 tensordict.set_("a", torch.ones(10))
 assert (tensordict.get("a") == 1).all()
 assert tensordict.get("a") is a
@@ -117,6 +120,9 @@ print(tensordict)
 # another :class:`~tensordict.TensorDict`, or of a ``dict``, into a
 # :class:`~tensordict.TensorDict`. It overwrites the keys that exist, and
 # creates the keys that do not exist.
+#
+# The second argument of the constructor below, ``[10]``, is the batch size:
+# the leading dimensions that all the entries share (see :ref:`batch-size`).
 
 tensordict = TensorDict({"a": torch.rand(10), "b": torch.rand(10)}, [10])
 tensordict.update(TensorDict({"a": torch.zeros(10), "c": torch.zeros(10)}, [10]))
@@ -197,8 +203,8 @@ for key, value in tensordict.items(include_nested=True):
         print(f"{key} is a Tensor")
 
 ##############################################################################
-# Checking for existence of a key
-# -------------------------------
+# Testing if a key exists
+# -----------------------
 # To find out if a key exists in a ``TensorDict``, use the ``in`` operator. It
 # also accepts nested keys as tuples of strings. Each ``in`` test is a ``dict``
 # lookup at each level of nesting, so its cost does not grow with the number
@@ -227,8 +233,8 @@ print(flattened_tensordict.unflatten_keys(separator="."))
 ##############################################################################
 # ``unflatten_keys`` works on any flat key names with a separator. For
 # example, the parameter names of a :class:`torch.nn.Module` use ``"."``. This
-# code builds a :class:`~tensordict.TensorDict` whose structure is the structure
-# of the module:
+# code builds a :class:`~tensordict.TensorDict` with the structure of the
+# module:
 
 import torch.nn as nn
 
@@ -268,12 +274,16 @@ print(tensordict.exclude(("nested", "b"), ("nested", "double_nested")))
 # Conclusion
 # ----------
 #
-# In this tutorial, you set, read, renamed and deleted the keys of a
-# :class:`~tensordict.TensorDict`. ``get`` returns ``None`` for a missing key,
-# and ``tensordict[key]`` raises a ``KeyError``. You checked keys with ``in``,
-# iterated over them with ``keys()``, ``values()`` and ``items()``, and used
-# tuples of strings for nested keys. Last, you flattened nested keys, and
-# selected and excluded keys.
+# You can now set, read, rename and delete the entries of a
+# :class:`~tensordict.TensorDict` at any depth, with tuples of strings for the
+# nested keys. You can test keys with ``in``, list them with ``keys()``,
+# ``values()`` and ``items()``, flatten them, and keep or drop a subset with
+# ``select`` and ``exclude``.
+#
+# Two behaviors differ from a ``dict``. ``get`` returns ``None`` for a missing
+# key, and ``tensordict[key]`` raises a ``KeyError``. A ``for`` loop over a
+# ``TensorDict`` goes over its first batch dimension, so use ``keys()`` to go
+# over the keys.
 #
 # Further reading
 # ---------------
