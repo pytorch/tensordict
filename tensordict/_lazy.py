@@ -5068,7 +5068,7 @@ class _ViewedTensorDict(_CustomOpTensorDict):
         elif len(shape) == 1 and isinstance(shape[0], (list, tuple, torch.Size)):
             return self._legacy_view(*shape[0])
         elif not isinstance(shape, torch.Size):
-            shape = _infer_size_impl(shape, self.numel())
+            shape = _infer_size_impl(shape, self.batch_size.numel())
             shape = torch.Size(shape)
         if shape == self._source.batch_size:
             return self._source

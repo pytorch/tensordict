@@ -464,7 +464,7 @@ class _ShapeOps:
         inplace = kwargs.pop("inplace", False)
         shape = _get_shape_from_args(*args, **kwargs)
         if any(dim < 0 for dim in shape):
-            shape = _infer_size_impl(shape, self.numel())
+            shape = _infer_size_impl(shape, self.batch_size.numel())
             shape = torch.Size(shape)
         if torch.Size(shape) == self.shape:
             return self
@@ -973,7 +973,11 @@ class _ShapeOps:
                     f"TensorDict.split: split_size must be positive, got {split_size}."
                 )
             split_size = min(split_size, max_size)
-            segments = _create_segments_from_int(split_size, max_size)
+            if max_size == 0:
+                # torch.split returns one empty piece along a zero-size dim
+                segments = [(0, 0)]
+            else:
+                segments = _create_segments_from_int(split_size, max_size)
             splits_list = [end - start for start, end in segments]
             num_splits = len(splits_list)
             splits = {
@@ -1191,7 +1195,7 @@ class _ShapeOps:
         elif len(shape) == 1 and isinstance(shape[0], (list, tuple, torch.Size)):
             return self.view(*shape[0])
         elif not isinstance(shape, torch.Size):
-            shape = _infer_size_impl(shape, self.numel())
+            shape = _infer_size_impl(shape, self.batch_size.numel())
             shape = torch.Size(shape)
         if shape == self.shape:
             return self

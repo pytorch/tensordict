@@ -2690,7 +2690,7 @@ def _infer_size_impl(shape: List[int], numel: int) -> List[int]:
                 f"invalid shape dimensions in {list(shape)}: sizes must be non-negative or -1"
             )
     if not (
-        numel == newsize
+        (infer_dim is None and numel == newsize)
         or (infer_dim is not None and newsize > 0 and numel % newsize == 0)
     ):
         raise RuntimeError(

@@ -1977,6 +1977,15 @@ class TestGeneric:
         assert td.view(3, 4) is td
         assert td.view(-1, 12).shape == torch.Size([1, 12])
 
+    @legacy_lazy_mode()
+    def test_inferred_view_size_zero_size_dim(self):
+        td = TensorDict({"a": torch.zeros(0, 3, 4)}, [0, 3])
+        assert td.view(-1).batch_size == torch.Size([0])
+        assert td.view(-1)["a"].shape == torch.Size([0, 4])
+        assert td.view(-1).view(-1, 3) is td
+        assert td.view(0, 3) is td
+        assert td.view(3, 0).view(-1).batch_size == torch.Size([0])
+
     def test_is_empty(self):
         assert TensorDict({"a": {"b": {}}}, []).is_empty()
         assert not TensorDict(
@@ -4473,6 +4482,39 @@ class TestGeneric:
         assert tds[1].shape == torch.Size([5, 3])
         assert tds[1]["a"].shape == torch.Size([5, 3, 2, 1])
         assert tds[1]["b"].shape == torch.Size([5, 3, 1])
+
+    def test_reshape_view_zero_size_dim(self):
+        td = TensorDict(
+            {"a": torch.zeros(0, 3, 4), "b": {"c": torch.zeros(0, 3)}}, [0, 3]
+        )
+        ref = torch.zeros(0, 3)
+        for shape in ((-1,), (-1, 3), (3, -1), (1, -1, 3)):
+            for out in (td.reshape(*shape), td.view(*shape)):
+                assert out.batch_size == ref.reshape(*shape).shape
+                assert out["a"].shape == (*out.batch_size, 4)
+                assert out["b", "c"].shape == out.batch_size
+        assert TensorDict({}, [0, 3]).reshape(-1).batch_size == torch.Size([0])
+        # -1 next to a 0 is ambiguous: torch raises too. The error is an
+        # AssertionError on main and a RuntimeError once #2119 lands.
+        with pytest.raises((AssertionError, RuntimeError), match="invalid shape"):
+            td.reshape(-1, 0)
+
+    def test_split_chunk_zero_size_dim(self):
+        td = TensorDict(
+            {"a": torch.zeros(0, 3, 4), "b": {"c": torch.zeros(0, 3)}}, [0, 3]
+        )
+        ref = torch.zeros(0, 3)
+        # along dim 0, of size 0, split gives one piece and chunk gives `chunks`
+        for dim in (0, 1):
+            for pieces, ref_pieces in (
+                (td.split(2, dim), ref.split(2, dim)),
+                (td.chunk(2, dim), ref.chunk(2, dim)),
+                (td.chunk(3, dim), ref.chunk(3, dim)),
+            ):
+                assert [p.batch_size for p in pieces] == [r.shape for r in ref_pieces]
+                for piece in pieces:
+                    assert piece["a"].shape == (*piece.batch_size, 4)
+                    assert piece["b", "c"].shape == piece.batch_size
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_squeeze(self, device):
