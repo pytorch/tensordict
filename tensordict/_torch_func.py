@@ -200,6 +200,10 @@ def _gather(
             f"Cannot gather tensordict with shape {input.shape} along dim {dim_orig}."
         )
 
+    # as torch.gather does, keep the size of the index on the batch dims where it
+    # is smaller than the input; every leaf starts with the batch size
+    target_batch_shape = list(map(min, index.shape, input.batch_size))
+
     def _gather_tensor(tensor, dest_container=None, dest_key=None):
         if dest_container is not None:
             dest = dest_container._get_str(dest_key, default=NO_DEFAULT)
@@ -209,6 +213,7 @@ def _gather(
         while index_expand.ndim < tensor.ndim:
             index_expand = index_expand.unsqueeze(-1)
         target_shape = list(tensor.shape)
+        target_shape[: len(target_batch_shape)] = target_batch_shape
         target_shape[dim] = index_expand.shape[dim]
         index_expand = index_expand.expand(target_shape)
         out = torch.gather(tensor, dim, index_expand, out=dest)
@@ -217,9 +222,8 @@ def _gather(
     def _gather_non_tensor_stack(stack):
         # A non-tensor stack has no tensor leaves to gather. Gather the position of
         # each entry instead, then select the entries at those positions, which
-        # copies the values themselves. _gather_tensor expands the index to the
-        # leaf shape on every non-gather dim; only expand the trailing dims the
-        # index lacks, so that a bare stack follows torch.gather.
+        # copies the values themselves. Only expand the trailing dims the index
+        # lacks, so that a bare stack follows torch.gather.
         positions = stack._positions().to(index.device)
         index_expand = index
         while index_expand.ndim < positions.ndim:
