@@ -13,7 +13,12 @@ from tensordict.persistent import PersistentTensorDict
 
 # implement_for stays importable from here for the deprecated
 # tensordict.implement_for alias of tensordict/__init__.py, until 0.17.
-from tensordict.utils import _shape, implement_for, is_compiling  # noqa: F401
+from tensordict.utils import (  # noqa: F401
+    _is_tensorclass,
+    _shape,
+    implement_for,
+    is_compiling,
+)
 from torch.utils._pytree import Context, MappingKey, register_pytree_node
 
 PYTREE_REGISTERED_TDS = (
@@ -22,6 +27,18 @@ PYTREE_REGISTERED_TDS = (
     PersistentTensorDict,
 )
 PYTREE_REGISTERED_LAZY_TDS = (LazyStackedTensorDict,)
+
+
+def _pytree_non_tensor_data(d: TensorDictBase) -> tuple | list:
+    # The non-tensor fields of a tensorclass are not in its tensordict, so its
+    # context keeps them. The non-tensor entries of a tensordict are among its
+    # values, and the spec of each rebuilds it with its batch size and device.
+    # Storing them again would make the context hold NonTensorData objects,
+    # whose == returns a tensor when they have a batch size, so that comparing
+    # two specs would raise.
+    if _is_tensorclass(type(d)):
+        return d.non_tensor_items()
+    return ()
 
 
 def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
@@ -38,7 +55,7 @@ def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
         "names": d.names if d._has_names() else None,
         "device": d.device,
         "constructor": _constructor(type(d)),
-        "non_tensor_data": d.non_tensor_items(),
+        "non_tensor_data": _pytree_non_tensor_data(d),
         "cls": type(d),
     }
     if is_compiling():
@@ -144,7 +161,7 @@ def _td_flatten_with_keys(
         "names": d._maybe_names(),
         "device": d.device,
         "constructor": _constructor(type(d)),
-        "non_tensor_data": d.non_tensor_items(),
+        "non_tensor_data": _pytree_non_tensor_data(d),
         "cls": type(d),
     }
 
@@ -202,8 +219,6 @@ def _tensordict_constructor(
         names=names,
         device=device,
     )
-    for key, item in non_tensor_items:
-        result.set_non_tensor(key, item)
     return result
 
 

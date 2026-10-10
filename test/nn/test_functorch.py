@@ -15,10 +15,16 @@ from _utils_internal import expand_list, get_available_devices, TestTensorDictsB
 from functorch import (
     make_functional_with_buffers as functorch_make_functional_with_buffers,
 )
-from tensordict import LazyStackedTensorDict, TensorDict
+from tensordict import LazyStackedTensorDict, NonTensorData, NonTensorStack, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn, vmap
-from torch.utils._pytree import tree_map
+from torch.utils._pytree import (
+    tree_flatten,
+    tree_flatten_with_path,
+    tree_map,
+    tree_structure,
+    tree_unflatten,
+)
 
 
 class TestVmap:
@@ -375,6 +381,29 @@ class TestPyTree(TestTensorDictsBase):
         # With exclusive keys
         del td0["a"]
         assert (tree_map(lambda x: x + 1, td) == td + 1).all()
+
+    def test_pytree_non_tensor_spec(self):
+        # The specs of tensordicts with batched non-tensor entries compare
+        # without raising.
+        def make(s="a string"):
+            return TensorDict(a=torch.zeros(4, 3), s=s, batch_size=[4], device="cpu")
+
+        assert tree_structure(make()) == tree_structure(make())
+        assert tree_structure(make()) != tree_structure(make("another string"))
+        assert tree_flatten_with_path(make())[1] == tree_structure(make())
+        out = tree_map(lambda a, b: a + b, make(), make())
+        assert out.get_non_tensor("s") == "a string"
+        assert (out["a"] == 0).all()
+        # The entries are rebuilt with their batch size and device.
+        td = make()
+        td.set("big", NonTensorData("x", batch_size=[4, 2]))
+        td.set("stack", NonTensorStack("a", "b", "c", "d"))
+        td = tree_unflatten(*tree_flatten(td))
+        assert td.get("s").batch_size == torch.Size([4])
+        assert td.get("s").device == torch.device("cpu")
+        assert td.get("big").batch_size == torch.Size([4, 2])
+        assert isinstance(td.get("stack"), NonTensorStack)
+        assert td.get("stack").tolist() == ["a", "b", "c", "d"]
 
 
 # The names that ``from tensordict._pytree import *`` used to copy into the

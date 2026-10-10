@@ -1897,6 +1897,20 @@ class TestExport:
         )
         torch.testing.assert_close(exported_module.module()(x=x), m(x))
 
+    def test_export_td_input_non_tensor(self):
+        # The exported module compares the spec of its input with the spec of
+        # the example input, which holds a batched non-tensor entry.
+        class Mod(torch.nn.Module):
+            def forward(self, td):
+                return td["a"] * 2
+
+        def make():
+            return TensorDict(a=torch.randn(4, 3), s="a string", batch_size=[4])
+
+        ep = torch.export.export(Mod(), (make(),), strict=True)
+        td = make()
+        torch.testing.assert_close(ep.module()(td), td["a"] * 2)
+
 
 @pytest.mark.skipif(not _has_onnx, reason="ONNX is not available")
 class TestONNXExport:
