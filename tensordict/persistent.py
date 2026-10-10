@@ -371,6 +371,10 @@ class _H5Backend(_PersistentBackend):
         try:
             file.move(old_key, new_key)
         except ValueError as err:
+            # h5py raises ValueError for a missing source too; an existing
+            # destination is reported first, as in _ZarrBackend.move
+            if old_key not in file and new_key not in file:
+                raise KeyError(f"key {old_key} not found in TensorDict.") from err
             raise KeyError(f"key {new_key} already present in TensorDict.") from err
 
     def getstate(self, file) -> dict:
@@ -1944,7 +1948,7 @@ class PersistentTensorDict(TensorDictBase):
         non_blocking: bool = False,
     ) -> PersistentTensorDict:
         if not validated:
-            value = self._validate_value(value, check_shape=idx is None)
+            value = self._validate_value(value, check_shape=idx is None, key=key)
         value = self._to_numpy(value)
         if not inplace:
             if idx is not None:
@@ -2222,8 +2226,6 @@ class PersistentTensorDict(TensorDictBase):
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
         splits = -(self.batch_size[dim] // -chunks)
         return self.split(splits, dim)
-
-    _index_tensordict = TensorDict._index_tensordict
 
 
 _register_tensor_class(PersistentTensorDict)
