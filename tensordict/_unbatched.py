@@ -4,10 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import hashlib
 import math
+import pickle
 import warnings
 
 import torch
+from torch.utils._python_dispatch import is_traceable_wrapper_subclass
 
 
 def _has_wrapper_subclass_vmap_fix():
@@ -40,6 +43,29 @@ def _has_wrapper_subclass_vmap_fix():
 
 
 _HAS_WRAPPER_SUBCLASS_FIX = _has_wrapper_subclass_vmap_fix()
+
+
+def _cache_key_data(tensor: torch.Tensor):
+    """Return the data that the AOTAutograd cache key of ``tensor`` hashes.
+
+    Collects what torch's default key reads, so that a wrapper subclass
+    payload keeps its inner tensors and metadata in the key.
+    """
+    # torch._inductor takes seconds to import; the AOTAutograd cache, the only
+    # caller, has imported it already.
+    from torch._inductor.codecache import extract_tensor_metadata_for_cache_key
+
+    if hasattr(tensor, "_stable_hash_for_caching"):
+        return tensor._stable_hash_for_caching()
+    if is_traceable_wrapper_subclass(tensor):
+        inner_names, metadata = tensor.__tensor_flatten__()
+        return (
+            tensor.shape,
+            tensor.requires_grad,
+            metadata,
+            [_cache_key_data(getattr(tensor, name)) for name in inner_names],
+        )
+    return extract_tensor_metadata_for_cache_key(tensor)
 
 
 class _UnbatchedTensorMixin:
@@ -283,6 +309,22 @@ if _HAS_WRAPPER_SUBCLASS_FIX:
         ):
             batch_size = None if metadata is None else metadata.get("batch_size")
             return cls(inner_tensors["_data"], batch_size=batch_size)
+
+        def _stable_hash_for_caching(self) -> str:
+            """Return the AOTAutograd cache key of this tensor.
+
+            Hashes what torch's default key for wrapper subclasses reads
+            through ``__tensor_flatten__`` (the outer shape, ``requires_grad``,
+            the batch size and ``_data``); torch warns when a wrapper subclass
+            does not define this method.
+            """
+            cache_data = (
+                self.shape,
+                self.requires_grad,
+                getattr(self, "_batch_size", None),
+                _cache_key_data(self._data),
+            )
+            return hashlib.blake2b(pickle.dumps(cache_data), digest_size=16).hexdigest()
 
         @classmethod
         def __torch_dispatch__(cls, func, types, args=(), kwargs=None):
