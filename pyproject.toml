@@ -103,6 +103,7 @@ dependencies = [
 
 [project.urls]
 homepage = "https://github.com/pytorch/tensordict"
+documentation = "https://docs.pytorch.org/tensordict/stable/"
 
 [project.optional-dependencies]
 tests = [

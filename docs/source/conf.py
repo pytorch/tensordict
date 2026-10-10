@@ -30,6 +30,7 @@ import sys
 
 import pytorch_sphinx_theme
 import tensordict
+from sphinx.domains.python import ObjectEntry
 from sphinx.util.inspect import stringify_signature
 
 project = "tensordict"
@@ -87,6 +88,8 @@ sphinx_gallery_conf = {
     "filename_pattern": "reference/generated/tutorials/",  # files to parse
     "notebook_images": "reference/generated/tutorials/media/",  # images to parse
     "download_all_examples": True,
+    # The teaching order of index.rst (docs/source/gallery_order.py).
+    "within_subsection_order": "gallery_order.TutorialOrder",
 }
 
 # The zarr tutorial needs zarr>=3, which requires Python>=3.11; skip it (with a
@@ -348,7 +351,35 @@ def _resolve_shared_method(app, env, node, contnode):
     )
 
 
+def _alias_shared_methods(app, env):
+    # The shared methods are documented once, on TensorDictBase. Give every
+    # documented subclass and tensorclass an inventory alias
+    # (``tensordict.TensorDict.select`` -> the TensorDictBase.select page), so
+    # that intersphinx links from other projects, such as TorchRL, keep
+    # resolving. Sphinx keeps aliased entries out of the search index.
+    objects = env.get_domain("py").objects
+    base = "tensordict.TensorDictBase."
+    shared = {
+        name[len(base) :]: entry
+        for name, entry in objects.items()
+        if name.startswith(base) and "." not in name[len(base) :]
+    }
+    for name, entry in list(objects.items()):
+        if entry.objtype != "class" or name == "tensordict.TensorDictBase":
+            continue
+        cls = _find_class(name)
+        if cls is None or not _shares_tensordict_api(cls):
+            continue
+        for member, target in shared.items():
+            alias = f"{name}.{member}"
+            if alias not in objects and hasattr(cls, member):
+                objects[alias] = ObjectEntry(
+                    target.docname, target.node_id, target.objtype, True
+                )
+
+
 def setup(app):
     app.connect("autodoc-process-signature", _process_signature)
     app.connect("autodoc-skip-member", _skip_shared_member)
     app.connect("missing-reference", _resolve_shared_method)
+    app.connect("env-updated", _alias_shared_methods)
