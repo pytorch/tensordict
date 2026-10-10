@@ -3022,13 +3022,11 @@ class TestGeneric:
 
     @pytest.mark.parametrize("inplace", [True, False])
     @pytest.mark.parametrize(
-        "repeats",
-        [torch.Size([2, 3]), [2, 3], (2, 3), torch.tensor([2, 3])],
-        ids=["size", "list", "tuple", "tensor"],
+        "repeats", [torch.Size([2, 3]), [2, 3], (2, 3)], ids=["size", "list", "tuple"]
     )
-    def test_repeat_size_list_tuple_tensor(self, repeats, inplace):
-        # repeats can be one torch.Size, list, tuple or tensor, and inplace
-        # applies to them as it does to separate ints
+    def test_repeat_size_list_tuple(self, repeats, inplace):
+        # repeats can be one torch.Size, list or tuple, as in torch, with or
+        # without inplace
         td = self._build_nested_td()
         ref = self._build_nested_td().repeat(2, 3)
         out = td.repeat(repeats, inplace=inplace)

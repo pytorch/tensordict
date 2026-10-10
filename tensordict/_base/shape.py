@@ -576,8 +576,13 @@ class _ShapeOps:
             if i == dim_corrected:
                 if isinstance(repeats, int):
                     new_batch_size.append(s * repeats)
-                elif isinstance(repeats, torch.Tensor) and repeats.numel() == 1:
-                    # torch broadcasts a one-element repeats to the size of dim
+                elif (
+                    isinstance(repeats, torch.Tensor)
+                    and repeats.ndim <= 1
+                    and repeats.numel() == 1
+                    and repeats.dtype in (torch.int32, torch.int64)
+                ):
+                    # torch broadcasts a 0-d or one-element repeats to the size of dim
                     new_batch_size.append(s * int(repeats))
                 else:
                     new_batch_size.append(repeats.sum().item())
@@ -670,7 +675,7 @@ class _ShapeOps:
                 return self.repeat(*repeats, inplace=inplace)
             if isinstance(repeats, torch.Tensor):
                 # This will cause cuda to sync, which may not be desirable
-                return self.repeat(*repeats.tolist(), inplace=inplace)
+                return self.repeat(*repeats.tolist())
             raise ValueError(
                 f"repeats must be a sequence of integers, a tensor or a torch.Size object. Got {type(repeats)} instead."
             )

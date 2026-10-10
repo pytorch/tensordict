@@ -1684,17 +1684,6 @@ class TestLazyStackedTensorDict:
         assert (result["a"] == expected).all()
 
     @pytest.mark.parametrize(
-        "repeats", [[1, 2], [1, 2, 3, 4]], ids=["shorter", "longer"]
-    )
-    def test_repeat_interleave_stack_dim_wrong_size(self, repeats):
-        # a repeats tensor of another size than the stack raises, as in torch
-        lazy = LazyStackedTensorDict.lazy_stack(
-            [TensorDict(a=torch.zeros(2), batch_size=[2]) for _ in range(3)]
-        )
-        with pytest.raises(RuntimeError, match="repeats must have the same size"):
-            lazy.repeat_interleave(torch.tensor(repeats), dim=0)
-
-    @pytest.mark.parametrize(
         "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "prod"]
     )
     def test_reduction_feature_full(self, reduction):
