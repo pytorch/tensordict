@@ -121,20 +121,21 @@ td.to_zarr(root / "compressed.zarr", chunks=(16, 3, 32, 32), compressors=ZstdCod
 #
 # .. note::
 #
-#    ``to_zarr`` writes the metadata file of each group, then writes it again
-#    to add attributes. A zip file cannot replace an entry, so the zip gets a
-#    second entry with the same name. For each group, the ``zipfile`` module
-#    of Python warns ``UserWarning: Duplicate name: 'zarr.json'``. Reading
-#    the store works: ``zipfile`` returns the last entry, which has all the
-#    attributes. The example below hides this warning.
+#    ``to_zarr`` writes the metadata file (``zarr.json``) of some groups and
+#    arrays, then writes it again to add attributes. A zip file cannot replace
+#    an entry, so the zip gets a second entry with the same name. For each of
+#    these files, the ``zipfile`` module of Python warns
+#    ``UserWarning: Duplicate name: 'zarr.json'``. Reading the store works:
+#    ``zipfile`` returns the last entry, which has all the attributes. The
+#    example below hides this warning.
 
 from zarr.storage import ZipStore
 
 # sphinx_gallery_start_ignore
 import warnings
 
-# to_zarr rewrites the metadata of each group, and a zip cannot replace an
-# entry, so zipfile warns "Duplicate name" (see the note above). The archive
+# to_zarr rewrites some zarr.json files, and a zip cannot replace an entry,
+# so zipfile warns "Duplicate name" (see the note above). The archive
 # reads correctly. Hide only this warning, only for this write.
 _zip_warnings = warnings.catch_warnings()
 _zip_warnings.__enter__()
