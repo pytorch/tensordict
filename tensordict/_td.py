@@ -71,6 +71,7 @@ from tensordict.utils import (
     _get_shape_from_args,
     _import_and_wrap_functorch,
     _infer_size_impl,
+    _is_non_tensor,
     _is_safe_legacy_key,
     _is_unbatched,
     _KEY_ERROR,
@@ -82,6 +83,7 @@ from tensordict.utils import (
     _NON_STR_KEY_TUPLE_ERR,
     _parse_to,
     _pass_through,
+    _pass_through_cls,
     _prune_selected_keys,
     _resolve_expand_shape,
     _set_item,
@@ -534,6 +536,25 @@ class TensorDict(TensorDictBase):
                 return result
             return TensorDictParams(destination, no_convert=True)
         return destination
+
+    @property
+    def _has_non_tensor(self):
+        # Same result as TensorDictBase._has_non_tensor, faster: it checks the
+        # set of value types and only iterates over the values to find the
+        # nested TensorDicts.
+        values = self._tensordict.values()
+        for cls in set(map(type, values)):
+            if cls is TensorDict:
+                for value in values:
+                    if type(value) is TensorDict and value._has_non_tensor:
+                        return True
+            elif issubclass(cls, Tensor):
+                continue
+            elif _is_non_tensor(cls):
+                return True
+            elif not _pass_through_cls(cls):
+                return super()._has_non_tensor
+        return False
 
     def is_empty(self):
 

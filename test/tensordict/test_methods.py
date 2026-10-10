@@ -4738,6 +4738,28 @@ class TestTensorDicts(TestTensorDictsBase):
 
         assert td.get("val").tolist() == [0, 1] * 5
 
+    @legacy_lazy_mode()
+    def test_update__nontensor_and_tensor(self, td_name, device):
+        # update_ writes the non-tensor leaves of the source also when the source
+        # shares tensor leaves with the dest.
+        if td_name == "td_h5":
+            pytest.skip("set_non_tensor is not compatible with td_h5")
+        if td_name == "td_params":
+            pytest.skip("TensorDictParams.update_ does not write non-tensor leaves")
+        td = getattr(self, td_name)(device)
+        source = td.clone()
+        source.apply_(lambda x: x.zero_())
+        source.set_non_tensor(("this", "will"), "world")
+        with td.unlock_():
+            td.set_non_tensor(("this", "will"), "hello")
+            td.update_(source)
+
+        def check(x):
+            assert x == "world"
+
+        torch.utils._pytree.tree_map(check, td.get_non_tensor(("this", "will")))
+        assert (td.filter_non_tensor_data() == 0).all()
+
     def test_copy_at_fast_transition(self, td_name, device):
         td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
         newdata = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])

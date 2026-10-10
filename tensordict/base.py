@@ -3464,17 +3464,36 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     _foreach_copy_compiled(vals, other_val, non_blocking=non_blocking)
                 else:
                     _foreach("copy_", vals, other_val, non_blocking=non_blocking)
-                return self
-            named = True
+                if not input_dict_or_td._has_non_tensor:
+                    return self
+                from tensordict import NonTensorStack
 
-            def inplace_update(name, source, dest):
-                if source is None:
-                    return None
-                if dest is None:
-                    raise KeyError(
-                        f"The key {name} was not found in the dest tensordict."
-                    )
-                dest.copy_(source, non_blocking=non_blocking)
+                # _items_list leaves out the non-tensor leaves: copy them below.
+                # Like the tensor leaves above, keys missing in self are skipped.
+                # copy_ raises for a locked dest (#2288) and between a
+                # NonTensorData and a NonTensorStack: these leaves are skipped too.
+                def inplace_update(name, source, dest):
+                    if (
+                        _is_non_tensor(type(source))
+                        and _is_non_tensor(type(dest))
+                        and not dest.is_locked
+                        and isinstance(source, NonTensorStack)
+                        == isinstance(dest, NonTensorStack)
+                    ):
+                        dest.copy_(source, non_blocking=non_blocking)
+
+            else:
+
+                def inplace_update(name, source, dest):
+                    if source is None:
+                        return None
+                    if dest is None:
+                        raise KeyError(
+                            f"The key {name} was not found in the dest tensordict."
+                        )
+                    dest.copy_(source, non_blocking=non_blocking)
+
+            named = True
 
         input_dict_or_td._apply_nest(
             inplace_update,
