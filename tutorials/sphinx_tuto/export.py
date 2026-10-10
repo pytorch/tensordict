@@ -49,7 +49,7 @@ from torch import nn
 # - A ReLU activation.
 # - A second linear layer that writes a latent representation.
 #
-# A :class:`~tensordict.nn.NormalParamExtractor` then splits the latent
+# A :class:`~tensordict.nn.distributions.NormalParamExtractor` then splits the latent
 # tensor into two outputs, ``"loc"`` and ``"scale"``.
 #
 model = Seq(
@@ -166,7 +166,7 @@ for out_model, out_loaded in zip(model(x=x), model_loaded.module()(x=x)):
 # By default, a ``tensordict.nn`` module keeps every intermediate value in its
 # output. During training, you can log these values, or rebuild a
 # distribution from its saved parameters instead of saving the
-# :class:`~torch.distributions.Distribution` object. The extra memory is small
+# :class:`~torch.distributions.distribution.Distribution` object. The extra memory is small
 # during training, because autograd keeps these tensors for the backward pass
 # anyway.
 #
@@ -176,9 +176,9 @@ for out_model, out_loaded in zip(model(x=x), model_loaded.module()(x=x)):
 #
 # 1. Pass the ``selected_out_keys`` keyword argument when you build the
 #    :class:`~tensordict.nn.TensorDictSequential`.
-# 2. Call the :meth:`~tensordict.nn.TensorDictModule.select_out_keys` method.
+# 2. Call the :meth:`~tensordict.nn.TensorDictModuleBase.select_out_keys` method.
 #    It changes the ``out_keys`` attribute in place. To undo it, call
-#    :meth:`~tensordict.nn.TensorDictModule.reset_out_keys`.
+#    :meth:`~tensordict.nn.TensorDictModuleBase.reset_out_keys`.
 # 3. Wrap the module in a :class:`~tensordict.nn.TensorDictSequential` that
 #    selects the keys:
 #

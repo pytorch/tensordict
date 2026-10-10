@@ -277,8 +277,8 @@ for name, module in [
 #     >>> td_out = module(td)
 #     >>> assert td_out is td
 #
-# Working with distributions: :class:`~tensordict.nn.ProbabilisticTensorDictModule`
-# ---------------------------------------------------------------------------------
+# Working with distributions
+# --------------------------
 #
 # A :class:`~tensordict.nn.ProbabilisticTensorDictModule` has no parameters.
 # It reads the parameters of a probability distribution from the tensordict,
@@ -302,7 +302,7 @@ for name, module in [
 # method.
 #
 # In the example below, a GRU cell writes a hidden state.
-# :class:`~tensordict.nn.NormalParamExtractor` splits it into ``"loc"`` and
+# :class:`~tensordict.nn.distributions.NormalParamExtractor` splits it into ``"loc"`` and
 # ``"scale"``, and the last module samples ``"action"`` from a normal
 # distribution. With ``return_log_prob=True``, it also writes the log
 # probability of the sample under ``"action_log_prob"``.

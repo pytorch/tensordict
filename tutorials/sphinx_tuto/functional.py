@@ -43,7 +43,7 @@ print(params)
 
 ##############################################################################
 # The :class:`~tensordict.TensorDict` holds the same
-# :class:`~torch.nn.Parameter` objects as the module. Tensordict operations
+# :class:`~torch.nn.parameter.Parameter` objects as the module. Tensordict operations
 # apply to all of them at once. For example, this line makes a copy of all
 # the parameters, with zeros as values:
 
@@ -122,7 +122,7 @@ for i, member in enumerate(modules):
 
 ##############################################################################
 # To train the stacked parameters, pass ``as_module=True``. The result is a
-# :class:`~tensordict.nn.TensorDictParams`, a tensordict that is also an
+# :class:`~tensordict.TensorDictParams`, a tensordict that is also an
 # :class:`~torch.nn.Module`, so that an optimizer can find its parameters
 # with ``parameters()``.
 #
@@ -171,7 +171,7 @@ print("functional_call output:", y.shape)
 #
 # - :ref:`compile` explains how tensordicts work with :mod:`torch.func`,
 #   including per-sample gradients with :func:`torch.vmap`.
-# - :ref:`modules-guide` explains :class:`~tensordict.nn.TensorDictParams` and
+# - :ref:`modules-guide` explains :class:`~tensordict.TensorDictParams` and
 #   the other modules of ``tensordict.nn``.
 # - :ref:`sphx_glr_tutorials_tensordict_module.py` shows how to build models
 #   from :class:`~tensordict.nn.TensorDictModule`.
