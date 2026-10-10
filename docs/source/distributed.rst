@@ -128,8 +128,8 @@ With ``consolidated=True``, ``send`` sends all the leaves as one message
 instead. It first calls :meth:`~tensordict.TensorDictBase.consolidate`, which
 copies the leaves into one storage (see :ref:`saving`), unless the tensordict
 is consolidated already. This is faster when the tensordict has many small
-leaves. In one measurement on one machine with ``gloo``, a consolidated send
-of 100 leaves of 256 bytes was 34 times as fast as a send per leaf. The receiver must
+leaves. In one measurement with 100 leaves of 256 bytes, on one machine with
+``gloo``, a consolidated send was 34 times as fast as a send per leaf. The receiver must
 hold a consolidated tensordict with the same keys, shapes and dtypes:
 
 .. code-block:: python
@@ -376,7 +376,7 @@ A dataset on a shared file system
 ---------------------------------
 
 If the nodes share a file system (for example NFS or Lustre), they can open
-the same memory-mapped tensordict, and no tensor goes over the network:
+the same memory-mapped tensordict. No tensor then goes over the network:
 
 1. On one rank, preallocate the files with
    :meth:`~tensordict.TensorDictBase.from_schema` (see :ref:`storage`). It
@@ -428,7 +428,7 @@ trainer. Compared with ``send`` and ``recv`` of ``torch.distributed``:
   buffer. It does not allocate memory or parse metadata.
 - UCX selects the transport: TCP, InfiniBand verbs or RoCE.
 - If the tensors are on a GPU and GPUDirect RDMA is available, the buffer
-  goes from GPU memory to the network without a copy to the CPU.
+  goes from GPU memory to the network, with no copy in CPU memory.
 - The API uses :mod:`asyncio`, and has synchronous wrappers.
 
 The classes are in the private module ``tensordict._ucxx``, and they need
