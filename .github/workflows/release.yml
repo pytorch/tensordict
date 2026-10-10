@@ -9,7 +9,8 @@
 # 3. Collects wheels into a single artifact
 # 4. Creates draft GitHub release with wheels attached
 # 5. Publishes to PyPI using OIDC trusted publishing
-# 6. Updates gh-pages docs (stable symlink), once the tag's docs are there
+# 6. Updates gh-pages docs (stable symlink and versions.html), once the tag's
+#    docs are there
 #
 # Triggers:
 # - Manual workflow_dispatch only (no automatic triggers)
@@ -434,24 +435,67 @@ jobs:
           ln -sf "$VERSION_MAJOR_MINOR" stable
           echo "Updated stable symlink -> $VERSION_MAJOR_MINOR"
 
-          # Update versions.html if it exists
-          if [[ -f "versions.html" ]]; then
-            # Check if this version is already in versions.html
-            if ! grep -q "\"$VERSION_MAJOR_MINOR\"" versions.html; then
-              echo "::notice::Version $VERSION_MAJOR_MINOR not in versions.html, may need manual update"
-            fi
-          fi
+          # Rewrite versions.html from the X.Y docs folders, newest first, so
+          # that it lists every version that has docs.
+          STABLE=$(readlink stable)
+          {
+            cat <<'EOF'
+          <html>
+            <head>
+              <meta charset="utf-8">
+
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <link rel="stylesheet" href="main/_static/css/theme.css" type="text/css" />
+              <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato" type="text/css" />
+              <link rel="stylesheet" href="main/_static/css/pytorch_theme.css" type="text/css" />
+              <script src="main/_static/js/modernizr.min.js"></script>
+
+
+            </head>
+            <body>
+              <div class="wy-nav-content">
+                <div class="rst-content">
+              <h1> TensorDict Documentation </h1>
+              <div class="toctree-wrapper compound">
+                <p class="caption"><span class="caption-text">Pick a version</span></p>
+                <ul>
+                  <li class="toctree-l1">
+                    <a class="reference internal" href="main/">main (unstable)</a>
+                  </li>
+          EOF
+            find . -maxdepth 1 -type d -regextype posix-extended -regex '\./[0-9]+\.[0-9]+' -printf '%f\n' |
+              sort -rV |
+              while read -r FOLDER; do
+                LABEL="v${FOLDER}"
+                if [[ "$FOLDER" == "$STABLE" ]]; then
+                  LABEL="${LABEL} (stable release)"
+                fi
+                printf '        <li class="toctree-l1">\n'
+                printf '          <a class="reference internal" href="%s/">%s</a>\n' "$FOLDER" "$LABEL"
+                printf '        </li>\n'
+              done
+            cat <<'EOF'
+                </ul>
+                <p>You can view previous versions of the tensordict documentation
+                <a href="https://pytorch.org/tensordict/versions.html">here</a>.
+
+              </div>
+              </div></div>
+            </body>
+          </html>
+          EOF
+          } > versions.html
 
           # Check if changes were made
-          if git diff --quiet; then
-            echo "::notice::Stable docs already point to $VERSION_MAJOR_MINOR. No changes needed."
+          git add stable versions.html
+          if git diff --cached --quiet; then
+            echo "::notice::Stable docs already point to $VERSION_MAJOR_MINOR and versions.html is up to date. No changes needed."
             exit 0
           fi
 
           # Commit and push
           git config user.name 'pytorchbot'
           git config user.email 'soumith+bot@pytorch.org'
-          git add stable versions.html 2>/dev/null || git add stable
           git commit -m "Update stable docs to $VERSION_MAJOR_MINOR"
           for attempt in 1 2 3 4 5; do
             if git push; then
@@ -470,7 +514,7 @@ jobs:
         if: ${{ env.DRY_RUN == 'true' }}
         run: |
           VERSION_MAJOR_MINOR="${{ steps.version.outputs.version_major_minor }}"
-          echo "DRY RUN: Would update stable symlink to point to $VERSION_MAJOR_MINOR"
+          echo "DRY RUN: Would update stable symlink to point to $VERSION_MAJOR_MINOR and rewrite versions.html"
 
           if [[ -L "stable" ]]; then
             CURRENT=$(readlink stable)
