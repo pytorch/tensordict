@@ -253,7 +253,7 @@ class CompositeDistribution(d.Distribution, Mapping):
         samples = {name: dist.sample(shape) for name, dist in self.dists.items()}
         return TensorDict(
             samples,
-            shape + self.batch_shape,
+            torch.Size(shape) + self.batch_shape,
         )
 
     @property
@@ -351,7 +351,7 @@ class CompositeDistribution(d.Distribution, Mapping):
             shape = torch.Size([])
         return TensorDict(
             {name: dist.rsample(shape) for name, dist in self.dists.items()},
-            shape + self.batch_shape,
+            torch.Size(shape) + self.batch_shape,
         )
 
     def log_prob(self, sample: TensorDictBase) -> torch.Tensor | TensorDictBase:  # noqa: D417
@@ -553,12 +553,12 @@ class CompositeDistribution(d.Distribution, Mapping):
         for name, dist in self.dists.items():
             prob = sample.get(_add_suffix(name, "_cdf"))
             if prob is None:
-                try:
-                    prob = self.cdf(sample.get(name))
-                except KeyError:
+                value = sample.get(name)
+                if value is None:
                     raise KeyError(
-                        f"Neither {name} nor {name + '_cdf'} could be found in the sampled tensordict. Make sure one of these is available to icdf."
+                        f"Neither {name} nor {_add_suffix(name, '_cdf')} could be found in the sampled tensordict. Make sure one of these is available to icdf."
                     )
+                prob = dist.cdf(value)
             icdf = dist.icdf(prob)
             sample.set(_add_suffix(name, "_icdf"), icdf)
         return sample

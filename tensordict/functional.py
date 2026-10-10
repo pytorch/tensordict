@@ -435,6 +435,10 @@ def pad_sequence(
         pad_dim (int, optional): the ``pad_dim`` indicates the dimension to pad all the keys in the tensordict.
             Defaults to ``0``.
         padding_value (number, optional): the padding value. Defaults to ``0.0``.
+            Non-tensor entries are not filled with ``padding_value``: when the padded
+            dim is a batch dimension of the output, they keep their values at the
+            valid positions and hold ``None`` in the pad slots, as with
+            :func:`~tensordict.pad`.
         out (TensorDictBase, optional): if provided, the destination where the data will be
             written.
         return_mask (bool or NestedKey, optional): if ``True``, a "masks" entry will be returned. If ``return_mask`` is a nested key (string or tuple of strings), it will be return the masks and be used as the key for the masks entry.
@@ -523,8 +527,12 @@ def pad_sequence(
     keys = keys_copy
 
     old_batch_size = list(list_of_tensordicts[0].batch_size)
+    # The batch dim set to max_seq_length, if any: non-tensor entries are
+    # padded along it too.
+    batch_pad_dim = None
     if update_batch_size and len(old_batch_size) > 0:
         old_batch_size[pad_dim] = max_seq_length
+        batch_pad_dim = pad_dim % len(old_batch_size)
     shape = [
         len(list_of_tensordicts),
     ] + old_batch_size
@@ -539,7 +547,22 @@ def pad_sequence(
                 out.set(key, item0)
                 continue
             if is_non_tensor(item0):
-                out.set(key, TensorDict.lazy_stack([d[key] for d in list_of_dicts]))
+                items = [d[key] for d in list_of_dicts]
+                if batch_pad_dim is not None and out.batch_dims > batch_pad_dim + 1:
+                    # Pad the entries that are shorter than out along that
+                    # dim, as pad does: original values, then None.
+                    length = out.batch_size[batch_pad_dim + 1]
+                    items = [
+                        _pad_non_tensor(
+                            item,
+                            [0, 0] * batch_pad_dim
+                            + [0, length - item.batch_size[batch_pad_dim]],
+                        )
+                        if item.batch_size[batch_pad_dim] < length
+                        else item
+                        for item in items
+                    ]
+                out.set(key, TensorDict.lazy_stack(items))
                 continue
             tensor_shape = item0.shape
             pos_pad_dim = (
@@ -669,7 +692,7 @@ def dense_stack_tds(
 ) -> T:
     """Densely stack a list of :class:`~tensordict.TensorDictBase` objects (or a :class:`~tensordict.LazyStackedTensorDict`) given that they have the same structure.
 
-    This function is called with a list of :class:`~tensordict.TensorDictBase` (either passed directly or obtrained from
+    This function is called with a list of :class:`~tensordict.TensorDictBase` (either passed directly or obtained from
     a :class:`~tensordict.LazyStackedTensorDict`).
     Instead of calling ``lazy_stack(td_list)``, which would return a :class:`~tensordict.LazyStackedTensorDict`,
     this function expands the first element of the input list and stacks the input list onto that element.
