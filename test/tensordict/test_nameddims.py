@@ -293,6 +293,86 @@ class TestNamedDims(TestTensorDictsBase):
             ).refine_names("a", "b", "c")
         assert td[index].names == names
 
+    @pytest.mark.parametrize("stack_dim", [None, 0, 1, 2])
+    @pytest.mark.parametrize(
+        "op,names",
+        [
+            pytest.param(lambda td: td.all(0), ["b", "c"], id="all"),
+            pytest.param(lambda td: td.all(-1), ["a", "b"], id="all-neg-dim"),
+            pytest.param(lambda td: td.any(1), ["a", "c"], id="any"),
+            pytest.param(
+                lambda td: td.where(torch.zeros(3, 4, 5, dtype=torch.bool), td.clone()),
+                ["a", "b", "c"],
+                id="where",
+            ),
+            pytest.param(
+                lambda td: td.expand(2, 3, 4, 5), [None, "a", "b", "c"], id="expand"
+            ),
+            pytest.param(lambda td: td.memmap(), ["a", "b", "c"], id="memmap"),
+            pytest.param(
+                lambda td: td.memmap_like(), ["a", "b", "c"], id="memmap_like"
+            ),
+        ],
+    )
+    def test_lazy_stack_op_names(self, stack_dim, op, names):
+        # the result keeps the names of the dims, for tensordicts and lazy
+        # stacks alike
+        td = TensorDict(
+            {"x": torch.zeros(3, 4, 5, dtype=torch.bool)},
+            [3, 4, 5],
+            names=["a", "b", "c"],
+        )
+        if stack_dim is not None:
+            td = LazyStackedTensorDict.lazy_stack(
+                list(td.unbind(stack_dim)), stack_dim
+            ).refine_names("a", "b", "c")
+        assert op(td).names == names
+
+    def test_lazy_stack_op_names_members_differ(self):
+        # a dim that the members name differently, or a stack without members,
+        # gives an unnamed dim
+        td = LazyStackedTensorDict(
+            TensorDict({}, [3], names=["x"]),
+            TensorDict({}, [3], names=["y"]),
+            stack_dim=1,
+        )
+        assert td.all(0).names == [None]
+        assert td.any(1).names == [None]
+        td = LazyStackedTensorDict(stack_dim=0, batch_size=[3])
+        assert td.all(1).names == [None]
+        assert td.any(0).names == [None]
+        # names that repeat once a dim is reduced: lazy_stack doesn't check
+        # that the stack dim name is not the name of a member dim
+        td = LazyStackedTensorDict.lazy_stack(
+            [
+                TensorDict({"a": torch.zeros(3, 4, 2)}, [3, 4], names=["x", "y"])
+                for _ in range(2)
+            ],
+            2,
+            stack_dim_name="x",
+        )
+        assert td.all(1).names == [None, None]
+        assert td.any(1).names == [None, None]
+        # a nested lazy stack whose members have different names can't be
+        # renamed, which must not make expand fail
+        td = LazyStackedTensorDict(
+            *[
+                TensorDict(
+                    {
+                        "sub": TensorDict(
+                            {"c": torch.zeros(3, 2, n)}, [3, 2], names=["x", name]
+                        )
+                    },
+                    [3],
+                    names=["x"],
+                )
+                for n, name in ((4, "p"), (5, "q"))
+            ],
+            stack_dim=1,
+            stack_dim_name="s",
+        )
+        assert td.expand(5, 3, 2).batch_size == (5, 3, 2)
+
     def test_masked_fill(self):
         td = TensorDict(batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
         tdm = td.masked_fill(torch.zeros(3, 4, 1, dtype=torch.bool), 1.0)
@@ -452,6 +532,15 @@ class TestNamedDims(TestTensorDictsBase):
         assert tdp.names == list("dbca")
         assert tdp.is_locked
         assert tdp["sub"].is_locked
+
+    def test_permute_leading_dims(self):
+        # an order for the leading dims only leaves the other dims, and their
+        # names, in place
+        td = TensorDict({"sub": {}}, batch_size=[2, 3, 4], names=["x", "y", "z"])
+        tdp = td.permute(1, 0)
+        assert tdp.batch_size == torch.Size([3, 2, 4])
+        assert tdp.names == ["y", "x", "z"]
+        assert tdp["sub"].names == ["y", "x", "z"]
 
     def test_permute_td(self):
         td = self.unsqueezed_td("cpu")
@@ -620,6 +709,27 @@ class TestNamedDims(TestTensorDictsBase):
         td.names = ["a", "b", "c", "d"]
         tds = td.squeeze(1)
         assert tds.names == ["a", "c", "d"]
+
+    def test_squeeze_all_singleton_dims(self):
+        # squeeze() of a named tensordict whose dims all have size 1, or of the
+        # 0-dim tensordict that squeeze(dim) leaves, gives a 0-dim tensordict
+        td = TensorDict(
+            {"a": torch.zeros(1, 1, 2)}, batch_size=[1, 1], names=["x", "y"]
+        )
+        for tds in (
+            td.squeeze(),
+            torch.squeeze(td),
+            td.squeeze(1).squeeze(0).squeeze(),
+        ):
+            assert tds.batch_size == torch.Size([])
+            assert tds.names == []
+            assert tds["a"].shape == torch.Size([2])
+        # the same when it is nested in a tensordict that is squeezed
+        parent = TensorDict({"td": td}, batch_size=[1], names=["x"])
+        tds = parent.squeeze()
+        assert tds.batch_size == torch.Size([])
+        assert tds.names == []
+        assert tds["td", "a"].shape == torch.Size([1, 2])
 
     def test_squeeze_td(self):
         td = self.squeezed_td("cpu")

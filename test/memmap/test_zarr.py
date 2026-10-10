@@ -261,6 +261,19 @@ class TestZarrIndexing:
         assert (ztd.get_at("a", 0) == 0).all()
         assert (ztd.get_at(("b", "c"), 0) == 0).all()
 
+    @pytest.mark.parametrize(
+        "index",
+        [0, (slice(None), 1), torch.tensor([0, 2])],
+        ids=["int", "tuple", "tensor"],
+    )
+    def test_setitem_scalar(self, ztd_and_td, index):
+        # a scalar is written into every entry at the index
+        ztd, td = ztd_and_td
+        ztd[index] = 7
+        td[index] = 7
+        for key in td.keys(True, True):
+            assert (ztd.get(key) == td.get(key)).all(), key
+
 
 @pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")
 class TestZarrWriteOps:

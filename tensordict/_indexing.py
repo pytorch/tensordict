@@ -227,13 +227,23 @@ def _read_index(index, ndim, sizes=None):
     if not isinstance(index, tuple):
         index = (index,)
     given = index
-    if sizes is not None and any(element is Ellipsis for element in index):
-        used = sum(_num_indexed_dims(e) for e in index if e is not Ellipsis)
-        if used > ndim:
+    try:
+        index = _expand_ellipsis(index, ndim)
+    except RuntimeError:
+        # too many indices for the dims, as torch says
+        if (
+            sizes is not None
+            and sum(
+                _num_indexed_dims(element)
+                for element in given
+                if element is not Ellipsis
+            )
+            > ndim
+        ):
             _raise_index_error(
                 sizes, given, f"too many indices for tensor of dimension {ndim}"
             )
-    index = _expand_ellipsis(index, ndim)
+        raise
     dims = []
     advanced = []
     position = None
