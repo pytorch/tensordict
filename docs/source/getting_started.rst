@@ -194,11 +194,13 @@ batch of images and their labels:
   >>> images.reshape(2, 3).image.shape
   torch.Size([2, 3, 3, 8, 8])
 
-Three other containers have the same operations:
+Use a TensorDict when you do not know the keys in advance, and a
+TensorClass for a fixed set of fields. Three other containers have the same
+operations:
 
 - :class:`~tensordict.TypedTensorDict` has typed fields on a
   ``TensorDictBase``, with ``td["key"]`` access and class inheritance to add
-  fields.
+  fields. :ref:`typed-tensordict-guide` explains it.
 - :class:`~tensordict.LazyStackedTensorDict` holds elements of different
   shapes. :func:`~tensordict.lazy_stack` makes one, as the stacking section
   below shows.
