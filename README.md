@@ -7,21 +7,30 @@
 [![Downloads](https://static.pepy.tech/badge/tensordict)](https://pepy.tech/projects/tensordict)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/pytorch/tensordict/blob/main/LICENSE)
 
-Most PyTorch programs pass around groups of tensors that belong together: the
-positions and velocities of a particle system, the nodes and edges of a batch
-of graphs, a robot trajectory, a training batch with its masks and labels. In
-a plain `dict`, every operation on such a group is a loop over its tensors,
-and nested dicts need recursion. TensorDict keeps the tensors and their
-shared batch dimensions together, so each operation is one call:
+PyTorch code often passes around groups of tensors that belong together: the
+positions and velocities of particles, the nodes and edges of a graph batch,
+the images, labels and masks of a training batch. Each function that touches
+such a group takes every tensor as an argument, repeats each operation for
+each tensor, and changes when you add one:
 
 ```diff
-- batch = {key: value.to("cuda") for key, value in batch.items()}
-- first8 = {key: value[:8] for key, value in batch.items()}
-- stacked = {key: torch.stack([b[key] for b in batches]) for key in batches[0]}
-+ batch = batch.to("cuda")
-+ first8 = batch[:8]
-+ stacked = torch.stack(batches)
+- def shuffle_and_split(images, labels, masks, weights):
+-     perm = torch.randperm(len(images))
+-     images, labels, masks, weights = images[perm], labels[perm], masks[perm], weights[perm]
+-     half = len(images) // 2
+-     first = images[:half], labels[:half], masks[:half], weights[:half]
+-     second = images[half:], labels[half:], masks[half:], weights[half:]
+-     return first, second
++ def shuffle_and_split(batch):
++     batch = batch[torch.randperm(len(batch))]
++     return batch.split(len(batch) // 2)
 ```
+
+A `TensorDict` holds the group as one object. Its tensors share their leading
+dimensions, the batch size, so indexing, reshaping, stacking, moving to a
+device, saving and `torch.compile` work on all of them at once. A
+`TensorClass` gives the same behavior to a class with typed fields and
+methods.
 
 [Getting started](https://docs.pytorch.org/tensordict/stable/getting_started.html) ·
 [Documentation](https://docs.pytorch.org/tensordict/stable/) ·
@@ -40,14 +49,11 @@ needs Python 3.10 or later and PyTorch 2.13 or later. For nightly builds,
 optional extras and installs from source, see
 [Installation](https://docs.pytorch.org/tensordict/stable/installation.html).
 
-## Two containers, one set of tensor operations
-
-`TensorDict` takes the keys you give it at run time, like a dict. `TensorClass`
-has the fields you declare, like a dataclass, and adds type hints, methods and
-editor completion. Both share their leading dimensions (the batch size), and
-both index, reshape, stack, move, save and compile like a single tensor.
+## TensorDict and TensorClass
 
 ### TensorDict
+
+A `TensorDict` takes the keys you give it at run time, like a dict:
 
 ```python
 import torch
@@ -70,8 +76,8 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 batch = batch.to(device)                       # moves every tensor, nested ones too
 ```
 
-The batch size is a rule, not a label. TensorDict checks it each time you add a
-tensor:
+TensorDict checks the batch size each time you add a tensor, so the tensors of
+a group always line up:
 
 ```python
 batch["scores"] = torch.ones(31)
@@ -81,6 +87,10 @@ batch["scores"] = torch.ones(31)
 ```
 
 ### TensorClass
+
+A `TensorClass` turns the group into a type of its own: declared fields, type
+hints, methods and editor completion. Write a method once, and it works on one
+item or on a batch of any shape:
 
 ```python
 import torch
@@ -93,7 +103,8 @@ class Particles(TensorClass):
 
     def step(self, force: torch.Tensor, dt: float) -> "Particles":
         vel = self.vel + dt * force / self.mass.unsqueeze(-1)
-        return Particles(pos=self.pos + dt * vel, vel=vel, mass=self.mass, batch_size=self.batch_size)
+        pos = self.pos + dt * vel
+        return Particles(pos=pos, vel=vel, mass=self.mass, batch_size=self.batch_size)
 
 # 64 independent systems of 1,000 particles each
 systems = Particles(
@@ -102,12 +113,13 @@ systems = Particles(
     mass=torch.ones(64, 1000),
     batch_size=[64, 1000],
 )
-systems = systems.step(force=torch.randn(64, 1000, 3), dt=0.01)
+systems = systems.step(force=torch.randn(64, 1000, 3), dt=0.01)  # all 64 systems
+one = systems[0].step(force=torch.randn(1000, 3), dt=0.01)        # one system
 
-print(type(systems[0]).__name__, systems[0].batch_size)  # Particles torch.Size([1000])
-print(torch.cat([systems, systems]).batch_size)           # torch.Size([128, 1000])
+print(type(one).__name__, one.batch_size)        # Particles torch.Size([1000])
+print(torch.cat([systems, systems]).batch_size)  # torch.Size([128, 1000])
 
-step = torch.compile(Particles.step, fullgraph=True)      # compile it like any tensor code
+step = torch.compile(Particles.step, fullgraph=True)  # compile it like any tensor code
 systems = step(systems, torch.randn(64, 1000, 3), 0.01)
 ```
 
@@ -121,13 +133,31 @@ dimensions and move through the code together.
 | Simulation and physics | Particles, meshes and fields, and the states of many parallel environments. | [PhysicsNeMo](https://github.com/NVIDIA/physicsnemo), [MuJoCo Playground](https://github.com/google-deepmind/mujoco_playground), [ProtoMotions](https://github.com/NVlabs/ProtoMotions), [holosoma](https://github.com/amazon-far/holosoma) |
 | Reinforcement learning | Rollouts, replay-buffer samples, and the inputs and outputs of policies. | [TorchRL](https://github.com/pytorch/rl), [SkyRL](https://github.com/NovaSky-AI/SkyRL) |
 | Training batches with many fields | LLM samples with prompts, responses, masks, log-probabilities and rewards, or sequencing reads with their labels. | [verl](https://github.com/verl-project/verl), [ROLL](https://github.com/alibaba/ROLL), [LMFlow](https://github.com/OptimalScale/LMFlow), [Medaka](https://github.com/nanoporetech/medaka) |
-| Datasets larger than memory | Memory-mapped tensors on disk, read with the same indexing as in RAM. | the TorchRL replay buffers on disk |
-| Model parameters | The parameters of a module, for functional calls, ensembles with `torch.vmap` and parameter averaging. | the TorchRL loss modules |
+| Datasets larger than memory | Memory-mapped tensors on disk, read with the same indexing as in RAM. | TorchRL (replay buffers on disk) |
+| Model parameters | The parameters of a module, for functional calls, ensembles with `torch.vmap` and parameter averaging. | TorchRL (loss modules) |
 
 GitHub lists [more than 2,000 repositories](https://github.com/pytorch/tensordict/network/dependents)
 that depend on TensorDict.
 
 ## More examples
+
+<details>
+<summary>Stack samples of different lengths, with no padding</summary>
+
+```python
+import torch
+from tensordict import TensorDict, lazy_stack
+
+episodes = [TensorDict(obs=torch.randn(n, 4), batch_size=[n]) for n in (3, 5, 2)]
+batch = lazy_stack(episodes)   # keeps each sample as it is
+print(batch.batch_size)        # torch.Size([3, -1]): -1 marks the dimension that varies
+print(batch[1]["obs"].shape)   # torch.Size([5, 4])
+print(batch[:, :2]["obs"].shape)  # torch.Size([3, 2, 4]): the first 2 steps of each
+```
+
+See [Stacking and variable-size data](https://docs.pytorch.org/tensordict/stable/concepts/stacking.html).
+
+</details>
 
 <details>
 <summary>Save a dataset to disk, then read single samples without loading it</summary>
@@ -223,6 +253,7 @@ See [torch.compile, torch.func, torch.export and CUDA graphs](https://docs.pytor
 | Question | Answer |
 |---|---|
 | Does it work with `torch.compile`? | Yes. TensorDict and TensorClass are pytrees, so `torch.compile`, `torch.func` (`vmap`, `grad`) and `torch.export` see the tensors inside them. The [compile guide](https://docs.pytorch.org/tensordict/stable/compile.html) lists what makes a function recompile. |
+| What does the container cost? | Python work per operation and per tensor, whatever the tensor sizes. Arithmetic and pointwise operations call PyTorch's foreach kernels, which take all the tensors of a group in one call. `to(device)` issues every copy without blocking and synchronizes at most once. Under `torch.compile`, the compiled graph holds only the tensor operations. |
 | Can I get plain tensors back? | Yes. Each entry is a regular `torch.Tensor`. `to_dict()` returns a nested `dict` of tensors, and `numpy()`, `to_pandas()`, `to_h5()` and `to_zarr()` export to other formats. |
 | What does it depend on? | PyTorch, NumPy, cloudpickle, packaging, pyvers, and orjson on Python before 3.13. |
 | Which versions are tested? | Python 3.10 to 3.14, including the free-threaded 3.14t build, with PyTorch 2.13, the latest PyTorch release and nightly builds, on Linux (CPU and GPU) and macOS. Each pull request also runs the TorchRL test suite. |
