@@ -2332,6 +2332,22 @@ class TestCudaGraphs:
         with pytest.raises(ValueError, match="captured with batch_size"):
             tdmodule(TensorDict(x=torch.randn(1), z=torch.randn(1), batch_size=[1]))
 
+    def test_tdmodule_cpu_input_copied_before_return(self, compiled):
+        # The caller may overwrite a pinned CPU input as soon as the call returns:
+        # the copy to the graph's buffers must be done by then.
+        if not torch.cuda.is_available():
+            pytest.skip("CudaGraphModule only replays graphs on CUDA")
+        tdmodule = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
+        tdmodule = self._make_cudagraph(tdmodule, compiled)
+        for _ in range(4):
+            tdmodule(TensorDict(x=torch.zeros(3), batch_size=[3]))
+        x = torch.ones(3, device="cpu").pin_memory()
+        # Keep the stream busy so that a pending copy would run after the write.
+        torch.cuda._sleep(100_000_000)
+        td = tdmodule(TensorDict(x=x, batch_size=[3]))
+        x.fill_(100.0)
+        torch.testing.assert_close(td["y"], torch.full((3,), 2.0))
+
     def test_tdmodule_entry_shape_change_raises(self, compiled):
         # Same batch size, entry of another shape: it must not be broadcast into
         # the captured buffer, or fail in the copy.
