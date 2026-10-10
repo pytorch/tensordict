@@ -77,6 +77,17 @@ except ImportError:
     from tensordict.utils import _ftdim_mock as ftdim
 
 
+def _pytree_dict_key(key):
+    # Reads a dict key that from_pytree stored. Once the non-tensor entry has
+    # batch dims (e.g. after stack or unsqueeze), td["key"] returns a list, so
+    # read .data. memmap saves tuples as JSON lists, which are not hashable.
+    if is_non_tensor(key):
+        key = key.data
+    if isinstance(key, list):
+        return tuple(_pytree_dict_key(k) for k in key)
+    return key
+
+
 class _Conversion:
     """Conversions to and from other containers, file formats and nn.Module parameters."""
 
@@ -306,6 +317,7 @@ class _Conversion:
             return pytree
 
         from tensordict._td import TensorDict
+        from tensordict.tensorclass import NonTensorData
 
         result = None
         if _is_namedtuple(pytree):
@@ -324,6 +336,9 @@ class _Conversion:
                     source[key] = cls.from_pytree(item)
                 else:
                     subs_key = "<NON_NESTED>" + str(uuid.uuid1())
+                    if not isinstance(key, torch.Tensor):
+                        # The constructor would turn numbers into tensors
+                        key = NonTensorData(key)
                     source[subs_key] = TensorDict(
                         {"value": cls.from_pytree(item), "key": key}
                     )
@@ -360,7 +375,7 @@ class _Conversion:
             items = dict(
                 (
                     (
-                        (val["key"], val["value"])
+                        (_pytree_dict_key(val.get("key")), val["value"])
                         if key.startswith("<NON_NESTED>")
                         else (key, val)
                     )
