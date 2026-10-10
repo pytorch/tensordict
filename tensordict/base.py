@@ -42,7 +42,7 @@ from warnings import warn
 import numpy as np
 import torch
 from tensordict._contextlib import LAST_OP_MAPS
-from tensordict._deprecation import deprecated, warn_deprecated
+from tensordict._deprecation import deprecated, warn_deprecated_env_var
 from tensordict._indexing import (
     _entry_index,
     _getitem_batch_size,
@@ -193,11 +193,11 @@ else:
     _GET_DEFAULTS_TO_NONE = True
 
 if not _GET_DEFAULTS_TO_NONE:
-    warn_deprecated(
-        f"TD_GET_DEFAULTS_TO_NONE={os.environ['TD_GET_DEFAULTS_TO_NONE']}",
+    warn_deprecated_env_var(
+        "TD_GET_DEFAULTS_TO_NONE",
+        os.environ["TD_GET_DEFAULTS_TO_NONE"],
         removal="0.17",
         replacement=_GET_DEFAULTS_TO_NONE_REPLACEMENT,
-        stacklevel=1,
     )
 
 

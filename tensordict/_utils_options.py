@@ -9,7 +9,7 @@ import os
 import warnings
 from typing import Any
 
-from tensordict._deprecation import warn_deprecated
+from tensordict._deprecation import warn_deprecated, warn_deprecated_env_var
 from torch.utils._contextlib import _DecoratorContextManager
 
 __all__ = [
@@ -97,14 +97,16 @@ def get_printoptions() -> dict:
     return dict(_REPR_OPTIONS)
 
 
-def _warn_lazy_legacy(stacklevel: int) -> None:
+def _warn_lazy_legacy(
+    stacklevel: int, category: type[Warning] = DeprecationWarning
+) -> None:
     warnings.warn(
         "The legacy lazy mode, turned on with set_lazy_legacy(True) or "
         "LAZY_LEGACY_OP=1, is deprecated and will be removed in TensorDict 0.17. "
         "Shape operations such as unsqueeze and permute will then always return "
         "a tensordict, and torch.stack will stack densely: use lazy_stack to "
         "build a lazy stack.",
-        DeprecationWarning,
+        category,
         stacklevel=stacklevel + 1,
     )
 
@@ -112,7 +114,8 @@ def _warn_lazy_legacy(stacklevel: int) -> None:
 _DEFAULT_LAZY_OP = False
 _LAZY_OP = os.environ.get("LAZY_LEGACY_OP")
 if _LAZY_OP is not None and _LAZY_OP.lower() in ("y", "yes", "t", "true", "on", "1"):
-    _warn_lazy_legacy(stacklevel=1)
+    # A FutureWarning, as warn_deprecated_env_var emits for the other variables.
+    _warn_lazy_legacy(stacklevel=1, category=FutureWarning)
 
 
 class set_lazy_legacy(_DecoratorContextManager):
@@ -174,11 +177,16 @@ def _legacy_lazy(func):
     return func
 
 
+_CAPTURE_NONTENSOR_STACK_REPLACEMENT = (
+    "NonTensorStack.data to get the single value of a stack of identical values"
+)
+
+
 def _warn_capture_non_tensor_stack(what: str, stacklevel: int) -> None:
     warn_deprecated(
         what,
         removal="0.17",
-        replacement="NonTensorStack.data to get the single value of a stack of identical values",
+        replacement=_CAPTURE_NONTENSOR_STACK_REPLACEMENT,
         stacklevel=stacklevel + 1,
     )
 
@@ -193,8 +201,11 @@ if _CAPTURE_NONTENSOR_STACK is not None and _CAPTURE_NONTENSOR_STACK.lower() in 
     "on",
     "1",
 ):
-    _warn_capture_non_tensor_stack(
-        f"CAPTURE_NONTENSOR_STACK={_CAPTURE_NONTENSOR_STACK}", stacklevel=1
+    warn_deprecated_env_var(
+        "CAPTURE_NONTENSOR_STACK",
+        _CAPTURE_NONTENSOR_STACK,
+        removal="0.17",
+        replacement=_CAPTURE_NONTENSOR_STACK_REPLACEMENT,
     )
 
 
@@ -266,11 +277,16 @@ def capture_non_tensor_stack(allow_none=False):
     )
 
 
+_LIST_TO_STACK_REPLACEMENT = (
+    "td.set_non_tensor(key, value) to store a list as one value"
+)
+
+
 def _warn_list_to_stack(what: str, stacklevel: int) -> None:
     warn_deprecated(
         what,
         removal="0.17",
-        replacement="td.set_non_tensor(key, value) to store a list as one value",
+        replacement=_LIST_TO_STACK_REPLACEMENT,
         stacklevel=stacklevel + 1,
     )
 
@@ -285,7 +301,12 @@ if _LIST_TO_STACK is not None and _LIST_TO_STACK.lower() in (
     "off",
     "0",
 ):
-    _warn_list_to_stack(f"LIST_TO_STACK={_LIST_TO_STACK}", stacklevel=1)
+    warn_deprecated_env_var(
+        "LIST_TO_STACK",
+        _LIST_TO_STACK,
+        removal="0.17",
+        replacement=_LIST_TO_STACK_REPLACEMENT,
+    )
 
 
 class _set_list_to_stack(_DecoratorContextManager):
