@@ -368,6 +368,22 @@ class TestTDModule:
 
         assert td["b"] == 4
 
+    @pytest.mark.parametrize("in_keys", [["obs"], {"x": "obs"}])
+    def test_get_kwargs(self, in_keys):
+        # get_kwargs reach get() whether in_keys is a list or a dict
+        td = TensorDict.lazy_stack(
+            [TensorDict(obs=torch.ones(2)), TensorDict(obs=torch.ones(3))]
+        )
+        module = TensorDictModule(
+            lambda x: x,
+            in_keys=in_keys,
+            out_keys=["y"],
+            get_kwargs={"as_padded_tensor": True, "padding_value": -1.0},
+        )
+        torch.testing.assert_close(
+            module(td)["y"], torch.tensor([[1.0, 1.0, -1.0], [1.0, 1.0, 1.0]])
+        )
+
     def test_repr(self):
         class MyModule(TensorDictModuleBase):
             in_keys = ["a"]
@@ -1848,6 +1864,51 @@ class TestTDSequence:
         assert set(v.keys()) == {"x", "loc", "y", "loc2"}
         assert isinstance(tdm.log_prob(v), TensorDict)
 
+    @pytest.mark.parametrize("nested_last", [True, False])
+    @set_composite_lp_aggregate(False)
+    def test_probtdseq_nested_seq_dist(self, nested_last):
+        # A nested ProbabilisticTensorDictSequential adds its distribution to the
+        # CompositeDistribution under its sample key, here "sample0".
+        inner = ProbabilisticTensorDictSequential(
+            TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["loc0"]),
+            ProbabilisticTensorDictModule(
+                in_keys={"loc": "loc0"},
+                out_keys=["sample0"],
+                distribution_class=Normal,
+                distribution_kwargs={"scale": 1.0},
+            ),
+        )
+        prob1 = ProbabilisticTensorDictModule(
+            in_keys={"loc": "loc1"},
+            out_keys=["sample1"],
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1.0},
+        )
+        if nested_last:
+            loc1 = TensorDictModule(lambda x: x - 1, in_keys=["x"], out_keys=["loc1"])
+            modules = [loc1, prob1, inner]
+        else:
+            loc1 = TensorDictModule(
+                lambda s: s + 1, in_keys=["sample0"], out_keys=["loc1"]
+            )
+            modules = [inner, loc1, prob1]
+        seq = ProbabilisticTensorDictSequential(*modules, return_composite=True)
+        td = TensorDict(x=torch.randn(3), batch_size=[3])
+
+        dist = seq.get_dist(td)
+        assert set(dist) == {"sample0", "sample1"}
+        if not nested_last:
+            # loc1 is computed from the deterministic sample0, the mean x + 1
+            torch.testing.assert_close(dist["sample1"].loc, td["x"] + 2)
+
+        with set_interaction_type("random"):
+            out = seq(td.copy())
+        lp = seq.log_prob(out)
+        assert set(lp.keys()) == {"sample0_log_prob", "sample1_log_prob"}
+        torch.testing.assert_close(
+            lp["sample0_log_prob"], Normal(out["loc0"], 1.0).log_prob(out["sample0"])
+        )
+
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful_probabilistic(self, lazy):
         torch.manual_seed(0)
@@ -2228,6 +2289,43 @@ class TestSkipExisting:
         assert td["value"].item() == 10
         assert td["next", "memory"].item() == 1
 
+    def test_nested_sequence_restores_mode(self):
+        # The inner and outer sequences share the decorator of
+        # TensorDictSequential.forward: the inner call must not change the
+        # mode that the outer call restores.
+        class Inner(TensorDictModuleBase):
+            in_keys = ["in"]
+            out_keys = ["out"]
+
+            def __init__(self):
+                super().__init__()
+                self.seq = TensorDictSequential(
+                    TensorDictModule(lambda x: x + 1, in_keys=["in"], out_keys=["out"])
+                )
+
+            @set_skip_existing(True)
+            def forward(self, tensordict):
+                return self.seq(tensordict)
+
+        module = TensorDictSequential(Inner())
+        td = module(TensorDict({"in": torch.zeros(())}, []))
+        assert (td["out"] == 1).all()
+        assert skip_existing() is False
+
+    def test_exception_restores_mode(self):
+        # The forward changes the mode without restoring it, then raises: the
+        # decorator of TensorDictModule.forward must restore the mode it saw.
+        def fail(x):
+            set_skip_existing(True).__enter__()
+            raise ValueError("fail")
+
+        module = TensorDictModule(fail, in_keys=["in"], out_keys=["out"])
+        with set_skip_existing(["other"]):
+            with pytest.raises(ValueError, match="fail"):
+                module(TensorDict({"in": torch.zeros(())}, []))
+            assert skip_existing() == ["other"]
+        assert skip_existing() is False
+
 
 @pytest.mark.parametrize("out_d_key", [("d", "e"), ["d"], ["d", "e"]])
 @pytest.mark.parametrize("unpack", [True, False])
@@ -2467,6 +2565,51 @@ class TestSelectOutKeys:
                     match=r"key should be a |Can't select non existent",
                 ):
                     mod2 = mod.select_out_keys(out_d_key)
+
+    def test_tdmodule_missing_in_key(self, out_d_key, unpack):
+        # strict=False passes the missing in_key "b" as None
+        mod = TensorDictModule(
+            lambda x, y: (x + 2, x + 2 if y is None else y + 2, x),
+            in_keys=["a", "b"],
+            out_keys=["c", "d", "e"],
+        )
+        if unpack:
+            mod.select_out_keys(*out_d_key)
+            td = mod(TensorDict(a=torch.zeros(())))
+            assert set(td.keys()) == {"a", *out_d_key}
+            td = mod(TensorDict(a=torch.zeros(())), tensordict_out=TensorDict())
+            assert set(td.keys()) == {*out_d_key}
+        else:
+            with pytest.raises(
+                (RuntimeError, ValueError),
+                match=r"key should be a |Can't select non existent",
+            ):
+                mod.select_out_keys(out_d_key)
+
+    def test_tdbase_missing_in_key(self, out_d_key, unpack):
+        class MyModule(TensorDictModuleBase):
+            in_keys = ["a", "b"]
+            out_keys = ["c", "d", "e"]
+
+            def forward(self, tensordict):
+                tensordict["c"] = tensordict["a"] + 2
+                tensordict["d"] = tensordict.get("b", tensordict["a"]) + 2
+                tensordict["e"] = tensordict["d"] + 2
+                return tensordict
+
+        mod = MyModule()
+        if unpack:
+            mod.select_out_keys(*out_d_key)
+            td = mod(TensorDict(a=torch.zeros(())))
+            assert set(td.keys()) == {"a", *out_d_key}
+            td = mod(tensordict=TensorDict(a=torch.zeros(())))
+            assert set(td.keys()) == {"a", *out_d_key}
+        else:
+            with pytest.raises(
+                (RuntimeError, ValueError),
+                match=r"key should be a |Can't select non existent",
+            ):
+                mod.select_out_keys(out_d_key)
 
     def test_tdmodule_wrap(self, out_d_key, unpack):
         mod = TensorDictModuleWrapper(
@@ -3385,6 +3528,29 @@ class TestEnsembleModule:
             f"Reset parameters called {lin.reset_parameters.call_count} times should be 2"
         )
 
+    def test_reset_parameters_recursive_warning(self):
+        """Ensure we warn about child modules other than self.module, but not about params_td"""
+        module = TensorDictModule(nn.Linear(2, 3), in_keys=["a"], out_keys=["b"])
+        ens = EnsembleModule(module, num_copies=2)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "error", message="EnsembleModule.reset_parameters_recursive"
+            )
+            ens.reset_parameters_recursive(ens.params_td)
+        ens.extra = nn.Linear(1, 1)
+        with pytest.warns(UserWarning, match="only resets parameters of self.module"):
+            ens.reset_parameters_recursive(ens.params_td)
+
+    @pytest.mark.parametrize("batch_size", [[4], [2, 3]])
+    def test_reset_parameters_recursive_batch_size(self, batch_size):
+        """Ensure the returned parameters keep the batch dims of the input"""
+        module = TensorDictModule(nn.Linear(2, 3), in_keys=["a"], out_keys=["b"])
+        ens = EnsembleModule(module, num_copies=2)
+        params = TensorDict.from_module(module).expand(*batch_size).clone().detach()
+        out = ens.reset_parameters_recursive(params)
+        assert out.batch_size == params.batch_size
+        assert (out == params).all()
+
 
 class TestTensorDictParams:
     @pytest.mark.parametrize(
@@ -3605,6 +3771,56 @@ class TestTensorDictParams:
         td = TensorDictParams(td, no_convert=True)
         td_clone = td.clone()
         assert td_clone["c"] is td_clone["a", "b", "c"]
+
+    @pytest.mark.parametrize("no_convert", [False, True])
+    @pytest.mark.parametrize(
+        "convert",
+        [
+            pytest.param(lambda p: p.to(torch.float64), id="float64"),
+            pytest.param(lambda p: p.to(torch.bfloat16), id="bfloat16"),
+            pytest.param(lambda p: p.to("meta"), id="meta"),
+            pytest.param(lambda p: p.cpu(), id="cpu"),
+            pytest.param(
+                lambda p: p.cuda(),
+                id="cuda",
+                marks=pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="CUDA is not available"
+                ),
+            ),
+        ],
+    )
+    def test_to_keeps_params_and_buffers(self, convert, no_convert):
+        params = TensorDictParams(
+            TensorDict(
+                weight=nn.Parameter(torch.ones(3)),
+                frozen=nn.Parameter(torch.ones(3), requires_grad=False),
+                running_mean=Buffer(torch.zeros(3)),
+                nested=TensorDict(count=Buffer(torch.zeros((), dtype=torch.long))),
+            ),
+            no_convert=no_convert,
+        )
+        converted = convert(params)
+        assert isinstance(converted, TensorDictParams)
+        assert converted.no_convert is no_convert
+        assert dict(converted.named_parameters()).keys() == {"weight", "frozen"}
+        assert dict(converted.named_buffers()).keys() == {
+            "running_mean",
+            "nested.count",
+        }
+        assert converted["weight"].requires_grad
+        assert not converted["frozen"].requires_grad
+        assert not converted["running_mean"].requires_grad
+
+    def test_to_keeps_buffer_graph(self):
+        # A buffer that tracks gradients stays a buffer in the graph after to()
+        weight = nn.Parameter(torch.ones(3))
+        params = TensorDictParams(
+            TensorDict(expanded=weight.expand(2, 3)), no_convert=True
+        )
+        converted = params.to(torch.float64)
+        assert dict(converted.named_buffers()).keys() == {"expanded"}
+        converted["expanded"].sum().backward()
+        torch.testing.assert_close(weight.grad, torch.full_like(weight, 2))
 
     @pytest.mark.parametrize("with_batch", [False, True])
     def test_func_on_tdparams(self, with_batch):
@@ -5072,6 +5288,26 @@ class TestAsTDM:
         a = A()
         assert a.func(TensorDict(c=0))["d"] == 1
 
+    def test_method_instances(self):
+        # Each instance runs the method with its own self, and the decorated
+        # method does not keep the first instance alive.
+        class A:
+            def __init__(self, k):
+                self.k = k
+
+            @as_tensordict_module(in_keys="c", out_keys="d")
+            def func(self, c):
+                return c * self.k
+
+        a, b = A(2), A(10)
+        assert a.func(TensorDict(c=1))["d"] == 2
+        assert b.func(TensorDict(c=1))["d"] == 10
+        assert a.func(c=torch.tensor(1)) == 2
+        assert b.func(c=torch.tensor(1)) == 10
+        a_ref = weakref.ref(a)
+        del a
+        assert a_ref() is None
+
     @pytest.mark.parametrize("in_keys", ["c", ["c"]])
     @pytest.mark.parametrize("out_keys", ["d", ["d"]])
     def test_free_func(self, in_keys, out_keys):
@@ -5153,6 +5389,17 @@ class TestTensorClassModule(TensorClassModuleBase[InputTensorClass, OutputTensor
         )
 
 
+class NestedInputModule(TensorClassModuleBase[OutputTensorClass, AddDiffResult]):
+    """Test module that reads the fields of a nested TensorClass input."""
+
+    def forward(self, x: OutputTensorClass) -> AddDiffResult:
+        return AddDiffResult(
+            added=x.input.a + x.result.added,
+            substracted=x.input.b - x.result.substracted,
+            batch_size=x.batch_size,
+        )
+
+
 class TestTensorClassModuleForward:
     """Tests for TensorClassModule forward pass."""
 
@@ -5172,6 +5419,14 @@ class TestTensorClassModuleForward:
         td_output = td_module(value.to_tensordict())
         assert td_output["result", "added"] == 15
         assert td_output["result", "substracted"] == 5
+
+    def test_td_forward_nested_input(self) -> None:
+        """Test that the wrapper passes nested inputs to forward as TensorClasses."""
+        td_module = NestedInputModule().as_td_module()
+        value = TestTensorClassModule()(InputTensorClass(a=10, b=5, batch_size=[]))
+        td_output = td_module(value.to_tensordict())
+        assert td_output["added"] == 25
+        assert td_output["substracted"] == 0
 
     def test_wrapper_keys(self) -> None:
         """Test that wrapper correctly extracts in_keys and out_keys."""
@@ -5279,6 +5534,22 @@ class TestEdgeCases:
             match="Only TensorClassModuleBase implementations with both input and output type as TensorClass",
         ):
             module.as_td_module()
+
+    def test_field_named_fields(self) -> None:
+        """Test that a field named ``fields`` is read as a key."""
+
+        class FieldsInput(TensorClass):
+            fields: torch.Tensor
+
+        class FieldsModule(TensorClassModuleBase[FieldsInput, AddDiffResult]):
+            def forward(self, x: FieldsInput) -> AddDiffResult:
+                return AddDiffResult(
+                    added=x.fields + 1, substracted=x.fields - 1, batch_size=[]
+                )
+
+        td_module = FieldsModule().as_td_module()
+        assert td_module.in_keys == ["fields"]
+        assert td_module(TensorDict(fields=torch.ones(())))["added"] == 2
 
     def test_batch_size_preservation(self) -> None:
         """Test that batch size is correctly preserved through forward pass."""
