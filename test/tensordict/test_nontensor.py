@@ -1391,6 +1391,22 @@ class TestNonTensorData:
         assert tdv.view(60).tolist() == [str(i) for i in range(60)]
         assert tdv.flatten().tolist() == [str(i) for i in range(60)]
 
+    def test_view_drop_size_one_dim(self):
+        strings = [["00", "01", "02"], ["10", "11", "12"]]
+        stack = NonTensorStack.from_list(strings).unsqueeze(1)
+        assert stack.shape == (2, 1, 3)
+        for out in (stack.view(2, 3), stack.reshape(2, 3)):
+            assert isinstance(out, NonTensorStack)
+            assert out.shape == (2, 3)
+            assert out.tolist() == strings
+        td = TensorDict(
+            {"i": torch.arange(6).view(2, 3), "s": NonTensorStack.from_list(strings)},
+            [2, 3],
+        )
+        out = td.unsqueeze(1).squeeze()
+        assert out.get("s").shape == (2, 3)
+        assert out["s"] == strings
+
     def test_where_copies_entries(self):
         # The result has its own entries, which hold the input data as they are
         class NoDeepCopy:

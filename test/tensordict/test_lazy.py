@@ -1650,6 +1650,32 @@ class TestLazyStackedTensorDict:
         assert (tdview == tds.unflatten(1, (3, 4, 5))).all()
         assert (tds == tdview.flatten(1, -1)).all()
 
+    @pytest.mark.parametrize(
+        "old_shape,new_shape",
+        [((2, 1, 3), (2, 3)), ((3, 1, 2), (3, 2)), ((2, 1, 1, 1, 3), (2, 1, 3))],
+    )
+    @pytest.mark.parametrize("op", ["view", "reshape"])
+    def test_lazy_stack_view_drop_size_one_dims(self, old_shape, new_shape, op):
+        dense = TensorDict(
+            {
+                "a": torch.arange(6).view(old_shape),
+                "nested": {"b": torch.arange(24.0).view(*old_shape, 4)},
+            },
+            old_shape,
+        )
+        expected = dense.reshape(new_shape)
+        for stack_dim in range(len(old_shape)):
+            tds = lazy_stack(list(dense.unbind(stack_dim)), stack_dim)
+            out = getattr(tds, op)(new_shape)
+            assert out.batch_size == new_shape
+            assert out["nested", "b"].shape == (*new_shape, 4)
+            assert (out == expected).all()
+        # members that cannot be squeezed, such as sub-tensordicts
+        subs = [dense._get_sub_tensordict(k) for k in range(old_shape[0])]
+        out = getattr(lazy_stack(subs, 0), op)(new_shape)
+        assert out.batch_size == new_shape
+        assert (out == expected).all()
+
     def test_neg_dim_lazystack(self):
         td0 = TensorDict(batch_size=(3, 5))
         td1 = TensorDict(batch_size=(4, 5))
