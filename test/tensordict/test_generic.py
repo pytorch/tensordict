@@ -5447,6 +5447,40 @@ class TestGeneric:
         )
         assert td["key1"].shape == td._tensordict["key1"].shape
 
+    @pytest.mark.parametrize(
+        "memory_format, shape",
+        [
+            (torch.channels_last, (2, 3, 4, 5)),
+            (torch.channels_last_3d, (2, 3, 4, 5, 6)),
+        ],
+        ids=["channels_last", "channels_last_3d"],
+    )
+    @pytest.mark.parametrize(
+        "args",
+        [(), ("cpu",), ("meta",), (torch.float64,)],
+        ids=["no-device", "same-device", "other-device", "dtype"],
+    )
+    @pytest.mark.parametrize("td_type", ["td", "consolidated", "sub_td"])
+    def test_to_memory_format(self, memory_format, shape, args, td_type):
+        # As in nn.Module.to, the memory format applies to the 4D and 5D leaves
+        td = TensorDict(
+            a=torch.randn(shape),
+            b=torch.randn(2, 3),
+            nested=TensorDict(c=torch.randn(shape), batch_size=[2]),
+            batch_size=[2],
+            device="cpu",
+        )
+        if td_type == "consolidated":
+            td = td.consolidate()
+        elif td_type == "sub_td":
+            td = td._get_sub_tensordict(slice(None))
+        out = td.to(*args, memory_format=memory_format)
+        assert out["a"].is_contiguous(memory_format=memory_format)
+        assert out["nested", "c"].is_contiguous(memory_format=memory_format)
+        assert out["b"].stride() == (3, 1)
+        if args != ("meta",):
+            assert (out == td).all()
+
     def test_to_memory_leak(self):
         """Test that the original tensordict is properly garbage collected when using to() method."""
         import gc
