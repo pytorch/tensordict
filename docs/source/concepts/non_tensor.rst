@@ -265,9 +265,10 @@ dict, and that must not become a stack.
 Non-tensor data in other operations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- Pointwise operations, :meth:`~tensordict.TensorDict.apply` and
+- Arithmetic, :meth:`~tensordict.TensorDict.apply` and
   :meth:`~tensordict.TensorDict.to` do not change non-tensor entries. The
-  result has them as they are (see :ref:`operations`).
+  result has them as they are. ``==`` and ``!=`` between two tensordicts
+  compare them (see :ref:`operations`).
 - ``keys(leaves_only=True)``, ``values(leaves_only=True)`` and
   ``items(leaves_only=True)`` skip the non-tensor entries. To include them,
   pass ``is_leaf=tensordict.is_leaf_nontensor``:

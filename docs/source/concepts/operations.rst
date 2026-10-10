@@ -17,7 +17,7 @@ Pointwise operations
 --------------------
 
 A pointwise operation applies to each leaf and returns a new tensordict with
-the same keys and the same batch size. The other operand can be a tensordict,
+the same keys. The other operand can be a tensordict,
 a tensor or a Python number:
 
     >>> import torch
@@ -65,7 +65,7 @@ operators ``-`` and ``~`` and the function :func:`abs` also work.
 ``//`` and ``@`` are not supported: they raise ``TypeError``. To use them,
 call :meth:`~tensordict.TensorDict.apply` (see below).
 
-Each pointwise function of :mod:`torch` also has a tensordict method:
+Most pointwise functions of :mod:`torch` also have a tensordict method:
 :meth:`~tensordict.TensorDict.exp`, :meth:`~tensordict.TensorDict.sqrt`,
 :meth:`~tensordict.TensorDict.clamp`, :meth:`~tensordict.TensorDict.sigmoid`,
 :meth:`~tensordict.TensorDict.lerp` and many more. The methods with a trailing
@@ -76,8 +76,10 @@ them all.
     >>> TensorDict(x=torch.tensor([-2.0, 0.5, 3.0])).clamp(0, 1)["x"]
     tensor([0.0000, 0.5000, 1.0000])
 
-Pointwise operations do not change non-tensor entries such as strings (see
-:ref:`non-tensor-data`). The result keeps them as they are.
+Arithmetic, the pointwise methods and the comparisons ``<``, ``<=``, ``>``
+and ``>=`` keep non-tensor entries, such as strings, as they are (see
+:ref:`non-tensor-data`). ``==`` and ``!=`` between two tensordicts also
+compare the non-tensor values, and give a boolean tensor at their keys.
 
 When it can, tensordict computes a pointwise operation with the fused
 ``torch._foreach_<op>`` kernels, one call for all the leaves. Inside a
@@ -146,8 +148,14 @@ the leaves in the result can depend on the order of the operands:
     >>> (td0 + td1)["x"].shape
     torch.Size([3, 3, 2])
 
+``td0 + td1`` follows the batch rules: ``td0`` has no batch dimensions, so
+its entry is used for each of the 3 elements of ``td1``, as with
+``td0.expand(3)``. ``td1 + td0`` broadcasts the two leaves as plain tensors.
 To get the same result in both orders, give the two tensordicts the same
-batch size first, for example with :meth:`~tensordict.TensorDict.expand`.
+batch size first, for example with :meth:`~tensordict.TensorDict.expand`:
+
+    >>> (td1 + td0.expand(3))["x"].shape
+    torch.Size([3, 3, 2])
 
 Missing entries
 ~~~~~~~~~~~~~~~
