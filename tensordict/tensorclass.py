@@ -157,6 +157,7 @@ _TD_PASS_THROUGH = {
     torch.atleast_3d: True,
     torch.broadcast_to: True,
     torch.cat: True,
+    torch.chunk: True,
     torch.clone: True,
     torch.empty_like: True,
     torch.flatten: True,
@@ -172,6 +173,8 @@ _TD_PASS_THROUGH = {
     torch.permute: True,
     torch.rand_like: True,
     torch.randn_like: True,
+    torch.repeat_interleave: True,
+    torch.reshape: True,
     torch.roll: True,
     torch.rot90: True,
     torch.split: True,
@@ -179,10 +182,12 @@ _TD_PASS_THROUGH = {
     torch.stack: True,
     torch.swapaxes: True,
     torch.swapdims: True,
+    torch.tensor_split: True,
     torch.tile: True,
     torch.unbind: True,
     torch.unflatten: True,
     torch.unsqueeze: True,
+    torch.where: True,
     torch.zeros_like: True,
     torch.autograd.grad: True,
 }
@@ -1071,7 +1076,10 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             kwargs = {}
 
         # get the output type from the arguments / keyword arguments
-        if len(args) > 0:
+        if func is torch.where:
+            # torch.where(condition, input, other): the result has the type of input
+            tensorclass_instance = args[1] if len(args) > 1 else kwargs.get("input")
+        elif len(args) > 0:
             tensorclass_instance = args[0]
         else:
             tensorclass_instance = kwargs.get("input", kwargs["tensors"])
@@ -1660,8 +1668,7 @@ def _init_wrapper(
             lock = kwargs.pop("lock", None)
         if lock is None:
             lock = frozen
-        if not is_compiling():
-            # zip not supported by dynamo
+        if args:
             # Use __dataclass_fields__ but filter out ClassVar fields to preserve order
             expected_keys_list = (
                 field_names
@@ -1683,6 +1690,7 @@ def _init_wrapper(
                 if key in kwargs:
                     raise ValueError(f"The key {key} is already set in kwargs")
                 kwargs[key] = value
+        if not is_compiling():
             if (
                 can_init_tensors
                 and type(self) is cls
@@ -1744,11 +1752,6 @@ def _init_wrapper(
                 if lock:
                     td.lock_()
                 return
-        else:
-            if args:
-                raise RuntimeError(
-                    "dynamo doesn't support arguments when building a tensorclass, pass the keyword explicitly."
-                )
 
         # Use `is`/isinstance instead of `in (..., dataclasses.MISSING)`:
         # under torch.compile, Dynamo can't proxy `_MISSING_TYPE` for `==`
@@ -4294,10 +4297,10 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
         ... class Foo:
         ...     integer: int
 
-    The bracket form is usually the most readable when you stack several flags and it is the form
-    static type-checkers (mypy/pyright) understand via :meth:`~object.__class_getitem__`. The kwargs
-    form is convenient if the flag value is computed; the decorator form is best when migrating
-    plain ``@dataclass`` code.
+    The bracket form is usually the most readable when you stack several flags. Pyright understands
+    it via :meth:`~object.__class_getitem__`; mypy rejects it, so use the kwargs form in code checked
+    by mypy. The kwargs form is also convenient if the flag value is computed; the decorator form is
+    best when migrating plain ``@dataclass`` code.
 
     Several flags can be combined inside the brackets:
 
@@ -4367,9 +4370,10 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
         ...     y: float
 
     **Type-checking.** ``TensorClass[...]`` is implemented via :meth:`~object.__class_getitem__`,
-    so mypy and pyright resolve it to the (parametrized) class itself rather than to a generic
-    parameter. Annotated fields propagate as expected and editors offer attribute completion on
-    instances.
+    so pyright resolves it to the (parametrized) class itself rather than to a generic parameter.
+    Mypy does not evaluate ``__class_getitem__`` in a list of base classes and rejects the bracket
+    form; use ``class Foo(TensorClass, autocast=True)`` instead. Annotated fields propagate as
+    expected and editors offer attribute completion on instances.
 
     .. note:: ``TensorClass`` itself is *not* decorated as a tensorclass — the dataclass machinery
         only fires on subclasses. This is intentional: we cannot anticipate whether ``frozen`` will
@@ -4816,8 +4820,12 @@ class NonTensorDataBase(TensorClass):
             issubclass(t, (NonTensorData, NonTensorStack)) for t in types
         ):
             return NonTensorData._cat_non_tensor(*args, **(kwargs or {}))
-        if func not in _TD_PASS_THROUGH or not all(
-            issubclass(t, (Tensor, cls)) for t in types
+        # NonTensorData.where does not select elementwise, so torch.where is
+        # not passed through
+        if (
+            func not in _TD_PASS_THROUGH
+            or func is torch.where
+            or not all(issubclass(t, (Tensor, cls)) for t in types)
         ):
             from torch._ops import HigherOrderOperator
 

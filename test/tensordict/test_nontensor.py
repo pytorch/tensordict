@@ -218,6 +218,7 @@ class TestNonTensorData:
             lambda x: torch.tile(x, (2, 1)),
             lambda x: x.broadcast_to((2, 2, 3)),
             lambda x: x.reshape(3, 2),
+            lambda x: torch.reshape(x, (3, 2)),
         ],
         ids=[
             "flip",
@@ -228,6 +229,7 @@ class TestNonTensorData:
             "tile",
             "broadcast_to",
             "reshape",
+            "torch.reshape",
         ],
     )
     def test_shape_ops_preserve_non_tensor_values(self, op, container):
@@ -1452,6 +1454,17 @@ class TestNonTensorData:
         )
         result = tensor.where(condition=condition, other=other, out=out, pad=0)
         assert result.tolist() == [["a"], ["a"]]
+
+    def test_torch_where_non_tensor_data(self):
+        # NonTensorData.where does not select elementwise, so torch.where
+        # is not passed through to it
+        condition = torch.tensor([True, False])
+        with pytest.raises(TypeError, match="Multiple dispatch failed"):
+            torch.where(
+                condition,
+                NonTensorData("a", batch_size=(2,)),
+                NonTensorData("b", batch_size=(2,)),
+            )
 
     def test_linked_list_str(self):
         td = TensorDict(a=NonTensorStack("foo", "bar"), batch_size=(2,))
