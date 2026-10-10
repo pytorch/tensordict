@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from typing import Any, Dict, TYPE_CHECKING
 
 import torch
+from tensordict._deprecation import warn_deprecated
 from tensordict._td import TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.nn.utils import composite_lp_aggregate, set_composite_lp_aggregate
@@ -439,17 +440,26 @@ class CompositeDistribution(d.Distribution, Mapping):
                 Defaults to `1`.
 
         Keyword Args:
+            aggregate_probabilities (bool, optional): Deprecated and ignored. A value other than ``None``
+                emits a :class:`DeprecationWarning`. Use :func:`~tensordict.nn.set_composite_lp_aggregate`
+                instead.
             include_sum (bool, optional): Whether to include the summed entropy in the output TensorDict.
                 Defaults to `composite_lp_aggregate()`, which defaults to `False`.
 
         Returns:
-            torch.Tensor or TensorDictBase: If `aggregate_probabilities` is `True`, returns a single tensor with
-            the summed entropies. If `aggregate_probabilities` is `False`, returns a TensorDict with the entropies
+            torch.Tensor or TensorDictBase: If `composite_lp_aggregate()` is `True`, returns a single tensor with
+            the summed entropies. If `composite_lp_aggregate()` is `False`, returns a TensorDict with the entropies
             of each component distribution.
 
         .. note:: If a distribution does not implement a closed-form solution for entropy, Monte Carlo sampling is used
             to estimate it.
         """
+        if aggregate_probabilities is not None:
+            warn_deprecated(
+                "CompositeDistribution.entropy(aggregate_probabilities=...), which has no effect,",
+                removal="0.17",
+                replacement="set_composite_lp_aggregate",
+            )
         aggregate_probabilities = composite_lp_aggregate()
         if include_sum is None:
             include_sum = composite_lp_aggregate()
