@@ -539,6 +539,9 @@ class TestPointwiseOps:
         td_div = td / torch.ones(shape)
         assert td_div.shape == broadcast_shape
         assert (td_div == td).all()
+        td_mod = td % torch.full(shape, 2.0)
+        assert td_mod.shape == broadcast_shape
+        assert (td_mod == td % 2.0).all()
         td_max = td.maximum(torch.ones(shape))
         assert td_max.shape == broadcast_shape
         assert (td_max == td.maximum(torch.ones_like(td))).all()
@@ -629,6 +632,9 @@ class TestPointwiseOps:
         td_div = td / td.new_ones(shape)
         assert td_div.shape == broadcast_shape
         assert (td_div == td).all()
+        td_mod = td % td.new_full(shape, 2.0)
+        assert td_mod.shape == broadcast_shape
+        assert (td_mod == td % 2.0).all()
         td_max = td.maximum(td.new_ones(shape))
         assert td_max.shape == broadcast_shape
         assert (td_max == td.maximum(torch.ones_like(td))).all()
