@@ -39,8 +39,7 @@ In this example, a tensordict holds 3 time steps of 2 robots. Each robot has
 in the batch (here 6), not the number of values in the tensors.
 
 A :class:`~tensordict.TensorClass` has a batch size too, with the same rules
-for its fields. Its methods therefore run on one element or on a whole batch
-(see :ref:`tensorclass-guide`).
+for its typed fields (see :ref:`tensorclass-guide`).
 
 The leading dimensions of each entry must be equal to the batch size. If they
 are not, the constructor and each write raise a ``RuntimeError`` that names the
