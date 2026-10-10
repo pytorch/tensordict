@@ -1305,6 +1305,33 @@ class TestLikeConstructors:
         else:
             assert tdnew.device is None
 
+    @pytest.mark.parametrize(
+        "func,args",
+        [
+            (torch.zeros_like, ()),
+            (torch.ones_like, ()),
+            (torch.empty_like, ()),
+            (torch.full_like, (2.0,)),
+            (torch.rand_like, ()),
+            (torch.randn_like, ()),
+        ],
+    )
+    def test_like_kwargs(self, func, args, td):
+        # requires_grad and memory_format are passed on to every leaf
+        td = td.float()
+        tdnew = func(td, *args, requires_grad=True)
+        assert tdnew.batch_size == td.batch_size
+        for key, leaf in tdnew.items(True, True):
+            assert leaf.shape == td[key].shape
+            assert leaf.requires_grad and leaf.is_leaf
+        td_t = TensorDict(a=torch.randn(4, 3).T, batch_size=(3,))
+        assert not func(td_t, *args)["a"].is_contiguous()
+        tdnew = func(td_t, *args, memory_format=torch.contiguous_format)
+        assert tdnew["a"].is_contiguous()
+        # torch rejects unknown keywords before calling the override
+        with pytest.raises(TypeError):
+            func(td, *args, foo=1)
+
 
 class TestMemmap:
     @pytest.mark.parametrize("robust_key", [False, True])

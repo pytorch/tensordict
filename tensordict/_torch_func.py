@@ -309,11 +309,6 @@ def _full_like(td: T, fill_value: float, *args, **kwargs: Any) -> T:
         propagate_lock=True,
         device=device_nd,
     )
-    if len(kwargs):
-        raise RuntimeError(
-            f"keyword arguments {list(kwargs.keys())} are not "
-            f"supported with full_like with TensorDict"
-        )
     return td_clone
 
 
@@ -334,11 +329,6 @@ def _zeros_like(td: T, *args, **kwargs: Any) -> T:
         propagate_lock=True,
         device=device_nd,
     )
-    if len(kwargs):
-        raise RuntimeError(
-            f"keyword arguments {list(kwargs.keys())} are not "
-            f"supported with zeros_like with TensorDict"
-        )
     return td_clone
 
 
@@ -359,11 +349,6 @@ def _ones_like(td: T, *args, **kwargs: Any) -> T:
         propagate_lock=True,
         device=device_nd,
     )
-    if len(kwargs):
-        raise RuntimeError(
-            f"keyword arguments {list(kwargs.keys())} are not "
-            f"supported with ones_like with TensorDict"
-        )
     return td_clone
 
 
@@ -384,11 +369,6 @@ def _rand_like(td: T, *args, **kwargs: Any) -> T:
         propagate_lock=True,
         device=device_nd,
     )
-    if len(kwargs):
-        raise RuntimeError(
-            f"keyword arguments {list(kwargs.keys())} are not "
-            f"supported with rand_like with TensorDict"
-        )
     return td_clone
 
 
@@ -409,11 +389,6 @@ def _randn_like(td: T, *args, **kwargs: Any) -> T:
         propagate_lock=True,
         device=device_nd,
     )
-    if len(kwargs):
-        raise RuntimeError(
-            f"keyword arguments {list(kwargs.keys())} are not "
-            f"supported with randn_like with TensorDict"
-        )
     return td_clone
 
 
@@ -434,11 +409,6 @@ def _empty_like(td: T, *args, **kwargs) -> T:
         propagate_lock=True,
         device=device_nd,
     )
-    if len(kwargs):
-        raise RuntimeError(
-            f"keyword arguments {list(kwargs.keys())} are not "
-            f"supported with empty_like with TensorDict"
-        )
     return td_clone
 
 
