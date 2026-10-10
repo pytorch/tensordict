@@ -17,7 +17,6 @@ import math
 import operator
 from typing import List, overload, Sequence, TYPE_CHECKING
 
-import numpy as np
 import torch
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
@@ -31,6 +30,7 @@ from tensordict.utils import (
     _is_tensorclass,
     _is_unbatched,
     _maybe_correct_neg_dim,
+    _resolve_expand_shape,
     _zip_strict,
     is_non_tensor,
     lazy_legacy,
@@ -74,6 +74,8 @@ class _ShapeOps:
                 f"the number of sizes provided ({len(shape)}) must be greater or equal to the number of "
                 f"dimensions in the TensorDict ({tensordict_dims})"
             )
+        if -1 in shape:
+            shape = _resolve_expand_shape(shape, self.batch_size)
 
         # new shape compatibility check
         for old_dim, new_dim in zip(self.batch_size, shape[-tensordict_dims:]):
@@ -150,7 +152,7 @@ class _ShapeOps:
             return self.apply(expand_as, other, batch_size=other.batch_size)
         return self.expand(other.shape)
 
-    def unbind(self, dim: int) -> tuple[T, ...]:
+    def unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
         """Returns a tuple of indexed tensordicts, unbound along the indicated dimension.
 
         Examples:
@@ -465,7 +467,7 @@ class _ShapeOps:
         inplace = kwargs.pop("inplace", False)
         shape = _get_shape_from_args(*args, **kwargs)
         if any(dim < 0 for dim in shape):
-            shape = _infer_size_impl(shape, self.numel())
+            shape = _infer_size_impl(shape, self.batch_size.numel())
             shape = torch.Size(shape)
         if torch.Size(shape) == self.shape:
             return self
@@ -576,6 +578,14 @@ class _ShapeOps:
             if i == dim_corrected:
                 if isinstance(repeats, int):
                     new_batch_size.append(s * repeats)
+                elif (
+                    isinstance(repeats, torch.Tensor)
+                    and repeats.ndim <= 1
+                    and repeats.numel() == 1
+                    and repeats.dtype in (torch.int32, torch.int64)
+                ):
+                    # torch broadcasts a 0-d or one-element repeats to the size of dim
+                    new_batch_size.append(s * int(repeats))
                 else:
                     new_batch_size.append(repeats.sum().item())
             else:
@@ -662,8 +672,9 @@ class _ShapeOps:
         """
         if len(repeats) == 1 and not isinstance(repeats[0], int):
             repeats = repeats[0]
-            if isinstance(repeats, torch.Size):
-                return self.repeat(*repeats[0])
+            # a torch.Size is a tuple
+            if isinstance(repeats, (list, tuple)):
+                return self.repeat(*repeats, inplace=inplace)
             if isinstance(repeats, torch.Tensor):
                 # This will cause cuda to sync, which may not be desirable
                 return self.repeat(*repeats.tolist())
@@ -974,7 +985,11 @@ class _ShapeOps:
                     f"TensorDict.split: split_size must be positive, got {split_size}."
                 )
             split_size = min(split_size, max_size)
-            segments = _create_segments_from_int(split_size, max_size)
+            if max_size == 0:
+                # torch.split returns one empty piece along a zero-size dim
+                segments = [(0, 0)]
+            else:
+                segments = _create_segments_from_int(split_size, max_size)
             splits_list = [end - start for start, end in segments]
             num_splits = len(splits_list)
             splits = {
@@ -1192,7 +1207,7 @@ class _ShapeOps:
         elif len(shape) == 1 and isinstance(shape[0], (list, tuple, torch.Size)):
             return self.view(*shape[0])
         elif not isinstance(shape, torch.Size):
-            shape = _infer_size_impl(shape, self.numel())
+            shape = _infer_size_impl(shape, self.batch_size.numel())
             shape = torch.Size(shape)
         if shape == self.shape:
             return self
@@ -1358,7 +1373,7 @@ class _ShapeOps:
 
         if not len(dims_list) and not self.batch_dims:
             return self
-        if np.array_equal(dims_list, range(self.batch_dims)):
+        if list(dims_list) == list(range(self.batch_dims)):
             return self
         min_dim, max_dim = -self.batch_dims, self.batch_dims - 1
         seen = [False for dim in range(max_dim + 1)]
@@ -1850,6 +1865,8 @@ class _ShapeOps:
             torch.Size([2, 3])
         """
         shape = torch.Size(shape)
+        if -1 in shape:
+            shape = _resolve_expand_shape(shape, self.batch_size)
 
         def _broadcast_to(tensor):
             return tensor.broadcast_to(shape + tensor.shape[self.ndim :])
@@ -2086,6 +2103,14 @@ class _ShapeOps:
             >>> assert (td == td_unflat).all()
         """
         dim = _maybe_correct_neg_dim(dim, self.batch_size)
+        if -1 in unflattened_size and -1 not in self.batch_size:
+            # Infer the -1 as torch.unflatten does, which raises for sizes that
+            # don't fit. A batch with a -1 (a ragged dim) is left as it is.
+            unflattened_size = (
+                torch.empty(self.batch_size, device="meta")
+                .unflatten(dim, unflattened_size)
+                .shape[dim : dim + len(unflattened_size)]
+            )
 
         def unflatten(tensor):
             return torch.unflatten(

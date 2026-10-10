@@ -82,9 +82,8 @@ class OneHotCategorical(D.Categorical):
     ) -> torch.Tensor:
         if sample_shape is None:
             sample_shape = torch.Size([])
-        d = D.relaxed_categorical.RelaxedOneHotCategorical(
-            1.0, probs=self.probs, logits=self.logits
-        )
+        # A Categorical always has both probs and logits; pass only one.
+        d = D.relaxed_categorical.RelaxedOneHotCategorical(1.0, logits=self.logits)
         out = d.rsample(sample_shape)
         out.data.copy_((out == out.max(-1)[0].unsqueeze(-1)).to(out.dtype))
         return out

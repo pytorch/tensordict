@@ -50,7 +50,7 @@ jobs:
       run:
         shell: bash -l {0}
     container:
-      image: nvidia/cuda:12.8.0-runtime-ubuntu22.04
+      image: nvidia/cuda:13.0.0-runtime-ubuntu22.04
       options: ${{ matrix.container-options }}
     steps:
       - name: Who triggered this?
@@ -95,7 +95,7 @@ jobs:
           source .venv/local/bin/activate
           echo "=== uv version ==="
           uv --version
-          uv pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128
+          uv pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu130
           uv pip install "setuptools" "wheel"
           uv pip install pytest pytest-benchmark "zarr>=3.0" h5py
           # Do not resolve runtime dependencies here: we want to keep the PyTorch build (nightly)
@@ -139,10 +139,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: benchmark
     if: ${{ !inputs.skip-upload && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmarks/upload'))) }}
-    # Every job that pushes to gh-pages joins this group, so they push one at a
-    # time. With `queue: max`, later jobs wait instead of being cancelled.
+    # Benchmark uploads run one at a time, in order. With `queue: max`, later
+    # ones wait instead of being cancelled, so no result is dropped. Other jobs
+    # that push to gh-pages write other folders: when one of them pushes first,
+    # github-action-benchmark pulls gh-pages again and retries, up to 10 times.
     concurrency:
-      group: gh-pages
+      group: gh-pages-benchmarks
       queue: max
     steps:
       - name: Show upload trigger reason

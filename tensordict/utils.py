@@ -603,10 +603,15 @@ _TENSORCLASS_MEMO = {}
 
 
 def _is_tensorclass(cls: type) -> bool:
-    out = _TENSORCLASS_MEMO.get(cls)
+    # Under Dynamo the memo is not read: a lookup that misses guards on all the
+    # keys of the memo, so any class memoized later in eager would recompile.
+    is_dynamo = is_compiling()
+    out = None
+    if not is_dynamo:
+        out = _TENSORCLASS_MEMO.get(cls)
     if out is None:
         out = getattr(cls, "_is_tensorclass", False)
-        if not is_compiling():
+        if not is_dynamo:
             _TENSORCLASS_MEMO[cls] = out
     return out
 
@@ -972,8 +977,16 @@ def _parse_to(*args, **kwargs):
         )
     else:
         non_blocking = kwargs.get("non_blocking", False)
-        convert_to_format = kwargs.get("convert_to_format")
-        if len(args) > 0:
+        convert_to_format = kwargs.get("memory_format")
+        if len(args) > 0 and isinstance(args[0], torch.dtype):
+            # td.to(dtype)
+            device = kwargs.get("device")
+            dtype = args[0]
+        elif len(args) > 0 and isinstance(args[0], torch.Tensor):
+            # td.to(tensor)
+            device = args[0].device
+            dtype = args[0].dtype
+        elif len(args) > 0:
             device = torch.device(args[0])
             if len(args) > 1:
                 dtype = args[1]
@@ -1915,6 +1928,33 @@ def _get_shape_from_args(*args, kwarg_name="size", **kwargs):
     return size
 
 
+def _resolve_expand_shape(shape: Sequence[int], batch_size: torch.Size) -> torch.Size:
+    """Replaces the ``-1`` sizes of an ``expand`` shape and checks the shape, as :meth:`torch.Tensor.expand` does.
+
+    The shapes are aligned on the right. A ``-1`` keeps the size of the matching dim of
+    ``batch_size``. The other sizes must match the existing size, or expand a dim of size
+    1. The sizes of new leading dims are left as they are.
+    """
+    num_new_dims = len(shape) - len(batch_size)
+    if num_new_dims < 0:
+        # too few sizes: left to the caller, which raises
+        return shape
+    resolved = list(shape)
+    for i, size in enumerate(shape):
+        if i < num_new_dims:
+            continue
+        existing = batch_size[i - num_new_dims]
+        if size == -1:
+            resolved[i] = existing
+        elif size != existing and existing != 1:
+            raise RuntimeError(
+                f"The expanded size of the tensor ({size}) must match the existing size "
+                f"({existing}) at non-singleton dimension {i}.  Target sizes: "
+                f"{list(shape)}.  Tensor sizes: {list(batch_size)}"
+            )
+    return torch.Size(resolved)
+
+
 # Imports of ``tensordict.utils.Buffer`` resolve to this empty placeholder,
 # as they have since torch.nn.Buffer was added (torch 2.5).
 class Buffer:  # noqa: D101
@@ -2399,6 +2439,44 @@ def _is_unbatched(data) -> bool:
     return out
 
 
+# The _foreach ops whose per-tensor op is not ``torch.Tensor.<name>``:
+# _foreach_maximum and _foreach_minimum dispatch to clamp_min and clamp_max
+# (torch.maximum takes no Python scalar), and _foreach_norm takes the
+# arguments of torch.linalg.vector_norm.
+_FOREACH_PER_TENSOR_OPS = {
+    "maximum": torch.clamp_min,
+    "maximum_": torch.Tensor.clamp_min_,
+    "minimum": torch.clamp_max,
+    "minimum_": torch.Tensor.clamp_max_,
+    "norm": torch.linalg.vector_norm,
+}
+
+
+def _foreach(name: str, tensors, *args, **kwargs):
+    """Calls ``torch._foreach_<name>(tensors, *args, **kwargs)``, one tensor at a time under torch.func.
+
+    functorch has no batching rule for the ``_foreach`` ops, so inside any
+    ``torch.func`` transform (``vmap``, ``grad``, ``jacrev``, ``functionalize``,
+    ...) each tensor goes through ``torch.Tensor.<name>``. Under a transform
+    without ``vmap``, such as ``grad`` alone, the ``_foreach`` ops would work,
+    but they also run one op per tensor. A list or tuple in ``args`` gives one
+    value per tensor; any other value is used for every tensor.
+    """
+    # Dynamo folds the depth to a guarded constant. Do not test
+    # ``peek_interpreter_stack() is None``: Dynamo evaluates it as False.
+    if torch._C._functorch.get_dynamic_layer_stack_depth() == 0:
+        return getattr(torch, "_foreach_" + name)(tensors, *args, **kwargs)
+    op = _FOREACH_PER_TENSOR_OPS.get(name) or getattr(torch.Tensor, name)
+    per_tensor_args = [
+        arg if isinstance(arg, (list, tuple)) else [arg] * len(tensors) for arg in args
+    ]
+    results = [
+        op(tensor, *tensor_args, **kwargs)
+        for tensor, *tensor_args in _zip_strict(tensors, *per_tensor_args)
+    ]
+    return None if name.endswith("_") else results
+
+
 # Set the TD_CHECK_INVARIANTS environment variable (as the CI does) to check the
 # tensordicts that are built without validation, see _check_invariants.
 _CHECK_INVARIANTS = bool(_strtobool(os.environ.get("TD_CHECK_INVARIANTS", "0")))
@@ -2649,15 +2727,6 @@ def _lock_warn():
 _lock_warn = assume_constant_result(_lock_warn)
 
 
-def _check_inbuild():
-    if not torch._dynamo.config.inline_inbuilt_nn_modules:
-        raise RuntimeError(
-            "to_module requires torch._dynamo.config.inline_inbuilt_nn_modules to be set to True."
-        )
-
-
-_check_inbuild = assume_constant_result(_check_inbuild)
-
 _zip_strict = functools.partial(zip, strict=True)
 
 
@@ -2674,25 +2743,27 @@ def _pin_mem(q_in, q_out):
 
 
 def _infer_size_impl(shape: List[int], numel: int) -> List[int]:
-    # A local copy of  torch.jit._shape_functions.infer_size_impl which is skipped by torch.compile
+    # A local copy of torch.jit._shape_functions.infer_size_impl, which is skipped
+    # by torch.compile. It raises RuntimeError, as torch.Tensor.view does, where
+    # the original raises AssertionError.
     newsize = 1
     infer_dim: int | None = None
     for dim in range(len(shape)):
         if shape[dim] == -1:
             if infer_dim is not None:
-                raise AssertionError("only one dimension can be inferred")
+                raise RuntimeError("only one dimension can be inferred")
             infer_dim = dim
         elif shape[dim] >= 0:
             newsize *= shape[dim]
         else:
-            raise AssertionError(
+            raise RuntimeError(
                 f"invalid shape dimensions in {list(shape)}: sizes must be non-negative or -1"
             )
     if not (
-        numel == newsize
+        (infer_dim is None and numel == newsize)
         or (infer_dim is not None and newsize > 0 and numel % newsize == 0)
     ):
-        raise AssertionError(
+        raise RuntimeError(
             f"invalid shape {list(shape)} for a batch of {numel} elements"
         )
     out = _copy(shape)

@@ -30,6 +30,7 @@ from tensordict.base import (
     Self,
 )
 from tensordict.utils import (
+    _foreach,
     _is_unbatched,
     _maybe_correct_neg_dim,
     _mismatch_keys,
@@ -512,61 +513,61 @@ class _PointwiseOps:
         )
 
     # point-wise arithmetic ops
-    def __add__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __add__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.add(other)
 
-    def __radd__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __radd__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.add(other)
 
-    def __iadd__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __iadd__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.add_(other)
 
-    def __truediv__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __truediv__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.div(other)
 
-    def __itruediv__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __itruediv__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.div_(other)
 
-    def __rtruediv__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __rtruediv__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.reciprocal() * other
 
-    def __mul__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __mul__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.mul(other)
 
-    def __mod__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __mod__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.mod(other)
 
-    def __rmul__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __rmul__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.mul(other)
 
-    def __imul__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __imul__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.mul_(other)
 
-    def __sub__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __sub__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.sub(other)
 
-    def __isub__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __isub__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.sub_(other)
 
-    def __rsub__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __rsub__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.rsub(other)
 
-    def __pow__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __pow__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.pow(other)
 
-    def __rpow__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __rpow__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         raise NotImplementedError(
             "rpow isn't implemented for tensordict yet. Make sure both elements are wrapped "
             "in a tensordict for this to work."
         )
 
-    def __ipow__(self, other: TensorCollection | torch.Tensor) -> Self:
+    def __ipow__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         return self.pow_(other)
 
     def abs(self) -> Self:
         """Computes the absolute value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_abs(vals)
+        vals = _foreach("abs", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -582,13 +583,13 @@ class _PointwiseOps:
 
     def abs_(self) -> Self:
         """Computes the absolute value of each element of the TensorDict in-place."""
-        torch._foreach_abs_(self._values_list(True, True))
+        _foreach("abs_", self._values_list(True, True))
         return self
 
     def acos(self) -> Self:
         """Computes the :meth:`~torch.acos` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_acos(vals)
+        vals = _foreach("acos", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -604,13 +605,13 @@ class _PointwiseOps:
 
     def acos_(self) -> Self:
         """Computes the :meth:`~torch.acos` value of each element of the TensorDict in-place."""
-        torch._foreach_acos_(self._values_list(True, True))
+        _foreach("acos_", self._values_list(True, True))
         return self
 
     def exp(self) -> Self:
         """Computes the :meth:`~torch.exp` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_exp(vals)
+        vals = _foreach("exp", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -626,7 +627,7 @@ class _PointwiseOps:
 
     def exp_(self) -> Self:
         """Computes the :meth:`~torch.exp` value of each element of the TensorDict in-place."""
-        torch._foreach_exp_(self._values_list(True, True))
+        _foreach("exp_", self._values_list(True, True))
         return self
 
     def neg(self) -> Self:
@@ -637,7 +638,7 @@ class _PointwiseOps:
             return self.copy()
         if any(_is_unbatched(v) for v in vals):
             return self.apply(lambda x: -x)
-        vals = torch._foreach_neg(vals)
+        vals = _foreach("neg", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -660,13 +661,13 @@ class _PointwiseOps:
         if any(_is_unbatched(v) for v in vals):
             self.apply_(lambda x: x.neg_())
             return self
-        torch._foreach_neg_(vals)
+        _foreach("neg_", vals)
         return self
 
     def reciprocal(self) -> Self:
         """Computes the :meth:`~torch.reciprocal` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_reciprocal(vals)
+        vals = _foreach("reciprocal", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -682,13 +683,13 @@ class _PointwiseOps:
 
     def reciprocal_(self) -> Self:
         """Computes the :meth:`~torch.reciprocal` value of each element of the TensorDict in-place."""
-        torch._foreach_reciprocal_(self._values_list(True, True))
+        _foreach("reciprocal_", self._values_list(True, True))
         return self
 
     def sigmoid(self) -> Self:
         """Computes the :meth:`~torch.sigmoid` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_sigmoid(vals)
+        vals = _foreach("sigmoid", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -704,13 +705,13 @@ class _PointwiseOps:
 
     def sigmoid_(self) -> Self:
         """Computes the :meth:`~torch.sigmoid` value of each element of the TensorDict in-place."""
-        torch._foreach_sigmoid_(self._values_list(True, True))
+        _foreach("sigmoid_", self._values_list(True, True))
         return self
 
     def sign(self) -> Self:
         """Computes the :meth:`~torch.sign` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_sign(vals)
+        vals = _foreach("sign", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -726,13 +727,13 @@ class _PointwiseOps:
 
     def sign_(self) -> Self:
         """Computes the :meth:`~torch.sign` value of each element of the TensorDict in-place."""
-        torch._foreach_sign_(self._values_list(True, True))
+        _foreach("sign_", self._values_list(True, True))
         return self
 
     def sin(self) -> Self:
         """Computes the :meth:`~torch.sin` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_sin(vals)
+        vals = _foreach("sin", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -748,13 +749,13 @@ class _PointwiseOps:
 
     def sin_(self) -> Self:
         """Computes the :meth:`~torch.sin` value of each element of the TensorDict in-place."""
-        torch._foreach_sin_(self._values_list(True, True))
+        _foreach("sin_", self._values_list(True, True))
         return self
 
     def sinh(self) -> Self:
         """Computes the :meth:`~torch.sinh` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_sinh(vals)
+        vals = _foreach("sinh", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -770,13 +771,13 @@ class _PointwiseOps:
 
     def sinh_(self) -> Self:
         """Computes the :meth:`~torch.sinh` value of each element of the TensorDict in-place."""
-        torch._foreach_sinh_(self._values_list(True, True))
+        _foreach("sinh_", self._values_list(True, True))
         return self
 
     def tan(self) -> Self:
         """Computes the :meth:`~torch.tan` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_tan(vals)
+        vals = _foreach("tan", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -792,13 +793,13 @@ class _PointwiseOps:
 
     def tan_(self) -> Self:
         """Computes the :meth:`~torch.tan` value of each element of the TensorDict in-place."""
-        torch._foreach_tan_(self._values_list(True, True))
+        _foreach("tan_", self._values_list(True, True))
         return self
 
     def tanh(self) -> Self:
         """Computes the :meth:`~torch.tanh` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_tanh(vals)
+        vals = _foreach("tanh", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -814,13 +815,13 @@ class _PointwiseOps:
 
     def tanh_(self) -> Self:
         """Computes the :meth:`~torch.tanh` value of each element of the TensorDict in-place."""
-        torch._foreach_tanh_(self._values_list(True, True))
+        _foreach("tanh_", self._values_list(True, True))
         return self
 
     def trunc(self) -> Self:
         """Computes the :meth:`~torch.trunc` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_trunc(vals)
+        vals = _foreach("trunc", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -836,13 +837,13 @@ class _PointwiseOps:
 
     def trunc_(self) -> Self:
         """Computes the :meth:`~torch.trunc` value of each element of the TensorDict in-place."""
-        torch._foreach_trunc_(self._values_list(True, True))
+        _foreach("trunc_", self._values_list(True, True))
         return self
 
     def lgamma(self) -> Self:
         """Computes the :meth:`~torch.lgamma` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_lgamma(vals)
+        vals = _foreach("lgamma", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -858,13 +859,13 @@ class _PointwiseOps:
 
     def lgamma_(self) -> Self:
         """Computes the :meth:`~torch.lgamma` value of each element of the TensorDict in-place."""
-        torch._foreach_lgamma_(self._values_list(True, True))
+        _foreach("lgamma_", self._values_list(True, True))
         return self
 
     def frac(self) -> Self:
         """Computes the :meth:`~torch.frac` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_frac(vals)
+        vals = _foreach("frac", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -880,13 +881,13 @@ class _PointwiseOps:
 
     def frac_(self) -> Self:
         """Computes the :meth:`~torch.frac` value of each element of the TensorDict in-place."""
-        torch._foreach_frac_(self._values_list(True, True))
+        _foreach("frac_", self._values_list(True, True))
         return self
 
     def expm1(self) -> Self:
         """Computes the :meth:`~torch.expm1` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_expm1(vals)
+        vals = _foreach("expm1", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -902,13 +903,13 @@ class _PointwiseOps:
 
     def expm1_(self) -> Self:
         """Computes the :meth:`~torch.expm1` value of each element of the TensorDict in-place."""
-        torch._foreach_expm1_(self._values_list(True, True))
+        _foreach("expm1_", self._values_list(True, True))
         return self
 
     def log(self) -> Self:
         """Computes the :meth:`~torch.log` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_log(vals)
+        vals = _foreach("log", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -924,7 +925,7 @@ class _PointwiseOps:
 
     def log_(self) -> Self:
         """Computes the :meth:`~torch.log` value of each element of the TensorDict in-place."""
-        torch._foreach_log_(self._values_list(True, True))
+        _foreach("log_", self._values_list(True, True))
         return self
 
     def softmax(self, dim: int, dtype: torch.dtype | None = None):  # noqa: D417
@@ -948,7 +949,7 @@ class _PointwiseOps:
     def log10(self) -> Self:
         """Computes the :meth:`~torch.log10` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_log10(vals)
+        vals = _foreach("log10", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -964,13 +965,13 @@ class _PointwiseOps:
 
     def log10_(self) -> Self:
         """Computes the :meth:`~torch.log10` value of each element of the TensorDict in-place."""
-        torch._foreach_log10_(self._values_list(True, True))
+        _foreach("log10_", self._values_list(True, True))
         return self
 
     def log1p(self) -> Self:
         """Computes the :meth:`~torch.log1p` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_log1p(vals)
+        vals = _foreach("log1p", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -986,13 +987,13 @@ class _PointwiseOps:
 
     def log1p_(self) -> Self:
         """Computes the :meth:`~torch.log1p` value of each element of the TensorDict in-place."""
-        torch._foreach_log1p_(self._values_list(True, True))
+        _foreach("log1p_", self._values_list(True, True))
         return self
 
     def log2(self) -> Self:
         """Computes the :meth:`~torch.log2` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_log2(vals)
+        vals = _foreach("log2", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -1008,13 +1009,13 @@ class _PointwiseOps:
 
     def log2_(self) -> Self:
         """Computes the :meth:`~torch.log2` value of each element of the TensorDict in-place."""
-        torch._foreach_log2_(self._values_list(True, True))
+        _foreach("log2_", self._values_list(True, True))
         return self
 
     def ceil(self) -> Self:
         """Computes the :meth:`~torch.ceil` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_ceil(vals)
+        vals = _foreach("ceil", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -1030,13 +1031,13 @@ class _PointwiseOps:
 
     def ceil_(self) -> Self:
         """Computes the :meth:`~torch.ceil` value of each element of the TensorDict in-place."""
-        torch._foreach_ceil_(self._values_list(True, True))
+        _foreach("ceil_", self._values_list(True, True))
         return self
 
     def floor(self) -> Self:
         """Computes the :meth:`~torch.floor` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_floor(vals)
+        vals = _foreach("floor", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -1052,13 +1053,13 @@ class _PointwiseOps:
 
     def floor_(self) -> Self:
         """Computes the :meth:`~torch.floor` value of each element of the TensorDict in-place."""
-        torch._foreach_floor_(self._values_list(True, True))
+        _foreach("floor_", self._values_list(True, True))
         return self
 
     def round(self) -> Self:
         """Computes the :meth:`~torch.round` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_round(vals)
+        vals = _foreach("round", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -1074,13 +1075,13 @@ class _PointwiseOps:
 
     def round_(self) -> Self:
         """Computes the :meth:`~torch.round` value of each element of the TensorDict in-place."""
-        torch._foreach_round_(self._values_list(True, True))
+        _foreach("round_", self._values_list(True, True))
         return self
 
     def erf(self) -> Self:
         """Computes the :meth:`~torch.erf` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_erf(vals)
+        vals = _foreach("erf", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -1096,13 +1097,13 @@ class _PointwiseOps:
 
     def erf_(self) -> Self:
         """Computes the :meth:`~torch.erf` value of each element of the TensorDict in-place."""
-        torch._foreach_erf_(self._values_list(True, True))
+        _foreach("erf_", self._values_list(True, True))
         return self
 
     def erfc(self) -> Self:
         """Computes the :meth:`~torch.erfc` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_erfc(vals)
+        vals = _foreach("erfc", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -1118,13 +1119,13 @@ class _PointwiseOps:
 
     def erfc_(self) -> Self:
         """Computes the :meth:`~torch.erfc` value of each element of the TensorDict in-place."""
-        torch._foreach_erfc_(self._values_list(True, True))
+        _foreach("erfc_", self._values_list(True, True))
         return self
 
     def asin(self) -> Self:
         """Computes the :meth:`~torch.asin` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_asin(vals)
+        vals = _foreach("asin", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -1140,13 +1141,13 @@ class _PointwiseOps:
 
     def asin_(self) -> Self:
         """Computes the :meth:`~torch.asin` value of each element of the TensorDict in-place."""
-        torch._foreach_asin_(self._values_list(True, True))
+        _foreach("asin_", self._values_list(True, True))
         return self
 
     def atan(self) -> Self:
         """Computes the :meth:`~torch.atan` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_atan(vals)
+        vals = _foreach("atan", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -1162,13 +1163,13 @@ class _PointwiseOps:
 
     def atan_(self) -> Self:
         """Computes the :meth:`~torch.atan` value of each element of the TensorDict in-place."""
-        torch._foreach_atan_(self._values_list(True, True))
+        _foreach("atan_", self._values_list(True, True))
         return self
 
     def cos(self) -> Self:
         """Computes the :meth:`~torch.cos` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_cos(vals)
+        vals = _foreach("cos", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -1184,13 +1185,13 @@ class _PointwiseOps:
 
     def cos_(self) -> Self:
         """Computes the :meth:`~torch.cos` value of each element of the TensorDict in-place."""
-        torch._foreach_cos_(self._values_list(True, True))
+        _foreach("cos_", self._values_list(True, True))
         return self
 
     def cosh(self) -> Self:
         """Computes the :meth:`~torch.cosh` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_cosh(vals)
+        vals = _foreach("cosh", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -1206,7 +1207,7 @@ class _PointwiseOps:
 
     def cosh_(self) -> Self:
         """Computes the :meth:`~torch.cosh` value of each element of the TensorDict in-place."""
-        torch._foreach_cosh_(self._values_list(True, True))
+        _foreach("cosh_", self._values_list(True, True))
         return self
 
     @_maybe_broadcast_other("bitwise_and")
@@ -1365,9 +1366,9 @@ class _PointwiseOps:
         else:
             other_val = other
         if alpha is not None:
-            vals = torch._foreach_add(vals, other_val, alpha=alpha)
+            vals = _foreach("add", vals, other_val, alpha=alpha)
         else:
-            vals = torch._foreach_add(vals, other_val)
+            vals = _foreach("add", vals, other_val)
         items = dict(zip(keys, vals))
 
         def pop(name, val):
@@ -1420,9 +1421,9 @@ class _PointwiseOps:
                     self.apply_(lambda x: x.add_(other))
             return self
         if alpha is not None:
-            torch._foreach_add_(vals, other_val, alpha=alpha)
+            _foreach("add_", vals, other_val, alpha=alpha)
         else:
-            torch._foreach_add_(vals, other_val)
+            _foreach("add_", vals, other_val)
         return self
 
     @_maybe_broadcast_other("lerp", 2)
@@ -1456,7 +1457,7 @@ class _PointwiseOps:
             weight_val = weight._values_list(True, True)
         else:
             weight_val = weight
-        vals = torch._foreach_lerp(vals, end_val, weight_val)
+        vals = _foreach("lerp", vals, end_val, weight_val)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -1486,7 +1487,7 @@ class _PointwiseOps:
             weight_val = weight._values_list(True, True)
         else:
             weight_val = weight
-        torch._foreach_lerp_(self._values_list(True, True), end_val, weight_val)
+        _foreach("lerp_", self._values_list(True, True), end_val, weight_val)
         return self
 
     @_maybe_broadcast_other("addcdiv", 2)
@@ -1523,7 +1524,7 @@ class _PointwiseOps:
             other2_val = other2._values_list(True, True)
         else:
             other2_val = other2
-        vals = torch._foreach_addcdiv(vals, other1_val, other2_val, value=value)
+        vals = _foreach("addcdiv", vals, other1_val, other2_val, value=value)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -1548,8 +1549,12 @@ class _PointwiseOps:
             other2_val = other2._values_list(True, True)
         else:
             other2_val = other2
-        torch._foreach_addcdiv_(
-            self._values_list(True, True), other1_val, other2_val, value=value
+        _foreach(
+            "addcdiv_",
+            self._values_list(True, True),
+            other1_val,
+            other2_val,
+            value=value,
         )
         return self
 
@@ -1588,7 +1593,7 @@ class _PointwiseOps:
             other2_val = other2._values_list(True, True)
         else:
             other2_val = other2
-        vals = torch._foreach_addcmul(vals, other1_val, other2_val, value=value)
+        vals = _foreach("addcmul", vals, other1_val, other2_val, value=value)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -1613,8 +1618,12 @@ class _PointwiseOps:
             other2_val = other2._values_list(True, True)
         else:
             other2_val = other2
-        torch._foreach_addcmul_(
-            self._values_list(True, True), other1_val, other2_val, value=value
+        _foreach(
+            "addcmul_",
+            self._values_list(True, True),
+            other1_val,
+            other2_val,
+            value=value,
         )
         return self
 
@@ -1659,9 +1668,9 @@ class _PointwiseOps:
         else:
             other_val = other
         if alpha is not None:
-            vals = torch._foreach_sub(vals, other_val, alpha=alpha)
+            vals = _foreach("sub", vals, other_val, alpha=alpha)
         else:
-            vals = torch._foreach_sub(vals, other_val)
+            vals = _foreach("sub", vals, other_val)
         items = dict(zip(keys, vals))
 
         def pop(name, val):
@@ -1697,9 +1706,9 @@ class _PointwiseOps:
             vals = self._values_list(True, True)
             other_val = other
         if alpha is not None:
-            torch._foreach_sub_(vals, other_val, alpha=alpha)
+            _foreach("sub_", vals, other_val, alpha=alpha)
         else:
-            torch._foreach_sub_(vals, other_val)
+            _foreach("sub_", vals, other_val)
         return self
 
     @_maybe_broadcast_other("rsub")
@@ -1743,9 +1752,9 @@ class _PointwiseOps:
         else:
             other_val = other
         if alpha is not None:
-            vals = torch._foreach_neg(torch._foreach_sub(vals, other_val, alpha=alpha))
+            vals = _foreach("neg", _foreach("sub", vals, other_val, alpha=alpha))
         else:
-            vals = torch._foreach_neg(torch._foreach_sub(vals, other_val))
+            vals = _foreach("neg", _foreach("sub", vals, other_val))
         items = dict(zip(keys, vals))
 
         def pop(name, val):
@@ -1822,7 +1831,7 @@ class _PointwiseOps:
             else:
                 self.apply_(lambda x: x.mul_(other))
             return self
-        torch._foreach_mul_(vals, other_val)
+        _foreach("mul_", vals, other_val)
         return self
 
     @_maybe_broadcast_other("mul")
@@ -1870,7 +1879,7 @@ class _PointwiseOps:
                 keys = new_keys
         else:
             other_val = other
-        vals = torch._foreach_mul(vals, other_val)
+        vals = _foreach("mul", vals, other_val)
         items = dict(zip(keys, vals))
 
         def pop(name, val):
@@ -1911,7 +1920,7 @@ class _PointwiseOps:
             else:
                 self.apply_(lambda x: x.maximum_(other))
             return self
-        torch._foreach_maximum_(vals, other_val)
+        _foreach("maximum_", vals, other_val)
         return self
 
     @_maybe_broadcast_other("maximum")
@@ -1954,7 +1963,7 @@ class _PointwiseOps:
                 keys = new_keys
         else:
             other_val = other
-        vals = torch._foreach_maximum(vals, other_val)
+        vals = _foreach("maximum", vals, other_val)
         items = dict(zip(keys, vals))
 
         def pop(name, val):
@@ -1995,7 +2004,7 @@ class _PointwiseOps:
             else:
                 self.apply_(lambda x: x.minimum_(other))
             return self
-        torch._foreach_minimum_(vals, other_val)
+        _foreach("minimum_", vals, other_val)
         return self
 
     @_maybe_broadcast_other("minimum")
@@ -2038,7 +2047,7 @@ class _PointwiseOps:
                 keys = new_keys
         else:
             other_val = other
-        vals = torch._foreach_minimum(vals, other_val)
+        vals = _foreach("minimum", vals, other_val)
         items = dict(zip(keys, vals))
 
         def pop(name, val):
@@ -2080,13 +2089,14 @@ class _PointwiseOps:
                 self.apply_(lambda x: x.clamp_max_(other))
             return self
         try:
-            torch._foreach_clamp_max_(vals, other_val)
+            _foreach("clamp_max_", vals, other_val)
         except RuntimeError as err:
             if "isDifferentiableType" in str(err):
                 raise RuntimeError(
                     "Attempted to execute _foreach_clamp_max_ with a differentiable tensor. "
                     "Use `td.apply(lambda x: x.clamp_max_(val)` instead."
                 )
+            raise
         return self
 
     @_maybe_broadcast_other("clamp_max")
@@ -2130,13 +2140,14 @@ class _PointwiseOps:
         else:
             other_val = other
         try:
-            vals = torch._foreach_clamp_max(vals, other_val)
+            vals = _foreach("clamp_max", vals, other_val)
         except RuntimeError as err:
             if "isDifferentiableType" in str(err):
                 raise RuntimeError(
                     "Attempted to execute _foreach_clamp_max with a differentiable tensor. "
                     "Use `td.apply(lambda x: x.clamp_max(val)` instead."
                 )
+            raise
         items = dict(zip(keys, vals))
 
         def pop(name, val):
@@ -2178,13 +2189,14 @@ class _PointwiseOps:
                 self.apply_(lambda x: x.clamp_min_(other))
             return self
         try:
-            torch._foreach_clamp_min_(vals, other_val)
+            _foreach("clamp_min_", vals, other_val)
         except RuntimeError as err:
             if "isDifferentiableType" in str(err):
                 raise RuntimeError(
                     "Attempted to execute _foreach_clamp_min_ with a differentiable tensor. "
                     "Use `td.apply(lambda x: x.clamp_min_(val)` instead."
                 )
+            raise
 
         return self
 
@@ -2228,13 +2240,14 @@ class _PointwiseOps:
         else:
             other_val = other
         try:
-            vals = torch._foreach_clamp_min(vals, other_val)
+            vals = _foreach("clamp_min", vals, other_val)
         except RuntimeError as err:
             if "isDifferentiableType" in str(err):
                 raise RuntimeError(
                     "Attempted to execute _foreach_clamp_min with a differentiable tensor. "
                     "Use `td.apply(lambda x: x.clamp_min(val)` instead."
                 )
+            raise
 
         items = dict(zip(keys, vals))
 
@@ -2257,8 +2270,8 @@ class _PointwiseOps:
     @_maybe_broadcast_other("clamp", 2)
     def clamp(
         self,
-        min: TensorDictBase | torch.Tensor = None,
-        max: TensorDictBase | torch.Tensor = None,
+        min: TensorDictBase | torch.Tensor | float | None = None,
+        max: TensorDictBase | torch.Tensor | float | None = None,
         *,
         out=None,
     ) -> Self:  # noqa: D417, W605
@@ -2333,7 +2346,7 @@ class _PointwiseOps:
         else:
             vals = self._values_list(True, True)
             other_val = other
-        torch._foreach_pow_(vals, other_val)
+        _foreach("pow_", vals, other_val)
         return self
 
     @_maybe_broadcast_other("pow")
@@ -2373,7 +2386,7 @@ class _PointwiseOps:
                 keys = new_keys
         else:
             other_val = other
-        vals = torch._foreach_pow(vals, other_val)
+        vals = _foreach("pow", vals, other_val)
         items = dict(zip(keys, vals))
 
         def pop(name, val):
@@ -2406,7 +2419,7 @@ class _PointwiseOps:
         else:
             vals = self._values_list(True, True)
             other_val = other
-        torch._foreach_div_(vals, other_val)
+        _foreach("div_", vals, other_val)
         return self
 
     @_maybe_broadcast_other("div")
@@ -2447,7 +2460,7 @@ class _PointwiseOps:
                 keys = new_keys
         else:
             other_val = other
-        vals = torch._foreach_div(vals, other_val)
+        vals = _foreach("div", vals, other_val)
         items = dict(zip(keys, vals))
 
         def pop(name, val):
@@ -2468,13 +2481,13 @@ class _PointwiseOps:
 
     def sqrt_(self) -> Self:
         """In-place version of :meth:`~.sqrt`."""
-        torch._foreach_sqrt_(self._values_list(True, True))
+        _foreach("sqrt_", self._values_list(True, True))
         return self
 
     def sqrt(self) -> Self:
         """Computes the element-wise square root of ``self``."""
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_sqrt(vals)
+        vals = _foreach("sqrt", vals)
         items = dict(zip(keys, vals))
 
         def get(name, val):

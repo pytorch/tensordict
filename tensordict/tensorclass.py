@@ -14,6 +14,7 @@ import inspect
 import multiprocessing.managers
 import multiprocessing.sharedctypes
 import numbers
+import operator
 import os
 import pickle
 import shutil
@@ -43,10 +44,9 @@ from typing import (
 )
 
 import numpy as np
-import tensordict as tensordict_lib
 import torch
 from tensordict import base as _td_base
-from tensordict._deprecation import deprecated
+from tensordict._deprecation import deprecated, warn_deprecated
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._pytree import _register_td_node
@@ -55,7 +55,7 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 from tensordict._utils_options import _set_capture_non_tensor_stack
 from tensordict.base import (
-    _ACCEPTED_CLASSES,
+    _is_accepted_class,
     _is_leaf_nontensor,
     _is_tensor_collection,
     _register_tensor_class,
@@ -69,9 +69,9 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _is_dataclass as is_dataclass,
     _is_json_serializable,
     _is_tensorclass,
-    _KeyDependentDefaultDict,
     _LOCK_ERROR,
     _REPR_OPTIONS,
+    _resolve_expand_shape,
     _td_fields,
     _TENSORCLASS_MEMO,
     _unravel_key_to_tuple,
@@ -159,6 +159,7 @@ _TD_PASS_THROUGH = {
     torch.atleast_3d: True,
     torch.broadcast_to: True,
     torch.cat: True,
+    torch.chunk: True,
     torch.clone: True,
     torch.empty_like: True,
     torch.flatten: True,
@@ -174,6 +175,8 @@ _TD_PASS_THROUGH = {
     torch.permute: True,
     torch.rand_like: True,
     torch.randn_like: True,
+    torch.repeat_interleave: True,
+    torch.reshape: True,
     torch.roll: True,
     torch.rot90: True,
     torch.split: True,
@@ -181,10 +184,12 @@ _TD_PASS_THROUGH = {
     torch.stack: True,
     torch.swapaxes: True,
     torch.swapdims: True,
+    torch.tensor_split: True,
     torch.tile: True,
     torch.unbind: True,
     torch.unflatten: True,
     torch.unsqueeze: True,
+    torch.where: True,
     torch.zeros_like: True,
     torch.autograd.grad: True,
 }
@@ -427,7 +432,6 @@ _FALLBACK_METHOD_FROM_TD = [
     "expand_as",
     "expm1",
     "expm1_",
-    "extend",
     "fill_",
     "filter_empty_",
     "filter_non_tensor_data",
@@ -1073,7 +1077,10 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             kwargs = {}
 
         # get the output type from the arguments / keyword arguments
-        if len(args) > 0:
+        if func is torch.where:
+            # torch.where(condition, input, other): the result has the type of input
+            tensorclass_instance = args[1] if len(args) > 1 else kwargs.get("input")
+        elif len(args) > 0:
             tensorclass_instance = args[0]
         else:
             tensorclass_instance = kwargs.get("input", kwargs["tensors"])
@@ -1154,8 +1161,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             if _is_reserved_field_name(attr):
                 _raise_reserved_field_name(attr)
 
-    cls.fields = classmethod(dataclasses.fields)
-    for field in cls.fields():
+    cls.fields = classmethod(_fields)
+    for field in dataclasses.fields(cls):
         if hasattr(cls, field.name):
             # if we have used Cls(TensorClass["shadow"]), we have a subclass of Cls(TensorClass)
             #  so we cannot directly delete the attribute
@@ -1289,6 +1296,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         cls.update_ = _update_
     if not hasattr(cls, "update_at_") and "update_at_" not in expected_keys:
         cls.update_at_ = _update_at_
+    if not hasattr(cls, "extend"):
+        cls.extend = _extend
     for method_name in _METHOD_FROM_TD:
         if not hasattr(cls, method_name):
             setattr(cls, method_name, getattr(TensorDict, method_name))
@@ -1420,10 +1429,6 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     # faster than doing instance checks
     cls._is_non_tensor = _is_non_tensor
     cls._is_tensorclass = True
-
-    from tensordict import _pytree
-
-    _pytree._CONSTRUCTORS[cls] = _pytree._tensorclass_constructor
     return cls
 
 
@@ -1478,6 +1483,22 @@ def _tc_broadcast(self, src, *, group=None, device=None):
     if not isinstance(result, type(self)):
         return type(self)._from_tensordict(result)
     return result
+
+
+@deprecated(
+    "TensorClass.fields()", removal="0.17", replacement="dataclasses.fields(cls)"
+)
+def _fields(cls) -> tuple[dataclasses.Field, ...]:
+    return dataclasses.fields(cls)
+
+
+@deprecated(
+    "TensorClass.extend()",
+    removal="0.17",
+    replacement="lazy_stack or torch.cat to build a new instance",
+)
+def _extend(self, tensordict: list[TensorDictBase] | TensorDictBase) -> None:
+    self._tensordict.extend(tensordict)
 
 
 def _from_tensordict_with_copy(tc, tensordict):
@@ -1666,8 +1687,7 @@ def _init_wrapper(
             lock = kwargs.pop("lock", None)
         if lock is None:
             lock = frozen
-        if not is_compiling():
-            # zip not supported by dynamo
+        if args:
             # Use __dataclass_fields__ but filter out ClassVar fields to preserve order
             expected_keys_list = (
                 field_names
@@ -1689,6 +1709,7 @@ def _init_wrapper(
                 if key in kwargs:
                     raise ValueError(f"The key {key} is already set in kwargs")
                 kwargs[key] = value
+        if not is_compiling():
             if (
                 can_init_tensors
                 and type(self) is cls
@@ -1750,11 +1771,6 @@ def _init_wrapper(
                 if lock:
                     td.lock_()
                 return
-        else:
-            if args:
-                raise RuntimeError(
-                    "dynamo doesn't support arguments when building a tensorclass, pass the keyword explicitly."
-                )
 
         # Use `is`/isinstance instead of `in (..., dataclasses.MISSING)`:
         # under torch.compile, Dynamo can't proxy `_MISSING_TYPE` for `==`
@@ -1891,9 +1907,15 @@ def _init_wrapper(
     return wrapper
 
 
-_cast_funcs = _KeyDependentDefaultDict(_identity)
-_cast_funcs[torch.Tensor] = torch.as_tensor
-_cast_funcs[np.ndarray] = np.asarray
+def _cast_func(cls: type) -> Callable:
+    """Returns the function that casts a value to the type annotation ``cls``."""
+    # Not a module-level dict: Dynamo guards on all the keys of a global dict
+    # read with a non-constant key, so a new type cast in eager would recompile.
+    if cls is torch.Tensor:
+        return torch.as_tensor
+    if cls is np.ndarray:
+        return np.asarray
+    return cls
 
 
 def _new_unsafe(cls, *args, **kwargs) -> T:
@@ -2234,7 +2256,7 @@ def _from_tensordict_public(
     cls,
     tensordict: TensorDictBase,
     non_tensordict: dict | None = None,
-    safe: bool = True,
+    safe: bool | None = None,
 ) -> Self:
     """Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
 
@@ -2249,8 +2271,9 @@ def _from_tensordict_public(
         tensordict (TensorDictBase): the tensordict that holds the tensor fields.
         non_tensordict (dict, optional): the values of the non-tensor fields. The
             fields that neither argument holds are set to ``None``.
-        safe (bool, optional): if ``True``, raise an error when ``tensordict`` is not
-            a :class:`~tensordict.TensorDictBase`. Defaults to ``True``.
+        safe (bool, optional): Deprecated in 0.15, to be removed in TensorDict 0.17. Whether to
+            raise an error if ``tensordict`` is not a :class:`~tensordict.TensorDictBase`.
+            Without it, such a tensordict raises an error.
 
     Examples:
         >>> import torch
@@ -2263,6 +2286,10 @@ def _from_tensordict_public(
         >>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
         'Pose'
     """
+    if safe is None:
+        safe = True
+    else:
+        warn_deprecated("TensorClass.from_tensordict(safe=...)", removal="0.17")
     # The tensorclass ops rebuild their results with _from_tensordict: their
     # nested entries are already tensorclasses.
     if cls._tensorclass_fields and isinstance(tensordict, TensorDict):
@@ -2698,6 +2725,12 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
             f"field. Its fields are {sorted(self.__expected_keys__)}."
         )
     if value is None:
+        # The getter reads the TensorDict first: drop the old value, as set()
+        # does. A TensorDict is checked with a dict lookup, which is much
+        # cheaper than keys().
+        td = self._tensordict
+        if key in (td._tensordict if type(td) is TensorDict else td.keys()):
+            td.del_(key)
         self._non_tensordict[key] = None
         return
     value, _ = _convert_mapping_for_field(key, value, type(self)._tensordict_fields)
@@ -2863,6 +2896,20 @@ def _update(
             ignore_lock=ignore_lock,
             is_leaf=is_leaf,
         )
+        # Drop the placeholders of the fields just written, as the TensorDict
+        # branch below does. The fields in the source's _non_tensordict are
+        # unset there, so only the other keys need a check.
+        self_non_tensordict = self._non_tensordict
+        if self_non_tensordict:
+            source_non_tensordict = input_dict_or_td.__dict__["_non_tensordict"]
+            maybe_written = [
+                key for key in self_non_tensordict if key not in source_non_tensordict
+            ]
+            if maybe_written:
+                keys = self._tensordict.keys()
+                for key in maybe_written:
+                    if key in keys:
+                        del self_non_tensordict[key]
         self._non_tensordict.update(non_tensordict)
         return self
 
@@ -2943,25 +2990,51 @@ def _update_at_(
     keys_to_update: Sequence[NestedKey] | None = None,
     non_blocking: bool = False,
 ):
+    # A source that update() accepts still goes to update(), which replaces the
+    # entries whatever the index, as writing it at the index could raise.
+    # Sources that update() rejects for their batch size are written at the index.
     if isinstance(input_dict_or_td, dict):
-        input_dict_or_td = type(self).from_dict(
-            input_dict_or_td, batch_size=self.batch_size
-        )
+        try:
+            input_dict_or_td = type(self).from_dict(
+                input_dict_or_td, batch_size=self.batch_size
+            )
+        except RuntimeError:
+            # write the dict at the index only if its values do not have the
+            # batch size of self
+            batch_size = self.batch_size
+            if not any(
+                isinstance(value, torch.Tensor)
+                and value.shape[: len(batch_size)] != batch_size
+                for value in input_dict_or_td.values()
+            ):
+                raise
 
     if is_tensorclass(input_dict_or_td):
         non_tensordict = {
             k: v for k, v in input_dict_or_td._non_tensordict.items() if v is not None
         }
-        self._tensordict.update(input_dict_or_td._tensordict)
-        self._non_tensordict.update(non_tensordict)
-        return self
+        source = input_dict_or_td._tensordict
+        try:
+            self._tensordict.update(source)
+        except RuntimeError:
+            # TensorDict.update checks the batch size before it changes anything
+            batch_size = self.batch_size
+            if (
+                not isinstance(self._tensordict, TensorDict)
+                or is_non_tensor(input_dict_or_td)
+                or batch_size[: source.batch_dims]
+                == source.batch_size[: len(batch_size)]
+            ):
+                raise
+            input_dict_or_td = source
+        else:
+            self._non_tensordict.update(non_tensordict)
+            return self
 
+    # LazyStackedTensorDict.update_at_ takes no keys_to_update
+    kwargs = {} if keys_to_update is None else {"keys_to_update": keys_to_update}
     self._tensordict.update_at_(
-        input_dict_or_td,
-        index=index,
-        clone=clone,
-        keys_to_update=keys_to_update,
-        non_blocking=non_blocking,
+        input_dict_or_td, index, clone=clone, non_blocking=non_blocking, **kwargs
     )
     return self
 
@@ -3376,15 +3449,13 @@ def _set(
                 if _fits_tensorclass(target_cls, value):
                     value = target_cls.from_tensordict(value)
                 return set_tensor(value=value)
-            elif value is not None and issubclass(
-                target_cls, tuple(tensordict_lib.base._ACCEPTED_CLASSES)
-            ):
+            elif value is not None and _is_accepted_class(target_cls):
                 try:
                     if not issubclass(value_type, target_cls):
                         if issubclass(target_cls, torch.Tensor):
                             # first convert to tensor to make sure that the dtype is preserved
                             value = torch.as_tensor(value)
-                        cast_val = _cast_funcs[target_cls](value)
+                        cast_val = _cast_func(target_cls)(value)
                     else:
                         cast_val = value
                 except TypeError:
@@ -3393,13 +3464,12 @@ def _set(
                     )
                 return set_tensor(value=cast_val)
             elif value is not None and target_cls is not _AnyType:
-                cast_val = _cast_funcs[target_cls](value)
+                cast_val = _cast_func(target_cls)(value)
                 return set_tensor(value=cast_val, non_tensor=True)
             elif target_cls is _AnyType and _is_castable(value_type):
                 return set_tensor()
             non_tensor = not (
-                isinstance(value, _ACCEPTED_CLASSES)
-                or _is_tensor_collection(value_type)
+                _is_accepted_class(value_type) or _is_tensor_collection(value_type)
             )
         elif (
             issubclass(value_type, torch.Tensor)
@@ -3510,7 +3580,7 @@ def _del_(self, key):
     if len(key) > 1:
         td = self.get(key[0])
         td.del_(key[1:])
-        return
+        return self
     if key[0] in self._tensordict.keys():
         self._tensordict.del_(key[0])
         # self.set(key[0], None)
@@ -3518,15 +3588,18 @@ def _del_(self, key):
         self._non_tensordict[key[0]] = None
     else:
         raise KeyError(f"Key {key} could not be found in tensorclass {self}.")
-    return
+    return self
 
 
 def _set_at_(
     self, key: NestedKey, value: Any, idx: IndexType, non_blocking: bool = False
 ):
-    if key in self._non_tensordict:
+    in_non_tensordict = key in self._non_tensordict
+    self._tensordict.set_at_(key, value, idx, non_blocking=non_blocking)
+    # Drop the non-tensor value only after the write succeeded
+    if in_non_tensordict:
         del self._non_tensordict[key]
-    return self._tensordict.set_at_(key, value, idx, non_blocking=non_blocking)
+    return self
 
 
 def _get(self, key: NestedKey, *args, **kwargs):
@@ -4087,7 +4160,7 @@ def _patch_tc(cls):
     cls.grad = property(_grad)
 
     cls._from_tensordict = classmethod(_from_tensordict)
-    cls.from_tensordict = _from_tensordict
+    cls.from_tensordict = _from_tensordict_public
     cls._new_unsafe = classmethod(_new_unsafe)
     cls._load_memmap = classmethod(_load_memmap)
     cls.from_dict = classmethod(_from_dict)
@@ -4297,10 +4370,10 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
         ... class Foo:
         ...     integer: int
 
-    The bracket form is usually the most readable when you stack several flags and it is the form
-    static type-checkers (mypy/pyright) understand via :meth:`~object.__class_getitem__`. The kwargs
-    form is convenient if the flag value is computed; the decorator form is best when migrating
-    plain ``@dataclass`` code.
+    The bracket form is usually the most readable when you stack several flags. Pyright understands
+    it via :meth:`~object.__class_getitem__`; mypy rejects it, so use the kwargs form in code checked
+    by mypy. The kwargs form is also convenient if the flag value is computed; the decorator form is
+    best when migrating plain ``@dataclass`` code.
 
     Several flags can be combined inside the brackets:
 
@@ -4370,9 +4443,10 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
         ...     y: float
 
     **Type-checking.** ``TensorClass[...]`` is implemented via :meth:`~object.__class_getitem__`,
-    so mypy and pyright resolve it to the (parametrized) class itself rather than to a generic
-    parameter. Annotated fields propagate as expected and editors offer attribute completion on
-    instances.
+    so pyright resolves it to the (parametrized) class itself rather than to a generic parameter.
+    Mypy does not evaluate ``__class_getitem__`` in a list of base classes and rejects the bracket
+    form; use ``class Foo(TensorClass, autocast=True)`` instead. Annotated fields propagate as
+    expected and editors offer attribute completion on instances.
 
     .. note:: ``TensorClass`` itself is *not* decorated as a tensorclass — the dataclass machinery
         only fires on subclasses. This is intentional: we cannot anticipate whether ``frozen`` will
@@ -4402,11 +4476,16 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
         return _TensorClassMeta.__getitem__(cls, item)
 
 
+# _TensorClassMeta does not pass the base class itself to tensorclass(), which
+# registers every subclass.
+_register_tensor_class(TensorClass)
+
+
 def _check_equal(a, b):
     # A util to check that two non-tensor data match
     #  We're replacing this by an identity match, not a value check (which will be faster and easier to handle).
     try:
-        if isinstance(a, _ACCEPTED_CLASSES) or isinstance(b, _ACCEPTED_CLASSES):
+        if _is_accepted_class(type(a)) or _is_accepted_class(type(b)):
             iseq = (a == b).all() and a.shape == b.shape
         elif isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
             iseq = (a == b).all() and a.shape == b.shape
@@ -4415,6 +4494,20 @@ def _check_equal(a, b):
     except Exception:
         iseq = False
     return iseq
+
+
+def _compares_by_element(non_tensor, other) -> bool:
+    # Whether a NonTensorDataBase is compared with `other` element by element,
+    # as two non-tensor stacks are
+    return (
+        isinstance(other, NonTensorStack)
+        and other.batch_size == non_tensor.batch_size
+        # the stack comparison needs at least one element
+        and non_tensor.batch_size.numel() > 0
+        # arrays and tensors are left out: they may hold one value per element
+        # (from_struct_array makes such data), which maybe_to_stack ignores
+        and not isinstance(non_tensor.data, (np.ndarray, torch.Tensor))
+    )
 
 
 class NonTensorDataBase(TensorClass):
@@ -4487,6 +4580,13 @@ class NonTensorDataBase(TensorClass):
                         bool(eqval),
                         device=self.device,
                     )
+                if _compares_by_element(self, other):
+                    try:
+                        return self.maybe_to_stack() == other
+                    except Exception:
+                        # values that cannot be compared (dicts holding
+                        # arrays, data frames) keep the empty result
+                        pass
                 # # Handle comparison with scalar values (like 0, 1, etc.)
                 # # For non-tensor data, we should return a boolean tensor
                 # if isinstance(other, (int, float, bool)) or (isinstance(other, torch.Tensor) and other.numel() == 1):
@@ -4519,6 +4619,13 @@ class NonTensorDataBase(TensorClass):
                         bool(neqval),
                         device=self.device,
                     )
+                if _compares_by_element(self, other):
+                    try:
+                        return self.maybe_to_stack() != other
+                    except Exception:
+                        # values that cannot be compared (dicts holding
+                        # arrays, data frames) keep the empty result
+                        pass
                 # # Handle comparison with scalar values (like 0, 1, etc.)
                 # # For non-tensor data, we should return a boolean tensor
                 # if isinstance(other, (int, float, bool)) or (isinstance(other, torch.Tensor) and other.numel() == 1):
@@ -4814,8 +4921,12 @@ class NonTensorDataBase(TensorClass):
             issubclass(t, (NonTensorData, NonTensorStack)) for t in types
         ):
             return NonTensorData._cat_non_tensor(*args, **(kwargs or {}))
-        if func not in _TD_PASS_THROUGH or not all(
-            issubclass(t, (Tensor, cls)) for t in types
+        # NonTensorData.where does not select elementwise, so torch.where is
+        # not passed through
+        if (
+            func not in _TD_PASS_THROUGH
+            or func is torch.where
+            or not all(issubclass(t, (Tensor, cls)) for t in types)
         ):
             from torch._ops import HigherOrderOperator
 
@@ -5052,8 +5163,11 @@ class NonTensorData(NonTensorDataBase):
         Unlike other tensorclass classes, :class:`NonTensorData` supports
         comparisons of two non-tensor data through :meth:`~.__eq__`, :meth:`~.__ne__`,
         :meth:`~.__xor__` or :meth:`~.__or__`. These operations return a tensor
-        of shape `batch_size`. For compatibility with `<a tensordict> == <float_number>`,
-        comparison with non-:class:`NonTensorData` will always return an empty
+        of shape `batch_size`. :meth:`~.__eq__` and :meth:`~.__ne__` also compare
+        with a :class:`~tensordict.NonTensorStack` of the same batch size, element
+        by element when their values can be compared, unless the data is an array
+        or a tensor. For compatibility with `<a tensordict> == <float_number>`,
+        comparison with other objects will always return an empty
         :class:`NonTensorData`.
 
         >>> a = NonTensorData(True)
@@ -5298,6 +5412,8 @@ class NonTensorData(NonTensorDataBase):
     def expand(self, *args, **kwargs) -> T:
         # tensordict_dims = self.batch_dims
         shape = _get_shape_from_args(*args, **kwargs)
+        if -1 in shape:
+            shape = _resolve_expand_shape(shape, self.batch_size)
 
         # Replicate self until we have the appropriate batch size
         out = self
@@ -6160,27 +6276,27 @@ _register_tensor_class(NonTensorStack)
 
 
 def _share_memory_nontensor(data, manager: Manager):
-    if isinstance(data, int):
-        return mp.Value(ctypes.c_int, data)
-    if isinstance(data, float):
-        return mp.Value(ctypes.c_double, data)
+    # bool is a subclass of int: check it first so that it stays a bool.
     if isinstance(data, bool):
         return mp.Value(ctypes.c_bool, data)
-    if isinstance(data, bytes):
-        return mp.Value(ctypes.c_byte, data)
+    if isinstance(data, int):
+        return mp.Value(ctypes.c_longlong, data)
+    if isinstance(data, float):
+        return mp.Value(ctypes.c_double, data)
     if isinstance(data, dict):
         result = manager.dict()
         result.update(data)
         return result
     if isinstance(data, str):
-        result = mp.Array(ctypes.c_char, 100)
         data = data.encode("utf-8")
+        result = mp.Array(ctypes.c_char, max(100, len(data)))
         result[: len(data)] = data
         return result
     if isinstance(data, list):
         result = manager.list()
         result.extend(data)
         return result
+    # bytes also end up here: a c_char array would be read back as a str.
     # In all other cases, we just return the tensor. It's ok because the content
     # will be passed to the remote process using regular serialization. We will
     # lock the update in _update_shared_nontensor though.
@@ -6212,6 +6328,10 @@ def _update_shared_nontensor(nontensor, val):
         nontensor.clear()
         nontensor.update(val)
     elif isinstance(nontensor, multiprocessing.sharedctypes.Synchronized):
+        if isinstance(nontensor.get_obj(), ctypes.c_bool):
+            # c_bool stores the truth value of any object: take only what an
+            # int slot takes
+            val = operator.index(val)
         nontensor.value = val
     elif isinstance(nontensor, multiprocessing.sharedctypes.SynchronizedArray):
         val = val.encode("utf-8")

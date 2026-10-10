@@ -30,10 +30,12 @@ permissions:
 jobs:
   collect-status:
     runs-on: ubuntu-latest
-    # Every job that pushes to gh-pages joins this group, so they push one at a
-    # time. With `queue: max`, later jobs wait instead of being cancelled.
+    # One collection at a time, since each one rewrites
+    # nightly-status/history.json. With `queue: max`, later ones wait instead
+    # of being cancelled. Other jobs that push to gh-pages write other folders;
+    # if one of them pushes first, the deploy is retried below.
     concurrency:
-      group: gh-pages
+      group: gh-pages-nightly-status
       queue: max
     outputs:
       should-deploy: ${{ steps.resolve-deploy.outputs.deploy }}
@@ -111,7 +113,21 @@ jobs:
           cp .github/nightly-dashboard/index.html nightly-status/
 
       - name: Deploy nightly-status to GitHub Pages
+        id: deploy
         if: steps.resolve-deploy.outputs.deploy == 'true'
+        # The push fails if another job pushed to gh-pages after this action
+        # cloned it. The action does not retry, so the next step does.
+        continue-on-error: true
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./nightly-status
+          destination_dir: nightly-status
+          keep_files: true
+          commit_message: 'Update nightly status dashboard'
+
+      - name: Retry the deploy of nightly-status
+        if: steps.deploy.outcome == 'failure'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

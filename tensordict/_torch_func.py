@@ -84,6 +84,11 @@ def _flatten(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
     return td.flatten(*args, **kwargs)
 
 
+@implements_for_td(torch.reshape)
+def _reshape(td: T, shape: Sequence[int]) -> T:
+    return td.reshape(shape)
+
+
 @implements_for_td(torch.flip)
 def _flip(td: T, dims: Sequence[int]) -> T:
     return td.flip(dims)
@@ -119,6 +124,17 @@ def _narrow(td: T, dim: int, start: int, length: int) -> T:
 @implements_for_td(torch.tile)
 def _tile(td: T, dims: Sequence[int]) -> T:
     return td.tile(dims)
+
+
+@implements_for_td(torch.repeat_interleave)
+def _repeat_interleave(
+    td: T,
+    repeats: Tensor | int,
+    dim: int | None = None,
+    *,
+    output_size: int | None = None,
+) -> T:
+    return td.repeat_interleave(repeats, dim, output_size=output_size)
 
 
 @implements_for_td(torch.broadcast_to)
@@ -184,6 +200,10 @@ def _gather(
             f"Cannot gather tensordict with shape {input.shape} along dim {dim_orig}."
         )
 
+    # as torch.gather does, keep the size of the index on the batch dims where it
+    # is smaller than the input; every leaf starts with the batch size
+    target_batch_shape = list(map(min, index.shape, input.batch_size))
+
     def _gather_tensor(tensor, dest_container=None, dest_key=None):
         if dest_container is not None:
             dest = dest_container._get_str(dest_key, default=NO_DEFAULT)
@@ -193,6 +213,7 @@ def _gather(
         while index_expand.ndim < tensor.ndim:
             index_expand = index_expand.unsqueeze(-1)
         target_shape = list(tensor.shape)
+        target_shape[: len(target_batch_shape)] = target_batch_shape
         target_shape[dim] = index_expand.shape[dim]
         index_expand = index_expand.expand(target_shape)
         out = torch.gather(tensor, dim, index_expand, out=dest)
@@ -201,9 +222,8 @@ def _gather(
     def _gather_non_tensor_stack(stack):
         # A non-tensor stack has no tensor leaves to gather. Gather the position of
         # each entry instead, then select the entries at those positions, which
-        # copies the values themselves. _gather_tensor expands the index to the
-        # leaf shape on every non-gather dim; only expand the trailing dims the
-        # index lacks, so that a bare stack follows torch.gather.
+        # copies the values themselves. Only expand the trailing dims the index
+        # lacks, so that a bare stack follows torch.gather.
         positions = stack._positions().to(index.device)
         index_expand = index
         while index_expand.ndim < positions.ndim:
@@ -289,11 +309,6 @@ def _full_like(td: T, fill_value: float, *args, **kwargs: Any) -> T:
         propagate_lock=True,
         device=device_nd,
     )
-    if len(kwargs):
-        raise RuntimeError(
-            f"keyword arguments {list(kwargs.keys())} are not "
-            f"supported with full_like with TensorDict"
-        )
     return td_clone
 
 
@@ -314,11 +329,6 @@ def _zeros_like(td: T, *args, **kwargs: Any) -> T:
         propagate_lock=True,
         device=device_nd,
     )
-    if len(kwargs):
-        raise RuntimeError(
-            f"keyword arguments {list(kwargs.keys())} are not "
-            f"supported with zeros_like with TensorDict"
-        )
     return td_clone
 
 
@@ -339,11 +349,6 @@ def _ones_like(td: T, *args, **kwargs: Any) -> T:
         propagate_lock=True,
         device=device_nd,
     )
-    if len(kwargs):
-        raise RuntimeError(
-            f"keyword arguments {list(kwargs.keys())} are not "
-            f"supported with ones_like with TensorDict"
-        )
     return td_clone
 
 
@@ -364,11 +369,6 @@ def _rand_like(td: T, *args, **kwargs: Any) -> T:
         propagate_lock=True,
         device=device_nd,
     )
-    if len(kwargs):
-        raise RuntimeError(
-            f"keyword arguments {list(kwargs.keys())} are not "
-            f"supported with rand_like with TensorDict"
-        )
     return td_clone
 
 
@@ -389,11 +389,6 @@ def _randn_like(td: T, *args, **kwargs: Any) -> T:
         propagate_lock=True,
         device=device_nd,
     )
-    if len(kwargs):
-        raise RuntimeError(
-            f"keyword arguments {list(kwargs.keys())} are not "
-            f"supported with randn_like with TensorDict"
-        )
     return td_clone
 
 
@@ -414,11 +409,6 @@ def _empty_like(td: T, *args, **kwargs) -> T:
         propagate_lock=True,
         device=device_nd,
     )
-    if len(kwargs):
-        raise RuntimeError(
-            f"keyword arguments {list(kwargs.keys())} are not "
-            f"supported with empty_like with TensorDict"
-        )
     return td_clone
 
 
@@ -794,7 +784,7 @@ def _stack(
                         )
                 raise
 
-            if all(_tensordict._lazy for _tensordict in list_of_tensordicts):
+            if all(isinstance(td, LazyStackedTensorDict) for td in list_of_tensordicts):
                 # Let's try to see if all tensors have the same shape
                 # If so, we can assume that we can densly stack the sub-tds
                 leaves = [tree_leaves(td) for td in list_of_tensordicts]
@@ -961,6 +951,34 @@ def _split(
     td: TensorDict, split_size_or_sections: int | list[int], dim: int = 0
 ) -> list[TensorDictBase]:
     return td.split(split_size_or_sections, dim)
+
+
+@implements_for_td(torch.tensor_split)
+def _tensor_split(
+    td: T,
+    indices_or_sections: int | Sequence[int] | Tensor | None = None,
+    /,
+    dim: int = 0,
+    *,
+    sections: int | None = None,
+    indices: Sequence[int] | None = None,
+    tensor_indices_or_sections: Tensor | None = None,
+) -> tuple[T, ...]:
+    # torch.tensor_split names this argument after its type: sections (int),
+    # indices (sequence of ints) or tensor_indices_or_sections (tensor)
+    if indices_or_sections is None:
+        if sections is not None:
+            indices_or_sections = sections
+        elif indices is not None:
+            indices_or_sections = indices
+        else:
+            indices_or_sections = tensor_indices_or_sections
+    return td.tensor_split(indices_or_sections, dim)
+
+
+@implements_for_td(torch.chunk)
+def _chunk(td: T, chunks: int, dim: int = 0) -> tuple[T, ...]:
+    return td.chunk(chunks, dim)
 
 
 @implements_for_td(torch.where)

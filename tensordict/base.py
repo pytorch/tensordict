@@ -61,6 +61,7 @@ from tensordict.utils import (
     _CloudpickleWrapper,
     _convert_list_to_stack,
     _erase_cache_first,
+    _foreach,
     _GENERIC_NESTED_ERR,
     _get_item,
     _index_preserve_data_ptr,
@@ -87,6 +88,7 @@ from tensordict.utils import (
     capture_non_tensor_stack,
     DeviceType,
     expand_as_right,
+    ftdim,
     IndexType,
     is_batchedtensor,
     is_non_tensor,
@@ -299,8 +301,56 @@ class _RecordDeviceTransfer:
 _device_recorder = _RecordDeviceTransfer()
 
 
+def _holds_its_tensors(td: TensorDictBase) -> bool:
+    """Returns whether ``td`` reads its entries from a ``TensorDict``, which holds its tensors.
+
+    ``TensorDictParams``, ``TypedTensorDict`` and tensorclasses read through the
+    container that they wrap. h5 files, stores, lazy stacks, sub-tensordicts
+    and lazy views build their entries again on each read.
+    """
+    from tensordict._td import TensorDict
+
+    while not isinstance(td, TensorDict):
+        from tensordict.nn.params import TensorDictParams
+        from tensordict.typedtensordict import TypedTensorDict
+
+        if isinstance(td, TensorDictParams):
+            td = td._param_td
+        elif isinstance(td, TypedTensorDict):
+            td = td._source
+        elif _is_tensorclass(type(td)):
+            td = td._tensordict
+        else:
+            return False
+    return True
+
+
+def _holds_leaves_of(td: TensorDictBase, other: TensorDictBase) -> bool:
+    """Returns whether each leaf of ``other`` is the tensor that ``td`` holds under the same key.
+
+    Only containers that hold their tensors are read (see ``_holds_its_tensors``).
+    For the others, this returns ``False`` without reading any entry.
+    """
+    if not _holds_its_tensors(td):
+        # A NonTensorStack holds no tensor for the op to write into
+        return is_non_tensor(td)
+    for key, value in other.items():
+        held = td._get_str(key, None)
+        if value is held:
+            continue
+        if not (
+            _is_tensor_collection(type(value))
+            and _is_tensor_collection(type(held))
+            and _holds_leaves_of(held, value)
+        ):
+            return False
+    return True
+
+
 def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Callable]:
     """Ensures that elementwise ops are broadcast when an nd tensor is passed."""
+    # add_, mul_, ... are in-place; __eq__, __lt__, ... also end with "_".
+    inplace = op.endswith("_") and not op.endswith("__")
 
     def wrap_func(func):
         @wraps(func)
@@ -335,7 +385,7 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     other = other.expand(shape)
                 others_map.append(other)
             if any(isinstance(other, torch.Tensor) for other in others_map):
-                return self_expand._fast_apply(
+                result = self_expand._fast_apply(
                     lambda x: getattr(x, op)(
                         *[
                             expand_as_right(other, x) if other is not None else None
@@ -345,6 +395,12 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                         **kwargs,
                     )
                 )
+                # Like torch, an in-place op returns self once it has written into
+                # the tensors that self holds. Containers that hand out copies of
+                # their storage (h5 files, stores) still return the new tensordict.
+                if inplace and self_expand is self and _holds_leaves_of(self, result):
+                    return self
+                return result
             return getattr(self_expand, op)(*others_map, *args, **kwargs)
 
         return new_func
@@ -586,6 +642,19 @@ def _register_tensor_class(cls):
     _ACCEPTED_CLASSES = set(_ACCEPTED_CLASSES)
     _ACCEPTED_CLASSES.add(cls)
     _ACCEPTED_CLASSES = tuple(_ACCEPTED_CLASSES)
+
+
+def _is_accepted_class(cls: type) -> bool:
+    """Returns True if ``cls`` is a subclass of one of the ``_ACCEPTED_CLASSES``."""
+    if is_compiling():
+        # Dynamo guards on the length of _ACCEPTED_CLASSES, which
+        # _register_tensor_class rebinds each time a tensorclass is defined,
+        # so the frame would recompile. Every registered class is a subclass
+        # of one of these three, or a tensorclass.
+        return issubclass(
+            cls, (Tensor, TensorDictBase, ftdim.Tensor)
+        ) or _is_tensorclass(cls)
+    return issubclass(cls, _ACCEPTED_CLASSES)
 
 
 _TENSOR_COLLECTION_MEMO = {}
@@ -863,6 +932,49 @@ def _value_at_new_dim(td: TensorDictBase, value):
     return value.expand(batch_size)[0]
 
 
+def _flatten_nested_dicts(source: dict) -> dict:
+    """Return ``source`` with the entries of its nested dicts under nested keys."""
+    result = {}
+    for key, value in source.items():
+        if isinstance(value, dict):
+            for subkey, subvalue in _flatten_nested_dicts(value).items():
+                result[(key, subkey)] = subvalue
+        else:
+            result[key] = value
+    return result
+
+
+def _select_entry(key: tuple, value: Any, keys_to_update: list[tuple]) -> Any:
+    """Return the part of the entry ``key: value`` that ``keys_to_update`` selects, or ``None``.
+
+    As in ``update_``, the leaves to update are those whose key starts with one
+    of ``keys_to_update``. The entry is kept whole if one of them is a prefix of
+    ``key``, and a tensor collection keeps only the leaves to update.
+    """
+    subkeys = []
+    for key_to_update in keys_to_update:
+        if key[: len(key_to_update)] == key_to_update:
+            return value
+        if key_to_update[: len(key)] == key:
+            subkeys.append(key_to_update[len(key) :])
+    if not subkeys or not _is_tensor_collection(type(value)):
+        return None
+    leaves = [
+        leaf
+        for leaf in value.keys(True, True, is_leaf=_is_leaf_nontensor)
+        if any(
+            _unravel_key_to_tuple(leaf)[: len(subkey)] == subkey for subkey in subkeys
+        )
+    ]
+    if not leaves:
+        return None
+    try:
+        return value.select(*leaves)
+    except NotImplementedError:
+        # PersistentTensorDict and the stores have no select
+        return value.to_tensordict().select(*leaves)
+
+
 class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     """TensorDictBase is an abstract parent class for TensorDicts, a torch.Tensor data container."""
 
@@ -920,7 +1032,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             string = "..."
         return f"{type(self).__name__}(\n{string})"
 
-    def __iter__(self) -> Iterator:
+    def __iter__(self) -> Iterator[TensorDictBase]:
         """Iterates over the first batch dimension of the tensordict.
 
         Raises:
@@ -959,6 +1071,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         raise RuntimeError(
             "key must be a NestedKey (a str or a possibly tuple of str)."
         )
+
+    @overload
+    def __getitem__(self, index: str | tuple[str, ...]) -> Any: ...
+
+    @overload
+    def __getitem__(self, index: IndexType) -> Self: ...
 
     def __getitem__(self, index: IndexType) -> Self | Tensor | TensorCollection | Any:
         """Indexes all tensors according to the provided index.
@@ -1054,6 +1172,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     non_blocking=False,
                 )
                 return
+
+        if is_tensorclass(value) and not is_non_tensor(value):
+            # write the fields key by key, as a tensorclass __setitem__ does;
+            # NonTensorData keeps the leaf path (its _tensordict is empty)
+            value = value._tensordict
 
         # we must use any and because using Ellipsis in index can break with some indices
         if index is Ellipsis or (
@@ -1386,7 +1509,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 val.grad = None
             return self
         for val in self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
-            val.grad.zero_()
+            grad = val.grad
+            if grad is not None:
+                grad.zero_()
         return self
 
     @_cache_while_locked  # noqa
@@ -3330,8 +3455,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 if len(other_val) != len(vals):
                     vals = dict(zip(keys, vals))
                     vals = [vals[k] for k in new_keys]
-                copy_fn = _foreach_copy_compiled if is_compiling() else _foreach_copy_
-                copy_fn(vals, other_val, non_blocking=non_blocking)
+                # _foreach_copy_compiled cannot run under a torch.func transform
+                # (vmap), _foreach can. Same check as in _foreach, which explains it.
+                if (
+                    is_compiling()
+                    and torch._C._functorch.get_dynamic_layer_stack_depth() == 0
+                ):
+                    _foreach_copy_compiled(vals, other_val, non_blocking=non_blocking)
+                else:
+                    _foreach("copy_", vals, other_val, non_blocking=non_blocking)
                 return self
             named = True
 
@@ -3419,15 +3551,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         if keys_to_update is not None:
             if len(keys_to_update) == 0:
                 return self
-            keys_to_update = unravel_key_list(keys_to_update)
+            keys_to_update = [
+                _unravel_key_to_tuple(key) for key in unravel_key_list(keys_to_update)
+            ]
+        if isinstance(input_dict_or_td, dict):
+            input_dict_or_td = _flatten_nested_dicts(input_dict_or_td)
         for key, value in input_dict_or_td.items():
             firstkey, *nextkeys = _unravel_key_to_tuple(key)
-            if keys_to_update and not any(
-                firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
-                for ktu in keys_to_update
-            ):
-                continue
-            if not isinstance(value, _ACCEPTED_CLASSES):
+            if keys_to_update:
+                value = _select_entry((firstkey, *nextkeys), value, keys_to_update)
+                if value is None:
+                    continue
+            if not _is_accepted_class(type(value)):
                 raise TypeError(
                     f"Expected value to be one of types {_ACCEPTED_CLASSES} "
                     f"but got {type(value)}"
@@ -3625,6 +3760,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def is_empty(self) -> bool:
         """Checks if the tensordict contains any leaf."""
+        if is_compiling():
+            # Dynamo cannot close a key generator that is left before its end.
+            return not list(self.keys(True, True))
         for _ in self.keys(True, True):
             return False
         return True
@@ -5530,7 +5668,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         """
         keys, vals = self._items_list(True, True, collapse=True)
-        vals = torch._foreach_norm(vals, dtype=dtype)
+        vals = _foreach("norm", vals, dtype=dtype)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -5565,7 +5703,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             foreach_vals = dict(
                 _zip_strict(
                     foreach_vals.keys(),
-                    torch._foreach_add(tuple(foreach_vals.values()), 0),
+                    _foreach("add", tuple(foreach_vals.values()), 0),
                 )
             )
         if iter_vals:
@@ -5720,7 +5858,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 value, non_blocking=_device_recorder.marked or non_blocking
             )
             is_tc = True
-        elif not issubclass(cls, _ACCEPTED_CLASSES):
+        elif not _is_accepted_class(cls):
             # If cls is not a tensor
             try:
                 value = self._convert_to_tensor(value)
@@ -5787,7 +5925,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             value = self._convert_to_tensordict(
                 value, non_blocking=_device_recorder.marked or non_blocking
             )
-        elif not issubclass(cls, _ACCEPTED_CLASSES):
+        elif not _is_accepted_class(cls):
             # If cls is not a tensor
             try:
                 value = self._convert_to_tensor(value)
@@ -5826,7 +5964,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 value, non_blocking=_device_recorder.marked or non_blocking
             )
             is_tc = True
-        elif not issubclass(cls, _ACCEPTED_CLASSES):
+        elif not _is_accepted_class(cls):
             # If cls is not a tensor
             try:
                 value = self._convert_to_tensor(value)
@@ -5886,7 +6024,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             value = self._convert_to_tensordict(
                 value, non_blocking=_device_recorder.marked or non_blocking
             )
-        elif not issubclass(cls, _ACCEPTED_CLASSES):
+        elif not _is_accepted_class(cls):
             # If cls is not a tensor
             try:
                 value = self._convert_to_tensor(value)

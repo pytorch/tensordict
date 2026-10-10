@@ -19,7 +19,7 @@ from typing import Any, Callable, Literal, Sequence, Tuple, Type, TYPE_CHECKING
 
 import torch
 from tensordict._deprecation import deprecated
-from tensordict._indexing import _as_tuple, _getitem_batch_size
+from tensordict._indexing import _as_tuple, _getitem_batch_size, convert_ellipsis_to_idx
 from tensordict._td import (
     _TensorDictKeysView,
     _unravel_key_to_tuple,
@@ -28,7 +28,9 @@ from tensordict._td import (
     TensorDict,
 )
 from tensordict.base import (
+    _is_leaf_nontensor,
     _register_tensor_class,
+    _UNSET,
     is_tensor_collection,
     T,
     TensorDictBase,
@@ -36,6 +38,7 @@ from tensordict.base import (
 from tensordict.utils import (
     _as_context_manager,
     _erase_cache_first,
+    _GENERIC_NESTED_ERR,
     _is_tensorclass,
     _KEY_ERROR,
     _lock_blocked,
@@ -245,6 +248,9 @@ class TensorDictStore(TensorDictBase):
     """
 
     _td_dim_names = None
+    # Set on the shallow copies that _clone(recurse=False) returns: they share
+    # the data and the metadata keys of the store, but not its batch size.
+    _is_shallow_copy = False
 
     def __init__(
         self,
@@ -460,12 +466,17 @@ class TensorDictStore(TensorDictBase):
         if self._keys_cache[0] is not None:
             self._keys_cache[0].add(key_path)
 
-    async def _aset_non_tensor(self, key_path: str, value: Any):
-        """Store a non-tensor value in Redis."""
+    async def _aset_non_tensor(self, key_path: str, value: Any, array: bool = False):
+        """Store a non-tensor value in Redis.
+
+        With ``array=True``, *value* is the list of the elements along dim 0,
+        stored as a ``json_array`` as indexed writes store it. A value that
+        JSON cannot encode is pickled either way.
+        """
         # Try JSON first, fall back to pickle
         try:
             serialized = json.dumps(value)
-            encoding = "json"
+            encoding = "json_array" if array else "json"
         except (TypeError, ValueError):
             serialized = pickle.dumps(value)
             encoding = "pickle"
@@ -1283,13 +1294,7 @@ class TensorDictStore(TensorDictBase):
 
     @batch_size.setter
     def batch_size(self, value):
-        old = self._batch_size
-        try:
-            self._batch_size = torch.Size(value)
-            self._check_batch_size(self._batch_size)
-            self._run_sync(self._apersist_metadata())
-        except ValueError:
-            self._batch_size = old
+        self._batch_size_setter(torch.Size(value))
 
     @property
     def device(self) -> torch.device | None:
@@ -1547,6 +1552,23 @@ class TensorDictStore(TensorDictBase):
             inplace = has_key
         return inplace
 
+    def _write_non_tensor(self, key_path: str, value: Any) -> None:
+        """Write a ``NonTensorData`` or ``NonTensorStack`` value."""
+        from tensordict.tensorclass import NonTensorData, NonTensorStack
+
+        if isinstance(value, NonTensorData):
+            self._run_sync(self._aset_non_tensor(key_path, value.data))
+            return
+        # A stack along a 1-D batch holds one value per element: store them as
+        # indexed writes do, so that indexed reads follow the index. Other
+        # stacks stay one blob, as json_array entries are read as 1-D stacks.
+        array = (
+            isinstance(value, NonTensorStack)
+            and self.batch_dims == 1
+            and value.batch_size == self.batch_size
+        )
+        self._run_sync(self._aset_non_tensor(key_path, value.tolist(), array=array))
+
     def _set_str(
         self,
         key: str,
@@ -1567,13 +1589,7 @@ class TensorDictStore(TensorDictBase):
         key_path = self._full_key_path(key)
 
         if is_non_tensor(value):
-            from tensordict.tensorclass import NonTensorData
-
-            if isinstance(value, NonTensorData):
-                raw_value = value.data
-            else:
-                raw_value = value.tolist()
-            self._run_sync(self._aset_non_tensor(key_path, raw_value))
+            self._write_non_tensor(key_path, value)
             return self
 
         if is_tensor_collection(value):
@@ -1629,12 +1645,7 @@ class TensorDictStore(TensorDictBase):
         if isinstance(value, torch.Tensor):
             self._run_sync(self._aset_tensor(key_path, value))
         elif is_non_tensor(value):
-            from tensordict.tensorclass import NonTensorData
-
-            raw_value = (
-                value.data if isinstance(value, NonTensorData) else value.tolist()
-            )
-            self._run_sync(self._aset_non_tensor(key_path, raw_value))
+            self._write_non_tensor(key_path, value)
         elif is_tensor_collection(value):
             nested_prefix = self._full_key_path(_KEY_SEP.join(key))
             nested = TensorDictStore._new_nested(
@@ -1649,6 +1660,26 @@ class TensorDictStore(TensorDictBase):
 
     def _set_at_str(self, key, value, idx, *, validated, non_blocking):
         key_path = self._full_key_path(key)
+        nested = False
+        if is_tensor_collection(value) and not is_non_tensor(value):
+            all_keys = self._get_all_keys()
+            nested = any(k.startswith(key_path + _KEY_SEP) for k in all_keys)
+        if nested:
+            # The store holds a tensordict at key: write each leaf of value under
+            # its full key, as store[key][idx] = value does. That would create
+            # the leaves that the store lacks, so check first that it has them.
+            for subkey in value.keys(True, True, is_leaf=_is_leaf_nontensor):
+                subkey = _unravel_key_to_tuple(subkey)
+                if _KEY_SEP.join((key_path, *subkey)) not in all_keys:
+                    raise KeyError(
+                        f"key {(key, *subkey)} not found in {type(self).__name__}"
+                    )
+            if isinstance(idx, tuple) and any(i is Ellipsis for i in idx):
+                # an Ellipsis stands for the batch dims, as on a TensorDict;
+                # store[key][idx] = value would read it on the dims of each leaf
+                idx = convert_ellipsis_to_idx(idx, self.batch_size)
+            TensorDictStore._new_nested(parent=self, key_prefix=key_path)[idx] = value
+            return self
         if not isinstance(value, torch.Tensor) and not self._is_tensor_entry(key_path):
             # Non-tensor indexed write: RMW on the JSON array
             self._run_sync(self._aset_non_tensor_at(key_path, value, idx))
@@ -1710,6 +1741,28 @@ class TensorDictStore(TensorDictBase):
         self._nested_tensordicts.pop(cache_key, None)
 
         return self
+
+    def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
+        key_tuple = _unravel_key_to_tuple(key)
+        if not key_tuple:
+            raise KeyError(_GENERIC_NESTED_ERR.format(key))
+        out = self.get(key_tuple, _UNSET)
+        if out is _UNSET:
+            if default is NO_DEFAULT:
+                raise KeyError(
+                    _KEY_ERROR.format(
+                        key_tuple[0] if len(key_tuple) == 1 else key_tuple,
+                        type(self).__name__,
+                        sorted(self.keys(include_nested=len(key_tuple) > 1), key=str),
+                    )
+                )
+            return default
+        if isinstance(out, TensorDictStore):
+            # A nested entry is a view that reads from the store, and del_
+            # deletes its data: return a copy of it.
+            out = out.to_tensordict()
+        self.del_(key_tuple)
+        return out
 
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
@@ -2288,10 +2341,12 @@ class TensorDictStore(TensorDictBase):
             return new_td
         else:
             # Shallow clone: same Redis data, new Python wrapper
-            return TensorDictStore._new_nested(
+            out = TensorDictStore._new_nested(
                 parent=self,
                 key_prefix=self._prefix,
             )
+            out._is_shallow_copy = True
+            return out
 
     # ---- Misc required overrides ----
 
@@ -2308,12 +2363,41 @@ class TensorDictStore(TensorDictBase):
             raise KeyError(f"popitem(): {type(self).__name__} is empty")
         key = keys_list[-1]
         value = self.get(key)
+        if isinstance(value, TensorDictStore):
+            # A nested entry is a view that reads from the store, and del_
+            # deletes its data: return a copy of it.
+            value = value.to_tensordict()
         self.del_(key)
         return key, value
 
+    def _check_new_batch_size(self, new_size: torch.Size) -> None:
+        # Check the stored shapes of the tensors instead of fetching them. A
+        # non-tensor value stored once fits any batch size; one written per
+        # element holds a value per element of the first batch dim.
+        prefix = self._prefix + _KEY_SEP if self._prefix else ""
+        key_paths = [k for k in self._get_all_keys() if k.startswith(prefix)]
+        non_tensor = {}
+        shapes = self._run_sync(
+            self._aget_metadata_batch(key_paths, non_tensor=non_tensor)
+        )
+        for key_path, meta in non_tensor.items():
+            if meta.get("encoding") == "json_array":
+                value = self._run_sync(self._aget_tensor(key_path))
+                shapes[key_path] = (value.shape, None)
+        for key_path, (shape, _) in shapes.items():
+            if torch.Size(shape[: len(new_size)]) != new_size:
+                key = unravel_key(tuple(key_path[len(prefix) :].split(_KEY_SEP)))
+                raise RuntimeError(
+                    f"the entry {key} has shape {torch.Size(shape)} which "
+                    f"is incompatible with the batch-size {new_size}."
+                )
+
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._batch_size = new_size
-        self._run_sync(self._apersist_metadata())
+        # Nested views and shallow copies share the metadata keys of the store:
+        # only the store's own handle persists its batch size.
+        if not self._prefix and not self._is_shallow_copy:
+            self._run_sync(self._apersist_metadata())
 
     def zero_(self) -> Self:
         for key in self.keys():
@@ -2400,6 +2484,7 @@ class TensorDictStore(TensorDictBase):
             "_td_dim_names": self._td_dim_names,
             "_cache_metadata": self._cache_metadata,
             "_tensorclass_cls": self._tensorclass_cls,
+            "_is_shallow_copy": self._is_shallow_copy,
         }
         return state
 
@@ -2419,6 +2504,7 @@ class TensorDictStore(TensorDictBase):
         self._redis_kwargs = state["_redis_kwargs"]
         self._td_dim_names = state["_td_dim_names"]
         self._tensorclass_cls = state.get("_tensorclass_cls")
+        self._is_shallow_copy = state.get("_is_shallow_copy", False)
 
         self._locked_tensordicts = []
         self._lock_id = set()
@@ -2582,9 +2668,21 @@ class TensorDictStore(TensorDictBase):
         existsok,
         robust_key,
     ):
-        raise RuntimeError(
-            f"Cannot call memmap on a {type(self).__name__} in-place. "
-            "Call `to_tensordict()` first."
+        if inplace:
+            raise RuntimeError(
+                f"Cannot call memmap on a {type(self).__name__} in-place. "
+                "Call `to_tensordict()` first."
+            )
+        return self.to_tensordict()._memmap_(
+            prefix=prefix,
+            copy_existing=copy_existing,
+            executor=executor,
+            futures=futures,
+            inplace=False,
+            like=like,
+            share_non_tensor=share_non_tensor,
+            existsok=existsok,
+            robust_key=robust_key,
         )
 
     def make_memmap(self, key, shape, *, dtype=None, robust_key=True):

@@ -29,6 +29,7 @@ import torch
 from _utils_internal import is_npu_available
 from functorch import make_functional_with_buffers as make_functional_functorch
 from tensordict import (
+    is_leaf_nontensor,
     is_tensor_collection,
     NonTensorData,
     NonTensorStack,
@@ -53,6 +54,7 @@ from tensordict.nn.distributions import (
     Delta,
     NormalParamExtractor,
     OneHotCategorical,
+    TruncatedNormal,
 )
 from tensordict.nn.distributions.composite import CompositeDistribution
 from tensordict.nn.ensemble import EnsembleModule
@@ -2839,6 +2841,42 @@ class TestProbabilisticTensorDictModule:
         assert record[0].filename == __file__
         assert value == getattr(truncated_normal, f"_{name}")
 
+    def test_truncated_normal_support(self):
+        a, b = torch.tensor([8.0]), torch.tensor([12.0])
+        dist = TruncatedNormal(
+            torch.tensor([10.0]), torch.tensor([2.0]), a, b, validate_args=True
+        )
+        assert torch.equal(dist.support.lower_bound, a)
+        assert torch.equal(dist.support.upper_bound, b)
+        sample = dist.rsample((100,))
+        assert dist.support.check(sample).all()
+        # log_prob and cdf check the value, not the standardised value,
+        # against the support, and still accept Python numbers
+        dist.log_prob(sample)
+        dist.cdf(sample)
+        torch.testing.assert_close(
+            dist.log_prob(11.0), dist.log_prob(torch.tensor([11.0]))
+        )
+        torch.testing.assert_close(dist.cdf(11.0), dist.cdf(torch.tensor([11.0])))
+        with pytest.raises(ValueError, match="to be within the support"):
+            dist.log_prob(torch.tensor([12.5]))
+        with pytest.raises(ValueError, match="to be within the support"):
+            dist.cdf(7.5)
+
+    def test_truncated_normal_number_args(self):
+        dist = TruncatedNormal(0.0, 2.0, -1.0, 1.0)
+        ref = TruncatedNormal(
+            torch.tensor(0.0), torch.tensor(2.0), torch.tensor(-1.0), torch.tensor(1.0)
+        )
+        assert dist.batch_shape == ref.batch_shape == torch.Size([])
+        for attr in ("scale", "mean", "variance", "entropy"):
+            torch.testing.assert_close(getattr(dist, attr), getattr(ref, attr))
+        value = torch.tensor(0.5)
+        torch.testing.assert_close(dist.log_prob(value), ref.log_prob(value))
+        assert TruncatedNormal(torch.zeros(3), 2.0, -1.0, 1.0).batch_shape == (3,)
+        # a Number scale is clamped as a tensor scale is
+        assert TruncatedNormal(0.0, 0.0, -1.0, 1.0).scale == TruncatedNormal.eps
+
     @set_composite_lp_aggregate(False)
     @pytest.mark.parametrize("inplace", [True, False, None])
     @pytest.mark.parametrize("module_inplace", [True, False])
@@ -3218,6 +3256,45 @@ class TestProbabilisticTensorDictModule:
         sample = module(td)["sample"]
         assert torch.equal(torch.get_rng_state(), state_before)
         assert torch.equal(sample, td["loc"])
+
+    @pytest.mark.parametrize("param", ["logits", "probs"])
+    def test_onehot_categorical_rsample(self, param):
+        torch.manual_seed(0)
+        logits = torch.randn(3, 4, requires_grad=True)
+        if param == "logits":
+            dist = OneHotCategorical(logits=logits)
+        else:
+            dist = OneHotCategorical(probs=logits.softmax(-1))
+        assert dist.rsample().shape == (3, 4)
+        sample = dist.rsample((2,))
+        assert sample.shape == (2, 3, 4)
+        assert ((sample == 0) | (sample == 1)).all()
+        assert (sample.sum(-1) == 1).all()
+        (sample * torch.arange(1.0, 5.0)).sum().backward()
+        assert logits.grad is not None
+        assert logits.grad.abs().sum() > 0
+
+    @pytest.mark.parametrize("base", ["Delta", "LogisticNormal"])
+    def test_deterministic_sample_independent(self, base):
+        # Independent has no deterministic_sample, and the register maps its
+        # base to DETERMINISTIC: the module uses the base's deterministic_sample.
+        def distribution_class(param):
+            if base == "Delta":
+                base_dist = Delta(param)
+            else:
+                base_dist = distributions.LogisticNormal(param, torch.ones_like(param))
+            return distributions.Independent(base_dist, 1)
+
+        module = ProbabilisticTensorDictModule(
+            in_keys=["param"],
+            out_keys=["sample"],
+            distribution_class=distribution_class,
+            default_interaction_type=InteractionType.DETERMINISTIC,
+        )
+        td = TensorDict(param=torch.randn(3, 4, 2), batch_size=[3])
+        sample = module(td)["sample"]
+        expected = distribution_class(td["param"]).base_dist.deterministic_sample
+        torch.testing.assert_close(sample, expected)
 
     # ------------------------------------------------------------------
     # generator argument: Generator object, int seed, and tensordict-key forms
@@ -3736,6 +3813,31 @@ class TestTensorDictParams:
         assert not param_td.get("e").requires_grad
         assert not param_td.get(("a", "b", "c")).requires_grad
 
+    @pytest.mark.parametrize("is_leaf", [is_leaf_nontensor, is_tensor_collection])
+    def test_items_values_is_leaf(self, is_leaf):
+        td = TensorDict(
+            a=torch.ones(3),
+            s=NonTensorData("hi"),
+            sub=TensorDict(b=torch.ones(3), t=NonTensorData("x")),
+        )
+        param_td = TensorDictParams(td, no_convert=True)
+        # items() and values() list the keys that keys() lists for is_leaf
+        keys = list(param_td.keys(True, True, is_leaf=is_leaf))
+        if is_leaf is is_leaf_nontensor:
+            assert keys == ["a", "s", ("sub", "b"), ("sub", "t")]
+        else:
+            assert keys == ["s", ("sub", "t"), "sub"]
+        expected = [param_td._param_td.get(key) for key in keys]
+        items = list(param_td.items(True, True, is_leaf=is_leaf))
+        assert [key for key, _ in items] == keys
+        assert all(item is exp for (_, item), exp in zip(items, expected))
+        values = list(param_td.values(True, True, is_leaf=is_leaf))
+        assert len(values) == len(keys)
+        assert all(value is exp for value, exp in zip(values, expected))
+        assert [key for key, _ in param_td.non_tensor_items()] == ["s"]
+        nested = [key for key, _ in param_td.non_tensor_items(include_nested=True)]
+        assert nested == ["s", ("sub", "t")]
+
     def test_tdparams_clone(self):
         td = TensorDict(
             {
@@ -4137,6 +4239,34 @@ class TestCompositeDist:
         assert sample.shape == torch.Size((4,) + params.shape)
         assert sample.requires_grad
 
+    @pytest.mark.parametrize("method", ["sample", "rsample"])
+    @pytest.mark.parametrize("shape", [[], [4], [4, 2]])
+    def test_sample_list_shape(self, method, shape):
+        # A list works as sample shape, as it does for torch distributions
+        params = TensorDict(
+            {
+                "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
+                ("nested", "cont"): {
+                    "loc": torch.randn(3, 4),
+                    "scale": torch.rand(3, 4),
+                },
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "cont"): distributions.Normal,
+            },
+        )
+        torch.manual_seed(0)
+        sample = getattr(dist, method)(shape)
+        torch.manual_seed(0)
+        expected = getattr(dist, method)(tuple(shape))
+        assert sample.batch_size == torch.Size(shape) + params.batch_size
+        assert (sample == expected).all()
+
     @set_composite_lp_aggregate(True)
     def test_log_prob_legacy(self):
         params = TensorDict(
@@ -4365,6 +4495,36 @@ class TestCompositeDist:
         assert sample.get("cont_cdf").requires_grad
         assert sample.get(("nested", "cont_cdf")).requires_grad
 
+    def test_icdf_without_cdf_entries(self):
+        # Without <sample_name>_cdf entries, icdf computes the cdf of the samples
+        params = TensorDict(
+            {
+                "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
+                ("nested", "cont"): {
+                    "loc": torch.randn(3, 4),
+                    "scale": torch.rand(3, 4),
+                },
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "cont"): distributions.Normal,
+            },
+        )
+        sample = dist.sample((4,))
+        expected = dist.icdf(dist.cdf(sample.clone()))
+        result = dist.icdf(sample.clone())
+        for key in ("cont_icdf", ("nested", "cont_icdf")):
+            torch.testing.assert_close(result[key], expected[key])
+        with pytest.raises(
+            KeyError,
+            match=r"Neither \('nested', 'cont'\) nor \('nested', 'cont_cdf'\)",
+        ):
+            dist.icdf(sample.exclude(("nested", "cont")))
+
     def test_icdf(self):
         # The cdf-icdf round trip loses float32 precision far in the tails, and
         # about 1% of unseeded draws land there and fail assert_close.
@@ -4395,6 +4555,36 @@ class TestCompositeDist:
         assert sample.get("cont_icdf").requires_grad
         assert sample.get(("nested", "cont_icdf")).requires_grad
         torch.testing.assert_close(sample.get("cont"), sample.get("cont_icdf"))
+
+    def test_deterministic_sample_independent(self):
+        # Independent has no deterministic_sample: the base's one is used, as in
+        # ProbabilisticTensorDictModule.
+        params = TensorDict(
+            {
+                "delta": {"param": torch.randn(3, 4, 2)},
+                ("nested", "logistic"): {
+                    "loc": torch.randn(3, 4, 2),
+                    "scale": torch.ones(3, 4, 2),
+                },
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "delta": lambda param: distributions.Independent(Delta(param), 1),
+                ("nested", "logistic"): lambda loc, scale: distributions.Independent(
+                    distributions.LogisticNormal(loc, scale), 1
+                ),
+            },
+        )
+        sample = dist.deterministic_sample
+        assert sample.batch_size == params.batch_size
+        torch.testing.assert_close(sample["delta"], params["delta", "param"])
+        logistic = distributions.LogisticNormal(**params["nested", "logistic"])
+        torch.testing.assert_close(
+            sample["nested", "logistic"], logistic.deterministic_sample
+        )
 
     @pytest.mark.parametrize(
         "interaction", [InteractionType.MODE, InteractionType.MEAN]
@@ -5455,6 +5645,36 @@ class TestTensorClassModuleForward:
         td_output = td_module(value.to_tensordict())
         assert td_output["result", "added"] == 15
         assert td_output["result", "substracted"] == 5
+
+    def test_td_forward_extra_keys(self) -> None:
+        """Test that the wrapper ignores the entries that are not input fields."""
+        td_module = TestTensorClassModule().as_td_module()
+        td = TensorDict(a=10, b=5, other=0)
+        td_output = td_module(td)
+        assert td_output["result", "added"] == 15
+        assert td_output["result", "substracted"] == 5
+        assert set(td_output["input"].keys()) == {"a", "b"}
+        assert set(td.keys()) == {"a", "b", "other"}
+
+    def test_td_forward_in_sequence(self) -> None:
+        """Test that the wrapper runs after another module in a TensorDictSequential."""
+        seq = TensorDictSequential(
+            TensorDictModule(lambda a: a + 1, in_keys=["a"], out_keys=["c"]),
+            TestTensorClassModule().as_td_module(),
+        )
+        td_output = seq(TensorDict(a=10, b=5))
+        assert td_output["result", "added"] == 15
+        assert td_output["result", "substracted"] == 5
+        assert set(td_output["input"].keys()) == {"a", "b"}
+
+    def test_td_forward_nested_input_extra_keys(self) -> None:
+        """Test that the wrapper ignores the entries next to nested input fields."""
+        value = TestTensorClassModule()(InputTensorClass(a=10, b=5, batch_size=[]))
+        td = value.to_tensordict()
+        td["other"] = torch.zeros(())
+        td_output = NestedInputModule().as_td_module()(td)
+        assert td_output["added"] == 25
+        assert td_output["substracted"] == 0
 
 
 @pytest.mark.skipif(not _has_onnx, reason="ONNX is not available")
