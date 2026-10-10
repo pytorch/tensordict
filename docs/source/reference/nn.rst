@@ -17,8 +17,8 @@ the PyTorch documentation.
 Modules
 -------
 
-- :class:`TensorDictModuleBase` is the base class of all the modules of
-  this page.
+- :class:`TensorDictModuleBase` is the base class of the tensordict
+  modules.
 - :class:`TensorDictModule` wraps a :class:`torch.nn.Module` that takes and
   returns tensors, and gives it ``in_keys`` and ``out_keys``.
 - :class:`TensorDictSequential` runs modules one after the other on the

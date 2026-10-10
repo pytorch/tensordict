@@ -73,8 +73,13 @@ still work. Use :class:`torch.nn.Buffer <torch.nn.parameter.Buffer>` instead.
 
     print_directory_tree
     timeit
-    logger
     Buffer
+
+.. py:data:: logger
+
+    The :class:`logging.Logger` named ``"tensordict"``. To show fewer
+    messages from tensordict, raise the level of this logger, for example
+    ``logging.getLogger("tensordict").setLevel(logging.WARNING)``.
 
 See also
 --------
