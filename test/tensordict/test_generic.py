@@ -4465,8 +4465,9 @@ class TestGeneric:
                 assert out["a"].shape == (*out.batch_size, 4)
                 assert out["b", "c"].shape == out.batch_size
         assert TensorDict({}, [0, 3]).reshape(-1).batch_size == torch.Size([0])
-        # -1 next to a 0 is ambiguous: torch raises too
-        with pytest.raises(AssertionError, match="invalid shape"):
+        # -1 next to a 0 is ambiguous: torch raises too. The error is an
+        # AssertionError on main and a RuntimeError once #2119 lands.
+        with pytest.raises((AssertionError, RuntimeError), match="invalid shape"):
             td.reshape(-1, 0)
 
     def test_split_chunk_zero_size_dim(self):
