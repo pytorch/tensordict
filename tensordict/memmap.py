@@ -163,18 +163,27 @@ def _compose_index(shape, first, second) -> tuple:
 
 
 class MemoryMappedTensor(torch.Tensor):
-    """A Memory-mapped Tensor.
+    """A CPU tensor whose storage is a file on disk, or anonymous shared memory when no filename is given.
 
-    Supports filenames or file handlers.
+    Use it to share a tensor between processes, or to work with data that is
+    larger than RAM: the operating system reads from the file only the pages
+    that you access. When a MemoryMappedTensor is sent through a
+    multiprocessing queue or an RPC call, only its file or shared-memory
+    reference is sent, not the data. :meth:`~tensordict.TensorDictBase.memmap`
+    turns every leaf of a tensordict into a MemoryMappedTensor. See
+    :ref:`saving` and :ref:`data-loading`.
 
-    The main advantage of MemoryMappedTensor resides in its serialization methods,
-    which ensure that the tensor is passed through queues or RPC remote calls without
-    any copy.
+    Build one with :meth:`from_tensor`, :meth:`empty`, :meth:`zeros`,
+    :meth:`ones`, :meth:`full`, their ``*_like`` variants, or
+    :meth:`from_filename` for an existing file. Indexing a MemoryMappedTensor
+    gives a MemoryMappedTensor on the same storage. Other operations
+    (``mmap + 1``, for example) give a regular :class:`torch.Tensor`.
 
-    .. note::
-        When used within RPC settings, the filepath should be accessible to both nodes.
-        If it isn't the behaviour of passing a MemoryMappedTensor from one worker
-        to another is undefined.
+    A MemoryMappedTensor has these constraints:
+
+    - It must be on CPU, and it cannot require gradients.
+    - With RPC, every node must have read access to the file path. If it
+      does not, the result of sending the tensor is undefined.
 
     .. warning::
         A caller that supplies ``filename`` must control its parent directory.
@@ -187,12 +196,14 @@ class MemoryMappedTensor(torch.Tensor):
     Examples:
           >>> import os
           >>> import tempfile
+          >>> import torch
+          >>> from tensordict import MemoryMappedTensor
           >>> # from an existing tensor
           >>> tensor = torch.randn(3)
           >>> with tempfile.TemporaryDirectory() as tmpdir:
           ...     memmap_tensor = MemoryMappedTensor.from_tensor(tensor, filename=os.path.join(tmpdir, "tensor.memmap"))
           ...     assert memmap_tensor.filename is not None
-          >>> # if no filename is passed, a handler is used and the tensor has no filename
+          >>> # without a filename, the tensor lives in anonymous shared memory and has no filename
           >>> tensor = torch.randn(3)
           >>> memmap_tensor = MemoryMappedTensor.from_tensor(tensor)
           >>> memmap_tensor.filename
@@ -294,9 +305,12 @@ class MemoryMappedTensor(torch.Tensor):
     ):  # noqa: D417
         """Creates a MemoryMappedTensor with the same content as another tensor.
 
-        If the tensor is already a MemoryMappedTensor the original tensor is
-        returned if the `filename` argument is `None` or if the two paths match.
-        In all other cases, a new :class:`MemoryMappedTensor` is produced.
+        If ``input`` is a MemoryMappedTensor, it is returned unchanged in two
+        cases: ``filename`` is ``None`` and ``input`` has no file, or
+        ``filename`` is the file of ``input`` (and ``input`` was not opened
+        with ``mode="r"``). A file-backed ``input`` with ``filename=None`` is
+        copied to anonymous shared memory. In all other cases, a new
+        :class:`MemoryMappedTensor` is produced.
 
         Args:
             input (torch.Tensor): the tensor which content must be copied onto
@@ -304,8 +318,8 @@ class MemoryMappedTensor(torch.Tensor):
 
         Keyword Args:
             filename (path to a file): the path to the file where the tensor
-                should be stored. If none is provided, a file handler is used
-                instead.
+                should be stored. If ``None``, the tensor lives in anonymous
+                shared memory.
             existsok (bool, optional): if ``True``, the file will overwrite
                 an existing file. Defaults to ``False``.
             copy_existing (bool, optional): if ``True`` and the provided input
@@ -318,6 +332,24 @@ class MemoryMappedTensor(torch.Tensor):
             shape (torch.Size or torch.Tensor): a shape to override the tensor
                 shape. If a tensor is passed, it must represent the nested shapes of a
                 nested tensor.
+
+        Raises:
+            RuntimeError: if ``input`` requires gradients, or if ``input`` has
+                a file, ``filename`` is another file and ``copy_existing`` is
+                ``False``.
+
+        Examples:
+            >>> import os
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import MemoryMappedTensor
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     filename = os.path.join(tmpdir, "tensor.memmap")
+            ...     mmap = MemoryMappedTensor.from_tensor(torch.arange(3.0), filename=filename)
+            ...     print(mmap)
+            ...     print(MemoryMappedTensor.from_tensor(mmap, filename=filename) is mmap)
+            MemoryMappedTensor([0., 1., 2.])
+            True
         """
         if isinstance(input, MemoryMappedTensor):
             if (filename is None and input._filename is None) or (
@@ -509,8 +541,8 @@ class MemoryMappedTensor(torch.Tensor):
             input (torch.Tensor): the tensor to use as an example.
 
         Keyword Args:
-            filename (path or equivalent): the path to the file, if any. If none
-                is provided, a handler is used.
+            filename (path or equivalent): the path to the file, if any. If
+                ``None``, the tensor lives in anonymous shared memory.
         """
         return cls.from_tensor(
             torch.zeros((), dtype=input.dtype, device=input.device).expand_as(input),
@@ -528,8 +560,8 @@ class MemoryMappedTensor(torch.Tensor):
             fill_value (float or equivalent): content of the tensor.
 
         Keyword Args:
-            filename (path or equivalent): the path to the file, if any. If none
-                is provided, a handler is used.
+            filename (path or equivalent): the path to the file, if any. If
+                ``None``, the tensor lives in anonymous shared memory.
         """
         return cls.from_tensor(
             torch.zeros((), dtype=input.dtype, device=input.device).expand_as(input),
@@ -546,8 +578,8 @@ class MemoryMappedTensor(torch.Tensor):
             input (torch.Tensor): the tensor to use as an example.
 
         Keyword Args:
-            filename (path or equivalent): the path to the file, if any. If none
-                is provided, a handler is used.
+            filename (path or equivalent): the path to the file, if any. If
+                ``None``, the tensor lives in anonymous shared memory.
         """
         return cls.from_tensor(
             torch.zeros((), dtype=input.dtype, device=input.device).expand_as(input),
@@ -564,8 +596,8 @@ class MemoryMappedTensor(torch.Tensor):
             input (torch.Tensor): the tensor to use as an example.
 
         Keyword Args:
-            filename (path or equivalent): the path to the file, if any. If none
-                is provided, a handler is used.
+            filename (path or equivalent): the path to the file, if any. If
+                ``None``, the tensor lives in anonymous shared memory.
         """
         return cls.from_tensor(
             torch.ones((), dtype=input.dtype, device=input.device).expand_as(input),
@@ -575,11 +607,15 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     @overload
-    def ones(cls, *size, dtype=None, device=None, filename=None): ...
+    def ones(
+        cls, *size, dtype=None, device=None, filename=None, existsok: bool = False
+    ): ...
 
     @classmethod
     @overload
-    def ones(cls, shape, *, dtype=None, device=None, filename=None): ...
+    def ones(
+        cls, shape, *, dtype=None, device=None, filename=None, existsok: bool = False
+    ): ...
 
     @classmethod
     def ones(cls, *args, **kwargs):
@@ -593,8 +629,8 @@ class MemoryMappedTensor(torch.Tensor):
             dtype (torch.dtype): the dtype of the tensor.
             device (torch.device): the device of the tensor. Only `None` and `"cpu"`
                 are accepted, any other device will raise an exception.
-            filename (path or equivalent): the path to the file, if any. If none
-                is provided, a handler is used.
+            filename (path or equivalent): the path to the file, if any. If
+                ``None``, the tensor lives in anonymous shared memory.
             existsok (bool, optional): whether it is ok to overwrite an existing file.
                 Defaults to ``False``.
         """
@@ -627,11 +663,15 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     @overload
-    def zeros(cls, *size, dtype=None, device=None, filename=None): ...
+    def zeros(
+        cls, *size, dtype=None, device=None, filename=None, existsok: bool = False
+    ): ...
 
     @classmethod
     @overload
-    def zeros(cls, shape, *, dtype=None, device=None, filename=None): ...
+    def zeros(
+        cls, shape, *, dtype=None, device=None, filename=None, existsok: bool = False
+    ): ...
 
     @classmethod
     def zeros(cls, *args, **kwargs):
@@ -645,8 +685,8 @@ class MemoryMappedTensor(torch.Tensor):
             dtype (torch.dtype): the dtype of the tensor.
             device (torch.device): the device of the tensor. Only `None` and `"cpu"`
                 are accepted, any other device will raise an exception.
-            filename (path or equivalent): the path to the file, if any. If none
-                is provided, a handler is used.
+            filename (path or equivalent): the path to the file, if any. If
+                ``None``, the tensor lives in anonymous shared memory.
             existsok (bool, optional): whether it is ok to overwrite an existing file.
                 Defaults to ``False``.
         """
@@ -680,11 +720,15 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     @overload
-    def empty(cls, *size, dtype=None, device=None, filename=None): ...
+    def empty(
+        cls, *size, dtype=None, device=None, filename=None, existsok: bool = False
+    ): ...
 
     @classmethod
     @overload
-    def empty(cls, shape, *, dtype=None, device=None, filename=None): ...
+    def empty(
+        cls, shape, *, dtype=None, device=None, filename=None, existsok: bool = False
+    ): ...
 
     @classmethod
     def empty(cls, *args, **kwargs):
@@ -698,8 +742,8 @@ class MemoryMappedTensor(torch.Tensor):
             dtype (torch.dtype): the dtype of the tensor.
             device (torch.device): the device of the tensor. Only `None` and `"cpu"`
                 are accepted, any other device will raise an exception.
-            filename (path or equivalent): the path to the file, if any. If none
-                is provided, a handler is used.
+            filename (path or equivalent): the path to the file, if any. If
+                ``None``, the tensor lives in anonymous shared memory.
             existsok (bool, optional): whether it is ok to overwrite an existing file.
                 Defaults to ``False``.
         """
@@ -779,11 +823,28 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     @overload
-    def full(cls, *size, fill_value, dtype=None, device=None, filename=None): ...
+    def full(
+        cls,
+        *size,
+        fill_value,
+        dtype=None,
+        device=None,
+        filename=None,
+        existsok: bool = False,
+    ): ...
 
     @classmethod
     @overload
-    def full(cls, shape, *, fill_value, dtype=None, device=None, filename=None): ...
+    def full(
+        cls,
+        shape,
+        *,
+        fill_value,
+        dtype=None,
+        device=None,
+        filename=None,
+        existsok: bool = False,
+    ): ...
 
     @classmethod
     def full(cls, *args, **kwargs):
@@ -798,8 +859,8 @@ class MemoryMappedTensor(torch.Tensor):
             dtype (torch.dtype): the dtype of the tensor.
             device (torch.device): the device of the tensor. Only `None` and `"cpu"`
                 are accepted, any other device will raise an exception.
-            filename (path or equivalent): the path to the file, if any. If none
-                is provided, a handler is used.
+            filename (path or equivalent): the path to the file, if any. If
+                ``None``, the tensor lives in anonymous shared memory.
             existsok (bool, optional): whether it is ok to overwrite an existing file.
                 Defaults to ``False``.
         """

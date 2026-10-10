@@ -48,7 +48,8 @@ def from_module(
 
     Same as :meth:`tensordict.TensorDict.from_module`, except for the default
     of ``lock``: this function locks the result by default, and the method
-    does not. The entries are the parameters and buffers of the module
+    does not (see #1954). This function does not take ``filter_empty``. The
+    entries are the parameters and buffers of the module
     themselves, not copies. Submodules become nested tensordicts.
 
     Args:
@@ -250,7 +251,7 @@ def lazy_stack(input: Sequence["T"], dim: int = 0, *, out=None) -> "T":
 
     This function takes only ``dim`` and ``out``. For the other arguments
     (``stack_dim_name``, ``strict_shape``), call
-    :meth:`tensordict.LazyStackedTensorDict.lazy_stack`.
+    :meth:`tensordict.LazyStackedTensorDict.lazy_stack` (see #1954).
 
     Args:
         input (sequence of TensorDictBase or tensorclass instances): the
@@ -435,7 +436,9 @@ def load(
 ) -> TensorCollection:
     """Loads a tensordict that :func:`~tensordict.save` wrote.
 
-    Same as :func:`~tensordict.load_memmap`. See
+    Same as :func:`~tensordict.load_memmap`, which takes the same arguments.
+    Unlike :meth:`tensordict.TensorDict.load_memmap`, it does not take
+    ``subpath`` or ``num_threads`` (see #1954). See
     :meth:`tensordict.TensorDict.load_memmap` for every argument, and
     :ref:`saving` for the ways to save and load a tensordict.
 
@@ -501,7 +504,8 @@ def load_memmap(
 
     Same as :func:`~tensordict.load`, and as
     :meth:`tensordict.TensorDict.load_memmap`, which holds the full text of
-    every argument. That method also takes ``subpath`` and ``num_threads``.
+    every argument. That method also takes ``subpath`` and ``num_threads``,
+    which this function does not take (see #1954).
     See :ref:`saving` for the ways to save and load a tensordict.
 
     Args:
@@ -566,8 +570,8 @@ def save(
 
     Same as :func:`~tensordict.memmap`, and as
     :meth:`~tensordict.TensorDictBase.memmap`, which holds the full text of
-    every argument. That method also takes ``archive`` and ``compression``.
-    The directory mirrors the key structure of the tensordict: one file per
+    every argument. That method also takes ``archive`` and ``compression``,
+    which this function does not take (see #1954). The directory mirrors the key structure of the tensordict: one file per
     tensor and one metadata file per nested tensordict. If ``prefix`` ends
     with ``".tdz"``, a single archive file is written instead. Load the
     result with :func:`~tensordict.load`. See :ref:`saving`.
@@ -634,7 +638,8 @@ def memmap(
 
     Same as :func:`~tensordict.save`, and as
     :meth:`~tensordict.TensorDictBase.memmap`, which holds the full text of
-    every argument. Use it to share a tensordict between processes without
+    every argument and also takes ``archive`` and ``compression`` (see
+    #1954). Use it to share a tensordict between processes without
     copies, or to keep data that is larger than RAM on disk. To convert the
     tensordict in place, use :meth:`~tensordict.TensorDictBase.memmap_`.
     See :ref:`saving` and :ref:`data-loading`.
