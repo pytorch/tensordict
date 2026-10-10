@@ -869,33 +869,49 @@ def tensorclass(
     shadow: bool = False,
     tensor_only: bool = False,
 ) -> T | None:
-    """A decorator to create :obj:`tensorclass` classes.
+    """A decorator that turns a class with annotated fields into a tensorclass.
 
-    ``tensorclass`` classes are specialized :func:`dataclasses.dataclass` instances that
-    can execute some pre-defined tensor operations out of the box, such as
-    indexing, item assignment, reshaping, casting to device or storage and many
-    others.
+    A tensorclass is a dataclass whose instances behave like a
+    :class:`~tensordict.TensorDict`: they have a batch size, and they support
+    indexing, reshaping, ``to(device)``, stacking and memory-mapping. For new
+    code, subclass :class:`~tensordict.TensorClass` instead. It takes the same
+    flags, and type checkers understand it without a plugin. This decorator
+    is kept for existing code and for code that moves from
+    ``@dataclass``. See :ref:`tensorclass-guide`.
 
     Keyword Args:
-        autocast (bool, optional): if ``True``, the types indicated will be enforced when an argument is set.
-            This argument is exclusive with ``nocast`` (both cannot be true at the same time). Defaults to ``False``.
-        frozen (bool, optional): if ``True``, the content of the tensorclass cannot be modified. This argument is
-            provided to dataclass-compatibility, a similar behavior can be obtained through the `lock` argument in
-            the class constructor. Defaults to ``False``.
-        nocast (bool, optional): if ``True``, Tensor-compatible types such as ``int``, ``np.ndarray`` and the like
-            will not be cast to a tensor type. This argument is exclusive with ``autocast`` (both cannot be true
-            at the same time). Defaults to ``False``.
-        shadow (bool, optional): Disables the validation of field names against the names of the tensorclass
-            members (e.g. ``batch_size`` or ``sum``). Use with caution, as this may cause unintended consequences.
-            Defaults to False.
-        tensor_only (bool, optional): if ``True``, it is expected that all items in tensorclass will be
-            tensor instances (tensor-compatible, since non-tensor data is converted to tensors if possible).
-            This can bring significant speed-ups at the cost of flexible interactions with non-tensor data.
+        autocast (bool, optional): if ``True``, when a field is set, the value
+            is converted to the annotated type. Exclusive with ``nocast`` and
+            ``tensor_only``. Defaults to ``False``.
+        frozen (bool, optional): if ``True``, assigning a field raises
+            ``dataclasses.FrozenInstanceError``, as with
+            ``@dataclass(frozen=True)``. To block writes on one instance only,
+            call ``lock_()`` on it or pass ``lock=True`` to the constructor:
+            writes then raise a ``RuntimeError``. Defaults to ``False``.
+        nocast (bool, optional): if ``True``, Tensor-compatible types such as
+            ``int``, ``np.ndarray`` and the like are not cast to a tensor
+            type. Exclusive with ``autocast`` and ``tensor_only``. Defaults
+            to ``False``.
+        shadow (bool, optional): if ``True``, fields can have the name of a
+            tensorclass member (``batch_size``, ``sum``, ...), and hide that
+            member. If ``False``, such a name raises an ``AttributeError``
+            when the class is defined. Defaults to ``False``.
+        tensor_only (bool, optional): if ``True``, every field annotation must
+            be a tensor type or a tensor collection. Values that can be cast
+            to a tensor are cast. Reading a field then skips the lookup in the
+            non-tensor storage. Exclusive with ``autocast`` and ``nocast``.
             Defaults to ``False``.
 
-    tensorclass can be used with or without arguments:
+    Returns:
+        the tensorclass, or a decorator if the flags are given without a
+        class (``@tensorclass(autocast=True)``).
 
     Examples:
+        tensorclass can be used with or without arguments:
+
+        >>> from typing import Any
+        >>> import torch
+        >>> from tensordict import tensorclass
         >>> @tensorclass
         ... class X:
         ...     y: int
@@ -922,11 +938,9 @@ def tensorclass(
         >>> X(1).y
         tensor(1)
 
-    Examples:
-        >>> from tensordict import tensorclass
-        >>> import torch
-        >>> from typing import Optional
-        >>>
+        A tensorclass can have methods. Fields that are not tensors are stored
+        as :class:`~tensordict.NonTensorData`:
+
         >>> @tensorclass
         ... class MyData:
         ...     X: torch.Tensor
@@ -953,12 +967,8 @@ def tensorclass(
         >>> print(data.expand_and_mask())
         tensor([])
 
-    It is also possible to nest tensorclasses instances within each other:
-        Examples:
-        >>> from tensordict import tensorclass
-        >>> import torch
-        >>> from typing import Optional
-        >>>
+        A tensorclass instance can be a field of another tensorclass:
+
         >>> @tensorclass
         ... class NestingMyData:
         ...     nested: MyData
@@ -967,7 +977,6 @@ def tensorclass(
         >>> # although the data is stored as a TensorDict, the type hint helps us
         >>> # to appropriately cast the data to the right type
         >>> assert isinstance(nesting_data.nested, type(data))
-
 
     """
 
@@ -1504,6 +1513,12 @@ def _tc_broadcast(self, src, *, group=None, device=None):
     "TensorClass.fields()", removal="0.17", replacement="dataclasses.fields(cls)"
 )
 def _fields(cls) -> tuple[dataclasses.Field, ...]:
+    """Returns the fields of the tensorclass.
+
+    .. deprecated:: 0.15
+        Use ``dataclasses.fields(cls)`` instead. It returns the same tuple of
+        :class:`dataclasses.Field` objects.
+    """
     return dataclasses.fields(cls)
 
 
@@ -1513,6 +1528,12 @@ def _fields(cls) -> tuple[dataclasses.Field, ...]:
     replacement="lazy_stack or torch.cat to build a new instance",
 )
 def _extend(self, tensordict: list[TensorDictBase] | TensorDictBase) -> None:
+    """Appends tensordicts to the lazy stack that the instance holds.
+
+    .. deprecated:: 0.15
+        Build a new instance with :func:`tensordict.lazy_stack` or
+        :func:`torch.cat` instead.
+    """
     self._tensordict.extend(tensordict)
 
 
@@ -3313,12 +3334,26 @@ def _to_tensordict(self, *, retain_none: bool | None = None) -> TensorDict:
     Makes a copy of all entries. Memmap and shared memory tensors are converted to
     regular tensors.
 
-    Args:
-        retain_none (bool): if ``True``, the ``None`` values will be written in the
-            tensordict. Otherwise they will be discrarded. Default: ``True``.
+    Keyword Args:
+        retain_none (bool, optional): if ``True``, fields set to ``None`` are
+            written as ``None`` entries. Defaults to ``None``, which drops
+            them.
 
     Returns:
         A new TensorDict object containing the same values as the tensorclass.
+
+    Examples:
+        >>> from typing import Any
+        >>> import torch
+        >>> from tensordict import TensorClass
+        >>> class Foo(TensorClass):
+        ...     x: torch.Tensor
+        ...     y: Any = None
+        >>> foo = Foo(x=torch.zeros(3))
+        >>> sorted(foo.to_tensordict().keys())
+        ['x']
+        >>> sorted(foo.to_tensordict(retain_none=True).keys())
+        ['x', 'y']
 
     """
     td = self._tensordict.to_tensordict(retain_none=retain_none)
@@ -4323,13 +4358,24 @@ class _TensorClassMeta(abc.ABCMeta):
 
 
 class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
-    """TensorClass is the inheritance-based version of the :func:`~tensordict.tensorclass` decorator.
+    """A base class for dataclass-like containers of tensors.
 
-    TensorClass lets you write dataclass-like containers that benefit from all the TensorDict
-    machinery (indexing, reshaping, ``to(device)``, ``stack``/``cat``, memmap serialization, ...)
-    while remaining pythonic and friendly to static type-checkers. It is the recommended entry
-    point for new code; the :func:`~tensordict.tensorclass` decorator is kept for backwards
-    compatibility and dataclass-style ergonomics.
+    Subclass :class:`TensorClass` and annotate fields, as you would with
+    :func:`dataclasses.dataclass`. The instances behave like a
+    :class:`~tensordict.TensorDict`: they have a batch size, and they support
+    indexing, reshaping, ``to(device)``, :func:`torch.stack`,
+    :func:`torch.cat` and memory-mapping. A field can hold a tensor, a
+    tensordict, another tensorclass, or any Python object (stored as
+    :class:`~tensordict.NonTensorData`). This class replaces the
+    :func:`~tensordict.tensorclass` decorator, which is kept for existing code.
+
+    Use a tensorclass instead of a :class:`~tensordict.TensorDict` when the
+    data has a fixed set of named fields, when you want editors and type
+    checkers to know the fields, or when you want to add methods. Use a
+    :class:`~tensordict.TypedTensorDict` instead if you need a
+    :class:`~tensordict.TensorDictBase` subclass (``state["key"]``,
+    ``**state`` unpacking). :ref:`choosing-a-container` compares the
+    containers, and :ref:`tensorclass-guide` is the user guide.
 
     Examples:
         >>> from typing import Any
@@ -4348,102 +4394,118 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
+        >>> foo[0].non_tensor
+        'a string!'
+        >>> foo.reshape(1, 3).batch_size
+        torch.Size([1, 3])
+
+    Instances support the methods of :class:`~tensordict.TensorDictBase`
+    (``apply``, ``reshape``, ``to``, ``memmap``, ...). The pages of these
+    methods are under :class:`~tensordict.TensorDictBase`, because the
+    tensorclass forwards the call to the tensordict that holds its fields.
 
     Keyword Args:
-        batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to ``None``.
-        device (torch.device, optional): The device on which the TensorDict will be created. Defaults to ``None``.
-        frozen (bool, optional): If ``True``, the resulting class or instance will be immutable. Defaults to ``False``.
-        autocast (bool, optional): If ``True``, values are coerced to the field's type annotation when
-            set (e.g. an ``int`` annotation keeps Python ints as ints rather than wrapping them in a
-            tensor). Mutually exclusive with ``nocast`` and ``tensor_only``. Defaults to ``False``.
-        nocast (bool, optional): If ``True``, tensor-compatible scalar types (``int``, ``float``,
-            ``np.ndarray``, ...) are stored as-is instead of being cast to a tensor. Mutually exclusive
-            with ``autocast`` and ``tensor_only``. Defaults to ``False``.
-        tensor_only (bool, optional): If ``True``, every field is expected to hold a tensor (or
-            tensor-compatible value, which will be cast). Lookups skip the non-tensor data path,
-            which can yield significant speed-ups at the cost of losing non-tensor support.
-            Mutually exclusive with ``autocast`` and ``nocast``. Defaults to ``False``.
-        shadow (bool, optional): Disables the validation of field names against the names of the
-            tensorclass members (e.g. allowing a field named ``device`` or ``batch_size``). Use with
-            caution, as this can lead to surprising behaviour. Defaults to ``False``.
+        batch_size (torch.Size, optional): The batch size of the instance.
+            Defaults to ``torch.Size([])``.
+        device (torch.device, optional): The device of the instance. Defaults
+            to ``None``.
+        names (list of str, optional): The names of the batch dimensions.
+            Defaults to ``None``.
+        lock (bool, optional): If ``True``, the instance is locked: writing a
+            field raises a ``RuntimeError``. Defaults to ``False``.
 
-    **The bracket form** ``TensorClass[...]`` is sugar for "build a parametrized subclass with the
-    given flags turned on". The three forms below are equivalent:
+    These keyword arguments go to the constructor, with the fields:
+    ``Foo(tensor=..., batch_size=[3])``. The class flags below go to the
+    class definition instead.
 
-    Examples:
+    .. rubric:: Class flags
+
+    A flag changes the behavior of every instance of the class. Set it in
+    one of three equivalent forms:
+
+        >>> from tensordict import tensorclass
         >>> class Foo(TensorClass["autocast"]):     # bracket form
         ...     integer: int
-        >>> class Foo(TensorClass, autocast=True):  # metaclass kwargs form
+        >>> class Foo(TensorClass, autocast=True):  # keyword form
         ...     integer: int
         >>> @tensorclass(autocast=True)             # legacy decorator form
         ... class Foo:
         ...     integer: int
 
-    The bracket form is usually the most readable when you stack several flags. Pyright understands
-    it via :meth:`~object.__class_getitem__`; mypy rejects it, so use the kwargs form in code checked
-    by mypy. The kwargs form is also convenient if the flag value is computed; the decorator form is
-    best when migrating plain ``@dataclass`` code.
+    To combine flags, list them in the brackets:
 
-    Several flags can be combined inside the brackets:
-
-    Examples:
         >>> class Foo(TensorClass["nocast", "frozen"]):
         ...     integer: int
 
-    **Per-flag semantics.** The flags fall into three families — casting (``autocast``, ``nocast``,
-    ``tensor_only``, which are mutually exclusive), mutability (``frozen``) and name shadowing
-    (``shadow``).
+    The flags are:
 
-    Default behaviour (no flags) — tensor-compatible values are wrapped as tensors and non-tensor
-    values are stored as :class:`~tensordict.NonTensorData`:
+    - No flag: tensor-compatible values (``int``, ``float``, ``np.ndarray``)
+      are cast to tensors. Other values are stored as
+      :class:`~tensordict.NonTensorData`.
 
-        >>> class Foo(TensorClass):
-        ...     x: int
-        >>> Foo(x=1).x
-        tensor(1)
+          >>> class Foo(TensorClass):
+          ...     x: int
+          >>> Foo(x=1).x
+          tensor(1)
 
-    ``autocast`` — coerce values back to the field's annotated type when reading them. Useful when
-    a field is conceptually a scalar/string/enum but should still travel through the TensorDict
-    machinery as a leaf:
+    - ``autocast``: when a field is set, the value is converted to the
+      annotated type. For example, an ``int`` field set to
+      ``torch.ones(())`` holds ``1``.
 
-        >>> class Foo(TensorClass["autocast"]):
-        ...     x: int
-        >>> Foo(x=torch.ones(())).x
-        1
+          >>> class Foo(TensorClass["autocast"]):
+          ...     x: int
+          >>> Foo(x=torch.ones(())).x
+          1
 
-    ``nocast`` — opt out of tensor casting entirely; tensor-compatible scalars are stored as-is:
+    - ``nocast``: tensor-compatible values are stored as they are, not cast
+      to tensors.
 
-        >>> class Foo(TensorClass["nocast"]):
-        ...     x: int
-        >>> Foo(x=1).x
-        1
+          >>> class Foo(TensorClass["nocast"]):
+          ...     x: int
+          >>> Foo(x=1).x
+          1
 
-    ``tensor_only`` — the strict, fast path. Every field must be (or convert to) a tensor; the
-    non-tensor storage is bypassed, which makes attribute access cheaper. Reach for this on
-    performance-sensitive containers (e.g. RL trajectories, batched model I/O) where you control
-    every field:
+    - ``tensor_only``: every field annotation must be a tensor type, a tensor
+      collection, or an optional or union of these. Other annotations raise
+      a ``TypeError`` when the class is defined. Values that can be cast to
+      a tensor (Python scalars, numpy arrays) are cast. Reading a field then
+      skips the lookup in the non-tensor storage.
 
-        >>> class Foo(TensorClass["tensor_only"]):
-        ...     x: torch.Tensor
+          >>> class Foo(TensorClass["tensor_only"]):
+          ...     x: torch.Tensor
+          >>> Foo(x=1).x
+          tensor(1)
 
-    ``frozen`` — make the class immutable, mirroring ``@dataclass(frozen=True)``. Frozen instances
-    play well with ``torch.compile`` and functional code paths where in-place mutation would be a
-    foot-gun. Note that ``frozen`` propagates to subclasses: a non-frozen subclass cannot inherit
-    from a frozen base, and vice versa.
+    - ``frozen``: assigning a field raises ``FrozenInstanceError``, as with
+      ``@dataclass(frozen=True)``. Subclasses of a frozen class are frozen
+      too. A frozen class cannot subclass a non-frozen tensorclass: this
+      raises a ``TypeError``.
 
-        >>> class Foo(TensorClass["frozen"]):
-        ...     x: torch.Tensor
-        >>> foo = Foo(x=torch.zeros(3))
-        >>> foo.x = torch.ones(3)  # raises FrozenInstanceError
+          >>> class Foo(TensorClass["frozen"]):
+          ...     x: torch.Tensor
+          >>> foo = Foo(x=torch.zeros(3))
+          >>> foo.x = torch.ones(3)
+          Traceback (most recent call last):
+            ...
+          dataclasses.FrozenInstanceError: cannot assign to field 'x'
 
-    ``shadow`` — by default, field names that collide with TensorDict's reserved attributes
-    (``batch_size``, ``device``, ``names``, ``data``, ...) raise an ``AttributeError`` at class
-    construction. ``shadow=True`` opts out of that check so you can use those names anyway:
+    - ``shadow``: by default, a field whose name is a tensorclass member
+      (``batch_size``, ``device``, ``names``, ``sum``, ``apply`` and the
+      other TensorDict methods) raises an ``AttributeError`` when the class
+      is defined. ``shadow=True`` allows these names. The field then hides
+      the member of the same name.
 
-        >>> class Foo(TensorClass["shadow"]):
-        ...     data: torch.Tensor
+          >>> class Foo(TensorClass["shadow"]):
+          ...     sum: torch.Tensor
+          >>> Foo(sum=torch.ones(3), batch_size=[3]).sum
+          tensor([1., 1., 1.])
 
-    **Subclassing.** A parametrized class is just a class — you can subclass it and stack more
+    ``autocast``, ``nocast`` and ``tensor_only`` are exclusive: combining two
+    of them raises a ``TypeError``.
+
+    .. rubric:: Subclassing
+
+    A class with flags is a regular class. You can subclass it and add
     flags:
 
         >>> class Base(TensorClass["autocast"]):
@@ -4451,15 +4513,19 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
         >>> class Sub(Base, shadow=True):   # autocast inherited, shadow added
         ...     y: float
 
-    **Type-checking.** ``TensorClass[...]`` is implemented via :meth:`~object.__class_getitem__`,
-    so pyright resolves it to the (parametrized) class itself rather than to a generic parameter.
-    Mypy does not evaluate ``__class_getitem__`` in a list of base classes and rejects the bracket
-    form; use ``class Foo(TensorClass, autocast=True)`` instead. Annotated fields propagate as
-    expected and editors offer attribute completion on instances.
+    .. rubric:: Type checking
 
-    .. note:: ``TensorClass`` itself is *not* decorated as a tensorclass — the dataclass machinery
-        only fires on subclasses. This is intentional: we cannot anticipate whether ``frozen`` will
-        be requested, and a non-frozen base cannot have a frozen subclass.
+    ``TensorClass[...]`` is implemented with :meth:`~object.__class_getitem__`,
+    so pyright resolves it to the class with flags, not to a generic
+    parameter. Mypy does not evaluate ``__class_getitem__`` in a list of base
+    classes and rejects the bracket form. In code that mypy checks, use the
+    keyword form: ``class Foo(TensorClass, autocast=True)``. Editors complete
+    the annotated fields on instances.
+
+    .. note:: ``TensorClass`` itself is not a tensorclass: the dataclass
+        machinery runs only on its subclasses. The reason is that a
+        non-frozen base cannot have a frozen subclass, and the base cannot
+        know whether a subclass asks for ``frozen``.
 
     .. seealso::
 
@@ -4520,18 +4586,19 @@ def _compares_by_element(non_tensor, other) -> bool:
 
 
 class NonTensorDataBase(TensorClass):
-    """A base class to carry non-tensor data.
+    """A base class for tensordict entries that hold a Python object instead of a tensor.
 
-    There are two main `NonTensorDataBase` subclasses: :class:`~tensordict.NonTensorData` which behaves
-    mostly as a regular tensordict when shape operations are applied, and :class:`~tensordict.MetaData`
-    which is more specific.
+    There are two subclasses:
 
-    The main difference between the two classes is their behavior during expansion or stacking. The
-    :class:`~tensordict.MetaData` class will keep a single copy of the data for the entire tensordict.
-    As the name suggests, the intended usage is to carry data that provides additional information about
-    the batch of data stored in a `TensorDict`. On the other hand, the :class:`~tensordict.NontensorData`
-    class will carry data in a batch-size compliant manner: the batch-size of the tensorclass is indicative
-    of different batch elements within it.
+    - :class:`~tensordict.NonTensorData` holds one value per batch element.
+      Stacking or ``unsqueeze`` gives a :class:`~tensordict.NonTensorStack`.
+    - :class:`~tensordict.MetaData` holds one value for the whole batch.
+      Stacking items that hold the same object (checked with ``is``) gives
+      one :class:`~tensordict.MetaData` with the new batch size. Other items
+      give a :class:`~tensordict.NonTensorStack`. ``unsqueeze`` and indexing
+      keep a :class:`~tensordict.MetaData`.
+
+    See :ref:`non-tensor-data`.
 
     """
 
@@ -5109,64 +5176,60 @@ class NonTensorDataBase(TensorClass):
 
 
 class NonTensorData(NonTensorDataBase):
-    """A carrier for non-tensordict data.
+    """A tensordict entry that holds a Python object instead of a tensor.
 
-    This class can be used whenever non-tensor data needs to be carried at
-    any level of a tensordict instance.
+    Use it to keep strings, numbers that must not become tensors, or any
+    other object next to the tensors of a tensordict: a task name, a file
+    path, a configuration. Each batch element has the value: indexing a
+    tensordict keeps the value in every element, and stacking gives a
+    :class:`~tensordict.NonTensorStack` with one value per element. To keep
+    one value for the whole batch through stacking and unsqueezing, use
+    :class:`~tensordict.MetaData` instead. :ref:`non-tensor-data` explains
+    the non-tensor classes.
 
-    :class:`~tensordict.tensorclass.NonTensorData` instances can be created
-    explicitly or using :meth:`~tensordict.TensorDictBase.set_non_tensor`.
+    You rarely build a :class:`NonTensorData` yourself. Assigning a value
+    that is not a tensor to a key creates one, and reading the key returns
+    the value. :meth:`~tensordict.TensorDictBase.get` returns the
+    :class:`NonTensorData` itself:
 
-    This class is serializable using :meth:`tensordict.TensorDictBase.memmap`
-    and related methods, and can be loaded through :meth:`~tensordict.TensorDictBase.load_memmap`.
-    If the content of the object is JSON-serializable, it will be serializsed in
-    the `meta.json` file in the directory pointed by the parent key of the `NoneTensorData`
-    object. If it isn't, serialization will fall back on pickle. This implies
-    that we assume that the content of this class is either json-serializable or
-    pickable, and it is the user responsibility to make sure that one of these
-    holds. We try to avoid pickling/unpickling objects for performance and security
-    reasons (as pickle can execute arbitrary code during loading).
+        >>> import torch
+        >>> from tensordict import NonTensorData, NonTensorStack, TensorDict
+        >>> td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
+        >>> td["b"] = "a string!"
+        >>> td["b"]
+        'a string!'
+        >>> td[0]["b"]
+        'a string!'
+        >>> td.get("b")
+        NonTensorData(data=a string!, batch_size=torch.Size([3]), device=None)
 
-    .. note::
-        If the data passed to :class:`NonTensorData` is a :class:`NonTensorData`
-        itself, the data from the nested object will be gathered.
+    You can also build one explicitly, or with
+    :meth:`~tensordict.TensorDictBase.set_non_tensor`:
 
-        >>> non_tensor = NonTensorData("a string!")
-        >>> non_tensor = NonTensorData(non_tensor)
+        >>> non_tensor = NonTensorData("a string!", batch_size=[])
+        >>> data = TensorDict({}, batch_size=[3])
+        >>> _ = data.set_non_tensor(("nested", "key"), "a string!")
+        >>> assert isinstance(data.get(("nested", "key")), NonTensorData)
+        >>> assert data.get_non_tensor(("nested", "key")) == "a string!"
+
+    If the data passed to :class:`NonTensorData` is a :class:`NonTensorData`
+    itself, the data from the nested object is used:
+
+        >>> non_tensor = NonTensorData(NonTensorData("a string!"))
         >>> assert non_tensor.data == "a string!"
 
     .. note::
-        To faciliate ``NonTensorData`` integration in tensordict, the
-        :meth:`~tensordict.TensorDictBase.__getitem__` and :meth:`~tensordict.TensorDictBase.__setitem__`
-        are overloaded to set non-tensor data appropriately (unlike :meth:`~tensordict.TensorDictBase.set`
-        and :meth:`~tensordict.TensorDictBase.get` which are reserved for tensor-like
-        objects):
+        If you assign a list to a key, each element of the list becomes the
+        value of one batch element, in a :class:`~tensordict.NonTensorStack`.
+        Reading the key returns a :class:`~tensordict.utils.LinkedList` of
+        the values:
 
-        >>> td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
-        >>> td["a"]  # gets a tensor
-        >>> td["b"] = "a string!"
-        >>> assert td["b"] == "a string!"
-        >>> # indexing preserves the meta-data
-        >>> assert td[0]["b"] == "a string!"
-        >>> td.get("b")  # returns the NonTensorData
-
-        One can uses lists to set multiple `NonTensorData` at the same time (if :class:`~tensordict.set_list_to_stack`
-        is set to `True`):
-
-        >>> from tensordict import TensorDict, set_list_to_stack
-        >>> set_list_to_stack(True).set()
         >>> td = TensorDict(batch_size=(3,))
         >>> td["foo"] = ["a", "b", "c"]
-        >>> print(td)
-        TensorDict(
-            fields={
-                foo: NonTensorStack(
-                    ['a', 'b', 'c'],
-                    batch_size=torch.Size([3]),
-                    device=None)},
-            batch_size=torch.Size([3]),
-            device=None,
-            is_shared=False)
+        >>> td["foo"]
+        LinkedList(['a', 'b', 'c'])
+        >>> td.get("foo").tolist()
+        ['a', 'b', 'c']
 
     .. note::
         Unlike other tensorclass classes, :class:`NonTensorData` supports
@@ -5175,9 +5238,9 @@ class NonTensorData(NonTensorDataBase):
         of shape `batch_size`. :meth:`~.__eq__` and :meth:`~.__ne__` also compare
         with a :class:`~tensordict.NonTensorStack` of the same batch size, element
         by element when their values can be compared, unless the data is an array
-        or a tensor. For compatibility with `<a tensordict> == <float_number>`,
-        comparison with other objects will always return an empty
-        :class:`NonTensorData`.
+        or a tensor. For compatibility with ``<a tensordict> == <float_number>``,
+        a comparison with any other object returns an empty
+        :class:`~tensordict.TensorDict`.
 
         >>> a = NonTensorData(True)
         >>> b = NonTensorData(True)
@@ -5192,15 +5255,13 @@ class NonTensorData(NonTensorDataBase):
         tensor([True, True, True])
 
     .. note::
-        Stacking :class:`NonTensorData` instances results
-        in a :class:`~tensordict.NonTensorStack` instance.
-        The data is not copied during stacking / expansion etc., so that
-        the memory footprint of these operations is negligeable.
-        If you're willing to keep a single non-tensor copy during these operations,
-        the :class:`~tensordict.MetaData` class can be used instead.
+        Stacking :class:`NonTensorData` instances gives a
+        :class:`~tensordict.NonTensorStack` instance. The data is not copied
+        during stacking, expansion and similar operations. To keep a single
+        value instead of a stack, use :class:`~tensordict.MetaData`.
 
-        >>> data = torch.stack([NonTensorData(1) for _ in range(10)])
-        >>> data
+        >>> stack = torch.stack([NonTensorData(1) for _ in range(10)])
+        >>> stack
         NonTensorStack(
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             batch_size=torch.Size([10]),
@@ -5210,56 +5271,39 @@ class NonTensorData(NonTensorDataBase):
         Non-tensor data can be filtered out from a tensordict using
         :meth:`~tensordict.TensorDictBase.filter_non_tensor`.
 
-    Examples:
-        >>> # create an instance explicitly
-        >>> non_tensor = NonTensorData("a string!", batch_size=[]) # batch-size can be anything
-        >>> data = TensorDict({}, batch_size=[3])
-        >>> data.set_non_tensor(("nested", "key"), "a string!")
-        >>> assert isinstance(data.get(("nested", "key")), NonTensorData)
-        >>> assert data.get_non_tensor(("nested", "key")) == "a string!"
-        >>> # serialization
-        >>> class MyPickableClass:
-        ...     value = 10
-        >>> data.set_non_tensor("pickable", MyPickableClass())
-        >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as tmpdir:
-        ...     data.memmap(tmpdir)
-        ...     loaded = TensorDict.load_memmap(tmpdir)
-        ...     # print directory path
-        ...     print_directory_tree(tmpdir)
-        Directory size: 511.00 B
-        tmp2cso9og_/
-            pickable/
-                _tensordict/
-                    meta.json
-                other.pickle
-                meta.json
-            nested/
-                key/
-                    _tensordict/
-                        meta.json
-                    meta.json
-                meta.json
-            meta.json
-        >>> assert loaded.get_non_tensor("pickable").value == 10
+    .. rubric:: Saving
 
-    .. note::
-        __Preallocation__ is also possible with ``NonTensorData``.
-        This class can handle conversion from ``NonTensorData`` to
-        ``NonTensorStack`` where appropriate, as the following example
-        demonstrates:
+    :meth:`~tensordict.TensorDictBase.memmap` and the related methods save
+    a :class:`NonTensorData`, and :meth:`~tensordict.TensorDictBase.load_memmap`
+    loads it. If JSON can encode the value, it goes to the ``meta.json``
+    file of the entry (a tuple is loaded back as a list). Instances of other
+    classes are pickled to an ``other.pickle`` file. Some values fail: a
+    ``set`` raises a ``TypeError``. Pickle can execute arbitrary code when it
+    loads, so :meth:`~tensordict.TensorDictBase.load_memmap` warns when it
+    loads a pickled value. Pass ``allow_pickle=True`` for data that you
+    trust. From TensorDict 0.15, the default is ``allow_pickle=False``, which
+    raises a ``RuntimeError`` for pickled values.
+
+        >>> import tempfile
+        >>> from fractions import Fraction
+        >>> _ = data.set_non_tensor("picklable", Fraction(1, 3))
+        >>> with tempfile.TemporaryDirectory() as tmpdir:
+        ...     _ = data.memmap(tmpdir)
+        ...     loaded = TensorDict.load_memmap(tmpdir, allow_pickle=True)
+        >>> loaded.get_non_tensor("picklable")
+        Fraction(1, 3)
+
+    .. rubric:: Preallocation
+
+    A tensordict can hold one :class:`NonTensorData` with a batch size, then
+    receive different values for some batch elements. The entry then
+    becomes a :class:`~tensordict.NonTensorStack`:
 
         >>> td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
         >>> print(td)
         TensorDict(
             fields={
-                val: NonTensorData(
-                    data=0,
-                    _metadata=None,
-                    _is_non_tensor=True,
-                    batch_size=torch.Size([10]),
-                    device=None,
-                    is_shared=False)},
+                val: NonTensorData(data=0, batch_size=torch.Size([10]), device=None)},
             batch_size=torch.Size([10]),
             device=None,
             is_shared=False)
@@ -5277,82 +5321,92 @@ class NonTensorData(NonTensorDataBase):
             batch_size=torch.Size([10]),
             device=None,
             is_shared=False)
-        >>> print(td["val"])  # the stack is automatically converted to a list
-        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1]
+        >>> td["val"]
+        LinkedList([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
 
-      If the value is unique, the ``NonTensorData`` container is kept and
-      retrieving the value only returns this value. If a ``NonTensorStack``
-      is used, ``__getitem__`` will return the list of values instead.
-      This makes the two operations not exactly interchangeable. The reason
-      for this inconsistency is that a single ``NonTensorData`` with a non-empty
-      batch-size is intended to be used as a metadata carrier for bigger
-      tensordicts, whereas ``NonTensorStack`` usage is aimed at allocating
-      one metadata atom to each corresponding batch element.
+    If the value is the same for every element, ``td[key]`` returns that
+    value. If the entry is a :class:`~tensordict.NonTensorStack`,
+    ``td[key]`` returns the values as a :class:`~tensordict.utils.LinkedList`.
+    The reason is that a single :class:`NonTensorData` with a batch size
+    carries metadata for the whole tensordict, and a
+    :class:`~tensordict.NonTensorStack` carries one value per batch element.
 
-    .. note::
-      ``NonTensorData`` can be shared between processes. In fact, both
-      :meth:`~tensordict.TensorDict.memmap_` (and the likes) and
-      :meth:`~tensordict.TensorDict.share_memory_` will produce sharable
-      instances.
+    .. rubric:: Sharing between processes
 
-      Valid methods to write data are :meth:`~tensordict.TensorDictBase.update`
-      with the `inplace=True` flag and :meth:`~tensordict.TensorDictBase.update_`
-      or :meth:`~tensordict.TensorDictBase.update_at_`.
+    :meth:`~tensordict.TensorDictBase.memmap_` and
+    :meth:`~tensordict.TensorDictBase.share_memory_` make a
+    :class:`NonTensorData` that other processes can read. To write a new
+    value, use :meth:`~tensordict.TensorDictBase.update` with
+    ``inplace=True``, :meth:`~tensordict.TensorDictBase.update_` or
+    :meth:`~tensordict.TensorDictBase.update_at_`. Assigning the key raises
+    an error, because the shared tensordict is locked:
 
-        >>> if __name__ == "__main__":
-        ...     td = TensorDict({"val": NonTensorData(data=0, batch_size=[])}, [])
-        ...     td.share_memory_()
-        ...     td.update_(TensorDict({"val": NonTensorData(data=1, batch_size=[])}, []))  # works
-        ...     td.update(TensorDict({"val": NonTensorData(data=1, batch_size=[])}, []), inplace=True)  # works
-        ...     td["val"] = 1  # breaks
+        >>> td = TensorDict({"val": NonTensorData(data=0, batch_size=[])}, [])
+        >>> _ = td.share_memory_()
+        >>> _ = td.update_(TensorDict({"val": NonTensorData(data=1, batch_size=[])}, []))
+        >>> _ = td.update(TensorDict({"val": NonTensorData(data=1, batch_size=[])}, []), inplace=True)
+        >>> td["val"] = 1
+        Traceback (most recent call last):
+            ...
+        RuntimeError: Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method and make sure the key is present.
 
-      A shared ``NonTensorData`` is writable whenever its content is a ``str``,
-      ``int``, ``float``, ``bool``, ``dict`` or ``list`` instance. Other types
-      (e.g., dataclasses) will not raise an exception during the call to
-      ``memmap_`` or ``share_memory_`` but they will cause the code to break
-      when the data is overwritten.
+    A shared :class:`NonTensorData` is writable if its value is a ``str``,
+    ``int``, ``float``, ``bool``, ``dict`` or ``list``. Other values (a
+    dataclass instance, for example) do not raise an error in ``memmap_`` or
+    ``share_memory_``, but writing a new value raises a
+    ``NotImplementedError``:
 
+        >>> from dataclasses import dataclass
         >>> @dataclass
         ... class MyClass:
         ...     string: str
-        ...
-        >>> if __name__ == "__main__":
-        ...     td = TensorDict({"val": MyClass("a string!")}, [])
-        ...     td.share_memory_()  # works and can be shared between processes
-        ...     td.update_(TensorDict({"val": MyClass("another string!")}, []))  # breaks!
+        >>> td = TensorDict({"val": MyClass("a string!")}, [])
+        >>> _ = td.share_memory_()
+        >>> _ = td.update_(TensorDict({"val": MyClass("another string!")}, []))
+        Traceback (most recent call last):
+            ...
+        NotImplementedError: Updating MyClass within a shared/memmaped structure is not supported.
 
-      :class:`~tensordict.tensorclass.TensorStack` instances are also sharable
-      in a similar way. Crucially, preallocation must be properly handled for
-      this to work.
+    A shared :class:`~tensordict.NonTensorStack` is writable too, if it was
+    preallocated: the entry must be a stack before the tensordict is
+    shared.
 
         >>> td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
-        >>> newdata = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
-        >>> td[1::2] = newdata
-        >>> # If TD is properly preallocated, we can share it and change its content
-        >>> td.share_memory_()
-        >>> newdata = TensorDict({"val": NonTensorData(data=2, batch_size=[5])}, [5])
-        >>> td[1::2] = newdata  # Works!
-        >>> # In contrast, not preallocating the tensordict properly will break when assigning values
+        >>> td[1::2] = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
+        >>> _ = td.share_memory_()
+        >>> td[1::2] = TensorDict({"val": NonTensorData(data=2, batch_size=[5])}, [5])
+        >>> td["val"]
+        LinkedList([0, 2, 0, 2, 0, 2, 0, 2, 0, 2])
+
+    If the entry is still a single :class:`NonTensorData` when the
+    tensordict is shared, writing different values to some elements raises
+    an error:
+
         >>> td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
-        >>> td.share_memory_()
-        >>> newdata = TensorDict({"val": NonTensorData(data=2, batch_size=[5])}, [5])
-        >>> td[1::2] = newdata  # breaks!
+        >>> _ = td.share_memory_()
+        >>> td[1::2] = TensorDict({"val": NonTensorData(data=2, batch_size=[5])}, [5])
+        Traceback (most recent call last):
+            ...
+        RuntimeError: You're attempting to update a leaf in-place with a shared tensordict, but the new value does not match the previous. If you're using NonTensorData, see the class documentation to see how to properly pre-allocate memory in shared contexts.
 
-      Writable memmapped-``NonTensorData`` instances will update the underlying
-      metadata if required. This involves writing in a JSON file, which can
-      introduce some overhead. We advise against this usage whenever one seeks
-      performance and long-lasting data sharing isn't required (``share_memory_``
-      should be preferred in these cases).
+    A memory-mapped :class:`NonTensorData` writes the new value to its JSON
+    file on disk at each update, which takes time. If the data does not need
+    to stay on disk, use ``share_memory_`` instead. The update also writes an
+    ``other.pickle`` file, so loading the directory needs
+    ``allow_pickle=True``:
 
-        >>> if __name__ == "__main__":
+        >>> with tempfile.TemporaryDirectory() as tmpdir:
         ...     td = TensorDict({"val": NonTensorData(data=0, batch_size=[])}, [])
-        ...     td.memmap_(dest_folder)
-        ...     td.update_(TensorDict({"val": NonTensorData(data=1, batch_size=[])}, []))
-        ...     # The underlying metadata on disk is updated during calls to update_
-        ...     td_load = TensorDict.load_memmap(dest_folder)
-        ...     assert (td == td_load).all()
+        ...     _ = td.memmap_(tmpdir)
+        ...     _ = td.update_(TensorDict({"val": NonTensorData(data=1, batch_size=[])}, []))
+        ...     td_load = TensorDict.load_memmap(tmpdir, allow_pickle=True)
+        ...     print(td_load["val"])
+        1
 
-    ``NonTensorData`` can store callables. If called, it will fallback on the `__call__` of `.data`:
+    .. rubric:: Callables
+
+    A :class:`NonTensorData` can hold a callable. Calling the
+    :class:`NonTensorData` calls its ``data``:
 
         >>> td0 = TensorDict({"a": 0, "b": 0})
         >>> td1 = TensorDict({"a": 1, "b": 1})
@@ -5564,18 +5618,42 @@ class _MetaDataMeta(_TensorClassMeta):
 
 
 class MetaData(NonTensorDataBase, metaclass=_MetaDataMeta):
-    """A non-tensor, metadata carrier class for `TensorDict`.
+    """A tensordict entry that holds one Python object for the whole batch.
 
-    This class mainly behaves as :class:`~tensordict.NonTensorData`, except for indexing,
-    stacking, squeezing/unsqueezing and similar operations.
+    Use it for information about the batch as a whole, such as a
+    configuration dict or the name of a dataset. It behaves as
+    :class:`~tensordict.NonTensorData`, except for indexing, stacking,
+    squeezing, unsqueezing and similar operations:
 
-    During __stacking__, `MetaData` will check if the content of the various items match
-    in identity (i.e., using `is` and not `==`). If so, a single `MetaData` instance will be
-    returned with the shape adapted to the stack operations. If not, a :class:`~tensordict.NonTensorStack`
-    instance will be returned.
+    - When stacking, :class:`MetaData` checks whether the items hold the same
+      object (with ``is``, not ``==``). If they do, the result is one
+      :class:`MetaData` with the stacked batch size. If they do not, the
+      result is a :class:`~tensordict.NonTensorStack`.
+      :meth:`~tensordict.TensorDictBase.clone` copies the value, so a clone
+      and its source hold different objects.
+    - :func:`~torch.unsqueeze` and indexing return a :class:`MetaData`, not a
+      stack.
 
-    Similarly, :func:`~torch.unsqueeze` will return a `MetaData` instance and not a stack (as it does for
-    :class:`~tensordict.NonTensorData`).
+    ``MetaData[cls]`` makes a subclass that raises a ``TypeError`` if the
+    value is not an instance of ``cls``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import MetaData, TensorDict
+        >>> config = {"lr": 0.1}
+        >>> td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        >>> td["config"] = MetaData(config, batch_size=[3])
+        >>> td["config"] is config
+        True
+        >>> stacked = torch.stack([td, td])
+        >>> type(stacked.get("config")).__name__
+        'MetaData'
+        >>> stacked["config"] is config
+        True
+        >>> MetaData[str](1)
+        Traceback (most recent call last):
+            ...
+        TypeError: Expected data of type str, got int
 
     """
 
@@ -5682,14 +5760,34 @@ _BREAK_ON_MEMMAP = True
 
 
 class NonTensorStack(LazyStackedTensorDict):
-    """A thin wrapper around LazyStackedTensorDict to make stack on non-tensor data easily recognizable.
+    """A lazy stack of :class:`~tensordict.NonTensorData`, one value per batch element.
 
-    A ``NonTensorStack`` is returned whenever :func:`~torch.stack` is called on
-    a list of :class:`~tensordict.NonTensorData` or ``NonTensorStack``.
+    You get a :class:`NonTensorStack` when you stack
+    :class:`~tensordict.NonTensorData` (or :class:`NonTensorStack`) instances
+    with :func:`torch.stack`, or when you assign a list to a key:
+    ``td["names"] = ["a", "b", "c"]``. You can also build one with
+    ``NonTensorStack("a", "b")`` or ``NonTensorStack.from_list(["a", "b"])``.
+
+    To read the values, call :meth:`tolist`. ``td["names"]`` returns a
+    :class:`~tensordict.utils.LinkedList` of the values, and
+    ``td.get("names")`` returns the :class:`NonTensorStack` itself. If every
+    element holds the same value, :attr:`data` returns it. To keep one shared
+    value for the whole batch, use :class:`~tensordict.MetaData`. See
+    :ref:`non-tensor-data`.
 
     Examples:
-        >>> from tensordict import NonTensorData
         >>> import torch
+        >>> from tensordict import NonTensorData, NonTensorStack, TensorDict
+        >>> NonTensorStack("a", "b").tolist()
+        ['a', 'b']
+        >>> td = TensorDict(batch_size=[3])
+        >>> td["names"] = ["a", "b", "c"]
+        >>> td["names"]
+        LinkedList(['a', 'b', 'c'])
+        >>> td[1]["names"]
+        'b'
+        >>> type(td.get("names")).__name__
+        'NonTensorStack'
         >>> data = torch.stack([
         ...     torch.stack([NonTensorData(data=(i, j), batch_size=[]) for i in range(2)])
         ...    for j in range(3)])
@@ -5698,8 +5796,6 @@ class NonTensorStack(LazyStackedTensorDict):
             [[(0, 0), (1, 0)], [(0, 1), (1, 1)], [(0, 2), (1, ...,
             batch_size=torch.Size([3, 2]),
             device=None)
-
-    To obtain the values stored in a ``NonTensorStack``, call :class:`~.tolist`.
 
     """
 
@@ -6263,9 +6359,17 @@ class NonTensorStack(LazyStackedTensorDict):
 
     @property
     def data(self) -> Self:
-        """Attempts to return the unique value in the stack.
+        """Returns the value of the stack, if every element holds the same value.
 
-        Raises a ValueError if there is more than one unique value.
+        Raises:
+            AttributeError: if the elements hold different values. Use
+                :meth:`tolist` to read them.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import NonTensorData
+            >>> torch.stack([NonTensorData("x"), NonTensorData("x")]).data
+            'x'
         """
         try:
             with _set_capture_non_tensor_stack(True):
