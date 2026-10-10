@@ -91,6 +91,9 @@ class dispatch:
             Defaults to ``True``.
 
     Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from tensordict.nn import dispatch
         >>> class MyModule(nn.Module):
         ...     in_keys = ["a"]
         ...     out_keys = ["b"]
@@ -141,7 +144,7 @@ class dispatch:
         ...         return tensordict
         ...
         >>> module = MyModuleNest()
-        >>> b, = module(a_c=torch.zeros(1, 2))
+        >>> b = module(a_c=torch.zeros(1, 2))
         >>> assert (b == 1).all()
 
     If another separator is wanted, it can be indicated with the ``separator``
@@ -158,17 +161,16 @@ class dispatch:
         ...         return tensordict
         ...
         >>> module = MyModuleNest()
-        >>> b, = module(asepc=torch.zeros(1, 2))
+        >>> b = module(asepc=torch.zeros(1, 2))
         >>> assert (b == 1).all()
 
-
-    Since the input keys is a sorted sequence of strings,
-    :func:`dispatch` can also be used with unnamed arguments where the order
-    must match the order of the input keys.
+    :func:`dispatch` also accepts positional arguments. They are matched to
+    the input keys in the order of ``in_keys``. If you pass the same key as a
+    positional and as a keyword argument, the call raises a ``RuntimeError``.
 
     .. note::
         If the first argument is a :class:`~.TensorDictBase` instance, it is
-        assumed that dispatch is __not__ being used and that this tensordict
+        assumed that dispatch is not being used and that this tensordict
         contains all the necessary information to be run through the module.
         In other words, one cannot decompose a tensordict with the first key
         of the module inputs pointing to a tensordict instance.
@@ -186,15 +188,21 @@ class dispatch:
         ...         return tensordict
         ...
         >>> module = MyModuleNest()
-        >>> b, = module(torch.zeros(1, 2), d=torch.ones(1, 2))  # works
+        >>> b = module(torch.zeros(1, 2), d=torch.ones(1, 2))  # works
         >>> assert (b == 1).all()
-        >>> b, = module(torch.zeros(1, 2), torch.ones(1, 2))  # works
+        >>> b = module(torch.zeros(1, 2), torch.ones(1, 2))  # works
         >>> assert (b == 1).all()
-        >>> try:
-        ...     b, = module(torch.zeros(1, 2), a_c=torch.ones(1, 2))  # fails
-        ... except:
-        ...     print("oopsy!")
-        ...
+        >>> module(torch.zeros(1, 2), a_c=torch.ones(1, 2))  # ("a", "c") is passed twice
+        Traceback (most recent call last):
+            ...
+        RuntimeError: Duplicated argument in args and kwargs.
+
+    .. note::
+        To turn keyword calls off for every module, set the environment
+        variable ``DISPATCH_TDNN_MODULES=0`` before you import tensordict.
+        The decorated functions then accept a tensordict only, and the call
+        does not go through the wrapper of :func:`dispatch`. See
+        :ref:`compile` for how modules behave under :func:`torch.compile`.
 
     """
 
@@ -499,7 +507,9 @@ class TensorDictModuleBase(nn.Module):
     The forward method input/output signature should always follow the
     convention:
 
-        >>> tensordict_out = module.forward(tensordict_in)
+    .. code-block:: python
+
+        tensordict_out = module.forward(tensordict_in)
 
     Unlike :class:`~tensordict.nn.TensorDictModule`, `TensorDictModuleBase` is typically used via subclassing:
     you can wrap any python function in a `TensorDictModuleBase` subclass, as long as the subclass forward reads and
@@ -524,7 +534,7 @@ class TensorDictModuleBase(nn.Module):
         tensor(0)
         >>> td["c"]
         tensor(1)
-        >>> mod.select_out_keys("c")
+        >>> _ = mod.select_out_keys("c")
         >>> td = mod(TensorDict(a=0))
         >>> td["c"]
         tensor(1)
@@ -557,11 +567,20 @@ class TensorDictModuleBase(nn.Module):
 
     @staticmethod
     def is_tdmodule_compatible(module):
-        """Checks if a module is compatible with TensorDictModule API."""
+        """Checks if a module is compatible with TensorDictModule API.
+
+        Args:
+            module (object): the object to check.
+
+        Returns:
+            ``True`` if ``module`` has both an ``in_keys`` and an ``out_keys``
+            attribute.
+        """
         return hasattr(module, "in_keys") and hasattr(module, "out_keys")
 
     @property
     def in_keys(self):
+        """The keys that the module reads from the input tensordict."""
         return self._in_keys
 
     @in_keys.setter
@@ -570,10 +589,16 @@ class TensorDictModuleBase(nn.Module):
 
     @property
     def out_keys(self):
+        """The keys that the module writes to the output tensordict.
+
+        After :meth:`select_out_keys`, only the selected keys. The full list
+        is in :attr:`out_keys_source`.
+        """
         return self._out_keys_apparent
 
     @property
     def out_keys_source(self):
+        """All the keys that the module writes, before :meth:`select_out_keys`."""
         return self._out_keys
 
     @out_keys.setter
@@ -613,7 +638,7 @@ class TensorDictModuleBase(nn.Module):
                 batch_size=torch.Size([]),
                 device=None,
                 is_shared=False)
-            >>> mod.select_out_keys("d")
+            >>> _ = mod.select_out_keys("d")
             >>> td = TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, [])
             >>> mod(td)
             TensorDict(
@@ -626,7 +651,7 @@ class TensorDictModuleBase(nn.Module):
                 is_shared=False)
 
         This feature will also work with dispatched arguments:
-        Examples:
+
             >>> mod(torch.zeros(()), torch.ones(()))
             tensor(3.)
 
@@ -634,8 +659,7 @@ class TensorDictModuleBase(nn.Module):
         with an updated list of out_keys). It can be reverted using the
         :meth:`TensorDictModuleBase.reset_out_keys` method.
 
-        Examples:
-            >>> mod.reset_out_keys()
+            >>> _ = mod.reset_out_keys()
             >>> mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
             TensorDict(
                 fields={
@@ -648,7 +672,7 @@ class TensorDictModuleBase(nn.Module):
                 is_shared=False)
 
         This will work with other classes too, such as Sequential:
-        Examples:
+
             >>> from tensordict.nn import TensorDictSequential
             >>> seq = TensorDictSequential(
             ...     TensorDictModule(lambda x: x+1, in_keys=["x"], out_keys=["y"]),
@@ -664,7 +688,7 @@ class TensorDictModuleBase(nn.Module):
                 batch_size=torch.Size([]),
                 device=None,
                 is_shared=False)
-            >>> seq.select_out_keys("z")
+            >>> _ = seq.select_out_keys("z")
             >>> td = TensorDict({"x": torch.zeros(())}, [])
             >>> seq(td)
             TensorDict(
@@ -693,7 +717,7 @@ class TensorDictModuleBase(nn.Module):
         return self
 
     def reset_out_keys(self):
-        """Resets the ``out_keys`` attribute to its orignal value.
+        """Resets the ``out_keys`` attribute to its original value.
 
         Returns: the same module, with its original ``out_keys`` values.
 
@@ -702,7 +726,7 @@ class TensorDictModuleBase(nn.Module):
             >>> from tensordict.nn import TensorDictModule, TensorDictSequential
             >>> import torch
             >>> mod = TensorDictModule(lambda x, y: (x+2, y+2), in_keys=["a", "b"], out_keys=["c", "d"])
-            >>> mod.select_out_keys("d")
+            >>> _ = mod.select_out_keys("d")
             >>> td = TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, [])
             >>> mod(td)
             TensorDict(
@@ -713,7 +737,7 @@ class TensorDictModuleBase(nn.Module):
                 batch_size=torch.Size([]),
                 device=None,
                 is_shared=False)
-            >>> mod.reset_out_keys()
+            >>> _ = mod.reset_out_keys()
             >>> mod(td)
             TensorDict(
                 fields={
@@ -817,7 +841,14 @@ class TensorDictModuleBase(nn.Module):
 
 
 class TensorDictModule(TensorDictModuleBase):
-    """A TensorDictModule, is a python wrapper around a :class:`torch.nn.Module` that reads and writes to a TensorDict.
+    """Wraps a callable, such as a :class:`torch.nn.Module`, so that it reads its inputs from a tensordict and writes its outputs to it.
+
+    When you call the module with a tensordict, it reads the entries at
+    ``in_keys``, passes them to ``module``, and writes the results at
+    ``out_keys``. By default it writes into the input tensordict and returns
+    it. You can also call it with tensors as positional or keyword arguments
+    (see :func:`~tensordict.nn.dispatch`). It then returns the output tensors.
+    See :ref:`modules-guide` for a guide.
 
     Args:
         module (Callable[[Any], Any]): a callable, typically a :class:`torch.nn.Module`,
@@ -827,56 +858,51 @@ class TensorDictModule(TensorDictModuleBase):
             will be used to populate the output tensordict (ie. the keys present
             in ``out_keys`` should be present in the dictionary returned by the
             ``module`` forward method).
-        in_keys (iterable of NestedKeys, Dict[NestedStr, str]): keys to be read
-            from input tensordict and passed to the module. If it
-            contains more than one element, the values will be passed in the
-            order given by the in_keys iterable.
-            If ``in_keys`` is a dictionary, its keys must correspond to the key
-            to be read in the tensordict and its values must match the name of
-            the keyword argument in the function signature. If `out_to_in_map` is ``True``,
-            the mapping gets inverted so that the keys correspond to the keyword
-            arguments in the function signature.
-        out_keys (iterable of str): keys to be written to the input tensordict. The length of out_keys must match the
-            number of tensors returned by the embedded module. Using "_" as a key avoid writing tensor to output.
+        in_keys (NestedKey, list of NestedKey, or dict): the entries that the
+            module reads from the input tensordict. If a list, the values are
+            passed as positional arguments, in this order. If a dict, the values
+            are passed as keyword arguments. By default, the dict maps an
+            argument name to a tensordict key: ``in_keys={"x": "obs"}`` calls
+            ``module(x=td["obs"])``. One tensordict key can feed several
+            arguments. ``out_to_in_map=False`` reverses the direction.
+        out_keys (NestedKey or list of NestedKey): the keys where the outputs of
+            ``module`` are written. The length of ``out_keys`` must match the
+            number of tensors returned by ``module``. The output at the key
+            ``"_"`` is not written.
 
     Keyword Args:
-        out_to_in_map (bool, optional): if ``True`` (default), `in_keys` is read as if the keys are the arguments keys of
-            the :meth:`~.forward` method and the values are the keys in the input :class:`~tensordict.TensorDict`. If
-            ``False``, keys are considered to be the input keys and values the method's arguments keys.
-        inplace (bool or string, optional): if ``True`` (default), the output of the module are written in the tensordict
-            provided to the :meth:`~.forward` method. If ``False``, a new :class:`~tensordict.TensorDict` with and empty
-            batch-size and no device is created. if ``"empty"``, :meth:`~tensordict.TensorDict.empty` will be used to
-            create the output tensordict.
+        out_to_in_map (bool, optional): the direction of a dict ``in_keys``.
+            ``True`` reads it as ``{argument: tensordict_key}``, ``False`` as
+            ``{tensordict_key: argument}``. Only used when ``in_keys`` is a
+            dict. If you pass it with another type of ``in_keys``, the
+            constructor warns. Defaults to ``True`` for a dict ``in_keys``.
+        inplace (bool or str, optional): where the module writes its outputs.
 
-            .. note::
-                If ``inplace=False`` and the tensordict passed to the module is another
-                :class:`~tensordict.TensorDictBase` subclass than :class:`~tensordict.TensorDict`, the output will still
-                be a :class:`~tensordict.TensorDict` instance. Its batch-size will be empty, and it will have no device.
-                Set to ``"empty"`` to get the same :class:`~tensordict.TensorDictBase` subtype, an identical batch-size
-                and device. Use ``tensordict_out`` at runtime (see below) to have a more fine-grained control over the
-                output.
+            - ``True`` (default): into the input tensordict, which ``forward`` returns.
+            - ``False``: into a new :class:`~tensordict.TensorDict` that holds only
+              the outputs, with an empty batch size and no device, whatever
+              the type of the input.
+            - ``"empty"``: into ``tensordict.empty()``, which keeps the type,
+              batch size and device of the input.
 
-            .. note::
-                If ``inplace=False`` and a `tensordict_out` is passed to the :meth:`~.forward` method,
-                the ``tensordict_out`` will prevail. This is the way one can get a tensordict_out taensordict passed to the module is another
-                :class:`~tensordict.TensorDictBase` subclass than :class:`~tensordict.TensorDict`, the output will still
-                be a :class:`~tensordict.TensorDict` instance.
+            If you pass ``tensordict_out`` to :meth:`forward`, the outputs are
+            written into it, whatever the value of ``inplace``.
 
         method (str, optional): the method to be called in the module, if any. Defaults to `__call__`.
         method_kwargs (Dict[str, Any], optional): additional keyword arguments to be passed to the module's method being called.
         strict (bool, optional): if ``True``, the module will raise an exception if any of the inputs is missing from
             the input tensordict. Otherwise, a `None` value will be used as placeholder. Defaults to ``False``.
         get_kwargs (dict[str, Any], optional): additional keyword arguments to be passed to the :meth:`~tensordict.TensorDictBase.get`
-            method. This is particularily useful when dealing with ragged tensors (see :meth:`~tensordict.LazyStackedTensorDict.get`).
+            method. This is particularly useful when dealing with ragged tensors (see :meth:`~tensordict.LazyStackedTensorDict.get`).
             Defaults to ``{}``.
 
-    Embedding a neural network in a TensorDictModule only requires to specify the input
-    and output keys. TensorDictModule support functional and regular :class:`torch.nn.Module`
-    objects. In the functional case, parameters can be swapped in with
-    :meth:`~tensordict.TensorDictBase.to_module`:
+    To wrap a neural network, give it the input and output keys:
 
     Examples:
+        >>> import torch
+        >>> from torch import nn
         >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictModule
         >>> # one can wrap regular nn.Module
         >>> module = TensorDictModule(nn.Transformer(128), in_keys=["input", "tgt"], out_keys=["out"])
         >>> input = torch.ones(2, 3, 128)
@@ -932,8 +958,21 @@ class TensorDictModule(TensorDictModuleBase):
             device=None,
             is_shared=False)
 
-    Another feature is passing a dictionary as input keys, to control the
-    dispatching of values to specific keyword arguments.
+    A dict ``in_keys`` passes the values as keyword arguments. By default
+    (``out_to_in_map=True``), its keys are the argument names and its values
+    are the tensordict keys. One tensordict key can then feed several
+    arguments:
+
+    Examples:
+        >>> module = TensorDictModule(lambda x, *, y, z: x+y+z,
+        ...     in_keys={'x': '1', 'y': '2', 'z': '2'}, out_keys=['t']
+        ...     )
+        >>> td = module(TensorDict({'1': torch.ones(()), '2': torch.ones(())*2}, []))
+        >>> td['t']
+        tensor(5.)
+
+    With ``out_to_in_map=False``, the keys of the dict are the tensordict keys
+    and its values are the argument names:
 
     Examples:
         >>> module = TensorDictModule(lambda x, *, y: x+y,
@@ -942,17 +981,6 @@ class TensorDictModule(TensorDictModuleBase):
         >>> td = module(TensorDict({'1': torch.ones(()), '2': torch.ones(())*2}, []))
         >>> td['z']
         tensor(3.)
-
-    If `out_to_in_map` is set to ``True``, then the `in_keys` mapping is reversed. This way,
-    one can use the same input key for different keyword arguments.
-
-    Examples:
-        >>> module = TensorDictModule(lambda x, *, y, z: x+y+z,
-        ...     in_keys={'x': '1', 'y': '2', 'z': '2'}, out_keys=['t'], out_to_in_map=True
-        ...     )
-        >>> td = module(TensorDict({'1': torch.ones(()), '2': torch.ones(())*2}, []))
-        >>> td['t']
-        tensor(5.)
 
     We can specify the method to be called within a module. Compared to using a lambda function or similar around the
     module's method, this has the advantage that the module attributes (params, buffers, submodules) will be exposed.
@@ -976,10 +1004,17 @@ class TensorDictModule(TensorDictModuleBase):
         ... )
         >>> td = s(TensorDict(a=0))
         >>> print(td)
-        >>>
+        TensorDict(
+            fields={
+                a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
         >>> assert td["b"] == 4
 
-    Functional calls to a tensordict module is easy:
+    To call the module with other parameters, put them in a tensordict and
+    use :meth:`~tensordict.TensorDictBase.to_module` as a context manager:
 
     Examples:
         >>> import torch
@@ -1005,6 +1040,7 @@ class TensorDictModule(TensorDictModuleBase):
             is_shared=False)
 
     In the stateful case:
+
         >>> module = torch.nn.GRUCell(4, 8)
         >>> td_module = TensorDictModule(
         ...    module=module, in_keys=["input", "hidden"], out_keys=["output"]
@@ -1171,7 +1207,24 @@ class TensorDictModule(TensorDictModuleBase):
         tensordict_out: TensorDictBase | None = None,
         **kwargs: Any,
     ) -> TensorDictBase:
-        """When the tensordict parameter is not set, kwargs are used to create an instance of TensorDict."""
+        """Reads ``in_keys`` from ``tensordict``, calls the wrapped module, and writes ``out_keys``.
+
+        If you call the module with tensors instead of a tensordict, the
+        tensors are put in a new tensordict first (see
+        :func:`~tensordict.nn.dispatch`).
+
+        Args:
+            tensordict (TensorDictBase): the input tensordict.
+
+        Keyword Args:
+            tensordict_out (TensorDictBase, optional): if given, the outputs
+                are written into it and it is returned, whatever the value of
+                ``inplace``. Defaults to ``None``.
+            **kwargs: passed to the wrapped module.
+
+        Returns:
+            the tensordict that holds the outputs (see ``inplace``).
+        """
         try:
             if len(args):
                 raise ValueError(
@@ -1332,8 +1385,29 @@ class TensorDictModuleWrapper(TensorDictModuleBase):
     TensorDictModule it contains except for the methods that are
     overwritten.
 
+    Subclass it to change :meth:`forward` and keep the ``in_keys``,
+    ``out_keys``, parameters and attributes of the wrapped module. An
+    attribute that the wrapper does not have is read from ``td_module``.
+
     Args:
         td_module (TensorDictModule): operator to be wrapped.
+
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
+        >>> class TimesTen(TensorDictModuleWrapper):
+        ...     def forward(self, tensordict):
+        ...         tensordict = self.td_module(tensordict)
+        ...         tensordict["y"] = tensordict["y"] * 10
+        ...         return tensordict
+        >>> inner = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
+        >>> wrapped = TimesTen(inner)
+        >>> wrapped.in_keys, wrapped.out_keys
+        (['x'], ['y'])
+        >>> wrapped(TensorDict(x=torch.zeros(2)))["y"]
+        tensor([10., 10.])
 
     """
 
@@ -1426,6 +1500,8 @@ class WrapModule(TensorDictModuleBase):
             about the output keys of the wrapped module. Defaults to `[]`.
 
     Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod, WrapModule
         >>> seq = Seq(
         ...     Mod(lambda x: x * 2, in_keys=["x"], out_keys=["y"]),
@@ -1476,6 +1552,8 @@ class as_tensordict_module:
         Callable: A decorator that can be applied to a function to convert it into a TensorDictModule.
 
     Examples:
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import as_tensordict_module
         >>> class MyClass:
         ...     @as_tensordict_module(in_keys="c", out_keys="d")
         ...     def my_method(self, c):

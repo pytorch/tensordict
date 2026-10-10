@@ -188,30 +188,58 @@ class _StoreTDKeysView(_TensorDictKeysView):
 
 
 class TensorDictStore(TensorDictBase):
-    """A TensorDict backed by an in-memory key-value store for out-of-core storage.
+    """A TensorDict whose entries live on a Redis-compatible server.
 
     Supports `Redis <https://redis.io>`_, `Dragonfly <https://dragonflydb.io>`_,
     `KeyDB <https://docs.keydb.dev>`_, and any other Redis-wire-compatible server.
 
-    Tensors are stored as raw bytes using ``torch.frombuffer``-compatible
-    serialization.  Metadata (shape, dtype) is stored in server-side Hashes
-    for fast introspection without downloading tensor data.
+    Use it to share data between processes or machines, or to keep data out of
+    the RAM of the training process. Each tensor entry is stored as one string
+    of raw bytes on the server. Its shape and dtype are stored next to it, so
+    that ``keys()`` and ``shape`` do not download the data. See
+    :ref:`storage` for a guide.
 
-    All I/O is performed via an async ``redis.asyncio.Redis`` client running on
-    a dedicated background event loop, ensuring non-blocking operation from the
-    caller's perspective.
+    Each read or write blocks until the server answers. Internally, the client
+    is a ``redis.asyncio.Redis`` client that runs on a background event loop,
+    so that one call can send many commands in one round-trip.
+
+    .. rubric:: Lifecycle and limits
+
+    - The store needs a running server. By default it connects to
+      ``localhost:6379``. To start a local Redis server, run
+      ``docker run -d -p 6379:6379 redis``.
+    - The data stays on the server after :meth:`close`, after the object is
+      garbage collected, and after the process ends. The server keeps it in
+      its memory until you delete it.
+    - To reconnect from another process, pass the ``td_id`` of the store to
+      :meth:`from_store`, which also reads the batch size and the device. The
+      id is in the private attribute ``_td_id``, and is shown by ``repr``.
+      There is no public accessor.
+    - :meth:`close` closes the connection and stops the background loop. The
+      object cannot read or write after that, and the data stays on the
+      server. :meth:`clear_redis` deletes the data and keeps the connection
+      open.
+    - Each tensor entry is one string on the server. Redis limits a string to
+      512 MB by default (``proto-max-bulk-len``), and a larger write raises
+      ``redis.exceptions.ResponseError``. For larger entries, raise the limit
+      on the server, or split the entry.
+    - Non-tensor values are stored as JSON. A value that JSON cannot encode
+      is stored with :mod:`pickle`, and on the current version, reading it
+      back raises ``UnicodeDecodeError``. Store JSON-compatible values only
+      (``str``, numbers, ``bool``, lists and dicts of these).
 
     Keyword Args:
         backend (str): Name of the server backend.  Accepted values include
             ``"redis"`` (default), ``"dragonfly"``, ``"keydb"``, or any
-            other string (stored for documentation; all use the same wire
-            protocol).
+            other string. It is a label, kept in the object and shown by
+            ``repr``. All servers use the same wire protocol, so the value
+            does not change how the store connects.
         host (str): Server hostname. Defaults to ``"localhost"``.
         port (int): Server port. Defaults to ``6379``.
         db (int): Database number. Defaults to ``0``.
-        unix_socket_path (str, optional): Path to a Unix domain socket for
-            local high-performance connections. Mutually exclusive with
-            ``host``/``port``.
+        unix_socket_path (str, optional): Path to a Unix domain socket, for a
+            server on the same machine. If set, ``host`` and ``port`` are
+            ignored.
         prefix (str, optional): A namespace prefix for all keys.
             Defaults to ``"tensordict"``.
         batch_size (torch.Size or compatible): The TensorDict batch size.
@@ -222,22 +250,32 @@ class TensorDictStore(TensorDictBase):
             provided, ``host``/``port``/``db``/``unix_socket_path`` are ignored.
         td_id (str, optional): A unique identifier for this TensorDict in the
             store.  Defaults to a new UUID.  Pass an existing ID to reconnect
-            to previously stored data.
+            to previously stored data. The constructor does not read the
+            stored batch size: use :meth:`from_store` to reconnect.
         cache_metadata (bool): If ``True`` (default), cache tensor metadata
             locally to reduce round-trips.
         **redis_kwargs: Additional keyword arguments passed to
             ``redis.asyncio.Redis``.
 
     Examples:
+        The example needs a Redis server on ``localhost:6379``.
+
+        >>> import torch
         >>> from tensordict.store import TensorDictStore
         >>> # Redis backend (default)
         >>> td = TensorDictStore(batch_size=[100])
         >>> td["obs"] = torch.randn(100, 84)
-        >>> td["obs"]  # fetched from the store
+        >>> td["obs"].shape  # fetched from the store
+        torch.Size([100, 84])
         >>> local_td = td.to_tensordict()
-        >>>
-        >>> # Dragonfly backend (same wire protocol, up to 25x faster)
-        >>> td = TensorDictStore(backend="dragonfly", host="dragonfly-host", batch_size=[100])
+        >>> type(local_td).__name__
+        'TensorDict'
+        >>> td.clear_redis()  # delete the data on the server
+        >>> td.close()
+
+        To connect to a Dragonfly server (same wire protocol as Redis) on
+        another host, pass its address, for example
+        ``TensorDictStore(backend="dragonfly", host="dragonfly-host", batch_size=[100])``.
 
     .. note::
         Requires ``redis`` package: ``pip install redis``.
@@ -1867,8 +1905,11 @@ class TensorDictStore(TensorDictBase):
     def to_tensordict(self, *, retain_none: bool | None = None) -> TensorDict:
         """Materialize all leaf tensors into a local ``TensorDict``.
 
-        Uses a single Redis pipeline to fetch all data in one round-trip,
-        avoiding per-key ``_get_str`` overhead.
+        Fetches all the data in one round-trip to the server.
+
+        Keyword Args:
+            retain_none (bool, optional): has no effect on a store. Defaults
+                to ``None``.
         """
         all_keys = self._get_all_keys()
         # Filter to keys under our prefix
@@ -1917,7 +1958,13 @@ class TensorDictStore(TensorDictBase):
         return self.to_tensordict()
 
     def contiguous(self, *, canonical: bool = False) -> TensorDict:
-        """Materialize into a regular TensorDict."""
+        """Materialize into a regular TensorDict (see :meth:`to_tensordict`).
+
+        Keyword Args:
+            canonical (bool, optional): if ``True``, also call
+                ``contiguous(canonical=True)`` on the result. Defaults to
+                ``False``.
+        """
         out = self.to_tensordict()
         if canonical:
             out = out.contiguous(canonical=True)
@@ -1947,15 +1994,35 @@ class TensorDictStore(TensorDictBase):
             input_dict: A dictionary or TensorDict to store.
 
         Keyword Args:
-            backend: Store backend (``"redis"``, ``"dragonfly"``, etc.).
-            host, port, db, unix_socket_path, prefix: Connection params.
-            auto_batch_size: If True, infer batch_size from data.
-            batch_size: Explicit batch_size.
+            backend (str): Store backend (``"redis"``, ``"dragonfly"``, etc.).
+                A label only (see :class:`TensorDictStore`).
+            host (str): Server hostname. Defaults to ``"localhost"``.
+            port (int): Server port. Defaults to ``6379``.
+            db (int): Database number. Defaults to ``0``.
+            unix_socket_path (str, optional): Unix socket path. If set,
+                ``host`` and ``port`` are ignored.
+            prefix (str): Key namespace. Defaults to ``"tensordict"``.
+            auto_batch_size (bool): has no effect on the current version:
+                the batch size is not inferred from the data. Pass
+                ``batch_size`` instead.
+            batch_size: Explicit batch_size. Defaults to the batch size of
+                ``input_dict`` if it is a TensorDict, else to ``[]``.
             device: Target device for tensor retrieval.
             **kwargs: Additional connection kwargs.
 
         Returns:
             A new TensorDictStore.
+
+        Examples:
+            The example needs a Redis server on ``localhost:6379``.
+
+            >>> import torch
+            >>> from tensordict.store import TensorDictStore
+            >>> store = TensorDictStore.from_dict({"a": torch.zeros(5, 3)}, batch_size=[5])
+            >>> store.batch_size
+            torch.Size([5])
+            >>> store.clear_redis()
+            >>> store.close()
         """
         if batch_size is None:
             if is_tensor_collection(input_dict):
@@ -2022,11 +2089,23 @@ class TensorDictStore(TensorDictBase):
         Returns:
             A new TensorDictStore backed by the uploaded data.
 
+        A :class:`~tensordict.LazyStackedTensorDict` gives a
+        :class:`~tensordict.store.LazyStackedTensorDictStore`, which keeps the
+        entries of different shapes.
+
         Examples:
+            The example needs a Redis server on ``localhost:6379``. For a
+            server on another machine, pass ``host``.
+
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from tensordict.store import TensorDictStore
             >>> local = TensorDict({"obs": torch.randn(10, 84)}, [10])
-            >>> remote = TensorDictStore.from_tensordict(local, host="my-server")
+            >>> remote = TensorDictStore.from_tensordict(local)
             >>> remote["obs"].shape
             torch.Size([10, 84])
+            >>> remote.clear_redis()
+            >>> remote.close()
         """
         if device is None:
             device = td.device
@@ -2089,15 +2168,21 @@ class TensorDictStore(TensorDictBase):
         device=None,
         **kwargs,
     ) -> TensorDictStore:
-        """Pre-allocate zero-filled keys on the remote store without using RAM.
+        """Creates a store with zero-filled entries of known shapes, without sending any data from Python.
 
         Creates a new :class:`TensorDictStore` and registers each key in
-        ``schema`` with its shape and dtype.  Storage is allocated directly
-        on the server using ``SETRANGE`` (the server zero-fills the bytes);
-        no tensor data passes through Python or host RAM.
+        ``schema`` with its shape and dtype. The server allocates each entry
+        with ``SETRANGE`` and fills it with zeros. No tensor data goes through
+        the Python process, but the server allocates the full size in its
+        memory at once.
 
-        This is useful for large replay buffers or shared data structures
-        where you know the schema up front and want to fill iteratively.
+        Use it for a replay buffer or another shared buffer whose schema you
+        know before you fill it.
+
+        Each entry is one string on the server. Redis limits a string to 512
+        MB by default (``proto-max-bulk-len``). A larger entry raises
+        ``redis.exceptions.ResponseError``: raise the limit on the server, or
+        split the entry.
 
         Args:
             schema: Mapping from field name to ``(element_shape, dtype)``.
@@ -2120,16 +2205,31 @@ class TensorDictStore(TensorDictBase):
             A new ``TensorDictStore`` with pre-allocated (zero-filled) keys.
 
         Examples:
+            The example needs a Redis server on ``localhost:6379``. The
+            ``obs`` entry takes 21 MB on the server.
+
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from tensordict.store import TensorDictStore
             >>> store = TensorDictStore.from_schema(
             ...     {"obs": ([84, 84, 3], torch.uint8),
             ...      "action": ([4], torch.float32),
             ...      "reward": ([], torch.float32)},
-            ...     batch_size=[100_000],
-            ...     host="localhost",
+            ...     batch_size=[1000],
             ... )
             >>> store["obs"].shape
-            torch.Size([100000, 84, 84, 3])
-            >>> store[0] = TensorDict(obs=..., action=..., reward=..., batch_size=[])
+            torch.Size([1000, 84, 84, 3])
+            >>> store[0] = TensorDict(
+            ...     obs=torch.ones(84, 84, 3, dtype=torch.uint8),
+            ...     action=torch.ones(4),
+            ...     reward=torch.ones(()),
+            ...     batch_size=[],
+            ... )
+            >>> store["action"][:2]
+            tensor([[1., 1., 1., 1.],
+                    [0., 0., 0., 0.]])
+            >>> store.clear_redis()
+            >>> store.close()
         """
         connect_kwargs = dict(kwargs)
         if unix_socket_path is not None:
@@ -2221,7 +2321,8 @@ class TensorDictStore(TensorDictBase):
             prefix (str): Key namespace. Defaults to ``"tensordict"``.
             td_id (str): The unique identifier of the TensorDict to reconnect
                 to. Obtain this from a previously created instance via
-                ``td._td_id``.
+                ``td._td_id`` (a private attribute: there is no public
+                accessor), or read it in its ``repr``.
             device (torch.device, optional): Device override for retrieved
                 tensors. If ``None``, uses the device stored in the server.
             tensorclass_cls (type | str | None): TensorClass to wrap the
@@ -2527,7 +2628,13 @@ class TensorDictStore(TensorDictBase):
     # ---- Cleanup ----
 
     def close(self):
-        """Close the Redis connection and stop the background event loop."""
+        """Close the Redis connection and stop the background event loop.
+
+        The data stays on the server: reconnect with :meth:`from_store`, or
+        delete it with :meth:`clear_redis` before you close. After
+        ``close()``, this object cannot read or write. Garbage collection
+        calls ``close()``.
+        """
         if hasattr(self, "_owns_loop") and self._owns_loop:
             if (
                 hasattr(self, "_client")
@@ -2553,7 +2660,13 @@ class TensorDictStore(TensorDictBase):
     def clear_redis(self):
         """Delete all keys associated with this TensorDict from Redis.
 
-        This removes all tensor data, metadata, and the key registry.
+        This removes all tensor data, metadata, and the key registry. The
+        connection stays open, so you can write new entries. Call
+        :meth:`close` to close it.
+
+        .. note::
+            For a store created from a tensorclass, one key,
+            ``<prefix>:{<td_id>}:__tensorclass__``, stays on the server.
         """
 
         async def _aclear():

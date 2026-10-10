@@ -36,12 +36,18 @@ __all__ = ["TensorDictSequential"]
 
 
 class TensorDictSequential(TensorDictModule):
-    """A sequence of TensorDictModules.
+    """Runs TensorDictModules one after the other on the same tensordict.
 
-    Similarly to :class:`torch.nn.Sequential` which passes a tensor through a chain of mappings that read and write a single tensor
-    each, this module will read and write over a tensordict by querying each of the input modules.
-    When calling a :class:`TensorDictSequential` instance with a functional module, it is expected that the parameter lists (and
-    buffers) will be concatenated in a single list.
+    Like :class:`torch.nn.Sequential`, each module receives the output of the
+    previous one. Here the data is a tensordict, so a module can read any entry
+    that an earlier module wrote.
+
+    The ``in_keys`` of the sequence are the keys that a module reads and that no
+    earlier module writes. The input tensordict must contain them. The
+    ``out_keys`` are all the keys that the modules write, each listed once.
+    To call the sequence with other parameters, use
+    :meth:`~tensordict.TensorDictBase.to_module` (see the second example).
+    See :ref:`modules-guide` for a guide.
 
     Args:
         modules (OrderedDict[str, Callable[[TensorDictBase], TensorDictBase]] | List[Callable[[TensorDictBase], TensorDictBase]]):
@@ -60,9 +66,17 @@ class TensorDictSequential(TensorDictModule):
             looking for those that have the required keys, if any. Defaults to False.
         selected_out_keys (iterable of NestedKeys, optional): the list of out-keys to select. If not provided, all
             ``out_keys`` will be written.
-        inplace (bool or str, optional): if `True`, the input tensordict is modified in-place. If `False`, a new empty
-            :class:`~tensordict.TensorDict` instance is created. If `"empty"`, `input.empty()` is used instead (ie, the
-            output preserves type, device and batch-size). Defaults to `None` (relies on sub-modules).
+        inplace (bool or str, optional): where the sequence writes its ``out_keys``
+            after the last module ran.
+
+            - ``True``: into the input tensordict, which is returned.
+            - ``False``: into a new, empty :class:`~tensordict.TensorDict`.
+            - ``"empty"``: into ``input.empty()``, which keeps the type, device
+              and batch size of the input.
+            - ``None`` (default): the sequence returns what the last module
+              returns, so the ``inplace`` value of each module decides.
+
+            See the last example.
 
     .. note::
         A :class:`TensorDictSequential` instance may have a long list of output keys, and one may wish to remove
@@ -72,8 +86,9 @@ class TensorDictSequential(TensorDictModule):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
+        >>> from torch import nn
         >>> from tensordict.nn import TensorDictModule, TensorDictSequential
-        >>> torch.manual_seed(0)
+        >>> _ = torch.manual_seed(0)
         >>> module = TensorDictSequential(
         ...     TensorDictModule(lambda x: x+1, in_keys=["x"], out_keys=["x+1"]),
         ...     TensorDictModule(nn.Linear(3, 4), in_keys=["x+1"], out_keys=["w*(x+1)+b"]),
@@ -88,13 +103,15 @@ class TensorDictSequential(TensorDictModule):
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
+        >>> module.in_keys, module.out_keys
+        (['x'], ['x+1', 'w*(x+1)+b'])
         >>> # with tensor input: returns all the output keys in the order of the modules, ie "x+1" and "w*(x+1)+b"
         >>> module(x=torch.zeros(3))
         (tensor([1., 1., 1.]), tensor([-0.7214, -0.8748,  0.1571, -0.1138], grad_fn=<ViewBackward0>))
         >>> module(torch.zeros(3))
         (tensor([1., 1., 1.]), tensor([-0.7214, -0.8748,  0.1571, -0.1138], grad_fn=<ViewBackward0>))
 
-    TensorDictSequence supports functional, modular and vmap coding.
+    TensorDictSequential supports functional, modular and vmap coding.
 
     Examples:
         >>> import torch
@@ -146,6 +163,7 @@ class TensorDictSequential(TensorDictModule):
             is_shared=False)
 
     In the vmap case:
+
         >>> from torch import vmap
         >>> params = params.expand(4)
         >>> def func(td, params):
@@ -163,6 +181,45 @@ class TensorDictSequential(TensorDictModule):
                 params: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
                 scale: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([4, 3]),
+            device=None,
+            is_shared=False)
+
+    The ``inplace`` argument controls where the outputs go. In this example the
+    inner modules use ``inplace=False``, so each one passes only its outputs to
+    the next. The sequence uses ``inplace=True``, so it writes the final
+    ``output`` into the input object. The intermediate entries are not written
+    into it.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorClass
+        >>> from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
+        >>>
+        >>> class MyClass(TensorClass):
+        ...     input: torch.Tensor
+        ...     output: torch.Tensor | None = None
+        >>>
+        >>> obj = MyClass(torch.randn(2, 3), batch_size=(2,))
+        >>>
+        >>> model = Seq(
+        ...     Mod(
+        ...         lambda x: (x + 1, x - 1),
+        ...         in_keys=["input"],
+        ...         out_keys=[("intermediate", "0"), ("intermediate", "1")],
+        ...         inplace=False
+        ...         ),
+        ...     Mod(
+        ...         lambda y0, y1: y0 * y1,
+        ...         in_keys=[("intermediate", "0"), ("intermediate", "1")],
+        ...         out_keys=["output"],
+        ...         inplace=False
+        ...         ),
+        ...     inplace=True, )
+        >>> print(model(obj))
+        MyClass(
+            input=Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+            output=Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+            batch_size=torch.Size([2]),
             device=None,
             is_shared=False)
 
@@ -369,7 +426,7 @@ class TensorDictSequential(TensorDictModule):
                 If none is provided, the module's ``out_keys`` are assumed.
 
         Returns:
-            A new TensorDictSequential with only the modules that are necessary acording to the given input and output keys.
+            A new TensorDictSequential with only the modules that are necessary according to the given input and output keys.
 
         Examples:
             >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
@@ -385,19 +442,19 @@ class TensorDictSequential(TensorDictModule):
             TensorDictSequential(
                 module=ModuleList(
                   (0): TensorDictModule(
-                      module=<function <lambda> at 0x126ed1ca0>,
+                      module=<function <lambda> at ...>,
                       in_keys=['a'],
                       out_keys=['b'])
                   (1): TensorDictModule(
-                      module=<function <lambda> at 0x126ed1ca0>,
+                      module=<function <lambda> at ...>,
                       in_keys=['b'],
                       out_keys=['c'])
                   (2): TensorDictModule(
-                      module=<function <lambda> at 0x126ed1ca0>,
+                      module=<function <lambda> at ...>,
                       in_keys=['c'],
                       out_keys=['d'])
                   (3): TensorDictModule(
-                      module=<function <lambda> at 0x126ed1ca0>,
+                      module=<function <lambda> at ...>,
                       in_keys=['a'],
                       out_keys=['e'])
                 ),
@@ -408,7 +465,7 @@ class TensorDictSequential(TensorDictModule):
             TensorDictSequential(
                 module=ModuleList(
                   (0): TensorDictModule(
-                      module=<function <lambda> at 0x126ed1ca0>,
+                      module=<function <lambda> at ...>,
                       in_keys=['c'],
                       out_keys=['d'])
                 ),
@@ -419,11 +476,11 @@ class TensorDictSequential(TensorDictModule):
             TensorDictSequential(
                 module=ModuleList(
                   (0): TensorDictModule(
-                      module=<function <lambda> at 0x126ed1ca0>,
+                      module=<function <lambda> at ...>,
                       in_keys=['a'],
                       out_keys=['b'])
                   (1): TensorDictModule(
-                      module=<function <lambda> at 0x126ed1ca0>,
+                      module=<function <lambda> at ...>,
                       in_keys=['b'],
                       out_keys=['c'])
                 ),
@@ -434,7 +491,7 @@ class TensorDictSequential(TensorDictModule):
             TensorDictSequential(
                 module=ModuleList(
                   (0): TensorDictModule(
-                      module=<function <lambda> at 0x126ed1ca0>,
+                      module=<function <lambda> at ...>,
                       in_keys=['a'],
                       out_keys=['e'])
                 ),
@@ -460,11 +517,11 @@ class TensorDictSequential(TensorDictModule):
                   (0): TensorDictSequential(
                       module=ModuleList(
                         (0): TensorDictModule(
-                            module=<function <lambda> at 0x129efae50>,
+                            module=<function <lambda> at ...>,
                             in_keys=['b'],
                             out_keys=['d'])
                         (1): TensorDictModule(
-                            module=<function <lambda> at 0x129efae50>,
+                            module=<function <lambda> at ...>,
                             in_keys=['d'],
                             out_keys=['e'])
                       ),
@@ -473,42 +530,6 @@ class TensorDictSequential(TensorDictModule):
                 ),
                 in_keys=['b'],
                 out_keys=['d', 'e'])
-
-        The `inplace` argument allows for a fine-grained control over the output type, allowing for instance to write
-        the result of the computational graph in the input object without tracking the intermediate tensors.
-
-        Example:
-            >>> import torch
-            >>> from tensordict import TensorClass
-            >>> from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
-            >>>
-            >>> class MyClass(TensorClass):
-            ...     input: torch.Tensor
-            ...     output: torch.Tensor | None = None
-            >>>
-            >>> obj = MyClass(torch.randn(2, 3), batch_size=(2,))
-            >>>
-            >>> model = Seq(
-            ...     Mod(
-            ...         lambda x: (x + 1, x - 1),
-            ...         in_keys=["input"],
-            ...         out_keys=[("intermediate", "0"), ("intermediate", "1")],
-            ...         inplace=False
-            ...         ),
-            ...     Mod(
-            ...         lambda y0, y1: y0 * y1,
-            ...         in_keys=[("intermediate", "0"), ("intermediate", "1")],
-            ...         out_keys=["output"],
-            ...         inplace=False
-            ...         ),
-            ...     inplace=True, )
-            >>> print(model(obj))
-            MyClass(
-                input=Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                output=Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                batch_size=torch.Size([2]),
-                device=None,
-                is_shared=False)
 
         """
         if in_keys is None:
