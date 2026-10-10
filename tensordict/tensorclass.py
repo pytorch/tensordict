@@ -725,8 +725,9 @@ def from_dataclass(
         inplace (bool, optional): If ``True``, the dataclass type passed will be modified in-place. Defaults to ``False``.
             Without effect if an instance is provided.
         device (torch.device, optional): The device on which the TensorDict will be created. Defaults to ``None``.
-        shadow (bool, optional): Disables the validation of field names against TensorDict's reserved attributes.
-            Use with caution, as this may cause unintended consequences. Defaults to False.
+        shadow (bool, optional): Disables the validation of field names against the names of the tensorclass
+            members (e.g. ``batch_size`` or ``sum``). Use with caution, as this may cause unintended consequences.
+            Defaults to False.
 
     Returns:
         A tensor-compatible class or instance derived from the provided dataclass.
@@ -879,8 +880,9 @@ def tensorclass(
         nocast (bool, optional): if ``True``, Tensor-compatible types such as ``int``, ``np.ndarray`` and the like
             will not be cast to a tensor type. This argument is exclusive with ``autocast`` (both cannot be true
             at the same time). Defaults to ``False``.
-        shadow (bool, optional): Disables the validation of field names against TensorDict's reserved attributes.
-            Use with caution, as this may cause unintended consequences. Defaults to False.
+        shadow (bool, optional): Disables the validation of field names against the names of the tensorclass
+            members (e.g. ``batch_size`` or ``sum``). Use with caution, as this may cause unintended consequences.
+            Defaults to False.
         tensor_only (bool, optional): if ``True``, it is expected that all items in tensorclass will be
             tensor instances (tensor-compatible, since non-tensor data is converted to tensors if possible).
             This can bring significant speed-ups at the cost of flexible interactions with non-tensor data.
@@ -995,15 +997,52 @@ def _own_annotation_names(cls: type) -> list[str]:
     return list(annotations)
 
 
+# The names of the members of a tensorclass and of the attributes that hold its
+# state. A tensorclass has or forwards to its TensorDict every TensorDict
+# attribute, and library code calls private TensorDict methods on nested tensor
+# collections (e.g. _get_non_tensor, _send, _transform_keys), so the names of
+# TensorDict are in the set, except the two below. The tuple holds the names
+# that only tensorclasses have.
+_TENSORCLASS_MEMBER_NAMES = frozenset(dir(TensorDict)).union(
+    (
+        "extend",
+        "fields",
+        "from_tensordict",
+        "_autocast",
+        "_from_tensordict",
+        "_frozen",
+        "_is_tensorclass",
+        "_nocast",
+        "_set_dict_warn_msg",
+        "_shadow",
+        "_tensor_only",
+        "_tensordict_fields",
+        "_type_hints",
+        # instance attributes
+        "_is_initialized",
+        "_non_tensordict",
+        "_tensordict",
+        # a TensorDict attribute that TensorDict.__enter__ reads from a tensorclass
+        "_last_op_queue",
+    )
+) - {
+    # a field of NonTensorData
+    "_is_non_tensor",
+    # read only by the cache decorator of TensorDict methods, on the TensorDict
+    "_cache",
+}
+
+
 def _is_reserved_field_name(name: str) -> bool:
-    return name in dir(TensorDict) and name not in ("_is_non_tensor", "data")
+    # A field named "data" (as in NonTensorData) or "fields" replaces the member.
+    return name in _TENSORCLASS_MEMBER_NAMES and name not in ("data", "fields")
 
 
 def _raise_reserved_field_name(name: str) -> None:
     raise AttributeError(
-        f"Attribute name {name} can't be used with @tensorclass or TensorClass. To allow it, please indicate "
-        f"that builtin names can be overwritten by using the allow_names keyword argument (@tensorclass(shadow=True) "
-        f"or TensorClass['shadow']."
+        f"Attribute name {name} can't be used with @tensorclass or TensorClass, as tensorclasses have a "
+        f"member of that name. To allow it, pass shadow=True (@tensorclass(shadow=True) or "
+        f"TensorClass['shadow'])."
     )
 
 
@@ -1057,12 +1096,13 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     inherited_reserved_fields = [
         name
         for name in _own_annotation_names(cls)
-        if name not in cls.__dict__ and _is_reserved_field_name(name)
+        if name not in cls.__dict__ and name in _TENSORCLASS_MEMBER_NAMES
         if hasattr(cls, name)
     ]
     if not shadow:
         for name in inherited_reserved_fields:
-            _raise_reserved_field_name(name)
+            if _is_reserved_field_name(name):
+                _raise_reserved_field_name(name)
     for name in inherited_reserved_fields:
         setattr(cls, name, dataclasses.field())
 
@@ -1123,7 +1163,7 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
                 pass
 
     if tensor_only:
-        for field in cls.fields():
+        for field in dataclasses.fields(cls):
             name = field.name
 
             def _make_prop(key):
@@ -1349,11 +1389,12 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     if not hasattr(cls, "to_dict") and "to_dict" not in expected_keys:
         cls.to_dict = _to_dict
 
-    if shadow and not tensor_only:
+    if not tensor_only:
         # Attribute lookup would find a TensorClass method or property of the
-        # same name (e.g. "sum") before the field, which _getattr serves.
+        # same name (e.g. "sum", or the "fields" of a tensorclass base) before
+        # the field, which _getattr serves.
         for name in expected_keys:
-            if hasattr(cls, name):
+            if (shadow or name == "fields") and hasattr(cls, name):
                 setattr(cls, name, property(functools.partial(_getattr, item=name)))
 
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
@@ -3994,9 +4035,9 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
             tensor-compatible value, which will be cast). Lookups skip the non-tensor data path,
             which can yield significant speed-ups at the cost of losing non-tensor support.
             Mutually exclusive with ``autocast`` and ``nocast``. Defaults to ``False``.
-        shadow (bool, optional): Disables the validation of field names against TensorDict's reserved
-            attributes (e.g. allowing a field named ``device`` or ``batch_size``). Use with caution,
-            as this can lead to surprising behaviour. Defaults to ``False``.
+        shadow (bool, optional): Disables the validation of field names against the names of the
+            tensorclass members (e.g. allowing a field named ``device`` or ``batch_size``). Use with
+            caution, as this can lead to surprising behaviour. Defaults to ``False``.
 
     **The bracket form** ``TensorClass[...]`` is sugar for "build a parametrized subclass with the
     given flags turned on". The three forms below are equivalent:

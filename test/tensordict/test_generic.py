@@ -1808,6 +1808,37 @@ class TestGeneric:
     @pytest.mark.parametrize(
         "index",
         [
+            (0, 0, 0),
+            (slice(None),) * 3,
+            5,
+            (slice(None), -5),
+            torch.ones(5, dtype=torch.bool),
+            torch.ones(3, 5, dtype=torch.bool),
+            (slice(None), torch.ones(2, dtype=torch.bool)),
+            (-1, torch.ones(2, dtype=torch.bool)),
+            (None, 5),
+            ([0, 1], [0, 1, 2]),
+        ],
+    )
+    def test_getitem_invalid_index_without_entries(self, index):
+        # torch finds an invalid index when it indexes the entries, so a
+        # tensordict checks the index against its batch size when it has none,
+        # and raises the error that torch raises
+        with pytest.raises(IndexError) as torch_error:
+            torch.zeros(3, 4)[index]
+        for td in (
+            TensorDict(batch_size=[3, 4]),
+            TensorDict({"a": torch.zeros(3, 4, 2)}, [3, 4]),
+        ):
+            with pytest.raises(IndexError) as error:
+                td[index]
+            assert str(error.value) == str(torch_error.value)
+            with pytest.raises(IndexError):
+                td[index] = TensorDict()
+
+    @pytest.mark.parametrize(
+        "index",
+        [
             [0, 2],
             torch.tensor([0, 2]),
             (slice(None), [0, 1]),
