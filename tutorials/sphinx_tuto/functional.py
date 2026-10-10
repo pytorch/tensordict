@@ -3,36 +3,49 @@ Functional Programming with TensorDict
 =======================================
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
-In this tutorial you will learn how to use :class:`~.TensorDict` for
-functional-style programming with :class:`~torch.nn.Module`, including
-parameter swapping, model ensembling with :func:`~torch.vmap`, and
-functional calls with :func:`~torch.func.functional_call`.
+This tutorial uses a :class:`~tensordict.TensorDict` to hold the parameters
+of a :class:`~torch.nn.Module`, so that you can replace them, stack them and
+pass them to functional calls.
+
+What you will learn:
+
+- How to extract the parameters of a module with
+  :meth:`~tensordict.TensorDict.from_module`, and swap them with
+  :meth:`~tensordict.TensorDict.to_module`.
+- How to run an ensemble of models with :func:`torch.vmap` over a stack of
+  parameters.
+- How to stack the parameters of several modules with
+  :meth:`~tensordict.TensorDict.from_modules`, and how
+  :class:`~tensordict.nn.EnsembleModule` does it for you.
+- How to call :func:`torch.func.functional_call` with these parameters.
+
+Before you start, read :ref:`sphx_glr_tutorials_tensordict_keys.py` for nested
+keys.
 """
 
 ##############################################################################
 # TensorDict as a parameter container
 # ------------------------------------
 #
-# :meth:`~.TensorDict.from_module` extracts the parameters of a module into a
-# nested :class:`~.TensorDict` whose structure mirrors the module hierarchy.
+# :meth:`~tensordict.TensorDict.from_module` copies the references to the
+# parameters and buffers of a module into a nested
+# :class:`~tensordict.TensorDict`. The structure of the tensordict is the
+# structure of the module.
 
-# sphinx_gallery_start_ignore
-import warnings
-
-warnings.filterwarnings("ignore")
-# sphinx_gallery_end_ignore
 import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
+torch.manual_seed(0)
 module = nn.Sequential(nn.Linear(3, 4), nn.ReLU(), nn.Linear(4, 1))
 params = TensorDict.from_module(module)
 print(params)
 
 ##############################################################################
-# The resulting :class:`~.TensorDict` holds the same
-# :class:`~torch.nn.Parameter` objects as the module. We can manipulate them
-# as a batch -- for example, zeroing all parameters at once:
+# The :class:`~tensordict.TensorDict` holds the same
+# :class:`~torch.nn.parameter.Parameter` objects as the module. Tensordict operations
+# apply to all of them at once. For example, this line makes a copy of all
+# the parameters, with zeros as values:
 
 params_zero = params.detach().clone().zero_()
 print("All zeros:", (params_zero == 0).all())
@@ -41,9 +54,9 @@ print("All zeros:", (params_zero == 0).all())
 # Swapping parameters with a context manager
 # -------------------------------------------
 #
-# :meth:`~.TensorDict.to_module` temporarily replaces the parameters of a
-# module within a context manager. The original parameters are restored on
-# exit.
+# :meth:`~tensordict.TensorDict.to_module` replaces the parameters of a module
+# with the values of the tensordict. Used in a ``with`` block, it puts the
+# original parameters back at the end of the block.
 
 x = torch.randn(5, 3)
 
@@ -61,9 +74,10 @@ assert not (y_original == 0).all()
 # Model ensembling with ``torch.vmap``
 # -------------------------------------
 #
-# Because :class:`~.TensorDict` supports batching and stacking, we can stack
-# multiple parameter configurations and use :func:`~torch.vmap` to run the
-# model across all of them in a single vectorized call.
+# Parameter tensordicts can be stacked like any tensordict. The stack has a
+# batch dimension, with one element per set of parameters.
+# :func:`~torch.vmap` then runs the model with each set of parameters in one
+# vectorized call.
 
 params_ones = params.detach().clone().apply_(lambda t: t.fill_(1.0))
 params_stack = torch.stack([params_zero, params_ones, params])
@@ -83,13 +97,55 @@ print("Output shape:", y.shape)
 assert (y[0] == 0).all()
 
 ##############################################################################
+# Stacking the parameters of several modules
+# ------------------------------------------
+#
+# An ensemble usually has several copies of a model, each with its own random
+# initialization. :meth:`~tensordict.TensorDict.from_modules` stacks the
+# parameters of several modules with the same structure into one tensordict.
+# The first dimension of the result is the index of the module:
+
+modules = [nn.Sequential(nn.Linear(3, 4), nn.ReLU(), nn.Linear(4, 1)) for _ in range(3)]
+ensemble_params = TensorDict.from_modules(*modules)
+print("Ensemble params batch_size:", ensemble_params.batch_size)
+
+##############################################################################
+# Use one of the modules as the structure, and run it with each set of
+# parameters. ``in_dims=(None, 0)`` gives the same input ``x`` to every
+# model, and maps over the first dimension of the parameters:
+
+x = torch.randn(5, 3)
+y = torch.vmap(call, in_dims=(None, 0))(x, ensemble_params)
+print("Output shape:", y.shape)
+for i, member in enumerate(modules):
+    torch.testing.assert_close(y[i], member(x))
+
+##############################################################################
+# To train the stacked parameters, pass ``as_module=True``. The result is a
+# :class:`~tensordict.TensorDictParams`, a tensordict that is also an
+# :class:`~torch.nn.Module`, so that an optimizer can find its parameters
+# with ``parameters()``.
+#
+# For a :class:`~tensordict.nn.TensorDictModule`,
+# :class:`~tensordict.nn.EnsembleModule` does all of this in one step. It
+# makes ``num_copies`` copies of the module with new random parameters, and
+# adds a leading dimension of size ``num_copies`` to its input and outputs:
+
+from tensordict.nn import EnsembleModule, TensorDictModule
+
+member = TensorDictModule(nn.Linear(3, 1), in_keys=["x"], out_keys=["y"])
+ensemble = EnsembleModule(member, num_copies=4)
+out = ensemble(TensorDict(x=torch.randn(5, 3), batch_size=[5]))
+print("EnsembleModule output batch_size:", out.batch_size)
+
+##############################################################################
 # Functional calls with ``torch.func``
 # --------------------------------------
 #
-# :func:`~torch.func.functional_call` works with the state-dict extracted
-# by :meth:`~.TensorDict.from_module`. Because ``from_module`` returns a
-# :class:`~.TensorDict` with the same structure as a state-dict, we can
-# convert it to a regular dict and pass it directly.
+# :func:`~torch.func.functional_call` takes a ``dict`` of parameters, with the
+# names of a state dict as keys. ``flatten_keys(".")`` turns the nested keys of
+# the tensordict into these names, and ``dict(...items())`` turns the result
+# into a ``dict``:
 
 from torch.func import functional_call
 
@@ -100,8 +156,23 @@ y = functional_call(module, state_dict, x)
 print("functional_call output:", y.shape)
 
 ##############################################################################
-# The combination of :meth:`~.TensorDict.from_module`,
-# :meth:`~.TensorDict.to_module`, and :func:`~torch.vmap` makes it
-# straightforward to do things like compute per-sample gradients, run
-# model ensembles, or implement meta-learning inner loops -- all without
-# leaving the standard PyTorch API.
+# Conclusion
+# ----------
+#
+# In this tutorial, you extracted the parameters of a module into a
+# :class:`~tensordict.TensorDict` with ``from_module``, and swapped them with
+# ``to_module``. You stacked parameters, by hand and with ``from_modules``,
+# and you ran an ensemble with :func:`torch.vmap`. You also built an ensemble
+# with :class:`~tensordict.nn.EnsembleModule`, and passed the parameters to
+# :func:`torch.func.functional_call`.
+#
+# Further reading
+# ---------------
+#
+# - :ref:`compile` explains how tensordicts work with :mod:`torch.func`,
+#   including per-sample gradients with :func:`torch.vmap`.
+# - :ref:`modules-guide` explains :class:`~tensordict.TensorDictParams` and
+#   the other modules of ``tensordict.nn``.
+# - :ref:`sphx_glr_tutorials_tensordict_module.py` shows how to build models
+#   from :class:`~tensordict.nn.TensorDictModule`.
+# - :ref:`api-nn` lists all the classes of ``tensordict.nn``.

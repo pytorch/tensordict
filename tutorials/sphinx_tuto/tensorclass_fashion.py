@@ -1,20 +1,32 @@
 """
 Using tensorclasses for datasets
 ================================
+
+This tutorial loads the FashionMNIST dataset into a tensorclass of
+memory-mapped tensors, and trains a model from it with a ``DataLoader``. It
+is based on the `PyTorch Quickstart Tutorial
+<https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html>`__,
+with the data loading changed to use a tensorclass.
+
+What you will learn:
+
+- How to define a :class:`~tensordict.TensorClass` with a typed field for each
+  part of a sample, and a method that loads a dataset into it.
+- How to pass a tensorclass to a ``DataLoader`` as a map-style dataset.
+- How to move a whole batch to the device with one call, and read its fields
+  as attributes.
+
+:ref:`sphx_glr_tutorials_data_fashion.py` does the same with a
+:class:`~tensordict.TensorDict`, and compares the loading time with the
+``torchvision`` data loader. Read it first.
 """
 
-##############################################################################
-# In this tutorial we demonstrate how tensorclasses can be used to
-# efficiently and transparently load and manage data inside a training
-# pipeline. The tutorial is based heavily on the `PyTorch Quickstart
-# Tutorial <https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html>`__,
-# but modified to demonstrate use of tensorclass. See the related tutorial using
-# ``TensorDict``.
+import time
 
 import torch
 import torch.nn as nn
 
-from tensordict import MemoryMappedTensor, tensorclass
+from tensordict import MemoryMappedTensor, TensorClass
 from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision.transforms import ToTensor
@@ -24,10 +36,9 @@ print(f"Using device: {device}")
 
 
 ###############################################################################
-# The ``torchvision.datasets`` module contains a number of convenient pre-prepared
-# datasets. In this tutorial we'll use the relatively simple FashionMNIST dataset. Each
-# image is an item of clothing, the objective is to classify the type of clothing in
-# the image (e.g. "Bag", "Sneaker" etc.).
+# This tutorial uses the FashionMNIST dataset of ``torchvision``. Each image
+# shows an item of clothing, and the task is to classify the type of clothing
+# in the image (for example "Bag" or "Sneaker").
 
 training_data = datasets.FashionMNIST(
     root="data",
@@ -43,64 +54,66 @@ test_data = datasets.FashionMNIST(
 )
 
 ###############################################################################
-# Tensorclasses are dataclasses that expose dedicated tensor methods over
-# its contents much like ``TensorDict``. They are a good choice when the
-# structure of the data you want to store is fixed and predictable.
+# A tensorclass is a dataclass whose fields are tensors. Like a
+# ``TensorDict``, it has a batch size, and you can index it, move it to a
+# device or memory-map it. Use a tensorclass when you know the fields of your
+# data in advance. To define one, subclass :class:`~tensordict.TensorClass`
+# and annotate its fields. The ``@tensorclass`` decorator is the older form of
+# the same thing.
 #
-# As well as specifying the contents, we can also encapsulate related
-# logic as custom methods when defining the class. In this case we'll
-# write a ``from_dataset`` classmethod that takes a dataset as input and
-# creates a tensorclass containing the data from the dataset. We create
-# memory-mapped tensors to hold the data. This will allow us to
-# efficiently load batches of transformed data from disk rather than
-# repeatedly load and transform individual images.
+# A tensorclass can also have methods. The ``from_dataset`` class method below
+# takes a dataset and returns a tensorclass that holds all its data in
+# memory-mapped tensors. ``MemoryMappedTensor.empty`` without a file name
+# creates an anonymous memory map: on Linux, it is in shared memory under
+# ``/dev/shm`` when it has room. The method fills the tensors in batches of
+# 1000 images, so the ``ToTensor`` transform runs once per image, and not at
+# each epoch.
 
 
-@tensorclass
-class FashionMNISTData:
+class FashionMNISTData(TensorClass):
     images: torch.Tensor
     targets: torch.Tensor
 
     @classmethod
-    def from_dataset(cls, dataset, device=None):
+    def from_dataset(cls, dataset):
         data = cls(
             images=MemoryMappedTensor.empty(
                 (len(dataset), *dataset[0][0].squeeze().shape), dtype=torch.float32
             ),
             targets=MemoryMappedTensor.empty((len(dataset),), dtype=torch.int64),
             batch_size=[len(dataset)],
-            device=device,
         )
-        for i, (image, target) in enumerate(dataset):
-            data[i] = cls(images=image, targets=torch.tensor(target), batch_size=[])
+        i = 0
+        for images, targets in DataLoader(dataset, batch_size=1000):  # noqa: TOR401
+            n = images.shape[0]
+            data[i : i + n] = cls(
+                images=images.squeeze(1), targets=targets, batch_size=[n]
+            )
+            i += n
         return data
 
 
 ###############################################################################
-# We will create two tensorclasses, one each for the training and test data. Note that
-# we incur some overhead here as we are looping over the entire dataset, transforming
-# and saving to disk.
+# Create two tensorclasses, one for the training data and one for the test
+# data. This step reads and converts every image once. The tensorclasses stay
+# on the CPU, so that their fields stay memory-mapped tensors. The training
+# loop moves each batch to the device.
 
-training_data_tc = FashionMNISTData.from_dataset(training_data, device=device)
-test_data_tc = FashionMNISTData.from_dataset(test_data, device=device)
+training_data_tc = FashionMNISTData.from_dataset(training_data)
+test_data_tc = FashionMNISTData.from_dataset(test_data)
+print(training_data_tc)
 
 ###############################################################################
 # DataLoaders
-# ----------------
+# -----------
 #
-# We'll create DataLoaders from the ``torchvision``-provided Datasets, as
-# well as from our memory-mapped TensorDicts.
-#
-# Since ``TensorDict`` implements ``__len__`` and ``__getitem__`` (and
-# also ``__getitems__``) we can use it like a map-style Dataset and create
-# a ``DataLoader`` directly from it. Note that because ``TensorDict`` can
-# already handle batched indices, there is no need for collation, so we
-# pass the identity function as ``collate_fn``.
+# A tensorclass implements ``__len__``, ``__getitem__`` and ``__getitems__``,
+# so you can use it as a map-style dataset. The ``DataLoader`` then reads each
+# batch with one batched index, and the result is already a
+# ``FashionMNISTData`` batch. Pass ``collate_fn=lambda x: x``: the default
+# collate function cannot read a tensorclass.
 
 batch_size = 64
-
-train_dataloader = DataLoader(training_data, batch_size=batch_size)  # noqa: TOR401
-test_dataloader = DataLoader(test_data, batch_size=batch_size)  # noqa: TOR401
 
 train_dataloader_tc = DataLoader(  # noqa: TOR401
     training_data_tc, batch_size=batch_size, collate_fn=lambda x: x
@@ -110,10 +123,15 @@ test_dataloader_tc = DataLoader(  # noqa: TOR401
 )
 
 ###############################################################################
+# Each batch is a ``FashionMNISTData`` with ``batch_size=[64]``:
+
+print(next(iter(train_dataloader_tc)))
+
+###############################################################################
 # Model
-# -------
+# -----
 #
-# We use the same model from the
+# The model is the same as in the
 # `Quickstart Tutorial <https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html>`__.
 #
 
@@ -136,47 +154,21 @@ class Net(nn.Module):
         return logits
 
 
-model = Net().to(device)
+torch.manual_seed(0)
 model_tc = Net().to(device)
-model, model_tc
 
 ###############################################################################
 # Optimizing the parameters
-# ---------------------------------
+# -------------------------
 #
-# We'll optimise the parameters of the model using stochastic gradient descent and
-# cross-entropy loss.
+# Optimize the parameters of the model with stochastic gradient descent and
+# the cross-entropy loss.
 #
+# The training loop moves the whole batch to the device with one ``.to()``
+# call, then reads the images and the targets as attributes.
 
 loss_fn = nn.CrossEntropyLoss()
-optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
 optimizer_tc = torch.optim.SGD(model_tc.parameters(), lr=1e-3)
-
-
-def train(dataloader, model, loss_fn, optimizer):
-    size = len(dataloader.dataset)
-    model.train()
-
-    for batch, (X, y) in enumerate(dataloader):
-        X, y = X.to(device), y.to(device)
-
-        pred = model(X)
-        loss = loss_fn(pred, y)
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        if batch % 100 == 0:
-            loss, current = loss.item(), batch * len(X)
-            print(f"loss: {loss:>7f} [{current:>5d}/{size:>5d}]")
-
-
-###############################################################################
-# The training loop for our tensorclass-based DataLoader is very similar, we just
-# adjust how we unpack the data to the more explicit attribute-based retrieval offered
-# by the tensorclass. The ``.contiguous()`` method loads the data stored in the memmap
-# tensor.
 
 
 def train_tc(dataloader, model, loss_fn, optimizer):
@@ -184,7 +176,8 @@ def train_tc(dataloader, model, loss_fn, optimizer):
     model.train()
 
     for batch, data in enumerate(dataloader):
-        X, y = data.images.contiguous(), data.targets.contiguous()
+        data = data.to(device)
+        X, y = data.images, data.targets
 
         pred = model(X)
         loss = loss_fn(pred, y)
@@ -193,31 +186,9 @@ def train_tc(dataloader, model, loss_fn, optimizer):
         loss.backward()
         optimizer.step()
 
-        if batch % 100 == 0:
+        if batch % 300 == 0:
             loss, current = loss.item(), batch * len(X)
             print(f"loss: {loss:>7f} [{current:>5d}/{size:>5d}]")
-
-
-def test(dataloader, model, loss_fn):
-    size = len(dataloader.dataset)
-    num_batches = len(dataloader)
-    model.eval()
-    test_loss, correct = 0, 0
-    with torch.no_grad():
-        for X, y in dataloader:
-            X, y = X.to(device), y.to(device)
-
-            pred = model(X)
-
-            test_loss += loss_fn(pred, y).item()
-            correct += (pred.argmax(1) == y).type(torch.float).sum().item()
-
-    test_loss /= num_batches
-    correct /= size
-
-    print(
-        f"Test Error: \n Accuracy: {(100 * correct):>0.1f}%, Avg loss: {test_loss:>8f} \n"
-    )
 
 
 def test_tc(dataloader, model, loss_fn):
@@ -227,7 +198,8 @@ def test_tc(dataloader, model, loss_fn):
     test_loss, correct = 0, 0
     with torch.no_grad():
         for batch in dataloader:
-            X, y = batch.images.contiguous(), batch.targets.contiguous()
+            batch = batch.to(device)
+            X, y = batch.images, batch.targets
 
             pred = model(X)
 
@@ -242,24 +214,35 @@ def test_tc(dataloader, model, loss_fn):
     )
 
 
-for d in train_dataloader_tc:
-    print(d)
-    break
+###############################################################################
+# Train the model for one epoch, and test it once:
 
-import time
+epochs = 1
 
-t0 = time.time()
-epochs = 5
+t0 = time.perf_counter()
 for t in range(epochs):
     print(f"Epoch {t + 1}\n-------------------------")
     train_tc(train_dataloader_tc, model_tc, loss_fn, optimizer_tc)
     test_tc(test_dataloader_tc, model_tc, loss_fn)
-print(f"Tensorclass training done! time: {time.time() - t0: 4.4f} s")
+print(f"Tensorclass training done! time: {time.perf_counter() - t0: 4.4f} s")
 
-t0 = time.time()
-epochs = 5
-for t in range(epochs):
-    print(f"Epoch {t + 1}\n-------------------------")
-    train(train_dataloader, model, loss_fn, optimizer)
-    test(test_dataloader, model, loss_fn)
-print(f"Training done! time: {time.time() - t0: 4.4f} s")
+###############################################################################
+# Conclusion
+# ----------
+#
+# In this tutorial, you defined a :class:`~tensordict.TensorClass` with an
+# ``images`` field and a ``targets`` field, and a ``from_dataset`` method that
+# loads a dataset into memory-mapped tensors once. You passed the tensorclass
+# to a ``DataLoader`` with ``collate_fn=lambda x: x``, moved each batch to the
+# device with one call, and read its fields as attributes.
+#
+# Further reading
+# ---------------
+#
+# - :ref:`tensorclass-guide` explains how to define and use tensorclasses.
+# - :ref:`choosing-a-container` compares ``TensorDict``, ``TensorClass`` and
+#   ``TypedTensorDict``.
+# - :ref:`data-loading` explains the ways to load data with tensordict and to
+#   share it between processes.
+# - :ref:`sphx_glr_tutorials_tensorclass_imagenet.py` applies random
+#   transforms to whole batches, for a larger image dataset.

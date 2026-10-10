@@ -6,29 +6,31 @@ TensorDictModule
 
 **Author**: `Nicolas Dufour <https://github.com/nicolas-dufour>`_, `Vincent Moens <https://github.com/vmoens>`_
 
-In this tutorial you will learn how to use :class:`~.TensorDictModule` and
-:class:`~.TensorDictSequential` to create generic and reusable modules that can accept
-:class:`~.TensorDict` as input.
+In this tutorial, you build a small residual network from modules that read
+their inputs from a :class:`~tensordict.TensorDict` and write their outputs
+into it.
 
+What you will learn:
+
+- How to wrap a module or a function in a :class:`~tensordict.nn.TensorDictModule`.
+- How to chain modules with :class:`~tensordict.nn.TensorDictSequential`, and
+  how to keep only some of the outputs.
+- How to call these modules with tensors as keyword arguments.
+- How to sample from a distribution with
+  :class:`~tensordict.nn.ProbabilisticTensorDictModule`.
+
+Before you start, read :ref:`sphx_glr_tutorials_tensordict_keys.py`, which
+explains how to read and write the entries of a tensordict.
 """
 
 ##############################################################################
 #
-# For a convenient usage of the :class:`~.TensorDict` class with :class:`~torch.nn.Module`,
-# :mod:`tensordict` provides an interface between the two named :class:`~tensordict.nn.TensorDictModule`.
-#
-# The :class:`~tensordict.nn.TensorDictModule` class is an :class:`~torch.nn.Module` that takes a
-# :class:`~tensordict.TensorDict` as input when called. It will read a sequence of input keys, pass them to the wrapped
-# module or function as input, and write the outputs in the same tensordict after completing the execution.
-#
-# It is up to the user to define the keys to be read as input and output.
-#
-
-# sphinx_gallery_start_ignore
-import warnings
-
-warnings.filterwarnings("ignore")
-# sphinx_gallery_end_ignore
+# A :class:`~tensordict.nn.TensorDictModule` is a :class:`~torch.nn.Module`
+# that takes a :class:`~tensordict.TensorDict` as input. It wraps a module or
+# a function. When you call it, it reads the entries named by its ``in_keys``
+# from the tensordict, and passes them to the wrapped module. Then it writes
+# the outputs into the same tensordict, under the names of its ``out_keys``.
+# You choose the input and output keys.
 
 import torch
 import torch.nn as nn
@@ -37,21 +39,16 @@ from tensordict.nn import TensorDictModule, TensorDictSequential
 
 ###############################################################################
 #
-# Simple example: coding a recurrent layer
-# ----------------------------------------
+# Example: a residual block
+# -------------------------
 #
-# The simplest usage of :class:`~tensordict.nn.TensorDictModule` is exemplified below.
-# If at first it may look like using this class introduces an unwated level of complexity, we will see
-# later on that this API enables users to programatically concatenate modules together, cache values
-# in between modules or programmatically build one.
-# One of the simplest examples of this is a recurrent module in an architecture like ResNet, where the input of the
-# module is cached and added to the output of a tiny multi-layered perceptron (MLP).
+# A residual block adds its input to the output of a small multi-layer
+# perceptron (MLP), as in a ResNet. At first, the wrapper adds code compared
+# to a plain :class:`~torch.nn.Module`. In return, you can chain modules by
+# the names of their inputs and outputs, keep intermediate values in the
+# tensordict, and build models in a loop.
 #
-# To start, let's first consider we you would chunk an MLP, and code it using :mod:`tensordict.nn`.
-# The first layer of the stack would presumably be a :class:`~torch.nn.Linear` layer, taking an entry as input
-# (let us name it `x`) and outputting another entry (which we will name `y`).
-#
-# To feed to our module, we have a :class:`~tensordict.TensorDict` instance with a single entry,
+# The input of the block is a :class:`~tensordict.TensorDict` with one entry,
 # ``"x"``:
 
 tensordict = TensorDict(
@@ -60,10 +57,12 @@ tensordict = TensorDict(
 )
 
 ###############################################################################
-# Now, we build our simple module using :class:`tensordict.nn.TensorDictModule`. By default, this class writes in the
-# input tensordict in-place (meaning that entries are written in the same tensordict as the input, not that entries
-# are overwritten in-place!), such that we don't need to explicitly indicate what the output is:
-#
+# Build the first layer with :class:`~tensordict.nn.TensorDictModule`. The
+# module reads ``"x"`` from the input tensordict and writes its result under
+# ``"linear0"`` in the same tensordict. It adds an entry. It does not change
+# the existing tensors. The call returns the same tensordict, so you do not
+# need to keep the return value:
+
 linear0 = TensorDictModule(nn.Linear(3, 128), in_keys=["x"], out_keys=["linear0"])
 linear0(tensordict)
 
@@ -71,38 +70,35 @@ assert "linear0" in tensordict
 
 ###############################################################################
 #
-# If the module outputs multiple tensors (or tensordicts!) their entries must be passed to
-# :class:`~tensordict.nn.TensorDictModule` in the right order.
+# If the wrapped module returns several tensors, give one output key per
+# tensor, in the order of the outputs.
 #
-# Support for Callables
-# ~~~~~~~~~~~~~~~~~~~~~
+# Functions as modules
+# ~~~~~~~~~~~~~~~~~~~~
 #
-# When designing a model, it often happens that you want to incorporate an arbitrary non-parametric function into
-# the network. For instance, you may wish to permute the dimensions of an image when it is passed to a convolutional network
-# or a vision transformer, or divide the values by 255.
-# There are several ways to do this: you could use a `forward_hook`, for example, or design a new
-# :class:`~torch.nn.Module` that performs this operation.
-#
-# :class:`~tensordict.nn.TensorDictModule` works with any callable, not just modules, which makes it easy to
-# incorporate arbitrary functions into a module. For instance, let's see how we can integrate the ``relu`` activation
-# function without using the :class:`~torch.nn.ReLU` module:
+# A model often contains a function without parameters, for example a
+# permutation of the dimensions of an image, or a division by 255.
+# :class:`~tensordict.nn.TensorDictModule` accepts any callable, not only
+# modules. This module applies ``torch.relu``, without an
+# :class:`~torch.nn.ReLU` module:
 
 relu0 = TensorDictModule(torch.relu, in_keys=["linear0"], out_keys=["relu0"])
 
 ###############################################################################
 #
-# Stacking modules
+# Chaining modules
 # ~~~~~~~~~~~~~~~~
 #
-# Our MLP isn't made of a single layer, so we now need to add another layer to it.
-# This layer will be an activation function, for instance :class:`~torch.nn.ReLU`.
-# We can stack this module and the previous one using :class:`~tensordict.nn.TensorDictSequential`.
+# :class:`~tensordict.nn.TensorDictSequential` calls a list of modules in
+# order, on the same tensordict. Each module reads the entries that the
+# earlier modules wrote.
 #
-# .. note:: Here comes the true power of ``tensordict.nn``: unlike :class:`~torch.nn.Sequential`,
-#   :class:`~tensordict.nn.TensorDictSequential` will keep in memory all the previous inputs and outputs
-#   (with the possibility to filter them out afterwards), making it easy to have complex network structures
-#   built on-the-fly and programmatically.
+# .. note::
 #
+#   :class:`~torch.nn.Sequential` passes only the output of each module to the
+#   next one. :class:`~tensordict.nn.TensorDictSequential` keeps all the inputs
+#   and outputs in the tensordict, unless you select some of them (see below).
+#   A later module can therefore read any earlier output, not only the last one.
 
 block0 = TensorDictSequential(linear0, relu0)
 
@@ -111,7 +107,7 @@ assert "linear0" in tensordict
 assert "relu0" in tensordict
 
 ###############################################################################
-# We can repeat this logic to get a full MLP:
+# Repeat this to build the rest of the MLP:
 #
 
 linear1 = TensorDictModule(nn.Linear(128, 128), in_keys=["relu0"], out_keys=["linear1"])
@@ -120,32 +116,35 @@ linear2 = TensorDictModule(nn.Linear(128, 3), in_keys=["relu1"], out_keys=["line
 block1 = TensorDictSequential(linear1, relu1, linear2)
 
 ###############################################################################
-# Multiple input keys
-# ~~~~~~~~~~~~~~~~~~~
+# Several input keys
+# ~~~~~~~~~~~~~~~~~~
 #
-# The last step of the residual network is to add the input to the output of the last linear layer.
-# No need to write a special :class:`~torch.nn.Module` subclass for this! :class:`~tensordict.nn.TensorDictModule`
-# can be used to wrap simple functions too:
+# The last step of the residual block adds the input ``"x"`` to the output of
+# the last linear layer. A function with two arguments reads two input keys,
+# so you do not need a new :class:`~torch.nn.Module` subclass:
 
 residual = TensorDictModule(
     lambda x, y: x + y, in_keys=["x", "linear2"], out_keys=["y"]
 )
 
 ###############################################################################
-# And we can now put together ``block0``, ``block1`` and ``residual`` for a fully fleshed residual block:
+# Put ``block0``, ``block1`` and ``residual`` together to get the residual
+# block:
 
 block = TensorDictSequential(block0, block1, residual)
 block(tensordict)
 assert "y" in tensordict
 
 ###############################################################################
-# A genuine concern may be the accumulation of entries in the tensordict used as input: in some cases (e.g., when
-# gradients are required) intermediate values may be cached anyway, but this isn't always the case and it can be useful
-# to let the garbage collector know that some entries can be discarded. :class:`tensordict.nn.TensorDictModuleBase` and
-# its subclasses (including :class:`tensordict.nn.TensorDictModule` and :class:`tensordict.nn.TensorDictSequential`)
-# have the option of seeing their output keys filtered after execution. To do this, just call the
-# :class:`tensordict.nn.TensorDictModuleBase.select_out_keys` method. This will update the module in-place and all the
-# unwanted entries will be discarded:
+# Keeping only some outputs
+# ~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# Each module adds its output to the tensordict, so the tensordict grows with
+# every layer. When autograd records the graph, it keeps these tensors anyway.
+# Without autograd, for example at inference, you can drop them. Call
+# :meth:`~tensordict.nn.TensorDictModuleBase.select_out_keys` with the keys to
+# keep. The method changes the module in place. After this call, the module
+# removes the other output keys from the tensordict:
 
 block.select_out_keys("y")
 
@@ -156,35 +155,44 @@ assert "y" in tensordict
 assert "linear1" not in tensordict
 
 ###############################################################################
-# However, the input keys are preserved:
+# The input keys stay:
 assert "x" in tensordict
 
 ###############################################################################
-# As a side note, ``selected_out_keys`` may also be passed to :class:`tensordict.nn.TensorDictSequential` to avoid
-# calling this method separately.
+# You can also pass ``selected_out_keys`` when you create a
+# :class:`~tensordict.nn.TensorDictSequential`, instead of calling
+# ``select_out_keys`` after.
 #
-# Using `TensorDictModule` without tensordict
-# -------------------------------------------
+# Calling a module with tensors
+# -----------------------------
 #
-# The opportunity offered by :class:`tensordict.nn.TensorDictSequential` to build complex architectures on-the-go
-# does not mean that one necessarily has to switch to tensordict to represent the data. Thanks to
-# :class:`~tensordict.nn.dispatch`, modules from `tensordict.nn` support arguments and keyword arguments that match the
-# entry names too:
+# You do not need to put your data in a tensordict to call these modules. The
+# :class:`~tensordict.nn.dispatch` decorator lets modules from
+# :mod:`tensordict.nn` take tensors as keyword arguments, with the names of
+# their input keys. The module returns the tensors of its output keys:
 
 x = torch.randn(1, 3)
 y = block(x=x)
 assert isinstance(y, torch.Tensor)
 
 ###############################################################################
-# Under the hood, :class:`~tensordict.nn.dispatch` rebuilds a tensordict, runs the module and then deconstructs it.
-# This may cause some overhead but, as we will see just after, there is a solution to get rid of this.
+# Internally, :class:`~tensordict.nn.dispatch` builds a tensordict from the
+# keyword arguments, runs the module, and returns the output entries. This
+# adds a cost to each call, which the next section measures.
 #
 # Runtime
 # -------
 #
-# :class:`tensordict.nn.TensorDictModule` and :class:`tensordict.nn.TensorDictSequential` do incur some overhead when
-# executed, as they need to read and write from a tensordict. However, we can greatly reduce this overhead by using
-# :func:`~torch.compile`. For this, let us compare the three versions of this code with and without compile:
+# A :class:`~tensordict.nn.TensorDictModule` reads its inputs from a
+# tensordict and writes its outputs to it, at each call. The code below
+# compares three versions of the same residual block:
+#
+# - ``Regular``: a plain :class:`~torch.nn.Module`.
+# - ``TDM``: the plain module wrapped in one :class:`~tensordict.nn.TensorDictModule`.
+# - ``Sequential``: the :class:`~tensordict.nn.TensorDictSequential` built above.
+#
+# It times each version in eager mode, then compiled with
+# :func:`torch.compile`.
 
 
 class ResidualBlock(nn.Module):
@@ -204,94 +212,108 @@ class ResidualBlock(nn.Module):
         return self.linear2(y) + x
 
 
-print("Without compile")
+from torch.utils.benchmark import Timer
+
 x = torch.randn(256, 3)
 block_notd = ResidualBlock()
 block_tdm = TensorDictModule(block_notd, in_keys=["x"], out_keys=["y"])
 block_tds = block
 
-from torch.utils.benchmark import Timer
 
-print(
-    f"Regular: {Timer('block_notd(x=x)', globals=globals()).adaptive_autorange().median * 1_000_000: 4.4f} us"
-)
-print(
-    f"TDM: {Timer('block_tdm(x=x)', globals=globals()).adaptive_autorange().median * 1_000_000: 4.4f} us"
-)
-print(
-    f"Sequential: {Timer('block_tds(x=x)', globals=globals()).adaptive_autorange().median * 1_000_000: 4.4f} us"
-)
+def median_us(module):
+    timer = Timer("module(x=x)", globals={"module": module, "x": x})
+    return timer.blocked_autorange(min_run_time=0.5).median * 1_000_000
 
-print("Compiled versions")
-block_notd_c = torch.compile(block_notd, mode="reduce-overhead")
-for _ in range(5):  # warmup
-    block_notd_c(x)
-print(
-    f"Compiled regular: {Timer('block_notd_c(x=x)', globals=globals()).adaptive_autorange().median * 1_000_000: 4.4f} us"
-)
-block_tdm_c = torch.compile(block_tdm, mode="reduce-overhead")
-for _ in range(5):  # warmup
-    block_tdm_c(x=x)
-print(
-    f"Compiled TDM: {Timer('block_tdm_c(x=x)', globals=globals()).adaptive_autorange().median * 1_000_000: 4.4f} us"
-)
-block_tds_c = torch.compile(block_tds, mode="reduce-overhead")
-for _ in range(5):  # warmup
-    block_tds_c(x=x)
-print(
-    f"Compiled sequential: {Timer('block_tds_c(x=x)', globals=globals()).adaptive_autorange().median * 1_000_000: 4.4f} us"
-)
+
+print("Eager")
+print(f"  Regular:    {median_us(block_notd):7.1f} us")
+print(f"  TDM:        {median_us(block_tdm):7.1f} us")
+print(f"  Sequential: {median_us(block_tds):7.1f} us")
+
+print("Compiled")
+for name, module in [
+    ("Regular", block_notd),
+    ("TDM", block_tdm),
+    ("Sequential", block_tds),
+]:
+    compiled = torch.compile(module)
+    for _ in range(3):  # the first calls compile the module
+        compiled(x=x)
+    print(f"  {name + ':':11} {median_us(compiled):7.1f} us")
 
 ###############################################################################
-# As one can see, the onverhead introduced by :class:`~tensordict.nn.TensorDictSequential` has been completely resolved.
+# The numbers above come from the machine that built this page, which runs on
+# a CPU. In eager mode, ``Sequential`` takes longer than ``Regular``, because
+# each of its six modules reads from the tensordict and writes to it.
 #
-# Do's and don't with TensorDictModule
-# ------------------------------------
+# :func:`torch.compile` traces through the tensordict code, so the compiled
+# graph contains only the tensor operations: the same matrix products as the
+# eager ``Regular`` module. Each call of a compiled module also checks the
+# guards of the graph (the conditions under which the graph is valid) before
+# it runs the generated code. On the CPU build of this page, the compiled
+# versions are not faster than the eager ``Regular`` module.
 #
-# - Don't use :class:`~torch.nn.Sequence` around modules from :mod:`tensordict.nn`. It would break the input/output
-#   key structure.
-#   Always try to rely on :class:`~tensordict.nn:TensorDictSequential` instead.
+# On a GPU, the cost to launch each kernel adds up. CUDA graphs replay all the
+# kernels of a call at once. Use ``torch.compile(module, mode="reduce-overhead")``
+# or :class:`~tensordict.nn.CudaGraphModule` to record them. The
+# :ref:`compile` guide explains both tools, and what makes a compiled
+# tensordict function compile again.
 #
-# - Don't assign the output tensordict to a new variable, as the output tensordict is just the input modified in-place.
-#   Assigning a new variable name isn't strictly prohibited, but it means that you may wish for both of them to disappear
-#   when one is deleted, when in fact the garbage collector will still see the tensors in the workspace and the no memory
-#   will be freed:
+# Rules for TensorDictModule
+# --------------------------
+#
+# - To chain modules from :mod:`tensordict.nn`, use
+#   :class:`~tensordict.nn.TensorDictSequential`, not
+#   :class:`~torch.nn.Sequential`. :class:`~torch.nn.Sequential` has no
+#   ``in_keys`` and ``out_keys``, so keyword calls such as ``seq(x=x)`` and
+#   ``select_out_keys`` do not work on it.
+# - A :class:`~tensordict.nn.TensorDictModule` writes its outputs into the
+#   input tensordict and returns that same object. ``td = module(td)`` and
+#   ``module(td)`` give the same result. If you write
+#   ``td_out = module(td)``, ``td_out`` and ``td`` are two names for one object:
 #
 #   .. code-block::
 #
-#     >>> tensordict = module(tensordict)  # ok!
-#     >>> tensordict_out = module(tensordict)  # don't!
+#     >>> td_out = module(td)
+#     >>> assert td_out is td
 #
-# Working with distributions: :class:`~tensordict.nn.ProbabilisticTensorDictModule`
-# ---------------------------------------------------------------------------------
+# Working with distributions
+# --------------------------
 #
-# :class:`~tensordict.nn.ProbabilisticTensorDictModule` is a non-parametric module representing a
-# probability distribution. Distribution parameters are read from tensordict
-# input, and the output is written to an output tensordict. The output is
-# sampled given some rule, specified by the input ``default_interaction_type``
-# argument and the :func:`~tensordict.nn.interaction_type` global function. If they conflict,
-# the context manager precedes.
+# A :class:`~tensordict.nn.ProbabilisticTensorDictModule` has no parameters.
+# It reads the parameters of a probability distribution from the tensordict,
+# builds the distribution, and writes a sample of it into the tensordict.
 #
-# It can be wired together with a :class:`~tensordict.nn.TensorDictModule` that returns
-# a tensordict updated with the distribution parameters using
-# :class:`~tensordict.nn.ProbabilisticTensorDictSequential`. This is a special case of
-# :class:`~tensordict.nn.TensorDictSequential` whose last layer is a
-# :class:`~tensordict.nn.ProbabilisticTensorDictModule` instance.
+# Two settings choose the sample. The ``default_interaction_type`` argument of
+# the module sets the default. The
+# :class:`~tensordict.nn.set_interaction_type` context manager overrides it
+# for the calls inside its ``with`` block. The default is
+# ``InteractionType.DETERMINISTIC``: the module writes a deterministic value
+# of the distribution, here the mean of a normal distribution.
 #
-# :class:`~tensordict.nn.ProbabilisticTensorDictModule` is responsible for constructing the
-# distribution (through the :meth:`~tensordict.nn.ProbabilisticTensorDictModule.get_dist` method) and/or
-# sampling from this distribution (through a regular `forward` call to the module). The same
-# :meth:`~tensordict.nn.ProbabilisticTensorDictModule.get_dist` method is exposed within
-# :class:`~tensordict.nn.ProbabilisticTensorDictSequential`.
+# :class:`~tensordict.nn.ProbabilisticTensorDictSequential` chains modules
+# like :class:`~tensordict.nn.TensorDictSequential`. Its last module is a
+# :class:`~tensordict.nn.ProbabilisticTensorDictModule`, and the modules
+# before it write the parameters of the distribution.
 #
-# One can find the parameters in the output tensordict as well as the log
-# probability if needed.
+# To get the distribution object instead of a sample, call
+# :meth:`~tensordict.nn.ProbabilisticTensorDictModule.get_dist`. The
+# :class:`~tensordict.nn.ProbabilisticTensorDictSequential` has the same
+# method.
+#
+# In the example below, a GRU cell writes a hidden state.
+# :class:`~tensordict.nn.distributions.NormalParamExtractor` splits it into ``"loc"`` and
+# ``"scale"``, and the last module samples ``"action"`` from a normal
+# distribution. With ``return_log_prob=True``, it also writes the log
+# probability of the sample under ``"action_log_prob"``.
 
 from tensordict.nn import (
+    InteractionType,
+    NormalParamExtractor,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
+    set_interaction_type,
 )
-from tensordict.nn.distributions import NormalParamExtractor
 from torch import distributions as dist
 
 td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3])
@@ -311,26 +333,41 @@ td_module = ProbabilisticTensorDictSequential(
 )
 print(f"TensorDict before going through module: {td}")
 td_module(td)
-print(f"TensorDict after going through module now as keys action, loc and scale: {td}")
+print(f"TensorDict after going through module: {td}")
+
+###############################################################################
+# The default interaction type is deterministic, so ``"action"`` is equal to
+# ``"loc"``. Inside ``set_interaction_type(InteractionType.RANDOM)``, the
+# module draws a random sample:
+
+assert (td["action"] == td["loc"]).all()
+
+td_random = td.select("input", "hidden")
+with set_interaction_type(InteractionType.RANDOM):
+    td_module(td_random)
+assert not (td_random["action"] == td_random["loc"]).all()
 
 ###############################################################################
 # Conclusion
 # ----------
 #
-# We have seen how `tensordict.nn` can be used to dynamically build complex neural architectures on-the-fly.
-# This opens the possibility of building pipelines that are oblivious to the model signature, i.e., write generic codes
-# that use networks with an arbitrary number of inputs or outputs in a flexible manner.
+# In this tutorial, you wrapped modules and functions in
+# :class:`~tensordict.nn.TensorDictModule`, and chained them with
+# :class:`~tensordict.nn.TensorDictSequential` by the names of their inputs
+# and outputs. You removed the intermediate outputs with
+# ``select_out_keys``, and you called the block with a tensor as a keyword
+# argument. You measured the cost of the tensordict reads and writes, in
+# eager mode and compiled. Last, you sampled from a distribution with
+# :class:`~tensordict.nn.ProbabilisticTensorDictModule`.
 #
-# We have also seen how :class:`~tensordict.nn.dispatch` enables to use `tensordict.nn` to build such networks and use
-# them without recurring to :class:`~tensordict.TensorDict` directly. Thanks to :func:`~torch.compile`, the overhead
-# introduced by :class:`tensordict.nn.TensorDictSequential` can be completely removed, leaving users with a neat,
-# tensordict-free version of their module.
+# Further reading
+# ---------------
 #
-# In the next tutorial, we will be seeing how ``torch.export`` can be used to isolate a module and export it.
-#
-
-# sphinx_gallery_start_ignore
-import time
-
-time.sleep(3)
-# sphinx_gallery_end_ignore
+# - :ref:`modules-guide` explains ``tensordict.nn`` in more detail.
+# - :ref:`compile` explains how to compile tensordict code and record CUDA
+#   graphs.
+# - :ref:`sphx_glr_tutorials_export.py` exports a ``tensordict.nn`` module to a
+#   graph that takes and returns plain tensors.
+# - :ref:`sphx_glr_tutorials_functional.py` swaps the parameters of a module
+#   and runs ensembles with :func:`torch.vmap`.
+# - :ref:`api-nn` lists all the classes of ``tensordict.nn``.

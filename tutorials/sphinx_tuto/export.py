@@ -6,34 +6,30 @@ Exporting tensordict modules
 
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
-Prerequisites
-~~~~~~~~~~~~~
+After you write a model with ``tensordict.nn``, you can export its
+computational graph with :func:`torch.export.export`. The exported program
+takes and returns plain tensors, and it does not need tensordict at run time.
+Use it to run the model on other hardware (robots, drones, edge devices), or
+to remove the dependency on tensordict.
 
-Reading the :ref:`TensorDictModule <tensordictmodule>` tutorial is preferable to fully benefit from this tutorial.
+What you will learn:
 
-Once a module has been written using ``tensordict.nn``, it is often useful to isolate the computational graph and export
-that graph. The goal of this may be to execute the model on hardware (e.g., robots, drones, edge devices) or eliminate
-the dependency on tensordict altogether.
+- How to call a ``tensordict.nn`` module with tensors instead of a
+  :class:`~tensordict.TensorDict`.
+- How to export the module with ``torch.export`` and save the result to a file.
+- How to export a module that reads and writes nested keys.
+- How to select the outputs of the model before you export it.
 
-PyTorch provides multiple methods for exporting modules, including ``onnx`` and ``torch.export``, both of which are
-compatible with ``tensordict``.
+Before you start, read the :ref:`TensorDictModule <tensordictmodule>`
+tutorial.
 
-In this short tutorial, we will see how one can use ``torch.export`` to isolate the computational graph of a model.
-``torch.onnx`` support follows the same logic.
-
-Key learnings
-~~~~~~~~~~~~~
-
-- Executing a ``tensordict.nn`` module without :class:`~tensordict.TensorDict` inputs;
-- Selecting the output(s) of a model;
-- Exporting such model using `torch.export`;
-- Saving the model to a file;
-- Isolating the pytorch model;
-
-
+PyTorch also has an ONNX exporter. In recent PyTorch versions,
+``torch.onnx.export(..., dynamo=True)`` is built on ``torch.export``. This
+tutorial covers ``torch.export`` only.
 """
 
-import time
+import tempfile
+from pathlib import Path
 
 import torch
 from tensordict.nn import (
@@ -47,14 +43,14 @@ from torch import nn
 # Designing the model
 # -------------------
 #
-# Let us build a simple neural network using ``tensordict.nn``. The network will consist of:
+# Build a small network with ``tensordict.nn``. The network has:
 #
-# - A linear layer mapping input to a hidden representation;
-# - A ReLU activation;
-# - A final linear layer producing the output.
+# - A linear layer that maps the input to a hidden representation.
+# - A ReLU activation.
+# - A second linear layer that writes a latent representation.
 #
-# We will also include a :class:`tensordict.nn.NormalParamExtractor` to demonstrate how to extract
-# multiple outputs from a single tensor.
+# A :class:`~tensordict.nn.distributions.NormalParamExtractor` then splits the latent
+# tensor into two outputs, ``"loc"`` and ``"scale"``.
 #
 model = Seq(
     # 1. A small network for embedding
@@ -66,65 +62,71 @@ model = Seq(
 )
 
 ##################################################
-# Let us run this model and see what the output looks like:
+# Run the model with a tensor as a keyword argument, and look at the output:
 #
 
+torch.manual_seed(0)
 x = torch.randn(1, 3)
 print(model(x=x))
 
 ##################################################
-# As expected, running the model with a tensor input returns as many tensors as the module's output keys! For large
-# models, this can be quite annoying and wasteful. Later, we will see how we can limit the number of outputs of the
-# model to deal with this issue.
+# Called with a tensor, the model returns one tensor per output key: here
+# ``"hidden"``, ``"latent"``, ``"loc"`` and ``"scale"``. For a large model,
+# you usually need fewer outputs. The section "Selecting the outputs" below
+# shows how to keep only some of them.
 #
 # Using ``torch.export`` with a ``TensorDictModule``
 # --------------------------------------------------
 #
-# Now that we have successfully built our model, we would like to extract its computational graph in a single object that
-# is independent of ``tensordict``. ``torch.export`` is a PyTorch module dedicated to isolating the graph of a module and
-# represent it in a standardized way. Its main entry point is :func:`~torch.export.export` which returns an ``ExportedProgram``
-# object. In turn, this object has several attributes of interest that we will explore below: a ``graph_module``,
-# which represents the FX graph captured by ``export``, a ``graph_signature`` with inputs, outputs, etc., of the graph,
-# and finally a ``module()`` that returns a callable that can be used in-place of the original module.
+# ``torch.export`` captures the graph of a module in a standard form, which
+# does not depend on ``tensordict``. Its main entry point is
+# :func:`~torch.export.export`, which returns an ``ExportedProgram``. This
+# object has the following attributes:
 #
-# Although our module accepts both args and kwargs, we will focus on its usage with kwargs as this is clearer.
+# - ``graph_module``: the FX graph that ``export`` captured.
+# - ``graph_signature``: the inputs and outputs of the graph.
+# - ``module()``: a method that returns a callable, which you can use in
+#   place of the original module.
+#
+# The model accepts positional and keyword arguments. This tutorial uses
+# keyword arguments, because they name the input keys.
 
 from torch.export import export
 
 model_export = export(model, args=(), kwargs={"x": x})
 
 ##################################################
-# Let us look at the module:
+# Look at the module:
 #
 print("module:", model_export.module())
 
 ##################################################
-# This module can be run exactly like our original module (with a lower overhead):
+# You call this module like the original module, and it returns the same
+# tensors:
 #
 
-t0 = time.time()
-model(x=x)
-print(f"Time for TDModule: {(time.time() - t0) * 1e6: 4.2f} micro-seconds")
 exported = model_export.module()
-
-# Exported version
-t0 = time.time()
-exported(x=x)
-print(f"Time for exported module: {(time.time() - t0) * 1e6: 4.2f} micro-seconds")
+for out_model, out_exported in zip(model(x=x), exported(x=x)):
+    torch.testing.assert_close(out_model, out_exported)
 
 ##################################################
-# and the FX graph:
-print("fx graph:", model_export.graph_module.print_readable())
+# Export does not optimize the graph. The exported module runs the same tensor
+# operations as the original module, one by one, without the tensordict reads
+# and writes. To make it faster, compile it (see :ref:`compile`), or compile
+# it ahead of time with AOTInductor (see "Further reading").
+#
+# Print the FX graph:
+print(model_export.graph_module.print_readable(print_output=False))
 
 ##################################################
 # Working with nested keys
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# Nested keys are a core feature of the tensordict library, and being able to export modules that read and write
-# nested entries is therefore an important feature to support.
-# Because keyword arguments must be regular strings, it is not possible for :class:`~tensordict.nn.dispatch` to work
-# directly with them. Instead, ``dispatch`` will unpack nested keys joined with a regular underscore (`"_"`), as the
-# following example shows.
+# Nested keys are tuples of strings, such as ``("some", "key")``. A keyword
+# argument must be a single string, so :class:`~tensordict.nn.dispatch`
+# joins the parts of a nested key with an underscore (``"_"``). In the
+# example below, the input key ``("some", "key")`` becomes the keyword
+# argument ``some_key``.
 
 model_nested = Seq(
     Mod(lambda x: x + 1, in_keys=[("some", "key")], out_keys=["hidden"]),
@@ -134,65 +136,90 @@ model_nested = Seq(
 model_nested_export = export(model_nested, args=(), kwargs={"some_key": x})
 print("exported module with nested input:", model_nested_export.module())
 
+##################################################
+# The ``forward`` method of the exported module takes ``some_key``:
+
+out = model_nested_export.module()(some_key=x)
+torch.testing.assert_close(out, x)
 
 ##################################################
-# Note that the callable returned by `module()` is a pure python callable that can be in turn compiled using
-# :func:`~torch.compile`.
+# The callable that ``module()`` returns is a plain Python callable. You can
+# compile it with :func:`~torch.compile`.
 #
 # Saving the exported module
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# ``torch.export`` has its own serialization protocol, :func:`~torch.export.save` and :func:`~torch.export.load`.
-# Conventionally, the `".pt2"` extension is to be used:
-#
-#   >>> torch.export.save(model_export, "model.pt2")
-#
+# ``torch.export`` has its own file format. Save the program with
+# :func:`~torch.export.save` and load it with :func:`~torch.export.load`. By
+# convention, the file name ends with ``".pt2"``:
+
+path = Path(tempfile.mkdtemp()) / "model.pt2"
+torch.export.save(model_export, path)
+model_loaded = torch.export.load(path)
+for out_model, out_loaded in zip(model(x=x), model_loaded.module()(x=x)):
+    torch.testing.assert_close(out_model, out_loaded)
+
+##################################################
 # Selecting the outputs
 # ---------------------
 #
-# Recall that the ``tensordict.nn`` is to keep every intermediate value in the output, unless the user specifically asks
-# for only a specific value. During training, this can be very useful: one can easily log intermediate values of the
-# graph, or use them for other purposes (e.g., reconstruct a distribution based on its saved parameters, rather than
-# saving the :class:`~torch.distributions.Distribution` object itself). One could also argue that, during training, the
-# impact on memory of registering intermediate values is negligible since they are part of the computational graph
-# used by ``torch.autograd`` to compute the parameter gradients.
+# By default, a ``tensordict.nn`` module keeps every intermediate value in its
+# output. During training, you can log these values, or rebuild a
+# distribution from its saved parameters instead of saving the
+# :class:`~torch.distributions.distribution.Distribution` object. The extra memory is small
+# during training, because autograd keeps these tensors for the backward pass
+# anyway.
 #
-# During inference, though, we most likely are only interested in specific outputs of the model.
-# Because we want to extract the model for usages that are independent of the ``tensordict`` library, it makes sense to
-# isolate the only output we desire.
-# To do this, we have several options:
+# An exported inference model usually needs one or two outputs. Select them
+# before you export, so that the exported graph returns only these tensors.
+# You can select outputs in three ways:
 #
-# 1. Build the :meth:`~tensordict.nn.TensorDictSequential` with the ``selected_out_keys`` keyword argument, which will
-#    induce the selection of the desired entries during calls to the module;
-# 2. Using the :meth:`~tensordict.nn.TensorDictModule.select_out_keys` method, which will modify the ``out_keys``
-#    attribute in-place (this can be reverted through :meth:`~tensordict.nn.TensorDictModule.reset_out_keys`).
-# 3. Wrap the existing instance in a :meth:`~tensordict.nn.TensorDictSequential` that will filter out the unwanted keys:
+# 1. Pass the ``selected_out_keys`` keyword argument when you build the
+#    :class:`~tensordict.nn.TensorDictSequential`.
+# 2. Call the :meth:`~tensordict.nn.TensorDictModuleBase.select_out_keys` method.
+#    It changes the ``out_keys`` attribute in place. To undo it, call
+#    :meth:`~tensordict.nn.TensorDictModuleBase.reset_out_keys`.
+# 3. Wrap the module in a :class:`~tensordict.nn.TensorDictSequential` that
+#    selects the keys:
 #
-#     >>> module_filtered = Seq(module, selected_out_keys=["loc"])
+#    >>> module_filtered = Seq(module, selected_out_keys=["loc"])
 #
-# Let us test the model after selecting its output keys.
-# When an `x` input is provided, we expect our model to output a single tensor corresponding to the `"loc"` output:
+# Select the ``"loc"`` output with the second method. With an ``x`` input,
+# the model now returns one tensor, the ``"loc"`` output:
 
 model.select_out_keys("loc")
 print(model(x=x))
 
 ##################################################
-# We see that the output is now a single tensor.
-# We can create a new exported graph from this. Its computational graph should be simplified:
+# Export the model again. The graph now returns a single tensor:
 
 model_export = export(model, args=(), kwargs={"x": x})
 print("module:", model_export.module())
 
 ##################################################
-# This is all you need to know to use ``torch.export``. Please refer to the
-# `official documentation <https://pytorch.org/docs/stable/export>`_ for more info.
+# Conclusion
+# ----------
 #
-# Next steps and further reading
-# ------------------------------
+# In this tutorial, you called a ``tensordict.nn`` model with tensors as
+# keyword arguments, and you exported it with ``torch.export``. The exported
+# program takes and returns plain tensors. You passed nested keys as keyword
+# arguments joined with ``"_"``, saved the program to a ``.pt2`` file, and
+# selected the outputs of the model before the export.
 #
-# - Check the ``torch.export`` tutorial, available `here <https://pytorch.org/tutorials/intermediate/torch_export_tutorial.html>`__;
-# - ONNX support: check the `ONNX tutorials <https://pytorch.org/tutorials/beginner/onnx/export_simple_model_to_onnx_tutorial.html>`_
-#   to learn more about this feature. Exporting to ONNX is very similar to `torch.export` explained here.
-# - For deployment of PyTorch code on servers without python environment, check the
-#   `AOTInductor <https://pytorch.org/docs/main/torch.compiler_aot_inductor.html>`_ documentation.
+# Further reading
+# ---------------
 #
+# - :ref:`compile` explains how tensordicts go through ``torch.export``,
+#   including dynamic batch sizes.
+# - :ref:`modules-guide` explains ``tensordict.nn`` modules and
+#   :class:`~tensordict.nn.dispatch`.
+# - The `torch.export documentation <https://pytorch.org/docs/stable/export>`_
+#   and the `torch.export tutorial
+#   <https://pytorch.org/tutorials/intermediate/torch_export_tutorial.html>`__
+#   explain the exporter.
+# - The `ONNX tutorials
+#   <https://pytorch.org/tutorials/beginner/onnx/export_simple_model_to_onnx_tutorial.html>`_
+#   explain the ONNX exporter.
+# - To run PyTorch code on servers without Python, read the
+#   `AOTInductor <https://pytorch.org/docs/main/torch.compiler_aot_inductor.html>`_
+#   documentation.
