@@ -44,6 +44,11 @@ tensordict, so modules that share keys make a graph. Generic code, such as a
 training loop, can then call any module on a tensordict without knowing its
 inputs.
 
+A :class:`~tensordict.nn.TensorDictModule` is a :class:`torch.nn.Module`.
+Save it with ``state_dict()`` and move it with ``to()``, as any other module.
+The parameters of the wrapped module have the prefix ``module.``, for
+example ``module.weight``.
+
 Input and output keys
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -272,6 +277,8 @@ modules, in order:
 - ``out_keys`` holds all the keys that the modules write, each one once. A key
   that two modules write is at the position of the last write.
 
+In this sequence, the last module writes ``"h"`` again:
+
   >>> from tensordict.nn import TensorDictModule as Mod
   >>> seq = TensorDictSequential(
   ...     Mod(lambda x: x + 1, in_keys=["x"], out_keys=["h"]),
@@ -381,6 +388,8 @@ above), the sequence writes the new value into it.
    :class:`~tensordict.nn.TensorDictSequential` and call ``select_out_keys``
    on the sequence.
 
+In this example, the module deletes the entry ``"other"``:
+
   >>> two = Mod(lambda x: (x + 1, x + 2), in_keys=["x"], out_keys=["a", "b"]).select_out_keys("b")
   >>> sorted(two(TensorDict(x=torch.zeros(3), other=torch.ones(3), batch_size=[3])).keys())
   ['b', 'x']
@@ -467,8 +476,25 @@ The default ``distribution_class`` is
 :class:`~tensordict.nn.distributions.Delta`, which always returns its
 parameter. With it, the module copies its input to ``out_keys``.
 
-A :class:`~tensordict.nn.ProbabilisticTensorDictSequential` has three methods
-that do not sample:
+``distribution_class`` can also be your own
+:class:`~torch.distributions.distribution.Distribution` subclass, or any
+callable that returns a distribution. The module calls it with the entries
+of ``in_keys`` as keyword arguments. To set the value that the
+``DETERMINISTIC`` interaction type returns (see below), give the class a
+``deterministic_sample`` property:
+
+  >>> class ClippedNormal(d.Normal):
+  ...     @property
+  ...     def deterministic_sample(self):
+  ...         return self.loc.clamp(-1.0, 1.0)
+  >>> clipped = ProbabilisticTensorDictModule(
+  ...     in_keys=["loc", "scale"], out_keys=["action"], distribution_class=ClippedNormal
+  ... )
+  >>> clipped(TensorDict(loc=torch.tensor([3.0, -0.5]), scale=torch.ones(2), batch_size=[2]))["action"]
+  tensor([ 1.0000, -0.5000])
+
+A :class:`~tensordict.nn.ProbabilisticTensorDictSequential` also has these
+methods:
 
 - :meth:`~tensordict.nn.ProbabilisticTensorDictSequential.get_dist` returns
   the distribution.
@@ -575,13 +601,13 @@ the value. The name of the entry depends on the global setting
 :func:`~tensordict.nn.composite_lp_aggregate`, which is ``False`` by default.
 Change it with :class:`~tensordict.nn.set_composite_lp_aggregate` or with the
 ``COMPOSITE_LP_AGGREGATE`` environment variable. The table gives the keys
-that the module writes on main:
+that the module writes:
 
 .. list-table::
    :header-rows: 1
    :widths: 30 35 35
 
-   * - Module
+   * - Case
      - ``composite_lp_aggregate()`` is ``False`` (default)
      - ``composite_lp_aggregate()`` is ``True``
    * - One out-key, ``"action"``
@@ -611,16 +637,17 @@ The rule for the default: the module adds ``"_log_prob"`` to the last part of
 each out-key. Each log-probability has the shape that the distribution
 gives. A :class:`~torch.distributions.normal.Normal` with a value of shape ``[5, 2]``
 gives a log-probability of shape ``[5, 2]``. To get one log-probability for
-each of the 5 rows, build the distribution as
-``Independent(Normal(loc, scale), 1)``
-(:class:`~torch.distributions.independent.Independent`), which sums over the last
-dimension.
+each of the 5 rows, give a ``distribution_class`` that returns
+``Independent(Normal(loc, scale), 1)``.
+:class:`~torch.distributions.independent.Independent` sums the
+log-probability over the last dimension.
 
 The ``log_prob`` methods follow the same setting. For one distribution,
 they return a tensor. For a
 :class:`~tensordict.nn.distributions.CompositeDistribution`, they return a
-tensordict of ``<name>_log_prob`` entries with the default, and with ``True``
-one tensor: the sum over all the distributions and their event dimensions.
+tensordict of ``<name>_log_prob`` entries by default. With ``True``, they
+return one tensor: the sum over all the distributions and their event
+dimensions.
 
 A module reads the setting when you build it. If the setting is different
 when you call a module with ``return_log_prob=True``, the module raises
@@ -635,9 +662,10 @@ discrete grip, needs one distribution for each output.
 :class:`~tensordict.nn.distributions.CompositeDistribution` groups them. Its
 parameters are a tensordict with one nested tensordict for each output. Its
 samples and log-probabilities are tensordicts with one entry for each output.
-To use it in a module, give ``distribution_map``, a dict from each output
-name to its distribution class. The module then takes its ``out_keys`` from
-the names of ``distribution_map``:
+To use it in a module, read the parameters at one key (``"params"`` below),
+and give ``distribution_map`` in ``distribution_kwargs``: a dict from each
+output name to its distribution class. The module then takes its
+``out_keys`` from the names of ``distribution_map``:
 
   >>> from tensordict.nn import CompositeDistribution
   >>> class Heads(nn.Module):
@@ -685,9 +713,9 @@ Parameters as tensordicts
 -------------------------
 
 The parameters of a model fit in a tensordict, with one nested key for each
-submodule. This gives a functional call: run a module with parameters that it
-does not own. Use it for ensembles, target networks, meta-learning and
-per-sample gradients.
+submodule. With such a tensordict, you can make a functional call: a call of
+a module with parameters that the module does not own. Use functional calls
+for ensembles, target networks, meta-learning and per-sample gradients.
 
 Extract and swap parameters
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -696,7 +724,7 @@ Extract and swap parameters
 of a module in a tensordict. The entries are the module's own
 :class:`~torch.nn.parameter.Parameter` objects, so an in-place change to them changes
 the module. :meth:`~tensordict.TensorDict.to_module` puts the entries of a
-tensordict into a module. Used as a context manager, it puts the original
+tensordict into a module. In a ``with`` block, it puts the original
 parameters back at the end of the block:
 
   >>> mlp = nn.Sequential(nn.Linear(3, 4), nn.ReLU(), nn.Linear(4, 1))
@@ -713,7 +741,8 @@ parameters back at the end of the block:
   >>> bool(mlp[0].weight.abs().sum() > 0)
   True
 
-Without ``with``, ``to_module`` keeps the new parameters in the module, and
+After the block, ``mlp`` has its own parameters again. Without ``with``,
+``to_module`` keeps the new parameters in the module, and
 returns a tensordict with the old ones.
 
 Ensembles with from_modules and vmap
@@ -774,20 +803,29 @@ optimizer then does not train it, and a checkpoint does not save it.
 :class:`~tensordict.TensorDictParams` is a tensordict whose entries are
 registered as parameters and buffers of the module that holds it. Use it to
 keep a tensordict of parameters on a module, for example the stacked weights
-of an ensemble or a copy of the weights for a target network:
+of an ensemble or a copy of the weights for a target network.
+
+A target network must not be trained by the optimizer. In this example,
+``no_convert=True`` registers the copy as buffers: ``state_dict()`` and
+``to()`` see them, ``parameters()`` does not.
 
   >>> from tensordict import TensorDictParams
   >>> class Critic(nn.Module):
   ...     def __init__(self, net):
   ...         super().__init__()
   ...         self.net = net
-  ...         self.target_params = TensorDictParams(TensorDict.from_module(net).detach().clone())
+  ...         target = TensorDict.from_module(net).detach().clone()
+  ...         self.target_params = TensorDictParams(target, no_convert=True)
   >>> critic = Critic(nn.Linear(2, 1))
   >>> list(critic.state_dict().keys())
   ['net.weight', 'net.bias', 'target_params.weight', 'target_params.bias']
+  >>> [name for name, _ in critic.named_parameters()]
+  ['net.weight', 'net.bias']
   >>> critic = critic.to(torch.float64)
   >>> critic.target_params["weight"].dtype
   torch.float64
+  >>> with critic.target_params.to_module(critic.net):
+  ...     target_value = critic.net(torch.zeros(1, 2, dtype=torch.float64))
 
 A :class:`~tensordict.TensorDictParams` behaves like the tensordict that it
 wraps: you can index it, set entries and call ``to_module``. These rules
