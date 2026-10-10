@@ -2787,21 +2787,33 @@ def parse_tensor_dict_string(s: str):
         This functions is intended to be used for debugging, to reproduce a tensordict
         given its printed version, and should not be used in real applications.
 
+    Raises:
+        ValueError: if a field is not a ``Tensor`` or a ``TensorDict`` printed
+            with the default print options.
+
     """
     from tensordict import TensorDict
 
-    # Regular expression patterns
-    field_pattern = r"(\w+): Tensor\(shape=torch.Size\((\[(.*?)\])\), device=(\w+), dtype=torch.(\w+), is_shared=(\w+)\)"
-    nested_field_pattern = r"(\w+): TensorDict\("
+    # Regular expression patterns. A field line is "<indent><key>: <value>", and a
+    # key can contain any character.
+    field_line_pattern = re.compile(r"^[ \t]*(.*?): \w+\(", re.MULTILINE)
+    field_pattern = re.compile(
+        r"^[ \t]*(.*?): Tensor\(shape=torch.Size\((\[(.*?)\])\), device=(\w+(?::\d+)?), dtype=torch.(\w+), is_shared=(\w+)\)",
+        re.MULTILINE,
+    )
+    nested_field_pattern = re.compile(r"^[ \t]*(.*?): TensorDict\(", re.MULTILINE)
     batch_size_pattern = r"batch_size=torch.Size\((\[(.*?)\])\)"
-    device_pattern = r"device=(\w+)(?=,|$)"
+    device_pattern = r"device=(\w+(?::\d+)?)(?=,|$)"
 
-    # Find all nested TensorDicts first
-    nested_dict_ranges = []
-    for match in re.finditer(nested_field_pattern, s):
-        start_idx = match.start()
+    # Find the nested TensorDicts of this level first. A match inside a nested
+    # TensorDict already found is a field of that TensorDict.
+    nested_dicts = []
+    for match in nested_field_pattern.finditer(s):
+        start_idx = match.start(1)
+        if any(start <= start_idx <= end for _, start, _, end in nested_dicts):
+            continue
         depth = 1
-        for i in range(start_idx + len(match.group(0)), len(s)):
+        for i in range(match.end(), len(s)):
             if s[i] == "(":
                 depth += 1
             elif s[i] == ")":
@@ -2809,38 +2821,43 @@ def parse_tensor_dict_string(s: str):
             if depth == 0:
                 end_idx = i
                 break
-        nested_dict_ranges.append((start_idx, end_idx))
+        nested_dicts.append((match.group(1), start_idx, match.end(), end_idx))
+    nested_dict_ranges = [(start, end) for _, start, _, end in nested_dicts]
 
     # Find all fields in the string that are not part of a nested TensorDict
     fields = {}
-    for match in re.finditer(field_pattern, s):
+    tensor_field_starts = set()
+    for match in field_pattern.finditer(s):
         name, _, shape, device, dtype, is_shared = match.groups()
-        field_start = match.start()
+        field_start = match.start(1)
         field_end = match.end()
         if any(
             field_start >= start and field_end <= end
             for start, end in nested_dict_ranges
         ):
             continue  # skip if this field is inside a nested TensorDict
+        tensor_field_starts.add(field_start)
         shape = [int(x) for x in shape.split(", ")] if shape else []
         fields[name] = torch.zeros(
             tuple(shape), device=torch.device(device), dtype=getattr(torch, dtype)
         )
 
-    # Now find nested TensorDicts and add them to the fields
-    for match in re.finditer(nested_field_pattern, s):
-        name = match.group(1)
-        start_idx = match.end()
-        depth = 1
-        for i in range(start_idx, len(s)):
-            if s[i] == "(":
-                depth += 1
-            elif s[i] == ")":
-                depth -= 1
-            if depth == 0:
-                end_idx = i
-                break
-        content = s[start_idx:end_idx]
+    # Every other field line of this level is a field that cannot be parsed
+    for match in field_line_pattern.finditer(s):
+        line_start = match.start(1)
+        if line_start in tensor_field_starts or any(
+            start <= line_start <= end for start, end in nested_dict_ranges
+        ):
+            continue
+        line = s[line_start:].split("\n", 1)[0].rstrip(",}")
+        raise ValueError(
+            f"Cannot parse the field {line!r}: parse_tensor_dict_string reads "
+            "Tensor and TensorDict fields printed with the default print options."
+        )
+
+    # Now add the nested TensorDicts to the fields
+    for name, _, content_start, end_idx in nested_dicts:
+        content = s[content_start:end_idx]
         nested_fields = parse_tensor_dict_string(f"TensorDict({content})")
         fields[name] = nested_fields
 
