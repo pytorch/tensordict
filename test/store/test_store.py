@@ -1759,6 +1759,64 @@ class TestLazyStackedTensorDictStore:
             torch.testing.assert_close(store_td[1][key], expected[key])
             torch.testing.assert_close(store_td[0][key], tds[0][key])
 
+    @pytest.mark.parametrize(
+        "shapes",
+        [
+            {"a": (3,), "f": (3, 2), ("n", "g"): (3, 2, 2)},
+            # the entry ends with the batch shape [4, 3]: torch's broadcasting
+            # from the right would apply the mask to the last two dims
+            {"s": (3, 4, 3)},
+        ],
+    )
+    def test_masked_fill_(self, store_kwargs, shapes):
+        """masked_fill_ with a batch-shaped mask fills the masked batch elements (#2224)."""
+        lazy_td = lazy_stack(
+            [
+                TensorDict(
+                    {key: torch.zeros(shape) for key, shape in shapes.items()},
+                    batch_size=[3],
+                )
+                for _ in range(4)
+            ]
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            mask = torch.zeros(4, 3, dtype=torch.bool)
+            mask[1, 2] = True
+            mask[3, 0] = True
+            assert store_td.masked_fill_(mask, 1.0) is store_td
+            expected = lazy_td.clone().masked_fill_(mask, 1.0)
+            assert_allclose_td(store_td.to_tensordict(), expected.to_tensordict())
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize("batch_size,mask_shape", [[(5, 4), (4,)], [(5, 5), (5,)]])
+    def test_masked_fill_trailing_mask(self, store_kwargs, batch_size, mask_shape):
+        """A mask that is not batch-shaped still broadcasts from the right.
+
+        TensorDict.masked_fill_ rejects these masks, but the store has always
+        accepted them for entries without feature dims. The behaviour is kept
+        for compatibility.
+        """
+        lazy_td = lazy_stack(
+            [
+                TensorDict(b=torch.zeros(batch_size[1:]), batch_size=batch_size[1:])
+                for _ in range(batch_size[0])
+            ]
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            mask = torch.zeros(mask_shape, dtype=torch.bool)
+            mask[1] = True
+            store_td.masked_fill_(mask, 1.0)
+            torch.testing.assert_close(
+                store_td["b"], torch.zeros(batch_size).masked_fill(mask, 1.0)
+            )
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     def test_fill_zero_nested(self, store_kwargs):
         """fill_ on a nested key and zero_ write nested entries, as on a lazy stack."""
         lazy_td = lazy_stack(

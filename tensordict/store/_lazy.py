@@ -2139,9 +2139,14 @@ class LazyStackedTensorDictStore(TensorDictBase):
         return self.to_tensordict().masked_fill(mask, value)
 
     def masked_fill_(self, mask, value):
+        # A batch-shaped mask is aligned with the leading dims of each entry,
+        # as in TensorDict.masked_fill_. Other masks keep torch's broadcasting
+        # from the right, as before.
+        batch_shaped = mask.shape == self.batch_size
         for key in self.keys(include_nested=True, leaves_only=True):
             tensor = self.get(key)
-            tensor = tensor.masked_fill(mask, value)
+            entry_mask = expand_as_right(mask, tensor) if batch_shaped else mask
+            tensor = tensor.masked_fill(entry_mask, value)
             self.set_(key, tensor)
         return self
 
