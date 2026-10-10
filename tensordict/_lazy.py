@@ -388,6 +388,9 @@ class LazyStackedTensorDict(TensorDictBase):
             return super().__torch_function__(func, types, args, kwargs)
 
     _td_dim_name = None
+    # The names of the batch dims of a stack without members, without the
+    # stack dim. None if these dims have no names.
+    _empty_stack_names = None
     _safe = False
     _lazy = True
 
@@ -412,6 +415,7 @@ class LazyStackedTensorDict(TensorDictBase):
             # create an empty tensor
             td0 = TensorDict(batch_size=batch_size, device=device, names=names)
             self._device = torch.device(device) if device is not None else None
+            self._empty_stack_names = td0._maybe_names()
         else:
             td0 = tensordicts[0]
             device = td0.device
@@ -560,6 +564,7 @@ class LazyStackedTensorDict(TensorDictBase):
             # create an empty tensor
             td0 = TensorDict(batch_size=batch_size, device=device, names=names)
             self._device = torch.device(device) if device is not None else None
+            self._empty_stack_names = td0._maybe_names()
         else:
             td0 = tensordicts[0]
             # device = td0.device
@@ -741,6 +746,11 @@ class LazyStackedTensorDict(TensorDictBase):
     @property
     @_cache_while_locked  # noqa
     def names(self):
+        if not self.tensordicts:
+            names = self._empty_stack_names
+            names = list(names) if names is not None else [None] * (self.ndim - 1)
+            names.insert(self.stack_dim, self._td_dim_name)
+            return names
         names = list(self.tensordicts[0].names)
         for td in self.tensordicts[1:]:
             if names != td.names:
@@ -760,11 +770,14 @@ class LazyStackedTensorDict(TensorDictBase):
             for td in self.tensordicts:
                 td.names = None
             self._td_dim_name = None
+            self._empty_stack_names = None
         else:
             names_c = list(names)
             name = names_c[self.stack_dim]
             self._td_dim_name = name
             del names_c[self.stack_dim]
+            if not self.tensordicts:
+                self._empty_stack_names = names_c
             for td in self.tensordicts:
                 if td._check_dim_name(name):
                     # TODO: should reset names here
@@ -779,10 +792,13 @@ class LazyStackedTensorDict(TensorDictBase):
             td.names = names
 
     def _has_names(self):
+        if not self.tensordicts:
+            return self._empty_stack_names is not None
         return all(td._has_names() for td in self.tensordicts)
 
     def _erase_names(self):
         self._td_dim_name = None
+        self._empty_stack_names = None
         for td in self.tensordicts:
             td._erase_names()
 
@@ -2258,6 +2274,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 stack_dim=self.stack_dim,
                 batch_size=batch_size,
                 device=self.device,
+                names=self._empty_stack_names,
                 stack_dim_name=self._td_dim_name,
             )
         if recurse:
