@@ -466,7 +466,7 @@ class TestErrors:
         assert result.returncode == 0, result.stderr
         if value == "0":
             assert result.stdout.splitlines() == [
-                "DeprecationWarning TD_GET_DEFAULTS_TO_NONE=0 is deprecated and will "
+                "FutureWarning TD_GET_DEFAULTS_TO_NONE=0 is deprecated and will "
                 "be removed in TensorDict 0.17. Use td[key] to raise a KeyError for "
                 "a missing key instead.",
                 "get: KeyError",

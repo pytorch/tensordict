@@ -92,14 +92,14 @@ def test_lazy_legacy_env_var_is_deprecated():
 
 def _import_warnings(env_var, value):
     # Imports tensordict in a subprocess with ``env_var=value`` and returns the
-    # messages of the DeprecationWarnings that the import emits.
+    # messages of the FutureWarnings that the import emits.
     code = (
         "import warnings\n"
         "with warnings.catch_warnings(record=True) as caught:\n"
         "    warnings.simplefilter('always')\n"
         "    import tensordict\n"
         "for w in caught:\n"
-        "    if issubclass(w.category, DeprecationWarning):\n"
+        "    if issubclass(w.category, FutureWarning):\n"
         "        print(w.message)\n"
     )
     env = {**os.environ, env_var: value}
@@ -182,6 +182,34 @@ def test_list_to_stack_env_var_false_is_deprecated(value):
         f"LIST_TO_STACK={value} is deprecated and will be removed in "
         "TensorDict 0.17." in _import_warnings("LIST_TO_STACK", value)
     )
+
+
+@pytest.mark.parametrize(
+    "env_var,value,message",
+    [
+        ("TD_GET_DEFAULTS_TO_NONE", "0", "TD_GET_DEFAULTS_TO_NONE=0 is deprecated"),
+        ("LIST_TO_STACK", "0", "LIST_TO_STACK=0 is deprecated"),
+        ("CAPTURE_NONTENSOR_STACK", "1", "CAPTURE_NONTENSOR_STACK=1 is deprecated"),
+        ("LAZY_LEGACY_OP", "1", "The legacy lazy mode"),
+    ],
+)
+def test_deprecated_env_vars_warn_with_default_filters(env_var, value, message):
+    # Python's default filters hide a DeprecationWarning raised inside
+    # tensordict at import time, so these warnings are FutureWarnings.
+    env = {
+        key: val
+        for key, val in os.environ.items()
+        if key not in ("PYTHONWARNINGS", "PYTHONDEVMODE")
+    }
+    env[env_var] = value
+    result = subprocess.run(
+        [sys.executable, "-c", "import tensordict"],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert f"FutureWarning: {message}" in result.stderr
 
 
 @pytest.mark.parametrize(

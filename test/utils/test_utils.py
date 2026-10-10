@@ -723,6 +723,21 @@ class TestDeprecationHelpers:
             )
         assert record[0].filename == __file__
 
+    def test_warn_deprecated_env_var(self):
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            _deprecation.warn_deprecated_env_var(
+                "OLD", "0", removal="0.17", replacement="new()"
+            )
+        assert len(record) == 1
+        # A FutureWarning, which Python's default filters show
+        assert record[0].category is FutureWarning
+        assert str(record[0].message) == (
+            "OLD=0 is deprecated and will be removed in TensorDict 0.17. "
+            "Use new() instead."
+        )
+        assert record[0].filename == __file__
+
     def test_deprecated(self):
         @_deprecation.deprecated("old()", removal="0.17")
         def old(x):
@@ -761,18 +776,62 @@ def _version_tuple(version):
     return tuple(int(part) for part in version.split(".")[:2])
 
 
+# The phrases that name the release of a removal or of a default change, in
+# messages, docstrings and docs. Line breaks and indentation may split them.
+_DEADLINE_PATTERNS = (
+    re.compile(r"removed\s+in\s+TensorDict\s+(\d+\.\d+)"),
+    re.compile(r"TensorDict\s+(\d+\.\d+),\s+the\s+default\s+will\s+change"),
+    re.compile(
+        r"default\s+(?:will\s+change|will\s+become|becomes)\b[^.]*?\bin\s+"
+        r"(?:TensorDict\s+)?(\d+\.\d+)"
+    ),
+)
+
+
+def _deadlines(text):
+    # Yields the offset and the version of each deadline phrase in text.
+    for pattern in _DEADLINE_PATTERNS:
+        for match in pattern.finditer(text):
+            yield match.start(), match.group(1)
+
+
+@pytest.mark.parametrize(
+    "text,versions",
+    [
+        ("x is deprecated and will be removed in TensorDict 0.17.", ["0.17"]),
+        ("is deprecated and will be removed in\n        TensorDict 0.17", ["0.17"]),
+        (
+            "Starting with TensorDict 0.16, the default will change to "
+            "allow_pickle=False.",
+            ["0.16"],
+        ),
+        ("the default will change to ``False`` in 0.16. Saves", ["0.16"]),
+        ("the default becomes\n``x=False`` (which raises) in 0.16.", ["0.16"]),
+        ("The default\nwill become ``False`` in TensorDict 0.16.", ["0.16"]),
+        (".. deprecated:: 0.15", []),
+        ("Since 0.15, the default is False. Set it in 0.16.", []),
+    ],
+)
+def test_deprecation_deadline_phrases(text, versions):
+    assert [version for _, version in _deadlines(text)] == versions
+
+
 def test_deprecation_deadlines():
     # Every deprecation names the release that removes it, either as the
     # removal= argument of a tensordict._deprecation helper or as "removed in
-    # TensorDict X.Y" in a message or docstring. Once version.txt reaches that
-    # release, the deprecated code has to go.
+    # TensorDict X.Y" in a message or docstring. Every announced default change
+    # names the release that makes it, as "Starting with TensorDict X.Y, the
+    # default will change" or "the default will change ... in X.Y". Once
+    # version.txt reaches that release, the deprecated code has to go, the
+    # default has to change, and the docs have to follow.
     package = Path(tensordict.__file__).parent
-    version_file = package.parent / "version.txt"
+    root = package.parent
+    version_file = root / "version.txt"
     if not version_file.exists():
         pytest.skip("version.txt is only available in a source checkout")
     current = _version_tuple(version_file.read_text().strip())
-    overdue = []
-    for path in sorted(package.rglob("*.py")):
+    deadlines = []
+    for path in sorted([*package.rglob("*.py"), *package.rglob("*.pyi")]):
         for node in ast.walk(ast.parse(path.read_text())):
             if (
                 isinstance(node, ast.keyword)
@@ -782,16 +841,27 @@ def test_deprecation_deadlines():
             ):
                 versions = [node.value.value]
             elif isinstance(node, ast.Constant) and isinstance(node.value, str):
-                versions = re.findall(r"removed in TensorDict (\d+\.\d+)", node.value)
+                versions = [version for _, version in _deadlines(node.value)]
             else:
                 continue
-            overdue.extend(
-                f"{path.relative_to(package.parent)}:{node.lineno}: {version}"
-                for version in versions
-                if _version_tuple(version) <= current
-            )
+            location = f"{path.relative_to(root)}:{node.lineno}"
+            deadlines.extend((location, version) for version in versions)
+    for path in [
+        root / "README.md",
+        *sorted((root / "docs" / "source").rglob("*.rst")),
+    ]:
+        text = path.read_text()
+        for offset, version in _deadlines(text):
+            line = text.count("\n", 0, offset) + 1
+            deadlines.append((f"{path.relative_to(root)}:{line}", version))
+    overdue = [
+        f"{location}: {version}"
+        for location, version in deadlines
+        if _version_tuple(version) <= current
+    ]
     assert not overdue, (
-        f"version.txt is {'.'.join(map(str, current))}; remove these deprecations:\n"
+        f"version.txt is {'.'.join(map(str, current))}; remove these "
+        "deprecations, or make these default changes and update their docs:\n"
         + "\n".join(overdue)
     )
 
