@@ -2920,6 +2920,22 @@ class TestGeneric:
             lst.repeat(2, 1, inplace=True)
 
     @pytest.mark.parametrize("inplace", [True, False])
+    @pytest.mark.parametrize(
+        "repeats",
+        [torch.Size([2, 3]), [2, 3], (2, 3), torch.tensor([2, 3])],
+        ids=["size", "list", "tuple", "tensor"],
+    )
+    def test_repeat_size_list_tuple_tensor(self, repeats, inplace):
+        # repeats can be one torch.Size, list, tuple or tensor, and inplace
+        # applies to them as it does to separate ints
+        td = self._build_nested_td()
+        ref = self._build_nested_td().repeat(2, 3)
+        out = td.repeat(repeats, inplace=inplace)
+        assert (out is td) is inplace
+        assert out.batch_size == torch.Size([6, 12])
+        assert (out == ref).all()
+
+    @pytest.mark.parametrize("inplace", [True, False])
     def test_repeat_interleave_inplace(self, inplace):
         td = self._build_nested_td()
         ref = self._build_nested_td().repeat_interleave(2, dim=0)
@@ -2936,6 +2952,24 @@ class TestGeneric:
         )
         with pytest.raises(NotImplementedError, match="repeat_interleave"):
             lst.repeat_interleave(2, dim=1, inplace=True)
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    @pytest.mark.parametrize("dim", [0, -1])
+    @pytest.mark.parametrize(
+        "repeats", [torch.tensor(2), torch.tensor([2])], ids=["0d", "one-element"]
+    )
+    def test_repeat_interleave_one_element_tensor(self, repeats, dim, inplace):
+        # a 0-d or one-element repeats is broadcast to the size of dim, as in
+        # torch
+        td = self._build_nested_td()
+        ref = self._build_nested_td().repeat_interleave(2, dim=dim)
+        out = td.repeat_interleave(repeats, dim=dim, inplace=inplace)
+        assert (out is td) is inplace
+        assert (
+            out.batch_size
+            == torch.empty(3, 4).repeat_interleave(repeats, dim=dim).shape
+        )
+        assert (out == ref).all()
 
     @pytest.mark.parametrize("inplace", [True, False])
     def test_roll_inplace(self, inplace):
