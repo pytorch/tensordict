@@ -1666,8 +1666,7 @@ def _init_wrapper(
             lock = kwargs.pop("lock", None)
         if lock is None:
             lock = frozen
-        if not is_compiling():
-            # zip not supported by dynamo
+        if args:
             # Use __dataclass_fields__ but filter out ClassVar fields to preserve order
             expected_keys_list = (
                 field_names
@@ -1689,6 +1688,7 @@ def _init_wrapper(
                 if key in kwargs:
                     raise ValueError(f"The key {key} is already set in kwargs")
                 kwargs[key] = value
+        if not is_compiling():
             if (
                 can_init_tensors
                 and type(self) is cls
@@ -1750,11 +1750,6 @@ def _init_wrapper(
                 if lock:
                     td.lock_()
                 return
-        else:
-            if args:
-                raise RuntimeError(
-                    "dynamo doesn't support arguments when building a tensorclass, pass the keyword explicitly."
-                )
 
         # Use `is`/isinstance instead of `in (..., dataclasses.MISSING)`:
         # under torch.compile, Dynamo can't proxy `_MISSING_TYPE` for `==`

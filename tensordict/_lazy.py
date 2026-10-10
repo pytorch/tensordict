@@ -147,7 +147,7 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
 
     def __contains__(self, item):
         item = _unravel_key_to_tuple(item)
-        if item[0] in self.tensordict._iterate_over_keys():
+        if item[0] in self.tensordict._key_list():
             if self.leaves_only:
                 return not _is_tensor_collection(self.tensordict.entry_class(item[0]))
             has_first_key = True
@@ -2392,10 +2392,6 @@ class LazyStackedTensorDict(TensorDictBase):
             )
             for (key, val0) in items
         )
-
-    def _iterate_over_keys(self) -> None:
-        # this is about 20x faster than the version above
-        yield from self._key_list()
 
     @_cache_while_locked  # noqa: B019
     def _key_list(self):
@@ -5205,9 +5201,11 @@ class _PermutedTensorDict(_CustomOpTensorDict):
             )
         if not len(dims_list) and not self.batch_dims:
             return self
-        if np.array_equal(dims_list, range(self.batch_dims)):
+        if list(dims_list) == list(range(self.batch_dims)):
             return self
-        if np.array_equal(np.argsort(dims_list), self.inv_op_kwargs.get("dims")):
+        if sorted(range(len(dims_list)), key=dims_list.__getitem__) == list(
+            self.inv_op_kwargs.get("dims")
+        ):
             return self._source
         return super()._legacy_permute(*dims_list)
 
