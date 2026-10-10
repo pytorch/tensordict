@@ -52,7 +52,14 @@ class _ShapeOps:
     def expand(self, shape: torch.Size) -> Self: ...
 
     def expand(self, *args, **kwargs) -> Self:
-        """Expands each tensor of the tensordict according to the :func:`~torch.expand` function, ignoring the feature dimensions.
+        """Expands each tensor of the tensordict according to :meth:`torch.Tensor.expand`, ignoring the feature dimensions.
+
+        The new shape is the new batch size. As for :meth:`torch.Tensor.expand`,
+        it can add leading dimensions and expand the dimensions of size 1. The
+        other dimensions must keep their size. The result holds views of the
+        original tensors: no memory is allocated, and the expanded leaves are
+        not contiguous. Call :meth:`~.clone` or :meth:`~.contiguous` before
+        you write into them.
 
         Supports iterables to specify the shape.
 
@@ -156,6 +163,12 @@ class _ShapeOps:
 
     def unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
         """Returns a tuple of indexed tensordicts, unbound along the indicated dimension.
+
+        The tensordicts of the result hold views of the original tensors.
+
+        Args:
+            dim (int): the batch dimension to remove. The result has
+                ``self.batch_size[dim]`` tensordicts.
 
         Examples:
             >>> import torch
@@ -289,10 +302,13 @@ class _ShapeOps:
 
     @_as_context_manager()
     def unsqueeze(self, *args, **kwargs):
-        """Unsqueezes all tensors for a dimension comprised in between `-td.batch_dims` and `td.batch_dims` and returns them in a new tensordict.
+        """Inserts a batch dimension of size 1 in every tensor, and returns them in a new tensordict.
+
+        The tensors of the result are views of the original tensors.
 
         Args:
-            dim (int): dimension along which to unsqueeze
+            dim (int): the position of the new dimension, in
+                ``[-batch_dims - 1, batch_dims]`` as for :func:`torch.unsqueeze`.
 
         Examples:
             >>> import torch
@@ -306,10 +322,13 @@ class _ShapeOps:
             >>> td.get("x").shape
             torch.Size([3, 1, 4, 2])
 
-        This operation can be used as a context manager too. Changes to the original
-        tensordict will occur out-place, i.e. the content of the original tensors
-        will not be altered. This also assumes that the tensordict is not locked
-        (otherwise, unlocking the tensordict is necessary).
+        This operation can be used as a context manager too. Inside the
+        ``with`` block, you work on the unsqueezed tensordict. When the block
+        exits, the inverse operation (:meth:`~.squeeze`) runs, and the entries
+        of the block are written back to the original tensordict. They replace
+        the original tensors instead of being copied into them. The original
+        tensordict must not be locked. If the block raises an exception,
+        nothing is written back.
 
             >>> td = TensorDict({
             ...     'x': torch.arange(24).reshape(3, 4, 2),
@@ -354,11 +373,15 @@ class _ShapeOps:
 
     @_as_context_manager()
     def squeeze(self, *args, **kwargs):
-        """Squeezes all tensors for a dimension in between `-self.batch_dims+1` and `self.batch_dims-1` and returns them in a new tensordict.
+        """Removes batch dimensions of size 1 from every tensor, and returns them in a new tensordict.
+
+        The tensors of the result are views of the original tensors. Feature
+        dimensions of size 1 are kept.
 
         Args:
-            dim (int | None): dimension along which to squeeze. If dim is
-                ``None``, all singleton dimensions will be squeezed.
+            dim (int | None): the batch dimension to remove, in
+                ``[-batch_dims, batch_dims - 1]``. If dim is
+                ``None``, all singleton batch dimensions will be squeezed.
                 Defaults to ``None``.
 
         Examples:
@@ -373,11 +396,15 @@ class _ShapeOps:
             >>> td.get("x").shape
             torch.Size([3, 4, 2])
 
-        This operation can be used as a context manager too. Changes to the original
-        tensordict will occur out-place, i.e. the content of the original tensors
-        will not be altered. This also assumes that the tensordict is not locked
-        (otherwise, unlocking the tensordict is necessary). This functionality is
-        *not* compatible with implicit squeezing.
+        This operation can be used as a context manager too. Inside the
+        ``with`` block, you work on the squeezed tensordict. When the block
+        exits, the inverse operation (:meth:`~.unsqueeze`) runs, and the
+        entries of the block are written back to the original tensordict. They
+        replace the original tensors instead of being copied into them. The
+        original tensordict must not be locked. If the block raises an
+        exception, nothing is written back. Pass ``dim``: ``with td.squeeze():``
+        raises ``RuntimeError``, because the inverse operation needs the
+        dimension.
 
             >>> td = TensorDict({
             ...     'x': torch.arange(24).reshape(3, 1, 4, 2),
@@ -447,10 +474,18 @@ class _ShapeOps:
         *args,
         **kwargs,
     ) -> Self:
-        """Returns a contiguous, reshaped tensor of the desired shape.
+        """Returns a tensordict whose batch dimensions are reshaped to ``shape``.
+
+        Each leaf is reshaped with :meth:`torch.Tensor.reshape`, and keeps its
+        feature dimensions. As with :meth:`torch.Tensor.reshape`, a leaf of
+        the result is a view of the original leaf when the memory layout
+        allows it, and a copy otherwise.
 
         Args:
-            *shape (int): new shape of the resulting tensordict.
+            *shape (int): new batch size of the resulting tensordict, as
+                integers or as one list, tuple or ``torch.Size``. One
+                dimension can be ``-1``. The shape is positional only:
+                ``reshape(shape=...)`` raises ``TypeError``.
 
         Keyword Args:
             inplace (bool, optional): If ``True``, this tensordict's identity
@@ -1177,16 +1212,23 @@ class _ShapeOps:
     ):
         """Returns a tensordict with views of the tensors according to a new shape, compatible with the tensordict batch_size.
 
+        Each leaf keeps its feature dimensions, and is a view of the original
+        leaf: they share storage. As for :meth:`torch.Tensor.view`, the
+        leaves must have a compatible memory layout. Otherwise, use
+        :meth:`~.reshape`.
+
         Alternatively, a dtype can be provided as a first unnamed argument. In that case, all tensors will be viewed
         with the according dtype. Note that this assume that the new shapes will be compatible with the provided dtype.
-        See :meth:`~torch.view` for more information on dtype views.
+        See :meth:`torch.Tensor.view` for more information on dtype views.
 
         Args:
-            *shape (int): new shape of the resulting tensordict.
+            *shape (int): new batch size of the resulting tensordict, as
+                integers or as one ``torch.Size``.
             dtype (torch.dtype): alternatively, a dtype to use to represent the tensor content.
-            size: iterable
 
         Keyword Args:
+            size (list, tuple or torch.Size, optional): the new batch size,
+                as a keyword argument instead of ``*shape``.
             batch_size (torch.Size, optional): if a dtype is provided, the batch-size can be reset using this
                 keyword argument. If the ``view`` is called with a shape, this is without effect.
 
@@ -1255,6 +1297,10 @@ class _ShapeOps:
         original tensordict too as the memory is shared. To map out-place
         modifications (such as new entries) back on the original tensordict,
         use the transposed tensordict as a context manager.
+
+        Args:
+            dim0 (int): the first batch dimension to swap.
+            dim1 (int): the second batch dimension to swap.
 
         Examples:
             >>> import torch
@@ -1346,7 +1392,7 @@ class _ShapeOps:
         """Returns a view of a tensordict with the batch dimensions permuted according to dims.
 
         Args:
-            *dims_list (int): the new ordering of the batch dims of the tensordict. Alternatively,
+            *dims (int): the new ordering of the batch dims of the tensordict. Alternatively,
                 a single iterable of integers can be provided.
             dims (list of int): alternative way of calling permute(...).
 
