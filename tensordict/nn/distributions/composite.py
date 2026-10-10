@@ -33,7 +33,7 @@ class CompositeDistribution(d.Distribution, Mapping):
     :meth:`log_prob` and :meth:`entropy` return a TensorDict with one entry
     per distribution while :func:`~tensordict.nn.composite_lp_aggregate` is
     ``False`` (the default), and one summed tensor while it is ``True``. See
-    the log-probability key table of
+    the :ref:`log-probability key table <log-prob-keys>` of
     :class:`~tensordict.nn.ProbabilisticTensorDictModule` for the keys that
     probabilistic modules write.
 

@@ -662,7 +662,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
     def log_prob_key(self):
         """The key where the log-probability is written, when there is one such key.
 
-        See the log-probability key table in the class docstring.
+        See the :ref:`log-probability key table <log-prob-keys>`.
 
         Raises:
             RuntimeError: if :func:`~tensordict.nn.composite_lp_aggregate`
@@ -691,7 +691,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
         One key per sampled key when :func:`~tensordict.nn.composite_lp_aggregate`
         is ``False``, and ``[log_prob_key]`` when it is ``True``. See the
-        log-probability key table in the class docstring.
+        :ref:`log-probability key table <log-prob-keys>`.
 
         Raises:
             RuntimeError: if :func:`~tensordict.nn.composite_lp_aggregate`
@@ -792,7 +792,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             :class:`~tensordict.nn.distributions.CompositeDistribution` while
             :func:`~tensordict.nn.composite_lp_aggregate` is ``False``, a
             TensorDict with one ``<key>_log_prob`` entry per sampled key (see
-            the log-probability key table in the class docstring). For a
+            the :ref:`log-probability key table <log-prob-keys>`). For a
             composite distribution while it is ``True``, the sum of these
             entries, which are also written into ``tensordict``.
 

@@ -491,7 +491,7 @@ def composite_lp_aggregate(nowarn: bool = False) -> bool | None:
 
     Returns ``False`` unless :class:`~tensordict.nn.set_composite_lp_aggregate`
     or the ``COMPOSITE_LP_AGGREGATE`` environment variable set it to ``True``.
-    See the log-probability key table of
+    See the :ref:`log-probability key table <log-prob-keys>` of
     :class:`~tensordict.nn.ProbabilisticTensorDictModule` for what each value
     changes.
 
@@ -513,7 +513,7 @@ class set_composite_lp_aggregate(_DecoratorContextManager):
     When it returns ``False`` (the default), they are returned as a
     TensorDict with one ``<name>_log_prob`` (or ``<name>_entropy``) entry per
     sampled key. The value also decides the keys where probabilistic modules
-    write their log-probabilities: see the log-probability key table of
+    write their log-probabilities: see the :ref:`log-probability key table <log-prob-keys>` of
     :class:`~tensordict.nn.ProbabilisticTensorDictModule`, and
     :ref:`modules-guide`.
 
