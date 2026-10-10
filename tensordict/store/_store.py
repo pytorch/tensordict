@@ -1699,9 +1699,11 @@ class TensorDictStore(TensorDictBase):
         if out is _UNSET:
             if default is NO_DEFAULT:
                 raise KeyError(
-                    f"You are trying to pop key `{key_tuple}` which is not in dict "
-                    f"without providing default value. "
-                    f"Keys={self.keys(include_nested=True)}."
+                    _KEY_ERROR.format(
+                        key_tuple[0] if len(key_tuple) == 1 else key_tuple,
+                        type(self).__name__,
+                        sorted(self.keys(include_nested=len(key_tuple) > 1), key=str),
+                    )
                 )
             return default
         if isinstance(out, TensorDictStore):
