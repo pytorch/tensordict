@@ -1425,9 +1425,9 @@ class _Serialization:
             allow_pickle (bool, optional): whether pickled non-tensor fields
                 may be loaded. Pickle can execute arbitrary code, so pass
                 ``True`` only for data from a trusted source and ``False``
-                for untrusted data. During the 0.14 compatibility window,
-                omitting this option loads pickle with a ``FutureWarning``;
-                the default will change to ``False`` in 0.15. Saves without
+                for untrusted data. In TensorDict 0.14 and 0.15, omitting
+                this option loads pickle with a ``FutureWarning``; the
+                default will change to ``False`` in 0.16. Saves without
                 a pickle sidecar do not require this option.
 
         Examples:

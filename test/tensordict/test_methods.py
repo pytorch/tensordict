@@ -2474,7 +2474,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td.memmap(prefix=tmpdir, copy_existing=True)
         with pytest.raises(RuntimeError, match="allow_pickle=True"):
             TensorDict.load_memmap(tmpdir, allow_pickle=False)
-        with pytest.warns(FutureWarning, match="0.15"):
+        with pytest.warns(FutureWarning, match="TensorDict 0.16, the default"):
             TensorDict.load_memmap(tmpdir)
         loaded = TensorDict.load_memmap(tmpdir, allow_pickle=True)
         assert is_non_tensor(loaded.get(("non", "json", "serializable")))
