@@ -2352,6 +2352,11 @@ class TestGeneric:
         assert td.is_locked
         assert td["b"].is_locked
 
+        # the entries pickle by the files of td_base
+        td_pickle = pickle.loads(pickle.dumps(td))
+        assert td_pickle["b", "c"].filename == td_base["b", "c"].filename
+        assert (td_pickle == td).all()
+
         td_load = TensorDict.load_memmap(tmpdir).memmap_()
         assert td_load.saved_path is not None
         assert (td == td_load).all()
