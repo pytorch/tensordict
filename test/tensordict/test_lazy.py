@@ -1698,25 +1698,6 @@ class TestLazyStackedTensorDict:
         assert len(ltd4.tensordicts) == 4
         assert_allclose_td(ltd4, ltd)
 
-    @pytest.mark.parametrize("stack_dim", [0, 1])
-    @pytest.mark.parametrize("dim", [0, 1])
-    @pytest.mark.parametrize(
-        "repeats",
-        [2, torch.tensor(2), torch.tensor([2]), torch.tensor([1, 0, 2])],
-        ids=["int", "0d", "one-element", "per-element"],
-    )
-    def test_repeat_interleave_matches_torch(self, stack_dim, dim, repeats):
-        # a 0-d or one-element repeats is broadcast to the size of dim, also
-        # along the stack dim
-        a = torch.arange(9.0).view(3, 3)
-        lazy = LazyStackedTensorDict.lazy_stack(
-            TensorDict(a=a, batch_size=[3, 3]).unbind(stack_dim), stack_dim
-        )
-        result = lazy.repeat_interleave(repeats, dim=dim)
-        expected = a.repeat_interleave(repeats, dim=dim)
-        assert result.batch_size == expected.shape
-        assert (result["a"] == expected).all()
-
     @pytest.mark.parametrize(
         "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "prod"]
     )
@@ -1793,6 +1774,25 @@ class TestLazyStackedTensorDict:
             td.rename_key_("a", "c", safe=error == "safe")
         for member in tds[:-1]:
             assert list(member.keys()) == ["a"]
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("dim", [0, 1])
+    @pytest.mark.parametrize(
+        "repeats",
+        [2, torch.tensor(2), torch.tensor([2]), torch.tensor([1, 0, 2])],
+        ids=["int", "0d", "one-element", "per-element"],
+    )
+    def test_repeat_interleave_matches_torch(self, stack_dim, dim, repeats):
+        # a 0-d or one-element repeats is broadcast to the size of dim, also
+        # along the stack dim
+        a = torch.arange(9.0).view(3, 3)
+        lazy = LazyStackedTensorDict.lazy_stack(
+            TensorDict(a=a, batch_size=[3, 3]).unbind(stack_dim), stack_dim
+        )
+        result = lazy.repeat_interleave(repeats, dim=dim)
+        expected = a.repeat_interleave(repeats, dim=dim)
+        assert result.batch_size == expected.shape
+        assert (result["a"] == expected).all()
 
     @set_list_to_stack(True)
     def test_set_list_stack(self):
