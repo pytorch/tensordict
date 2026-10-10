@@ -3086,6 +3086,43 @@ class TestTensorClass:
         assert "y" in ctd.keys()
         assert ("y", "x") in ctd.keys(True)
 
+    @pytest.mark.parametrize("source_type", ["tensorclass", "tensordict", "dict"])
+    def test_update_at_(self, source_type):
+        @tensorclass
+        class TC:
+            a: torch.Tensor
+            b: torch.Tensor
+
+        tc = TC(a=torch.zeros(4, 3), b=torch.zeros(4), batch_size=[4])
+        a, b = tc.a, tc.b
+        source = TC(a=torch.ones(2, 3), b=torch.ones(2), batch_size=[2])
+        if source_type == "tensordict":
+            source = source.to_tensordict()
+        elif source_type == "dict":
+            source = source.to_dict()
+        assert tc.update_at_(source, slice(1, 3)) is tc
+        # the values are written in place, at the index only
+        assert tc.a is a and tc.b is b
+        assert (tc.b == torch.tensor([0.0, 1.0, 1.0, 0.0])).all()
+        assert (tc.a == tc.b.unsqueeze(-1)).all()
+
+        tc.update_at_(source, slice(2, 4), keys_to_update=["a"])
+        assert (tc.a[:, 0] == torch.tensor([0.0, 1.0, 1.0, 1.0])).all()
+        assert (tc.b == torch.tensor([0.0, 1.0, 1.0, 0.0])).all()
+
+    @pytest.mark.parametrize("source_type", ["tensordict", "dict"])
+    def test_update_at_lazy_stack(self, source_type):
+        @tensorclass
+        class TC:
+            a: torch.Tensor
+
+        tc = lazy_stack([TC(a=torch.zeros(3), batch_size=[]) for _ in range(4)])
+        source = TensorDict(a=torch.ones(2, 3), batch_size=[2])
+        if source_type == "dict":
+            source = source.to_dict()
+        tc.update_at_(source, slice(1, 3))
+        assert (tc.a[:, 0] == torch.tensor([0.0, 1.0, 1.0, 0.0])).all()
+
     def test_type(self):
         data = MyData(
             X=torch.ones(3, 4, 5),

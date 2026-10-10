@@ -2943,25 +2943,51 @@ def _update_at_(
     keys_to_update: Sequence[NestedKey] | None = None,
     non_blocking: bool = False,
 ):
+    # A source that update() accepts still goes to update(), which replaces the
+    # entries whatever the index, as writing it at the index could raise.
+    # Sources that update() rejects for their batch size are written at the index.
     if isinstance(input_dict_or_td, dict):
-        input_dict_or_td = type(self).from_dict(
-            input_dict_or_td, batch_size=self.batch_size
-        )
+        try:
+            input_dict_or_td = type(self).from_dict(
+                input_dict_or_td, batch_size=self.batch_size
+            )
+        except RuntimeError:
+            # write the dict at the index only if its values do not have the
+            # batch size of self
+            batch_size = self.batch_size
+            if not any(
+                isinstance(value, torch.Tensor)
+                and value.shape[: len(batch_size)] != batch_size
+                for value in input_dict_or_td.values()
+            ):
+                raise
 
     if is_tensorclass(input_dict_or_td):
         non_tensordict = {
             k: v for k, v in input_dict_or_td._non_tensordict.items() if v is not None
         }
-        self._tensordict.update(input_dict_or_td._tensordict)
-        self._non_tensordict.update(non_tensordict)
-        return self
+        source = input_dict_or_td._tensordict
+        try:
+            self._tensordict.update(source)
+        except RuntimeError:
+            # TensorDict.update checks the batch size before it changes anything
+            batch_size = self.batch_size
+            if (
+                not isinstance(self._tensordict, TensorDict)
+                or is_non_tensor(input_dict_or_td)
+                or batch_size[: source.batch_dims]
+                == source.batch_size[: len(batch_size)]
+            ):
+                raise
+            input_dict_or_td = source
+        else:
+            self._non_tensordict.update(non_tensordict)
+            return self
 
+    # LazyStackedTensorDict.update_at_ takes no keys_to_update
+    kwargs = {} if keys_to_update is None else {"keys_to_update": keys_to_update}
     self._tensordict.update_at_(
-        input_dict_or_td,
-        index=index,
-        clone=clone,
-        keys_to_update=keys_to_update,
-        non_blocking=non_blocking,
+        input_dict_or_td, index, clone=clone, non_blocking=non_blocking, **kwargs
     )
     return self
 
