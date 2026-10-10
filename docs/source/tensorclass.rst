@@ -543,8 +543,7 @@ Tensorclasses as module inputs and outputs
 
 For a module whose inputs and outputs are tensorclasses, subclass
 :class:`~tensordict.nn.TensorClassModuleBase`. Its generic parameters declare
-the input and output types, so your IDE completes the fields and a type
-checker reports a wrong one. Its ``as_td_module()`` method returns a module
+the input and output types for type checkers and IDEs. Its ``as_td_module()`` method returns a module
 that you can put in a :class:`~tensordict.nn.TensorDictSequential`. See
 :ref:`modules-guide` for an example.
 
@@ -553,9 +552,10 @@ that you can put in a :class:`~tensordict.nn.TensorDictSequential`. See
 
 Tensorclasses work with :func:`torch.compile`, :mod:`torch.func` and
 :func:`torch.export.export`. :ref:`compile` lists what makes a function
-recompile or break its graph, and the workarounds. Two of these limits are
-specific to tensorclasses: a string field that the function returns, and a
-new tensorclass defined after the first call.
+recompile or break its graph, and the workarounds. Two of them concern
+tensorclasses: a function that returns a string field recompiles for each new
+string, and a compiled function that flattens a pytree recompiles after a new
+tensorclass is defined.
 
 .. _tensorclass-static-typing:
 

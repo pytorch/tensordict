@@ -20,7 +20,7 @@ The containers
 
 .. list-table::
    :header-rows: 1
-   :widths: 22 39 39
+   :widths: 26 37 37
 
    * - Container
      - Use it for

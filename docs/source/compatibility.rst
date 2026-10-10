@@ -58,7 +58,7 @@ table:
 
 .. list-table::
    :header-rows: 1
-   :widths: 20 30 50
+   :widths: 26 24 50
 
    * - Backend
      - Operation
@@ -142,7 +142,8 @@ Redis (``TensorDictStore``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 These examples need a Redis server on ``localhost``, so the docs build does
-not run them. :ref:`storage` shows how to start one.
+not run them. To start a server for a test, run
+``docker run --rm -d -p 6379:6379 redis:7-alpine``.
 
   >>> from tensordict.store import TensorDictStore
   >>> store = TensorDictStore.from_tensordict(td, host="localhost")  # doctest: +SKIP
