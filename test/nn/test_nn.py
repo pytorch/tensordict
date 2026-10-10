@@ -53,6 +53,7 @@ from tensordict.nn.distributions import (
     Delta,
     NormalParamExtractor,
     OneHotCategorical,
+    TruncatedNormal,
 )
 from tensordict.nn.distributions.composite import CompositeDistribution
 from tensordict.nn.ensemble import EnsembleModule
@@ -2838,6 +2839,42 @@ class TestProbabilisticTensorDictModule:
             value = getattr(truncated_normal, name)
         assert record[0].filename == __file__
         assert value == getattr(truncated_normal, f"_{name}")
+
+    def test_truncated_normal_support(self):
+        a, b = torch.tensor([8.0]), torch.tensor([12.0])
+        dist = TruncatedNormal(
+            torch.tensor([10.0]), torch.tensor([2.0]), a, b, validate_args=True
+        )
+        assert torch.equal(dist.support.lower_bound, a)
+        assert torch.equal(dist.support.upper_bound, b)
+        sample = dist.rsample((100,))
+        assert dist.support.check(sample).all()
+        # log_prob and cdf check the value, not the standardised value,
+        # against the support, and still accept Python numbers
+        dist.log_prob(sample)
+        dist.cdf(sample)
+        torch.testing.assert_close(
+            dist.log_prob(11.0), dist.log_prob(torch.tensor([11.0]))
+        )
+        torch.testing.assert_close(dist.cdf(11.0), dist.cdf(torch.tensor([11.0])))
+        with pytest.raises(ValueError, match="to be within the support"):
+            dist.log_prob(torch.tensor([12.5]))
+        with pytest.raises(ValueError, match="to be within the support"):
+            dist.cdf(7.5)
+
+    def test_truncated_normal_number_args(self):
+        dist = TruncatedNormal(0.0, 2.0, -1.0, 1.0)
+        ref = TruncatedNormal(
+            torch.tensor(0.0), torch.tensor(2.0), torch.tensor(-1.0), torch.tensor(1.0)
+        )
+        assert dist.batch_shape == ref.batch_shape == torch.Size([])
+        for attr in ("scale", "mean", "variance", "entropy"):
+            torch.testing.assert_close(getattr(dist, attr), getattr(ref, attr))
+        value = torch.tensor(0.5)
+        torch.testing.assert_close(dist.log_prob(value), ref.log_prob(value))
+        assert TruncatedNormal(torch.zeros(3), 2.0, -1.0, 1.0).batch_shape == (3,)
+        # a Number scale is clamped as a tensor scale is
+        assert TruncatedNormal(0.0, 0.0, -1.0, 1.0).scale == TruncatedNormal.eps
 
     @set_composite_lp_aggregate(False)
     @pytest.mark.parametrize("inplace", [True, False, None])
