@@ -1356,16 +1356,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         Keyword Args:
             auto_batch_size (bool, optional): if ``True``, the batch size will be computed automatically.
-                Defaults to ``False``.
+                Defaults to ``None``, which behaves like ``False``, unless
+                ``batch_dims`` is passed: then it behaves like ``True``.
             batch_size (iterable of int, optional): a batch size for the tensordict.
             device (torch.device or compatible type, optional): a device for the TensorDict.
-            batch_dims (int, optional): the ``batch_dims`` (ie number of leading dimensions
-                to be considered for ``batch_size``). Exclusinve with ``batch_size``.
-                Note that this is the __maximum__ number of batch dims of the tensordict,
-                a smaller number is tolerated.
+            batch_dims (int, optional): the maximum number of leading dimensions
+                of the computed batch size. A smaller number is used if the
+                tensors do not share that many leading dimensions. Exclusive
+                with ``batch_size``.
             names (list of str, optional): the dimension names of the tensordict.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> input_dict = {"a": torch.randn(3, 4), "b": torch.randn(3)}
             >>> print(TensorDict.from_dict(input_dict, auto_batch_size=True))
             TensorDict(
@@ -5350,21 +5353,21 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         it in tensordicts of equal size and dispatching the operations over the
         desired number of workers.
 
-        The function signature should be ``Callabe[[TensorDict], TensorDict | Tensor]``.
+        The function signature should be ``Callable[[TensorDict], TensorDict | Tensor]``.
         The output must support the :func:`torch.cat` operation. The function
         must be serializable.
 
         .. note::
             This method is particularly useful when working with large
-            datasets stored on disk (e.g. memory-mapped tensordicts) where
-            chunks will be zero-copied slices of the original data which can
-            be passed to the processes with virtually zero-cost. This allows
-            to tread very large datasets (eg. over a Tb big) to be processed
-            at little cost.
+            datasets stored on disk (for example, memory-mapped tensordicts).
+            The chunks are slices of the original data that are not copied,
+            and the processes receive them without a data transfer. This way,
+            you can process datasets larger than the memory (for example,
+            over 1 TB).
 
         Args:
             fn (callable): function to apply to the tensordict.
-                Signatures similar to ``Callabe[[TensorDict], TensorDict | Tensor]``
+                Signatures similar to ``Callable[[TensorDict], TensorDict | Tensor]``
                 are supported.
             dim (int, optional): the dim along which the tensordict will be chunked.
             num_workers (int, optional): the number of workers. Exclusive with ``pool``.
@@ -5444,15 +5447,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 is passed to the ``map`` method.
 
         Examples:
+            Run this example as a script: the worker processes must import
+            ``process_data``, and the ``if __name__ == "__main__"`` block keeps
+            them from running the main code again.
+
             >>> import torch
             >>> from tensordict import TensorDict
             >>>
             >>> def process_data(data):
-            ...     data.set("y", data.get("x") + 1)
-            ...     return data
+            ...     # The chunks of a memory-mapped tensordict are locked:
+            ...     # return a new tensordict instead of adding a key to ``data``.
+            ...     return data.empty().set("y", data["x"] + 1)
             >>> if __name__ == "__main__":
-            ...     data = TensorDict({"x": torch.zeros(1, 1_000_000)}, [1, 1_000_000]).memmap_()
-            ...     data = data.map(process_data, dim=1)
+            ...     data = TensorDict({"x": torch.zeros(1, 1_000)}, [1, 1_000]).memmap_()
+            ...     data = data.map(process_data, dim=1, num_workers=2)
             ...     print(data["y"][:, :10])
             ...
             tensor([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]])
@@ -5532,24 +5540,24 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         it in tensordicts of equal size and dispatching the operations over the
         desired number of workers. It will yield the results one at a time.
 
-        The function signature should be ``Callabe[[TensorDict], TensorDict | Tensor]``.
+        The function signature should be ``Callable[[TensorDict], TensorDict | Tensor]``.
         The function must be serializable.
 
         .. note::
             This method is particularly useful when working with large
-            datasets stored on disk (e.g. memory-mapped tensordicts) where
-            chunks will be zero-copied slices of the original data which can
-            be passed to the processes with virtually zero-cost. This allows
-            to tread very large datasets (eg. over a Tb big) to be processed
-            at little cost.
+            datasets stored on disk (for example, memory-mapped tensordicts).
+            The chunks are slices of the original data that are not copied,
+            and the processes receive them without a data transfer. This way,
+            you can process datasets larger than the memory (for example,
+            over 1 TB).
 
         .. note::
-            This function be used to represent a dataset and load from it,
-            in a dataloader-like fashion.
+            You can use this function to represent a dataset and load from
+            it, as a dataloader does.
 
         Args:
             fn (callable): function to apply to the tensordict.
-                Signatures similar to ``Callabe[[TensorDict], TensorDict | Tensor]``
+                Signatures similar to ``Callable[[TensorDict], TensorDict | Tensor]``
                 are supported.
             dim (int, optional): the dim along which the tensordict will be chunked.
             num_workers (int, optional): the number of workers. Exclusive with ``pool``.
@@ -5632,16 +5640,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 is passed to the ``map`` method.
 
         Examples:
+            Run this example as a script: the worker processes must import
+            ``process_data``, and the ``if __name__ == "__main__"`` block keeps
+            them from running the main code again.
+
             >>> import torch
             >>> from tensordict import TensorDict
             >>>
             >>> def process_data(data):
-            ...     data.unlock_()
-            ...     data.set("y", data.get("x") + 1)
-            ...     return data
+            ...     # The chunks of a memory-mapped tensordict are locked:
+            ...     # return a new tensordict instead of adding a key to ``data``.
+            ...     return data.empty().set("y", data["x"] + 1)
             >>> if __name__ == "__main__":
-            ...     data = TensorDict({"x": torch.zeros(1, 1_000_000)}, [1, 1_000_000]).memmap_()
-            ...     for sample in data.map_iter(process_data, dim=1, chunksize=5):
+            ...     data = TensorDict({"x": torch.zeros(1, 1_000)}, [1, 1_000]).memmap_()
+            ...     for sample in data.map_iter(process_data, dim=1, num_workers=2, chunksize=5):
             ...         print(sample["y"])
             ...         break
             ...

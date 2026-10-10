@@ -679,7 +679,7 @@ class _DeviceOps:
             device_module.synchronize()
 
     def double(self) -> Self:
-        r"""Casts all tensors to ``torch.bool``."""
+        r"""Casts all tensors to ``torch.double`` (``torch.float64``)."""
 
         def dble(x):
             return x.double()

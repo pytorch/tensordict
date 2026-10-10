@@ -870,10 +870,22 @@ class _Conversion:
         preserve_module_state: bool | None = True,
         memo=None,  # deprecated
     ):
-        """Writes the content of a TensorDictBase instance onto a given nn.Module attributes, recursively.
+        """Writes the content of the tensordict into the parameters and buffers of a module, recursively.
 
-        ``to_module`` can also be used a context manager to temporarily populate a module with a collection of
-        parameters/buffers (see example below).
+        The keys of the tensordict must match the names of the module
+        attributes, as :meth:`~.from_module` gives them. A nested key is a
+        submodule: ``("layers", "0", "weight")`` is ``module.layers[0].weight``.
+
+        ``to_module`` can also be used as a context manager, to populate a
+        module with other parameters for the duration of a ``with`` block (see
+        the second example). When the block exits, the original parameters are
+        written back.
+
+        .. warning::
+            If the ``with`` block raises an exception, the original parameters
+            are not written back: the module keeps the parameters of the
+            tensordict. To restore them in all cases, keep the returned swap and
+            write it back in a ``finally`` clause (see the third example).
 
         Args:
             module (nn.Module): a module to write the parameters into.
@@ -887,6 +899,7 @@ class _Conversion:
                 will be returned. Defaults to ``True``.
             swap_dest (TensorDictBase, optional): if ``return_swap`` is ``True``,
                 the tensordict where the swap should be written.
+            memo: deprecated. Passing it raises ``RuntimeError``.
             use_state_dict (bool, optional): if ``True``, state-dict API will be
                 used to load the parameters (including the state-dict hooks).
                 Defaults to ``False``.
@@ -906,32 +919,38 @@ class _Conversion:
                 is not an :class:`~torch.nn.Parameter`. Defaults to ``True``.
                 Pass ``False`` to retain the historical replacement behavior.
 
-        Examples:
-            >>> from torch import nn
-            >>> module = nn.TransformerDecoder(
-            ...     decoder_layer=nn.TransformerDecoderLayer(nhead=4, d_model=4),
-            ...     num_layers=1)
-            >>> params = TensorDict.from_module(module)
-            >>> params.data.zero_()
-            >>> params.to_module(module, preserve_module_state=True)
-            >>> assert (module.layers[0].linear1.weight == 0).all()
-
-        Using a tensordict as a context manager can be useful to make functional calls:
-        Examples:
-            >>> from tensordict import from_module
-            >>> module = nn.TransformerDecoder(
-            ...     decoder_layer=nn.TransformerDecoderLayer(nhead=4, d_model=4),
-            ...     num_layers=1)
-            >>> params = TensorDict.from_module(module)
-            >>> params = params.data * 0 # Use TensorDictParams to remake these tensors regular nn.Parameter instances
-            >>> with params.to_module(module, preserve_module_state=True):
-            ...     # Call the module with zeroed params
-            ...     y = module(*inputs)
-            >>> # The module is repopulated with its original params
-            >>> assert (TensorDict.from_module(module) != 0).any()
-
         Returns:
             A tensordict containing the values from the module if ``return_swap`` is ``True``, ``None`` otherwise.
+
+        Examples:
+            >>> import torch
+            >>> from torch import nn
+            >>> from tensordict import TensorDict
+            >>> module = nn.Linear(3, 4)
+            >>> params = TensorDict.from_module(module)
+            >>> zeros = params.data.clone().zero_()
+            >>> old_params = zeros.to_module(module)
+            >>> assert (module.weight == 0).all()
+            >>> _ = old_params.to_module(module)  # restores the original values
+            >>> assert (module.weight != 0).any()
+
+            Use the tensordict as a context manager to make a functional call:
+
+        >>> zeros = params.data * 0
+        >>> with zeros.to_module(module):
+        ...     y = module(torch.ones(2, 3))  # runs with zeroed parameters
+        >>> assert (y == 0).all()
+        >>> # When the block exits, the original parameters are written back.
+        >>> assert (module.weight != 0).any()
+
+            Restore the parameters even if the call raises an exception:
+
+        >>> old_params = zeros.to_module(module)
+        >>> try:
+        ...     y = module(torch.ones(2, 3))
+        ... finally:
+        ...     _ = old_params.to_module(module)
+        >>> assert (module.weight != 0).any()
 
         """
         if memo is not None:
@@ -1141,15 +1160,32 @@ class _Conversion:
         )
 
     def to_tensordict(self, *, retain_none: bool | None = None) -> Self:
-        """Returns a regular TensorDict instance from the TensorDictBase.
+        """Returns a :class:`~tensordict.TensorDict` copy of this tensordict.
 
-        Args:
-            retain_none (bool): if ``True``, the ``None`` values from tensorclass instances
-                will be written in the tensordict.
-                Otherwise they will be discarded. Default: ``True``.
+        Every tensor is cloned, and every sub-tensordict and tensorclass is
+        converted to a :class:`~tensordict.TensorDict`, recursively. Use it to
+        get a regular, unlocked tensordict in memory from a lazy stack, a
+        memory-mapped or locked tensordict, a
+        :class:`~tensordict.PersistentTensorDict` or a tensorclass. The batch
+        size, device and dimension names are kept.
+
+        Keyword Args:
+            retain_none (bool, optional): if ``True``, the ``None`` fields of
+                tensorclass instances are written as entries of the result.
+                Defaults to ``None``, which behaves like ``False``: the
+                ``None`` fields are dropped.
 
         Returns:
             a new TensorDict object containing the same values.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import LazyStackedTensorDict, TensorDict
+            >>> stack = LazyStackedTensorDict(
+            ...     TensorDict(a=torch.zeros(3)), TensorDict(a=torch.ones(3)), stack_dim=0)
+            >>> td = stack.to_tensordict()
+            >>> type(td).__name__, td.batch_size
+            ('TensorDict', torch.Size([2]))
 
         """
         from tensordict import TensorDict

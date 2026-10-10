@@ -462,7 +462,7 @@ class _PointwiseOps:
         )
 
     def isneginf(self) -> Self:
-        """Tests if each element of input is negative infinity or not."""
+        """Returns a tensordict of boolean leaves that are ``True`` where the element is negative infinity."""
         keys, vals = self._items_list(True, True)
         vals = [val.isneginf() for val in vals]
         items = dict(zip(keys, vals))
@@ -479,7 +479,7 @@ class _PointwiseOps:
         )
 
     def isposinf(self) -> Self:
-        """Tests if each element of input is negative infinity or not."""
+        """Returns a tensordict of boolean leaves that are ``True`` where the element is positive infinity."""
         keys, vals = self._items_list(True, True)
         vals = [val.isposinf() for val in vals]
         items = dict(zip(keys, vals))
@@ -1719,25 +1719,44 @@ class _PointwiseOps:
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
     ) -> Self:  # noqa: D417
-        r"""Subtracts `self` from :attr:`other`, scaled by :attr:`alpha`, from ``self``.
+        r"""Subtracts ``self`` from ``other`` scaled by ``alpha``, leaf by leaf.
 
         .. math::
-            \text{{out}}_i = \text{{input}}_i - \text{{alpha}} \times \text{{other}}_i
+            \text{{out}}_i = \text{{alpha}} \times \text{{other}}_i - \text{{self}}_i
+
+        .. warning::
+            This formula differs from :func:`torch.rsub`, which computes
+            ``other - alpha * self``. The two results are the same only if
+            ``alpha`` is 1. ``other`` must be a tensordict, or a number
+            without ``alpha``. A :class:`torch.Tensor` raises
+            ``AttributeError``, and a number with ``alpha`` raises
+            ``TypeError``.
 
         Supports broadcasting,
         type promotion, and integer, float, and complex inputs.
 
         Args:
-            other (TensorDict, Tensor or Number): the tensor or number to subtract from ``self``.
+            other (TensorDict or Number): the tensordict or number from which
+                ``self`` is subtracted.
 
         Keyword Args:
-            alpha (Number): the multiplier for :attr:`other`.
+            alpha (Number): the multiplier for ``other``.
             default (torch.Tensor or str, optional): the default value to use for exclusive entries.
                 If none is provided, the two tensordicts key list must match exactly.
                 If ``default="intersection"`` is passed, only the intersecting key sets will be considered
                 and other keys will be ignored.
                 In all other cases, ``default`` will be used for all missing entries on both sides of the
                 operation.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.full((2,), 10.0), batch_size=[2])
+            >>> other = TensorDict(a=torch.ones(2), batch_size=[2])
+            >>> td.rsub(other)["a"]
+            tensor([-9., -9.])
+            >>> td.rsub(other, alpha=2)["a"]  # 2 * 1 - 10
+            tensor([-8., -8.])
 
         """
         keys, vals = self._items_list(True, True)
