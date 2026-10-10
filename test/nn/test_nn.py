@@ -5254,6 +5254,46 @@ class TestToModule:
         for target in grad_targets:
             assert target.grad is not None
 
+    @pytest.mark.parametrize("custom_setattr", [False, True])
+    def test_to_module_from_load_memmap(self, as_module, custom_setattr, tmpdir):
+        class MyLinear(nn.Linear):
+            def __setattr__(self, key, value):
+                return super().__setattr__(key, value)
+
+        module = MyLinear(4, 2) if custom_setattr else nn.Linear(4, 2)
+        module.weight.requires_grad_(False)
+        TensorDict.from_module(module, as_module=as_module).memmap(tmpdir)
+        params = TensorDict.load_memmap(tmpdir)
+        state_dict_keys = set(module.state_dict())
+
+        params.to_module(module)
+
+        assert set(module.state_dict()) == state_dict_keys
+        assert type(module.weight) is nn.Parameter
+        assert type(module.bias) is nn.Parameter
+        assert module.weight.requires_grad is False
+        assert module.bias.requires_grad is True
+        # the parameters share the memory-mapped storage
+        assert module.weight.data_ptr() == params["weight"].data_ptr()
+        assert module.bias.data_ptr() == params["bias"].data_ptr()
+
+    def test_to_module_keeps_parameter_when_conversion_fails(self, as_module):
+        class DetachToTensor(torch.Tensor):
+            # detach() returns a plain Tensor, which nn.Parameter rejects
+            __torch_function__ = torch._C._disabled_torch_function_impl
+
+        module = nn.Linear(4, 2)
+        weight = module.weight
+        # TensorDictParams stores a plain Tensor, so only a TensorDict keeps
+        # the subclass up to to_module
+        params = TensorDict(weight=torch.zeros(2, 4).as_subclass(DetachToTensor))
+
+        with pytest.raises(RuntimeError, match="Parameter"):
+            params.to_module(module)
+
+        assert module.weight is weight
+        assert set(dict(module.named_parameters())) == {"weight", "bias"}
+
     def test_plain_tensor_to_module_can_keep_current_behavior(self, as_module):
         module = nn.Linear(4, 2)
         params = TensorDict.from_module(module, as_module=as_module).data.detach()

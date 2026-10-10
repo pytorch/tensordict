@@ -471,7 +471,7 @@ def _maybe_preserve_module_state(
             if _tracks_gradients(tensor):
                 # swap_tensor writes it to module._parameters as it is
                 return tensor
-            return torch.nn.Parameter(tensor, requires_grad=param.requires_grad)
+            return _new_parameter(tensor, requires_grad=param.requires_grad)
     elif (
         preserve_module_state
         and isinstance(tensor, torch.nn.Parameter)
@@ -526,14 +526,15 @@ def _set_tensor_dict(
             return out
     was_buffer = False
     keep_parameter_slot = False
-    out = _parameters.pop(name, NO_DEFAULT)  # type: ignore[assignment]
+    # Build the new value before removing the old one, so that the module
+    # keeps its entry if building the new value raises.
+    out = _parameters.get(name, NO_DEFAULT)  # type: ignore[assignment]
     was_parameter = out is not NO_DEFAULT
     if out is NO_DEFAULT:
-        out = _buffers.pop(name, NO_DEFAULT)
+        out = _buffers.get(name, NO_DEFAULT)
         was_buffer = out is not NO_DEFAULT
     if out is NO_DEFAULT:
-        # dynamo doesn't like pop...
-        out = __dict__.pop(name)
+        out = __dict__[name]
     if inplace:
         # swap tensor and out after updating out
         out_tmp = out.clone() if return_swap else out
@@ -555,7 +556,7 @@ def _set_tensor_dict(
             if _tracks_gradients(tensor):
                 keep_parameter_slot = True
             else:
-                tensor = torch.nn.Parameter(tensor, requires_grad=out.requires_grad)
+                tensor = _new_parameter(tensor, requires_grad=out.requires_grad)
     elif (
         preserve_module_state is True
         and was_buffer
@@ -564,6 +565,12 @@ def _set_tensor_dict(
         persistent = name not in module._non_persistent_buffers_set
         tensor = Buffer(tensor, persistent=persistent)
 
+    if was_parameter:
+        del _parameters[name]
+    elif was_buffer:
+        del _buffers[name]
+    else:
+        del __dict__[name]
     if isinstance(tensor, torch.nn.Parameter):
         for hook in hooks:
             output = hook(module, name, tensor)
@@ -585,6 +592,17 @@ def _set_tensor_dict(
     else:
         __dict__[name] = tensor
     return out
+
+
+def _new_parameter(tensor: torch.Tensor, *, requires_grad: bool) -> torch.nn.Parameter:
+    """Wraps ``tensor`` in an ``nn.Parameter`` that shares its storage.
+
+    ``nn.Parameter`` rejects a ``MemoryMappedTensor``, whose ``detach()``
+    returns a plain ``Tensor``, so it wraps a plain view of the same storage.
+    """
+    if isinstance(tensor, MemoryMappedTensor):
+        tensor = tensor.as_subclass(torch.Tensor)
+    return torch.nn.Parameter(tensor, requires_grad=requires_grad)
 
 
 def _tracks_gradients(tensor: torch.Tensor) -> bool:
