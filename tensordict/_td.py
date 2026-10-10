@@ -244,8 +244,6 @@ class TensorDict(TensorDictBase):
 
         self._tensordict = _StringOnlyDict()
 
-        # if names and is_compiling():
-        #     graph_break()
         has_device = device is not None
         sub_non_blocking = False
         call_sync = False
@@ -281,18 +279,7 @@ class TensorDict(TensorDictBase):
                     f"sub-type or a dictionary, found type(source)={type(source)}."
                 )
             self._batch_size = self._parse_batch_size(source, batch_size)
-            # Always materialize _td_dim_names on the instance so its presence
-            # in self.__dict__ is invariant for Dynamo. Without this, a TD
-            # constructed inside a compiled region (where the branch below is
-            # skipped) would only have the class-level default, while a sibling
-            # TD coming from _new_unsafe would have an instance attribute, and
-            # Dynamo would recompile on the difference
-            # (`not ___dict_contains('_td_dim_names', __dict__)` guard).
-            self._td_dim_names = None
-            # TODO: this breaks when stacking tensorclasses with dynamo
-            is_eager = not is_compiling()
-            if is_eager:
-                self._set_names(names)
+            self._set_names(names)
 
             # Fast path: use dict.update() to establish all keys in one
             # bulk operation, then validate values individually. This
@@ -301,6 +288,7 @@ class TensorDict(TensorDictBase):
             _tensordict = self._tensordict
             _validate_value = self._validate_value
             _tensordict.update(source)
+            is_eager = not is_compiling()
             # Exact tensors need neither conversion nor collection dispatch.
             # Keep subclasses (including TensorDict subclasses with custom
             # validation), nested tensors and device moves on the general path.
@@ -2234,7 +2222,11 @@ class TensorDict(TensorDictBase):
             return self._clone_recurse()
 
         if not recurse and is_compiling():
-            result = TensorDict(batch_size=self.batch_size, device=self.device)
+            result = TensorDict(
+                batch_size=self.batch_size,
+                device=self.device,
+                names=self._maybe_names(),
+            )
             schema = self._locked_schema
             _src = self._tensordict
             _dst = result._tensordict

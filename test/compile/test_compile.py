@@ -659,8 +659,6 @@ class TestTD:
         assert result_unsqueeze_c.shape == torch.Size([1, 3])
 
     def test_names(self, mode):
-        import torch._dynamo.exc
-
         def make_td_with_names(data):
             return TensorDict(data, batch_size=[1, 2], names=["d0", "d1"])
 
@@ -672,8 +670,40 @@ class TestTD:
             make_td_with_names, fullgraph=True, mode=mode
         )
         make_td_with_names(data_dict)
-        # with pytest.raises(torch._dynamo.exc.Unsupported):
-        make_td_with_names_c(data_dict)
+        td = make_td_with_names_c(data_dict)
+        assert td.names == ["d0", "d1"]
+
+    def test_names_kept_by_ops(self, mode):
+        # TensorDict._new_unsafe calls TensorDict(..., names=names) under
+        # compile, so every op that rebuilds a tensordict goes through the
+        # names argument of __init__.
+        def ops(td):
+            nested = TensorDict(
+                {"a": td["a"], "sub": {"b": td["a"]}}, batch_size=[3], names=["n"]
+            )
+            return (
+                td.clone(),
+                td.copy(),
+                td.clone(False),
+                td.select("a"),
+                td + 1,
+                td[:2],
+                torch.stack([td, td], 1),
+                nested,
+            )
+
+        ops_c = torch.compile(ops, fullgraph=True, mode=mode)
+        td = TensorDict(a=torch.zeros(3, 2), batch_size=[3, 2], names=["x", "y"])
+        clone, copy, shallow_clone, select, add, index, stack, nested = ops_c(td)
+        assert clone.names == ["x", "y"]
+        assert copy.names == ["x", "y"]
+        assert shallow_clone.names == ["x", "y"]
+        assert select.names == ["x", "y"]
+        assert add.names == ["x", "y"]
+        assert index.names == ["x", "y"]
+        assert stack.names == ["x", None, "y"]
+        assert nested.names == ["n"]
+        assert nested["sub"].names == ["n"]
 
     @pytest.mark.skipif(
         not torch.cuda.is_available(), reason="cuda required to test device casting"
@@ -1400,6 +1430,30 @@ class TestTC:
 
         assert (stack_eager == stack_compile).all()
 
+    def test_tc_stack_names(self, mode):
+        # TensorDict.__init__ used to skip the names under compile, with the
+        # comment "this breaks when stacking tensorclasses with dynamo".
+        def stack_named(b):
+            inner = MyClass(a=None, b=b, batch_size=[3], names=["n"])
+            data = MyClass(a=inner, batch_size=[3], names=["n"])
+            return data, torch.stack([data, data.clone()])
+
+        def stack_inputs(data0, data1):
+            return torch.stack([data0, data1])
+
+        stack_named_c = torch.compile(stack_named, fullgraph=True, mode=mode)
+        data, stacked = stack_named_c(torch.arange(3))
+        assert data.names == ["n"]
+        assert data.a.names == ["n"]
+        assert stacked.names == [None, "n"]
+        assert stacked.a.names == [None, "n"]
+        assert (stacked.a.b == torch.arange(3).expand(2, 3)).all()
+
+        stack_inputs_c = torch.compile(stack_inputs, fullgraph=True, mode=mode)
+        stacked = stack_inputs_c(data, data.clone())
+        assert stacked.names == [None, "n"]
+        assert stacked.a.names == [None, "n"]
+
     def test_tc_cat(self, mode):
         def cat_tds(td0, td1):
             return torch.cat([td0, td1])
@@ -2037,6 +2091,22 @@ class TestExport:
         torch.testing.assert_close(out, td["a"] * 2)
         assert tuple(batch_size) == (4,)
         assert tuple(nested_batch_size) == (4,)
+
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_export_td_input_names(self, strict):
+        # Export traces with is_compiling() True. The input spec of non-strict
+        # export must record the dim names, so that the exported module
+        # accepts the named tensordict it was exported with, and the clone
+        # built in forward must keep them.
+        class Mod(torch.nn.Module):
+            def forward(self, td):
+                return td.clone()
+
+        td = TensorDict(a=torch.randn(4, 3), batch_size=[4], names=["n"])
+        ep = torch.export.export(Mod(), (td,), strict=strict)
+        out = ep.module()(td)
+        assert out.names == ["n"]
+        torch.testing.assert_close(out["a"], td["a"])
 
     @pytest.mark.parametrize("strict", [False])  # , True])
     def test_export_with_td_params(self, strict):
