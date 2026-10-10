@@ -690,6 +690,13 @@ class LazyStackedTensorDict(TensorDictBase):
             td.clear_device_()
         return self
 
+    def _set_device(self, device: torch.device) -> Self:
+        # The device property reads the members, or _device if there are none.
+        self._device = device
+        for td in self.tensordicts:
+            td._set_device(device)
+        return self
+
     @property
     def batch_size(self) -> torch.Size:
         return self._batch_size
