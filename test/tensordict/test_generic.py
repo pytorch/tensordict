@@ -1700,6 +1700,19 @@ class TestGeneric:
         torch.utils._pytree.tree_map(check, pytree, pytree_recon)
         assert weird_key in pytree_recon[1]
 
+    def test_from_pytree_namedtuple_batch_dims(self):
+        # batch_dims without batch_size used to raise for namedtuples
+        NT = namedtuple("NT", ["a", "b"])
+        nt = NT(a=torch.zeros(3, 2), b=torch.ones(3))
+        td = TensorDict.from_pytree(nt, auto_batch_size=True, batch_dims=1)
+        assert td.batch_size == (3,)
+        pytree_recon = td.to_pytree()
+        assert type(pytree_recon) is NT
+        assert (pytree_recon.a == nt.a).all()
+        assert (pytree_recon.b == nt.b).all()
+        # without auto_batch_size, batch_dims is ignored, as for lists and dicts
+        assert TensorDict.from_pytree(nt, batch_dims=1).batch_size == ()
+
     def test_from_struct_array(self):
         x = np.array(
             [("Rex", 9, 81.0), ("Fido", 3, 27.0)],

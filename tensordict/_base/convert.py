@@ -310,7 +310,9 @@ class _Conversion:
         result = None
         if _is_namedtuple(pytree):
             result = TensorDict.from_namedtuple(named_tuple=pytree)
-            if batch_dims is not None:
+            # Without batch_dims, batch_size is ignored here, unlike for lists
+            # and dicts: applying it would raise when it does not fit the leaves.
+            if batch_dims is not None and batch_size is not None:
                 result.batch_size = batch_size
             result["_pytree_type"] = type(pytree)
         elif isinstance(pytree, (list, tuple)):
