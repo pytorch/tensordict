@@ -4130,13 +4130,31 @@ class LazyStackedTensorDict(TensorDictBase):
         dim = _maybe_correct_neg_dim(dim, shape=self.shape)
         if dim == self.stack_dim:
             if isinstance(split_size, int):
+                if split_size <= 0:
+                    raise ValueError(
+                        f"TensorDict.split: split_size must be positive, got {split_size}."
+                    )
                 split_size = [split_size] * -(len(self.tensordicts) // -split_size)
                 split_size[-1] = len(self.tensordicts) - sum(split_size[:-1])
+            else:
+                # the sizes are read twice, so read an iterable only once
+                split_size = list(split_size)
+                if sum(split_size) != len(self.tensordicts):
+                    raise RuntimeError(
+                        "Split method expects split_size to sum exactly to "
+                        f"{len(self.tensordicts)}, but got sum({split_size}) = "
+                        f"{sum(split_size)}"
+                    )
 
             def iter_across_tds():
                 start = 0
                 for s in split_size:
-                    if s == 0:
+                    if s <= 0:
+                        if s < 0:
+                            raise RuntimeError(
+                                "Split method expects split_size to have only "
+                                f"non-negative entries, but got {split_size}"
+                            )
                         batch_size = list(self._batch_size)
                         batch_size.pop(self.stack_dim)
                         yield LazyStackedTensorDict(
@@ -4162,6 +4180,10 @@ class LazyStackedTensorDict(TensorDictBase):
         )
 
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
+        if chunks < 1:
+            raise ValueError(
+                f"chunks must be a strictly positive integer, got {chunks}."
+            )
         splits = -(self.batch_size[dim] // -chunks)
         return self.split(splits, dim)
 

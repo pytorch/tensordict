@@ -1820,6 +1820,30 @@ class TestLazyStackedTensorDict:
         assert self.recursively_check_key(res1[index], 1)  # check all 1
         assert self.recursively_check_key(res2[index], 1)  # check all 1
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_split_chunk_stack_dim_invalid_sizes(self, stack_dim):
+        # Along the stack dim, split and chunk check their sizes as TensorDict does,
+        # instead of dropping members or returning short pieces.
+        td = lazy_stack(
+            [TensorDict({"a": torch.full((2,), float(i))}, [2]) for i in range(3)],
+            stack_dim,
+        )
+        for split_size in ([1, 1], [2, 2], [4], []):
+            with pytest.raises(RuntimeError, match="expects split_size to sum exactly"):
+                td.split(split_size, stack_dim)
+        with pytest.raises(RuntimeError, match="only non-negative entries"):
+            td.split([-1, 4], stack_dim)
+        with pytest.raises(ValueError, match="split_size must be positive, got 0."):
+            td.split(0, stack_dim)
+        with pytest.raises(ValueError, match="split_size must be positive, got -1."):
+            td.split(-1, stack_dim)
+        for dim in range(td.ndim):
+            with pytest.raises(ValueError, match="chunks must be a strictly positive"):
+                td.chunk(0, dim)
+        pieces = td.split([1, 0, 2], stack_dim)
+        assert [piece.shape[stack_dim] for piece in pieces] == [1, 0, 2]
+        assert (torch.cat(pieces, stack_dim) == td).all()
+
     def test_split_lazy(self):
         td = LazyStackedTensorDict(
             TensorDict({"a": torch.zeros(2, 3), "b": "a string!"}, batch_size=[2]),
