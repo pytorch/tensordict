@@ -1848,6 +1848,51 @@ class TestTDSequence:
         assert set(v.keys()) == {"x", "loc", "y", "loc2"}
         assert isinstance(tdm.log_prob(v), TensorDict)
 
+    @pytest.mark.parametrize("nested_last", [True, False])
+    @set_composite_lp_aggregate(False)
+    def test_probtdseq_nested_seq_dist(self, nested_last):
+        # A nested ProbabilisticTensorDictSequential adds its distribution to the
+        # CompositeDistribution under its sample key, here "sample0".
+        inner = ProbabilisticTensorDictSequential(
+            TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["loc0"]),
+            ProbabilisticTensorDictModule(
+                in_keys={"loc": "loc0"},
+                out_keys=["sample0"],
+                distribution_class=Normal,
+                distribution_kwargs={"scale": 1.0},
+            ),
+        )
+        prob1 = ProbabilisticTensorDictModule(
+            in_keys={"loc": "loc1"},
+            out_keys=["sample1"],
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1.0},
+        )
+        if nested_last:
+            loc1 = TensorDictModule(lambda x: x - 1, in_keys=["x"], out_keys=["loc1"])
+            modules = [loc1, prob1, inner]
+        else:
+            loc1 = TensorDictModule(
+                lambda s: s + 1, in_keys=["sample0"], out_keys=["loc1"]
+            )
+            modules = [inner, loc1, prob1]
+        seq = ProbabilisticTensorDictSequential(*modules, return_composite=True)
+        td = TensorDict(x=torch.randn(3), batch_size=[3])
+
+        dist = seq.get_dist(td)
+        assert set(dist) == {"sample0", "sample1"}
+        if not nested_last:
+            # loc1 is computed from the deterministic sample0, the mean x + 1
+            torch.testing.assert_close(dist["sample1"].loc, td["x"] + 2)
+
+        with set_interaction_type("random"):
+            out = seq(td.copy())
+        lp = seq.log_prob(out)
+        assert set(lp.keys()) == {"sample0_log_prob", "sample1_log_prob"}
+        torch.testing.assert_close(
+            lp["sample0_log_prob"], Normal(out["loc0"], 1.0).log_prob(out["sample0"])
+        )
+
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful_probabilistic(self, lazy):
         torch.manual_seed(0)
@@ -5176,6 +5221,26 @@ class TestAsTDM:
 
         a = A()
         assert a.func(TensorDict(c=0))["d"] == 1
+
+    def test_method_instances(self):
+        # Each instance runs the method with its own self, and the decorated
+        # method does not keep the first instance alive.
+        class A:
+            def __init__(self, k):
+                self.k = k
+
+            @as_tensordict_module(in_keys="c", out_keys="d")
+            def func(self, c):
+                return c * self.k
+
+        a, b = A(2), A(10)
+        assert a.func(TensorDict(c=1))["d"] == 2
+        assert b.func(TensorDict(c=1))["d"] == 10
+        assert a.func(c=torch.tensor(1)) == 2
+        assert b.func(c=torch.tensor(1)) == 10
+        a_ref = weakref.ref(a)
+        del a
+        assert a_ref() is None
 
     @pytest.mark.parametrize("in_keys", ["c", ["c"]])
     @pytest.mark.parametrize("out_keys", ["d", ["d"]])
