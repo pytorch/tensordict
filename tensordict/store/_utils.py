@@ -65,6 +65,19 @@ return redis.status_reply('OK')
 """
 
 
+def _check_indexed_value(store, value) -> None:
+    """Raise if ``store[index] = value`` does not take ``value``.
+
+    A store takes a tensordict, a dict or a scalar at an index. It does not
+    take a tensor, which a tensordict would broadcast to every entry.
+    """
+    if isinstance(value, torch.Tensor):
+        raise TypeError(
+            f"{type(store).__name__} takes a tensordict, a dict or a scalar at an "
+            "index, not a tensor. Use set_at_ to write a tensor to one entry."
+        )
+
+
 def _dtype_to_str(dtype: torch.dtype) -> str:
     """Convert a torch.dtype to its string representation."""
     return str(dtype)
@@ -263,9 +276,12 @@ def _getitem_result_shape(
 
 
 def _prepare_indexed_value(
-    value: torch.Tensor, shape: list[int], dtype: torch.dtype, idx
+    value: torch.Tensor | float, shape: list[int], dtype: torch.dtype, idx
 ) -> torch.Tensor:
     """Match the selected shape and data type before converting values to bytes."""
+    if not isinstance(value, torch.Tensor):
+        # torch writes a Python scalar in the dtype of the entry
+        value = torch.as_tensor(value, dtype=dtype)
     read = _read_dim0(idx)
     kind = None if read is None else read[0]
     # A boolean mask accepts one CPU value with a different data type.
