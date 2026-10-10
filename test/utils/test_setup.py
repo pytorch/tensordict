@@ -220,11 +220,13 @@ print(json.dumps(out))
 
 
 @pytest.mark.slow
-def test_wheel_is_pure_python(tmp_path):
+def test_wheel_is_pure_python(isolated_venv, tmp_path):
     """tensordict compiles nothing, so one wheel serves every platform."""
+    # The venv's python has pip, which sys.executable lacks in a uv venv made
+    # without --seed.
     _run(
         [
-            sys.executable,
+            str(isolated_venv["python"]),
             "-m",
             "pip",
             "wheel",
@@ -244,7 +246,12 @@ def test_wheel_is_pure_python(tmp_path):
             for name in archive.namelist()
             if name.endswith((".so", ".pyd", ".dll", ".dylib"))
         ]
+        top_level = {name.split("/")[0] for name in archive.namelist()}
     assert not binaries, binaries
+    # Only the tensordict package and its metadata: no scripts/, and no build/
+    # left by an earlier build in the same tree.
+    dist_info = wheel.name.removesuffix("-py3-none-any.whl") + ".dist-info"
+    assert top_level == {"tensordict", dist_info}, top_level
 
 
 if __name__ == "__main__":
