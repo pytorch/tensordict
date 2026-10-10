@@ -336,6 +336,23 @@ class TestNonTensorData:
         assert td.roll(1, 0, inplace=True) is td
         assert td.get("query").tolist() == [["b", "d"], ["a", "c"]]
         assert td.get("x").tolist() == [[1, 3], [0, 2]]
+        # and in a nested td with an extra batch dim, when the flattened batch
+        # is rolled
+        td = TensorDict(
+            nested=TensorDict(
+                query=NonTensorStack.from_list([["a", "b"], ["c", "d"], ["e", "f"]]),
+                x=torch.arange(6).view(3, 2),
+                batch_size=[3, 2],
+            ),
+            batch_size=[3],
+        )
+        assert td.roll(1, inplace=True) is td
+        assert td.get(("nested", "query")).tolist() == [
+            ["e", "f"],
+            ["a", "b"],
+            ["c", "d"],
+        ]
+        assert td.get(("nested", "x")).tolist() == [[4, 5], [0, 1], [2, 3]]
 
         grid = NonTensorStack.from_list([["a", "b", "c"], ["d", "e", "f"]])
         assert grid.reshape(2, 3) is grid
@@ -557,6 +574,53 @@ class TestNonTensorData:
         assert nd[1, 1].data == 0
         assert nd[1, 2].data == "final"
 
+    @pytest.mark.parametrize("cls", [NonTensorData, MetaData])
+    def test_init(self, cls):
+        # NonTensorData and MetaData fill _non_tensordict without going
+        # through set(): the result must be the one set() gives.
+        x = cls(data="x", batch_size=[3], device="cpu", names=["n"], lock=True)
+        assert x.data == "x"
+        assert x.batch_size == (3,)
+        assert x.device == torch.device("cpu")
+        assert x.names == ["n"]
+        assert x.is_locked
+        assert x._non_tensordict == {
+            "data": "x",
+            "_metadata": None,
+            "_is_non_tensor": True,
+        }
+        assert x._tensordict.is_empty()
+        # A NonTensorData value is unwrapped, as set() does.
+        assert cls(cls(NonTensorData("y"))).data == "y"
+        assert cls("z", {"k": 1})._metadata == {"k": 1}
+        assert cls("z", _metadata={"k": 1})._metadata == {"k": 1}
+        with pytest.raises(TypeError, match="missing 1 required positional argument"):
+            cls()
+        with pytest.raises(AttributeError, match="Cannot set the attribute 'foo'"):
+            cls(data=1, foo=2)
+
+    def test_is_non_tensor(self):
+        from tensordict.tensorclass import is_non_tensor as tc_is_non_tensor
+
+        non_tensors = [
+            NonTensorData("a"),
+            MetaData("a"),
+            NonTensorStack(NonTensorData("a"), NonTensorData("b")),
+        ]
+        others = [
+            torch.zeros(()),
+            TensorDict(),
+            self.SomeTensorClass(a="a", b=torch.zeros(())),
+            "a",
+            None,
+        ]
+        for obj in non_tensors:
+            assert tc_is_non_tensor(obj)
+            assert is_non_tensor(obj)
+        for obj in others:
+            assert not tc_is_non_tensor(obj)
+            assert not is_non_tensor(obj)
+
     @set_list_to_stack(True)
     def test_linked_list(self):
         td = TensorDict(a=["foo", "bar"], batch_size=(2,))
@@ -688,6 +752,18 @@ class TestNonTensorData:
         )
         assert [x.tolist() for x in td.get("a").tolist()] == [[6, 7], [6, 7], [4, 5]]
         assert td["b"].tolist() == [1.0, 1.0, 1.0]
+
+    @pytest.mark.parametrize("batch_size", [(), (3,), (3, 2)])
+    def test_set_at_empty_index(self, batch_size):
+        # The index () selects the whole entry, as for a tensor entry. A
+        # NonTensorData cannot be indexed with it, which used to raise.
+        expected = TensorDict(a="s1", batch_size=batch_size).get("a").tolist()
+        td = TensorDict(a="s0", batch_size=batch_size)
+        assert td.set_at_("a", "s1", ()) is td
+        assert td.get("a").tolist() == expected
+        td = TensorDict(a="s0", batch_size=batch_size)
+        td[()] = TensorDict(a="s1", batch_size=batch_size)
+        assert td.get("a").tolist() == expected
 
     def test_setitem_edge_case(self):
         s = NonTensorStack("a string")
@@ -1315,6 +1391,25 @@ class TestNonTensorData:
         assert tdv.view(60).tolist() == [str(i) for i in range(60)]
         assert tdv.flatten().tolist() == [str(i) for i in range(60)]
 
+    def test_where_copies_entries(self):
+        # The result has its own entries, which hold the input data as they are
+        class NoDeepCopy:
+            def __deepcopy__(self, memo):
+                raise TypeError("cannot deep-copy")
+
+        condition = torch.tensor([True, False])
+        tensor = NonTensorStack("a", "b")
+        other = NonTensorStack("x", "y")
+        result = tensor.where(condition, other)
+        assert result.tolist() == ["a", "y"]
+        result[0] = "z"
+        result[1] = "z"
+        assert tensor.tolist() == ["a", "b"]
+        assert other.tolist() == ["x", "y"]
+        data = [NoDeepCopy() for _ in range(4)]
+        result = NonTensorStack(*data[:2]).where(condition, NonTensorStack(*data[2:]))
+        assert result.tolist() == [data[0], data[3]]
+
     def test_where(self):
         condition = torch.tensor([True, False])
         tensor = NonTensorStack(
@@ -1725,6 +1820,23 @@ class TestUnbatchedTensor:
         assert isinstance(result, torch.Tensor)
         assert isinstance(result, UnbatchedTensor)
         assert result.data_ptr() == data.data_ptr()
+
+    @pytest.mark.parametrize("value_type", ["tensordict", "dict"])
+    @pytest.mark.parametrize("index", [None, True, torch.tensor(True)])
+    def test_unbatched_setitem_new_dim(self, index, value_type):
+        # None and True add a dim of size 1: the value is written to all of td,
+        # as with td[:] = value
+        data = torch.arange(5.0)
+        td = TensorDict(a=torch.zeros(4, 3), u=UnbatchedTensor(data), batch_size=[4, 3])
+        value = {"a": torch.ones(1, 4, 3), "u": UnbatchedTensor(torch.full((5,), 7.0))}
+        if value_type == "tensordict":
+            value = TensorDict(value, batch_size=[1, 4, 3])
+        td[index] = value
+        assert (td["a"] == 1).all()
+        u = td.get("u")
+        assert isinstance(u, UnbatchedTensor)
+        assert u.data_ptr() == data.data_ptr()
+        assert (u == 7).all()
 
     @pytest.mark.parametrize("nested", [False, True])
     @pytest.mark.parametrize(

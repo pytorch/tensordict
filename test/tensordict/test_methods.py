@@ -1376,16 +1376,20 @@ class TestTensorDicts(TestTensorDictsBase):
         index = torch.tensor([[0, 1, 2], [1, 2, 0], [2, 0, 1]])
         if npy:
             index = index.numpy()
+        # the index varies along both dims of the block, which can't both
+        # take the name of the indexed dim: names are unique
         td_idx = td[:, index]
         assert tensor_example[:, index].shape == td_idx.shape
-        # TODO: this multiple dims with identical names should not be allowed
-        assert td_idx.names == [names[0], names[1], names[1], *names[2:]]
+        assert td_idx.names == [names[0], None, None, *names[2:]]
         td_idx = td[0, index]
         assert tensor_example[0, index].shape == td_idx.shape
-        assert td_idx.names == [names[1], names[1], *names[2:]]
+        assert td_idx.names == [None, None, *names[2:]]
         td_idx = td[..., index, :, :]
         assert tensor_example[..., index, :, :].shape == td_idx.shape
-        assert td_idx.names == [names[0], names[1], names[1], *names[2:]]
+        assert td_idx.names == [names[0], None, None, *names[2:]]
+        # along a dim of size 1, the index does not vary
+        td_idx = td[:, index[:1]]
+        assert td_idx.names == [names[0], None, names[1], *names[2:]]
 
     def test_inferred_view_size(self, td_name, device):
         if td_name in ("permute_td", "sub_td2"):
@@ -1702,6 +1706,7 @@ class TestTensorDicts(TestTensorDictsBase):
             pytest.skip("UnbatchedTensor masked_fill_ has dimension mismatch")
             return
         mask = torch.zeros(td.shape, dtype=torch.bool, device=device).bernoulli_()
+        td_before = td.to_tensordict()
         if td_name == "td_params":
             td_set = td.data
         else:
@@ -1710,6 +1715,9 @@ class TestTensorDicts(TestTensorDictsBase):
         assert new_td is td_set
         for item in td.values():
             assert (item[mask] == -10).all(), item[mask]
+        # the entries outside the mask keep their values
+        for key in td.keys(True, True):
+            assert (td.get(key)[~mask] == td_before.get(key)[~mask]).all(), key
 
     def test_masking(self, td_name, device):
         torch.manual_seed(1)
@@ -2655,10 +2663,7 @@ class TestTensorDicts(TestTensorDictsBase):
             out = td.pop("z", default)
             assert (out == default).all()
 
-            with pytest.raises(
-                KeyError,
-                match=re.escape(r"You are trying to pop key"),
-            ):
+            with pytest.raises(KeyError, match='key "z" not found in'):
                 td.pop("z")
 
     def test_popitem(self, td_name, device):
@@ -2680,6 +2685,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td = _to_float(td, td_name, tmpdir)
         if red == "quantile":
             assert getattr(td, red)(0.5).batch_size == torch.Size(())
+            assert getattr(td, red)(0.5, dim=None).batch_size == torch.Size(())
             assert getattr(td, red)(0.5, 1).shape == torch.Size(
                 [s for i, s in enumerate(td.shape) if i != 1]
             )
@@ -2689,6 +2695,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert isinstance(td.quantile(0.5, reduce=True), torch.Tensor)
         else:
             assert getattr(td, red)().batch_size == torch.Size(())
+            assert getattr(td, red)(dim=None).batch_size == torch.Size(())
             assert getattr(td, red)(1).shape == torch.Size(
                 [s for i, s in enumerate(td.shape) if i != 1]
             )

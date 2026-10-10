@@ -852,9 +852,10 @@ def _stack(
                     if not is_not_init:
                         new_tensor_shape = _shape(tensor)
                         if tensor_shape is not None:
-                            if len(new_tensor_shape) != len(tensor_shape) or not all(
-                                s1 == s2 and s1 != -1
-                                for s1, s2 in _zip_strict(_shape(tensor), tensor_shape)
+                            # _shape gives -1 for the ragged dims of nested tensors
+                            if (
+                                new_tensor_shape != tensor_shape
+                                or -1 in new_tensor_shape
                             ):
                                 # Nested tensors will require a lazy stack
                                 if maybe_dense_stack:

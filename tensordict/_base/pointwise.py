@@ -1773,7 +1773,7 @@ class _PointwiseOps:
             result.update(items)
         return result
 
-    @_maybe_broadcast_other("mod")
+    @_maybe_broadcast_other("__mod__")
     def mod(self, other: TensorCollection | torch.Tensor) -> Self:
         """Computes the element-wise modulo of ``self`` and :attr:`other`.
 

@@ -23,6 +23,7 @@ from tensordict import (
     TensorDict,
     UnbatchedTensor,
 )
+from tensordict._indexing import _getitem_batch_size
 from tensordict._reductions import _reduce_td
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _NESTED_TENSORS_AS_LISTS, TensorDictBase
@@ -382,6 +383,40 @@ class TestLazyStackedTensorDict:
         td2 = TensorDict({"a": torch.zeros(2)}, [])
         stack = LazyStackedTensorDict.lazy_stack([td, td2])
         assert set(stack.keys(True, True)) == {"a"}
+
+    @pytest.mark.parametrize("include_nested", [False, True])
+    @pytest.mark.parametrize("leaves_only", [False, True])
+    def test_keys_len(self, include_nested, leaves_only):
+        td = TensorDict(
+            a=torch.zeros(3),
+            nested=TensorDict(b=torch.zeros(3), c=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        stack = lazy_stack([td[0], td[1]])
+        keys = stack.keys(include_nested, leaves_only)
+        assert len(keys) == len(list(keys))
+        assert len(keys) == len(td.keys(include_nested, leaves_only))
+
+    @pytest.mark.parametrize("include_nested", [False, True])
+    @pytest.mark.parametrize("leaves_only", [False, True])
+    def test_keys_heterogeneous_nested(self, include_nested, leaves_only):
+        # A sub-tensordict that only one member has is not a key of the stack
+        td0 = TensorDict(
+            a=torch.zeros(3),
+            nested0=TensorDict(b=torch.zeros(3, 1), batch_size=[3]),
+            batch_size=[3],
+        )
+        td1 = TensorDict(
+            a=torch.zeros(3),
+            nested1=TensorDict(c=torch.zeros(3, 2), batch_size=[3]),
+            batch_size=[3],
+        )
+        stack = lazy_stack([td0, td1])
+        keys = stack.keys(include_nested, leaves_only)
+        assert list(keys) == ["a"]
+        assert len(keys) == 1
+        assert len(list(stack.values(include_nested, leaves_only))) == 1
+        assert [key for key, _ in stack.items(include_nested, leaves_only)] == ["a"]
 
     @pytest.mark.parametrize("ragged", [False, True])
     def test_arithmetic_ops(self, ragged):
@@ -1136,6 +1171,37 @@ class TestLazyStackedTensorDict:
             dense.update_at_(value, index)
         assert (lazy.to_tensordict() == dense).all()
 
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2])
+    @pytest.mark.parametrize(
+        "index", [(..., 0), (0, ..., 1), (..., [1, 0]), (..., None)]
+    )
+    @pytest.mark.parametrize("op", ["set_at_", "set_at_ scalar", "update_at_"])
+    def test_lazy_set_at_ellipsis(self, stack_dim, index, op):
+        # set_at_ reads the index on the entry, as torch does: the Ellipsis
+        # also covers the dims of the entry after the batch dims
+        dense = TensorDict(
+            {
+                "b": torch.arange(48.0).view(3, 4, 2, 2),
+                "nested": {"c": torch.arange(48).view(3, 4, 2, 2)},
+            },
+            [3, 4, 2],
+        )
+        lazy = LazyStackedTensorDict.lazy_stack(
+            dense.clone().unbind(stack_dim), stack_dim
+        )
+        if op == "set_at_":
+            value = -1 - dense["b"][index]
+            lazy.set_at_("b", value, index)
+            dense.set_at_("b", value, index)
+        elif op == "set_at_ scalar":
+            lazy.set_at_(("nested", "c"), -7.5, index)
+            dense.set_at_(("nested", "c"), -7.5, index)
+        else:
+            value = TensorDict({"b": -1 - dense["b"][index]})
+            lazy.update_at_(value, index)
+            dense.update_at_(value, index)
+        assert (lazy.to_tensordict() == dense).all()
+
     def test_lazy_setitem_scalar_unbatched(self):
         # each member writes a scalar as it is, also into an entry that the
         # batch dims don't index
@@ -1309,6 +1375,112 @@ class TestLazyStackedTensorDict:
         else:
             lazy.set_at_("a", value["a"], index)
             dense.set_at_("a", value["a"], index)
+        assert (lazy.to_tensordict() == dense).all()
+
+    @staticmethod
+    def _lazy_mask_op(td, index, op):
+        value = TensorDict(a=-1.0, nested=TensorDict(b=-1.0)).expand(
+            _getitem_batch_size(td.batch_size, index)
+        )
+        if op == "getitem":
+            return td[index]
+        if op == "get_at":
+            return td.get_at("nested", index)
+        if op == "setitem":
+            td[index] = -1.0
+        elif op == "setitem_td":
+            td[index] = value
+        elif op == "set_at_":
+            td.set_at_("a", value["a"], index)
+        else:
+            td.update_at_(value, index)
+
+    @staticmethod
+    def _lazy_mask_tds(stack_dim):
+        batch_size = (4, 3)
+        dense = TensorDict(
+            a=torch.arange(12.0).view(batch_size),
+            nested=TensorDict(
+                b=torch.arange(12.0).view(batch_size), batch_size=batch_size
+            ),
+            batch_size=batch_size,
+        )
+        lazy = LazyStackedTensorDict.lazy_stack(
+            dense.clone().unbind(stack_dim), stack_dim
+        )
+        return dense, lazy
+
+    _LAZY_MASK_OPS = [
+        "getitem",
+        "get_at",
+        "setitem",
+        "setitem_td",
+        "set_at_",
+        "update_at_",
+    ]
+
+    @pytest.mark.parametrize(
+        "index",
+        [
+            torch.tensor([True, False, True]),
+            torch.tensor([True, False, True, False, True]),
+            (slice(None), torch.tensor([True, False])),
+            (slice(None), torch.tensor([True, False, True, True])),
+            torch.ones(4, 2, dtype=torch.bool),
+            torch.ones(3, 3, dtype=torch.bool),
+            (torch.tensor([0, 2]), torch.tensor([True, False])),
+            (torch.tensor([True, False, True]), torch.tensor([0, 2])),
+            (Ellipsis, torch.tensor([True, True])),
+        ],
+        ids=[
+            "dim0-short",
+            "dim0-long",
+            "dim1-short",
+            "dim1-long",
+            "2d-dim1-short",
+            "2d-dim0-short",
+            "index-and-dim1-short",
+            "dim0-short-and-index",
+            "ellipsis-dim1-short",
+        ],
+    )
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("op", _LAZY_MASK_OPS)
+    def test_lazy_mask_wrong_shape(self, index, stack_dim, op):
+        # a mask that does not have the shape of the dims it indexes raises as
+        # in torch, along the stack dim and along the dims of the members
+        dense, lazy = self._lazy_mask_tds(stack_dim)
+        with pytest.raises(IndexError) as torch_error:
+            torch.zeros(dense.batch_size)[index]
+        with pytest.raises(IndexError) as error:
+            self._lazy_mask_op(lazy, index, op)
+        assert str(error.value) == str(torch_error.value)
+        # nothing was written
+        assert (lazy.to_tensordict() == dense).all()
+
+    @pytest.mark.parametrize(
+        "index",
+        [
+            torch.tensor([True, False, True, False]),
+            (slice(None), torch.tensor([True, False, True])),
+            torch.tensor([[True, False, True]] * 2 + [[False, True, False]] * 2),
+            (torch.tensor([0, 2]), torch.tensor([True, False, True])),
+            (torch.tensor([True, False, True, False]), torch.tensor([0, 2])),
+            (Ellipsis, torch.tensor([True, True, False])),
+        ],
+        ids=["dim0", "dim1", "2d", "index-and-dim1", "dim0-and-index", "ellipsis-dim1"],
+    )
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("op", _LAZY_MASK_OPS)
+    def test_lazy_mask_right_shape(self, index, stack_dim, op):
+        # a mask that has the shape of the dims it indexes behaves as in the
+        # dense TensorDict
+        dense, lazy = self._lazy_mask_tds(stack_dim)
+        result = self._lazy_mask_op(lazy, index, op)
+        expected = self._lazy_mask_op(dense, index, op)
+        if result is not None:
+            assert result.batch_size == expected.batch_size
+            assert (result == expected).all()
         assert (lazy.to_tensordict() == dense).all()
 
     @pytest.mark.parametrize("batch_size", [(), (32,), (32, 4)])
@@ -1550,6 +1722,58 @@ class TestLazyStackedTensorDict:
         assert td.shape == (3, 2, 4, 5)
         tensor = getattr(td, reduction)(dim="feature", reduce=True)
         assert tensor.shape == td.shape
+
+    @pytest.mark.parametrize("safe", [False, True])
+    @pytest.mark.parametrize("key,new_key", [("a", "c"), (("n", "x"), ("n", "y"))])
+    def test_rename_key_repeated_member(self, key, new_key, safe):
+        # A tensordict that is in the stack more than once is renamed once.
+        def make():
+            return TensorDict(
+                a=torch.zeros(3),
+                n=TensorDict(x=torch.zeros(3), batch_size=[3]),
+                batch_size=[3],
+            )
+
+        t, u = make(), make()
+        td = lazy_stack([t, t, u])
+        assert td.rename_key_(key, new_key, safe=safe) is td
+        for member in (td, t, u):
+            assert key not in member.keys(True)
+            assert new_key in member.keys(True)
+
+        # also when a nested lazy stack repeats it, or is repeated
+        t = make()
+        inner = lazy_stack([t, make()])
+        others = [t, make()]
+        td = lazy_stack([inner, inner, lazy_stack(others)])
+        td.rename_key_(key, new_key, safe=safe)
+        for member in (td, inner, *inner.tensordicts, *others):
+            assert key not in member.keys(True)
+            assert new_key in member.keys(True)
+
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize("error", ["safe", "missing", "locked"])
+    def test_rename_key_error_leaves_stack_unchanged(self, error, nested):
+        # A rename that raises renames the key in no member.
+        tds = [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(4)]
+        if error == "safe":
+            tds[-1]["c"] = torch.ones(3)
+            raises = pytest.raises(KeyError, match="key c already present")
+        elif error == "missing":
+            tds[-1] = TensorDict(b=torch.zeros(3), batch_size=[3])
+            raises = pytest.raises(KeyError, match='key "a" not found')
+        else:
+            tds[-1].lock_()
+            raises = pytest.raises(RuntimeError, match="Cannot modify locked")
+        if nested:
+            td = lazy_stack([lazy_stack(tds[:2]), lazy_stack(tds[2:])])
+        else:
+            td = lazy_stack(tds)
+        assert not td.is_locked
+        with raises:
+            td.rename_key_("a", "c", safe=error == "safe")
+        for member in tds[:-1]:
+            assert list(member.keys()) == ["a"]
 
     @set_list_to_stack(True)
     def test_set_list_stack(self):
@@ -2048,6 +2272,44 @@ class TestLazyStackedTensorDict:
         assert td.batch_size == (2, 4)
         assert td.batch_size == td2.batch_size
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_where_scalar_tensor(self, stack_dim):
+        # A 0-dim tensor goes whole to each member, as a scalar does
+        lazy = lazy_stack(
+            [
+                TensorDict(a=torch.arange(3.0) + 10 * i, batch_size=[3])
+                for i in range(2)
+            ],
+            stack_dim,
+        )
+        cond = torch.arange(6).reshape(lazy.shape) % 2 == 0
+        other = torch.tensor(-1.0)
+        expected = lazy.to_tensordict().where(cond, other)
+        assert (lazy.where(cond, other) == expected).all()
+        assert (torch.where(cond, lazy, other) == expected).all()
+
+    @pytest.mark.parametrize("other_type", ["lazy", "dense", "tensor", "scalar"])
+    def test_where_whole_members(self, other_type):
+        # With 0-dim members, the condition selects whole members: the result
+        # matches TensorDict.where, in tensors that are not those of the inputs
+        lazy = lazy_stack([TensorDict(a=torch.tensor(float(i))) for i in range(3)])
+        dense_other = TensorDict(a=-torch.arange(1.0, 4.0), batch_size=[3])
+        other = {
+            "lazy": lazy_stack(list(dense_other.unbind(0))),
+            "dense": dense_other,
+            "tensor": dense_other["a"],
+            "scalar": torch.tensor(-1.0),
+        }[other_type]
+        cond = torch.tensor([True, False, True])
+        expected = lazy.to_tensordict().where(
+            cond, other.to_tensordict() if other_type == "lazy" else other
+        )
+        result = lazy.where(cond, other)
+        assert (result == expected).all()
+        result["a"] = torch.full((3,), 100.0)
+        assert (lazy["a"] == torch.arange(3.0)).all()
+        assert (dense_other["a"] == -torch.arange(1.0, 4.0)).all()
+
     def test_lazy_mask_nested_stack(self):
         # Boolean-masking a lazy stack whose constituents are themselves lazy
         # stacks: the per-constituent scalar masks must behave like new-axis
@@ -2213,6 +2475,18 @@ class TestLazyStackedTensorDict:
         assert empty.get("b").batch_size == empty.batch_size
         assert empty.clone().get("b").batch_size == empty.batch_size
         assert empty["b"] == []
+
+    @pytest.mark.parametrize("member_batch_size", [(), (2,)])
+    @pytest.mark.parametrize("index", [1, slice(0, 2), torch.tensor([0, 2])])
+    def test_lazy_set_at_non_tensor(self, member_batch_size, index):
+        # An index along the stack dim writes whole members, with the index ()
+        lazy = LazyStackedTensorDict.lazy_stack(
+            [TensorDict(a="s0", batch_size=member_batch_size) for _ in range(3)]
+        )
+        dense = TensorDict(a="s0", batch_size=(3, *member_batch_size))
+        lazy.set_at_("a", "s1", index)
+        dense.set_at_("a", "s1", index)
+        assert lazy.get("a").tolist() == dense.get("a").tolist()
 
 
 if __name__ == "__main__":

@@ -1737,10 +1737,11 @@ class _Serialization:
         # Ensure the result remains locked to maintain consolidated state integrity
         result.lock_()
         if non_blocking in (False, None):
-            if device.type != "cpu" and non_blocking is False:
+            # meta tensors hold no data, so the meta device needs no sync either
+            if device.type not in ("cpu", "meta") and non_blocking is False:
                 # sending to non-cpu device force sync
                 non_cpu_device = device
-            elif storage.device.type != "cpu":
+            elif storage.device.type not in ("cpu", "meta"):
                 # sending from non-cpu device: need sync unless intentionally not asked for
                 non_cpu_device = storage.device.type
             else:
