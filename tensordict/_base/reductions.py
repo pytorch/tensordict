@@ -246,7 +246,7 @@ class _Reductions:
             values_only=not return_indices,
             call_on_nested=False,
         )
-        if dim is not NO_DEFAULT and return_indices:
+        if dim is not NO_DEFAULT and dim is not None and return_indices:
             # Split the tensordict
             from torch.return_types import min
 
@@ -412,7 +412,7 @@ class _Reductions:
             values_only=not return_indices,
             call_on_nested=False,
         )
-        if dim is not NO_DEFAULT and return_indices:
+        if dim is not NO_DEFAULT and dim is not None and return_indices:
             # Split the tensordict
             from torch.return_types import max
 
@@ -1859,6 +1859,9 @@ class _Reductions:
     ):
         from tensordict._td import TensorDict
 
+        if dim is None and not keepdim:
+            # dim=None reduces over all the elements, as an omitted dim does
+            dim = NO_DEFAULT
         if further_reduce:
             # It is not very memory-efficient to do this, but it's the easiest to cover all use cases
             if dim is NO_DEFAULT:
@@ -1934,7 +1937,7 @@ class _Reductions:
         dim_needs_proc = (dim is not NO_DEFAULT) and (dim not in ("feature",))
         if dim_needs_proc:
             dim = proc_dim(dim, self.batch_dims, tuple_ok=tuple_ok)
-            if not tuple_ok:
+            if not tuple_ok and dim is not None:
                 dim = dim[0]
         if dim in ("feature",):
             if keepdim:
