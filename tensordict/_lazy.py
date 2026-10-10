@@ -4152,6 +4152,15 @@ class LazyStackedTensorDict(TensorDictBase):
         if dim_corrected == self.stack_dim:
             if isinstance(repeats, int):
                 repeats: list[int] = [repeats] * len(self.tensordicts)
+            elif (
+                isinstance(repeats, torch.Tensor)
+                and repeats.ndim <= 1
+                and repeats.numel() == 1
+                and repeats.dtype in (torch.int32, torch.int64)
+            ):
+                # torch broadcasts a 0-d or one-element repeats to the size of dim
+                repeats = [repeats.tolist()] if repeats.ndim == 0 else repeats.tolist()
+                repeats = repeats * len(self.tensordicts)
             else:
                 repeats = repeats.tolist()
             new_list_of_tds = [
