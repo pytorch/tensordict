@@ -2941,6 +2941,10 @@ class LazyStackedTensorDict(TensorDictBase):
                 names = None
             if names is not None:
                 names = [name for i, name in enumerate(names) if i != dim]
+                # the stack dim may have the name of a member dim
+                named = [name for name in names if name is not None]
+                if len(set(named)) != len(named):
+                    names = None
             return TensorDict(
                 source={key: value.all(dim=dim) for key, value in self.items()},
                 batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
@@ -2966,6 +2970,10 @@ class LazyStackedTensorDict(TensorDictBase):
                 names = None
             if names is not None:
                 names = [name for i, name in enumerate(names) if i != dim]
+                # the stack dim may have the name of a member dim
+                named = [name for name in names if name is not None]
+                if len(set(named)) != len(named):
+                    names = None
             return TensorDict(
                 source={key: value.any(dim=dim) for key, value in self.items()},
                 batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],

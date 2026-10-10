@@ -341,6 +341,18 @@ class TestNamedDims(TestTensorDictsBase):
         td = LazyStackedTensorDict(stack_dim=0, batch_size=[3])
         assert td.all(1).names == [None]
         assert td.any(0).names == [None]
+        # names that repeat once a dim is reduced: lazy_stack doesn't check
+        # that the stack dim name is not the name of a member dim
+        td = LazyStackedTensorDict.lazy_stack(
+            [
+                TensorDict({"a": torch.zeros(3, 4, 2)}, [3, 4], names=["x", "y"])
+                for _ in range(2)
+            ],
+            2,
+            stack_dim_name="x",
+        )
+        assert td.all(1).names == [None, None]
+        assert td.any(1).names == [None, None]
         # a nested lazy stack whose members have different names can't be
         # renamed, which must not make expand fail
         td = LazyStackedTensorDict(
