@@ -698,6 +698,49 @@ class LazyStackedTensorDict(TensorDictBase):
         stack_dim=0,
         names: list[str] | None = None,
     ):
+        """Builds a lazy stack from a list of dicts, one tensordict per dict.
+
+        Each dict goes through :meth:`tensordict.TensorDict.from_dict`, then the
+        results are stacked lazily, so the dicts can have different keys and
+        entry shapes. A dict whose keys are ``"0"``, ``"1"``, ... is read as
+        that list.
+
+        Args:
+            input_dict (list of dicts, or dict of dicts): the data of each
+                stacked tensordict.
+            *other: passed to :meth:`tensordict.TensorDict.from_dict`.
+
+        Keyword Args:
+            auto_batch_size (bool, optional): if ``True``, the batch size of
+                each tensordict is computed from its data. Defaults to
+                ``False``.
+            batch_size (torch.Size, optional): the batch size of each stacked
+                tensordict.
+            device (torch.device, optional): the device of each stacked
+                tensordict.
+            batch_dims (int, optional): with ``auto_batch_size``, the number of
+                batch dimensions to keep.
+            stack_dim_name (str, optional): the name of the stack dimension.
+            stack_dim (int, optional): the stack dimension. Defaults to ``0``.
+            names (list of str, optional): the names of the dimensions of the
+                result, stack dimension included. Exclusive with
+                ``stack_dim_name``.
+
+        Returns:
+            a :class:`~tensordict.LazyStackedTensorDict`.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import LazyStackedTensorDict
+            >>> td = LazyStackedTensorDict.from_dict(
+            ...     [{"a": torch.zeros(3)}, {"a": torch.zeros(4)}], stack_dim_name="t"
+            ... )
+            >>> td.batch_size, td.names
+            (torch.Size([2]), ['t'])
+            >>> td[1]["a"].shape
+            torch.Size([4])
+
+        """
         if names is not None:
             if stack_dim_name is not None:
                 raise ValueError("names and stack_dim_name are exclusive.")
@@ -736,6 +779,22 @@ class LazyStackedTensorDict(TensorDictBase):
         names: list[str] | None = None,
         lazy: bool | None = None,
     ) -> Self:
+        """Builds a lazy stack from a list of dicts.
+
+        Same as :meth:`from_dict` with a list. ``lazy`` is ignored: the result
+        is always a lazy stack. See
+        :meth:`tensordict.TensorDictBase.from_list` for the other arguments.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import LazyStackedTensorDict
+            >>> td = LazyStackedTensorDict.from_list(
+            ...     [{"a": torch.zeros(3)}, {"a": torch.zeros(4)}], auto_batch_size=True
+            ... )
+            >>> td.batch_size
+            torch.Size([2, -1])
+
+        """
         return cls.from_dict(
             input,
             auto_batch_size=auto_batch_size,
