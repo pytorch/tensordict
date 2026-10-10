@@ -676,6 +676,25 @@ class TestTD:
         td_op_c = locked_op_c(td)
         assert (td_op == td_op_c).all()
 
+    @pytest.mark.parametrize("after_empty", ["tensor", "nested"])
+    def test_tree_map_empty_nested_first(self, after_empty, mode):
+        # The batch size of the result is not read from the empty nested td,
+        # https://github.com/pytorch/tensordict/issues/2072
+        def add_one(td):
+            return tree_map(lambda x: x + 1, td)
+
+        if after_empty == "tensor":
+            other = torch.zeros(4, 3)
+        else:
+            other = TensorDict(x=torch.zeros(4, 2, 3), batch_size=[4, 2])
+        td = TensorDict(empty=TensorDict(batch_size=[4]), other=other, batch_size=[4])
+        add_one_c = torch.compile(add_one, fullgraph=True, mode=mode)
+        out = add_one_c(td)
+        assert out.batch_size == torch.Size([4])
+        assert out["empty"].batch_size == torch.Size([4])
+        assert out["other"].shape == other.shape
+        assert (out == add_one(td)).all()
+
     # Memmap is currently not supported
     # def test_memmap(self, mode, tmpdir):
     #     def locked_op(td):
