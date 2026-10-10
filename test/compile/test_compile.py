@@ -29,7 +29,7 @@ from tensordict import (
     TensorDictParams,
     TypedTensorDict,
 )
-from tensordict._unbatched import UnbatchedTensor
+from tensordict._unbatched import _HAS_WRAPPER_SUBCLASS_FIX, UnbatchedTensor
 from tensordict.base import _get_defaults_to_none, _set_get_defaults_to_none
 from tensordict.nn import (
     CudaGraphModule,
@@ -55,6 +55,9 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch._dynamo.testing import CompileCounterWithBackend
+from torch._dynamo.utils import counters
+from torch._inductor.utils import fresh_cache
+from torch.testing._internal.two_tensor import TwoTensor
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
@@ -2979,6 +2982,75 @@ class TestGuardCount:
         assert ut_clone.data_ptr() != ut_orig.data_ptr(), (
             "clone() must produce independent data"
         )
+
+    @pytest.mark.skipif(
+        not _HAS_WRAPPER_SUBCLASS_FIX,
+        reason="The fallback UnbatchedTensor is not a wrapper subclass.",
+    )
+    def test_unbatched_aot_autograd_cache_key(self):
+        """UnbatchedTensor gives the AOTAutograd cache a key without a warning.
+
+        Equal inputs hit the cache and another batch size misses it.
+        """
+
+        def fn(u):
+            return u * 2
+
+        def compile_and_count(u):
+            torch._dynamo.reset()
+            counters.clear()
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                out = torch.compile(fn)(u)
+            torch.testing.assert_close(out, u * 2)
+            assert not [
+                w for w in caught if "_stable_hash_for_caching" in str(w.message)
+            ]
+            aot_counters = counters["aot_autograd"]
+            return (
+                aot_counters["autograd_cache_hit"],
+                aot_counters["autograd_cache_miss"],
+            )
+
+        data = torch.randn(5)
+        with (
+            fresh_cache(),
+            torch._functorch.config.patch(enable_autograd_cache=True),
+        ):
+            first = compile_and_count(UnbatchedTensor(data, batch_size=[4]))
+            equal = compile_and_count(UnbatchedTensor(data.clone(), batch_size=[4]))
+            other_batch_size = compile_and_count(UnbatchedTensor(data, batch_size=[6]))
+        assert first == (0, 1)
+        assert equal == (1, 0)
+        assert other_batch_size == (0, 1)
+
+    @pytest.mark.skipif(
+        not _HAS_WRAPPER_SUBCLASS_FIX,
+        reason="The fallback UnbatchedTensor is not a wrapper subclass.",
+    )
+    def test_unbatched_aot_autograd_cache_key_subclass_payload(self):
+        """The cache key of an UnbatchedTensor covers a wrapper subclass payload."""
+
+        class TaggedTwoTensor(TwoTensor):
+            def _stable_hash_for_caching(self):
+                return self.tag
+
+        def key(data):
+            return UnbatchedTensor(data, batch_size=[4])._stable_hash_for_caching()
+
+        def tagged(tag, a):
+            out = TaggedTwoTensor(a, a.clone())
+            out.tag = tag
+            return out
+
+        a = torch.randn(5)
+        two = key(TwoTensor(a, a.clone()))
+        assert two == key(TwoTensor(torch.randn(5), torch.randn(5)))
+        assert two != key(TwoTensor(a.double(), a.double()))
+        assert two != key(a)
+        # A payload with its own stable hash is keyed by that hash.
+        assert key(tagged("x", a)) == key(tagged("x", a.double()))
+        assert key(tagged("x", a)) != key(tagged("y", a))
 
     def test_lock_inside_compile_no_weakref_leftover(self):
         """``lock_()`` called inside a compiled region must not leave a
