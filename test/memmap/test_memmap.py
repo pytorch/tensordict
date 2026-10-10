@@ -337,6 +337,35 @@ class TestConstructors:
             )
         torch.testing.assert_close(t, t2)
 
+    def test_from_storage(self, shape, dtype, device, tmp_path, from_path):
+        if from_path:
+            filename = tmp_path / "file.memmap"
+        else:
+            filename = None
+        if dtype is None:
+            dtype = torch.float32
+        tensor = -torch.randint(10, shape, dtype=dtype, device=device)
+        t = MemoryMappedTensor.from_tensor(tensor, filename=filename)
+        t2 = MemoryMappedTensor.from_storage(
+            t.untyped_storage(), shape=shape, dtype=dtype
+        )
+        assert type(t2) is MemoryMappedTensor
+        assert t2.shape == shape
+        assert t2.dtype is dtype
+        assert t2.data_ptr() == t.data_ptr()
+        if filename is None:
+            # a storage without a file still cannot be pickled
+            return
+        assert t2.filename == t.filename
+        # pickles by its file, as t does, also when indexed
+        index = (slice(1, None),) * len(shape)
+        for view in (t2, t2[index]):
+            loaded = pickle.loads(pickle.dumps(view))
+            assert loaded.filename == t.filename
+            torch.testing.assert_close(loaded, view)
+        loaded.fill_(3)
+        assert (t[index] == 3).all()
+
 
 class TestIndexing:
     @staticmethod

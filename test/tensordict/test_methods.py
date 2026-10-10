@@ -2685,6 +2685,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td = _to_float(td, td_name, tmpdir)
         if red == "quantile":
             assert getattr(td, red)(0.5).batch_size == torch.Size(())
+            assert getattr(td, red)(0.5, dim=None).batch_size == torch.Size(())
             assert getattr(td, red)(0.5, 1).shape == torch.Size(
                 [s for i, s in enumerate(td.shape) if i != 1]
             )
@@ -2694,6 +2695,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert isinstance(td.quantile(0.5, reduce=True), torch.Tensor)
         else:
             assert getattr(td, red)().batch_size == torch.Size(())
+            assert getattr(td, red)(dim=None).batch_size == torch.Size(())
             assert getattr(td, red)(1).shape == torch.Size(
                 [s for i, s in enumerate(td.shape) if i != 1]
             )
