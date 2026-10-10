@@ -2853,9 +2853,32 @@ def _update(
             for k, v in input_dict_or_td.__dict__["_non_tensordict"].items()
             if v is not None
         }
-        input_dict_or_td = input_dict_or_td.__dict__["_tensordict"]
-    else:
-        non_tensordict = None
+        self._tensordict.update(
+            input_dict_or_td.__dict__["_tensordict"],
+            clone=clone,
+            inplace=inplace,
+            keys_to_update=keys_to_update,
+            non_blocking=non_blocking,
+            update_batch_size=update_batch_size,
+            ignore_lock=ignore_lock,
+            is_leaf=is_leaf,
+        )
+        # Drop the placeholders of the fields just written, as the TensorDict
+        # branch below does. The fields in the source's _non_tensordict are
+        # unset there, so only the other keys need a check.
+        self_non_tensordict = self._non_tensordict
+        if self_non_tensordict:
+            source_non_tensordict = input_dict_or_td.__dict__["_non_tensordict"]
+            maybe_written = [
+                key for key in self_non_tensordict if key not in source_non_tensordict
+            ]
+            if maybe_written:
+                keys = self._tensordict.keys()
+                for key in maybe_written:
+                    if key in keys:
+                        del self_non_tensordict[key]
+        self._non_tensordict.update(non_tensordict)
+        return self
 
     self._tensordict.update(
         input_dict_or_td,
@@ -2873,8 +2896,6 @@ def _update(
         ntd = {k: val for k, val in self._non_tensordict.items() if k not in keys}
         self._non_tensordict.clear()
         self._non_tensordict.update(ntd)
-    if non_tensordict:
-        self._non_tensordict.update(non_tensordict)
     return self
 
 
