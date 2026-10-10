@@ -3015,10 +3015,22 @@ class LazyStackedTensorDict(TensorDictBase):
             # TODO: we need to adapt this to LazyStackedTensorDict too
             if dim < 0:
                 dim = self.batch_dims + dim
+            try:
+                names = self._maybe_names()
+            except (IndexError, ValueError):
+                # a stack without members, or members with different names
+                names = None
+            if names is not None:
+                names = [name for i, name in enumerate(names) if i != dim]
+                # the stack dim may have the name of a member dim
+                named = [name for name in names if name is not None]
+                if len(set(named)) != len(named):
+                    names = None
             return TensorDict(
                 source={key: value.all(dim=dim) for key, value in self.items()},
                 batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
                 device=self.device,
+                names=names,
             )
         return all(value.all() for value in self.tensordicts)
 
@@ -3032,10 +3044,22 @@ class LazyStackedTensorDict(TensorDictBase):
             # TODO: we need to adapt this to LazyStackedTensorDict too
             if dim < 0:
                 dim = self.batch_dims + dim
+            try:
+                names = self._maybe_names()
+            except (IndexError, ValueError):
+                # a stack without members, or members with different names
+                names = None
+            if names is not None:
+                names = [name for i, name in enumerate(names) if i != dim]
+                # the stack dim may have the name of a member dim
+                named = [name for name in names if name is not None]
+                if len(set(named)) != len(named):
+                    names = None
             return TensorDict(
                 source={key: value.any(dim=dim) for key, value in self.items()},
                 batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
                 device=self.device,
+                names=names,
             )
         return any(value.any() for value in self.tensordicts)
 
@@ -3265,7 +3289,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             )
         if not inplace:
-            results = LazyStackedTensorDict.lazy_stack(results, dim=self.stack_dim)
+            results = LazyStackedTensorDict.lazy_stack(
+                results, dim=self.stack_dim, stack_dim_name=self._td_dim_name
+            )
         else:
             results = self
         results._device = torch.device("cpu")
@@ -3375,7 +3401,23 @@ class LazyStackedTensorDict(TensorDictBase):
             self.tensordicts = tensordicts
             self.stack_dim = stack_dim
             return self
-        return LazyStackedTensorDict.maybe_dense_stack(tensordicts, dim=stack_dim)
+        result = LazyStackedTensorDict.maybe_dense_stack(tensordicts, dim=stack_dim)
+        if self._td_dim_name is not None:
+            # maybe_dense_stack leaves the stack dim unnamed
+            if isinstance(result, LazyStackedTensorDict):
+                # a stack of lazy stacks can come back stacked along another dim
+                if result.stack_dim == stack_dim:
+                    result._td_dim_name = self._td_dim_name
+            elif isinstance(result, TensorDict):
+                names = result.names
+                names[stack_dim] = self._td_dim_name
+                try:
+                    result.names = names
+                except (IndexError, ValueError):
+                    # it holds a lazy stack whose members have different
+                    # names, which can't be renamed: leave the dim unnamed
+                    pass
+        return result
 
     @_lock_blocked
     def update(
@@ -3684,8 +3726,6 @@ class LazyStackedTensorDict(TensorDictBase):
         pad: int | bool = None,
         update_batch_size: bool = False,
     ):
-        from tensordict import lazy_stack
-
         if condition.ndim < self.ndim:
             condition = expand_right(condition, self.batch_size)
         condition = condition.unbind(self.stack_dim)
@@ -3707,7 +3747,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     torch.clone, filter_empty=False
                 )
 
-            result = lazy_stack(
+            result = LazyStackedTensorDict.lazy_stack(
                 [
                     where(td, cond, _other, pad=pad)
                     for td, cond, _other in _zip_strict(
@@ -3715,14 +3755,16 @@ class LazyStackedTensorDict(TensorDictBase):
                     )
                 ],
                 self.stack_dim,
+                stack_dim_name=self._td_dim_name,
             )
         else:
-            result = lazy_stack(
+            result = LazyStackedTensorDict.lazy_stack(
                 [
                     td.where(cond, other, pad=pad)
                     for td, cond in _zip_strict(self.tensordicts, condition)
                 ],
                 self.stack_dim,
+                stack_dim_name=self._td_dim_name,
             )
         # We should not pass out to stack because this will overwrite the tensors in-place, but
         # we don't want that
