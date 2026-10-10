@@ -18,7 +18,7 @@ from functorch import (
 from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn, vmap
-from torch.utils._pytree import tree_map
+from torch.utils._pytree import tree_flatten_with_path, tree_map, tree_structure
 
 
 class TestVmap:
@@ -350,6 +350,33 @@ class TestPyTree(TestTensorDictsBase):
         td = TensorDict({"a": {"b": {"c": [1]}, "d": [2]}}, [1])
         td_no_shape = tree_map(lambda x: x.squeeze(), td)
         assert td_no_shape.shape == torch.Size([])
+
+    def test_spec_batch_size(self):
+        # The batch size is not part of the tree structure, the number of
+        # batch dims is. The batch size is kept to rebuild a tensordict without
+        # tensors.
+        def spec(*batch_size):
+            return tree_structure(
+                TensorDict(a=torch.zeros(*batch_size, 2), batch_size=batch_size)
+            )
+
+        assert spec(4) == spec(6)
+        assert spec(4) != spec(4, 2)
+        _, spec_with_path = tree_flatten_with_path(
+            TensorDict(a=torch.zeros(4, 2), batch_size=[4])
+        )
+        assert spec_with_path == spec(4)
+        td = tree_map(lambda x: x, TensorDict(batch_size=[3]))
+        assert td.batch_size == torch.Size([3])
+
+    def test_pytree_map_different_batch_sizes(self):
+        # The specs of td4 and td6 are equal; the batch size of the result is
+        # read from its tensors.
+        td4 = TensorDict(x=torch.zeros(4, 3), batch_size=[4])
+        td6 = TensorDict(x=torch.zeros(6, 3), batch_size=[6])
+        assert tree_map(lambda a, b: b, td4, td6).batch_size == torch.Size([6])
+        out = tree_map(lambda a, b: torch.cat([a, b]), td4, td6)
+        assert out.batch_size == torch.Size([10])
 
     def test_pytree_lazy(self):
         td0 = TensorDict(
