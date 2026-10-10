@@ -692,7 +692,7 @@ def dense_stack_tds(
 ) -> T:
     """Densely stack a list of :class:`~tensordict.TensorDictBase` objects (or a :class:`~tensordict.LazyStackedTensorDict`) given that they have the same structure.
 
-    This function is called with a list of :class:`~tensordict.TensorDictBase` (either passed directly or obtrained from
+    This function is called with a list of :class:`~tensordict.TensorDictBase` (either passed directly or obtained from
     a :class:`~tensordict.LazyStackedTensorDict`).
     Instead of calling ``lazy_stack(td_list)``, which would return a :class:`~tensordict.LazyStackedTensorDict`,
     this function expands the first element of the input list and stacks the input list onto that element.
