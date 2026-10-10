@@ -3242,7 +3242,7 @@ class _SubTensorDict(TensorDictBase):
 
     def masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
         for key, item in self.items():
-            self.set_(key, torch.full_like(item, value))
+            self.set_(key, item.masked_fill(expand_as_right(mask, item), value))
         return self
 
     def masked_fill(self, mask: Tensor, value: float | bool) -> Self:

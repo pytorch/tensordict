@@ -455,14 +455,14 @@ class _OutKeysSelect:
                 raise RuntimeError(
                     f"Selecting out-keys failed. Original out_keys: {module._out_keys}, selected: {module.out_keys}."
                 )
-        return tensordict_out.select(
-            *in_keys, *out_keys, inplace=True, strict=tensordict_out is tensordict_in
+        # the input may lack some in_keys (e.g. with strict=False)
+        strict = tensordict_out is tensordict_in and all(
+            key in tensordict_in.keys(include_nested=True) for key in in_keys
         )
+        return tensordict_out.select(*in_keys, *out_keys, inplace=True, strict=strict)
 
     def _detect_dispatch(self, tensordict_in, kwargs, in_keys):  # noqa: F811
-        if isinstance(tensordict_in, TensorDictBase) and all(
-            key in tensordict_in.keys(include_nested=True) for key in in_keys
-        ):
+        if isinstance(tensordict_in, TensorDictBase):
             return False
         elif isinstance(tensordict_in, tuple):
             if len(tensordict_in) or len(kwargs):
@@ -1515,14 +1515,15 @@ class as_tensordict_module:
             def wrapped(_self, *args, **kwargs):
                 nonlocal tdmodule
                 if tdmodule is None:
-
-                    def newfunc(*args, **kwargs):
-                        return func(_self, *args, **kwargs)
+                    # The module is shared by all instances, so the instance
+                    # is passed with each call rather than kept in a closure.
+                    def newfunc(*args, _as_tensordict_module_self, **kwargs):
+                        return func(_as_tensordict_module_self, *args, **kwargs)
 
                     tdmodule = TensorDictModule(
                         newfunc, in_keys=self.in_keys, out_keys=self.out_keys
                     )
-                return tdmodule(*args, **kwargs)
+                return tdmodule(*args, _as_tensordict_module_self=_self, **kwargs)
 
         else:
 
