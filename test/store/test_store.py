@@ -675,6 +675,23 @@ class TestTensorDictStore:
             writer.clear_redis()
             writer.close()
 
+    def test_from_store_cache_metadata(self, store_kwargs):
+        """from_store passes cache_metadata to the store, not to the Redis client."""
+        writer = TensorDictStore(batch_size=[3], **store_kwargs)
+        try:
+            writer["x"] = torch.arange(3.0)
+            reader = TensorDictStore.from_store(
+                td_id=writer._td_id, cache_metadata=False, **store_kwargs
+            )
+            try:
+                assert reader._meta_cache is None
+                assert torch.equal(reader["x"], torch.arange(3.0))
+            finally:
+                reader.close()
+        finally:
+            writer.clear_redis()
+            writer.close()
+
     def test_from_store_not_found(self, store_kwargs):
         """from_store should raise KeyError for unknown td_id."""
 
@@ -1644,6 +1661,18 @@ class TestLazyStackedTensorDictStore:
         try:
             assert restored.batch_size == store_td.batch_size
             assert restored._count == 5
+            assert torch.allclose(restored[0]["a"], tds[0]["a"])
+        finally:
+            restored.close()
+
+    def test_from_store_cache_metadata(self, store_stack, store_kwargs):
+        """from_store passes cache_metadata to the store, not to the Redis client."""
+        store_td, tds, lazy_td = store_stack
+        restored = LazyStackedTensorDictStore.from_store(
+            td_id=store_td._td_id, cache_metadata=False, **store_kwargs
+        )
+        try:
+            assert restored._meta_cache is None
             assert torch.allclose(restored[0]["a"], tds[0]["a"])
         finally:
             restored.close()

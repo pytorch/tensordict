@@ -2241,7 +2241,8 @@ class TensorDictStore(TensorDictBase):
                 fully-qualified class path (``"module.ClassName"``) and
                 imported.  If ``None`` (default), the class path stored in
                 the server (if any) is used automatically.
-            **kwargs: Extra connection kwargs.
+            **kwargs: Extra keyword arguments for the constructor, such as
+                ``cache_metadata``, and connection kwargs for the Redis client.
 
         Returns:
             A TensorDictStore (or TensorClass wrapping one) connected to the
@@ -2264,7 +2265,10 @@ class TensorDictStore(TensorDictBase):
         """
         import redis.asyncio as aioredis
 
-        connect_kwargs = dict(kwargs)
+        # ``client`` and ``cache_metadata`` go to the constructor only.
+        connect_kwargs = {
+            k: v for k, v in kwargs.items() if k not in ("client", "cache_metadata")
+        }
         if unix_socket_path is not None:
             connect_kwargs["unix_socket_path"] = unix_socket_path
         else:
@@ -2273,7 +2277,6 @@ class TensorDictStore(TensorDictBase):
         connect_kwargs["db"] = db
 
         # Temporarily create an async client to read stored metadata
-        loop = asyncio.new_event_loop()
         client = aioredis.Redis(**connect_kwargs)
 
         async def _read_meta():
@@ -2288,8 +2291,11 @@ class TensorDictStore(TensorDictBase):
             await client.aclose()
             return raw_bs, raw_dev, raw_tc
 
-        raw_bs, raw_dev, raw_tc = loop.run_until_complete(_read_meta())
-        loop.close()
+        loop = asyncio.new_event_loop()
+        try:
+            raw_bs, raw_dev, raw_tc = loop.run_until_complete(_read_meta())
+        finally:
+            loop.close()
 
         if raw_bs is None:
             raise KeyError(
