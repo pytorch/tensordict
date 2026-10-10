@@ -795,6 +795,28 @@ def _expand_to_match_shape(
     return result
 
 
+def _batch_mismatch_error(
+    batch_size: torch.Size, value: Any, key: NestedKey | None
+) -> RuntimeError:
+    """Builds the error raised when a value does not start with the batch size."""
+    shape = _shape(value)
+    msg = (
+        f"batch dimension mismatch, got self.batch_size={batch_size} and "
+        f"value.shape={shape}"
+    )
+    if key is not None:
+        msg += f" for key {key!r}"
+    msg += ". The leading dimensions of a value must match the batch size."
+    if not shape:
+        msg += (
+            " Python scalars are stored as 0-dim tensors: to store a scalar in a "
+            "tensordict with a non-empty batch size, expand it to the batch size or "
+            "wrap it in NonTensorData (in a tensorclass, the nocast option stores "
+            "scalars as they are)."
+        )
+    return RuntimeError(msg)
+
+
 # TensorDictBase's methods are grouped by area of the API into mixins under
 # tensordict/_base/. Those modules import the helpers above from this module,
 # so they are imported here, after the helpers and before the class. Hence:
@@ -2830,9 +2852,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             return first._get_tuple(key[1:], default=default, **kwargs)
         except AttributeError as err:
             if "has no attribute" in str(err):
+                rest = key[1] if len(key) == 2 else key[1:]
                 raise ValueError(
-                    f"Expected a TensorDictBase instance but got {type(first)} instead"
-                    f" for key '{key[1:]}' in tensordict:\n{self}."
+                    f"{key[0]!r} is a {type(first).__name__}, not a tensordict, "
+                    f"so it has no entry {rest!r}."
                 )
 
     def _get_tuple_maybe_non_tensor(self, key, default, **kwargs):
@@ -4002,9 +4025,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # Key not found
             if default is NO_DEFAULT:
                 raise KeyError(
-                    f"You are trying to pop key `{key_tuple}` which is not in dict "
-                    f"without providing default value. "
-                    f"Keys={self.keys(include_nested=isinstance(key_tuple, tuple))}."
+                    _KEY_ERROR.format(
+                        key_tuple[0] if len(key_tuple) == 1 else key_tuple,
+                        type(self).__name__,
+                        sorted(self.keys(include_nested=len(key_tuple) > 1), key=str),
+                    )
                 )
             return default
         self.del_(key_tuple)
@@ -5682,6 +5707,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         non_blocking: bool = False,
         *,
         check_shape: bool = True,
+        key: NestedKey | None = None,
     ) -> CompatibleType | dict[str, CompatibleType]:
         cls = type(value)
         if issubclass(cls, torch.Tensor):
@@ -5721,10 +5747,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 value = value.clone(recurse=False)
                 value.batch_size = self.batch_size
             else:
-                raise RuntimeError(
-                    f"batch dimension mismatch, got self.batch_size"
-                    f"={self.batch_size} and value.shape={_shape(value)}."
-                )
+                raise _batch_mismatch_error(self.batch_size, value, key)
         device = self.device
         if device is not None and value.device != device:
             if _device_recorder.marked and device.type != "cuda":
@@ -5754,6 +5777,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         non_blocking: bool = False,
         *,
         check_shape: bool = True,
+        key: NestedKey | None = None,
     ) -> CompatibleType | dict[str, CompatibleType]:
         cls = type(value)
         if issubclass(cls, torch.Tensor) or _is_tensor_collection(cls):
@@ -5789,6 +5813,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         non_blocking: bool = False,
         *,
         check_shape: bool = True,
+        key: NestedKey | None = None,
     ) -> CompatibleType | dict[str, CompatibleType]:
         cls = type(value)
         if issubclass(cls, torch.Tensor):
@@ -5824,10 +5849,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 value = value.clone(recurse=False)
                 value.batch_size = self.batch_size
             else:
-                raise RuntimeError(
-                    f"batch dimension mismatch, got self.batch_size"
-                    f"={self.batch_size} and value.shape={_shape(value)}."
-                )
+                raise _batch_mismatch_error(self.batch_size, value, key)
         if check_shape:
             if not is_tc:
                 return value
@@ -5854,6 +5876,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         non_blocking: bool = False,
         *,
         check_shape: bool = True,
+        key: NestedKey | None = None,
     ) -> CompatibleType | dict[str, CompatibleType]:
         cls = type(value)
         if issubclass(cls, torch.Tensor) or _is_tensor_collection(cls):
