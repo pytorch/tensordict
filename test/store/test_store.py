@@ -795,6 +795,21 @@ class TestTensorDictStore:
             store_td.set_at_("obs", torch.zeros(10, 3), mask)
         torch.testing.assert_close(store_td["obs"], obs)
 
+    @pytest.mark.parametrize(
+        "index", [1, [0, 2], torch.tensor([1, 3]), slice(2, 5), [True, False] * 5]
+    )
+    def test_set_at_python_scalar(self, store_td, index):
+        """set_at_ writes a Python scalar in the dtype of the entry, as torch does."""
+        store_td["count"] = torch.zeros(10, 2, dtype=torch.long)
+        store_td["obs"] = torch.zeros(10, 3)
+        count, obs = torch.zeros(10, 2, dtype=torch.long), torch.zeros(10, 3)
+        store_td.set_at_("count", -3.5, index)
+        store_td.set_at_("obs", 2, index)
+        count[index] = -3.5
+        obs[index] = 2
+        torch.testing.assert_close(store_td["count"], count)
+        torch.testing.assert_close(store_td["obs"], obs)
+
     def test_set_at_byte_range(self, store_td):
         """set_at_ should use SETRANGE for a single key."""
         store_td["obs"] = torch.zeros(10, 3)
@@ -1171,6 +1186,14 @@ class TestLazyStackedTensorDictStore:
         torch.testing.assert_close(store_td.get_at("a", mask), expected[mask])
         store_td.set_at_("a", torch.zeros(3, 4, 3), mask)
         expected[mask] = 0
+        torch.testing.assert_close(store_td["a"], expected)
+
+    @pytest.mark.parametrize("index", [1, [0, 2], (slice(None), [1, 3])])
+    def test_set_at_python_scalar(self, store_stack, index):
+        store_td, tds, lazy_td = store_stack
+        expected = lazy_td["a"]
+        store_td.set_at_("a", -2, index)
+        expected[index] = -2
         torch.testing.assert_close(store_td["a"], expected)
 
     def test_nd_mask(self, store_stack):

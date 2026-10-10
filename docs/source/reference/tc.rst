@@ -147,7 +147,9 @@ The available flags are:
   ``@dataclass(frozen=True)``. Plays well with ``torch.compile`` and functional
   code paths.
 * ``shadow`` — opt out of the check that forbids field names colliding with
-  reserved TensorDict attributes (``batch_size``, ``device``, ``data``, ...).
+  the members of a tensorclass (``batch_size``, ``device``, ``sum``,
+  ``from_tensordict``, ...). A field named ``data`` or ``fields`` is allowed
+  without it and replaces the member of that name.
 
 ``autocast``, ``nocast`` and ``tensor_only`` are mutually exclusive. See the
 :class:`~tensordict.TensorClass` docstring for per-flag runnable examples.

@@ -205,8 +205,13 @@ def _expand_ellipsis(index: tuple, ndim: int) -> tuple:
     return index[:position] + (slice(None),) * ellipsis_length + index[position + 1 :]
 
 
-def _read_index(index, ndim):
+def _read_index(index, ndim, sizes=None):
     """Read ``index`` as torch does for a tensor with ``ndim`` dims.
+
+    If the ``sizes`` of the dims are given, the index is checked against them
+    as torch checks it: too many indices, ints out of range and masks of
+    another shape raise the ``IndexError`` that torch raises. Index tensors
+    are not read, so the values out of range that they may hold are not found.
 
     Returns ``(dims, advanced, position, rest)``:
 
@@ -221,14 +226,32 @@ def _read_index(index, ndim):
     """
     if not isinstance(index, tuple):
         index = (index,)
+    given = index
+    if sizes is not None and any(element is Ellipsis for element in index):
+        used = sum(_num_indexed_dims(e) for e in index if e is not Ellipsis)
+        if used > ndim:
+            _raise_index_error(
+                sizes, given, f"too many indices for tensor of dimension {ndim}"
+            )
     index = _expand_ellipsis(index, ndim)
     dims = []
     advanced = []
     position = None
     after_gap = separated = False
     dim = 0
+    error = None
     for element in index:
         kind, num_dims, element = _read_element(element)
+        if sizes is not None and error is None:
+            # the conditions are checked here, and the message is only built
+            # for an element that fails them
+            if kind == _INT:
+                if isinstance(element, (int, np.integer)) and not (
+                    dim < ndim and -sizes[dim] <= element < sizes[dim]
+                ):
+                    error = _element_error(kind, element, dim, num_dims, sizes)
+            elif kind == _MASK and element.shape != sizes[dim : dim + num_dims]:
+                error = _element_error(kind, element, dim, num_dims, sizes)
         if kind == _INT:
             dim += 1
         elif kind == _SLICE:
@@ -247,7 +270,50 @@ def _read_index(index, ndim):
             dim += num_dims
     if separated:
         position = 0
+    if sizes is not None:
+        # torch counts the indexed dims first
+        if dim > ndim:
+            error = f"too many indices for tensor of dimension {ndim}"
+        if error is not None:
+            _raise_index_error(sizes, given, error)
     return dims, advanced, position, dim
+
+
+def _element_error(kind, element, dim, num_dims, sizes):
+    """The error that torch finds in an element of an index that uses the dims from ``dim`` on, or ``None``."""
+    if kind == _INT and isinstance(element, (int, np.integer)):
+        if dim < len(sizes) and not -sizes[dim] <= element < sizes[dim]:
+            return (
+                f"index {element} is out of bounds for dimension {dim} with size "
+                f"{sizes[dim]}"
+            )
+    elif kind == _MASK and element.shape != sizes[dim : dim + num_dims]:
+        for i, (size, expected) in enumerate(zip(element.shape, sizes[dim:])):
+            if size != expected:
+                return (
+                    f"The shape of the mask {list(element.shape)} at index {i} does "
+                    f"not match the shape of the indexed tensor {list(sizes)} at "
+                    f"index {dim + i}"
+                )
+    return None
+
+
+def _raise_index_error(sizes, index, message):
+    """Raise the ``IndexError`` that torch raises for ``index`` on a tensor of shape ``sizes``.
+
+    Torch writes its message from the part of the tensor that it has indexed
+    when it finds the error, so ``index`` is read on a tensor of that shape,
+    which a single expanded element backs. ``message`` is used if that tensor
+    does not give an ``IndexError``, which happens with index tensors on
+    another device than the CPU.
+    """
+    try:
+        torch.zeros(()).expand(sizes)[index]
+    except IndexError:
+        raise
+    except RuntimeError:
+        pass
+    raise IndexError(message)
 
 
 def _getitem_batch_size(batch_size, index):
@@ -272,10 +338,12 @@ def _getitem_batch_size(batch_size, index):
     """
     if not isinstance(index, tuple):
         if isinstance(index, int) and not isinstance(index, bool):
+            if not batch_size or not -batch_size[0] <= index < batch_size[0]:
+                _read_index(index, len(batch_size), batch_size)
             return batch_size[1:]
         if isinstance(index, slice) and index == slice(None):
             return batch_size
-    dims, advanced, position, rest = _read_index(index, len(batch_size))
+    dims, advanced, position, rest = _read_index(index, len(batch_size), batch_size)
     out = [
         1 if dim is None else _slice_length(element, batch_size[dim])
         for dim, element in dims
@@ -283,9 +351,19 @@ def _getitem_batch_size(batch_size, index):
     out.extend(batch_size[rest:])
     if advanced:
         shapes = [_advanced_shape(kind, element) for kind, element, _, _ in advanced]
-        out[position:position] = (
-            shapes[0] if len(shapes) == 1 else torch.broadcast_shapes(*shapes)
-        )
+        if len(shapes) == 1:
+            shape = shapes[0]
+        else:
+            try:
+                shape = torch.broadcast_shapes(*shapes)
+            except RuntimeError:
+                _raise_index_error(
+                    batch_size,
+                    index,
+                    "shape mismatch: indexing tensors could not be broadcast "
+                    f"together with shapes {', '.join(str(list(s)) for s in shapes)}",
+                )
+        out[position:position] = shape
     return torch.Size(out)
 
 
@@ -298,6 +376,8 @@ def _getitem_names(names, index):
     single input dim vary. The other dims are unnamed: the dims that ``None``
     adds, and the advanced dims that come from several input dims, such as
     the dim of an N-D mask or of advanced indices that broadcast together.
+    Names are unique, so an N-D index of one input dim names at most one dim
+    of the block after it: the only one along which it varies.
     """
     dims, advanced, position, rest = _read_index(index, len(names))
     out = [None if dim is None else names[dim] for dim, _ in dims]
@@ -330,8 +410,18 @@ def _block_names(names, advanced):
         having = [(shape[dim], used) for shape, used in shapes if len(shape) >= -dim]
         varying = [used for size, used in having if size != 1]
         sources = set().union(*(varying or [used for _, used in having]))
-        out.append(names[sources.pop()] if len(sources) == 1 else None)
-    return out
+        name = names[sources.pop()] if len(sources) == 1 else None
+        out.append((name, bool(varying)))
+    # a name that several dims of the block would take stays only on the one
+    # along which its index varies, if there is exactly one
+    return [
+        name
+        if name is None
+        or [other for other, _ in out].count(name) == 1
+        or (varies and [v for other, v in out if other == name].count(True) == 1)
+        else None
+        for name, varies in out
+    ]
 
 
 def _advanced_shape(kind, element):
