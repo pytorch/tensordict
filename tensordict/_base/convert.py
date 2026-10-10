@@ -2500,7 +2500,7 @@ class _Conversion:
             **kwargs: kwargs to be passed to :meth:`h5py.File.create_dataset`.
 
         Returns:
-            A :class:`~.tensordict.PersitentTensorDict` instance linked to the newly created file.
+            A :class:`~tensordict.PersistentTensorDict` instance linked to the newly created file.
 
         Examples:
             >>> import torch

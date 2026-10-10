@@ -587,7 +587,7 @@ class _PointwiseOps:
         return self
 
     def acos(self) -> Self:
-        """Computes the :meth:`~torch.acos` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.acos` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("acos", vals)
         items = dict(zip(keys, vals))
@@ -604,12 +604,12 @@ class _PointwiseOps:
         )
 
     def acos_(self) -> Self:
-        """Computes the :meth:`~torch.acos` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.acos` value of each element of the TensorDict in-place."""
         _foreach("acos_", self._values_list(True, True))
         return self
 
     def exp(self) -> Self:
-        """Computes the :meth:`~torch.exp` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.exp` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("exp", vals)
         items = dict(zip(keys, vals))
@@ -626,12 +626,12 @@ class _PointwiseOps:
         )
 
     def exp_(self) -> Self:
-        """Computes the :meth:`~torch.exp` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.exp` value of each element of the TensorDict in-place."""
         _foreach("exp_", self._values_list(True, True))
         return self
 
     def neg(self) -> Self:
-        """Computes the :meth:`~torch.neg` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.neg` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         # Empty tensordict (no tensors) - return a copy unchanged
         if not vals:
@@ -653,7 +653,7 @@ class _PointwiseOps:
         )
 
     def neg_(self) -> Self:
-        """Computes the :meth:`~torch.neg` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.neg` value of each element of the TensorDict in-place."""
         vals = self._values_list(True, True)
         # Empty tensordict (no tensors) - nothing to do
         if not vals:
@@ -665,7 +665,7 @@ class _PointwiseOps:
         return self
 
     def reciprocal(self) -> Self:
-        """Computes the :meth:`~torch.reciprocal` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.reciprocal` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("reciprocal", vals)
         items = dict(zip(keys, vals))
@@ -682,12 +682,12 @@ class _PointwiseOps:
         )
 
     def reciprocal_(self) -> Self:
-        """Computes the :meth:`~torch.reciprocal` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.reciprocal` value of each element of the TensorDict in-place."""
         _foreach("reciprocal_", self._values_list(True, True))
         return self
 
     def sigmoid(self) -> Self:
-        """Computes the :meth:`~torch.sigmoid` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.sigmoid` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("sigmoid", vals)
         items = dict(zip(keys, vals))
@@ -704,12 +704,12 @@ class _PointwiseOps:
         )
 
     def sigmoid_(self) -> Self:
-        """Computes the :meth:`~torch.sigmoid` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.sigmoid` value of each element of the TensorDict in-place."""
         _foreach("sigmoid_", self._values_list(True, True))
         return self
 
     def sign(self) -> Self:
-        """Computes the :meth:`~torch.sign` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.sign` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("sign", vals)
         items = dict(zip(keys, vals))
@@ -726,12 +726,12 @@ class _PointwiseOps:
         )
 
     def sign_(self) -> Self:
-        """Computes the :meth:`~torch.sign` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.sign` value of each element of the TensorDict in-place."""
         _foreach("sign_", self._values_list(True, True))
         return self
 
     def sin(self) -> Self:
-        """Computes the :meth:`~torch.sin` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.sin` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("sin", vals)
         items = dict(zip(keys, vals))
@@ -748,12 +748,12 @@ class _PointwiseOps:
         )
 
     def sin_(self) -> Self:
-        """Computes the :meth:`~torch.sin` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.sin` value of each element of the TensorDict in-place."""
         _foreach("sin_", self._values_list(True, True))
         return self
 
     def sinh(self) -> Self:
-        """Computes the :meth:`~torch.sinh` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.sinh` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("sinh", vals)
         items = dict(zip(keys, vals))
@@ -770,12 +770,12 @@ class _PointwiseOps:
         )
 
     def sinh_(self) -> Self:
-        """Computes the :meth:`~torch.sinh` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.sinh` value of each element of the TensorDict in-place."""
         _foreach("sinh_", self._values_list(True, True))
         return self
 
     def tan(self) -> Self:
-        """Computes the :meth:`~torch.tan` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.tan` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("tan", vals)
         items = dict(zip(keys, vals))
@@ -792,12 +792,12 @@ class _PointwiseOps:
         )
 
     def tan_(self) -> Self:
-        """Computes the :meth:`~torch.tan` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.tan` value of each element of the TensorDict in-place."""
         _foreach("tan_", self._values_list(True, True))
         return self
 
     def tanh(self) -> Self:
-        """Computes the :meth:`~torch.tanh` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.tanh` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("tanh", vals)
         items = dict(zip(keys, vals))
@@ -814,12 +814,12 @@ class _PointwiseOps:
         )
 
     def tanh_(self) -> Self:
-        """Computes the :meth:`~torch.tanh` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.tanh` value of each element of the TensorDict in-place."""
         _foreach("tanh_", self._values_list(True, True))
         return self
 
     def trunc(self) -> Self:
-        """Computes the :meth:`~torch.trunc` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.trunc` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("trunc", vals)
         items = dict(zip(keys, vals))
@@ -836,12 +836,12 @@ class _PointwiseOps:
         )
 
     def trunc_(self) -> Self:
-        """Computes the :meth:`~torch.trunc` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.trunc` value of each element of the TensorDict in-place."""
         _foreach("trunc_", self._values_list(True, True))
         return self
 
     def lgamma(self) -> Self:
-        """Computes the :meth:`~torch.lgamma` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.lgamma` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("lgamma", vals)
         items = dict(zip(keys, vals))
@@ -858,12 +858,12 @@ class _PointwiseOps:
         )
 
     def lgamma_(self) -> Self:
-        """Computes the :meth:`~torch.lgamma` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.lgamma` value of each element of the TensorDict in-place."""
         _foreach("lgamma_", self._values_list(True, True))
         return self
 
     def frac(self) -> Self:
-        """Computes the :meth:`~torch.frac` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.frac` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("frac", vals)
         items = dict(zip(keys, vals))
@@ -880,12 +880,12 @@ class _PointwiseOps:
         )
 
     def frac_(self) -> Self:
-        """Computes the :meth:`~torch.frac` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.frac` value of each element of the TensorDict in-place."""
         _foreach("frac_", self._values_list(True, True))
         return self
 
     def expm1(self) -> Self:
-        """Computes the :meth:`~torch.expm1` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.expm1` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("expm1", vals)
         items = dict(zip(keys, vals))
@@ -902,12 +902,12 @@ class _PointwiseOps:
         )
 
     def expm1_(self) -> Self:
-        """Computes the :meth:`~torch.expm1` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.expm1` value of each element of the TensorDict in-place."""
         _foreach("expm1_", self._values_list(True, True))
         return self
 
     def log(self) -> Self:
-        """Computes the :meth:`~torch.log` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.log` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("log", vals)
         items = dict(zip(keys, vals))
@@ -924,7 +924,7 @@ class _PointwiseOps:
         )
 
     def log_(self) -> Self:
-        """Computes the :meth:`~torch.log` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.log` value of each element of the TensorDict in-place."""
         _foreach("log_", self._values_list(True, True))
         return self
 
@@ -947,7 +947,7 @@ class _PointwiseOps:
         )
 
     def log10(self) -> Self:
-        """Computes the :meth:`~torch.log10` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.log10` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("log10", vals)
         items = dict(zip(keys, vals))
@@ -964,12 +964,12 @@ class _PointwiseOps:
         )
 
     def log10_(self) -> Self:
-        """Computes the :meth:`~torch.log10` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.log10` value of each element of the TensorDict in-place."""
         _foreach("log10_", self._values_list(True, True))
         return self
 
     def log1p(self) -> Self:
-        """Computes the :meth:`~torch.log1p` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.log1p` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("log1p", vals)
         items = dict(zip(keys, vals))
@@ -986,12 +986,12 @@ class _PointwiseOps:
         )
 
     def log1p_(self) -> Self:
-        """Computes the :meth:`~torch.log1p` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.log1p` value of each element of the TensorDict in-place."""
         _foreach("log1p_", self._values_list(True, True))
         return self
 
     def log2(self) -> Self:
-        """Computes the :meth:`~torch.log2` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.log2` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("log2", vals)
         items = dict(zip(keys, vals))
@@ -1008,12 +1008,12 @@ class _PointwiseOps:
         )
 
     def log2_(self) -> Self:
-        """Computes the :meth:`~torch.log2` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.log2` value of each element of the TensorDict in-place."""
         _foreach("log2_", self._values_list(True, True))
         return self
 
     def ceil(self) -> Self:
-        """Computes the :meth:`~torch.ceil` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.ceil` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("ceil", vals)
         items = dict(zip(keys, vals))
@@ -1030,12 +1030,12 @@ class _PointwiseOps:
         )
 
     def ceil_(self) -> Self:
-        """Computes the :meth:`~torch.ceil` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.ceil` value of each element of the TensorDict in-place."""
         _foreach("ceil_", self._values_list(True, True))
         return self
 
     def floor(self) -> Self:
-        """Computes the :meth:`~torch.floor` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.floor` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("floor", vals)
         items = dict(zip(keys, vals))
@@ -1052,12 +1052,12 @@ class _PointwiseOps:
         )
 
     def floor_(self) -> Self:
-        """Computes the :meth:`~torch.floor` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.floor` value of each element of the TensorDict in-place."""
         _foreach("floor_", self._values_list(True, True))
         return self
 
     def round(self) -> Self:
-        """Computes the :meth:`~torch.round` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.round` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("round", vals)
         items = dict(zip(keys, vals))
@@ -1074,12 +1074,12 @@ class _PointwiseOps:
         )
 
     def round_(self) -> Self:
-        """Computes the :meth:`~torch.round` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.round` value of each element of the TensorDict in-place."""
         _foreach("round_", self._values_list(True, True))
         return self
 
     def erf(self) -> Self:
-        """Computes the :meth:`~torch.erf` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.erf` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("erf", vals)
         items = dict(zip(keys, vals))
@@ -1096,12 +1096,12 @@ class _PointwiseOps:
         )
 
     def erf_(self) -> Self:
-        """Computes the :meth:`~torch.erf` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.erf` value of each element of the TensorDict in-place."""
         _foreach("erf_", self._values_list(True, True))
         return self
 
     def erfc(self) -> Self:
-        """Computes the :meth:`~torch.erfc` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.erfc` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("erfc", vals)
         items = dict(zip(keys, vals))
@@ -1118,12 +1118,12 @@ class _PointwiseOps:
         )
 
     def erfc_(self) -> Self:
-        """Computes the :meth:`~torch.erfc` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.erfc` value of each element of the TensorDict in-place."""
         _foreach("erfc_", self._values_list(True, True))
         return self
 
     def asin(self) -> Self:
-        """Computes the :meth:`~torch.asin` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.asin` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("asin", vals)
         items = dict(zip(keys, vals))
@@ -1140,12 +1140,12 @@ class _PointwiseOps:
         )
 
     def asin_(self) -> Self:
-        """Computes the :meth:`~torch.asin` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.asin` value of each element of the TensorDict in-place."""
         _foreach("asin_", self._values_list(True, True))
         return self
 
     def atan(self) -> Self:
-        """Computes the :meth:`~torch.atan` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.atan` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("atan", vals)
         items = dict(zip(keys, vals))
@@ -1162,12 +1162,12 @@ class _PointwiseOps:
         )
 
     def atan_(self) -> Self:
-        """Computes the :meth:`~torch.atan` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.atan` value of each element of the TensorDict in-place."""
         _foreach("atan_", self._values_list(True, True))
         return self
 
     def cos(self) -> Self:
-        """Computes the :meth:`~torch.cos` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.cos` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("cos", vals)
         items = dict(zip(keys, vals))
@@ -1184,12 +1184,12 @@ class _PointwiseOps:
         )
 
     def cos_(self) -> Self:
-        """Computes the :meth:`~torch.cos` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.cos` value of each element of the TensorDict in-place."""
         _foreach("cos_", self._values_list(True, True))
         return self
 
     def cosh(self) -> Self:
-        """Computes the :meth:`~torch.cosh` value of each element of the TensorDict."""
+        """Computes the :func:`~torch.cosh` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = _foreach("cosh", vals)
         items = dict(zip(keys, vals))
@@ -1206,7 +1206,7 @@ class _PointwiseOps:
         )
 
     def cosh_(self) -> Self:
-        """Computes the :meth:`~torch.cosh` value of each element of the TensorDict in-place."""
+        """Computes the :func:`~torch.cosh` value of each element of the TensorDict in-place."""
         _foreach("cosh_", self._values_list(True, True))
         return self
 
@@ -1226,12 +1226,13 @@ class _PointwiseOps:
             other (TensorDictBase or torch.Tensor): the tensor or TensorDict to perform the bitwise AND with.
 
         Keyword Args:
-            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
-                If none is provided, the two tensordicts key list must match exactly.
-                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
-                and other keys will be ignored.
-                In all other cases, ``default`` will be used for all missing entries on both sides of the
-                operation.
+            default (torch.Tensor or str, optional): the value to use for an
+                entry that only one of the two tensordicts has. If ``None``
+                (default), the two tensordicts must have the same keys, and a
+                missing key raises ``KeyError``. If ``"intersection"``, only
+                the keys that both tensordicts have are computed, and the
+                other keys are dropped. Any other value replaces the missing
+                entries on both sides of the operation.
         """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
@@ -1279,12 +1280,13 @@ class _PointwiseOps:
             other (TensorDictBase or torch.Tensor): the tensor or TensorDict to perform the logical AND with.
 
         Keyword Args:
-            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
-                If none is provided, the two tensordicts key list must match exactly.
-                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
-                and other keys will be ignored.
-                In all other cases, ``default`` will be used for all missing entries on both sides of the
-                operation.
+            default (torch.Tensor or str, optional): the value to use for an
+                entry that only one of the two tensordicts has. If ``None``
+                (default), the two tensordicts must have the same keys, and a
+                missing key raises ``KeyError``. If ``"intersection"``, only
+                the keys that both tensordicts have are computed, and the
+                other keys are dropped. Any other value replaces the missing
+                entries on both sides of the operation.
         """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
@@ -1334,12 +1336,13 @@ class _PointwiseOps:
 
         Keyword Args:
             alpha (Number, optional): the multiplier for :attr:`other`.
-            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
-                If none is provided, the two tensordicts key list must match exactly.
-                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
-                and other keys will be ignored.
-                In all other cases, ``default`` will be used for all missing entries on both sides of the
-                operation.
+            default (torch.Tensor or str, optional): the value to use for an
+                entry that only one of the two tensordicts has. If ``None``
+                (default), the two tensordicts must have the same keys, and a
+                missing key raises ``KeyError``. If ``"intersection"``, only
+                the keys that both tensordicts have are computed, and the
+                other keys are dropped. Any other value replaces the missing
+                entries on both sides of the operation.
 
         """
         keys, vals = self._items_list(True, True)
@@ -1648,12 +1651,13 @@ class _PointwiseOps:
 
         Keyword Args:
             alpha (Number): the multiplier for :attr:`other`.
-            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
-                If none is provided, the two tensordicts key list must match exactly.
-                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
-                and other keys will be ignored.
-                In all other cases, ``default`` will be used for all missing entries on both sides of the
-                operation.
+            default (torch.Tensor or str, optional): the value to use for an
+                entry that only one of the two tensordicts has. If ``None``
+                (default), the two tensordicts must have the same keys, and a
+                missing key raises ``KeyError``. If ``"intersection"``, only
+                the keys that both tensordicts have are computed, and the
+                other keys are dropped. Any other value replaces the missing
+                entries on both sides of the operation.
 
         """
         keys, vals = self._items_list(True, True)
@@ -1741,12 +1745,13 @@ class _PointwiseOps:
 
         Keyword Args:
             alpha (Number): the multiplier for ``other``.
-            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
-                If none is provided, the two tensordicts key list must match exactly.
-                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
-                and other keys will be ignored.
-                In all other cases, ``default`` will be used for all missing entries on both sides of the
-                operation.
+            default (torch.Tensor or str, optional): the value to use for an
+                entry that only one of the two tensordicts has. If ``None``
+                (default), the two tensordicts must have the same keys, and a
+                missing key raises ``KeyError``. If ``"intersection"``, only
+                the keys that both tensordicts have are computed, and the
+                other keys are dropped. Any other value replaces the missing
+                entries on both sides of the operation.
 
         Examples:
             >>> import torch
@@ -1871,12 +1876,13 @@ class _PointwiseOps:
             other (TensorDict, Tensor or Number): the tensor or number to subtract from ``self``.
 
         Keyword Args:
-            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
-                If none is provided, the two tensordicts key list must match exactly.
-                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
-                and other keys will be ignored.
-                In all other cases, ``default`` will be used for all missing entries on both sides of the
-                operation.
+            default (torch.Tensor or str, optional): the value to use for an
+                entry that only one of the two tensordicts has. If ``None``
+                (default), the two tensordicts must have the same keys, and a
+                missing key raises ``KeyError``. If ``"intersection"``, only
+                the keys that both tensordicts have are computed, and the
+                other keys are dropped. Any other value replaces the missing
+                entries on both sides of the operation.
 
         """
         keys, vals = self._items_list(True, True)
@@ -1955,12 +1961,13 @@ class _PointwiseOps:
             other (TensorDict or Tensor): the other input tensordict or tensor.
 
         Keyword Args:
-            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
-                If none is provided, the two tensordicts key list must match exactly.
-                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
-                and other keys will be ignored.
-                In all other cases, ``default`` will be used for all missing entries on both sides of the
-                operation.
+            default (torch.Tensor or str, optional): the value to use for an
+                entry that only one of the two tensordicts has. If ``None``
+                (default), the two tensordicts must have the same keys, and a
+                missing key raises ``KeyError``. If ``"intersection"``, only
+                the keys that both tensordicts have are computed, and the
+                other keys are dropped. Any other value replaces the missing
+                entries on both sides of the operation.
 
         """
         keys, vals = self._items_list(True, True)
@@ -2039,12 +2046,13 @@ class _PointwiseOps:
             other (TensorDict or Tensor): the other input tensordict or tensor.
 
         Keyword Args:
-            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
-                If none is provided, the two tensordicts key list must match exactly.
-                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
-                and other keys will be ignored.
-                In all other cases, ``default`` will be used for all missing entries on both sides of the
-                operation.
+            default (torch.Tensor or str, optional): the value to use for an
+                entry that only one of the two tensordicts has. If ``None``
+                (default), the two tensordicts must have the same keys, and a
+                missing key raises ``KeyError``. If ``"intersection"``, only
+                the keys that both tensordicts have are computed, and the
+                other keys are dropped. Any other value replaces the missing
+                entries on both sides of the operation.
 
         """
         keys, vals = self._items_list(True, True)
@@ -2125,18 +2133,19 @@ class _PointwiseOps:
         *,
         default: str | CompatibleType | None = None,
     ) -> Self:  # noqa: D417
-        """Clamps the elements of ``self`` to :attr:`other` if they're superior to that value.
+        """Clamps each element of ``self`` to at most ``other``.
 
         Args:
             other (TensorDict or Tensor): the other input tensordict or tensor.
 
         Keyword Args:
-            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
-                If none is provided, the two tensordicts key list must match exactly.
-                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
-                and other keys will be ignored.
-                In all other cases, ``default`` will be used for all missing entries on both sides of the
-                operation.
+            default (torch.Tensor or str, optional): the value to use for an
+                entry that only one of the two tensordicts has. If ``None``
+                (default), the two tensordicts must have the same keys, and a
+                missing key raises ``KeyError``. If ``"intersection"``, only
+                the keys that both tensordicts have are computed, and the
+                other keys are dropped. Any other value replaces the missing
+                entries on both sides of the operation.
 
         """
         keys, vals = self._items_list(True, True)
@@ -2225,18 +2234,19 @@ class _PointwiseOps:
         other: TensorDictBase | torch.Tensor,
         default: str | CompatibleType | None = None,
     ) -> Self:  # noqa: D417
-        """Clamps the elements of ``self`` to :attr:`other` if they're inferior to that value.
+        """Clamps each element of ``self`` to at least ``other``.
 
         Args:
             other (TensorDict or Tensor): the other input tensordict or tensor.
 
         Keyword Args:
-            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
-                If none is provided, the two tensordicts key list must match exactly.
-                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
-                and other keys will be ignored.
-                In all other cases, ``default`` will be used for all missing entries on both sides of the
-                operation.
+            default (torch.Tensor or str, optional): the value to use for an
+                entry that only one of the two tensordicts has. If ``None``
+                (default), the two tensordicts must have the same keys, and a
+                missing key raises ``KeyError``. If ``"intersection"``, only
+                the keys that both tensordicts have are computed, and the
+                other keys are dropped. Any other value replaces the missing
+                entries on both sides of the operation.
 
         """
         keys, vals = self._items_list(True, True)
@@ -2386,12 +2396,13 @@ class _PointwiseOps:
             other (float, tensor or tensordict): the exponent value
 
         Keyword Args:
-            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
-                If none is provided, the two tensordicts key list must match exactly.
-                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
-                and other keys will be ignored.
-                In all other cases, ``default`` will be used for all missing entries on both sides of the
-                operation.
+            default (torch.Tensor or str, optional): the value to use for an
+                entry that only one of the two tensordicts has. If ``None``
+                (default), the two tensordicts must have the same keys, and a
+                missing key raises ``KeyError``. If ``"intersection"``, only
+                the keys that both tensordicts have are computed, and the
+                other keys are dropped. Any other value replaces the missing
+                entries on both sides of the operation.
 
         """
         keys, vals = self._items_list(True, True)
@@ -2460,12 +2471,13 @@ class _PointwiseOps:
             other (TensorDict, Tensor or Number): the divisor.
 
         Keyword Args:
-            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
-                If none is provided, the two tensordicts key list must match exactly.
-                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
-                and other keys will be ignored.
-                In all other cases, ``default`` will be used for all missing entries on both sides of the
-                operation.
+            default (torch.Tensor or str, optional): the value to use for an
+                entry that only one of the two tensordicts has. If ``None``
+                (default), the two tensordicts must have the same keys, and a
+                missing key raises ``KeyError``. If ``"intersection"``, only
+                the keys that both tensordicts have are computed, and the
+                other keys are dropped. Any other value replaces the missing
+                entries on both sides of the operation.
 
         """
         keys, vals = self._items_list(True, True)

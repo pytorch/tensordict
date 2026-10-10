@@ -960,6 +960,26 @@ class _ShapeOps:
         """Stacks tensordicts into a single tensordict along the given dimension.
 
         This call is equivalent to calling :func:`torch.stack` but is compatible with torch.compile.
+        The tensordicts must have the same batch size and the same keys.
+        Otherwise, the call raises ``RuntimeError``. To stack tensordicts with
+        different keys or shapes, use :meth:`~.lazy_stack`. See
+        :ref:`stacking`.
+
+        Args:
+            input (sequence of TensorDictBase): the tensordicts to stack.
+            dim (int, optional): the new batch dimension. Defaults to ``0``.
+
+        Keyword Args:
+            out (TensorDictBase, optional): a tensordict to write the result
+                into.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> a = TensorDict(x=torch.zeros(3), batch_size=[3])
+            >>> b = TensorDict(x=torch.ones(3), batch_size=[3])
+            >>> TensorDict.stack([a, b]).batch_size
+            torch.Size([2, 3])
 
         """
         from tensordict._torch_func import _stack
@@ -973,6 +993,25 @@ class _ShapeOps:
         """Concatenates tensordicts into a single tensordict along the given dimension.
 
         This call is equivalent to calling :func:`torch.cat` but is compatible with torch.compile.
+        The tensordicts must have the same keys, and the same batch size
+        except along ``dim``.
+
+        Args:
+            input (sequence of TensorDictBase): the tensordicts to concatenate.
+            dim (int, optional): the batch dimension to concatenate along.
+                Defaults to ``0``.
+
+        Keyword Args:
+            out (TensorDictBase, optional): a tensordict to write the result
+                into.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> a = TensorDict(x=torch.zeros(3), batch_size=[3])
+            >>> b = TensorDict(x=torch.ones(3), batch_size=[3])
+            >>> TensorDict.cat([a, b]).batch_size
+            torch.Size([6])
 
         """
         from tensordict._torch_func import _cat
@@ -985,7 +1024,19 @@ class _ShapeOps:
     def lazy_stack(cls, input, dim: int = 0, *, out=None, **kwargs):
         """Creates a lazy stack of tensordicts.
 
-        See :meth:`~tensordict.LazyStackTensorDict.lazy_stack` for details.
+        A lazy stack keeps the tensordicts as they are and stacks their values
+        only when you read them. The tensordicts can have different keys and
+        different feature shapes. See :ref:`stacking`, and
+        :func:`tensordict.lazy_stack` for the arguments.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> a = TensorDict(x=torch.zeros(3), batch_size=[3])
+            >>> b = TensorDict(y=torch.ones(3), batch_size=[3])
+            >>> stack = TensorDict.lazy_stack([a, b])
+            >>> type(stack).__name__, stack.batch_size
+            ('LazyStackedTensorDict', torch.Size([2, 3]))
         """
         from tensordict._lazy import LazyStackedTensorDict
 
@@ -993,9 +1044,24 @@ class _ShapeOps:
 
     @classmethod
     def maybe_dense_stack(cls, input, dim: int = 0, *, out=None, **kwargs):
-        """Attempts to make a dense stack of tensordicts, and falls back on lazy stack when required..
+        """Attempts to make a dense stack of tensordicts, and falls back on lazy stack when required.
 
-        See :meth:`~tensordict.LazyStackTensorDict.maybe_dense_stack` for details.
+        The result is a :class:`~tensordict.TensorDict` if the tensordicts
+        have the same keys and shapes, and a
+        :class:`~tensordict.LazyStackedTensorDict` otherwise. See
+        :ref:`stacking`, and :func:`tensordict.maybe_dense_stack` for the
+        arguments.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> a = TensorDict(x=torch.zeros(3), batch_size=[3])
+            >>> b = TensorDict(x=torch.ones(3), batch_size=[3])
+            >>> c = TensorDict(y=torch.ones(3), batch_size=[3])
+            >>> type(TensorDict.maybe_dense_stack([a, b])).__name__
+            'TensorDict'
+            >>> type(TensorDict.maybe_dense_stack([a, c])).__name__
+            'LazyStackedTensorDict'
         """
         from tensordict._lazy import LazyStackedTensorDict
 
@@ -1108,7 +1174,7 @@ class _ShapeOps:
         Args:
             dim (int): the dimension along which collect the elements
             index (torch.Tensor): a long tensor which number of dimension matches
-                the one of the tensordict with only one dimension differring between
+                the one of the tensordict with only one dimension differing between
                 the two (the gathering dimension). Its elements refer to the
                 index to be gathered along the required dimension.
             out (TensorDictBase, optional): a destination tensordict. It must

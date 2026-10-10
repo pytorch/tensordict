@@ -483,7 +483,7 @@ class _DeviceOps:
                     Since :class:`~tensordict.TensorDictBase` instances do not have
                     a dtype, the dtype is gathered from the example leaves.
                     If there are more than one dtype, then no dtype
-                    casting is undertook.
+                    casting is done.
 
             non_blocking_pin (bool, optional): if ``True``, the tensors are pinned before
                 being sent to device. This will be done asynchronously but can be

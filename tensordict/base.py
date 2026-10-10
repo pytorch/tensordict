@@ -3220,7 +3220,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return out[idx]
 
     def get_item_shape(self, key: NestedKey):
-        """Returns the shape of the entry, possibly avoiding recurring to :meth:`~.get`."""
+        """Returns the shape of the entry, without reading it with :meth:`~.get` when possible.
+
+        Args:
+            key (NestedKey): the key of the entry.
+        """
         return _shape(self.get(key))
 
     @_lock_blocked
