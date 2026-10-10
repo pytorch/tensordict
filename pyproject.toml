@@ -72,7 +72,7 @@ combine-as-imports = true
 [project]
 name = "tensordict"
 dynamic = ["version"]
-description = "TensorDict is a pytorch dedicated tensor container."
+description = "A dict[str, torch.Tensor] that behaves like one tensor."
 authors = [
   { name="Vincent Moens", email="vincentmoens@gmail.com" },
   { name="Peter Sharpe", email="peterdsharpe@gmail.com" },
