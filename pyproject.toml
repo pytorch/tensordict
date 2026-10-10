@@ -129,6 +129,11 @@ include-package-data = false
 [tool.setuptools.packages.find]
 exclude = ["test*", "tutorials*", "packaging*", "docs*", "benchmarks*"]
 
+[tool.setuptools.package-data]
+# PEP 561: type checkers use the inline annotations and stubs of a package
+# that ships this marker.
+tensordict = ["py.typed"]
+
 [tool.setuptools_scm]
 # Use SETUPTOOLS_SCM_PRETEND_VERSION=M.Major.Minor to set the version for stable releases
 version_scheme = "post-release"
