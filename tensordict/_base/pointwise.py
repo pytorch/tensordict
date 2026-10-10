@@ -1710,19 +1710,19 @@ class _PointwiseOps:
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
     ) -> Self:  # noqa: D417
-        r"""Subtracts `self` from :attr:`other`, scaled by :attr:`alpha`, from ``self``.
+        r"""Subtracts ``self``, scaled by :attr:`alpha`, from :attr:`other`.
 
         .. math::
-            \text{{out}}_i = \text{{input}}_i - \text{{alpha}} \times \text{{other}}_i
+            \text{{out}}_i = \text{{other}}_i - \text{{alpha}} \times \text{{input}}_i
 
         Supports broadcasting,
         type promotion, and integer, float, and complex inputs.
 
         Args:
-            other (TensorDict, Tensor or Number): the tensor or number to subtract from ``self``.
+            other (TensorDict, Tensor or Number): the tensor or number to subtract ``self`` from.
 
         Keyword Args:
-            alpha (Number): the multiplier for :attr:`other`.
+            alpha (Number): the multiplier for ``self``.
             default (torch.Tensor or str, optional): the default value to use for exclusive entries.
                 If none is provided, the two tensordicts key list must match exactly.
                 If ``default="intersection"`` is passed, only the intersecting key sets will be considered
@@ -1743,7 +1743,8 @@ class _PointwiseOps:
         else:
             other_val = other
         if alpha is not None:
-            vals = torch._foreach_neg(torch._foreach_sub(vals, other_val, alpha=alpha))
+            # other - alpha * self, as torch.rsub: alpha scales self, not other
+            vals = torch._foreach_add(torch._foreach_mul(vals, -alpha), other_val)
         else:
             vals = torch._foreach_neg(torch._foreach_sub(vals, other_val))
         items = dict(zip(keys, vals))

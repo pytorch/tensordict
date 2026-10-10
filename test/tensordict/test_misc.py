@@ -260,6 +260,22 @@ class TestPointwiseOps:
         assert "d" not in tdsub
         assert "b" in tdsub
 
+    @pytest.mark.parametrize("other_type", ["tensordict", "scalar", "0-dim tensor"])
+    def test_rsub_alpha(self, other_type):
+        x = torch.tensor([1.0, 2.0])
+        y = torch.tensor([10.0, 10.0])
+        td = TensorDict(a=x, b={"c": x})
+        if other_type == "tensordict":
+            other = TensorDict(a=y, b={"c": y})
+        elif other_type == "scalar":
+            other, y = 10.0, 10.0
+        else:
+            other = y = torch.tensor(10.0)
+        expected = torch.rsub(x, y, alpha=2)
+        result = td.rsub(other, alpha=2)
+        assert (result["a"] == expected).all()
+        assert (result["b", "c"] == expected).all()
+
     @pytest.mark.parametrize("locked", [True, False])
     def test_add_(self, locked):
         td = self.dummy_td_0
