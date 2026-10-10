@@ -252,9 +252,9 @@ pip install tensordict-nightly
 **From source with an existing PyTorch install**:
 
 tensordict is pure Python, so building it from source needs no compiler. The
-build requirement `setuptools_scm` is installed by pip unless you pass
-`--no-build-isolation`. `--no-deps` also skips the runtime dependencies, so
-install them first:
+build requirements `setuptools>=77` and `setuptools_scm` are installed by pip
+unless you pass `--no-build-isolation`. `--no-deps` also skips the runtime
+dependencies, so install them first:
 
 ```bash
 pip install numpy cloudpickle packaging orjson "pyvers>=0.2,<0.3"

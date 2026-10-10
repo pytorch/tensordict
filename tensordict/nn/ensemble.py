@@ -115,14 +115,14 @@ class EnsembleModule(TensorDictModuleBase):
             for params_copy in parameters.unbind(0):
                 self.reset_parameters_recursive(params_copy)
                 params_pointers.append(params_copy)
-            return LazyStackedTensorDict.lazy_stack(params_pointers, -1)
+            return LazyStackedTensorDict.lazy_stack(params_pointers, 0)
         else:
             # In case the user has added other neural networks to the EnsembleModule
             # besides those in self.module
             child_mods = [
                 mod
                 for name, mod in self.named_children()
-                if name != "module" and name != "ensemble_parameters"
+                if name not in ("module", "ensemble_parameters", "params_td")
             ]
             if child_mods:
                 warnings.warn(

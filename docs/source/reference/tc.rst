@@ -119,9 +119,14 @@ Multiple flags can be combined in the brackets:
   >>> class Foo(TensorClass["nocast", "frozen"]):
   ...     x: int
 
-The bracket form is the one that static type-checkers (mypy, pyright) resolve
-correctly via :meth:`~object.__class_getitem__`, so IDE completion on instance
-attributes works without further configuration.
+Pyright accepts the bracket and the kwargs forms. Mypy does not evaluate
+:meth:`~object.__class_getitem__` in a list of base classes and rejects the
+bracket form, so use the kwargs form (``class Foo(TensorClass, autocast=True)``)
+in code checked by mypy.
+
+Type-checkers do not understand the decorator form: they know the fields of a
+``@tensorclass`` class but neither its TensorDict methods nor its
+``batch_size`` and ``device`` arguments. Use inheritance in type-checked code.
 
 The available flags are:
 

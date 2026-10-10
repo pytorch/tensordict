@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Tuple
 import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import _SubTensorDict, TensorDict, TensorDictBase
+from tensordict.base import is_tensor_collection
 from tensordict.persistent import PersistentTensorDict
 
 # implement_for and is_compiling stay importable from here for the deprecated
@@ -137,6 +138,14 @@ def _tensordict_unflatten(values: List[Any], context: Context) -> Dict[Any, Any]
         # with its batch_size would specialize them (Dynamo shows SymInts as
         # ints, hence the is_dynamo_compiling() check). Reconstruct from the
         # leading batch_dims dimensions of the actual tensor shapes.
+        # A nested tensordict without leaves has the batch size [0] * batch_dims,
+        # or its stored one, which is static: read the batch size from another
+        # value when there is one.
+        shapes = [
+            _shape(v)
+            for v in values
+            if hasattr(v, "shape") and not (is_tensor_collection(v) and v.is_empty())
+        ] or shapes
         batch_size = shapes[0][:batch_dims]
     else:
         if shapes and any(s[:batch_dims] != batch_size for s in shapes):

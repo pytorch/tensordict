@@ -100,6 +100,19 @@ class TestH5Serialization:
         assert is_non_tensor(td_recover.get("f"))
         assert is_non_tensor(td_recover.get(("g", "h")))
 
+    def test_rename_key_missing(self, tmp_path):
+        # the error names the missing source key, not the free destination
+        td = TensorDict({"a": torch.zeros(3), ("b", "c"): torch.zeros(3)}, [3])
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        with pytest.raises(KeyError, match="key nope not found"):
+            h5td.rename_key_("nope", "x")
+        with pytest.raises(KeyError, match="key b/nope not found"):
+            h5td.rename_key_(("b", "nope"), "x")
+        with pytest.raises(KeyError, match="key a already present"):
+            h5td.rename_key_("nope", "a")
+        assert set(h5td.keys(True, True)) == {"a", ("b", "c")}
+        h5td.close()
+
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_auto_batch_size(tmpdir):
@@ -284,6 +297,20 @@ class TestH5Indexing:
             assert h5td[idx].get(key).shape == expected.shape, key
             assert (h5td[idx].get(key) == expected).all(), key
 
+    @pytest.mark.parametrize("idx", [slice(0, 2), torch.tensor([1, 3])])
+    def test_index_masked_fill_(self, tmp_path, idx):
+        # h5td[idx] writes to the file: only the masked rows are filled
+        td = TensorDict(
+            {"a": torch.arange(8.0).view(4, 2), "nested": {"b": torch.arange(4)}},
+            batch_size=[4],
+        )
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        mask = torch.tensor([True, False])
+        h5td[idx].masked_fill_(mask, -1)
+        td[idx] = td[idx].masked_fill(mask, -1)
+        for key in td.keys(True, True):
+            assert (h5td.get(key) == td.get(key)).all(), key
+
     def test_index_reads_only_selected_rows(self, data, monkeypatch):
         # Slicing must not load whole datasets from storage
         _, h5td = data
@@ -350,6 +377,25 @@ class TestH5Indexing:
         for i, element in enumerate(elements):
             assert type(element) is H5Data
             assert element.a == td["a"][i]
+
+    @pytest.mark.parametrize("method", ["update_at_", "sub_update_"])
+    def test_update_at_nested_keys_to_update(self, tmp_path, method):
+        td = TensorDict(
+            a=torch.ones(3, 2),
+            n=TensorDict(b=torch.ones(3, 2), c=torch.ones(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        dest = td.clone().zero_()
+        if method == "update_at_":
+            dest.update_at_(h5td, slice(0, 3), keys_to_update=[("n", "b")])
+        else:
+            dest._get_sub_tensordict(slice(0, 3)).update_(
+                h5td, keys_to_update=[("n", "b")]
+            )
+        assert (dest["n", "b"] == 1).all()
+        assert (dest["n", "c"] == 0).all()
+        assert (dest["a"] == 0).all()
 
     def test_keys_contains(self, data):
         _, h5td = data

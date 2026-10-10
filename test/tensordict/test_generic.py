@@ -17,7 +17,7 @@ import sys
 import threading
 import warnings
 import weakref
-from collections import UserDict
+from collections import namedtuple, UserDict
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +28,8 @@ import pytest
 import tensordict.base as tensordict_base
 import torch
 from tensordict import (
+    from_any,
+    from_tuple,
     is_leaf_nontensor,
     lazy_stack,
     LazyStackedTensorDict,
@@ -1349,6 +1351,33 @@ class TestGeneric:
         assert TensorDict.from_any(d)["a"] == 0
         assert isinstance(TensorDict.from_any(d)["a"], torch.Tensor)
 
+    def test_module_level_from_any_from_tuple(self):
+        # tensordict.from_any and tensordict.from_tuple match the classmethods,
+        # also for dicts and for containers that hold a dict
+        @dataclass
+        class MyClass:
+            d: dict
+
+        NT = namedtuple("NT", ["a", "d"])
+        objs = [
+            {"a": torch.zeros(3), "b": {"c": torch.ones(3, 2)}},
+            UserDict(a=torch.zeros(3)),
+            (torch.zeros(3), {"x": torch.ones(3)}),
+            NT(a=torch.zeros(3), d={"x": torch.ones(3)}),
+            MyClass(d={"x": torch.ones(3)}),
+        ]
+        for obj in objs:
+            td = from_any(obj, auto_batch_size=True)
+            expected = TensorDict.from_any(obj, auto_batch_size=True)
+            assert isinstance(td, TensorDict)
+            assert td.batch_size == expected.batch_size == (3,)
+            assert (td == expected).all()
+        obj = (torch.zeros(3), {"x": torch.ones(3)})
+        td = from_tuple(obj, batch_size=[3])
+        assert isinstance(td, TensorDict)
+        assert td.batch_size == (3,)
+        assert (td == TensorDict.from_tuple(obj, batch_size=[3])).all()
+
     def test_from_dataclass(self):
         @dataclass
         class MyClass:
@@ -2376,6 +2405,11 @@ class TestGeneric:
 
         assert td.is_locked
         assert td["b"].is_locked
+
+        # the entries pickle by the files of td_base
+        td_pickle = pickle.loads(pickle.dumps(td))
+        assert td_pickle["b", "c"].filename == td_base["b", "c"].filename
+        assert (td_pickle == td).all()
 
         td_load = TensorDict.load_memmap(tmpdir).memmap_()
         assert td_load.saved_path is not None
@@ -4251,6 +4285,15 @@ class TestGeneric:
             td0 = td0.squeeze(0)
             assert_shared(td0)
 
+            # Indexing propagates the shared status if it gives a view
+            td0 = td[0]
+            assert_shared(td0)
+
+            # torch reads a bool as a 0-d mask, which copies
+            for index in (True, False, (0, True), torch.tensor(True)):
+                td0 = td[index]
+                assert_not_shared(td0)
+
     def test_sorted_keys(self):
         td = TensorDict(
             {
@@ -4561,6 +4604,55 @@ class TestGeneric:
         torch.testing.assert_close(cummax.values, -cummin.values)
         torch.testing.assert_close(cummax.indices, cummin.indices)
 
+    @pytest.mark.parametrize("reduce", [False, True])
+    @pytest.mark.parametrize(
+        "reduction",
+        [
+            "sum",
+            "nansum",
+            "mean",
+            "nanmean",
+            "std",
+            "var",
+            "prod",
+            "quantile",
+            "amax",
+            "amin",
+            "max",
+            "min",
+        ],
+    )
+    def test_reduction_dim_none(self, reduction, reduce):
+        # dim=None reduces over all the elements, as a call without dim does
+        td = TensorDict(
+            a=torch.randn(3, 4, 5),
+            b=TensorDict(c=torch.randn(3, 4, 5, 6), batch_size=(3, 4, 5)),
+            batch_size=(3, 4),
+        )
+        args = (0.5,) if reduction == "quantile" else ()
+        result = getattr(td, reduction)(*args, dim=None, reduce=reduce)
+        expected = getattr(td, reduction)(*args, reduce=reduce)
+        if reduce:
+            torch.testing.assert_close(result, expected)
+        else:
+            assert result.batch_size == torch.Size([])
+            assert result["b"].batch_size == torch.Size([])
+            assert_allclose_td(result, expected)
+
+    @pytest.mark.parametrize(
+        "reduction",
+        ["sum", "nansum", "mean", "nanmean", "std", "var", "quantile", "amax", "amin"],
+    )
+    def test_reduction_dim_none_keepdim(self, reduction):
+        # With keepdim=True, each leaf is reduced as torch reduces it with dim=None
+        td = TensorDict(a=torch.randn(3, 4, 5), batch_size=(3, 4))
+        args = (0.5,) if reduction == "quantile" else ()
+        result = getattr(td, reduction)(*args, dim=None, keepdim=True)
+        assert result.batch_size == torch.Size([1, 1])
+        torch.testing.assert_close(
+            result["a"], getattr(td["a"], reduction)(*args, dim=None, keepdim=True)
+        )
+
     @pytest.mark.parametrize(
         "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "quantile"]
     )
@@ -4634,7 +4726,7 @@ class TestGeneric:
         # Test multiple quantiles
         quantiles = torch.tensor([0.25, 0.5, 0.75])
         multi_quantile = td.quantile(quantiles, dim=0)
-        assert multi_quantile.batch_size == torch.Size([4])
+        assert multi_quantile.batch_size == torch.Size([3, 4])
         assert multi_quantile["a"].shape == torch.Size([3, 4, 5])
 
         # Test feature dimension
@@ -4646,6 +4738,42 @@ class TestGeneric:
         quantile_keepdim = td.quantile(0.5, dim=0, keepdim=True)
         assert quantile_keepdim.batch_size == torch.Size([1, 4])
         assert quantile_keepdim["a"].shape == torch.Size([1, 4, 5])
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"dim": 0},
+            {"dim": -1},
+            {"dim": 0, "keepdim": True},
+            {"keepdim": True},
+            {"dim": "feature"},
+        ],
+        ids=["dim", "neg_dim", "dim_keepdim", "keepdim", "feature"],
+    )
+    def test_quantile_tensor_q(self, kwargs):
+        # With a 1-d tensor q, the result stacks the results of each quantile
+        # along a new first dim, as torch.quantile does
+        td = TensorDict(
+            a=torch.randn(3, 4, 5),
+            b=TensorDict(c=torch.randn(3, 4, 5, 6), batch_size=(3, 4, 5)),
+            batch_size=(3, 4),
+        )
+        q = torch.tensor([0.25, 0.5])
+        result = td.quantile(q, **kwargs)
+        expected = torch.stack([td.quantile(q_i.item(), **kwargs) for q_i in q])
+        assert result.batch_size == expected.batch_size
+        assert result["b"].batch_size == expected["b"].batch_size
+        assert_allclose_td(result, expected)
+        assert_allclose_td(result.unbind(0)[1], expected[1])
+        # A 0-d tensor q adds no dim
+        assert td.quantile(q[0], **kwargs).batch_size == expected.batch_size[1:]
+
+        if "dim" in kwargs:
+            td.names = ["x", "y"]
+            result = td.quantile(q, **kwargs)
+            expected = td.quantile(0.5, **kwargs)
+            assert result.names == [None, *expected.names]
+            assert result["b"].names == [None, *expected["b"].names]
 
     def test_subclassing(self):
         class SubTD(TensorDict): ...

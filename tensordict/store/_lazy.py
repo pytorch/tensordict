@@ -126,9 +126,9 @@ class _StoreStackElementView(TensorDictBase):
         all_keys = self._get_all_keys()
         key_path = key
 
-        # Nested prefix
+        # Nested prefix, in the order of the keys view
         prefix_check = key_path + _KEY_SEP
-        nested_keys = [k for k in all_keys if k.startswith(prefix_check)]
+        nested_keys = sorted(k for k in all_keys if k.startswith(prefix_check))
         if nested_keys:
             result = self._run_sync(
                 self._parent._abatch_get_element_keys(self._element_idx, nested_keys)
@@ -505,7 +505,9 @@ class _StoreStackElementView(TensorDictBase):
         )
 
     def _memmap_(self, **kw):
-        raise RuntimeError(f"Cannot call memmap on a {type(self).__name__}.")
+        if kw["inplace"]:
+            raise RuntimeError(f"Cannot call memmap on a {type(self).__name__}.")
+        return self.to_tensordict()._memmap_(**kw)
 
     def make_memmap(self, key, shape, *, dtype=None, robust_key=True):
         raise RuntimeError(f"Cannot make memmap on a {type(self).__name__}.")
@@ -591,7 +593,9 @@ class _LazyStackedStoreKeysView(_TensorDictKeysView):
         td = self.tensordict
         all_keys = td._get_all_keys()
         seen = set()
-        for full_key in all_keys:
+        # Sorted as in _StoreTDKeysView. _get_str sorts the paths of a nested
+        # tensordict too, so that values() and items() follow this order.
+        for full_key in sorted(all_keys):
             parts = full_key.split(_KEY_SEP)
             if self.include_nested:
                 key = tuple(parts) if len(parts) > 1 else parts[0]
@@ -1535,9 +1539,9 @@ class LazyStackedTensorDictStore(TensorDictBase):
         key_path = key
         all_keys = self._get_all_keys()
 
-        # Check nested
+        # Check nested, in the order of the keys view
         prefix_check = key_path + _KEY_SEP
-        nested_keys = [k for k in all_keys if k.startswith(prefix_check)]
+        nested_keys = sorted(k for k in all_keys if k.startswith(prefix_check))
         if nested_keys:
             # Return full stacked tensor for each nested leaf, build TD
             result = self._run_sync(self._abatch_get_at(nested_keys, slice(None)))
@@ -1755,19 +1759,34 @@ class LazyStackedTensorDictStore(TensorDictBase):
         async def _arename():
             all_keys = await self._aget_all_keys()
             if old_path in all_keys:
+                moves = [
+                    (self._data_key(old_path), self._data_key(new_path)),
+                    (self._meta_key(old_path), self._meta_key(new_path)),
+                    (self._idx_key(old_path), self._idx_key(new_path)),
+                ]
+                # Only leaves whose elements differ in shape or dtype have an
+                # offset table, and empty leaves may have no data. RENAME fails
+                # on a missing key, so a key that the leaf lacks is deleted at
+                # the destination instead.
                 pipe = self._client.pipeline()
-                pipe.rename(self._data_key(old_path), self._data_key(new_path))
-                pipe.rename(self._meta_key(old_path), self._meta_key(new_path))
+                for src, _ in moves:
+                    pipe.exists(src)
+                found = await pipe.execute()
+                pipe = self._client.pipeline()
+                for (src, dst), src_found in zip(moves, found):
+                    if src_found:
+                        pipe.rename(src, dst)
+                    else:
+                        pipe.delete(dst)
                 pipe.srem(self._keys_registry_key, old_path)
                 pipe.sadd(self._keys_registry_key, new_path)
-                # Try renaming idx key (may not exist for homogeneous)
-                try:
-                    pipe.rename(self._idx_key(old_path), self._idx_key(new_path))
-                except Exception:
-                    pass
                 await pipe.execute()
 
         self._run_sync(_arename())
+        if self._meta_cache is not None:
+            # old_path is gone, and a leaf at new_path may have been replaced
+            self._meta_cache.pop(old_path, None)
+            self._meta_cache.pop(new_path, None)
         return self
 
     def entry_class(self, key: NestedKey) -> type:
@@ -2264,7 +2283,21 @@ class LazyStackedTensorDictStore(TensorDictBase):
         existsok,
         robust_key,
     ):
-        raise RuntimeError(f"Cannot call memmap on a {type(self).__name__} in-place.")
+        if inplace:
+            raise RuntimeError(
+                f"Cannot call memmap on a {type(self).__name__} in-place."
+            )
+        return self.to_tensordict()._memmap_(
+            prefix=prefix,
+            copy_existing=copy_existing,
+            executor=executor,
+            futures=futures,
+            inplace=False,
+            like=like,
+            share_non_tensor=share_non_tensor,
+            existsok=existsok,
+            robust_key=robust_key,
+        )
 
     def make_memmap(self, key, shape, *, dtype=None, robust_key=True):
         raise RuntimeError(

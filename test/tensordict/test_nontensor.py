@@ -218,6 +218,7 @@ class TestNonTensorData:
             lambda x: torch.tile(x, (2, 1)),
             lambda x: x.broadcast_to((2, 2, 3)),
             lambda x: x.reshape(3, 2),
+            lambda x: torch.reshape(x, (3, 2)),
         ],
         ids=[
             "flip",
@@ -228,6 +229,7 @@ class TestNonTensorData:
             "tile",
             "broadcast_to",
             "reshape",
+            "torch.reshape",
         ],
     )
     def test_shape_ops_preserve_non_tensor_values(self, op, container):
@@ -752,6 +754,18 @@ class TestNonTensorData:
         )
         assert [x.tolist() for x in td.get("a").tolist()] == [[6, 7], [6, 7], [4, 5]]
         assert td["b"].tolist() == [1.0, 1.0, 1.0]
+
+    @pytest.mark.parametrize("batch_size", [(), (3,), (3, 2)])
+    def test_set_at_empty_index(self, batch_size):
+        # The index () selects the whole entry, as for a tensor entry. A
+        # NonTensorData cannot be indexed with it, which used to raise.
+        expected = TensorDict(a="s1", batch_size=batch_size).get("a").tolist()
+        td = TensorDict(a="s0", batch_size=batch_size)
+        assert td.set_at_("a", "s1", ()) is td
+        assert td.get("a").tolist() == expected
+        td = TensorDict(a="s0", batch_size=batch_size)
+        td[()] = TensorDict(a="s1", batch_size=batch_size)
+        assert td.get("a").tolist() == expected
 
     def test_setitem_edge_case(self):
         s = NonTensorStack("a string")
@@ -1379,6 +1393,25 @@ class TestNonTensorData:
         assert tdv.view(60).tolist() == [str(i) for i in range(60)]
         assert tdv.flatten().tolist() == [str(i) for i in range(60)]
 
+    def test_where_copies_entries(self):
+        # The result has its own entries, which hold the input data as they are
+        class NoDeepCopy:
+            def __deepcopy__(self, memo):
+                raise TypeError("cannot deep-copy")
+
+        condition = torch.tensor([True, False])
+        tensor = NonTensorStack("a", "b")
+        other = NonTensorStack("x", "y")
+        result = tensor.where(condition, other)
+        assert result.tolist() == ["a", "y"]
+        result[0] = "z"
+        result[1] = "z"
+        assert tensor.tolist() == ["a", "b"]
+        assert other.tolist() == ["x", "y"]
+        data = [NoDeepCopy() for _ in range(4)]
+        result = NonTensorStack(*data[:2]).where(condition, NonTensorStack(*data[2:]))
+        assert result.tolist() == [data[0], data[3]]
+
     def test_where(self):
         condition = torch.tensor([True, False])
         tensor = NonTensorStack(
@@ -1404,6 +1437,17 @@ class TestNonTensorData:
         )
         result = tensor.where(condition=condition, other=other, out=out, pad=0)
         assert result.tolist() == [["a"], ["a"]]
+
+    def test_torch_where_non_tensor_data(self):
+        # NonTensorData.where does not select elementwise, so torch.where
+        # is not passed through to it
+        condition = torch.tensor([True, False])
+        with pytest.raises(TypeError, match="Multiple dispatch failed"):
+            torch.where(
+                condition,
+                NonTensorData("a", batch_size=(2,)),
+                NonTensorData("b", batch_size=(2,)),
+            )
 
     def test_linked_list_str(self):
         td = TensorDict(a=NonTensorStack("foo", "bar"), batch_size=(2,))

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel", "setuptools_scm"]
+requires = ["setuptools>=77", "wheel", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [tool.ruff]
@@ -80,7 +80,8 @@ authors = [
   { name="Achintya Paningapalli", email="apaninga@berkeley.edu" }
 ]
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3.10",

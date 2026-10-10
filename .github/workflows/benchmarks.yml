@@ -50,7 +50,7 @@ jobs:
       run:
         shell: bash -l {0}
     container:
-      image: nvidia/cuda:12.8.0-runtime-ubuntu22.04
+      image: nvidia/cuda:13.0.0-runtime-ubuntu22.04
       options: ${{ matrix.container-options }}
     steps:
       - name: Who triggered this?
@@ -95,7 +95,7 @@ jobs:
           source .venv/local/bin/activate
           echo "=== uv version ==="
           uv --version
-          uv pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128
+          uv pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu130
           uv pip install "setuptools" "wheel"
           uv pip install pytest pytest-benchmark "zarr>=3.0" h5py
           # Do not resolve runtime dependencies here: we want to keep the PyTorch build (nightly)
