@@ -335,6 +335,25 @@ class TestH5Indexing:
         with pytest.raises(KeyError):
             h5td.get_at("missing", 0)
 
+    @pytest.mark.parametrize("method", ["update_at_", "sub_update_"])
+    def test_update_at_nested_keys_to_update(self, tmp_path, method):
+        td = TensorDict(
+            a=torch.ones(3, 2),
+            n=TensorDict(b=torch.ones(3, 2), c=torch.ones(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        dest = td.clone().zero_()
+        if method == "update_at_":
+            dest.update_at_(h5td, slice(0, 3), keys_to_update=[("n", "b")])
+        else:
+            dest._get_sub_tensordict(slice(0, 3)).update_(
+                h5td, keys_to_update=[("n", "b")]
+            )
+        assert (dest["n", "b"] == 1).all()
+        assert (dest["n", "c"] == 0).all()
+        assert (dest["a"] == 0).all()
+
     def test_keys_contains(self, data):
         _, h5td = data
         assert "a" in h5td.keys()

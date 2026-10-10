@@ -4550,6 +4550,36 @@ class TestTensorDicts(TestTensorDictsBase):
         td.update_at_(td0, 0)
         assert (td[0] == 0).all()
 
+    def test_update_at_nested_dict(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td.unlock_()
+        td.set(("n", "x"), torch.zeros(td.shape, device=device))
+        td.set(("n", "y"), torch.zeros(td.shape, device=device))
+        td.update_at_({"n": {"x": torch.ones(td.shape[1:], device=device)}}, 0)
+        assert (td["n", "x"][0] == 1).all()
+        assert (td["n", "x"][1:] == 0).all()
+        assert (td["n", "y"] == 0).all()
+
+    def test_update_at_nested_keys_to_update(self, td_name, device):
+        if td_name in ("stacked_td", "nested_stacked_td"):
+            pytest.skip("LazyStackedTensorDict.update_at_ has no keys_to_update")
+        td = getattr(self, td_name)(device)
+        td.unlock_()
+        shape = td.shape[1:]
+        td.set(("n", "x"), torch.zeros(td.shape, device=device))
+        td.set(("n", "y"), torch.zeros(td.shape, device=device))
+        x = torch.ones(shape, device=device)
+        sources = [{("n", "x"): x, ("n", "y"): x * 2}]
+        if td_name not in ("permute_td", "unsqueezed_td", "squeezed_td"):
+            # set_at_ cannot write a nested tensordict into these
+            sources.append(
+                TensorDict({"n": {"x": x, "y": x * 3}}, batch_size=shape, device=device)
+            )
+        for source in sources:
+            td.update_at_(source, 0, keys_to_update=[("n", "y")])
+            assert (td["n", "y"][0] == source["n", "y"]).all()
+            assert (td["n", "x"] == 0).all()
+
     def test_update_at_nested_time_slice(self, td_name, device):
         td = TensorDict(
             {
