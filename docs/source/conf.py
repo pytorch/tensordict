@@ -196,6 +196,8 @@ html_theme_options = {
     "collapse_navigation": True,
     "navigation_depth": 2,
     "navigation_with_keys": False,
+    # The summary of llms.txt and of the page metadata (the PyPI summary).
+    "llm_description": "A dict[str, torch.Tensor] that behaves like one tensor.",
 }
 
 theme_variables = pytorch_sphinx_theme2.get_theme_variables()
@@ -217,6 +219,8 @@ html_context = {
     "feedback_url": "https://github.com/pytorch/tensordict",
     # Colab opens the notebooks that gh-pages serves for this version.
     "colab_branch": f"gh-pages/{version if RELEASE else 'main'}",
+    # Follow the light or dark setting of the reader's system.
+    "default_mode": "auto",
 }
 html_css_files = ["css/custom.css"]
 html_js_files = [
@@ -537,8 +541,17 @@ def _set_header_nav(app, pagename, templatename, context, doctree):
     ]
 
 
+def _keep_sidebar(app, pagename, templatename, context, doctree):
+    # The theme drops the sidebar of a page that it cannot place under a
+    # top-level page: the home page, and the gallery index, which no toctree
+    # lists. The sidebar of this site lists every page from the root, so it is
+    # never empty.
+    context["suppress_sidebar_toctree"] = lambda **kwargs: False
+
+
 def setup(app):
     app.connect("html-page-context", _set_header_nav, priority=600)
+    app.connect("html-page-context", _keep_sidebar, priority=600)
     app.connect("autodoc-process-signature", _process_signature)
     app.connect("autodoc-skip-member", _skip_shared_member)
     app.connect("missing-reference", _resolve_shared_method)
