@@ -904,6 +904,47 @@ class TestTensorDictStore:
         assert torch.allclose(full[:3], torch.zeros(3, 3))
         assert torch.allclose(full[4:], torch.zeros(6, 3))
 
+    @pytest.mark.parametrize(
+        "index",
+        [3, slice(2, 5), [0, 9], torch.tensor([1, 3]), torch.arange(10) < 4, (..., 3)],
+    )
+    def test_set_at_update_at_nested(self, store_td, index):
+        """set_at_ and update_at_ write each leaf of a tensordict value at the
+        index, as on a TensorDict."""
+        td = TensorDict(
+            a=torch.zeros(10),
+            n=TensorDict(
+                b=torch.zeros(10),
+                m=TensorDict(c=torch.zeros(10, 2, dtype=torch.long), batch_size=[10]),
+                batch_size=[10],
+            ),
+            batch_size=[10],
+        )
+        td["n"].set_non_tensor("s", "x")
+        store_td.update(td)
+        value = td[index] + 1
+        value["n"].set_non_tensor("s", "y")
+        nested = value["n"] + 1
+        nested.set_non_tensor("s", "z")
+        for target in (store_td, td):
+            target.update_at_(value, index)
+            target.set_at_("n", nested, index)
+            target.set_at_(("n", "m"), nested["m"] + 1, index)
+
+        def check():
+            for key in td.keys(True, True):
+                torch.testing.assert_close(store_td[key], td[key])
+            assert store_td.get(("n", "s")).tolist() == td.get(("n", "s")).tolist()
+
+        check()
+        # a leaf that the store lacks raises before anything is written
+        missing = (nested + 2).set("z", nested["b"])
+        missing.set_non_tensor("s", "w")
+        with pytest.raises(KeyError, match="not found"):
+            store_td.set_at_("n", missing, index)
+        check()
+        assert "z" not in store_td["n"].keys()
+
     # ---- Metadata caching tests ----
 
     def test_cache_metadata_default(self, store_td):
@@ -1308,6 +1349,48 @@ class TestLazyStackedTensorDictStore:
         store_td.set_at_("a", -2, index)
         expected[index] = -2
         torch.testing.assert_close(store_td["a"], expected)
+
+    @pytest.mark.parametrize(
+        "index",
+        [3, slice(1, 4), [0, 4], (slice(None), 1), (..., 1), torch.arange(5) > 2],
+    )
+    def test_set_at_update_at_nested(self, store_kwargs, index):
+        """set_at_ and update_at_ write each leaf of a tensordict value at the
+        index, as on a lazy stack."""
+        td = TensorDict(
+            a=torch.zeros(5, 4),
+            n=TensorDict(
+                b=torch.zeros(5, 4),
+                m=TensorDict(
+                    c=torch.zeros(5, 4, 2, dtype=torch.long), batch_size=[5, 4]
+                ),
+                batch_size=[5, 4],
+            ),
+            batch_size=[5, 4],
+        )
+        lazy_td = lazy_stack(list(td.unbind(0)))
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            value = td[index] + 1
+            for target in (store_td, lazy_td):
+                target.update_at_(value, index)
+                target.set_at_("n", value["n"] + 1, index)
+                target.set_at_(("n", "m"), value["n", "m"] + 2, index)
+
+            def check():
+                for key in lazy_td.keys(True, True):
+                    torch.testing.assert_close(store_td[key], lazy_td[key])
+
+            check()
+            # a leaf that the store lacks raises before anything is written
+            missing = (value["n"] + 3).set("z", value["n", "b"])
+            with pytest.raises(KeyError):
+                store_td.set_at_("n", missing, index)
+            check()
+            assert "z" not in store_td["n"].keys()
+        finally:
+            store_td.clear_redis()
+            store_td.close()
 
     @pytest.mark.parametrize("index", [1, [0, 2], (slice(None), [1, 3])])
     def test_setitem_scalar(self, store_stack, index):
