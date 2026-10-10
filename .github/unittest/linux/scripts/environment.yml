@@ -21,6 +21,7 @@ dependencies:
     - numpy<2.0.0
     - mosaicml-streaming
     - mypy
+    - beartype
     - pandas
     - pyarrow
     - redis

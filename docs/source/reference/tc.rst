@@ -447,6 +447,39 @@ The constructor casts lists, NumPy arrays and Python numbers passed to a
 Mypy reports any ``frozen=True`` tensorclass as "Frozen dataclass cannot
 inherit from a non-frozen dataclass".
 
+.. _tensorclass-runtime-typing:
+
+Runtime type checking
+---------------------
+
+Runtime type checkers such as `beartype <https://github.com/beartype/beartype>`_
+can decorate a tensorclass. They check the methods written in the class body
+and skip the methods that tensorclass adds, which are marked with
+:func:`typing.no_type_check`. ``__init__`` keeps the annotations of the fields,
+so ``jaxtyping.jaxtyped`` still checks the values passed to it.
+
+.. code-block::
+
+  >>> from beartype import beartype
+  >>> @beartype
+  ... class Obs(TensorClass):
+  ...     a: torch.Tensor
+  ...
+  ...     def scaled(self, k: float) -> torch.Tensor:
+  ...         return self.a * k
+  >>> obs = Obs(a=torch.zeros(3), batch_size=[3])
+  >>> obs.scaled(2.0)  # accepted
+  >>> obs.scaled("2")  # raises BeartypeCallHintParamViolation
+
+Some methods of a tensorclass have the names of builtins, such as ``bool``,
+``int``, ``float``, ``set`` and ``type``. With
+``from __future__ import annotations``, beartype looks up the names in the
+annotations of a method in the namespace of the class. The ``@tensorclass``
+decorator puts these methods in that namespace, so an ``int`` annotation names
+the method there and decorating the class fails. A subclass of
+:class:`~tensordict.TensorClass` inherits these methods instead; with the
+decorator, write ``builtins.int``.
+
 .. _tensorclass-legacy-decorator:
 
 Legacy: the ``@tensorclass`` decorator
