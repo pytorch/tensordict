@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4965+g82ff18eae.d20261010)
+                  main (0.14.0.dev4966+g8f7eae976.d20261010)
                 </div>
               
             
@@ -279,6 +279,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../compatibility.html">Cross-class compatibility</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../distributed.html">TensorDict in distributed settings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../compile.html">torch.compile, torch.func, torch.export and CUDA graphs</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../fx.html">Tracing TensorDictModule</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../saving.html">Saving TensorDict and tensorclass objects</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../storage.html">Storing large heterogeneous data</a></li>
@@ -654,6 +655,8 @@ to produce simpler graphs.</p></li>
 branch) and prefer <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.where.html#torch.where" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.where()</span></code></a> over Python <code class="docutils literal notranslate"><span class="pre">if</span></code>/<code class="docutils literal notranslate"><span class="pre">else</span></code> on tensor
 values.</p></li>
 </ul>
+<p>See <a class="reference internal" href="../compile.html#compile"><span class="std std-ref">torch.compile, torch.func, torch.export and CUDA graphs</span></a> for what recompiles or breaks the graph, and how to work
+around it.</p>
 </section>
 <section id="serialization">
 <h2>Serialization<a class="headerlink" href="#serialization" title="Permalink to this heading">¶</a></h2>

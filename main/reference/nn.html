@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4965+g82ff18eae.d20261010)
+                  main (0.14.0.dev4966+g8f7eae976.d20261010)
                 </div>
               
             
@@ -279,6 +279,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../compatibility.html">Cross-class compatibility</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../distributed.html">TensorDict in distributed settings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../compile.html">torch.compile, torch.func, torch.export and CUDA graphs</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../fx.html">Tracing TensorDictModule</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../saving.html">Saving TensorDict and tensorclass objects</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../storage.html">Storing large heterogeneous data</a></li>
@@ -685,7 +686,9 @@ We can duplicate and reinitialize model copies using the <a class="reference int
 <h2>Compiling TensorDictModules<a class="headerlink" href="#compiling-tensordictmodules" title="Permalink to this heading">¶</a></h2>
 <p>Since v0.5, TensorDict components are compatible with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">compile()</span></code></a>.
 For instance, a <a class="reference internal" href="generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> module can be compiled with
-<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>.
+See <a class="reference internal" href="../compile.html#compile"><span class="std std-ref">torch.compile, torch.func, torch.export and CUDA graphs</span></a> for what recompiles or breaks the graph, and for
+<a class="reference internal" href="generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule" title="tensordict.nn.CudaGraphModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">CudaGraphModule</span></code></a>.</p>
 </section>
 <section id="distributions">
 <h2>Distributions<a class="headerlink" href="#distributions" title="Permalink to this heading">¶</a></h2>

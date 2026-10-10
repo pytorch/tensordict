@@ -1,0 +1,1067 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torch.compile, torch.func, torch.export and CUDA graphs &mdash; tensordict main documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="_static/sg_gallery-rendered-html.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Tracing TensorDictModule" href="fx.html" />
+    <link rel="prev" title="TensorDict in distributed settings" href="distributed.html" />
+  <!-- Google Analytics -->
+  
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'GTM-T8XT4PS');
+    </script>
+  
+  <!-- End Google Analytics -->
+  
+
+  
+  <script src="_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li class="active docs-active">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-orange-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/audio/stable/index.html">
+                  <span class="dropdown-title">torchaudio</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/text/stable/index.html">
+                  <span class="dropdown-title">torchtext</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/vision/stable/index.html">
+                  <span class="dropdown-title">torchvision</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torcharrow">
+                  <span class="dropdown-title">torcharrow</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/data">
+                  <span class="dropdown-title">TorchData</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchrec">
+                  <span class="dropdown-title">TorchRec</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/serve/">
+                  <span class="dropdown-title">TorchServe</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchx/">
+                  <span class="dropdown-title">TorchX</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/xla">
+                  <span class="dropdown-title">PyTorch on XLA Devices</span>
+                  <p></p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-arrow">
+                Resources
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/features">
+                  <span class="dropdown-title">About</span>
+                  <p>Learn about PyTorch’s features and capabilities</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn about the PyTorch foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class="dropdown-title">Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered.</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch.</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class="dropdown-title">Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class="dropdown-title">Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/hub">
+                  <span class="dropdown-title">Models (Beta)</span>
+                  <p>Discover, publish, and reuse pre-trained models</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">GitHub</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+
+            
+              
+              
+                <div class="version">
+                  main (0.14.0.dev4966+g8f7eae976.d20261010)
+                </div>
+              
+            
+
+            
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+            
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_shapes.html">Manipulating the shape of a TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_slicing.html">Slicing, Indexing, and Masking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_keys.html">Manipulating the keys of a TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_preallocation.html">Pre-allocating memory with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_memory.html">Simplifying PyTorch Memory Management with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/streamed_tensordict.html">Building tensordicts from streams</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/serialization_speed.html">Benchmarking TensorDict serialization speed</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/zarr_storage.html">Storing TensorDicts in zarr</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_module.html">TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/functional.html">Functional Programming with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/export.html">Exporting tensordict modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/data_fashion.html">Using TensorDict for datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="compatibility.html">Cross-class compatibility</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">TensorDict in distributed settings</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">torch.compile, torch.func, torch.export and CUDA graphs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fx.html">Tracing TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="saving.html">Saving TensorDict and tensorclass objects</a></li>
+<li class="toctree-l1"><a class="reference internal" href="storage.html">Storing large heterogeneous data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="printing.html">Printing and Display</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference/index.html">API Reference</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+      <li>torch.compile, torch.func, torch.export and CUDA graphs</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="_sources/compile.rst.txt" rel="nofollow"><img src="_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+          
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <section id="torch-compile-torch-func-torch-export-and-cuda-graphs">
+<span id="compile"></span><h1>torch.compile, torch.func, torch.export and CUDA graphs<a class="headerlink" href="#torch-compile-torch-func-torch-export-and-cuda-graphs" title="Permalink to this heading">¶</a></h1>
+<p>This page lists what works when tensordicts and tensorclasses go through
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>, <a class="reference external" href="https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.func</span></code></a>, <a class="reference external" href="https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.export.export()</span></code></a> and CUDA
+graphs, what makes a function recompile or fail, and how to work around each
+limit.</p>
+<section id="how-tensordicts-compile">
+<h2>How tensordicts compile<a class="headerlink" href="#how-tensordicts-compile" title="Permalink to this heading">¶</a></h2>
+<p><a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, <a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>
+and tensorclasses are registered as pytree nodes, so <a class="reference external" href="https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.func</span></code></a> and
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.export.export()</span></code></a> see their tensors as leaves. Inside
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>, Dynamo traces the Python code of tensordict like user
+code: indexing, <code class="docutils literal notranslate"><span class="pre">apply</span></code>, arithmetic, reductions, shape operations, stacking
+and construction all end up in the graph. Most operations compile with
+<code class="docutils literal notranslate"><span class="pre">fullgraph=True</span></code>. With that flag, a graph break raises an error instead of
+splitting the function into several graphs.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">tensorclass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">Transition</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">obs</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">reward</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@torch</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">fullgraph</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">... </span><span class="k">def</span><span class="w"> </span><span class="nf">scale</span><span class="p">(</span><span class="n">td</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">td</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">/</span> <span class="n">x</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="o">*</span> <span class="mi">2</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@torch</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">fullgraph</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">... </span><span class="k">def</span><span class="w"> </span><span class="nf">step</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">Transition</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">obs</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">reward</span> <span class="o">*</span> <span class="mf">0.5</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">obs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="nb">next</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">obs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">8</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">8</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">scale</span><span class="p">(</span><span class="n">td</span><span class="p">)</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">torch.Size([8])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">step</span><span class="p">(</span><span class="n">Transition</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">8</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">8</span><span class="p">]))</span><span class="o">.</span><span class="n">reward</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="go">tensor(0.5000)</span>
+</pre></div>
+</div>
+<p>To find out why a function recompiles or breaks, run it with
+<code class="docutils literal notranslate"><span class="pre">TORCH_LOGS=&quot;recompiles&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">TORCH_LOGS=&quot;graph_breaks&quot;</span></code> in the
+environment, or call <code class="docutils literal notranslate"><span class="pre">torch._logging.set_logs(recompiles=True)</span></code> first.</p>
+</section>
+<section id="recompiles">
+<h2>Recompiles<a class="headerlink" href="#recompiles" title="Permalink to this heading">¶</a></h2>
+<p>Dynamo specializes a compiled function on the structure of its inputs and
+installs guards that check it on every call. A call that fails a guard
+compiles the function again. By default, a function compiles at most 8 times
+(<code class="docutils literal notranslate"><span class="pre">torch._dynamo.config.recompile_limit</span></code>). After that, it runs in eager mode,
+or raises <code class="docutils literal notranslate"><span class="pre">FailOnRecompileLimitHit</span></code> with <code class="docutils literal notranslate"><span class="pre">fullgraph=True</span></code>. With
+tensordicts, a function recompiles for the following reasons.</p>
+<dl>
+<dt>Another key set</dt><dd><p>An operation that goes over all the entries (arithmetic, <code class="docutils literal notranslate"><span class="pre">apply</span></code>,
+<code class="docutils literal notranslate"><span class="pre">clone</span></code>, reductions) is compiled for the keys it saw. An input with another
+key set compiles a new graph. Reading one entry (<code class="docutils literal notranslate"><span class="pre">td[&quot;obs&quot;]</span></code>) does not
+depend on the other keys.</p>
+</dd>
+<dt>Writing into an input tensordict</dt><dd><p><code class="docutils literal notranslate"><span class="pre">td[&quot;y&quot;]</span> <span class="pre">=</span> <span class="pre">...</span></code>, <code class="docutils literal notranslate"><span class="pre">td.set</span></code>, <code class="docutils literal notranslate"><span class="pre">td.update</span></code> and a
+<a class="reference internal" href="reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> (which writes its <code class="docutils literal notranslate"><span class="pre">out_keys</span></code> into
+its input) recompile whenever the key set of the input changes, even when
+the key written already exists. Dynamo guards on all the keys of a dict that
+the function writes into
+(<a class="reference external" href="https://github.com/pytorch/tensordict/issues/1606">#1606</a>,
+<a class="reference external" href="https://github.com/pytorch/pytorch/issues/175858">pytorch/pytorch#175858</a>).
+A write into a nested tensordict only depends on the keys of that nested
+tensordict. If the key sets vary, build a new tensordict in the compiled
+function and write it into the input outside:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@torch</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">fullgraph</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">... </span><span class="k">def</span><span class="w"> </span><span class="nf">policy</span><span class="p">(</span><span class="n">td</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="n">td</span><span class="p">[</span><span class="s2">"obs"</span><span class="p">]</span><span class="o">.</span><span class="n">tanh</span><span class="p">(),</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">td</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">obs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"action"</span><span class="p">]</span> <span class="o">=</span> <span class="n">policy</span><span class="p">(</span><span class="n">td</span><span class="p">)[</span><span class="s2">"action"</span><span class="p">]</span>
+</pre></div>
+</div>
+</dd>
+<dt>Another batch size</dt><dd><p>The first call with a new batch size recompiles once with dynamic shapes
+(automatic dynamic shapes), and later sizes reuse that graph.
+<code class="docutils literal notranslate"><span class="pre">torch.compile(fn,</span> <span class="pre">dynamic=True)</span></code> avoids the second compilation.
+<code class="docutils literal notranslate"><span class="pre">torch._dynamo.mark_dynamic</span></code> on an entry does not: the batch size holds
+Python ints, and a function that builds a tensordict with
+<code class="docutils literal notranslate"><span class="pre">batch_size=td.batch_size</span></code> then raises <code class="docutils literal notranslate"><span class="pre">ConstraintViolationError</span></code>
+(pytorch/tensordict#2077).
+<code class="docutils literal notranslate"><span class="pre">split</span></code>, <code class="docutils literal notranslate"><span class="pre">chunk</span></code>, <code class="docutils literal notranslate"><span class="pre">unbind</span></code> and <code class="docutils literal notranslate"><span class="pre">tolist</span></code> recompile for each batch
+size, also after that.</p>
+</dd>
+<dt>Lazy stacks of another length</dt><dd><p>A <a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a> is specialized on the number of
+tensordicts it stacks, also with <code class="docutils literal notranslate"><span class="pre">dynamic=True</span></code>. A new stack of the same
+length and structure reuses the graph.</p>
+</dd>
+<dt>Strings in the output</dt><dd><p>Each distinct <code class="docutils literal notranslate"><span class="pre">str</span></code> value of a tensorclass field or of a
+<a class="reference internal" href="reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> entry recompiles the function when the
+function returns it, for instance through <code class="docutils literal notranslate"><span class="pre">apply</span></code>, <code class="docutils literal notranslate"><span class="pre">clone</span></code> or the
+constructor of a tensorclass. Dynamo specializes the graph on the value.
+Reading only the tensors does not recompile. Return tensors from the
+compiled function and rebuild the tensorclass outside, or keep the strings
+out of the compiled function.</p>
+</dd>
+<dt>New tensorclasses and pytree flattening</dt><dd><p>A compiled function that flattens a tensordict as a pytree (a compiled
+<code class="docutils literal notranslate"><span class="pre">torch.vmap</span></code>, <code class="docutils literal notranslate"><span class="pre">torch.utils._pytree.tree_map</span></code>) recompiles after a new
+tensorclass or <a class="reference internal" href="reference/generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict" title="tensordict.TypedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TypedTensorDict</span></code></a> subclass is defined,
+because PyTorch guards on the size of its pytree registry. Define the
+classes before the first call.</p>
+</dd>
+</dl>
+<p>With <code class="docutils literal notranslate"><span class="pre">TORCH_LOGS=&quot;recompiles&quot;</span></code>, the guard that failed names the cause. A
+guard on <code class="docutils literal notranslate"><span class="pre">len(td._tensordict)</span></code> means that the key set of a tensordict that
+the function writes into changed. A guard on <code class="docutils literal notranslate"><span class="pre">td._batch_size[0]</span></code> means a new
+batch size.</p>
+</section>
+<section id="known-limits">
+<h2>Known limits<a class="headerlink" href="#known-limits" title="Permalink to this heading">¶</a></h2>
+<p>The following patterns break the graph (an error with <code class="docutils literal notranslate"><span class="pre">fullgraph=True</span></code>).
+The error messages in the table are those of PyTorch 2.13, 2.14 and the 2.16
+nightly. Other versions can word them differently.</p>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 35%" />
+<col style="width: 35%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Pattern</p></th>
+<th class="head"><p>What happens</p></th>
+<th class="head"><p>Workaround</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">td</span> <span class="pre">*</span> <span class="pre">t</span></code>, <code class="docutils literal notranslate"><span class="pre">t</span> <span class="pre">*</span> <span class="pre">td</span></code>, <code class="docutils literal notranslate"><span class="pre">td</span> <span class="pre">+</span> <span class="pre">t</span></code>, <code class="docutils literal notranslate"><span class="pre">td</span> <span class="pre">-=</span> <span class="pre">t</span></code> where <code class="docutils literal notranslate"><span class="pre">t</span></code> is a
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> (also with tensorclasses)</p></td>
+<td><p>Dynamo turns the operator into a <code class="docutils literal notranslate"><span class="pre">Tensor</span></code> method and does not call
+<code class="docutils literal notranslate"><span class="pre">TensorDict.__mul__</span></code>
+(<a class="reference external" href="https://github.com/pytorch/pytorch/issues/200455">pytorch/pytorch#200455</a>):
+<code class="docutils literal notranslate"><span class="pre">Unsupported:</span> <span class="pre">All</span> <span class="pre">__torch_function__</span> <span class="pre">overrides</span> <span class="pre">returned</span>
+<span class="pre">NotImplemented</span></code>. Operators with a Python number or another tensordict
+work.</p></td>
+<td><p>Call the method: <code class="docutils literal notranslate"><span class="pre">td.mul(t)</span></code>, <code class="docutils literal notranslate"><span class="pre">td.add(t)</span></code>, <code class="docutils literal notranslate"><span class="pre">td.sub_(t)</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">td.all()</span></code>, <code class="docutils literal notranslate"><span class="pre">td.any()</span></code> without <code class="docutils literal notranslate"><span class="pre">dim</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">(td</span> <span class="pre">==</span> <span class="pre">other).all():</span></code></p></td>
+<td><p>These return a Python <code class="docutils literal notranslate"><span class="pre">bool</span></code>, so the graph depends on tensor values:
+<code class="docutils literal notranslate"><span class="pre">Unsupported:</span> <span class="pre">Data-dependent</span> <span class="pre">branching</span></code>.</p></td>
+<td><p>Reduce in the graph:
+<code class="docutils literal notranslate"><span class="pre">torch.stack([v.all()</span> <span class="pre">for</span> <span class="pre">v</span> <span class="pre">in</span> <span class="pre">td.values(include_nested=True,</span>
+<span class="pre">leaves_only=True)]).all()</span></code>,
+and select with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.where.html#torch.where" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.where()</span></code></a> instead of <code class="docutils literal notranslate"><span class="pre">if</span></code>. <code class="docutils literal notranslate"><span class="pre">td.all(dim=0)</span></code>
+returns a tensordict and compiles.</p></td>
+</tr>
+<tr class="row-even"><td><p>Boolean-mask indexing: <code class="docutils literal notranslate"><span class="pre">td[mask]</span></code>, <code class="docutils literal notranslate"><span class="pre">td[mask]</span> <span class="pre">=</span> <span class="pre">other[mask]</span></code></p></td>
+<td><p>The result has a data-dependent shape, also with
+<code class="docutils literal notranslate"><span class="pre">torch._dynamo.config.capture_dynamic_output_shape_ops</span> <span class="pre">=</span> <span class="pre">True</span></code>:
+<code class="docutils literal notranslate"><span class="pre">Could</span> <span class="pre">not</span> <span class="pre">guard</span> <span class="pre">on</span> <span class="pre">data-dependent</span> <span class="pre">expression</span></code>.</p></td>
+<td><p>Keep the shapes fixed: <code class="docutils literal notranslate"><span class="pre">torch.where(mask,</span> <span class="pre">td,</span> <span class="pre">other)</span></code>,
+<code class="docutils literal notranslate"><span class="pre">td.where(mask,</span> <span class="pre">other)</span></code> or <code class="docutils literal notranslate"><span class="pre">td.masked_fill(~mask,</span> <span class="pre">0.0)</span></code>, or index
+outside the compiled function.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">memmap</span></code>, <code class="docutils literal notranslate"><span class="pre">memmap_like</span></code>, <code class="docutils literal notranslate"><span class="pre">share_memory_</span></code>, <code class="docutils literal notranslate"><span class="pre">to_namedtuple</span></code>,
+<code class="docutils literal notranslate"><span class="pre">data_ptr</span></code></p></td>
+<td><p>Eager-only operations (files, shared memory, Python classes built at
+run time).</p></td>
+<td><p>Call them outside the compiled function.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">loss.backward()</span></code> or <code class="docutils literal notranslate"><span class="pre">torch.autograd.grad</span></code> inside the compiled
+function</p></td>
+<td><p>Dynamo does not trace the backward pass:
+<code class="docutils literal notranslate"><span class="pre">Unsupported</span> <span class="pre">Tensor.backward()</span> <span class="pre">call</span></code>.</p></td>
+<td><p>Return the loss and call <code class="docutils literal notranslate"><span class="pre">loss.backward()</span></code> outside.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Building a <a class="reference internal" href="reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> inside the
+compiled function (<code class="docutils literal notranslate"><span class="pre">seq[:2](td)</span></code>, <code class="docutils literal notranslate"><span class="pre">seq.select_subsequence(...)</span></code>)</p></td>
+<td><p>Dynamo cannot build the new module inside the graph:
+<code class="docutils literal notranslate"><span class="pre">Unexpected</span> <span class="pre">type</span> <span class="pre">in</span> <span class="pre">sourceless</span> <span class="pre">builder</span></code>.</p></td>
+<td><p>Build the subsequence once, outside, and call it inside.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="torch-func">
+<h2>torch.func<a class="headerlink" href="#torch-func" title="Permalink to this heading">¶</a></h2>
+<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a> maps over the batch dimensions of tensordicts and
+tensorclasses: <code class="docutils literal notranslate"><span class="pre">in_dims</span></code> and <code class="docutils literal notranslate"><span class="pre">out_dims</span></code> refer to batch dimensions, and
+tensordict methods, arithmetic included, work on the per-sample tensordict.
+<code class="docutils literal notranslate"><span class="pre">torch.compile(torch.vmap(fn))</span></code> compiles the same code.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">5</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">vmap</span><span class="p">(</span><span class="k">lambda</span> <span class="n">t</span><span class="p">:</span> <span class="p">(</span><span class="n">t</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">exp</span><span class="p">())(</span><span class="n">td</span><span class="p">)</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">torch.Size([5])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">vmap</span><span class="p">(</span><span class="k">lambda</span> <span class="n">t</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">t</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span> <span class="o">@</span> <span class="n">x</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="kc">None</span><span class="p">))(</span><span class="n">td</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">torch.Size([5])</span>
+</pre></div>
+</div>
+<p>Under <a class="reference external" href="https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.func</span></code></a> transforms, pointwise tensordict methods run one
+operation per entry, so they are slower than in eager mode
+(<a class="reference external" href="https://github.com/pytorch/pytorch/issues/200456">pytorch/pytorch#200456</a>).</p>
+<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.func.grad.html#torch.func.grad" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.func.grad()</span></code></a>, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.func.grad_and_value.html#torch.func.grad_and_value" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">grad_and_value()</span></code></a>,
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.func.vjp.html#torch.func.vjp" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vjp()</span></code></a> and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.func.jacrev.html#torch.func.jacrev" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">jacrev()</span></code></a> accept tensordict
+inputs. The gradient is a tensordict with the structure of the input:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">grads</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">func</span><span class="o">.</span><span class="n">grad</span><span class="p">(</span><span class="k">lambda</span> <span class="n">t</span><span class="p">:</span> <span class="p">(</span><span class="n">t</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">())(</span><span class="n">td</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">assert_close</span><span class="p">(</span><span class="n">grads</span><span class="p">[</span><span class="s2">"a"</span><span class="p">],</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">td</span><span class="p">[</span><span class="s2">"a"</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>To call a module with other parameters, extract them with
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.from_module" title="tensordict.TensorDict.from_module"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_module()</span></code></a> and swap them in with
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.to_module" title="tensordict.TensorDict.to_module"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_module()</span></code></a>. This works in eager mode, compiled
+and under <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a>, which gives model ensembles and per-sample
+gradients:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">with</span> <span class="n">params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">module</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ensemble</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_modules</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">)])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">vmap</span><span class="p">(</span><span class="n">call</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="kc">None</span><span class="p">))(</span><span class="n">ensemble</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">torch.Size([4, 10, 1])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">loss</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">call</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">module</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">per_sample</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">vmap</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">func</span><span class="o">.</span><span class="n">grad</span><span class="p">(</span><span class="n">loss</span><span class="p">),</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="mi">0</span><span class="p">))(</span><span class="n">params</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">per_sample</span><span class="p">[</span><span class="s2">"weight"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">torch.Size([10, 1, 3])</span>
+</pre></div>
+</div>
+<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.func.functional_call.html#torch.func.functional_call" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.func.functional_call()</span></code></a> only accepts a <code class="docutils literal notranslate"><span class="pre">dict</span></code>: pass
+<code class="docutils literal notranslate"><span class="pre">params.flatten_keys(&quot;.&quot;).to_dict()</span></code> instead of the tensordict. See the
+<a class="reference internal" href="tutorials/functional.html"><span class="doc">Functional Programming with TensorDict</span></a> tutorial for more. If the process also creates a
+<a class="reference internal" href="reference/generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule" title="tensordict.nn.CudaGraphModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">CudaGraphModule</span></code></a>, see the warning in
+<a class="reference internal" href="#compile-cudagraphs"><span class="std std-ref">CUDA graphs</span></a>.</p>
+</section>
+<section id="torch-export">
+<h2>torch.export<a class="headerlink" href="#torch-export" title="Permalink to this heading">¶</a></h2>
+<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.export.export()</span></code></a> accepts tensordict and tensorclass inputs and
+outputs, in strict and non-strict mode (non-strict is the default). To keep
+the batch dimension dynamic, give <code class="docutils literal notranslate"><span class="pre">dynamic_shapes</span></code> one entry per entry of
+the tensordict, in the order of <code class="docutils literal notranslate"><span class="pre">td.keys()</span></code> (insertion order), with a nested
+list for a nested tensordict:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Model</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">c</span><span class="o">=</span><span class="n">td</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">td</span><span class="p">[</span><span class="s2">"n"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">],</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">td</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">make</span><span class="p">(</span><span class="n">batch</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+<span class="gp">... </span>        <span class="n">n</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">batch</span><span class="p">]),</span>
+<span class="gp">... </span>        <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">batch</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">export</span><span class="o">.</span><span class="n">Dim</span><span class="p">(</span><span class="s2">"batch"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">program</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">export</span><span class="o">.</span><span class="n">export</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">Model</span><span class="p">(),</span> <span class="p">(</span><span class="n">make</span><span class="p">(</span><span class="mi">4</span><span class="p">),),</span> <span class="n">dynamic_shapes</span><span class="o">=</span><span class="p">([{</span><span class="mi">0</span><span class="p">:</span> <span class="n">batch</span><span class="p">},</span> <span class="p">[{</span><span class="mi">0</span><span class="p">:</span> <span class="n">batch</span><span class="p">}]],)</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">program</span><span class="o">.</span><span class="n">module</span><span class="p">()(</span><span class="n">make</span><span class="p">(</span><span class="mi">6</span><span class="p">))</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">torch.Size([6])</span>
+</pre></div>
+</div>
+<p>Without <code class="docutils literal notranslate"><span class="pre">dynamic_shapes</span></code>, a call with another batch size fails a guard of
+the exported program (<code class="docutils literal notranslate"><span class="pre">AssertionError:</span> <span class="pre">Guard</span> <span class="pre">failed</span></code>). Non-strict export
+does not support tensordicts with dimension names or non-tensor entries
+(pytorch/tensordict#2073, pytorch/tensordict#2074): use <code class="docutils literal notranslate"><span class="pre">strict=True</span></code> for
+them, and keep the non-tensor entries out of the output.
+To export a <a class="reference internal" href="reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> so that it takes and
+returns plain tensors, see the <a class="reference internal" href="tutorials/export.html"><span class="doc">Exporting tensordict modules</span></a> tutorial. If the process
+also creates a <a class="reference internal" href="reference/generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule" title="tensordict.nn.CudaGraphModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">CudaGraphModule</span></code></a>, see the warning in
+<a class="reference internal" href="#compile-cudagraphs"><span class="std std-ref">CUDA graphs</span></a>.</p>
+</section>
+<section id="cuda-graphs">
+<span id="compile-cudagraphs"></span><h2>CUDA graphs<a class="headerlink" href="#cuda-graphs" title="Permalink to this heading">¶</a></h2>
+<p>Two tools record CUDA graphs. <a class="reference internal" href="reference/generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule" title="tensordict.nn.CudaGraphModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">CudaGraphModule</span></code></a> works
+with or without <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>, records one graph, and checks the
+inputs of each call against it. <code class="docutils literal notranslate"><span class="pre">torch.compile(...,</span> <span class="pre">mode=&quot;reduce-overhead&quot;)</span></code>
+needs compilation and manages its own graphs: it records a new graph for each
+new batch size.</p>
+<section id="cudagraphmodule">
+<h3>CudaGraphModule<a class="headerlink" href="#cudagraphmodule" title="Permalink to this heading">¶</a></h3>
+<p><a class="reference internal" href="reference/generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule" title="tensordict.nn.CudaGraphModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">CudaGraphModule</span></code></a> captures a function, or a
+<a class="reference internal" href="reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>, in a
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.CUDAGraph.html#torch.cuda.CUDAGraph" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.cuda.CUDAGraph</span></code></a> and replays it. The function can be compiled.
+Give it enough <code class="docutils literal notranslate"><span class="pre">warmup</span></code> calls to finish compiling, for instance
+<code class="docutils literal notranslate"><span class="pre">CudaGraphModule(torch.compile(module),</span> <span class="pre">warmup=3)</span></code>. The first
+<code class="docutils literal notranslate"><span class="pre">warmup</span> <span class="pre">-</span> <span class="pre">1</span></code> calls (<code class="docutils literal notranslate"><span class="pre">warmup=2</span></code> by default) run the function on a side
+stream. The next call runs it once more and captures the graph, and later
+calls copy their inputs into the graph’s buffers and replay it. See
+<a class="reference internal" href="reference/generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule" title="tensordict.nn.CudaGraphModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">CudaGraphModule</span></code></a> for the other requirements: no
+data-dependent control flow, and inputs that do not require gradients.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">CudaGraphModule</span><span class="p">,</span> <span class="n">TensorDictModule</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"x"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"y"</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">graph_module</span> <span class="o">=</span> <span class="n">CudaGraphModule</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">results</span> <span class="o">=</span> <span class="p">[</span>
+<span class="gp">... </span>    <span class="n">graph_module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">3</span><span class="p">,),</span> <span class="nb">float</span><span class="p">(</span><span class="n">i</span><span class="p">),</span> <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">]))</span>
+<span class="gp">... </span>    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+<span class="gp">... </span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">result</span><span class="p">[</span><span class="s2">"y"</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span><span class="p">]</span>
+<span class="go">[1.0, 2.0, 3.0, 4.0]</span>
+</pre></div>
+</div>
+<p>The replay follows these rules:</p>
+<ul class="simple">
+<li><p>The inputs must keep the shapes and batch size of the capture. A
+tensordict input without one of the <code class="docutils literal notranslate"><span class="pre">in_keys</span></code> raises a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>, and
+a tensordict input with another batch size or entry shape raises a
+<code class="docutils literal notranslate"><span class="pre">ValueError</span></code>, as a tensor input of another shape does. Extra keys are
+ignored. After the capture, a CPU input is copied to the device.</p></li>
+<li><p>The outputs are new tensors: the values written into the input
+tensordict, and the outputs of a function that returns a new tensordict or
+tensors, are clones of the graph’s buffers. A result kept from an earlier
+call keeps its values.</p></li>
+<li><p>In-place writes to the inputs inside the function (<code class="docutils literal notranslate"><span class="pre">x.add_(1)</span></code>) do not
+reach the caller’s tensors after the capture: the graph writes its own
+copies.</p></li>
+<li><p>The inputs are copied, and the graph replayed, on the current stream. If
+the inputs are written on another stream, order that work before the call,
+for instance with <code class="docutils literal notranslate"><span class="pre">torch.cuda.current_stream().wait_stream(stream)</span></code>.
+Issue consecutive calls from one stream, or order them in the same way.</p></li>
+<li><p>Arguments that are not tensors (a <code class="docutils literal notranslate"><span class="pre">float</span></code>, a <code class="docutils literal notranslate"><span class="pre">str</span></code>) must not change
+after the capture. If the function takes a tensordict, the replay uses the
+captured values and ignores the new ones without an error
+(pytorch/tensordict#2075), and every tensor must be an entry of the
+tensordict, not a separate argument. If the function takes tensors, a
+changed value raises a <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>.</p></li>
+</ul>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Creating a <a class="reference internal" href="reference/generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule" title="tensordict.nn.CudaGraphModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">CudaGraphModule</span></code></a> removes
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, <a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>
+and <a class="reference internal" href="reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a> from PyTorch’s pytree registry
+for the rest of the process, and warns about it (set
+<code class="docutils literal notranslate"><span class="pre">EXCLUDE_TD_FROM_PYTREE=1</span></code> to silence the warning). After that,
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.export.export()</span></code></a> and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.func.grad.html#torch.func.grad" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.func.grad()</span></code></a> no longer accept
+these tensordicts. <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a> still does, and tensorclasses stay
+registered (pytorch/tensordict#2076).</p>
+</div>
+</section>
+<section id="mode-reduce-overhead">
+<h3><code class="docutils literal notranslate"><span class="pre">mode=&quot;reduce-overhead&quot;</span></code><a class="headerlink" href="#mode-reduce-overhead" title="Permalink to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">torch.compile(module,</span> <span class="pre">mode=&quot;reduce-overhead&quot;)</span></code> records CUDA graphs with
+the cudagraph trees of Inductor. It works with tensordict inputs and outputs,
+and the PyTorch rules apply:</p>
+<ul class="simple">
+<li><p>The output tensors of a call are overwritten by the next call. Reading them
+afterwards raises <code class="docutils literal notranslate"><span class="pre">RuntimeError:</span> <span class="pre">Error:</span> <span class="pre">accessing</span> <span class="pre">tensor</span> <span class="pre">output</span> <span class="pre">of</span>
+<span class="pre">CUDAGraphs</span> <span class="pre">that</span> <span class="pre">has</span> <span class="pre">been</span> <span class="pre">overwritten</span> <span class="pre">by</span> <span class="pre">a</span> <span class="pre">subsequent</span> <span class="pre">run</span></code>. Clone the
+outputs that you keep (<code class="docutils literal notranslate"><span class="pre">out</span> <span class="pre">=</span> <span class="pre">compiled(td).clone()</span></code>).</p></li>
+<li><p>A function that writes in place into an input tensor (<code class="docutils literal notranslate"><span class="pre">td[&quot;x&quot;].add_(1)</span></code>)
+runs without CUDA graphs (<code class="docutils literal notranslate"><span class="pre">skipping</span> <span class="pre">cudagraphs</span> <span class="pre">due</span> <span class="pre">to</span> <span class="pre">mutated</span> <span class="pre">inputs</span></code> with
+<code class="docutils literal notranslate"><span class="pre">TORCH_LOGS=&quot;cudagraphs&quot;</span></code>).</p></li>
+<li><p>For inference, call the function under <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.no_grad.html#torch.no_grad" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.no_grad</span></code></a>. With
+gradients enabled and no backward pass, the calls run without recording a
+CUDA graph (<code class="docutils literal notranslate"><span class="pre">Running</span> <span class="pre">eager</span> <span class="pre">function</span></code> with <code class="docutils literal notranslate"><span class="pre">TORCH_LOGS=&quot;cudagraphs&quot;</span></code>).</p></li>
+</ul>
+<p>For example:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">policy</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">TensorDictModule</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span><span class="o">.</span><span class="n">cuda</span><span class="p">(),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"obs"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"action"</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">mode</span><span class="o">=</span><span class="s2">"reduce-overhead"</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+<span class="gp">... </span>    <span class="n">outputs</span> <span class="o">=</span> <span class="p">[</span>
+<span class="gp">... </span>        <span class="n">policy</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">obs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">8</span><span class="p">]))</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+<span class="gp">... </span>        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">outputs</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">"action"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">torch.Size([8, 4])</span>
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="fx.html" class="btn btn-neutral float-right" title="Tracing TensorDictModule" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="distributed.html" class="btn btn-neutral" title="TensorDict in distributed settings" accesskey="p" rel="prev"><img src="_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">torch.compile, torch.func, torch.export and CUDA graphs</a><ul>
+<li><a class="reference internal" href="#how-tensordicts-compile">How tensordicts compile</a></li>
+<li><a class="reference internal" href="#recompiles">Recompiles</a></li>
+<li><a class="reference internal" href="#known-limits">Known limits</a></li>
+<li><a class="reference internal" href="#torch-func">torch.func</a></li>
+<li><a class="reference internal" href="#torch-export">torch.export</a></li>
+<li><a class="reference internal" href="#cuda-graphs">CUDA graphs</a><ul>
+<li><a class="reference internal" href="#cudagraphmodule">CudaGraphModule</a></li>
+<li><a class="reference internal" href="#mode-reduce-overhead"><code class="docutils literal notranslate"><span class="pre">mode=&quot;reduce-overhead&quot;</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+         <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+         <script src="_static/jquery.js"></script>
+         <script src="_static/underscore.js"></script>
+         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="_static/doctools.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li class="resources-mobile-menu-title" class="active">
+            Docs
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/audio/stable/index.html">torchaudio</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/text/stable/index.html">torchtext</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/vision/stable/index.html">torchvision</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torcharrow">torcharrow</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/data">TorchData</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torchrec">TorchRec</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/serve/">TorchServe</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torchx/">TorchX</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/xla">PyTorch on XLA Devices</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            Resources
+          </li>
+
+           <ul class="resources-mobile-menu-items">
+
+            <li>
+              <a href="https://pytorch.org/features">About</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/#community-module">Community</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/resources">Developer Resources</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+
+            <li>
+              <a href="https://discuss.pytorch.org/">Forums</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/hub">Models (Beta)</a>
+            </li>
+          </ul>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

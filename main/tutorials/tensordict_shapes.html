@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4965+g82ff18eae.d20261010)
+                  main (0.14.0.dev4966+g8f7eae976.d20261010)
                 </div>
               
             
@@ -279,6 +279,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../compatibility.html">Cross-class compatibility</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../distributed.html">TensorDict in distributed settings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../compile.html">torch.compile, torch.func, torch.export and CUDA graphs</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../fx.html">Tracing TensorDictModule</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../saving.html">Saving TensorDict and tensorclass objects</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../storage.html">Storing large heterogeneous data</a></li>
@@ -663,19 +664,19 @@ like <a class="reference external" href="https://docs.pytorch.org/docs/stable/ge
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>index:
- tensor([[2, 0, 1, 0],
-        [0, 1, 3, 1],
-        [0, 2, 0, 2]])
+ tensor([[2, 2, 0, 2],
+        [1, 1, 2, 2],
+        [2, 0, 3, 3]])
 
 tensordict['a']:
- tensor([[0.5730, 0.2910, 0.0737, 0.9779],
-        [0.2664, 0.4186, 0.8053, 0.4420],
-        [0.3467, 0.3984, 0.1113, 0.7423]])
+ tensor([[0.9430, 0.6384, 0.2526, 0.2716],
+        [0.8460, 0.5686, 0.0589, 0.0525],
+        [0.7926, 0.9085, 0.2934, 0.2110]])
 
 gathered_tensordict['a']:
- tensor([[0.0737, 0.5730, 0.2910, 0.5730],
-        [0.2664, 0.4186, 0.4420, 0.4186],
-        [0.3467, 0.1113, 0.3467, 0.1113]])
+ tensor([[0.2526, 0.2526, 0.9430, 0.2526],
+        [0.5686, 0.5686, 0.0589, 0.0589],
+        [0.2934, 0.7926, 0.2110, 0.2110]])
 </pre></div>
 </div>
 <p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.006 seconds)</p>
