@@ -4,10 +4,11 @@ Devices, dtypes and memory
 ==========================
 
 This page explains where the leaves of a tensordict are and how to move
-them: the ``device`` of a tensordict and what it means for new entries,
-:meth:`~tensordict.TensorDict.to` for devices and dtypes, casting each leaf
-to its own device and dtype, and pinned memory, shared memory and
-consolidation. A *leaf* is a tensor at the end of a key path.
+them. A *leaf* is a tensor at the end of a key path. The page covers the
+``device`` of a tensordict and what it means for new entries,
+:meth:`~tensordict.TensorDict.to` for devices and dtypes, and casting each
+leaf to its own device and dtype. It ends with pinned memory, shared memory
+and consolidation.
 
 Most examples use the ``meta`` device in place of a GPU. Every PyTorch build
 has it: a tensor on the ``meta`` device has a shape and a dtype, but no data.
@@ -95,8 +96,8 @@ the cast leaves into the same tensordict and returns it.
 The ``non_blocking`` argument controls how the leaves are copied:
 
 - ``None`` (the default): the leaves are copied with ``non_blocking=True``.
-  If the target device is not a CUDA device, for example for a copy from a
-  GPU to the CPU, ``to()`` then synchronizes once, after all the copies.
+  If the target device is not a CUDA device (for example, the CPU), ``to()``
+  then synchronizes once, after all the copies.
   Under :func:`torch.compile`, these copies are blocking.
 - ``True``: the copies are non-blocking and ``to()`` does not synchronize.
   You must synchronize before you read the data.

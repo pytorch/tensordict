@@ -4,9 +4,9 @@ Printing and display
 ====================
 
 This page shows what ``print(td)`` displays for a
-:class:`~tensordict.TensorDict`, how to choose the attributes that it shows
-with :class:`~tensordict.set_printoptions`, and how to rebuild a tensordict
-from a printed one. The full list of options is in `Available options`_.
+:class:`~tensordict.TensorDict`. It also shows how to select the attributes
+in the display with :class:`~tensordict.set_printoptions`, and how to
+rebuild a tensordict from a printed one. The full list of options is in `Available options`_.
 
 What ``print`` shows
 --------------------

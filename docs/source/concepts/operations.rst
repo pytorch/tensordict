@@ -300,7 +300,7 @@ operation are used:
   :meth:`~tensordict.TensorDict.pad`, :meth:`~tensordict.TensorDict.repeat`,
   :meth:`~tensordict.TensorDict.gather`,
   :meth:`~tensordict.TensorDict.repeat_interleave`) keeps the object
-  identity and the key set of the tensordict, but each leaf storage can be
+  identity and the key set of the tensordict. Each leaf storage can be
   replaced with a newly allocated tensor. The guarantee is "no extra
   tensordict-shaped allocation". The implementation releases each old leaf
   storage as soon as its replacement is written, so that peak memory stays
@@ -464,8 +464,8 @@ tensordicts. The result is a tensordict in which the entry
     >>> J["x", "a"].shape  # output_shape + input_shape = (3, 2) + (3, 2)
     torch.Size([3, 2, 3, 2])
 
-The three transforms can fail when the batch size is not empty and each leaf
-has one element for each batch element, for example shape ``(4,)`` or
+The three transforms can fail if the batch size is not empty and each leaf
+has one element for each batch element. Examples are the shapes ``(4,)`` and
 ``(4, 1)`` with ``batch_size=[4]``. In this case, :func:`~torch.func.jacrev`
 works only if the function returns two or more keys.
 :func:`~torch.func.jacfwd` and :func:`~torch.func.hessian` fail for any number
