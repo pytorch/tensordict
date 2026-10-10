@@ -7,15 +7,13 @@ tensordict: containers and functions
 
 .. module:: tensordict
 
-A :class:`~tensordict.TensorDict` is a dictionary of tensors that share
-their leading dimensions, the *batch size*. It supports many
-:class:`torch.Tensor` operations, such as indexing, reshaping and
-:meth:`~tensordict.TensorDictBase.to`, and applies each one to every entry.
-For an introduction, see :ref:`overview`.
-
-This page lists the container classes and the methods that all
-tensordicts share, grouped by task. Each group also lists the functions
-of the ``tensordict`` module for the same task.
+This page lists the tensordict containers, and the methods that they all
+share, grouped by task. Each group also lists the functions of the
+``tensordict`` module for its task. A :class:`~tensordict.TensorDict` is a
+``dict[str, torch.Tensor]`` that behaves like one tensor. Its entries share
+their leading dimensions, the *batch size*, and an operation such as
+indexing, reshaping or :meth:`~tensordict.TensorDictBase.to` applies to every
+entry. For an introduction, see :ref:`overview`.
 
 Containers
 ----------
@@ -37,7 +35,8 @@ Its subclasses keep their entries in different places:
 :class:`MemoryMappedTensor` is not a tensordict. It is a tensor whose data
 is in a file, and the type of the entries of a memory-mapped tensordict.
 
-Other containers have their own pages: tensorclasses and non-tensor data
+Other containers have their own pages: :class:`TensorClass`, the class
+form with typed fields and methods, and non-tensor data
 (:ref:`api-tensorclass`), :class:`TypedTensorDict`
 (:ref:`api-typed-tensordict`), and the key-value stores
 (:ref:`api-storage`). To choose one, see :ref:`choosing-a-container`.

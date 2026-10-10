@@ -5,14 +5,15 @@
 Containers on storage backends
 ==============================
 
-:class:`~tensordict.TensorClass` and :class:`~tensordict.TypedTensorDict` add
-typed fields to a tensordict. Each of them can wrap a tensordict of any
-storage backend: an in-memory :class:`~tensordict.TensorDict`, an HDF5 or
-zarr file (:class:`~tensordict.PersistentTensorDict`), a Redis server
+A :class:`~tensordict.TensorClass` or a :class:`~tensordict.TypedTensorDict`
+can wrap a tensordict on any storage backend without a copy. The backends are
+an in-memory :class:`~tensordict.TensorDict`, an HDF5 or zarr file
+(:class:`~tensordict.PersistentTensorDict`), a Redis server
 (:class:`~tensordict.store.TensorDictStore`), a lazy stack
 (:class:`~tensordict.LazyStackedTensorDict`), or a memory-mapped
-``TensorDict``. This page shows how to build each combination, and lists the
-operations that behave differently on some backends.
+``TensorDict``. Code that uses the typed fields then reads and writes the file
+or the server directly. A few operations behave differently on some backends:
+see `Operations on each backend`_.
 
 To choose between ``TensorClass`` and ``TypedTensorDict``, see
 :ref:`choosing-a-container`. For the backends themselves, see :ref:`storage`
@@ -34,9 +35,9 @@ How the classes relate
 
 A ``TypedTensorDict`` is a :class:`~tensordict.TensorDictBase`. A
 ``TensorClass`` is not: it keeps its fields in a tensordict that it holds.
-Both have a ``from_tensordict(td)`` class method that wraps ``td`` without a
-copy. Reads and writes through the wrapper go to the storage of ``td``. If you
-call the constructor instead, the storage is a new in-memory ``TensorDict``.
+Both have a ``from_tensordict(td)`` class method that wraps ``td``. Reads and
+writes through the wrapper go to the storage of ``td``. If you call the
+constructor instead, the storage is a new in-memory ``TensorDict``.
 
 Operations on each backend
 --------------------------
@@ -92,27 +93,27 @@ table:
        operation does not change the storage. Write the result back with
        ``w.a = ...``, ``set_()`` or an indexed assignment.
 
-When a field is annotated with another tensorclass (``a: Pose`` or
-``a: Pose | None``) and the input is a ``TensorDict`` whose entry for it is a
-tensordict, ``from_tensordict`` builds a ``Pose`` from that entry,
-recursively. The ``Pose`` is set in a shallow copy of the input. The leaves
+Nested tensorclass fields
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A field can have another tensorclass as its type (``a: Pose`` or
+``a: Pose | None``). If the input is a ``TensorDict`` and its entry for that
+field is a tensordict, ``from_tensordict`` builds a ``Pose`` from that entry,
+recursively. The ``Pose`` goes into a shallow copy of the input. The leaves
 are shared, but the input keeps its tensordict entry, and it does not see the
 entries set later on the tensorclass. An entry with keys that ``Pose`` does
-not declare stays a tensordict. Other backends are wrapped as they are, and
-the nested entry stays a tensordict, because a tensorclass set in them would
-be written to their storage.
-
-The examples below write their files to a temporary directory:
-
-  >>> import tempfile
-  >>> tmpdir = tempfile.TemporaryDirectory()
-  >>> path = tmpdir.name
+not declare stays a tensordict. On the other backends, ``from_tensordict``
+wraps the input as it is, and the nested entry stays a tensordict, so that
+the wrapper writes nothing to their storage.
 
 A TensorClass on each backend
 -----------------------------
 
-The examples use this class:
+The examples write their files to a temporary directory, and use this class:
 
+  >>> import tempfile
+  >>> tmpdir = tempfile.TemporaryDirectory()
+  >>> path = tmpdir.name
   >>> import torch
   >>> from torch import Tensor
   >>> from tensordict import TensorDict, TensorClass

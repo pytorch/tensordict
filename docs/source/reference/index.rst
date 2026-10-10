@@ -3,10 +3,9 @@
 API reference
 =============
 
-The API reference documents each public class and function of
-tensordict. To learn how the pieces fit together, start with
-:ref:`overview` and the user guide. Each page starts with a short
-description of its names, and each name has its own page.
+Each page of the API reference lists the public classes and functions of
+one part of tensordict, and each name has its own page. To learn how the
+parts fit together, start with :ref:`overview` and the user guide.
 
 - :ref:`api-tensordict`: the container classes (``TensorDict``,
   ``LazyStackedTensorDict``, ``PersistentTensorDict``, ...), the methods

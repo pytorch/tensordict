@@ -3,17 +3,18 @@
 Printing and display
 ====================
 
-This page shows what ``print(td)`` displays for a
-:class:`~tensordict.TensorDict`. It also shows how to select the attributes
-in the display with :class:`~tensordict.set_printoptions`, and how to
-rebuild a tensordict from a printed one. The full list of options is in `Available options`_.
+``print(td)`` shows the structure of a :class:`~tensordict.TensorDict`
+without the values of its tensors: one line for each tensor, whatever its
+size. :class:`~tensordict.set_printoptions` chooses the attributes
+that the display shows, and :func:`~tensordict.parse_tensor_dict_string`
+rebuilds a tensordict from a printed one. All the options are in
+`Available options`_.
 
 What ``print`` shows
 --------------------
 
-``print(td)`` shows the structure of a tensordict, not the values of its
-tensors: the key, shape, device and dtype of each field, and the batch size
-and device of the tensordict:
+By default, the display shows the shape, device, dtype and ``is_shared`` of
+each entry, and the batch size, device and ``is_shared`` of the tensordict:
 
     >>> import torch
     >>> from tensordict import TensorDict
@@ -31,23 +32,18 @@ and device of the tensordict:
         device=None,
         is_shared=False)
 
-Configuring the display with ``set_printoptions``
--------------------------------------------------
+Choose what the display shows
+-----------------------------
 
-By default, the repr shows the shape, device, dtype and ``is_shared`` of each
-field, and the batch size, device and ``is_shared`` of the tensordict. Some
-of these attributes can be noise. For instance, if all your work is on the
-CPU and nothing is shared, ``device=cpu`` and ``is_shared=False`` are
-repeated on every line without adding information.
-
+If all your work is on the CPU and nothing is shared, ``device=cpu`` and
+``is_shared=False`` repeat on every line and tell you nothing.
 :class:`~tensordict.set_printoptions` selects the attributes that appear. It
-works as a global setter, a context manager or a decorator, as
+works for the whole process, as a context manager or as a decorator, as
 :class:`torch.no_grad` does for the last two. Its role is similar to
-:func:`torch.set_printoptions`, which is a plain function and not a context
-manager or a decorator.
+:func:`torch.set_printoptions`, which is only a function.
 
-Global configuration
-~~~~~~~~~~~~~~~~~~~~
+For the whole process
+~~~~~~~~~~~~~~~~~~~~~
 
 Call ``set_printoptions(...).set()`` to change the defaults for the rest of
 the process. ``show_device`` and ``show_is_shared`` control the lines of the
@@ -79,8 +75,8 @@ back to the defaults, set the changed options again:
     ...     show_field_is_shared=True,
     ... ).set()
 
-Scoped configuration (context manager)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+For one block of code
+~~~~~~~~~~~~~~~~~~~~~
 
 Use the context manager to change the options for one block of code. At the
 end of the block, the previous options come back:
@@ -103,8 +99,8 @@ end of the block, the previous options come back:
         device=None,
         is_shared=False)
 
-Decorator
-~~~~~~~~~
+For one function
+~~~~~~~~~~~~~~~~
 
 Decorate a function to use the options for every ``repr`` call in it. Here,
 ``show_is_shared=False`` hides the ``is_shared=`` line of the tensordict:
@@ -120,11 +116,11 @@ Decorate a function to use the options for every ``repr`` call in it. Here,
         batch_size=torch.Size([32]),
         device=None)
 
-Compact shapes-only display (``verbose=False``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Shapes only: ``verbose=False``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To see only the shapes, pass ``verbose=False``. It hides the device, dtype
-and ``is_shared`` information in one argument:
+To see only the shapes, pass ``verbose=False``. This one argument hides the
+device, the dtype and ``is_shared``:
 
     >>> with set_printoptions(verbose=False):
     ...     print(td)
@@ -198,8 +194,8 @@ Option                  Default             Description
                                              passed as ``key`` to :func:`sorted`.
 ======================  ==================  =============================================
 
-Querying the current settings
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Read the current options
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 :func:`~tensordict.get_printoptions` returns a dict with the current values:
 
@@ -207,11 +203,11 @@ Querying the current settings
     >>> get_printoptions()
     {'show_batch_size': True, 'show_device': True, ...}
 
-Reconstructing a TensorDict from its printed representation
------------------------------------------------------------
+Rebuild a tensordict from its printed form
+------------------------------------------
 
-When you debug, you can get a tensordict repr as a string, for example from a
-log file or from the terminal of a colleague.
+When you debug, you sometimes have only the printed form of a tensordict, for
+example from a log file or from the terminal of a colleague.
 :func:`~tensordict.parse_tensor_dict_string` builds a
 :class:`~tensordict.TensorDict` from that string. The result has the keys,
 shapes, dtypes and batch size of the printed tensordict, and its device if
