@@ -3269,8 +3269,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         .. warning:: ``update`` is not atomic. If one entry fails (for
             example, its shape does not match the batch size), the entries
             before it are already written. Do not catch the exception and
-            continue with the same tensordict. Update a copy, or check the
-            input first.
+            continue with the same tensordict. Update a copy, or make sure
+            that the input is valid first.
 
         Args:
             input_dict_or_td (TensorDictBase or dict, optional): input data to be written
@@ -5488,7 +5488,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         it in tensordicts of equal size and dispatching the operations over the
         desired number of workers.
 
-        The function signature should be ``Callable[[TensorDict], TensorDict | Tensor]``.
+        The function signature must be ``Callable[[TensorDict], TensorDict | Tensor]``.
         The output must support the :func:`torch.cat` operation. The function
         must be serializable.
 
@@ -5593,7 +5593,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
                 def process_data(data):
                     # The chunks of a memory-mapped tensordict are locked:
-                    # return a new tensordict instead of adding a key to ``data``.
+                    # return a new tensordict instead of adding a key to data.
                     return data.empty().set("y", data["x"] + 1)
 
                 if __name__ == "__main__":
@@ -5677,7 +5677,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         it in tensordicts of equal size and dispatching the operations over the
         desired number of workers. It will yield the results one at a time.
 
-        The function signature should be ``Callable[[TensorDict], TensorDict | Tensor]``.
+        The function signature must be ``Callable[[TensorDict], TensorDict | Tensor]``.
         The function must be serializable.
 
         .. note::
@@ -5788,7 +5788,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
                 def process_data(data):
                     # The chunks of a memory-mapped tensordict are locked:
-                    # return a new tensordict instead of adding a key to ``data``.
+                    # return a new tensordict instead of adding a key to data.
                     return data.empty().set("y", data["x"] + 1)
 
                 if __name__ == "__main__":
