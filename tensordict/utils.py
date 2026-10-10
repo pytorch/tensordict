@@ -1805,7 +1805,7 @@ def _check_keys(
         keys_set = {k for k in keys}  # noqa: C416
     else:
         keys_set: set[str] = set(keys)
-    for td in list_of_tensordicts[1:]:
+    for i, td in enumerate(list_of_tensordicts[1:], 1):
         k = td.keys(
             include_nested=include_nested,
             leaves_only=leaves_only,
@@ -1820,7 +1820,9 @@ def _check_keys(
                 k = set(k)
             if k != keys_set:
                 raise KeyError(
-                    f"got keys {keys} and {set(td.keys())} which are incompatible"
+                    f"tensordict {i} has keys {sorted(k, key=str)} but tensordict 0 "
+                    f"has keys {sorted(keys_set, key=str)}; all tensordicts must have "
+                    f"the same keys"
                 )
     if strict:
         if is_comp:
@@ -2683,12 +2685,16 @@ def _infer_size_impl(shape: List[int], numel: int) -> List[int]:
         elif shape[dim] >= 0:
             newsize *= shape[dim]
         else:
-            raise AssertionError("invalid shape dimensions")
+            raise AssertionError(
+                f"invalid shape dimensions in {list(shape)}: sizes must be non-negative or -1"
+            )
     if not (
         numel == newsize
         or (infer_dim is not None and newsize > 0 and numel % newsize == 0)
     ):
-        raise AssertionError("invalid shape")
+        raise AssertionError(
+            f"invalid shape {list(shape)} for a batch of {numel} elements"
+        )
     out = _copy(shape)
     if infer_dim is not None:
         out[infer_dim] = numel // newsize
