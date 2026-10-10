@@ -148,10 +148,11 @@ exclude_patterns = ["reference/generated/tutorials/README.rst"]
 html_theme = "pytorch_sphinx_theme2"
 html_theme_path = [pytorch_sphinx_theme2.get_html_theme_path()]
 
-# The version switcher reads this list of versions. The file is
-# docs/source/_static/versions.json: the upload job of docs.yml copies the
-# _static directory of each main build to the root of gh-pages, which
-# publishes the file at this URL. Add each new minor release to it.
+# The version switcher reads the list of versions from this URL. The source
+# of the file is docs/source/_static/versions.json. After each build of main,
+# the upload job of docs.yml copies the _static directory to the root of
+# gh-pages, and that copy is the published file. Add each new minor release
+# to the file on main.
 switcher_json_url = "https://docs.pytorch.org/tensordict/_static/versions.json"
 
 html_baseurl = "https://docs.pytorch.org/tensordict/stable/"
@@ -164,8 +165,8 @@ html_theme_options = {
         "json_url": switcher_json_url,
         "version_match": version if RELEASE else "main",
     },
-    # The build must not depend on the published site: a new version is in
-    # the list only after its build is on gh-pages.
+    # Do not download the version list during the build. The build then needs
+    # no network access, and it gives no warning before the file is published.
     "check_switcher": False,
     "show_version_warning_banner": True,
     "navbar_start": ["navbar-logo", "version-switcher"],
@@ -209,7 +210,6 @@ html_context = {
     "library_links": theme_variables.get("library_links", []),
     # Show the tutorial buttons on the sphinx-gallery pages.
     "has_sphinx_gallery": True,
-    "display_github": True,
     "github_url": "https://github.com",
     "github_user": "pytorch",
     "github_repo": "tensordict",
@@ -224,7 +224,7 @@ html_context = {
 }
 html_css_files = ["css/custom.css"]
 html_js_files = [
-    # Points the "View on GitHub" button of a tutorial to its source file.
+    # Links the "View on GitHub" button of a tutorial to its source file.
     "js/tutorial_links.js",
 ]
 
@@ -526,7 +526,8 @@ def _build_header_sections(app):
 
 
 def _set_header_nav(app, pagename, templatename, context, doctree):
-    # Runs after the theme's handler, and replaces the list that it builds.
+    # This handler runs after the handler of the theme, and replaces the list
+    # that the theme builds.
     if app.builder.name not in _header_sections:
         _header_sections[app.builder.name] = _build_header_sections(app)
     context["hierarchical_header_nav"] = [

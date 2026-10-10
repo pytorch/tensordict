@@ -1,9 +1,10 @@
-// Point the "View on GitHub" button of a tutorial to its source file.
+// Link the "View on GitHub" button of a tutorial to the source file of the
+// tutorial.
 //
-// pytorch_sphinx_theme2 sets the button to "<folder>_source/<name>.py", the
+// pytorch_sphinx_theme2 links the button to "<folder>_source/<name>.py", the
 // layout of the pytorch/tutorials repository. The tensordict tutorials are
-// in tutorials/sphinx_tuto/. The "load" event fires after the theme has set
-// the link.
+// in tutorials/sphinx_tuto/. The browser sends the "load" event after the
+// theme script sets the link, so this script runs last.
 window.addEventListener("load", function () {
   var typeEl = document.getElementById("tutorial-type");
   var githubLink = document.getElementById("github-link");
