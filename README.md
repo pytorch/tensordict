@@ -1,5 +1,5 @@
 [![Docs](https://img.shields.io/static/v1?logo=github&style=flat&color=pink&label=docs&message=tensordict)][#docs-package]
-[![Discord](https://img.shields.io/badge/Discord-blue?logo=discord&logoColor=white)](https://discord.gg/tz3TgTAe3D)
+[![Discord](https://img.shields.io/badge/Discord-blue?logo=discord&logoColor=white)](https://discord.com/invite/tz3TgTAe3D)
 [![Python version](https://img.shields.io/pypi/pyversions/tensordict.svg)](https://www.python.org/downloads/)
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)][#github-license]
 <a href="https://pypi.org/project/tensordict"><img src="https://img.shields.io/pypi/v/tensordict" alt="pypi version"></a>
@@ -7,18 +7,19 @@
 [![Conda (channel only)](https://img.shields.io/conda/vn/conda-forge/tensordict?logo=anaconda&style=flat&color=orange)][#conda-forge-package]
 
 [#docs-package]: https://docs.pytorch.org/tensordict/stable/
-[#docs-package-benchmark]: https://docs.pytorch.org/tensordict/dev/bench/
 [#github-license]: https://github.com/pytorch/tensordict/blob/main/LICENSE
-[#pepy-package]: https://pepy.tech/project/tensordict
+[#pepy-package]: https://pepy.tech/projects/tensordict
 [#conda-forge-package]: https://anaconda.org/conda-forge/tensordict
 
 # TensorDict
 
 **TensorDict is a batched, nested `dict[str, Tensor]` that behaves like a tensor.**
 
-Move it, slice it, reshape it, stack it, save it, compile it, or do arithmetic on
-it: every tensor leaf follows the same operation, and one shared `batch_size`
-keeps the structure honest.
+All tensors in a TensorDict share their leading dimensions, the `batch_size`.
+TensorDict makes sure that each tensor you write has these dimensions. When you
+index, reshape, stack, move, save or add a TensorDict, the operation applies to
+every tensor in it, the nested ones too. These tensors are the *leaves* of the
+TensorDict. A TensorDict also works under `torch.compile`.
 
 ```text
 TensorDict(batch_size=[32])
@@ -29,9 +30,10 @@ TensorDict(batch_size=[32])
     `-- obs:  Tensor[32, 128]
 ```
 
+[**Getting started**](https://docs.pytorch.org/tensordict/stable/getting_started.html) |
+[**Documentation**][#docs-package] |
 [**30-second demo**](#30-second-demo) |
 [**Why TensorDict**](#why-tensordict) |
-[**What is new in 0.14**](#what-is-new-in-014) |
 [**Patterns**](#patterns) |
 [**Installation**](#installation) |
 [**Ecosystem**](#ecosystem) |
@@ -55,108 +57,91 @@ batch = TensorDict(
 
 mini = batch[:8]                 # slices every leaf
 device = "cuda" if torch.cuda.is_available() else "cpu"
-on_device = batch.to(device)       # moves every leaf; non-blocking internally
-scaled = batch * 0.5             # arithmetic on the whole structure
-merged = batch + batch           # leaf-wise TensorDict arithmetic
+on_device = batch.to(device)     # moves every leaf
+scaled = batch * 0.5             # arithmetic on every leaf
+merged = batch + batch           # adds the leaves with the same key
 stacked = torch.stack([batch, batch], 0)
 
 print(mini.shape)                # torch.Size([8])
 print(stacked.shape)             # torch.Size([2, 32])
 ```
 
-The object remains a mapping, but the batch acts like a tensor. That is the
-point: write the operation once, apply it to every tensor that belongs to the
-same example, rollout, batch, parameter set, or dataset shard.
+The object is still a mapping, but the batch acts like a tensor. Write the
+operation once, and it applies to every tensor of the same sample, rollout,
+batch, parameter set or dataset shard.
 
 ## Why TensorDict
 
-Plain dictionaries are flexible. TensorDict keeps that flexibility and adds the
-parts tensor programs need once the code gets serious.
+A TensorDict uses string keys like a `dict`, and it can also hold non-tensor
+values. The table shows the code that it replaces.
 
 | With a plain `dict` | With `TensorDict` |
 |---------------------|-------------------|
-| Manually keep leading dimensions aligned | One `batch_size` validates the structure |
-| Repeat `.to(device)` for every tensor | `td.to(device)` moves the full batch |
-| Hand-roll slicing, stacking, reshaping | `td[:32]`, `torch.stack`, `td.reshape` |
-| Manually recurse through nested state | Nested keys are first-class |
-| Duplicate arithmetic over leaves | `td + td`, `td * scalar`, `td.abs()` |
-| Invent checkpoint formats | `td.save`, `td.memmap`, `load_memmap` |
-| Hope generic code keeps working | PyTorch-native APIs, `torch.compile` coverage |
+| Keep the leading dimensions aligned by hand | One `batch_size`, checked on each write |
+| Call `.to(device)` for every tensor | `td.to(device)` moves every leaf |
+| Write slicing, stacking and reshaping code | `td[:32]`, `torch.stack`, `td.reshape` |
+| Recurse through nested dicts by hand | Tuple keys: `td["agents", "policy"]` |
+| Repeat arithmetic over the leaves | `td + td`, `td * scalar`, `td.abs()` |
+| Invent a checkpoint format | `td.save`, `td.memmap`, `TensorDict.load_memmap` |
+| Write new code for each new structure | `torch.stack`, `torch.cat` and `torch.compile` accept a TensorDict |
 
-Use TensorDict when the unit of data is not one tensor anymore, but it should
-still move through your program like one tensor.
+Use TensorDict when one sample of your data has more than one tensor, and you
+want to index, move or save all of them with one call.
 
-## Performance is part of the API
+## Speed and memory
 
-TensorDict is not just syntax for recursive Python loops. Core paths are built
-for high-throughput PyTorch workloads:
+- Arithmetic such as `td + td`, `td * 0.5` and `td.abs()`, and the in-place
+  versions, call one PyTorch `_foreach` kernel for all leaves when that kernel
+  exists.
+- `td.to(device)` copies every leaf with `non_blocking=True`. If the target is
+  not a CUDA device (for example a copy from GPU to CPU), TensorDict
+  synchronizes once, after the last copy. If you need blocking copies, pass
+  `non_blocking=False`.
+- A lazy stack keeps a list of TensorDicts, and does not copy them into one
+  tensor for each key.
+- Memory-mapped leaves stay on disk until you read them.
+- Shape operations with `inplace=True`, such as `td.repeat(2, inplace=True)`,
+  release each old leaf when its replacement is written. Peak memory stays
+  close to one copy of the data.
+- The test suite runs the core operations under `torch.compile`.
 
-- **Arithmetic dispatch**: operations such as `td + td`, `td * 0.5`, `td.abs()`
-  and in-place variants apply directly to leaves and use PyTorch foreach kernels
-  where available.
-- **Device and host transfers**: D2H and H2D copies are dispatched across the
-  full structure. TensorDict uses non-blocking leaf transfers internally when
-  possible, so the common path is just `td.to(device)`; pass
-  `non_blocking=False` only when you need an explicitly synchronous transfer.
-- **Shape operations without boilerplate**: indexing, `view`, `reshape`,
-  `permute`, `unsqueeze`, `squeeze`, `flatten`, `unflatten`, `stack` and `cat`
-  operate on the batch structure rather than on hand-maintained lists of leaves.
-- **Low-allocation workflows**: lazy stacks, preallocation, memory mapping and
-  `inplace=True` shape-changing operations help reduce peak memory in data-heavy
-  pipelines.
-- **Compile-aware internals**: TensorDict is used in compiled training and RL
-  loops, and the codebase carries dedicated `torch.compile` coverage for hot
-  paths.
-
-For deeper numbers, see the [benchmark notes][#docs-package-benchmark].
-
-## What is new in 0.14
-
-TensorDict 0.14 adds new storage formats and autograd on a whole structure, and
-changes how module state and pickled memmap data are handled:
-
-- **Zarr-backed `PersistentTensorDict`** through `td.to_zarr()`,
-  `PersistentTensorDict.from_zarr()` and
-  `TensorDict.from_schema(..., storage="zarr")`.
-- **Portable single-file `.tdz` archives**: `td.save("x.tdz")` and
-  `TensorDict.load_memmap("x.tdz")`, plus `pack_memmap` / `unpack_memmap` to
-  convert between memmap directories and archives.
-- **`TensorDict.backward()`** backpropagates through all differentiable leaves
-  in a single autograd call.
-- **Group-relative peers** with `group_dst` / `group_src` for point-to-point
-  `send` / `recv`.
-- **Behavior changes**: `to_module()` preserves existing parameter and buffer
-  registrations by default (`preserve_module_state=True`; pass `False` for the
-  previous replacement behavior), and `copy_at_()` uses its fast path by
-  default (pass `fast=False` for the previous one).
-- **Deprecation**: calling `load_memmap()` without `allow_pickle` still loads
-  pickled non-tensor data, with a `FutureWarning`; the default becomes
-  `allow_pickle=False` in 0.15.
+The [benchmark dashboard](https://docs.pytorch.org/tensordict/dev/bench/)
+shows the results of the benchmarks in `benchmarks/` over time.
 
 ## Patterns
 
 ### One batch through the whole training step
 
-TensorDict lets datasets, models and losses agree on one container instead of a
-long argument list.
+A dataset, a model and a loss can share one TensorDict instead of a long list
+of arguments. This loop trains a linear model on 4 mini-batches:
 
 ```python
-for batch in dataloader:
-    batch = batch.to(device)
-    batch = model(batch)
-    loss = loss_module(batch)
+import torch
+from torch import nn
+from tensordict import TensorDict
+from tensordict.nn import TensorDictModule
 
+model = TensorDictModule(nn.Linear(3, 1), in_keys=["x"], out_keys=["pred"])
+optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+data = TensorDict(x=torch.randn(64, 3), y=torch.randn(64, 1), batch_size=[64])
+
+for batch in data.split(16):
+    batch = model(batch)  # reads batch["x"], writes batch["pred"]
+    loss = (batch["pred"] - batch["y"]).pow(2).mean()
     loss.backward()
     optimizer.step()
     optimizer.zero_grad()
 ```
 
-That loop can stay stable while the schema changes from classification to
-segmentation, RL rollouts, model-based prediction or LLM post-training batches.
+The loop does not change when the data gets new keys, for example for
+classification, segmentation, RL rollouts or LLM post-training batches.
 
-### Nested data without custom plumbing
+### Nested data
 
 ```python
+import torch
+from tensordict import TensorDict
+
 td = TensorDict(
     {
         "agents": {
@@ -173,113 +158,111 @@ td = TensorDict(
 
 policy = td["agents", "policy"]
 td["env", "reward"] = td["env", "reward"].clip(-1, 1)
+print(td[:4]["agents"].batch_size)  # torch.Size([4])
 ```
 
-Nested keys are part of the API, not an afterthought.
+A tuple key reads or writes a nested entry. Indexing and the other operations
+apply to the nested TensorDicts too.
 
-### Functional modules and parameter sets
+### Module parameters
 
-TensorDict can hold module parameters, swap them into modules, vectorize over
-ensembles and make model state explicit.
+A TensorDict can hold the parameters of a module. Use it to call the module
+with other parameters, to stack parameter sets for `torch.vmap`, or to save
+them.
 
 ```python
+import torch
+from torch import nn
 from tensordict import TensorDict
 
+module = nn.Linear(3, 4)
 params = TensorDict.from_module(module)
+zeros = params.detach().clone().zero_()
 
-with params.to_module(module, preserve_module_state=True):
-    out = module(inputs)
+with zeros.to_module(module):  # the module uses the zero parameters here
+    out = module(torch.ones(3))
+print(out)  # all zeros. After the block, the module has its own parameters again.
 ```
 
-This is the same foundation used by TorchRL modules and functional training
-utilities.
+TorchRL modules and functional training code use the same mechanism.
 
-### Checkpoint and share large tensor batches
+### Save and memory-map a batch
 
 ```python
-td = TensorDict({"tokens": tokens, "scores": scores}, batch_size=[n])
-td.memmap("/path/to/private/batch")  # memory-map every leaf
-reloaded = TensorDict.load_memmap("/path/to/private/batch")
+import tempfile
+
+import torch
+from tensordict import TensorDict
+
+td = TensorDict(
+    {"tokens": torch.randint(0, 1000, (128, 32)), "scores": torch.randn(128)},
+    batch_size=[128],
+)
+with tempfile.TemporaryDirectory() as path:
+    td.memmap(path)  # one file per leaf
+    reloaded = TensorDict.load_memmap(path)
+    print(reloaded[:2]["tokens"].shape)  # torch.Size([2, 32])
 ```
 
-Memory-mapped TensorDicts are useful for large offline datasets, replay buffers,
-inter-process handoff and checkpointed intermediate state.
+`load_memmap` maps the files into memory, so it reads data only when you use
+it. Memory-mapped TensorDicts hold offline datasets, replay buffers and
+checkpoints, and several processes can read the same files.
 
 ## Key features
 
-- **Tensor-like collection ops**: indexing, slicing, device casting, dtype
-  casting, reshaping, stacking and concatenation.
+- Tensor operations on the whole structure: indexing, slicing, device and
+  dtype casts, reshaping, stacking and concatenation.
+  [[guide]](https://docs.pytorch.org/tensordict/stable/concepts/batch_size.html)
   [[tutorial]](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_shapes.html)
-- **Nested structures** with tuple keys and predictable batch semantics.
+- Nested structures with tuple keys.
+  [[guide]](https://docs.pytorch.org/tensordict/stable/concepts/keys.html)
   [[tutorial]](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_keys.html)
-- **Fast memory workflows**: asynchronous transfers, memmap, consolidated
-  tensors, lazy stacks and preallocation.
-  [[tutorial]](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_memory.html)
-- **Functional programming** with parameter TensorDicts, `to_module` and
-  compatibility with `torch.vmap`.
+- Memory: non-blocking device copies
+  [[guide]](https://docs.pytorch.org/tensordict/stable/concepts/devices.html),
+  lazy stacks [[guide]](https://docs.pytorch.org/tensordict/stable/concepts/stacking.html),
+  preallocation [[tutorial]](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_preallocation.html),
+  memory mapping and consolidation [[guide]](https://docs.pytorch.org/tensordict/stable/saving.html).
+- Functional programming with parameter TensorDicts, `to_module`,
+  `torch.vmap` and `torch.compile`.
   [[tutorial]](https://docs.pytorch.org/tensordict/stable/tutorials/functional.html)
-- **`@tensorclass`**: a tensor-aware dataclass for structured tensor objects.
+  [[guide]](https://docs.pytorch.org/tensordict/stable/compile.html)
+- `TensorClass`: a dataclass with typed fields and the TensorDict operations.
+  [[guide]](https://docs.pytorch.org/tensordict/stable/tensorclass.html)
   [[tutorial]](https://docs.pytorch.org/tensordict/stable/tutorials/tensorclass_fashion.html)
-- **Distributed and multiprocessed pipelines** across workers, devices and
-  machines. [[doc]](https://docs.pytorch.org/tensordict/stable/distributed.html)
-- **Serialization and memory mapping** for efficient checkpointing and dataset
-  storage. [[doc]](https://docs.pytorch.org/tensordict/stable/saving.html)
+- Distributed and multi-process pipelines: send, receive and share
+  TensorDicts between workers, devices and machines.
+  [[guide]](https://docs.pytorch.org/tensordict/stable/distributed.html)
+- Serialization and memory mapping for checkpoints and datasets.
+  [[guide]](https://docs.pytorch.org/tensordict/stable/saving.html)
 
-For a longer tour, start with
-[GETTING_STARTED.md](https://github.com/pytorch/tensordict/blob/main/GETTING_STARTED.md) or the
-[online documentation][#docs-package].
+For a longer tour, read [Getting started](https://docs.pytorch.org/tensordict/stable/getting_started.html), then the
+[documentation][#docs-package]. The changes of each release are in the
+[release notes](https://github.com/pytorch/tensordict/releases).
 
 ## Installation
 
-**With pip**:
+TensorDict requires Python 3.10 or later and PyTorch 2.13 or later.
 
 ```bash
 pip install tensordict
 ```
 
-**With conda**:
+or
 
 ```bash
 conda install -c conda-forge tensordict
 ```
 
-**Nightly builds**:
-
-```bash
-pip install tensordict-nightly
-```
-
-**From source with an existing PyTorch install**:
-
-tensordict is pure Python, so building it from source needs no compiler. The
-build requirements `setuptools>=77` and `setuptools_scm` are installed by pip
-unless you pass `--no-build-isolation`. `--no-deps` also skips the runtime
-dependencies, so install them first:
-
-```bash
-pip install numpy cloudpickle packaging orjson "pyvers>=0.2,<0.3"
-pip install -e . --no-deps
-```
-
-(`orjson` is only listed as a dependency for Python < 3.13.)
-
-If you use `uv` with PyTorch nightlies, keep `torch` pinned to the PyTorch wheel
-index or install TensorDict with `--no-deps` so the resolver does not replace
-your existing PyTorch build. Use one of:
-
-```bash
-# Option 1: skip dependency resolution (install the runtime dependencies first)
-uv pip install -e . --no-deps
-# Option 2: resolve against the PyTorch nightly index
-uv pip install -e . --prerelease=allow -f "https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html"
-```
+The [installation page](https://docs.pytorch.org/tensordict/stable/installation.html) covers nightly builds, the
+optional dependencies (HDF5, Zarr, pandas, Parquet, ONNX), source installs and
+the TorchRL versions.
 
 ## Ecosystem
 
-TensorDict started in reinforcement learning, where batches quickly become
-nested trajectories. It is now used anywhere tensor batches are structured data:
-RL rollouts, LLM post-training samples, robotics trajectories, simulation state,
-model parameters, checkpointed datasets and scientific pipelines.
+TensorDict started in reinforcement learning, where a batch is often a nested
+trajectory. These projects use it for RL rollouts, LLM post-training samples,
+robotics trajectories, simulation state, model parameters, checkpointed datasets
+and scientific pipelines.
 
 | Domain | Projects |
 |--------|----------|
