@@ -40,7 +40,7 @@ With conda, from the conda-forge channel:
 
    conda install -c conda-forge tensordict
 
-To check the installation, print the version:
+To make sure that tensordict is installed, print its version:
 
 .. code-block:: bash
 

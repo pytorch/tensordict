@@ -181,7 +181,7 @@ zeros = params.detach().clone().zero_()
 
 with zeros.to_module(module):  # the module uses the zero parameters here
     out = module(torch.ones(3))
-print(out)  # all zeros; the original parameters are back after the block
+print(out)  # all zeros. After the block, the module has its own parameters again.
 ```
 
 TorchRL modules and functional training code use the same mechanism.

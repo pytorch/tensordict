@@ -19,8 +19,8 @@ If tensordict is not installed yet, read :ref:`installation` first.
          td.consolidate and flatten_keys.
    :width: 100%
 
-   The operations of this page on one nested TensorDict. The two arrows on
-   the left, labelled ``td.flatten()`` and ``td.unflatten()``, are
+   Common operations on one nested TensorDict. The two arrows on
+   the left, labeled ``td.flatten()`` and ``td.unflatten()``, are
    :meth:`~tensordict.TensorDict.flatten_keys` and
    :meth:`~tensordict.TensorDict.unflatten_keys`.
 
@@ -156,7 +156,9 @@ A boolean mask over the batch dimensions selects elements, as for a tensor:
 To write into a part of a TensorDict, index it on the left of ``=``:
 
   >>> data[0] = TensorDict(
-  ...     obs=torch.zeros(4, 5), done=torch.ones(4, dtype=torch.bool), batch_size=[4]
+  ...     obs=torch.zeros(4, 5),
+  ...     done=torch.ones(4, dtype=torch.bool),
+  ...     batch_size=[4],
   ... )
   >>> data["done"][0]
   tensor([True, True, True, True])
@@ -199,7 +201,8 @@ level, with the keys joined by a separator.
   >>> sorted(flat.unflatten_keys(".").keys())
   ['next', 'obs']
 
-:ref:`keys` explains nested keys, and how to select and rename entries.
+:ref:`keys` explains nested keys and the methods that select and flatten
+them.
 
 Devices, dtypes and arithmetic
 ------------------------------
@@ -290,8 +293,13 @@ Reading one returns the value:
   >>> data["label"]
   'cat'
 
-A non-tensor value has no batch dimensions, and shape operations do not
-change it. When you stack TensorDicts, the non-tensor values become a list:
+TensorDict stores one value for the whole batch. Every element has that
+value, so indexing keeps it:
+
+  >>> data[0]["label"]
+  'cat'
+
+When you stack TensorDicts, the non-tensor values become a list:
 
   >>> pets = torch.stack([TensorDict(label="cat"), TensorDict(label="dog")])
   >>> list(pets["label"])
@@ -329,9 +337,9 @@ are other names for the same two methods:
 
 Tensors are stored without pickle. Non-tensor values that JSON cannot store
 are stored with pickle, and ``load_memmap`` loads them only if you allow it
-with ``allow_pickle``. :meth:`~tensordict.TensorDict.consolidate` is another
-tool for transfers: it copies all the leaves into one storage, so that a
-device move or an inter-process transfer copies one buffer.
+with ``allow_pickle``. :meth:`~tensordict.TensorDict.consolidate` copies all
+the leaves into one storage. A device move or an inter-process transfer of
+the result then copies one buffer.
 
 :ref:`saving` compares ``memmap``, :func:`torch.save` and ``state_dict``.
 :ref:`storage` covers datasets that do not fit in memory.
