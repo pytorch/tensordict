@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Tuple
 import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import _SubTensorDict, TensorDict, TensorDictBase
-from tensordict.base import _NESTED_TENSORS_AS_LISTS
+from tensordict.base import _NESTED_TENSORS_AS_LISTS, is_tensor_collection
 from tensordict.persistent import PersistentTensorDict
 
 # implement_for stays importable from here for the deprecated
@@ -80,6 +80,13 @@ def _tensordict_unflatten(values: List[Any], context: Context) -> Dict[Any, Any]
         # may contain SymInts which torch.export cannot serialize. Reconstruct
         # from the leading batch_dims dimensions of the actual tensor shapes.
         batch_dims = context["batch_dims"]
+        # A nested tensordict without leaves gets the batch size [0] * batch_dims
+        # here: read the batch size from another value when there is one.
+        shapes = [
+            _shape(v)
+            for v in values
+            if hasattr(v, "shape") and not (is_tensor_collection(v) and v.is_empty())
+        ] or shapes
         batch_size = shapes[0][:batch_dims] if shapes else torch.Size([0] * batch_dims)
     else:
         batch_size = context["batch_size"]
