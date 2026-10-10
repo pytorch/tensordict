@@ -3979,7 +3979,7 @@ class LazyStackedTensorDict(TensorDictBase):
             if isinstance(repeats, int):
                 repeats: list[int] = [repeats] * len(self.tensordicts)
             else:
-                if repeats.numel() == 1:
+                if isinstance(repeats, torch.Tensor) and repeats.numel() == 1:
                     # torch broadcasts a one-element repeats to the size of dim
                     repeats = repeats.expand(len(self.tensordicts))
                 repeats = repeats.tolist()

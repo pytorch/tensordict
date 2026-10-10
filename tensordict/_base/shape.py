@@ -574,7 +574,7 @@ class _ShapeOps:
             if i == dim_corrected:
                 if isinstance(repeats, int):
                     new_batch_size.append(s * repeats)
-                elif repeats.numel() == 1:
+                elif isinstance(repeats, torch.Tensor) and repeats.numel() == 1:
                     # torch broadcasts a one-element repeats to the size of dim
                     new_batch_size.append(s * int(repeats))
                 else:
