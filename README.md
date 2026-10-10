@@ -54,17 +54,17 @@ import torch
 from tensordict import TensorDict
 
 batch = TensorDict(
-    obs=torch.randn(32, 3, 64, 64),
-    action=torch.randint(4, (32,)),
-    reward=torch.randn(32, 1),
-    next={"obs": torch.randn(32, 3, 64, 64)},  # a nested dict becomes a nested TensorDict
-    batch_size=[32],                            # the leading dimension that all tensors share
+    images=torch.randn(32, 3, 64, 64),
+    labels=torch.randint(10, (32,)),
+    masks=torch.ones(32, 64, 64, dtype=torch.bool),
+    meta={"weight": torch.rand(32), "source": torch.arange(32)},  # becomes a nested TensorDict
+    batch_size=[32],  # the leading dimension that all tensors share
 )
 
 print(batch[:8].batch_size)                    # torch.Size([8])
-print(batch["next", "obs"].shape)              # torch.Size([32, 3, 64, 64])
+print(batch["meta", "weight"].shape)           # torch.Size([32])
 print(torch.stack([batch, batch]).batch_size)  # torch.Size([2, 32])
-print(batch.reshape(4, 8)["reward"].shape)     # torch.Size([4, 8, 1])
+print(batch.reshape(4, 8)["masks"].shape)      # torch.Size([4, 8, 64, 64])
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 batch = batch.to(device)                       # moves every tensor, nested ones too
@@ -74,9 +74,9 @@ The batch size is a rule, not a label. TensorDict checks it each time you add a
 tensor:
 
 ```python
-batch["mask"] = torch.ones(31)
+batch["scores"] = torch.ones(31)
 # RuntimeError: batch dimension mismatch, got self.batch_size=torch.Size([32]) and
-# value.shape=torch.Size([31]) for key 'mask'. The leading dimensions of a value
+# value.shape=torch.Size([31]) for key 'scores'. The leading dimensions of a value
 # must match the batch size.
 ```
 
