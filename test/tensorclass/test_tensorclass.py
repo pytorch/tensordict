@@ -71,6 +71,7 @@ from tensordict.utils import _check_recursive_properties
 from torch import Tensor
 
 _has_streaming = importlib.util.find_spec("streaming", None) is not None
+_has_mypy = importlib.util.find_spec("mypy") is not None
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
@@ -309,6 +310,137 @@ def test_tensorclass_instance_methods(form):
         str(_TENSORDICT_DIR / "tensorclass.pyi"), "TensorClass"
     )
     _check_stub_class(stub_attrs, X, exclusions)
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+def test_tensorclass_stub_constructor():
+    # The stub types the constructor of a subclass with dataclass_transform:
+    # its fields, then the keyword-only arguments of _TensorClassInitArgs,
+    # which the runtime constructor must accept.
+    with open(_TENSORDICT_DIR / "tensorclass.pyi", "r") as f:
+        tree = ast.parse(f.read())
+    (init_args_class,) = (
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "_TensorClassInitArgs"
+    )
+    init_args = {
+        node.target.id
+        for node in init_args_class.body
+        if isinstance(node, ast.AnnAssign)
+    }
+
+    class X(TensorClass):
+        x: torch.Tensor
+
+    init_values = {"batch_size": [3], "device": "cpu", "names": ["n"], "lock": True}
+    assert init_args == init_values.keys()
+    x = X(torch.zeros(3), **init_values)
+    assert x.batch_size == (3,)
+    assert x.device == torch.device("cpu")
+    assert x.names == ["n"]
+    assert x.is_locked
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_tensorclass_stub_constructor_static(tmp_path, monkeypatch):
+    from mypy import api
+
+    # Check tensorclass.pyi alone: the modules it imports are reduced to the
+    # names these checks need, or to Any. Mypy also searches the working
+    # directory, which must not hold the tensordict sources.
+    monkeypatch.chdir(tmp_path)
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    package.mkdir(parents=True)
+    torch_package = stubs / "torch"
+    torch_package.mkdir()
+    torch_package.joinpath("__init__.pyi").write_text(
+        """from typing import Any
+
+class Tensor: ...
+class device: ...
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    package.joinpath("__init__.pyi").write_text(
+        "from .tensorclass import TensorClass as TensorClass\n"
+    )
+    package.joinpath("utils.pyi").write_text(
+        """from typing import Any, TypeAlias
+
+import torch
+
+DeviceType: TypeAlias = torch.device | str | int
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    package.joinpath("tensorclass.pyi").write_text(
+        (_TENSORDICT_DIR / "tensorclass.pyi").read_text()
+    )
+
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.11
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+
+    def user_errors(source):
+        user = tmp_path / "user.py"
+        user.write_text(source)
+        stdout, stderr, status = api.run(["--config-file", str(config), str(user)])
+        assert not stderr, stderr
+        return [line for line in stdout.splitlines() if line.startswith("user.py:")]
+
+    # The runtime calls __post_init__() without arguments, so a plain
+    # __post_init__(self) must type-check.
+    valid = """import torch
+from tensordict import TensorClass
+
+class Obs(TensorClass):
+    a: torch.Tensor
+    label: str = "x"
+
+class Child(Obs):
+    b: torch.Tensor | None = None
+
+class Post(TensorClass):
+    a: torch.Tensor
+
+    def __post_init__(self) -> None: ...
+
+t = torch.Tensor()
+Obs(t, "s", batch_size=[3], device="cpu", names=["n"], lock=False)
+Obs(a=t, batch_size=3)
+Child(t, "s", None, batch_size=[3])
+Post(a=t)
+"""
+    assert user_errors(valid) == []
+
+    invalid = """import torch
+from tensordict import TensorClass
+
+class Obs(TensorClass):
+    a: torch.Tensor
+
+Obs(batch_size=[3])
+Obs(a="not a tensor")
+Obs(a=torch.Tensor(), extra=1)
+Obs(a=torch.Tensor(), non_blocking=True)
+"""
+    errors = "\n".join(user_errors(invalid))
+    assert 'Missing positional argument "a"' in errors
+    assert 'incompatible type "str"' in errors
+    assert 'Unexpected keyword argument "extra"' in errors
+    assert 'Unexpected keyword argument "non_blocking"' in errors
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")

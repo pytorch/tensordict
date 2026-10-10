@@ -14,6 +14,7 @@ import pickle
 import threading
 import uuid
 import weakref
+from numbers import Number
 from typing import Any, Callable, Literal, Sequence, Tuple, Type, TYPE_CHECKING
 
 import torch
@@ -41,6 +42,7 @@ from tensordict.utils import (
     _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
+    expand_as_right,
     is_non_tensor,
     NestedKey,
     unravel_key,
@@ -62,6 +64,7 @@ _KEY_SEP = "."
 # tensordict.store._lazy uses.
 from tensordict.store._utils import (  # noqa: F401
     _bytes_to_tensor,
+    _check_indexed_value,
     _compute_byte_ranges,
     _compute_covering_range,
     _decode_meta,
@@ -120,15 +123,17 @@ class _StoreTDKeysView(_TensorDictKeysView):
         prefix_dot = prefix + _KEY_SEP if prefix else ""
 
         seen = set()
-        for full_key in all_keys:
-            # Filter keys belonging to this prefix level
-            if prefix:
-                if not full_key.startswith(prefix_dot):
-                    continue
-                relative = full_key[len(prefix_dot) :]
-            else:
-                relative = full_key
-
+        # The registry is a set: sort the paths of this level, as
+        # to_tensordict() does, so that the keys come in one order. The paths
+        # of a nested tensordict are contiguous once sorted, so values() and
+        # items(), which recurse into each nested tensordict, follow this
+        # order too.
+        if prefix:
+            start = len(prefix_dot)
+            paths = sorted(k[start:] for k in all_keys if k.startswith(prefix_dot))
+        else:
+            paths = sorted(all_keys)
+        for relative in paths:
             parts = relative.split(_KEY_SEP)
 
             if self.include_nested:
@@ -1365,6 +1370,23 @@ class TensorDictStore(TensorDictBase):
         if isinstance(index, list):
             index = torch.tensor(index)
 
+        _check_indexed_value(self, value)
+        if isinstance(value, Number):
+            # a scalar is written to every tensor entry, in its dtype; the
+            # non-tensor entries are left as they are
+            key_paths = [
+                self._full_key_path(_KEY_SEP.join(_unravel_key_to_tuple(key)))
+                for key in self.keys(include_nested=True, leaves_only=True)
+            ]
+            non_tensor = {}
+            tensor_paths = self._run_sync(
+                self._aget_metadata_batch(key_paths, non_tensor=non_tensor)
+            )
+            self._run_sync(
+                self._abatch_set_at({kp: (value, index) for kp in tensor_paths})
+            )
+            return
+
         if not isinstance(value, TensorDictBase):
             value = TensorDict.from_dict(value, batch_size=[])
 
@@ -2371,7 +2393,7 @@ class TensorDictStore(TensorDictBase):
     def masked_fill_(self, mask, value):
         for key in self.keys(include_nested=True, leaves_only=True):
             tensor = self.get(key)
-            tensor = tensor.masked_fill(mask, value)
+            tensor = tensor.masked_fill(expand_as_right(mask, tensor), value)
             self.set_(key, tensor)
         return self
 
