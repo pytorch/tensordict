@@ -67,6 +67,7 @@ from tensordict.utils import (
 from torch import nn, Tensor
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.nn.utils._named_member_accessor import swap_tensor
+from torch.utils._pytree import is_structseq_instance
 
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
@@ -1765,15 +1766,13 @@ class _Conversion:
         def namedtuple_to_dict(namedtuple_obj):
             if _is_namedtuple(namedtuple_obj):
                 namedtuple_obj = namedtuple_obj._asdict()
-
-            else:
-                from torch.return_types import cummax, cummin, max, min
-
-                if isinstance(namedtuple_obj, (min, cummin, max, cummax)):
-                    namedtuple_obj = {
-                        "values": namedtuple_obj.values,
-                        "indices": namedtuple_obj.indices,
-                    }
+            elif is_structseq_instance(namedtuple_obj):
+                # torch.return_types (the results of max, sort, topk, ...)
+                # are structseqs: named fields, but no _fields or _asdict.
+                namedtuple_obj = {
+                    name: getattr(namedtuple_obj, name)
+                    for name in type(namedtuple_obj).__match_args__
+                }
             for key, value in namedtuple_obj.items():
                 namedtuple_obj[key] = cls.from_any(
                     value, device=device, batch_size=batch_size
