@@ -3699,10 +3699,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             if -1 in self.batch_size:
                 # keep the dims where the members differ
-                batch_size = (
-                    self.batch_size[: self.stack_dim]
-                    + self.batch_size[self.stack_dim + 1 :]
-                )
+                batch_size = [
+                    s for i, s in enumerate(self.batch_size) if i != self.stack_dim
+                ]
         else:
             batch_size = tensordict.batch_size
 
@@ -3759,10 +3758,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
         if self.tensordicts and -1 in self.batch_size:
             # keep the dims where the members differ
-            batch_size = (
-                self.batch_size[: self.stack_dim]
-                + self.batch_size[self.stack_dim + 1 :]
-            )
+            batch_size = [
+                s for i, s in enumerate(self.batch_size) if i != self.stack_dim
+            ]
 
         self.tensordicts.extend(tensordict)
 
