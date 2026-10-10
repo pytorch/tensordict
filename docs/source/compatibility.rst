@@ -6,8 +6,8 @@ Containers on storage backends
 ==============================
 
 A :class:`~tensordict.TensorClass` or a :class:`~tensordict.TypedTensorDict`
-can wrap a tensordict on any storage backend without a copy: an in-memory
-:class:`~tensordict.TensorDict`, an HDF5 or zarr file
+can wrap a tensordict on any storage backend without a copy. The backends are
+an in-memory :class:`~tensordict.TensorDict`, an HDF5 or zarr file
 (:class:`~tensordict.PersistentTensorDict`), a Redis server
 (:class:`~tensordict.store.TensorDictStore`), a lazy stack
 (:class:`~tensordict.LazyStackedTensorDict`), or a memory-mapped

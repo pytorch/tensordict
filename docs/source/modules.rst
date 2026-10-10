@@ -5,7 +5,7 @@ Modules: TensorDictModule and tensordict.nn
 
 A module of :mod:`tensordict.nn` reads its inputs from a tensordict by key and
 writes its outputs back into it. You can then chain modules that take several
-inputs, and generic code, such as a training loop, can call any model with one
+inputs. Generic code, such as a training loop, can call any model with one
 tensordict, without knowing its inputs. For what a tensordict is, see
 :ref:`overview`.
 
