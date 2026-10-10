@@ -373,6 +373,42 @@ class TestNonTensorData:
             ("nested", "bool")
         )
 
+    @pytest.mark.parametrize("data_first", [True, False])
+    def test_comparison_data_and_stack(self, data_first):
+        # A NonTensorData and a NonTensorStack of the same batch size are
+        # compared element by element, as two stacks are
+        def ordered(data, stack):
+            return (data, stack) if data_first else (stack, data)
+
+        data = NonTensorData("a", batch_size=[2])
+        lhs, rhs = ordered(data, NonTensorStack("a", "b"))
+        assert (lhs == rhs).tolist() == [True, False]
+        assert (lhs != rhs).tolist() == [False, True]
+        data = NonTensorData("a", batch_size=[2, 2])
+        lhs, rhs = ordered(data, NonTensorStack.from_list([["a", "b"], ["a", "a"]]))
+        assert (lhs == rhs).tolist() == [[True, False], [True, True]]
+        assert (lhs != rhs).tolist() == [[False, True], [False, False]]
+        # values that cannot be compared keep the empty result
+        data = NonTensorData({"k": np.zeros(2)}, batch_size=[2])
+        lhs, rhs = ordered(data, NonTensorStack({"k": np.zeros(2)}, {"k": np.zeros(2)}))
+        assert (lhs == rhs).is_empty()
+        assert (lhs != rhs).is_empty()
+
+        # so tensordict comparisons see the non-tensor values in either form
+        td_data = TensorDict(s=NonTensorData("a", batch_size=[2]), batch_size=[2])
+        td_diff = TensorDict(s=NonTensorStack("a", "b"), batch_size=[2])
+        td_same = TensorDict(s=NonTensorStack("a", "a"), batch_size=[2])
+        lhs, rhs = ordered(td_data, td_diff)
+        assert not (lhs == rhs).all()
+        assert (lhs != rhs).any()
+        lhs, rhs = ordered(td_data, td_same)
+        assert (lhs == rhs).all()
+        assert not (lhs != rhs).any()
+        # with no elements, they stay equal
+        lhs, rhs = ordered(td_data[:0], td_diff[:0])
+        assert (lhs == rhs).all()
+        assert not (lhs != rhs).any()
+
     @pytest.mark.parametrize("dest", ["data", "stack"])
     def test_gather_non_tensor_data_out(self, dest):
         td = TensorDict(x=torch.zeros(2, 3), batch_size=[2, 3])
