@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 import torch
 from tensordict import (
+    assert_allclose_td,
     is_tensor_collection,
     lazy_stack,
     NonTensorData,
@@ -64,6 +65,15 @@ def store_kwargs(backend):
     """Common keyword arguments for constructing a store in tests."""
     name, port = backend
     return {"backend": name, "port": port, "db": 15}
+
+
+def _stored_batch_size(store, store_kwargs):
+    """Read the batch size of ``store`` from the server, with a new handle."""
+    reader = TensorDictStore.from_store(td_id=store._td_id, **store_kwargs)
+    try:
+        return reader.batch_size
+    finally:
+        reader.close()
 
 
 @pytest.mark.parametrize(
@@ -164,6 +174,53 @@ class TestTensorDictStore:
     def test_batch_size(self, store_td):
         """Verify batch_size is correctly stored and accessible."""
         assert store_td.batch_size == torch.Size([10])
+
+    def test_batch_size_setter(self, store_td, store_kwargs):
+        """Setting batch_size checks the entries and persists the new size."""
+        store_td["obs"] = torch.zeros(10, 3)
+        store_td["nested", "x"] = torch.zeros(10, 3, 2)
+        store_td["text"] = "hello"
+
+        store_td.batch_size = [10, 3]
+        assert store_td.batch_size == torch.Size([10, 3])
+        assert _stored_batch_size(store_td, store_kwargs) == torch.Size([10, 3])
+        with pytest.raises(RuntimeError, match="incompatible with the batch-size"):
+            store_td.batch_size = [10, 2]
+        assert store_td.batch_size == torch.Size([10, 3])
+        assert _stored_batch_size(store_td, store_kwargs) == torch.Size([10, 3])
+        # the batch size of a nested view is not stored
+        store_td["nested"].batch_size = [10, 3, 2]
+        assert store_td["nested"].batch_size == torch.Size([10, 3, 2])
+        assert store_td.batch_size == torch.Size([10, 3])
+        assert _stored_batch_size(store_td, store_kwargs) == torch.Size([10, 3])
+
+    def test_batch_size_setter_copy(self, store_td, store_kwargs):
+        """A shallow copy of the store, such as the one a tensordict holds when
+        the store goes in with another batch size, sets its batch size in
+        memory only."""
+        store_td["obs"] = torch.zeros(10, 3, 2)
+        td = TensorDict({"s": store_td}, batch_size=[10, 3])
+        assert td["s"].batch_size == torch.Size([10, 3])
+        assert store_td.batch_size == torch.Size([10])
+        assert _stored_batch_size(store_td, store_kwargs) == torch.Size([10])
+        # an unpickled copy is still a copy
+        copy = pickle.loads(pickle.dumps(store_td.copy()))
+        try:
+            copy.batch_size = [10, 3, 2]
+            assert copy.batch_size == torch.Size([10, 3, 2])
+            assert _stored_batch_size(store_td, store_kwargs) == torch.Size([10])
+        finally:
+            copy.close()
+
+    def test_batch_size_setter_non_tensor(self, store_td):
+        """A non-tensor entry written per element holds one value per element
+        of the first batch dim, so it fixes that dim."""
+        store_td[0] = TensorDict(label="a", batch_size=[])
+        with pytest.raises(RuntimeError, match="label"):
+            store_td.batch_size = [5]
+        assert store_td.batch_size == torch.Size([10])
+        store_td.batch_size = []
+        assert store_td.batch_size == torch.Size([])
 
     def test_from_dict(self, store_kwargs):
         """Construct from a dict."""
@@ -464,6 +521,24 @@ class TestTensorDictStore:
         with pytest.raises(NotImplementedError):
             store_td.share_memory_()
 
+    def test_memmap(self, store_td, tmp_path):
+        """memmap and save write a memory-mapped copy; only memmap_ raises."""
+        source = TensorDict(
+            {"obs": torch.randn(10, 3), "nested": {"a": torch.randn(10, 2)}}, [10]
+        )
+        store_td.update(source)
+        for out in (
+            store_td.memmap(tmp_path / "memmap"),
+            store_td.save(tmp_path / "save"),
+            store_td.memmap(),
+        ):
+            assert type(out) is TensorDict
+            assert out.is_memmap() and out.is_locked
+            assert (out == source).all()
+        assert (TensorDict.load_memmap(tmp_path / "save") == source).all()
+        with pytest.raises(RuntimeError, match="in-place"):
+            store_td.memmap_(tmp_path / "memmap_")
+
     def test_close_releases_event_loop(self, store_kwargs):
         """close() closes the event loop, which releases the sockets that it holds."""
         td = TensorDictStore(batch_size=[5], **store_kwargs)
@@ -504,6 +579,29 @@ class TestTensorDictStore:
         # Only one key should remain
         remaining = list(store_td.keys())
         assert len(remaining) == 1
+
+    def test_pop_nested(self, store_td):
+        """pop and popitem return the data of a nested entry that they delete."""
+        a, c, d = torch.randn(10, 2), torch.randn(10, 3), torch.randn(10)
+        store_td["nested", "a"] = a
+        store_td["nested", "b", "c"] = c
+        store_td["other", "d"] = d
+
+        value = store_td.pop(("nested", "b"))
+        assert isinstance(value, TensorDict)
+        assert torch.equal(value["c"], c)
+        assert ("nested", "b") not in store_td.keys(include_nested=True)
+
+        value = store_td.pop("other")
+        assert isinstance(value, TensorDict)
+        assert torch.equal(value["d"], d)
+        assert "other" not in store_td.keys()
+
+        key, value = store_td.popitem()
+        assert key == "nested"
+        assert isinstance(value, TensorDict)
+        assert torch.equal(value["a"], a)
+        assert list(store_td.keys()) == []
 
     def test_rename_key(self, store_td):
         """Test rename_key_."""
@@ -1394,6 +1492,25 @@ class TestLazyStackedTensorDictStore:
         assert isinstance(local, TensorDict)
         assert local.batch_size == torch.Size([5, 4])
 
+    def test_memmap(self, store_stack, tmp_path):
+        """memmap and save write a memory-mapped copy; only memmap_ raises."""
+        store_td, tds, lazy_td = store_stack
+        source = lazy_td.to_tensordict()
+        for out in (
+            store_td.memmap(tmp_path / "memmap"),
+            store_td.save(tmp_path / "save"),
+            store_td.memmap(),
+        ):
+            assert type(out) is TensorDict
+            assert out.is_memmap() and out.is_locked
+            assert (out == source).all()
+        assert (TensorDict.load_memmap(tmp_path / "save") == source).all()
+        elem = store_td[1].memmap(tmp_path / "elem")
+        assert elem.is_memmap()
+        assert (elem == tds[1]).all()
+        with pytest.raises(RuntimeError, match="in-place"):
+            store_td.memmap_(tmp_path / "memmap_")
+
     # ---- td[idx].to_tensordict() pattern ----
 
     def test_indexed_to_tensordict(self, store_stack):
@@ -1475,6 +1592,56 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    # ---- rename_key_ ----
+
+    def test_rename_key(self, store_stack):
+        store_td, tds, lazy_td = store_stack
+        # the elements of "a" have one shape, so "a" has no offset table
+        store_td.rename_key_("a", "c")
+        assert set(store_td.keys()) == {"b", "c"}
+        torch.testing.assert_close(store_td["c"], lazy_td["a"])
+        # replaces "b", whose shape differs
+        store_td.rename_key_("c", "b")
+        assert set(store_td.keys()) == {"b"}
+        torch.testing.assert_close(store_td["b"], lazy_td["a"])
+
+    def test_rename_key_leaf_kinds(self, store_kwargs):
+        tds = [
+            TensorDict(
+                {
+                    "het": torch.randn(3, i + 1),
+                    "empty": torch.randn(3, 0),
+                    "nested": {"x": torch.randn(3, 2)},
+                },
+                batch_size=[3],
+            )
+            for i in range(4)
+        ]
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            # "het" has an offset table, as its elements have different
+            # shapes, "empty" has no data, and ("nested", "x") is a leaf of
+            # one shape in a sub-tensordict
+            store_td.rename_key_("het", "het2")
+            store_td.rename_key_("empty", "empty2")
+            store_td.rename_key_(("nested", "x"), ("nested", "y"))
+            assert set(store_td.keys(True, True)) == {
+                "het2",
+                "empty2",
+                ("nested", "y"),
+            }
+            for i, td in enumerate(tds):
+                torch.testing.assert_close(store_td[i]["het2"], td["het"])
+            assert store_td["empty2"].shape == (4, 3, 0)
+            torch.testing.assert_close(
+                store_td["nested", "y"], torch.stack([td["nested", "x"] for td in tds])
+            )
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     # ---- Write-through view tests ----
 
     def test_view_set_propagates(self, store_stack):
@@ -1508,6 +1675,69 @@ class TestLazyStackedTensorDictStore:
         for key in ("a", "b"):
             torch.testing.assert_close(store_td[1][key], expected[key])
             torch.testing.assert_close(store_td[0][key], tds[0][key])
+
+    def test_fill_zero_nested(self, store_kwargs):
+        """fill_ on a nested key and zero_ write nested entries, as on a lazy stack."""
+        lazy_td = lazy_stack(
+            [
+                TensorDict(
+                    a=torch.ones(3),
+                    n=TensorDict(
+                        b=torch.ones(3, 2),
+                        m=TensorDict(c=torch.ones(3), batch_size=[3]),
+                        batch_size=[3],
+                    ),
+                    batch_size=[3],
+                )
+                for _ in range(4)
+            ]
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            for td in (store_td, lazy_td):
+                assert td.fill_("n", 5.0) is td
+                view = td[1]
+                assert view.fill_(("n", "m"), 7.0) is view
+                td[2].zero_()
+            assert_allclose_td(store_td.to_tensordict(), lazy_td.to_tensordict())
+            assert store_td.zero_() is store_td
+            assert_allclose_td(
+                store_td.to_tensordict(), lazy_td.zero_().to_tensordict()
+            )
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_fill_zero_nested_heterogeneous(self, store_kwargs):
+        """fill_ and zero_ on the store skip heterogeneous nested entries.
+
+        Their elements differ in shape. Written as one tensor, every element
+        would get the shape of element 0 (#2030). The element views write each
+        element with its own shape.
+        """
+        tds = [
+            TensorDict(
+                n=TensorDict(b=torch.ones(3), h=torch.ones(3, 2 + i), batch_size=[3]),
+                batch_size=[3],
+            )
+            for i in range(2)
+        ]
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            store_td.fill_("n", 5.0)
+            torch.testing.assert_close(store_td["n", "b"], torch.full((2, 3), 5.0))
+            store_td.zero_()
+            torch.testing.assert_close(store_td["n", "b"], torch.zeros(2, 3))
+            for i in range(2):
+                torch.testing.assert_close(store_td[i]["n", "h"], tds[i]["n", "h"])
+            store_td[1].fill_("n", 5.0)
+            torch.testing.assert_close(store_td[1]["n", "h"], torch.full((3, 3), 5.0))
+            torch.testing.assert_close(store_td[0]["n", "h"], tds[0]["n", "h"])
+        finally:
+            store_td.clear_redis()
+            store_td.close()
 
     def test_view_shape_change_raises(self, store_stack):
         """Changing element shape through the view should raise."""
@@ -1545,6 +1775,36 @@ class TestLazyStackedTensorDictStore:
             view.set(("nested", "x"), new_x, inplace=True)
             reread = store_td[0][("nested", "x")]
             assert torch.allclose(reread, new_x)
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    # ---- empty ----
+
+    def test_empty_recurse(self, store_kwargs):
+        """empty(recurse=True) keeps the sub-tensordicts, as on a lazy stack."""
+        tds = [
+            TensorDict(
+                {
+                    "a": torch.randn(3),
+                    "b": {"c": torch.randn(3), "d": {"e": torch.randn(3, 2)}},
+                },
+                batch_size=[3],
+            )
+            for _ in range(4)
+        ]
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            # the store and the view of one element
+            for td in (store_td, store_td[1]):
+                empty = td.empty(recurse=True)
+                assert isinstance(empty, TensorDict)
+                assert set(empty.keys(True)) == {"b", ("b", "d")}
+                assert empty.batch_size == td.batch_size
+                assert empty["b", "d"].batch_size == td.batch_size
+                assert len(td.empty().keys()) == 0
         finally:
             store_td.clear_redis()
             store_td.close()

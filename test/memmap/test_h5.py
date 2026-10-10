@@ -155,6 +155,25 @@ def test_auto_batch_size(tmpdir):
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+@pytest.mark.parametrize("batch_dims", [None, 1, 2])
+def test_from_any_batch_size(tmpdir, batch_dims):
+    filename = Path(tmpdir) / "file.h5"
+    with h5py.File(filename, "w") as f:
+        f["a"] = np.zeros((3, 4, 5))
+        f["b/c"] = np.zeros((3, 4, 5, 6))
+        f["b/d"] = np.zeros((3, 4, 5))
+    expected = torch.Size([3, 4, 5][:batch_dims])
+    with h5py.File(filename, "r") as f:
+        td = TensorDict.from_any(f, auto_batch_size=True, batch_dims=batch_dims)
+        assert td.batch_size == expected
+        assert td["b"].batch_size == expected
+        td = TensorDict.from_any(f, batch_size=expected)
+        assert td.batch_size == expected
+        assert td["b"].batch_size == expected
+        assert TensorDict.from_any(f, batch_size=3).batch_size == (3,)
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_kwargs_passthrough_nested(tmpdir):
     # create_dataset kwargs must reach the leaves of nested tensordicts too
     # https://github.com/pytorch/tensordict/issues/1758
@@ -297,6 +316,39 @@ class TestH5Indexing:
             assert h5td[idx].get(key).shape == expected.shape, key
             assert (h5td[idx].get(key) == expected).all(), key
 
+    @pytest.mark.parametrize(
+        "idx",
+        [
+            1,
+            slice(1, 3),
+            torch.tensor([0, 2]),
+            torch.tensor([True, False, True, False]),
+        ],
+    )
+    @pytest.mark.parametrize("value", [7, 0.1, True])
+    def test_index_setitem_scalar(self, tmp_path, idx, value):
+        # h5td[idx] = scalar writes the scalar into every tensor entry, in the
+        # dtype of the entry, and leaves the non-tensor entries as they are
+        td = TensorDict(
+            {
+                "a": torch.arange(8.0, dtype=torch.float64).view(4, 2),
+                "b": torch.zeros(4, dtype=torch.bool),
+                "nested": TensorDict(c=torch.arange(12).view(4, 3), batch_size=[4, 3]),
+                "s": "a string!",
+            },
+            batch_size=[4],
+        )
+        td.set_non_tensor("f", 1)
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        h5td[idx] = value
+        expected = td.exclude("s", "f")
+        expected[idx] = value
+        for key in expected.keys(True, True):
+            assert h5td.get(key).dtype == expected.get(key).dtype, key
+            assert (h5td.get(key) == expected.get(key)).all(), key
+        assert h5td["s"] == b"a string!"
+        assert h5td["f"] == 1
+
     @pytest.mark.parametrize("idx", [slice(0, 2), torch.tensor([1, 3])])
     def test_index_masked_fill_(self, tmp_path, idx):
         # h5td[idx] writes to the file: only the masked rows are filled
@@ -310,6 +362,16 @@ class TestH5Indexing:
         td[idx] = td[idx].masked_fill(mask, -1)
         for key in td.keys(True, True):
             assert (h5td.get(key) == td.get(key)).all(), key
+
+    def test_stack_items(self, data):
+        # h5td[idx] is a lazy view of the file, not a lazy stack
+        td, h5td = data
+        result = torch.stack([h5td[0], h5td[3]])
+        expected = torch.stack([td[0], td[3]])
+        assert type(result) is TensorDict
+        assert result.batch_size == expected.batch_size
+        for key in expected.keys(True, True):
+            assert (result.get(key) == expected.get(key)).all(), key
 
     def test_index_reads_only_selected_rows(self, data, monkeypatch):
         # Slicing must not load whole datasets from storage
@@ -377,6 +439,25 @@ class TestH5Indexing:
         for i, element in enumerate(elements):
             assert type(element) is H5Data
             assert element.a == td["a"][i]
+
+    @pytest.mark.parametrize("method", ["update_at_", "sub_update_"])
+    def test_update_at_nested_keys_to_update(self, tmp_path, method):
+        td = TensorDict(
+            a=torch.ones(3, 2),
+            n=TensorDict(b=torch.ones(3, 2), c=torch.ones(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        dest = td.clone().zero_()
+        if method == "update_at_":
+            dest.update_at_(h5td, slice(0, 3), keys_to_update=[("n", "b")])
+        else:
+            dest._get_sub_tensordict(slice(0, 3)).update_(
+                h5td, keys_to_update=[("n", "b")]
+            )
+        assert (dest["n", "b"] == 1).all()
+        assert (dest["n", "c"] == 0).all()
+        assert (dest["a"] == 0).all()
 
     def test_keys_contains(self, data):
         _, h5td = data

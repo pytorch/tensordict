@@ -15,19 +15,21 @@ from typing import Any, Callable
 
 import pytest
 import torch
-from _utils_internal import is_npu_available
+from _utils_internal import is_npu_available, legacy_lazy_mode
 from packaging import version
 from tensordict import (
     assert_close,
     from_dataclass,
+    lazy_stack,
     LazyStackedTensorDict,
+    MetaData,
     NonTensorData,
     tensorclass,
     TensorDict,
     TensorDictParams,
     TypedTensorDict,
 )
-from tensordict._unbatched import UnbatchedTensor
+from tensordict._unbatched import _HAS_WRAPPER_SUBCLASS_FIX, UnbatchedTensor
 from tensordict.base import _get_defaults_to_none, _set_get_defaults_to_none
 from tensordict.nn import (
     CudaGraphModule,
@@ -53,6 +55,9 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch._dynamo.testing import CompileCounterWithBackend
+from torch._dynamo.utils import counters
+from torch._inductor.utils import fresh_cache
+from torch.testing._internal.two_tensor import TwoTensor
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
@@ -367,6 +372,19 @@ class TestTD:
         data_reshape_c = reshape_c(data)
         assert (data_reshape == data_reshape_c).all()
 
+    def test_torch_reshape_chunk(self, mode):
+        def reshape_chunk(td):
+            return torch.chunk(torch.reshape(td, (2, 2)), 2, 1)
+
+        reshape_chunk_c = torch.compile(reshape_chunk, fullgraph=True, mode=mode)
+        data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
+        chunks = reshape_chunk(data)
+        chunks_c = reshape_chunk_c(data)
+        assert len(chunks) == len(chunks_c) == 2
+        for chunk, chunk_c in zip(chunks, chunks_c):
+            assert chunk_c.batch_size == (2, 1)
+            assert (chunk == chunk_c).all()
+
     def test_view(self, mode):
         def view(td):
             out = td.view(2, 2).clear_refs_for_compile_()
@@ -389,6 +407,58 @@ class TestTD:
         _ = transpose_c(data)
         data_transpose_c = transpose_c(data)
         assert (data_transpose == data_transpose_c).all()
+
+    @pytest.mark.parametrize("dims", [(1, 0), (0, 1)])
+    @pytest.mark.parametrize("legacy", [False, True])
+    def test_permute(self, dims, legacy, mode):
+        def permute(td):
+            return td.permute(*dims)["a", "b"]
+
+        def permute_twice(td):
+            # In legacy mode, the second permute is applied to a permuted td.
+            return td.permute(*dims).permute(*dims)["a", "b"]
+
+        permute_c = torch.compile(permute, fullgraph=True, mode=mode)
+        permute_twice_c = torch.compile(permute_twice, fullgraph=True, mode=mode)
+        data = TensorDict({"a": {"b": torch.arange(6).view(2, 3)}}, [2, 3])
+        with legacy_lazy_mode() if legacy else contextlib.nullcontext():
+            data_permute = permute(data)
+            _ = permute_c(data)
+            data_permute_c = permute_c(data)
+            data_permute_twice = permute_twice(data)
+            data_permute_twice_c = permute_twice_c(data)
+        torch.testing.assert_close(data_permute_c, data_permute)
+        torch.testing.assert_close(data_permute_twice_c, data_permute_twice)
+
+    def test_lazy_stack_contains_is_empty(self, mode):
+        def contains_is_empty(td):
+            return "a" in td.keys(), "c" in td.keys(), td.is_empty(), td["a"] + 1
+
+        contains_is_empty_c = torch.compile(
+            contains_is_empty, fullgraph=True, mode=mode
+        )
+        data = lazy_stack([TensorDict(a=torch.randn(3)) for _ in range(2)])
+        has_a, has_c, is_empty, a = contains_is_empty_c(data)
+        assert has_a
+        assert not has_c
+        assert not is_empty
+        torch.testing.assert_close(a, data["a"] + 1)
+
+    def test_lazy_stack_set_inplace_pop(self, mode):
+        def set_inplace_pop(td):
+            td.set_("b", td["b"] + 1)
+            return td.pop("a")
+
+        set_inplace_pop_c = torch.compile(set_inplace_pop, fullgraph=True, mode=mode)
+        data = lazy_stack(
+            [TensorDict(a=torch.randn(3), b=torch.randn(3)) for _ in range(2)]
+        )
+        data_c = data.clone()
+        a = set_inplace_pop(data)
+        a_c = set_inplace_pop_c(data_c)
+        torch.testing.assert_close(a_c, a)
+        assert "a" not in data_c.keys()
+        assert (data_c == data).all()
 
     def test_unbind(self, mode):
         def unbind(td):
@@ -589,8 +659,6 @@ class TestTD:
         assert result_unsqueeze_c.shape == torch.Size([1, 3])
 
     def test_names(self, mode):
-        import torch._dynamo.exc
-
         def make_td_with_names(data):
             return TensorDict(data, batch_size=[1, 2], names=["d0", "d1"])
 
@@ -602,8 +670,40 @@ class TestTD:
             make_td_with_names, fullgraph=True, mode=mode
         )
         make_td_with_names(data_dict)
-        # with pytest.raises(torch._dynamo.exc.Unsupported):
-        make_td_with_names_c(data_dict)
+        td = make_td_with_names_c(data_dict)
+        assert td.names == ["d0", "d1"]
+
+    def test_names_kept_by_ops(self, mode):
+        # TensorDict._new_unsafe calls TensorDict(..., names=names) under
+        # compile, so every op that rebuilds a tensordict goes through the
+        # names argument of __init__.
+        def ops(td):
+            nested = TensorDict(
+                {"a": td["a"], "sub": {"b": td["a"]}}, batch_size=[3], names=["n"]
+            )
+            return (
+                td.clone(),
+                td.copy(),
+                td.clone(False),
+                td.select("a"),
+                td + 1,
+                td[:2],
+                torch.stack([td, td], 1),
+                nested,
+            )
+
+        ops_c = torch.compile(ops, fullgraph=True, mode=mode)
+        td = TensorDict(a=torch.zeros(3, 2), batch_size=[3, 2], names=["x", "y"])
+        clone, copy, shallow_clone, select, add, index, stack, nested = ops_c(td)
+        assert clone.names == ["x", "y"]
+        assert copy.names == ["x", "y"]
+        assert shallow_clone.names == ["x", "y"]
+        assert select.names == ["x", "y"]
+        assert add.names == ["x", "y"]
+        assert index.names == ["x", "y"]
+        assert stack.names == ["x", None, "y"]
+        assert nested.names == ["n"]
+        assert nested["sub"].names == ["n"]
 
     @pytest.mark.skipif(
         not torch.cuda.is_available(), reason="cuda required to test device casting"
@@ -626,6 +726,45 @@ class TestTD:
         td_device_c = test_to_device_c(td)
         assert td_device_c.batch_size == td.batch_size
         assert td_device_c.device == torch.device(device)
+
+    def test_to_cpu(self, mode):
+        def to_cpu(td):
+            return td.to("cpu")
+
+        td = TensorDict({"a": torch.randn(1, 2, 3)}, batch_size=[1, 2])
+        to_cpu_c = torch.compile(to_cpu, fullgraph=True, mode=mode)
+        td_cpu_c = to_cpu_c(td)
+        assert td_cpu_c.device == torch.device("cpu")
+        torch.testing.assert_close(td_cpu_c["a"], td["a"])
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="cuda required")
+    def test_to_cpu_from_cuda(self, mode):
+        def to_cpu(td):
+            return (td + 1).to("cpu")
+
+        td = TensorDict({"a": torch.randn(1, 2, 3)}, batch_size=[1, 2], device="cuda")
+        to_cpu_c = torch.compile(to_cpu, fullgraph=True, mode=mode)
+        td_cpu = to_cpu(td)
+        td_cpu_c = to_cpu_c(td)
+        assert td_cpu_c.device == torch.device("cpu")
+        assert td_cpu_c["a"].device == torch.device("cpu")
+        torch.testing.assert_close(td_cpu_c["a"], td_cpu["a"])
+
+    def test_to_dtype(self, mode):
+        def to_dtype(td):
+            return td.to(torch.float64)
+
+        def to_tensor(td, other):
+            return td.to(other)
+
+        td = TensorDict({"a": torch.randn(1, 2, 3)}, batch_size=[1, 2])
+        to_dtype_c = torch.compile(to_dtype, fullgraph=True, mode=mode)
+        to_tensor_c = torch.compile(to_tensor, fullgraph=True, mode=mode)
+        assert to_dtype_c(td)["a"].dtype == torch.float64
+        other = torch.zeros((), dtype=torch.float64)
+        td_other_c = to_tensor_c(td, other)
+        assert td_other_c["a"].dtype == torch.float64
+        assert td_other_c.device == other.device
 
     @pytest.mark.skipif(
         is_npu_available(),
@@ -675,6 +814,40 @@ class TestTD:
         _ = locked_op_c(td)
         td_op_c = locked_op_c(td)
         assert (td_op == td_op_c).all()
+
+    def test_inplace_broadcast_tensor(self, mode):
+        def add_(td, other):
+            return td.add_(other)
+
+        td = TensorDict(
+            {"a": torch.zeros(1, 2, 3), "b": torch.zeros(1, 2, dtype=torch.int64)},
+            batch_size=[1, 2],
+            lock=True,
+        )
+        add_c = torch.compile(add_, fullgraph=True, mode=mode)
+        other = torch.ones(1, 2, dtype=torch.int64)
+        assert add_c(td, other) is td
+        assert add_c(td, other) is td
+        assert (td["a"] == 2).all()
+
+    @pytest.mark.parametrize("after_empty", ["tensor", "nested"])
+    def test_tree_map_empty_nested_first(self, after_empty, mode):
+        # The batch size of the result is not read from the empty nested td,
+        # https://github.com/pytorch/tensordict/issues/2072
+        def add_one(td):
+            return tree_map(lambda x: x + 1, td)
+
+        if after_empty == "tensor":
+            other = torch.zeros(4, 3)
+        else:
+            other = TensorDict(x=torch.zeros(4, 2, 3), batch_size=[4, 2])
+        td = TensorDict(empty=TensorDict(batch_size=[4]), other=other, batch_size=[4])
+        add_one_c = torch.compile(add_one, fullgraph=True, mode=mode)
+        out = add_one_c(td)
+        assert out.batch_size == torch.Size([4])
+        assert out["empty"].batch_size == torch.Size([4])
+        assert out["other"].shape == other.shape
+        assert (out == add_one(td)).all()
 
     # Memmap is currently not supported
     # def test_memmap(self, mode, tmpdir):
@@ -1257,6 +1430,30 @@ class TestTC:
 
         assert (stack_eager == stack_compile).all()
 
+    def test_tc_stack_names(self, mode):
+        # TensorDict.__init__ used to skip the names under compile, with the
+        # comment "this breaks when stacking tensorclasses with dynamo".
+        def stack_named(b):
+            inner = MyClass(a=None, b=b, batch_size=[3], names=["n"])
+            data = MyClass(a=inner, batch_size=[3], names=["n"])
+            return data, torch.stack([data, data.clone()])
+
+        def stack_inputs(data0, data1):
+            return torch.stack([data0, data1])
+
+        stack_named_c = torch.compile(stack_named, fullgraph=True, mode=mode)
+        data, stacked = stack_named_c(torch.arange(3))
+        assert data.names == ["n"]
+        assert data.a.names == ["n"]
+        assert stacked.names == [None, "n"]
+        assert stacked.a.names == [None, "n"]
+        assert (stacked.a.b == torch.arange(3).expand(2, 3)).all()
+
+        stack_inputs_c = torch.compile(stack_inputs, fullgraph=True, mode=mode)
+        stacked = stack_inputs_c(data, data.clone())
+        assert stacked.names == [None, "n"]
+        assert stacked.a.names == [None, "n"]
+
     def test_tc_cat(self, mode):
         def cat_tds(td0, td1):
             return torch.cat([td0, td1])
@@ -1279,6 +1476,23 @@ class TestTC:
             a=MyClass(a=None, b=torch.arange(4), batch_size=[4]), batch_size=[4]
         )
         assert (reshape(data) == reshape_c(data)).all()
+
+    def test_tc_torch_where(self, mode):
+        def where(mask, td0, td1):
+            return torch.reshape(torch.where(mask, td0, td1), (2, 2))
+
+        where_c = torch.compile(where, fullgraph=True, mode=mode)
+        mask = torch.tensor([True, False, True, False])
+        data0 = MyClass(
+            a=MyClass(a=None, b=torch.arange(4), batch_size=[4]), batch_size=[4]
+        )
+        data1 = MyClass(
+            a=MyClass(a=None, b=torch.arange(4, 8), batch_size=[4]), batch_size=[4]
+        )
+        result_c = where_c(mask, data0, data1)
+        assert isinstance(result_c, MyClass)
+        assert result_c.batch_size == (2, 2)
+        assert (where(mask, data0, data1) == result_c).all()
 
     def test_tc_get_defaults_to_none(self, mode):
         # The AttributeError is caught in the compiled function: with
@@ -1659,39 +1873,6 @@ class TestNN:
 
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestFunctional:
-    def test_functional_error(self, mode):
-        TORCHDYNAMO_INLINE_INBUILT_NN_MODULES = (
-            torch._dynamo.config.inline_inbuilt_nn_modules
-        )
-        torch._dynamo.config.inline_inbuilt_nn_modules = True
-        module = torch.nn.Sequential(
-            torch.nn.Linear(3, 4),
-            torch.nn.ReLU(),
-            torch.nn.Linear(4, 5),
-        )
-        td = TensorDict.from_module(module)
-        td_zero = TensorDictParams(td.data.clone())
-        td_zero.zero_()
-
-        torch._dynamo.config.inline_inbuilt_nn_modules = False
-        try:
-
-            def call(x, td):
-                with td.to_module(module, preserve_module_state=False):
-                    return module(x)
-
-            call_compile = torch.compile(call, fullgraph=True, mode=mode)
-            x = torch.randn(2, 3)
-            with pytest.raises(
-                RuntimeError, match="torch._dynamo.config.inline_inbuilt_nn_modules"
-            ):
-                call_compile(x, td_zero)
-        finally:
-            if torch._dynamo.config.inline_inbuilt_nn_modules is not None:
-                torch._dynamo.config.inline_inbuilt_nn_modules = (
-                    TORCHDYNAMO_INLINE_INBUILT_NN_MODULES
-                )
-
     # in-place modif raises an error even if fullgraph=False
     @pytest.mark.parametrize("modif_param", [False])
     def test_functional(self, modif_param, mode):
@@ -1910,6 +2091,22 @@ class TestExport:
         torch.testing.assert_close(out, td["a"] * 2)
         assert tuple(batch_size) == (4,)
         assert tuple(nested_batch_size) == (4,)
+
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_export_td_input_names(self, strict):
+        # Export traces with is_compiling() True. The input spec of non-strict
+        # export must record the dim names, so that the exported module
+        # accepts the named tensordict it was exported with, and the clone
+        # built in forward must keep them.
+        class Mod(torch.nn.Module):
+            def forward(self, td):
+                return td.clone()
+
+        td = TensorDict(a=torch.randn(4, 3), batch_size=[4], names=["n"])
+        ep = torch.export.export(Mod(), (td,), strict=strict)
+        out = ep.module()(td)
+        assert out.names == ["n"]
+        torch.testing.assert_close(out["a"], td["a"])
 
     @pytest.mark.parametrize("strict", [False])  # , True])
     def test_export_with_td_params(self, strict):
@@ -2253,6 +2450,22 @@ class TestCudaGraphs:
         with pytest.raises(ValueError, match="captured with batch_size"):
             tdmodule(TensorDict(x=torch.randn(1), z=torch.randn(1), batch_size=[1]))
 
+    def test_tdmodule_cpu_input_copied_before_return(self, compiled):
+        # The caller may overwrite a pinned CPU input as soon as the call returns:
+        # the copy to the graph's buffers must be done by then.
+        if not torch.cuda.is_available():
+            pytest.skip("CudaGraphModule only replays graphs on CUDA")
+        tdmodule = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
+        tdmodule = self._make_cudagraph(tdmodule, compiled)
+        for _ in range(4):
+            tdmodule(TensorDict(x=torch.zeros(3), batch_size=[3]))
+        x = torch.ones(3, device="cpu").pin_memory()
+        # Keep the stream busy so that a pending copy would run after the write.
+        torch.cuda._sleep(100_000_000)
+        td = tdmodule(TensorDict(x=x, batch_size=[3]))
+        x.fill_(100.0)
+        torch.testing.assert_close(td["y"], torch.full((3,), 2.0))
+
     def test_tdmodule_entry_shape_change_raises(self, compiled):
         # Same batch size, entry of another shape: it must not be broadcast into
         # the captured buffer, or fail in the copy.
@@ -2485,6 +2698,36 @@ class TestTCNonTensorInit:
         inp = torch.randn(3)
         result = fn(inp)
         torch.testing.assert_close(result, inp * 2)
+
+    def test_tc_positional_init_fullgraph(self):
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(a):
+            tc = self.MyTC(a, "hello", batch_size=[3])
+            return tc.x + 1, tc.label
+
+        inp = torch.randn(3)
+        result, label = fn(inp)
+        torch.testing.assert_close(result, inp + 1)
+        assert label == "hello"
+
+    def test_nontensordata_positional_init_fullgraph(self):
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(a):
+            return a + 1, NonTensorData("hello", batch_size=[3])
+
+        _, data = fn(torch.randn(3))
+        assert isinstance(data, NonTensorData)
+        assert data.data == "hello"
+        assert data.batch_size == (3,)
+
+    def test_metadata_positional_init_fullgraph(self):
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(a):
+            return a + 1, MetaData({"a": 1})
+
+        _, data = fn(torch.randn(3))
+        assert isinstance(data, MetaData)
+        assert data.data == {"a": 1}
 
 
 @tensorclass
@@ -2824,6 +3067,75 @@ class TestGuardCount:
         assert ut_clone.data_ptr() != ut_orig.data_ptr(), (
             "clone() must produce independent data"
         )
+
+    @pytest.mark.skipif(
+        not _HAS_WRAPPER_SUBCLASS_FIX,
+        reason="The fallback UnbatchedTensor is not a wrapper subclass.",
+    )
+    def test_unbatched_aot_autograd_cache_key(self):
+        """UnbatchedTensor gives the AOTAutograd cache a key without a warning.
+
+        Equal inputs hit the cache and another batch size misses it.
+        """
+
+        def fn(u):
+            return u * 2
+
+        def compile_and_count(u):
+            torch._dynamo.reset()
+            counters.clear()
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                out = torch.compile(fn)(u)
+            torch.testing.assert_close(out, u * 2)
+            assert not [
+                w for w in caught if "_stable_hash_for_caching" in str(w.message)
+            ]
+            aot_counters = counters["aot_autograd"]
+            return (
+                aot_counters["autograd_cache_hit"],
+                aot_counters["autograd_cache_miss"],
+            )
+
+        data = torch.randn(5)
+        with (
+            fresh_cache(),
+            torch._functorch.config.patch(enable_autograd_cache=True),
+        ):
+            first = compile_and_count(UnbatchedTensor(data, batch_size=[4]))
+            equal = compile_and_count(UnbatchedTensor(data.clone(), batch_size=[4]))
+            other_batch_size = compile_and_count(UnbatchedTensor(data, batch_size=[6]))
+        assert first == (0, 1)
+        assert equal == (1, 0)
+        assert other_batch_size == (0, 1)
+
+    @pytest.mark.skipif(
+        not _HAS_WRAPPER_SUBCLASS_FIX,
+        reason="The fallback UnbatchedTensor is not a wrapper subclass.",
+    )
+    def test_unbatched_aot_autograd_cache_key_subclass_payload(self):
+        """The cache key of an UnbatchedTensor covers a wrapper subclass payload."""
+
+        class TaggedTwoTensor(TwoTensor):
+            def _stable_hash_for_caching(self):
+                return self.tag
+
+        def key(data):
+            return UnbatchedTensor(data, batch_size=[4])._stable_hash_for_caching()
+
+        def tagged(tag, a):
+            out = TaggedTwoTensor(a, a.clone())
+            out.tag = tag
+            return out
+
+        a = torch.randn(5)
+        two = key(TwoTensor(a, a.clone()))
+        assert two == key(TwoTensor(torch.randn(5), torch.randn(5)))
+        assert two != key(TwoTensor(a.double(), a.double()))
+        assert two != key(a)
+        # A payload with its own stable hash is keyed by that hash.
+        assert key(tagged("x", a)) == key(tagged("x", a.double()))
+        assert key(tagged("x", a)) != key(tagged("y", a))
 
     def test_lock_inside_compile_no_weakref_leftover(self):
         """``lock_()`` called inside a compiled region must not leave a

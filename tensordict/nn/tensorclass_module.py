@@ -90,7 +90,8 @@ class TensorClassModuleWrapper(TensorDictModuleBase):
         """Forward pass converting TensorDict to TensorClass and back.
 
         Args:
-            tensordict (TensorDict): Input tensordict.
+            tensordict (TensorDict): Input tensordict. Its entries that are not
+                fields of the input class are ignored.
             *args: Additional positional arguments.
             **kwargs: Additional keyword arguments.
 
@@ -98,9 +99,14 @@ class TensorClassModuleWrapper(TensorDictModuleBase):
             TensorDict: Output tensordict.
 
         """
-        return self.tc_module(
-            self.tc_module.input_type.from_tensordict(tensordict)
-        ).to_tensordict()
+        input_type = self.tc_module.input_type
+        # from_tensordict rejects the keys that are not fields of the input class
+        extra_keys = [
+            key for key in tensordict.keys() if key not in input_type.__expected_keys__
+        ]
+        if extra_keys:
+            tensordict = tensordict.exclude(*extra_keys)
+        return self.tc_module(input_type.from_tensordict(tensordict)).to_tensordict()
 
 
 InputClass = TypeVar("InputClass", bound=Union[TensorClass, Tensor])
