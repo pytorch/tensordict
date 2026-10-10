@@ -567,7 +567,8 @@ send and recv with a pipe
 of a rank, and :meth:`~tensordict.TensorDictBase.asend` and
 :meth:`~tensordict.TensorDictBase.arecv` are their async versions. With a
 pipe, ``recv`` does not always write into ``td``. On the first message, it
-returns a new consolidated tensordict, and ``td`` does not change. Keep the
+returns a new consolidated tensordict, and ``td`` does not change
+(`#2244 <https://github.com/pytorch/tensordict/issues/2244>`_). Keep the
 return value, and receive into it:
 
 .. code-block:: python

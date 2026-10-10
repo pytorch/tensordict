@@ -240,11 +240,14 @@ the default print format, with ``shape=``, ``device=``, ``dtype=`` and
   (`#1956 <https://github.com/pytorch/tensordict/issues/1956>`_), and fields
   on a device with an index, such as ``cuda:0``, without an error. The repr
   of a tensordict with ``device=cuda:0`` raises
-  ``ValueError: Device not found in the string``.
+  ``ValueError: Device not found in the string``
+  (`#2243 <https://github.com/pytorch/tensordict/issues/2243>`_).
 - It reads one level of nesting. With two levels or more, the result also
-  has a wrong copy of each deeper tensordict at the top level.
+  has a wrong copy of each deeper tensordict at the top level
+  (`#2243 <https://github.com/pytorch/tensordict/issues/2243>`_).
 - It reads keys that contain only letters, digits and ``_``. A key such as
-  ``my-key`` comes back as ``key``.
+  ``my-key`` comes back as ``key``
+  (`#2243 <https://github.com/pytorch/tensordict/issues/2243>`_).
 - It does not keep ``is_shared``, and it returns a
   :class:`~tensordict.TensorDict` for the repr of a lazy stack.
 

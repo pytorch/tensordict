@@ -3314,7 +3314,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 regardless of its locked status. Defaults to ``False``.
                 On a locked :class:`~tensordict.TensorDict`, ``ignore_lock=True``
                 does not lift the lock in the current version: a new or
-                replaced entry still raises ``RuntimeError``. Use
+                replaced entry still raises ``RuntimeError``
+                (`#2260 <https://github.com/pytorch/tensordict/issues/2260>`_). Use
                 ``inplace=True``, or unlock the tensordict with
                 :meth:`~.unlock_` first.
 
@@ -7367,7 +7368,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         Can be used as a context manager: the tensordict is unlocked when the
         ``with`` block exits. If the block raises an exception, the tensordict
-        stays locked.
+        stays locked (`#2241 <https://github.com/pytorch/tensordict/issues/2241>`_).
 
         Examples:
             >>> from tensordict import TensorDict

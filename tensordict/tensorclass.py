@@ -5278,7 +5278,9 @@ class NonTensorData(NonTensorDataBase):
     loads it. If JSON can encode the value, it goes to the ``meta.json``
     file of the entry (a tuple is loaded back as a list). Instances of other
     classes are pickled to an ``other.pickle`` file. Some values fail: a
-    ``set`` raises a ``TypeError``. Pickle can execute arbitrary code when it
+    ``set`` raises a ``TypeError``
+    (`#2264 <https://github.com/pytorch/tensordict/issues/2264>`_). Pickle can
+    execute arbitrary code when it
     loads, so :meth:`~tensordict.TensorDictBase.load_memmap` warns when it
     loads a pickled value. Pass ``allow_pickle=True`` for data that you
     trust. From TensorDict 0.15, the default is ``allow_pickle=False``, which

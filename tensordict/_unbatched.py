@@ -268,7 +268,8 @@ if _HAS_WRAPPER_SUBCLASS_FIX:
         - Indexed assignment (``td[:, :2] = other``) leaves an unbatched entry
           unchanged only if ``other`` does not have that key. If ``other``
           has it, the batch index is applied to the unbatched payload, which
-          usually raises a shape error.
+          usually raises a shape error
+          (`#2251 <https://github.com/pytorch/tensordict/issues/2251>`_).
         - :meth:`~tensordict.TensorDictBase.auto_batch_size_` ignores
           unbatched entries: the batch size comes from the other entries.
 
@@ -433,7 +434,8 @@ else:
         - Indexed assignment (``td[:, :2] = other``) leaves an unbatched entry
           unchanged only if ``other`` does not have that key. If ``other``
           has it, the batch index is applied to the unbatched payload, which
-          usually raises a shape error.
+          usually raises a shape error
+          (`#2251 <https://github.com/pytorch/tensordict/issues/2251>`_).
         - :meth:`~tensordict.TensorDictBase.auto_batch_size_` ignores
           unbatched entries: the batch size comes from the other entries.
 

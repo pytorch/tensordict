@@ -83,7 +83,10 @@ table:
        To copy the data into memory, use ``to_tensordict()``.
    * - ``PersistentTensorDict``, ``TensorDictStore``
      - ``update_(d)``
-     - Writes nothing, and raises no error. ``TypedTensorDict`` over a
+     - Writes nothing, and raises no error
+       (`#2217 <https://github.com/pytorch/tensordict/issues/2217>`_,
+       `#2242 <https://github.com/pytorch/tensordict/issues/2242>`_).
+       ``TypedTensorDict`` over a
        ``LazyStackedTensorDict`` has the same fault. Use ``set_()`` for each
        key, or ``update(d, inplace=True)``.
    * - ``PersistentTensorDict``, ``TensorDictStore``,

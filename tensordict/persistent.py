@@ -1031,7 +1031,9 @@ class PersistentTensorDict(TensorDictBase):
         Keyword Args:
             auto_batch_size (bool, optional): not used. The batch size comes
                 from ``batch_size``, or from the input as described there,
-                whatever the value of this argument. Defaults to ``False``.
+                whatever the value of this argument
+                (`#2247 <https://github.com/pytorch/tensordict/issues/2247>`_). Defaults
+                to ``False``.
             batch_size (tensordict batch-size, optional): if provided, batch size
                 of the tensordict. If not, a tensordict input keeps its batch
                 size, and a dict input gets the largest leading shape that all

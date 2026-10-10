@@ -95,7 +95,7 @@ The loaded leaves are :class:`~tensordict.MemoryMappedTensor` instances.
 Without ``inplace=True``, ``to_module`` tries to make a parameter from each
 of them, and raises ``RuntimeError: Creating a Parameter from an instance of
 type MemoryMappedTensor requires that detach() returns an instance of the
-same type``.
+same type`` (`#2240 <https://github.com/pytorch/tensordict/issues/2240>`_).
 
 To load one sub-module, pass its key as ``subpath``. tensordict then reads
 only that part of the tree. ``subpath`` takes a nested key, such as
@@ -538,7 +538,9 @@ inside a :class:`~tensordict.TensorDict` or a stack of tensordicts:
 through the ``tensordict`` logger, and returns it as a string.
 
 A ``set`` value cannot be saved: ``save`` raises a ``TypeError`` because
-JSON cannot represent it. Convert it to a list first.
+JSON cannot represent it
+(`#2264 <https://github.com/pytorch/tensordict/issues/2264>`_). Convert it to a list
+first.
 
 Memory-mapped tensors
 ---------------------

@@ -190,8 +190,10 @@ example on a batch size mismatch, the entries before it are already written.
 
    Do not use ``update_`` on a :class:`~tensordict.PersistentTensorDict` or a
    :class:`~tensordict.store.TensorDictStore`. On these backends, ``update_``
-   writes nothing and raises no error. Use ``set_`` for each key, or
-   ``update(..., inplace=True)``.
+   writes nothing and raises no error
+   (`#2217 <https://github.com/pytorch/tensordict/issues/2217>`_,
+   `#2242 <https://github.com/pytorch/tensordict/issues/2242>`_). Use ``set_``
+   for each key, or ``update(..., inplace=True)``.
 
 Select, exclude and remove entries
 ----------------------------------
@@ -361,8 +363,8 @@ gets its original parameters back:
   False
 
 If the ``with`` block raises an exception, the module keeps the parameters of
-``params``. Catch the exception inside the block if you must restore the
-module.
+``params`` (`#2241 <https://github.com/pytorch/tensordict/issues/2241>`_).
+Catch the exception inside the block if you must restore the module.
 
 These shape operations also work as context managers:
 :meth:`~tensordict.TensorDict.view`, :meth:`~tensordict.TensorDict.permute`,
