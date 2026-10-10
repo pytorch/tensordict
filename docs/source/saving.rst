@@ -192,8 +192,8 @@ the default mode changes the file:
 
 If many nodes read the same files on a network file system, load with
 ``mode="r"``. On some of these file systems (for example Lustre), a page
-fault on a shared writable mapping takes a write lock, and readers on
-different nodes block each other. On Linux, a copy-on-write mapping counts against the memory commit limit. If a file is
+fault on a shared writable mapping takes a write lock. Readers on
+different nodes then block each other. On Linux, a copy-on-write mapping counts against the memory commit limit. If a file is
 larger than RAM plus swap, ``mode="r"`` can fail to map it. In that case,
 use the default mode.
 
