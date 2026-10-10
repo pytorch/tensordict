@@ -1,9 +1,8 @@
 from __future__ import annotations
 
+import dataclasses
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
-from dataclasses import Field
-from typing import Any, cast, Generic, get_args, get_origin, TypeVar, Union
+from typing import cast, Generic, get_args, get_origin, TypeVar, Union
 
 from tensordict._td import TensorDict
 from tensordict.nn.common import dispatch, TensorDictModuleBase
@@ -23,7 +22,7 @@ def _tensor_class_keys(tensorclass_type: type[TensorClass]) -> list[tuple[str, .
         list[tuple[str, ...]]: A list of key tuples representing all fields in the TensorClass.
 
     """
-    fields = cast("Iterable[Field[Any]]", tensorclass_type.fields())
+    fields = dataclasses.fields(tensorclass_type)
     # field.type is a string under postponed annotations: use the resolved hints
     type_hints = getattr(tensorclass_type, "_type_hints", None) or {}
     keys: list[tuple[str, ...]] = []

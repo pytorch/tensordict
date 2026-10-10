@@ -1581,7 +1581,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                         )
                     ]
                 else:
-                    keys = list(set(self.out_keys + list(tensordict.keys(True, True))))
+                    keys = list(set(self.out_keys).union(tensordict.keys(True, True)))
                 return tensordict.update(result, keys_to_update=keys)
         return result
 
