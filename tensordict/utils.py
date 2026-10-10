@@ -2107,7 +2107,8 @@ def _is_json_serializable(item):
                 return False
         else:
             return True
-    if isinstance(item, (list, tuple, set)):
+    # a set is not a JSON type: leave it to pickle
+    if isinstance(item, (list, tuple)):
         for val in item:
             if not _is_json_serializable(val):
                 return False
