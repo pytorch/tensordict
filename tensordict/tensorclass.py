@@ -1145,6 +1145,20 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     else:
         user_init = init
 
+    # Keep the docstring of the class. A class that was a dataclass already
+    # may carry the docstring that dataclass() generated from its signature:
+    # treat it as absent, so that it is regenerated below.
+    own_doc = cls.__dict__.get("__doc__")
+    if own_doc and "__dataclass_fields__" in cls.__dict__:
+        try:
+            generated_doc = cls.__name__ + str(inspect.signature(cls)).replace(
+                " -> None", ""
+            )
+        except (TypeError, ValueError):
+            generated_doc = None
+        if own_doc == generated_doc:
+            own_doc = None
+
     # Breaks some tests, don't do that:
     # if not dataclasses.is_dataclass(cls):
     cls = dataclass(cls, frozen=frozen)
@@ -1417,7 +1431,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             if (shadow or name == "fields") and hasattr(cls, name):
                 setattr(cls, name, property(functools.partial(_getattr, item=name)))
 
-    cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
+    # Without a docstring, the class documents its constructor signature.
+    cls.__doc__ = own_doc or f"{cls.__name__}{inspect.signature(cls)}"
 
     _register_tensor_class(cls)
     try:
