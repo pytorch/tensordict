@@ -95,8 +95,8 @@ On ``PersistentTensorDict`` and ``TensorDictStore``, use ``set_()`` for each
 key, or ``update(d, inplace=True)``, instead of ``update_()``.
 :ref:`compatibility` lists this limit with the other limits of each backend.
 
-If you need X, use Y
---------------------
+Choose by need
+--------------
 
 - If your program chooses the keys at run time, use a
   :class:`~tensordict.TensorDict`. See :ref:`overview`.
