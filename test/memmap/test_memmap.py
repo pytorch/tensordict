@@ -453,12 +453,6 @@ class TestIndexing:
         buffer.seek(0)
         return torch.load(buffer, weights_only=False)
 
-    def test_pickle_view_of_view_error(self):
-        t = MemoryMappedTensor.from_tensor(torch.zeros(2, 3))
-        # no index selects a dim that None added and that a slice made empty
-        with pytest.raises(RuntimeError, match="length 0"):
-            pickle.dumps(t[None][1:])
-
     def test_pickle_td_view_of_view(self, tmp_path):
         td = TensorDict(a=torch.arange(12).view(3, 4), batch_size=[3, 4])
         sub = td.memmap(tmp_path)[1:][1:]
@@ -467,12 +461,35 @@ class TestIndexing:
         assert loaded["a"].shape == sub["a"].shape
         assert (loaded["a"] == td["a"][2:]).all()
 
-    def test_pickle_view_of_empty_tensor(self, tmp_path):
+    @pytest.mark.parametrize("with_filename", [False, True])
+    def test_pickle_empty_view_of_view(self, with_filename, tmp_path):
+        if not with_filename and os.name == "nt":
+            pytest.skip("the handler pickles through a fd")
+        filename = tmp_path / "tensor.memmap" if with_filename else None
+        t = MemoryMappedTensor.from_tensor(
+            torch.arange(12).view(3, 4), filename=filename
+        )
+        hows = ["forking", "pickle", "torch.save"] if with_filename else ["forking"]
+        # no index selects the first two from t: they slice a dim that None
+        # added to length 0
+        for view in (t[2][None][3:], t[None][1:], t[1:][5:]):
+            for how in hows:
+                loaded = self._pickle_and_load(view, how)
+                assert isinstance(loaded, MemoryMappedTensor)
+                assert loaded.shape == view.shape
+                assert loaded.dtype == view.dtype
+
+    def test_pickle_td_empty_view_of_view(self, tmp_path):
+        td = TensorDict(a=torch.arange(12).view(3, 4), batch_size=[3])
+        sub = td.memmap(tmp_path / "td")[2][None][3:]
+        loaded = pickle.loads(pickle.dumps(sub))
+        assert loaded.batch_size == torch.Size([0])
+        assert loaded["a"].shape == torch.Size([0, 4])
         # torch gives the storage of a tensor with no elements the data_ptr 0,
         # so indexing it with a tensor gives a copy that is wrapped as a view
         td = TensorDict(
             obs=torch.arange(12.0).view(4, 3), info=torch.zeros(4, 0), batch_size=[4]
-        ).memmap(tmp_path)
+        ).memmap(tmp_path / "empty_leaf")
         sample = td[torch.tensor([0, 2])]
         for view in (sample[1], sample.unbind(0)[1]):
             loaded = pickle.loads(pickle.dumps(view))

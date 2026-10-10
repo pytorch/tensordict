@@ -67,7 +67,8 @@ def _index_elements(index, ndim: int) -> list:
     """Read an index that makes a view of a tensor with ``ndim`` dims.
 
     Returns its elements: ints as ints, and the Ellipsis and the dims that the
-    index leaves out as ``slice(None)``.
+    index leaves out as ``slice(None)``. Raises a ``ValueError`` for an index
+    that makes a copy.
     """
     if isinstance(index, list) and any(
         element is None
@@ -85,10 +86,7 @@ def _index_elements(index, ndim: int) -> list:
         if kind == _INT:
             element = operator.index(element)
         elif kind not in (_SLICE, _NONE):
-            raise RuntimeError(
-                f"Cannot pickle this MemoryMappedTensor: the index {element!r} "
-                "that built it makes a copy."
-            )
+            raise ValueError(f"The index {element!r} makes a copy, not a view.")
         elements.append(element)
     return elements + [slice(None)] * (ndim - sum(e is not None for e in elements))
 
@@ -98,7 +96,7 @@ def _compose_index(shape, first, second) -> tuple:
 
     ``first`` and ``second`` are indices that make views (ints, slices, None and
     Ellipsis). ``shape`` is the shape of ``t``, or its nested shapes if ``t`` is
-    a nested tensor. Raises a ``RuntimeError`` if no index selects that view.
+    a nested tensor. Raises a ``ValueError`` if no index selects that view.
     """
     nested = isinstance(shape, torch.Tensor)
     # the sizes of the dims of t, None for those of a nested tensor
@@ -122,10 +120,7 @@ def _compose_index(shape, first, second) -> tuple:
         elif element == slice(None):
             view.append(element)
         else:
-            raise RuntimeError(
-                "Cannot pickle this MemoryMappedTensor: it slices a dim of a "
-                "nested tensor."
-            )
+            raise ValueError("Torch slices no dim of a nested tensor.")
         dim += 1
     # t[first][second], in the same form
     out = []
@@ -148,10 +143,9 @@ def _compose_index(shape, first, second) -> tuple:
         elif isinstance(element, slice):
             # a dim that None added, which an int removes
             if not range(1)[element]:
-                raise RuntimeError(
-                    "Cannot pickle this MemoryMappedTensor: it slices a dim "
-                    "that None added to length 0, and no index selects such a "
-                    "view from the tensor that holds its memory."
+                raise ValueError(
+                    "No index selects a view that slices a dim that None added "
+                    "to length 0."
                 )
             out.append(None)
     out.extend(view[pos:])
@@ -1025,10 +1019,6 @@ class MemoryMappedTensor(torch.Tensor):
         # the pickle too
         if not self._index_chain:
             return self._parent_shape, None
-        if not self.is_nested and not self.untyped_storage().nbytes():
-            # No memory to share, and __getitem__ also wraps the copies that
-            # index a tensor with no elements: pickle a tensor of this shape
-            return self.shape, None
         indices = []
         chain = self._index_chain
         while chain:
@@ -1038,8 +1028,24 @@ class MemoryMappedTensor(torch.Tensor):
         if index is None:
             # from_filename and _from_handler read None as no index
             index = (None,)
-        for item in items:
-            index = _compose_index(self._parent_shape, index, item)
+        if not items:
+            return self._parent_shape, index
+        if not self.is_nested and not self.numel():
+            # A view of a view with no elements has no memory to share, and
+            # maybe no index selects it (if a slice empties a dim that None
+            # added): pickle an empty tensor of its shape
+            if self._handler is None:
+                return self.shape, None
+            # _from_handler views all the elements of the handler
+            numel = self._handler.size // self.element_size()
+            return torch.Size([numel]), torch.empty(self.shape, dtype=torch.long)
+        try:
+            for item in items:
+                index = _compose_index(self._parent_shape, index, item)
+        except (IndexError, TypeError, ValueError):
+            # No index selects this view, for instance after an index that
+            # copies: pickle the last index, as earlier versions did
+            return self._parent_shape, self._index
         return self._parent_shape, index
 
     @property
