@@ -592,7 +592,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (3 minutes 17.595 seconds)
+   **Total running time of the script:** (3 minutes 5.793 seconds)
 
 
 .. _sphx_glr_download_tutorials_serialization_speed.py:
