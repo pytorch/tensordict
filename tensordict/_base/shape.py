@@ -315,7 +315,7 @@ class _ShapeOps:
             ...     'x': torch.arange(24).reshape(3, 4, 2),
             ... }, batch_size=[3, 4])
             >>> with td.unsqueeze(-2) as tds:
-            ...     tds.set("y", torch.zeros(3, 1, 4))
+            ...     _ = tds.set("y", torch.zeros(3, 1, 4))
             >>> assert td.get("y").shape == (3, 4)
 
         """
@@ -383,7 +383,7 @@ class _ShapeOps:
             ...     'x': torch.arange(24).reshape(3, 1, 4, 2),
             ... }, batch_size=[3, 1, 4])
             >>> with td.squeeze(1) as tds:
-            ...     tds.set("y", torch.zeros(3, 4))
+            ...     _ = tds.set("y", torch.zeros(3, 4))
             >>> assert td.get("y").shape == (3, 1, 4)
 
         """
@@ -807,7 +807,7 @@ class _ShapeOps:
             >>> import torch
             >>> from tensordict import TensorDict
             >>> td = TensorDict(a=torch.zeros(1), b=torch.ones(1))
-            >>> td.cat_tensors("a", "b", out_key="c")
+            >>> _ = td.cat_tensors("a", "b", out_key="c")
             >>> assert "a" not in td
             >>> assert (td["c"] == torch.tensor([0, 1])).all()
 
@@ -843,7 +843,7 @@ class _ShapeOps:
             >>> import torch
             >>> from tensordict import TensorDict
             >>> td = TensorDict(a=torch.zeros(()), b=torch.ones(()))
-            >>> td.stack_tensors("a", "b", out_key="c")
+            >>> _ = td.stack_tensors("a", "b", out_key="c")
             >>> assert "a" not in td
             >>> assert (td["c"] == torch.tensor([0, 1])).all()
 
@@ -1199,11 +1199,15 @@ class _ShapeOps:
             >>> td = TensorDict(source={'a': torch.zeros(3,4,5),
             ...    'b': torch.zeros(3,4,10,1)}, batch_size=torch.Size([3, 4]))
             >>> td_view = td.view(12)
-            >>> print(td_view.get("a").shape)  # torch.Size([12, 5])
-            >>> print(td_view.get("b").shape)  # torch.Size([12, 10, 1])
+            >>> print(td_view.get("a").shape)
+            torch.Size([12, 5])
+            >>> print(td_view.get("b").shape)
+            torch.Size([12, 10, 1])
             >>> td_view = td.view(-1, 4, 3)
-            >>> print(td_view.get("a").shape)  # torch.Size([1, 4, 3, 5])
-            >>> print(td_view.get("b").shape)  # torch.Size([1, 4, 3, 10, 1])
+            >>> print(td_view.get("a").shape)
+            torch.Size([1, 4, 3, 5])
+            >>> print(td_view.get("b").shape)
+            torch.Size([1, 4, 3, 10, 1])
 
         """
         if len(shape) == 1 and isinstance(shape[0], torch.dtype):

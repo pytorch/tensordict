@@ -724,14 +724,18 @@ def is_tensor_collection(datatype: type | Any) -> bool:
 
     Examples:
         >>> from tensordict import TensorDict, TensorDictBase, is_tensor_collection, tensorclass
-        >>> is_tensor_collection(TensorDictBase)  # True
-        >>> is_tensor_collection(TensorDict())  # True
+        >>> is_tensor_collection(TensorDictBase)
+        True
+        >>> is_tensor_collection(TensorDict())
+        True
         >>> @tensorclass
         ... class MyClass:
         ...     pass
         ...
-        >>> is_tensor_collection(MyClass)  # True
-        >>> is_tensor_collection(MyClass(batch_size=[]))  # True
+        >>> is_tensor_collection(MyClass)
+        True
+        >>> is_tensor_collection(MyClass(batch_size=[]))
+        True
 
     """
     # memoizing is 2x faster
@@ -1319,10 +1323,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> from tensordict import TensorDict
             >>> import torch
             >>> td = TensorDict({"a": torch.randn(3, 4, 5), "b": {"c": torch.randn(3, 4, 6)}}, batch_size=[])
-            >>> td.auto_batch_size_()
+            >>> _ = td.auto_batch_size_()
             >>> print(td.batch_size)
             torch.Size([3, 4])
-            >>> td.auto_batch_size_(batch_dims=1)
+            >>> _ = td.auto_batch_size_(batch_dims=1)
             >>> print(td.batch_size)
             torch.Size([3])
 
@@ -3571,12 +3575,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> b = torch.randn(3, 4)
             >>> td = TensorDict({"a": a, "b": b}, batch_size=[3])
             >>> other_td = TensorDict({"a": a*0, "b": b*0}, batch_size=[])
-            >>> td.update_(other_td)
+            >>> _ = td.update_(other_td)
             >>> assert td['a'] is not other_td['a']
             >>> assert (td['a'] == other_td['a']).all()
             >>> assert (td['a'] == 0).all()
             >>> # keyword form for top-level entries (key must already exist)
-            >>> td.update_(a=torch.ones(3))
+            >>> _ = td.update_(a=torch.ones(3))
             >>> assert (td["a"] == 1).all()
 
         """
@@ -3821,8 +3825,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Examples:
             >>> from tensordict import TensorDict
             >>> data = TensorDict({}, [3, 4, 5])
-            >>> data.create_nested("root")
-            >>> data.create_nested(("some", "nested", "value"))
+            >>> _ = data.create_nested("root")
+            >>> _ = data.create_nested(("some", "nested", "value"))
             >>> print(data)
             TensorDict(
                 fields={
@@ -6607,7 +6611,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> td = TensorDict(source={'a': torch.zeros(3, 4)},
             ...     batch_size=[3])
             >>> mask = torch.tensor([True, False, False])
-            >>> td.masked_fill_(mask, 1.0)
+            >>> _ = td.masked_fill_(mask, 1.0)
             >>> td.get("a")
             tensor([[1., 1., 1., 1.],
                     [0., 0., 0., 0.],
@@ -6761,7 +6765,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 batch_size=torch.Size([]),
                 device=None,
                 is_shared=False)
-            >>> model.load_state_dict(dict(model_state_dict.flatten_keys(".")))
+            >>> _ = model.load_state_dict(dict(model_state_dict.flatten_keys(".")))
         """
         if inplace:
             return self._flatten_keys_inplace(separator=separator, is_leaf=is_leaf)
@@ -6930,7 +6934,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 batch_size=torch.Size([]),
                 device=None,
                 is_shared=False)
-            >>> model.load_state_dict(dict(model_state_dict.flatten_keys(".")))
+            >>> _ = model.load_state_dict(dict(model_state_dict.flatten_keys(".")))
 
         """
         if not inplace:
@@ -6968,7 +6972,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Splits the tensordict in subsets given one or more set of keys.
 
         The method will return ``N+1`` tensordicts, where ``N`` is the number of
-        the arguments provided.
+        the arguments provided. The last tensordict holds the keys that are in
+        no set.
 
         Args:
             key_sets (sequence of Dict[in_key, out_key] or list of keys): the various splits.
@@ -6997,7 +7002,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             ...     d=0,
             ... )
             >>> td_a, td_bc, td_d = td.split_keys(["a"], ["b", "c"])
-            >>> print(td_bc)
+            >>> sorted(td_a.keys()), sorted(td_bc.keys()), sorted(td_d.keys())
+            (['a'], ['b', 'c'], ['d'])
+            >>> # with inplace=True, the last tensordict is ``td`` itself
+            >>> td_a, rest = td.split_keys(["a"], inplace=True)
+            >>> rest is td, sorted(td.keys())
+            (True, ['b', 'c', 'd'])
         """
         from tensordict import PersistentTensorDict
 

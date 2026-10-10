@@ -307,7 +307,7 @@ class _Conversion:
             >>> def check(v1, v2):
             ...     assert (v1 == v2).all()
             ...
-            >>> torch.utils._pytree.tree_map(check, pytree, pytree_recon)
+            >>> _ = torch.utils._pytree.tree_map(check, pytree, pytree_recon)
             >>> assert weird_key in pytree_recon[1]
 
         """
@@ -752,7 +752,7 @@ class _Conversion:
             >>> import torch
             >>> from torch import nn
             >>> from tensordict import TensorDict
-            >>> torch.manual_seed(0)
+            >>> _ = torch.manual_seed(0)
             >>> empty_module = nn.Linear(3, 4, device="meta")
             >>> n_models = 2
             >>> modules = [nn.Linear(3, 4) for _ in range(n_models)]
@@ -1228,7 +1228,7 @@ class _Conversion:
             For example, if you have a LazyStackedTensorDict with stack_dim=1, you can use this method to swap it to stack_dim=0:
 
             >>> import torch
-            >>> from tensordict import LazyStackedTensorDict
+            >>> from tensordict import LazyStackedTensorDict, TensorDict
             >>> td = TensorDict({"a": torch.zeros(2, 3), "b": torch.ones(2, 3)}, batch_size=(2, 3))
             >>> td2 = td.to_lazystack()
             >>> td2.batch_size
@@ -1248,7 +1248,8 @@ class _Conversion:
             A LazyStackedTensorDict instance.
 
         Examples:
-            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> from tensordict import LazyStackedTensorDict, TensorDict
             >>> td = TensorDict({"a": torch.zeros(2, 3), "b": torch.ones(2, 3)}, batch_size=(2, 3))
             >>> td2 = td.to_lazystack()
             >>> td2.batch_size

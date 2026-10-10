@@ -1440,7 +1440,7 @@ class _Serialization:
             >>> import torch
             >>> from tensordict import TensorDict
             >>> td = TensorDict.fromkeys(["a", "b", "c", ("nested", "e")], 0)
-            >>> td.memmap("./saved_td")
+            >>> _ = td.memmap("./saved_td")
             >>> td_load = TensorDict.load_memmap("./saved_td")
             >>> assert (td == td_load).all()
 
@@ -1457,7 +1457,7 @@ class _Serialization:
             >>> import tempfile
             >>> td = TensorDict({"a": torch.zeros(()), "b": {"c": torch.zeros(())}})
             >>> with tempfile.TemporaryDirectory() as path:
-            ...     td.save(path)
+            ...     _ = td.save(path)
             ...     td_load = TensorDict.load_memmap(path, device="meta")
             ...     print("meta:", td_load)
             ...     from torch._subclasses import FakeTensorMode
