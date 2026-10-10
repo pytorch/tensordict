@@ -31,6 +31,8 @@ TIMEOUT = 100
         torch.uint8,
         torch.long,
         torch.bool,
+        torch.complex64,
+        torch.complex128,
     ],
 )
 @pytest.mark.parametrize("shape", [[2], [1, 2]])
@@ -334,6 +336,35 @@ class TestConstructors:
                 t._handler, dtype=dtype, shape=shape, index=None
             )
         torch.testing.assert_close(t, t2)
+
+    def test_from_storage(self, shape, dtype, device, tmp_path, from_path):
+        if from_path:
+            filename = tmp_path / "file.memmap"
+        else:
+            filename = None
+        if dtype is None:
+            dtype = torch.float32
+        tensor = -torch.randint(10, shape, dtype=dtype, device=device)
+        t = MemoryMappedTensor.from_tensor(tensor, filename=filename)
+        t2 = MemoryMappedTensor.from_storage(
+            t.untyped_storage(), shape=shape, dtype=dtype
+        )
+        assert type(t2) is MemoryMappedTensor
+        assert t2.shape == shape
+        assert t2.dtype is dtype
+        assert t2.data_ptr() == t.data_ptr()
+        if filename is None:
+            # a storage without a file still cannot be pickled
+            return
+        assert t2.filename == t.filename
+        # pickles by its file, as t does, also when indexed
+        index = (slice(1, None),) * len(shape)
+        for view in (t2, t2[index]):
+            loaded = pickle.loads(pickle.dumps(view))
+            assert loaded.filename == t.filename
+            torch.testing.assert_close(loaded, view)
+        loaded.fill_(3)
+        assert (t[index] == 3).all()
 
 
 class TestIndexing:
@@ -668,6 +699,15 @@ def test_pickle_handler():
     assert (loaded == mt).all()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="the handler pickles through a fd")
+def test_pickle_handler_complex():
+    tensor = torch.complex(torch.arange(6.0), -torch.arange(6.0)).view(2, 3)
+    mt = MemoryMappedTensor.from_tensor(tensor)[1]
+    loaded = pickle.loads(ForkingPickler.dumps(mt))
+    assert loaded.dtype == torch.complex64
+    assert (loaded == tensor[1]).all()
+
+
 def test_pickle_filename(tmp_path):
     mt = MemoryMappedTensor.from_tensor(
         torch.arange(6.0).view(2, 3), filename=tmp_path / "tensor.memmap"
@@ -854,6 +894,14 @@ class TestNestedTensor:
         for i in range(2):
             for j in range(3):
                 assert (td[i, j] == tdsave[i, j]).all()
+
+    @pytest.mark.parametrize("fn", ["empty", "zeros", "ones"])
+    def test_complex_with_handler(self, fn):
+        tensor = getattr(MemoryMappedTensor, fn)(self.shape, dtype=torch.complex64)
+        assert type(tensor) is MemoryMappedTensor
+        assert tensor.dtype == torch.complex64
+        assert tensor._handler is not None
+        assert (tensor._nested_tensor_size() == self.shape).all()
 
 
 class TestReadWrite:
