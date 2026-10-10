@@ -1104,7 +1104,7 @@ class _Reductions:
         if keepdim:
             if isinstance(dim, tuple):
                 dim = dim[0]
-            if dim not in (None, NO_DEFAULT):
+            if dim is not None and dim is not NO_DEFAULT:
                 result = result.unsqueeze(dim)
             else:
                 result = result.reshape([1 for _ in self.shape])

@@ -957,6 +957,11 @@ class TestNamedDims(TestTensorDictsBase):
         assert tdu.names == ["a", "b", "c", "d", None]
         tdu = td.unsqueeze(2)
         assert tdu.names == ["a", "b", None, "c", "d"]
+        # Reducing the only dim of a named tensordict leaves its names empty
+        td = TensorDict(a=torch.zeros(3), batch_size=[3], names=["a"]).sum(0)
+        tdu = td.unsqueeze(0)
+        assert tdu.batch_size == torch.Size([1])
+        assert tdu.names == [None]
 
     def test_unsqueeze_td(self):
         td = self.unsqueezed_td("cpu")

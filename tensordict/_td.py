@@ -878,7 +878,7 @@ class TensorDict(TensorDictBase):
         batch_size = torch.Size(batch_size)
 
         names = list(self.names) if self._has_names() else None
-        if names:
+        if names is not None:
             names.insert(newdim, None)
 
         def _unsqueeze(tensor):
