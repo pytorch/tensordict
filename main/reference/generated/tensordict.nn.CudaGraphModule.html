@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4881+g1e6f900c6.d20261010)
+                  main (0.14.0.dev4882+g682219a1c.d20261010)
                 </div>
               
             
@@ -436,6 +436,10 @@ the input are clones of the graph’s output buffers. In all other cases, the ou
 irrespective of whether its elements match or do not match one of the inputs.</p></li>
 <li><p>In-place writes to the input tensors inside the function (e.g. <code class="docutils literal notranslate"><span class="pre">x.add_(1)</span></code>) do not reach the caller’s
 inputs once the graph is captured: the graph reads and writes its own copies of the inputs.</p></li>
+<li><p>The inputs are copied into the graph’s buffers, and the graph is replayed, on the current stream. As for any
+CUDA operation, inputs written on another stream must be ordered before the call by the caller, e.g. with
+<code class="docutils literal notranslate"><span class="pre">torch.cuda.current_stream().wait_stream(producer_stream)</span></code>. Consecutive calls share the graph’s buffers:
+issue them from one stream, or order each call after the previous one in the same way.</p></li>
 </ul>
 </div></blockquote>
 </div>
