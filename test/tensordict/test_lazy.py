@@ -951,6 +951,27 @@ class TestLazyStackedTensorDict:
             assert clone.shape == torch.Size([1, 0, 2])
             assert clone.device == torch.device("cpu")
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("names", [None, ["a"]])
+    def test_create_empty_names(self, stack_dim, names):
+        # A stack without members keeps the names it was built with, and the
+        # stack dim has no name.
+        td = LazyStackedTensorDict(stack_dim=stack_dim, batch_size=[3], names=names)
+        expected = [None] if names is None else list(names)
+        expected.insert(stack_dim, None)
+        batch_size = [3]
+        batch_size.insert(stack_dim, 0)
+        assert td.names == expected
+        for out in (td.to_tensordict(), td.contiguous(), td.clone()):
+            assert out.batch_size == torch.Size(batch_size)
+            assert out.names == expected
+        refined = ["s", "a"] if stack_dim == 0 else ["a", "s"]
+        assert td.refine_names(*refined) is td
+        assert td.names == refined
+        assert td.to_tensordict().names == refined
+        td.names = None
+        assert td.names == [None, None]
+
     @pytest.mark.parametrize("key", ["a", ("n", "x"), "n"])
     @pytest.mark.parametrize("op", ["del", "pop"])
     def test_del_repeated_member(self, key, op):
