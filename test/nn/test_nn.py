@@ -3958,6 +3958,34 @@ class TestCompositeDist:
         assert sample.shape == torch.Size((4,) + params.shape)
         assert sample.requires_grad
 
+    @pytest.mark.parametrize("method", ["sample", "rsample"])
+    @pytest.mark.parametrize("shape", [[], [4], [4, 2]])
+    def test_sample_list_shape(self, method, shape):
+        # A list works as sample shape, as it does for torch distributions
+        params = TensorDict(
+            {
+                "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
+                ("nested", "cont"): {
+                    "loc": torch.randn(3, 4),
+                    "scale": torch.rand(3, 4),
+                },
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "cont"): distributions.Normal,
+            },
+        )
+        torch.manual_seed(0)
+        sample = getattr(dist, method)(shape)
+        torch.manual_seed(0)
+        expected = getattr(dist, method)(tuple(shape))
+        assert sample.batch_size == torch.Size(shape) + params.batch_size
+        assert (sample == expected).all()
+
     @set_composite_lp_aggregate(True)
     def test_log_prob_legacy(self):
         params = TensorDict(
@@ -4185,6 +4213,36 @@ class TestCompositeDist:
         sample = dist.cdf(sample)
         assert sample.get("cont_cdf").requires_grad
         assert sample.get(("nested", "cont_cdf")).requires_grad
+
+    def test_icdf_without_cdf_entries(self):
+        # Without <sample_name>_cdf entries, icdf computes the cdf of the samples
+        params = TensorDict(
+            {
+                "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
+                ("nested", "cont"): {
+                    "loc": torch.randn(3, 4),
+                    "scale": torch.rand(3, 4),
+                },
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "cont"): distributions.Normal,
+            },
+        )
+        sample = dist.sample((4,))
+        expected = dist.icdf(dist.cdf(sample.clone()))
+        result = dist.icdf(sample.clone())
+        for key in ("cont_icdf", ("nested", "cont_icdf")):
+            torch.testing.assert_close(result[key], expected[key])
+        with pytest.raises(
+            KeyError,
+            match=r"Neither \('nested', 'cont'\) nor \('nested', 'cont_cdf'\)",
+        ):
+            dist.icdf(sample.exclude(("nested", "cont")))
 
     def test_icdf(self):
         # The cdf-icdf round trip loses float32 precision far in the tails, and
