@@ -3037,8 +3037,8 @@ class _SubTensorDict(TensorDictBase):
                 continue
             if not isinstance(value, _td_base._ACCEPTED_CLASSES):
                 raise TypeError(
-                    f"Expected value to be one of types {_td_base._ACCEPTED_CLASSES} "
-                    f"but got {type(value)}"
+                    "Expected value to be a Tensor, a TensorDictBase or a "
+                    f"tensorclass but got {type(value)}"
                 )
             if clone:
                 value = value.clone()
