@@ -2701,9 +2701,12 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
             f"field. Its fields are {sorted(self.__expected_keys__)}."
         )
     if value is None:
-        # The getter reads the TensorDict first: drop the old value, as set() does.
-        if key in self._tensordict.keys():
-            self._tensordict.del_(key)
+        # The getter reads the TensorDict first: drop the old value, as set()
+        # does. A TensorDict is checked with a dict lookup, which is much
+        # cheaper than keys().
+        td = self._tensordict
+        if key in (td._tensordict if type(td) is TensorDict else td.keys()):
+            td.del_(key)
         self._non_tensordict[key] = None
         return
     value, _ = _convert_mapping_for_field(key, value, type(self)._tensordict_fields)
