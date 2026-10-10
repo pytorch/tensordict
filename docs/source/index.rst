@@ -82,9 +82,8 @@ write once runs on one item or on a batch of any shape, and it compiles with
   ...
   ...     def step(self, force: torch.Tensor, dt: float) -> "Particles":
   ...         vel = self.vel + dt * force / self.mass.unsqueeze(-1)
-  ...         return Particles(
-  ...             pos=self.pos + dt * vel, vel=vel, mass=self.mass, batch_size=self.batch_size
-  ...         )
+  ...         pos = self.pos + dt * vel
+  ...         return Particles(pos=pos, vel=vel, mass=self.mass, batch_size=self.batch_size)
   >>> systems = Particles(  # 64 systems of 1,000 particles each
   ...     pos=torch.randn(64, 1000, 3),
   ...     vel=torch.zeros(64, 1000, 3),

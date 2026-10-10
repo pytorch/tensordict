@@ -194,9 +194,7 @@ batch of images and their labels:
   >>> images.reshape(2, 3).image.shape
   torch.Size([2, 3, 3, 8, 8])
 
-Use a TensorDict when your code chooses the keys at run time, and a
-TensorClass when the fields are fixed. Three other containers have the same
-operations:
+Three other containers have the same operations:
 
 - :class:`~tensordict.TypedTensorDict` has typed fields on a
   ``TensorDictBase``, with ``td["key"]`` access and class inheritance to add
@@ -315,7 +313,7 @@ read it. To read a leaf with different shapes, ask for a list or a padded
 tensor:
 
   >>> from tensordict import lazy_stack
-  >>> ragged = lazy_stack([TensorDict(tokens=torch.arange(2)), TensorDict(tokens=torch.arange(5))])
+  >>> ragged = lazy_stack([TensorDict(tokens=torch.arange(n)) for n in (2, 5)])
   >>> ragged.batch_size
   torch.Size([2])
   >>> ragged[1]["tokens"].shape

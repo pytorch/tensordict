@@ -83,8 +83,8 @@ Install a nightly build
 The ``tensordict-nightly`` package is built from the main branch every day.
 It installs the same ``tensordict`` directory as the release. If both
 packages are installed, the one installed last overwrites the files of the
-other, and uninstalling one deletes files that the other needs. So uninstall
-the release first:
+other. Uninstalling one of them then deletes files that the other needs. So
+uninstall the release first:
 
 .. code-block:: bash
 

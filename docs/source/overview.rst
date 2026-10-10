@@ -5,7 +5,7 @@ What is TensorDict?
 
 A :class:`~tensordict.TensorDict` is a dictionary of tensors that behaves
 like one tensor. You index, reshape, move and save the whole group with one
-call, and TensorDict makes sure that every tensor keeps the dimensions that
+call. TensorDict also makes sure that every tensor keeps the dimensions that
 the group shares. A :class:`~tensordict.TensorClass` gives the same behavior
 to a class with typed fields and methods.
 
@@ -20,7 +20,10 @@ and a camera image in a nested TensorDict:
   >>> from tensordict import TensorDict
   >>> robots = TensorDict(
   ...     joints=torch.zeros(4, 7),
-  ...     camera={"rgb": torch.zeros(4, 3, 32, 32, dtype=torch.uint8), "depth": torch.zeros(4, 32, 32)},
+  ...     camera={
+  ...         "rgb": torch.zeros(4, 3, 32, 32, dtype=torch.uint8),
+  ...         "depth": torch.zeros(4, 32, 32),
+  ...     },
   ...     batch_size=[4],
   ... )
 
@@ -38,8 +41,8 @@ too. Device moves and dtype casts also apply to every entry:
 You can also save a TensorDict to disk, send it to other processes or nodes,
 and pass it to :class:`torch.nn.Module` objects through :mod:`tensordict.nn`.
 With :mod:`torch.func`, a TensorDict of parameters makes model ensembles and
-parameter edits shorter to write. TensorDict started as part of TorchRL and
-is now a separate library.
+parameter edits shorter to write (see :ref:`compile`). TensorDict started as
+part of TorchRL and is now a separate library.
 
 TensorClass: the class form
 ---------------------------
@@ -57,7 +60,9 @@ boxes for each image:
   ...
   ...     def area(self) -> torch.Tensor:
   ...         return (self.high - self.low).prod(-1)
-  >>> boxes = Box(low=torch.zeros(8, 5, 2), high=torch.full((8, 5, 2), 2.0), batch_size=[8, 5])
+  >>> boxes = Box(
+  ...     low=torch.zeros(8, 5, 2), high=torch.full((8, 5, 2), 2.0), batch_size=[8, 5]
+  ... )
   >>> boxes.area().shape
   torch.Size([8, 5])
   >>> boxes[0, 1].area()
@@ -94,7 +99,10 @@ each level of nesting:
   >>> samples = [
   ...     {
   ...         "nodes": unbound["nodes"][i],
-  ...         "edges": {"index": unbound["edges"]["index"][i], "weight": unbound["edges"]["weight"][i]},
+  ...         "edges": {
+  ...             "index": unbound["edges"]["index"][i],
+  ...             "weight": unbound["edges"]["weight"][i],
+  ...         },
   ...     }
   ...     for i in range(3)
   ... ]
@@ -136,9 +144,9 @@ also work on a TensorDict. The result is a TensorDict:
 What it is not
 --------------
 
-A TensorDict is not a :class:`dict`. It has the methods of a mapping
-(``keys``, ``values``, ``items``, ``get``, ``pop``, ``update``, ``in`` and
-``**data``), but ``for x in data``, ``len(data)``, ``bool(data)`` and
+A TensorDict is not a :class:`dict`. It has the methods of a mapping:
+``keys``, ``values``, ``items``, ``get``, ``pop``, ``update``, ``in`` and
+``**data``. But ``for x in data``, ``len(data)``, ``bool(data)`` and
 ``data == other`` follow the rules of a tensor:
 
   >>> isinstance(robots, dict)
