@@ -290,8 +290,34 @@ class _RecordDeviceTransfer:
 _device_recorder = _RecordDeviceTransfer()
 
 
+def _holds_leaves_of(td: TensorDictBase, other: TensorDictBase) -> bool:
+    """Returns whether each leaf of ``other`` is the tensor that ``td`` holds under the same key.
+
+    ``td`` is read one entry at a time, so a container that reads copies from
+    its storage (h5 files, stores) stops at its first entry.
+    """
+    # Lazy stacks and views build new tensors on each read, and a lazy stack
+    # of tensors that differ in shape cannot be read at all. A TypedTensorDict
+    # reads through its _source.
+    if (td._lazy or getattr(td, "_source", td)._lazy) and not is_non_tensor(td):
+        return False
+    for key, value in other.items():
+        held = td._get_str(key, None)
+        if value is held:
+            continue
+        if not (
+            _is_tensor_collection(type(value))
+            and _is_tensor_collection(type(held))
+            and _holds_leaves_of(held, value)
+        ):
+            return False
+    return True
+
+
 def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Callable]:
     """Ensures that elementwise ops are broadcast when an nd tensor is passed."""
+    # add_, mul_, ... are in-place; __eq__, __lt__, ... also end with "_".
+    inplace = op.endswith("_") and not op.endswith("__")
 
     def wrap_func(func):
         @wraps(func)
@@ -326,7 +352,7 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     other = other.expand(shape)
                 others_map.append(other)
             if any(isinstance(other, torch.Tensor) for other in others_map):
-                return self_expand._fast_apply(
+                result = self_expand._fast_apply(
                     lambda x: getattr(x, op)(
                         *[
                             expand_as_right(other, x) if other is not None else None
@@ -336,6 +362,12 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                         **kwargs,
                     )
                 )
+                # Like torch, an in-place op returns self once it has written into
+                # the tensors that self holds. Containers that hand out copies of
+                # their storage (h5 files, stores) still return the new tensordict.
+                if inplace and self_expand is self and _holds_leaves_of(self, result):
+                    return self
+                return result
             return getattr(self_expand, op)(*others_map, *args, **kwargs)
 
         return new_func

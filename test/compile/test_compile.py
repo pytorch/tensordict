@@ -665,6 +665,21 @@ class TestTD:
         td_op_c = locked_op_c(td)
         assert (td_op == td_op_c).all()
 
+    def test_inplace_broadcast_tensor(self, mode):
+        def add_(td, other):
+            return td.add_(other)
+
+        td = TensorDict(
+            {"a": torch.zeros(1, 2, 3), "b": torch.zeros(1, 2, dtype=torch.int64)},
+            batch_size=[1, 2],
+            lock=True,
+        )
+        add_c = torch.compile(add_, fullgraph=True, mode=mode)
+        other = torch.ones(1, 2, dtype=torch.int64)
+        assert add_c(td, other) is td
+        assert add_c(td, other) is td
+        assert (td["a"] == 2).all()
+
     # Memmap is currently not supported
     # def test_memmap(self, mode, tmpdir):
     #     def locked_op(td):
