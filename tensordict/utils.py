@@ -2679,7 +2679,7 @@ def _infer_size_impl(shape: List[int], numel: int) -> List[int]:
         else:
             raise AssertionError("invalid shape dimensions")
     if not (
-        numel == newsize
+        (infer_dim is None and numel == newsize)
         or (infer_dim is not None and newsize > 0 and numel % newsize == 0)
     ):
         raise AssertionError("invalid shape")

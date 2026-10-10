@@ -671,8 +671,12 @@ class TensorDict(TensorDictBase):
         batch_size = self.batch_size
         dim = _maybe_correct_neg_dim(dim, batch_size)
         max_size = batch_size[dim]
-        split_size = -(max_size // -chunks)
-        segments = _create_segments_from_int(split_size, max_size)
+        if max_size == 0:
+            # torch.chunk returns `chunks` empty pieces along a zero-size dim
+            segments = [(0, 0)] * chunks
+        else:
+            split_size = -(max_size // -chunks)
+            segments = _create_segments_from_int(split_size, max_size)
         splits = {
             k: (v,) * len(segments) if _is_unbatched(v) else v.chunk(chunks, dim)
             for k, v in self.items()
@@ -716,7 +720,7 @@ class TensorDict(TensorDictBase):
     ) -> Self:
         shape = _get_shape_from_args(*args, **kwargs)
         if any(dim < 0 for dim in shape):
-            shape = _infer_size_impl(shape, self.numel())
+            shape = _infer_size_impl(shape, self.batch_size.numel())
         if torch.Size(shape) == self.shape:
             return self
         batch_dims = self.batch_dims

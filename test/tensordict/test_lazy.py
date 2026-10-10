@@ -1752,6 +1752,15 @@ class TestLazyStackedTensorDict:
         assert (torch.cat(split1, dim=1) == td).all()
         assert (torch.cat(split1b, dim=1) == td).all()
 
+    def test_split_lazy_zero_size_dim(self):
+        td = LazyStackedTensorDict(
+            *[TensorDict({"a": torch.zeros(0, 4)}, [0]) for _ in range(3)],
+            stack_dim=0,
+        )
+        (piece,) = td.split(2, 1)
+        assert piece.batch_size == torch.Size([3, 0])
+        assert piece["a"].shape == torch.Size([3, 0, 4])
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_stack(self, device):
         torch.manual_seed(1)
