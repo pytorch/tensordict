@@ -3,35 +3,36 @@
 Arithmetic, apply, reductions and gradients
 ===========================================
 
-This page shows how to compute with the values of a tensordict: arithmetic
-and other pointwise operations, :meth:`~tensordict.TensorDict.apply`,
-reductions, in-place updates and gradients. It is for readers who can already
-build and index a tensordict (see :ref:`batch-size` and :ref:`keys`).
+Arithmetic, :mod:`torch` functions and reductions on a tensordict apply to
+every leaf in one call, and gradients flow through them. A leaf is a tensor at
+the end of a key path (see :ref:`keys`). You write the computation once for
+the whole group of tensors, and the result keeps the keys and the batch size
+(see :ref:`batch-size`).
 
-On this page, a *leaf* is a tensor at the end of a key path, not a nested
-tensordict. The *batch dimensions* are the first dimensions of every leaf,
-given by ``batch_size``. The other dimensions of a leaf are its *feature
-dimensions*.
+A :class:`~tensordict.TensorClass` has the same operations, so a method that
+you write with them runs on one element or on a whole batch (see
+:ref:`tensorclass-guide`).
 
 Pointwise operations
 --------------------
 
 A pointwise operation applies to each leaf and returns a new tensordict with
-the same keys. The other operand can be a tensordict,
-a tensor or a Python number:
+the same keys. The other operand can be a tensordict, a tensor or a Python
+number. In this example, a weather grid of 3 by 4 cells has a pressure and a
+2-D wind velocity for each cell:
 
     >>> import torch
     >>> from tensordict import TensorDict
     >>> td = TensorDict(
-    ...     a=torch.ones(3, 4),
-    ...     b=TensorDict(c=torch.ones(3, 4, 5), batch_size=[3, 4]),
+    ...     pressure=torch.ones(3, 4),
+    ...     wind={"velocity": torch.ones(3, 4, 2)},
     ...     batch_size=[3, 4],
     ... )
-    >>> (td * 2 + td)["b", "c"][0, 0]
-    tensor([3., 3., 3., 3., 3.])
+    >>> (td * 2 + td)["wind", "velocity"][0, 0]
+    tensor([3., 3.])
     >>> (td - torch.ones(4)).batch_size
     torch.Size([3, 4])
-    >>> (td > 0)["a"].dtype
+    >>> (td > 0)["pressure"].dtype
     torch.bool
 
 The Python operators work as follows:
@@ -82,10 +83,10 @@ and ``>=`` keep non-tensor entries, such as strings, as they are (see
 compare the non-tensor values, and give a boolean tensor at their keys.
 
 When it can, tensordict computes a pointwise operation with the fused
-``torch._foreach_<op>`` kernels, one call for all the leaves. Inside a
-:mod:`torch.func` transform such as :func:`torch.vmap`, which has no batching
-rule for the ``_foreach`` ops, it applies the operation to one leaf at a time
-instead. Inside :func:`torch.compile`, ``td * t`` with a tensor ``t`` breaks
+``torch._foreach_<op>`` kernels, one call for all the leaves. The
+:mod:`torch.func` transforms, such as :func:`torch.vmap`, have no batching
+rule for the ``_foreach`` ops. Inside them, tensordict applies the operation
+to one leaf at a time. Inside :func:`torch.compile`, ``td * t`` with a tensor ``t`` breaks
 the graph: call ``td.mul(t)`` instead. :ref:`compile` gives the details.
 
 Broadcasting with a tensor
@@ -98,15 +99,16 @@ with the full shape of each leaf:
    the right, as two tensor shapes do. The result has this broadcast batch
    size.
 2. For each leaf, the tensor gets trailing dimensions of size 1, so it
-   broadcasts over the feature dimensions of that leaf.
+   broadcasts over the feature dimensions of that leaf (the dimensions after
+   the batch dimensions).
 
-In this example, ``td.batch_size`` is ``(3, 4)`` and ``td["b", "c"]`` has
-shape ``(3, 4, 5)``. ``td * t`` multiplies ``td["b", "c"][i, j, k]`` by
-``t[j]``:
+In this example, ``td.batch_size`` is ``(3, 4)`` and ``td["wind", "velocity"]``
+has shape ``(3, 4, 2)``. ``td * t`` multiplies
+``td["wind", "velocity"][i, j, k]`` by ``t[j]``:
 
     >>> t = torch.arange(4.0)
-    >>> (td * t)["b", "c"][1, 2]
-    tensor([2., 2., 2., 2., 2.])
+    >>> (td * t)["wind", "velocity"][1, 2]
+    tensor([2., 2.])
 
 A tensor with more dimensions than the batch size gives a result with a
 larger batch size:
@@ -117,10 +119,10 @@ larger batch size:
 A tensor that matches only the feature dimensions does not broadcast. Its
 shape must broadcast with the batch size:
 
-    >>> td * torch.ones(5)
+    >>> td * torch.ones(2)
     Traceback (most recent call last):
     ...
-    RuntimeError: Attempting to broadcast a dimension of length 5 at -1! ...
+    RuntimeError: Attempting to broadcast a dimension of length 2 at -1! ...
 
 To scale the feature dimensions, use ``td.apply(lambda x: x * w)``.
 In-place operators, such as ``td *= t``, follow the same rules.
@@ -198,11 +200,11 @@ returns a new tensordict with the results, at the same keys. Use it for an
 operation that has no tensordict method:
 
     >>> td = TensorDict(
-    ...     a=torch.ones(3, 4),
-    ...     b=TensorDict(c=torch.ones(3, 4, 5), batch_size=[3, 4]),
+    ...     pressure=torch.ones(3, 4),
+    ...     wind={"velocity": torch.ones(3, 4, 2)},
     ...     batch_size=[3, 4],
     ... )
-    >>> td.apply(lambda x: x // 2)["a"][0]
+    >>> td.apply(lambda x: x // 2)["pressure"][0]
     tensor([0., 0., 0., 0.])
 
 The function gets tensors only. Non-tensor entries go to the result as they
@@ -223,23 +225,24 @@ are. These arguments change what ``apply`` does:
 The next examples use another tensordict, ``batch_size=`` and a function that
 returns ``None``:
 
-    >>> td.apply(lambda x, y: x + y, td)["a"][0, 0]
+    >>> td.apply(lambda x, y: x + y, td)["pressure"][0, 0]
     tensor(2.)
     >>> td.apply(lambda x: x.sum(-1), batch_size=[3]).batch_size
     torch.Size([3])
     >>> list(td.apply(lambda x: x if x.ndim == 2 else None).keys(True, True))
-    ['a']
+    ['pressure']
 
 :meth:`~tensordict.TensorDict.named_apply` also passes the key to the
 function, as its first argument. By default, the key is the last string of the
 key path. With ``nested_keys=True``, it is the full key, a tuple for a nested
 entry:
 
-    >>> td.named_apply(lambda key, x: x * 0 if key == "c" else x)["b", "c"][0, 0, 0]
+    >>> calm = td.named_apply(lambda key, x: x * 0 if key == "velocity" else x)
+    >>> calm["wind", "velocity"][0, 0, 0]
     tensor(0.)
     >>> _ = td.named_apply(lambda key, x: print(key), nested_keys=True)
-    a
-    ('b', 'c')
+    pressure
+    ('wind', 'velocity')
 
 Reductions
 ----------
@@ -267,14 +270,14 @@ The ``dim`` argument selects what they reduce:
 With ``reduce=True``, the reduction also combines the leaves, and the result
 is one tensor:
 
-    >>> td.sum()["b", "c"]
-    tensor(60.)
-    >>> td.sum(dim=0)["b", "c"].shape
-    torch.Size([4, 5])
-    >>> td.sum(dim="feature")["b", "c"].shape
+    >>> td.sum()["wind", "velocity"]
+    tensor(24.)
+    >>> td.sum(dim=0)["wind", "velocity"].shape
+    torch.Size([4, 2])
+    >>> td.sum(dim="feature")["wind", "velocity"].shape
     torch.Size([3, 4])
     >>> td.sum(reduce=True)
-    tensor(72.)
+    tensor(36.)
     >>> td.sum(dim="feature", reduce=True).shape
     torch.Size([3, 4])
 
@@ -284,7 +287,7 @@ with a ``dim`` return a named tuple of two tensordicts, ``values`` and
 and :meth:`~tensordict.TensorDict.any` without ``dim`` return a Python
 ``bool``:
 
-    >>> td.max(dim=0).indices["a"].dtype
+    >>> td.max(dim=0).indices["pressure"].dtype
     torch.int64
     >>> (td == 1).all()
     True
@@ -294,26 +297,22 @@ and :meth:`~tensordict.TensorDict.any` without ``dim`` return a Python
 In-place operations
 -------------------
 
-Throughout the library, two related but distinct flavors of in-place
-operation are used:
+tensordict has two kinds of in-place operation:
 
-- A trailing-underscore method (``method_``, for example
-  :meth:`~tensordict.TensorDict.add_`, :meth:`~tensordict.TensorDict.mul_`,
-  :meth:`~tensordict.TensorDict.masked_fill_`) writes into the same
-  underlying tensor storage for every leaf. The ``data_ptr`` of each leaf
-  does not change. This mirrors the convention of PyTorch, and is only
-  available when the operation can be performed without changing the shape,
-  dtype or layout of a tensor.
-- An ``inplace=True`` keyword on a shape-changing operation (for example
+- A method with a trailing underscore (``method_``), such as
+  :meth:`~tensordict.TensorDict.add_`, :meth:`~tensordict.TensorDict.mul_`
+  or :meth:`~tensordict.TensorDict.masked_fill_`, writes into the same tensor
+  storage for every leaf. The ``data_ptr`` of each leaf does not change. This
+  is the convention of PyTorch. These methods exist only for operations that
+  keep the shape, dtype and layout of each tensor.
+- The ``inplace=True`` keyword of a shape-changing operation, such as
   :meth:`~tensordict.TensorDict.pad`, :meth:`~tensordict.TensorDict.repeat`,
-  :meth:`~tensordict.TensorDict.gather`,
-  :meth:`~tensordict.TensorDict.repeat_interleave`) keeps the object
-  identity and the key set of the tensordict. Each leaf storage can be
-  replaced with a newly allocated tensor. The guarantee is "no extra
-  tensordict-shaped allocation". The implementation releases each old leaf
-  storage as soon as its replacement is written, so that peak memory stays
-  close to ``1x`` rather than ``2x``. This is the only meaningful flavor of
-  in-place for shape-changing operations.
+  :meth:`~tensordict.TensorDict.gather` or
+  :meth:`~tensordict.TensorDict.repeat_interleave`, keeps the tensordict
+  object and its keys. Each leaf can get a new tensor. The operation
+  allocates no second tensordict, and it releases each old leaf as soon as it
+  writes the new one. Peak memory therefore stays close to ``1x``, not
+  ``2x``. A shape-changing operation can offer only this kind of in-place.
 
 In short, ``method_`` keeps the bytes, and ``inplace=True`` on a
 shape-changing operation keeps the container.
@@ -328,13 +327,12 @@ shape-changing operation keeps the container.
     (True, torch.Size([4, 4]), False)
 
 For :meth:`~tensordict.TensorDict.set`, :meth:`~tensordict.TensorDict.update`
-and :meth:`~tensordict.TensorDict.apply`, ``inplace=True`` means that values
-are written into the existing leaves when the key exists, so the
-``data_ptr`` of each leaf does not change. A value of another dtype is cast
-to the dtype of the leaf. ``set()`` and ``update()`` add the key when it is
-missing. :meth:`~tensordict.TensorDict.set_` and
-:meth:`~tensordict.TensorDict.update_` also write into the existing leaves,
-but raise a ``KeyError`` when the key is missing.
+and :meth:`~tensordict.TensorDict.apply`, ``inplace=True`` writes into the
+existing leaf when the key exists, so its ``data_ptr`` does not change. A
+value of another dtype is cast to the dtype of the leaf. ``set()`` and
+``update()`` add a missing key, and :meth:`~tensordict.TensorDict.set_` and
+:meth:`~tensordict.TensorDict.update_` raise a ``KeyError`` for it (see
+:ref:`keys-write`).
 
     >>> ptr = td["a"].data_ptr()
     >>> _ = td.set("a", torch.zeros(4, 4), inplace=True)
@@ -345,14 +343,15 @@ but raise a ``KeyError`` when the key is missing.
     ...
     KeyError: 'key "missing" not found in TensorDict with keys ...
 
-Other methods follow neither of the two rules above:
+These methods follow neither of the two kinds:
 
 - :meth:`~tensordict.TensorDict.memmap_` and
   :meth:`~tensordict.TensorDict.share_memory_` have a trailing underscore,
   but they move each leaf to new storage: memory-mapped files, or shared
-  memory. The ``data_ptr`` of each leaf changes. Both also lock the
-  tensordict. For the same reason, :meth:`~tensordict.TensorDict.pin_memory_`
-  is deprecated: use ``pin_memory(inplace=True)``.
+  memory. The ``data_ptr`` of each leaf changes, and the tensordict gets
+  locked (see :ref:`keys-locking`). For the same reason,
+  :meth:`~tensordict.TensorDict.pin_memory_` is deprecated: use
+  ``pin_memory(inplace=True)``.
 - :meth:`~tensordict.TensorDict.lock_`, :meth:`~tensordict.TensorDict.unlock_`,
   :meth:`~tensordict.TensorDict.rename_key_`, :meth:`~tensordict.TensorDict.del_`,
   :meth:`~tensordict.TensorDict.auto_batch_size_`,
@@ -433,10 +432,11 @@ outputs:
 :meth:`torch.Tensor.backward`. It collects the differentiable leaves of the
 tensordict, also nested ones, and backpropagates through all of them in one
 :func:`torch.autograd.backward` call. If every leaf is a scalar, you do not
-need to give a gradient. A tensordict of losses is the usual case:
+need to give a gradient. The usual case is a tensordict of losses, here a fit term and a
+regularization term:
 
     >>> w = torch.ones(3, requires_grad=True)
-    >>> loss_td = TensorDict(actor_loss=(w ** 2).sum(), critic_loss=w.sum())
+    >>> loss_td = TensorDict(fit_loss=(w ** 2).sum(), reg_loss=w.sum())
     >>> loss_td.backward()  # same as loss_td.sum(reduce=True).backward()
     >>> w.grad
     tensor([3., 3., 3.])
@@ -445,8 +445,8 @@ For leaves that are not scalars, or to weight each loss, pass a gradient
 tensordict whose entries match the differentiable leaves by nested key:
 
     >>> w.grad = None
-    >>> loss_td = TensorDict(actor_loss=(w ** 2).sum(), critic_loss=w.sum())
-    >>> weights = TensorDict(actor_loss=torch.tensor(0.5), critic_loss=torch.tensor(1.0))
+    >>> loss_td = TensorDict(fit_loss=(w ** 2).sum(), reg_loss=w.sum())
+    >>> weights = TensorDict(fit_loss=torch.tensor(0.5), reg_loss=torch.tensor(1.0))
     >>> loss_td.backward(weights)
     >>> w.grad
     tensor([2., 2., 2.])

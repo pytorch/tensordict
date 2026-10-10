@@ -3,67 +3,71 @@
 Batch size, shapes and indexing
 ===============================
 
-This page explains the batch size of a :class:`~tensordict.TensorDict`, and how
-indexing and shape operations use it. It also lists where a TensorDict acts
-like a tensor and not like a :class:`dict`: iteration, ``len``, ``bool``,
-``in`` and ``==``. Read it before the other pages of the user guide.
+The batch size is the shape that all the entries of a
+:class:`~tensordict.TensorDict` share at the front. With it, one index, one
+``reshape`` or one ``unbind`` applies to every tensor of the group. A tensor
+of the wrong shape raises an error when you add it.
 
 Batch size and batch dimensions
 -------------------------------
 
-The batch size of a TensorDict is the shape that the leading dimensions of all
-its entries share. These leading dimensions are the batch dimensions.
-``batch_dims`` is their number. The other dimensions of an entry, after the
-batch dimensions, are its feature dimensions. Each entry can have different
-feature dimensions.
+The leading dimensions that all the entries share are the batch dimensions.
+``batch_dims`` is their number. The dimensions that come after them are the
+feature dimensions of each entry, and they can differ from entry to entry.
+
+In this example, a tensordict holds 3 time steps of 2 robots. Each robot has
+4 joint angles and one battery level:
 
   >>> import torch
   >>> from tensordict import TensorDict
   >>> td = TensorDict(
-  ...     obs=torch.zeros(2, 3, 4),
-  ...     reward=torch.zeros(2, 3),
+  ...     joints=torch.zeros(2, 3, 4),
+  ...     battery=torch.zeros(2, 3),
   ...     batch_size=[2, 3],
   ... )
   >>> td.batch_size
   torch.Size([2, 3])
   >>> td.batch_dims
   2
-  >>> td["obs"].shape[td.batch_dims:]  # the feature dimensions of "obs"
+  >>> td["joints"].shape[td.batch_dims:]  # the feature dimensions of "joints"
   torch.Size([4])
-  >>> td["reward"].shape[td.batch_dims:]
+  >>> td["battery"].shape[td.batch_dims:]
   torch.Size([])
 
 ``td.shape`` and ``td.size()`` return the batch size. ``td.ndim`` and
 ``td.dim()`` return ``batch_dims``. ``td.numel()`` is the number of elements
 in the batch (here 6), not the number of values in the tensors.
 
+A :class:`~tensordict.TensorClass` has a batch size too, with the same rules
+for its typed fields (see :ref:`tensorclass-guide`).
+
 The leading dimensions of each entry must be equal to the batch size. If they
 are not, the constructor and each write raise a ``RuntimeError`` that names the
 key:
 
-  >>> td["done"] = torch.zeros(3)
+  >>> td["contact"] = torch.zeros(3)
   Traceback (most recent call last):
   ...
-  RuntimeError: batch dimension mismatch, got self.batch_size=torch.Size([2, 3]) and value.shape=torch.Size([3]) for key 'done'. The leading dimensions of a value must match the batch size.
+  RuntimeError: batch dimension mismatch, got self.batch_size=torch.Size([2, 3]) and value.shape=torch.Size([3]) for key 'contact'. The leading dimensions of a value must match the batch size.
 
 TensorDict stores a Python number as a 0-dim tensor. If the batch size is not
 empty, a number therefore gives the same error. To store one number for each
 element, expand it to the batch size. To store one number for the whole batch,
 see :ref:`non-tensor-data`.
 
-  >>> td["done"] = torch.tensor(False).expand(td.batch_size)
-  >>> td["done"].shape
+  >>> td["contact"] = torch.tensor(False).expand(td.batch_size)
+  >>> td["contact"].shape
   torch.Size([2, 3])
 
 A nested tensordict is an entry too. Its batch size must start with the batch
 size of its parent, and it can have more batch dimensions. When you give a
 dictionary as a value, the nested tensordict gets the batch size of the parent:
 
-  >>> td["next"] = {"obs": torch.zeros(2, 3, 4)}
-  >>> td["next"].batch_size
+  >>> td["target"] = {"joints": torch.zeros(2, 3, 4)}
+  >>> td["target"].batch_size
   torch.Size([2, 3])
 
-To store an entry that does not have the batch dimensions, wrap it in an
+To store a tensor that does not have the batch dimensions, wrap it in an
 :class:`~tensordict.UnbatchedTensor` (see :ref:`unbatched-tensor`).
 
 Empty batch size
@@ -74,7 +78,7 @@ dimensions. TensorDict does not infer it from the entries. With an empty batch
 size, the entries can have any shape, but you cannot index the tensordict or
 iterate over it:
 
-  >>> data = TensorDict(obs=torch.zeros(3, 4), reward=torch.zeros(3))
+  >>> data = TensorDict(images=torch.zeros(3, 4), labels=torch.zeros(3))
   >>> data.batch_size
   torch.Size([])
   >>> data[0]
@@ -97,10 +101,10 @@ Both set the batch size to the longest list of leading dimensions that all the
 entries share. Use ``batch_dims`` to set a maximum number of batch dimensions:
 
   >>> TensorDict.from_dict(
-  ...     {"obs": torch.zeros(3, 4), "reward": torch.zeros(3)}, auto_batch_size=True
+  ...     {"images": torch.zeros(3, 4), "labels": torch.zeros(3)}, auto_batch_size=True
   ... ).batch_size
   torch.Size([3])
-  >>> data = TensorDict(obs=torch.zeros(3, 4, 5), mask=torch.zeros(3, 4))
+  >>> data = TensorDict(images=torch.zeros(3, 4, 5), masks=torch.zeros(3, 4))
   >>> data.auto_batch_size_().batch_size
   torch.Size([3, 4])
   >>> data.auto_batch_size_(batch_dims=1).batch_size
@@ -115,12 +119,12 @@ Change the batch size
 You can assign a new batch size if all the entries are compatible with it. An
 empty batch size is always compatible:
 
-  >>> data = TensorDict(obs=torch.zeros(3, 4), batch_size=[3])
+  >>> data = TensorDict(images=torch.zeros(3, 4), batch_size=[3])
   >>> data.batch_size = [3, 4]
   >>> data.batch_size = [4]
   Traceback (most recent call last):
   ...
-  RuntimeError: the Tensor obs has shape torch.Size([3, 4]) which is incompatible with the batch-size torch.Size([4]).
+  RuntimeError: the Tensor images has shape torch.Size([3, 4]) which is incompatible with the batch-size torch.Size([4]).
 
 A :class:`~tensordict.LazyStackedTensorDict` (see :ref:`stacking`) does not
 accept a new batch size, not even an empty one. Call
@@ -136,16 +140,16 @@ An index on a TensorDict follows one rule:
   an integer, a slice, ``...``, ``None``, a list or tensor of integers, or a
   boolean mask.
 
-The result of a batch index is a TensorDict. An index applies to the batch
-dimensions, not to the dimensions of each entry. ``td[..., :2]["obs"]`` and
-``td["obs"][..., :2]`` are therefore different:
+The result of a batch index is a TensorDict. Because the index applies to the
+batch dimensions, ``td[..., :2]["joints"]`` and ``td["joints"][..., :2]`` are
+different:
 
-  >>> td = TensorDict(obs=torch.zeros(2, 3, 4), reward=torch.zeros(2, 3), batch_size=[2, 3])
-  >>> td[0].batch_size
+  >>> td = TensorDict(joints=torch.zeros(2, 3, 4), battery=torch.zeros(2, 3), batch_size=[2, 3])
+  >>> td[0].batch_size  # robot 0, all time steps
   torch.Size([3])
-  >>> td[..., :2]["obs"].shape  # the last batch dimension
+  >>> td[..., :2]["joints"].shape  # the first 2 time steps
   torch.Size([2, 2, 4])
-  >>> td["obs"][..., :2].shape  # the last dimension of "obs"
+  >>> td["joints"][..., :2].shape  # the first 2 joints
   torch.Size([2, 3, 2])
   >>> td[:, None].batch_size
   torch.Size([2, 1, 3])
@@ -156,7 +160,7 @@ tensor. Its shape must match those dimensions:
   >>> mask = torch.tensor([[True, False, True], [False, False, True]])
   >>> td[mask].batch_size
   torch.Size([3])
-  >>> td[mask]["obs"].shape
+  >>> td[mask]["joints"].shape
   torch.Size([3, 4])
   >>> td[torch.tensor([True, False])].batch_size
   torch.Size([1, 3])
@@ -170,8 +174,8 @@ original. A mask or a tensor of indices gives copies. A new key that you write
 into the result does not appear in the original:
 
   >>> sub = td[0]
-  >>> sub["reward"] += 1
-  >>> td["reward"]
+  >>> sub["battery"] += 1
+  >>> td["battery"]
   tensor([[1., 1., 1.],
           [0., 0., 0.]])
   >>> sub["new"] = torch.zeros(3)
@@ -182,9 +186,9 @@ To write into the batch elements of the original, assign to an index. The
 value can be a TensorDict with the batch size of the indexed result, or a
 number or tensor that broadcasts to each entry:
 
-  >>> td[1] = TensorDict(obs=torch.ones(3, 4), reward=torch.ones(3), batch_size=[3])
+  >>> td[1] = TensorDict(joints=torch.ones(3, 4), battery=torch.ones(3), batch_size=[3])
   >>> td[:, 0] = 0
-  >>> td["reward"]
+  >>> td["battery"]
   tensor([[0., 1., 1.],
           [0., 1., 1.]])
 
@@ -194,16 +198,16 @@ creates the entries. See :ref:`stacking-preallocation`.
 Shape operations
 ----------------
 
-The shape operations of a TensorDict act on the batch dimensions. They apply
-the same operation to each entry, and they do not change the feature
-dimensions. The dimension arguments count batch dimensions only:
+The shape operations of a TensorDict apply the same operation to the batch
+dimensions of each entry. They do not change the feature dimensions, and their
+dimension arguments count batch dimensions only:
 
-  >>> td = TensorDict(obs=torch.zeros(2, 3, 4), reward=torch.zeros(2, 3), batch_size=[2, 3])
-  >>> td.reshape(6)["obs"].shape
+  >>> td = TensorDict(joints=torch.zeros(2, 3, 4), battery=torch.zeros(2, 3), batch_size=[2, 3])
+  >>> td.reshape(6)["joints"].shape
   torch.Size([6, 4])
-  >>> td.permute(1, 0)["obs"].shape
+  >>> td.permute(1, 0)["joints"].shape
   torch.Size([3, 2, 4])
-  >>> td.unsqueeze(-1)["obs"].shape  # a new last batch dimension, before the 4
+  >>> td.unsqueeze(-1)["joints"].shape  # a new last batch dimension, before the 4 joints
   torch.Size([2, 3, 1, 4])
   >>> td.flatten(0, 1).unflatten(0, (2, 3)).batch_size
   torch.Size([2, 3])
@@ -230,31 +234,32 @@ Dimension names
 ---------------
 
 You can give a name to each batch dimension, as with the named tensors of
-PyTorch. ``names`` has one entry for each batch dimension. ``None`` means that
-the dimension has no name. Give the names at construction, or set them later:
+PyTorch. ``names`` has one entry for each batch dimension, and ``None`` means
+that the dimension has no name. Give the names at construction, or set them
+later:
 
-  >>> td = TensorDict(batch_size=[3, 4], names=["a", None])
+  >>> td = TensorDict(batch_size=[3, 4], names=["robot", None])
   >>> td.names
-  ['a', None]
-  >>> td = td.refine_names(..., "b")
+  ['robot', None]
+  >>> td = td.refine_names(..., "time")
   >>> td.names
-  ['a', 'b']
-  >>> td.names = ["z", "y"]
-  >>> td = td.rename("m", "n")
+  ['robot', 'time']
+  >>> td.names = ["env", "step"]
+  >>> td = td.rename("agent", "t")
   >>> td.names
-  ['m', 'n']
-  >>> td = td.rename(m="h")
+  ['agent', 't']
+  >>> td = td.rename(agent="robot")
   >>> td.names
-  ['h', 'n']
+  ['robot', 't']
 
 The names follow the shape operations:
 
   >>> td[0].names  # indexing removes the name of the indexed dimension
-  ['n']
+  ['t']
   >>> td.permute(1, 0).names
-  ['n', 'h']
+  ['t', 'robot']
   >>> td.unsqueeze(0).names  # a new dimension has no name
-  [None, 'h', 'n']
+  [None, 'robot', 't']
   >>> td.reshape(12).names
   [None]
 
