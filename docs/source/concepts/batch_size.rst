@@ -269,8 +269,8 @@ A TensorDict is not a dict
 
 A TensorDict has the mapping methods of a :class:`dict`: ``keys()``,
 ``values()``, ``items()``, ``get()``, ``pop()``, ``update()`` and
-``setdefault()``, and it unpacks with ``**td``. These operations follow the
-rules of a tensor instead:
+``setdefault()``, and it unpacks with ``**td``. The operations below follow
+the rules of a tensor instead:
 
 Iteration
   ``for x in td`` iterates over the first batch dimension, like a tensor. Each

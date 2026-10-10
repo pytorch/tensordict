@@ -139,8 +139,8 @@ dimensions only:
   >>> sliced["obs"].shape, sliced["next", "reward"].shape
   (torch.Size([2, 11]), torch.Size([2]))
 
-A dictionary accepts a tensor of any shape. A TensorDict checks the batch size
-when you write an entry:
+A dictionary accepts a tensor of any shape. A TensorDict raises an error when
+an entry does not match the batch size:
 
   >>> regular_dict["next"]["done"] = torch.zeros(5)  # no error
   >>> td["next", "done"] = torch.zeros(5)
