@@ -4013,6 +4013,91 @@ class TestTensorDicts(TestTensorDictsBase):
         td2 = td.to_tensordict(retain_none=True)
         assert (td2 == td).all()
 
+    @pytest.mark.parametrize(
+        "torch_call,method_call",
+        [
+            (
+                lambda td: torch.chunk(td, 2, 1),
+                lambda td: td.chunk(2, 1),
+            ),
+            (
+                lambda td: torch.chunk(td, chunks=2, dim=1),
+                lambda td: td.chunk(2, 1),
+            ),
+            (
+                lambda td: torch.repeat_interleave(td, 2, 1),
+                lambda td: td.repeat_interleave(2, 1),
+            ),
+            (
+                lambda td: torch.repeat_interleave(
+                    td,
+                    repeats=torch.tensor([1, 2, 3], device=td.device),
+                    dim=1,
+                    output_size=6,
+                ),
+                lambda td: td.repeat_interleave(
+                    torch.tensor([1, 2, 3], device=td.device), 1, output_size=6
+                ),
+            ),
+            (
+                lambda td: torch.reshape(td, (-1,)),
+                lambda td: td.reshape(-1),
+            ),
+            (
+                lambda td: torch.reshape(td, shape=(-1,)),
+                lambda td: td.reshape(-1),
+            ),
+            (
+                lambda td: torch.tensor_split(td, (1, 3)),
+                lambda td: td.tensor_split((1, 3)),
+            ),
+            (
+                lambda td: torch.tensor_split(td, sections=3),
+                lambda td: td.tensor_split(3),
+            ),
+            (
+                lambda td: torch.tensor_split(td, indices=[1, 2], dim=1),
+                lambda td: td.tensor_split([1, 2], 1),
+            ),
+            (
+                lambda td: torch.tensor_split(td, torch.tensor([1, 2]), 1),
+                lambda td: td.tensor_split(torch.tensor([1, 2]), 1),
+            ),
+            (
+                lambda td: torch.tensor_split(
+                    td, tensor_indices_or_sections=torch.tensor(3)
+                ),
+                lambda td: td.tensor_split(torch.tensor(3)),
+            ),
+        ],
+        ids=[
+            "chunk",
+            "chunk-kwargs",
+            "repeat_interleave",
+            "repeat_interleave-tensor-kwargs",
+            "reshape",
+            "reshape-kwargs",
+            "tensor_split",
+            "tensor_split-sections",
+            "tensor_split-indices",
+            "tensor_split-tensor",
+            "tensor_split-tensor-kwargs",
+        ],
+    )
+    def test_torch_shape_functions(self, td_name, device, torch_call, method_call):
+        td = getattr(self, td_name)(device)
+        result = torch_call(td)
+        expected = method_call(td)
+        if isinstance(expected, tuple):
+            assert isinstance(result, tuple)
+            assert len(result) == len(expected)
+        else:
+            result, expected = (result,), (expected,)
+        for r, e in zip(result, expected):
+            assert type(r) is type(e)
+            assert r.batch_size == e.batch_size
+            assert (r == e).all()
+
     @legacy_lazy_mode()
     def test_transpose_legacy(self, td_name, device):
         td = getattr(self, td_name)(device)
