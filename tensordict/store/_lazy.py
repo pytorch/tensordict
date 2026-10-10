@@ -64,6 +64,21 @@ from tensordict.utils import (
     unravel_key,
 )
 
+
+def _empty_structure(key_paths: set[str]) -> dict:
+    """Returns the sub-tensordicts of a store as nested empty dicts.
+
+    ``key_paths`` are the leaf paths of the key registry (``"b.c"`` for
+    ``("b", "c")``), so no data is read.
+    """
+    structure: dict = {}
+    for key_path in sorted(key_paths):
+        d = structure
+        for part in key_path.split(_KEY_SEP)[:-1]:
+            d = d.setdefault(part, {})
+    return structure
+
+
 # ---------------------------------------------------------------------------
 # _StoreStackElementView — write-through view for a single stack element
 # ---------------------------------------------------------------------------
@@ -428,7 +443,7 @@ class _StoreStackElementView(TensorDictBase):
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> T:
         return TensorDict(
-            {},
+            _empty_structure(self._get_all_keys()) if recurse else {},
             device=self.device if device is NO_DEFAULT else device,
             batch_size=self.batch_size if batch_size is None else batch_size,
             names=self.names if names is None and self._has_names() else names,
@@ -2067,7 +2082,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> T:
         return TensorDict(
-            {},
+            _empty_structure(self._get_all_keys()) if recurse else {},
             device=self.device if device is NO_DEFAULT else device,
             batch_size=self.batch_size if batch_size is None else batch_size,
             names=self.names if names is None and self._has_names() else names,
