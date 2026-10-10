@@ -1188,7 +1188,10 @@ class _Serialization:
         robust_key: bool | None = True,
         archive: bool | None = None,
     ) -> Self:
-        """Creates a contentless Memory-mapped tensordict with the same shapes as the original one.
+        """Creates a memory-mapped tensordict with the same keys, shapes and dtypes, without copying the values.
+
+        The files are filled with zeros. Write the values into the result
+        afterwards, for example with :meth:`~.update_` or indexing.
 
         Args:
             prefix (str): directory prefix where the memory-mapped tensors will
@@ -1251,8 +1254,12 @@ class _Serialization:
             >>> td = TensorDict({
             ...     "a": torch.zeros((3, 64, 64), dtype=torch.uint8),
             ...     "b": torch.zeros(1, dtype=torch.int64),
-            ... }, batch_size=[]).expand(1_000_000)  # expand does not allocate new memory
-            >>> buffer = td.memmap_like("/path/to/dataset")
+            ... }, batch_size=[]).expand(1_000)  # expand does not allocate new memory
+            >>> import tempfile
+            >>> with tempfile.TemporaryDirectory() as path:
+            ...     buffer = td.memmap_like(path)
+            ...     print(buffer.is_memmap(), buffer["a"].shape)
+            True torch.Size([1000, 3, 64, 64])
 
         """
         from tensordict.base import TensorDictBase

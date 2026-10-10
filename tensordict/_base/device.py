@@ -517,36 +517,55 @@ class _DeviceOps:
             If the TensorDict is consolidated, the resulting TensorDict will be consolidated too.
             Each new tensor will be a view on the consolidated storage cast to the desired device.
 
-        This operation can be used as a context manager too. When used as a context manager,
-        the tensordict is temporarily moved to the target device/dtype, and upon exiting
-        the context, it is automatically restored to its original device/dtype. This is
-        particularly useful when working with neural network modules that expect data
-        on a specific device.
+        This operation can be used as a context manager too. Inside the
+        ``with`` block, you work on the cast tensordict. When the block exits,
+        its entries are written back to the original tensordict, on the
+        original device. Use it to run a module that expects its input on a
+        specific device. See :ref:`devices`.
+
+        .. note::
+            On exit, every entry is moved back to the original device. The
+            entries that already existed get their original dtype back, but
+            the new entries keep the dtype of the ``with`` block: after
+            ``with td.to(torch.float64) as td64``, a new entry of ``td64`` is
+            ``float64`` in ``td``. The original tensordict must not be
+            locked. If the block raises an exception, nothing is written back.
 
         Examples:
+            >>> import torch
             >>> from tensordict import TensorDict
             >>> data = TensorDict({"a": 1.0}, [], device=None)
-            >>> data_cuda = data.to("cuda:0")  # casts to cuda
             >>> data_int = data.to(torch.int)  # casts to int
-            >>> data_cuda_int = data.to("cuda:0", torch.int)  # multiple casting
-            >>> data_cuda = data.to(torch.randn(3, device="cuda:0"))  # using an example tensor
-            >>> data_cuda = data.to(other=TensorDict({}, [], device="cuda:0"))  # using a tensordict example
+            >>> data_int["a"]
+            tensor(1, dtype=torch.int32)
 
-            Using as a context manager for temporary device changes:
+            The next lines need a CUDA device, so they are not run when the
+            documentation is tested.
+
+            >>> data_cuda = data.to("cuda:0")  # doctest: +SKIP
+            >>> data_cuda_int = data.to("cuda:0", torch.int)  # doctest: +SKIP
+            >>> data_cuda = data.to(torch.randn(3, device="cuda:0"))  # doctest: +SKIP
+            >>> data_cuda = data.to(other=TensorDict({}, [], device="cuda:0"))  # doctest: +SKIP
+
+            Use it as a context manager for a temporary device change (CUDA
+            needed):
+
             >>> from tensordict.nn import TensorDictModule
-            >>> import torch
-            >>>
-            >>> # Create a module and data
             >>> mod = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
             >>> td = TensorDict(x=torch.zeros(3), batch_size=[3], device="cpu")
-            >>>
-            >>> # Use context manager to temporarily move to GPU
-            >>> with td.to("cuda") as td_gpu:
-            ...     td_gpu.update(mod(td_gpu))  # Process on GPU and update in-place
-            >>>
-            >>> # Data is automatically restored to original device
-            >>> assert td["x"].device.type == "cpu"
-            >>> assert td["y"].device.type == "cpu"  # Output also restored to original device
+            >>> with td.to("cuda") as td_gpu:  # doctest: +SKIP
+            ...     _ = td_gpu.update(mod(td_gpu))  # runs on the GPU
+            >>> # The entries are written back on the original device
+            >>> assert td["y"].device.type == "cpu"  # doctest: +SKIP
+
+            A temporary dtype change runs on CPU. The new entry keeps the dtype
+            of the ``with`` block:
+
+            >>> td = TensorDict(x=torch.zeros(3), batch_size=[3])
+            >>> with td.to(torch.float64) as td64:
+            ...     td64["y"] = td64["x"] + 1
+            >>> td["x"].dtype, td["y"].dtype
+            (torch.float32, torch.float64)
         """
         # Per-leaf spec: a positional tensordict argument is interpreted as an
         # attrs tensordict whose leaves are `TensorAttrs` — each source leaf

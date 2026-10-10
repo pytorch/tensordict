@@ -414,14 +414,21 @@ class _Conversion:
             A PersistentTensorDict representation of the input h5 file.
 
         Examples:
+            >>> import os
+            >>> import tempfile
+            >>> import torch
             >>> from tensordict import TensorDict
-            >>> td = TensorDict.from_h5("path/to/file.h5")
-            >>> print(td)
+            >>> data = TensorDict(key1=torch.zeros(3), key2=torch.ones(3), batch_size=[3])
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     path = os.path.join(tmpdir, "file.h5")
+            ...     _ = data.to_h5(path)
+            ...     td = TensorDict.from_h5(path)
+            ...     print(td)
             PersistentTensorDict(
                 fields={
                     key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
                     key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([]),
+                batch_size=torch.Size([3]),
                 device=None,
                 is_shared=False)
         """
@@ -469,14 +476,21 @@ class _Conversion:
             A PersistentTensorDict representation of the input zarr store.
 
         Examples:
+            >>> import os
+            >>> import tempfile
+            >>> import torch
             >>> from tensordict import TensorDict
-            >>> td = TensorDict.from_zarr("path/to/store.zarr")
-            >>> print(td)
+            >>> data = TensorDict(key1=torch.zeros(3), key2=torch.ones(3), batch_size=[3])
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     path = os.path.join(tmpdir, "store.zarr")
+            ...     _ = data.to_zarr(path)
+            ...     td = TensorDict.from_zarr(path)
+            ...     print(td)
             PersistentTensorDict(
                 fields={
                     key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
                     key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([]),
+                batch_size=torch.Size([3]),
                 device=None,
                 is_shared=False)
         """
@@ -2216,10 +2230,18 @@ class _Conversion:
             A TensorDict representation of the CSV data.
 
         Examples:
+            >>> import os
+            >>> import tempfile
             >>> import torch
             >>> from tensordict import TensorDict
-            >>> td = TensorDict.from_csv("data.csv")
-            >>> td = TensorDict.from_csv("data.csv", separator=".", dtype=torch.float32)
+            >>> data = TensorDict(obs=torch.arange(3.0), reward=torch.ones(3), batch_size=[3])
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     path = os.path.join(tmpdir, "data.csv")
+            ...     data.to_csv(path)
+            ...     td = TensorDict.from_csv(path)
+            ...     td32 = TensorDict.from_csv(path, dtype=torch.float32)
+            >>> td.batch_size, td["obs"].dtype, td32["obs"].dtype
+            (torch.Size([3]), torch.float64, torch.float32)
         """
         from tensordict.base import TensorDictBase
 
@@ -2305,9 +2327,18 @@ class _Conversion:
             A TensorDict representation of the Parquet data.
 
         Examples:
+            >>> import os
+            >>> import tempfile
+            >>> import torch
             >>> from tensordict import TensorDict
-            >>> td = TensorDict.from_parquet("data.parquet")
-            >>> td = TensorDict.from_parquet("data.parquet", columns=["obs", "reward"])
+            >>> data = TensorDict(obs=torch.arange(3.0), reward=torch.ones(3), batch_size=[3])
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     path = os.path.join(tmpdir, "data.parquet")
+            ...     data.to_parquet(path)
+            ...     td = TensorDict.from_parquet(path)
+            ...     td_obs = TensorDict.from_parquet(path, columns=["obs"])
+            >>> sorted(td.keys()), sorted(td_obs.keys())
+            (['obs', 'reward'], ['obs'])
         """
         from tensordict.base import TensorDictBase
 
@@ -2396,9 +2427,20 @@ class _Conversion:
             A TensorDict representation of the JSON data.
 
         Examples:
+            >>> import os
+            >>> import tempfile
+            >>> import torch
             >>> from tensordict import TensorDict
-            >>> td = TensorDict.from_json("data.json")
-            >>> td = TensorDict.from_json("data.jsonl", lines=True)
+            >>> data = TensorDict(obs=torch.arange(3.0), reward=torch.ones(3), batch_size=[3])
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     path = os.path.join(tmpdir, "data.json")
+            ...     data.to_json(path)
+            ...     td = TensorDict.from_json(path)
+            ...     path_lines = os.path.join(tmpdir, "data.jsonl")
+            ...     data.to_json(path_lines, lines=True)
+            ...     td_lines = TensorDict.from_json(path_lines, lines=True)
+            >>> td.batch_size, td_lines.batch_size
+            (torch.Size([3]), torch.Size([3]))
         """
         from tensordict.base import TensorDictBase
 
@@ -2601,15 +2643,19 @@ class _Conversion:
             A store-backed TensorDict instance.
 
         Examples:
+            The example needs a Redis server on ``localhost:6379``, and the
+            last line a Dragonfly server on the host ``dragonfly-host``, so it
+            is not run when the documentation is tested.
+
             >>> import torch
             >>> from tensordict import TensorDict
             >>> td = TensorDict({"obs": torch.randn(10, 84)}, [10])
-            >>> store_td = td.to_store(host="localhost")
-            >>> store_td["obs"].shape
+            >>> store_td = td.to_store(host="localhost")  # doctest: +SKIP
+            >>> store_td["obs"].shape  # doctest: +SKIP
             torch.Size([10, 84])
             >>>
             >>> # Using Dragonfly instead of Redis
-            >>> store_td = td.to_store(backend="dragonfly", host="dragonfly-host")
+            >>> store_td = td.to_store(backend="dragonfly", host="dragonfly-host")  # doctest: +SKIP
         """
         from tensordict.store._store import TensorDictStore
 

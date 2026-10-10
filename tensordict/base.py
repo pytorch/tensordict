@@ -2402,43 +2402,45 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Device of a TensorDict.
 
         If the TensorDict has a specified device, all
-        its tensors (incl. nested ones) must live on the same device.
-        If the TensorDict device is ``None``, different values can be located
-        on different devices.
+        its tensors (incl. nested ones) must live on the same device: the
+        tensors that you pass to the constructor or set later are moved to
+        it. If the TensorDict device is ``None``, different values can be
+        located on different devices. The device is not inferred from the
+        tensors. See :ref:`devices`.
 
         Returns:
             torch.device object indicating the device where the tensors
             are placed, or None if TensorDict does not have a device.
 
         Examples:
+            The examples use the ``"meta"`` device so that they run on CPU.
+            A CUDA device works the same way.
+
             >>> import torch
             >>> from tensordict import TensorDict
             >>> td = TensorDict({
             ...     "cpu": torch.randn(3, device='cpu'),
-            ...     "cuda": torch.randn(3, device='cuda'),
+            ...     "meta": torch.randn(3, device='meta'),
             ... }, batch_size=[], device=None)
             >>> td['cpu'].device
             device(type='cpu')
-            >>> td['cuda'].device
-            device(type='cuda')
-            >>> td = TensorDict({
-            ...     "x": torch.randn(3, device='cpu'),
-            ...     "y": torch.randn(3, device='cuda'),
-            ... }, batch_size=[], device='cuda')
-            >>> td['x'].device
-            device(type='cuda')
-            >>> td['y'].device
-            device(type='cuda')
+            >>> td['meta'].device
+            device(type='meta')
+            >>> print(td.device)
+            None
             >>> td = TensorDict({
             ...     "x": torch.randn(3, device='cpu'),
             ...     "y": TensorDict({'z': torch.randn(3, device='cpu')}, batch_size=[], device=None),
-            ... }, batch_size=[], device='cuda')
+            ... }, batch_size=[], device='meta')
             >>> td['x'].device
-            device(type='cuda')
+            device(type='meta')
             >>> td['y'].device # nested tensordicts are also mapped onto the appropriate device.
-            device(type='cuda')
-            >>> td['y', 'x'].device
-            device(type='cuda')
+            device(type='meta')
+            >>> td['y', 'z'].device
+            device(type='meta')
+            >>> td['w'] = torch.zeros(3)  # a new entry is moved to the device too
+            >>> td['w'].device
+            device(type='meta')
 
         """
         raise NotImplementedError
