@@ -10,17 +10,18 @@ from typing import Any, Dict, List, Tuple
 import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import _SubTensorDict, TensorDict, TensorDictBase
-from tensordict.base import _NESTED_TENSORS_AS_LISTS
 from tensordict.persistent import PersistentTensorDict
 
-# implement_for stays importable from here for the deprecated
-# tensordict.implement_for alias of tensordict/__init__.py, until 0.17.
+# implement_for and is_compiling stay importable from here for the deprecated
+# tensordict.implement_for and tensordict.is_compiling aliases of
+# tensordict/__init__.py, until 0.17.
 from tensordict.utils import (  # noqa: F401
     _is_tensorclass,
     _shape,
     implement_for,
     is_compiling,
 )
+from torch.compiler import is_dynamo_compiling
 from torch.utils._pytree import Context, MappingKey, register_pytree_node
 
 PYTREE_REGISTERED_TDS = (
@@ -29,6 +30,41 @@ PYTREE_REGISTERED_TDS = (
     PersistentTensorDict,
 )
 PYTREE_REGISTERED_LAZY_TDS = (LazyStackedTensorDict,)
+
+
+class _PytreeBatchSize:
+    """The batch size of a TensorDict in its pytree context.
+
+    Two of them compare equal when they have the same number of dims: like the
+    shape of a tensor leaf, the batch size is not part of the tree structure.
+    torch.export checks that the inputs of an exported module have the
+    structure of the example inputs, and a batch dim exported as dynamic can
+    take another size. ``batch_size`` is ``None`` when it held SymInts (traced
+    with dynamic shapes), which would be stale once the trace is over.
+    """
+
+    __slots__ = ("batch_dims", "batch_size")
+
+    def __init__(self, batch_size: torch.Size) -> None:
+        self.batch_dims = len(batch_size)
+        self.batch_size = (
+            None
+            if any(isinstance(dim, torch.SymInt) for dim in batch_size)
+            else batch_size
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, _PytreeBatchSize):
+            return NotImplemented
+        return self.batch_dims == other.batch_dims
+
+    def __hash__(self) -> int:
+        return hash(self.batch_dims)
+
+    def __repr__(self) -> str:
+        if self.batch_size is None:
+            return f"{type(self).__name__}(batch_dims={self.batch_dims})"
+        return f"{type(self).__name__}({list(self.batch_size)})"
 
 
 def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
@@ -48,7 +84,7 @@ def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
         "non_tensor_data": d.non_tensor_items(),
         "cls": type(d),
     }
-    if is_compiling():
+    if is_dynamo_compiling():
         # During torch.export with dynamic shapes, batch_size may contain SymInts.
         # torch.export cannot serialize SymInts in the output pytree spec
         # (as_python_constant raises). Store batch_dims (int) instead and
@@ -56,9 +92,13 @@ def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
         # See: https://github.com/pytorch/tensordict/issues/1003
         context["batch_dims"] = len(d.batch_size)
     else:
-        # Eager path: store batch_size directly so that torch.func transforms
+        # Eager path: store batch_size so that torch.func transforms
         # (jacrev, jacfwd, hessian) can detect basis-vector shape mismatches.
-        context["batch_size"] = d.batch_size
+        # Non-strict torch.export also takes this path (is_compiling() is True
+        # there, is_dynamo_compiling() is not): the exported module checks that
+        # the spec of its inputs, flattened in eager mode, equals the spec of
+        # the example inputs, flattened while tracing.
+        context["batch_size"] = _PytreeBatchSize(d.batch_size)
     return values, context
 
 
@@ -83,28 +123,47 @@ def _tensordict_unflatten(values: List[Any], context: Context) -> Dict[Any, Any]
         return
     shapes = [_shape(v) for v in values if hasattr(v, "shape")]
     if "batch_dims" in context:
-        # Compilation path (torch.export): batch_size was not stored because it
-        # may contain SymInts which torch.export cannot serialize. Reconstruct
-        # from the leading batch_dims dimensions of the actual tensor shapes.
         batch_dims = context["batch_dims"]
-        batch_size = shapes[0][:batch_dims] if shapes else torch.Size([0] * batch_dims)
+        batch_size = None
     else:
-        batch_size = context["batch_size"]
-        batch_dims = len(batch_size)
+        batch_dims = context["batch_size"].batch_dims
+        batch_size = context["batch_size"].batch_size
+    if not shapes:
+        # No tensor to read the batch size from: keep the stored one.
+        if batch_size is None:
+            batch_size = torch.Size([0] * batch_dims)
+    elif (
+        batch_size is None
+        or is_dynamo_compiling()
+        or any(isinstance(dim, torch.SymInt) for dim in shapes[0][:batch_dims])
+    ):
+        # Compilation path (torch.export): batch_size was not stored because it
+        # may contain SymInts which torch.export cannot serialize. Or the values
+        # have symbolic shapes: torch.export builds its example inputs with
+        # dynamic dims from a spec flattened in eager mode, and comparing them
+        # with its batch_size would specialize them (Dynamo shows SymInts as
+        # ints, hence the is_dynamo_compiling() check). Reconstruct from the
+        # leading batch_dims dimensions of the actual tensor shapes.
+        batch_size = shapes[0][:batch_dims]
+    else:
         if shapes and any(s[:batch_dims] != batch_size for s in shapes):
             # Values have different leading dims than the original batch_size.
             # This happens when torch.func transforms (jacrev, jacfwd, hessian)
             # create basis vectors with extra leading dimensions. We infer a new
             # batch_size from the common prefix of all value shapes, capped at
-            # batch_dims + 1 to include at most one extra (basis) dimension.
+            # batch_dims + 1 to include at most one extra (basis) dimension, and
+            # at batch_dims when the values do not have the original batch_size
+            # after their first dim (e.g. tree_map over tensordicts with different
+            # batch sizes).
             #
             # NOTE: when tensors have no feature dimensions (ndim == batch_dims),
             # the basis leading dim can coincidentally equal a batch dim, making
             # it impossible to detect the mismatch here. In that case, the
             # TensorDict should be created with batch_size=[] or the tensors
             # should be given at least one feature dimension (e.g. via unsqueeze).
+            has_basis_dim = all(s[1 : batch_dims + 1] == batch_size for s in shapes)
             min_dims = min(len(s) for s in shapes)
-            max_prefix_len = min(min_dims, batch_dims + 1)
+            max_prefix_len = min(min_dims, batch_dims + has_basis_dim)
             common_dims = 0
             for i in range(max_prefix_len):
                 if all(s[i] == shapes[0][i] for s in shapes):
@@ -131,29 +190,18 @@ def _tensordict_unflatten(values: List[Any], context: Context) -> Dict[Any, Any]
 
 def _lazy_tensordict_unflatten(values: List[Any], context: Context) -> Dict[Any, Any]:
     stack_dim = context["stack_dim"]
-    return cls(*values, stack_dim=stack_dim, stack_dim_name=context["stack_dim_name"])
+    return context["cls"](
+        *values, stack_dim=stack_dim, stack_dim_name=context["stack_dim_name"]
+    )
 
 
 def _td_flatten_with_keys(
     d: TensorDictBase,
 ):
-    items = tuple(d.items(is_leaf=_NESTED_TENSORS_AS_LISTS))
-    if items:
-        keys, values = zip(*items)
-        keys = list(keys)
-        values = list(values)
-    else:
-        keys = []
-        values = []
-    return [(MappingKey(k), v) for k, v in zip(keys, values)], {
-        "keys": keys,
-        "batch_size": d.batch_size,
-        "names": d._maybe_names(),
-        "device": d.device,
-        "constructor": _constructor(type(d)),
-        "non_tensor_data": d.non_tensor_items(),
-        "cls": type(d),
-    }
+    # Same context as _tensordict_flatten: torch.export compares the spec of
+    # tree_flatten_with_path(call inputs) with the spec of tree_flatten(example inputs).
+    values, context = _tensordict_flatten(d)
+    return [(MappingKey(k), v) for k, v in zip(context["keys"], values)], context
 
 
 def _lazy_td_flatten_with_keys(

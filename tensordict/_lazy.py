@@ -15,6 +15,7 @@ from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
 from copy import copy, deepcopy
 from functools import wraps
+from itertools import islice
 from pathlib import Path
 from textwrap import indent
 from typing import (
@@ -3550,11 +3551,43 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return self
 
+    def _innermost_tensordicts(self) -> list[TensorDictBase]:
+        """The members of the stack, with the members of its nested lazy stacks in their place."""
+        tds = []
+        for td in self.tensordicts:
+            if isinstance(td, LazyStackedTensorDict):
+                tds.extend(td._innermost_tensordicts())
+            else:
+                tds.append(td)
+        return tds
+
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> Self:
-        for td in self.tensordicts:
-            td.rename_key_(old_key, new_key, safe=safe)
+        old = _unravel_key_to_tuple(old_key)
+        new = _unravel_key_to_tuple(new_key)
+        # Check every tensordict before any renames the key, so that a call
+        # that raises leaves the stack unchanged: a tensordict that cannot
+        # rename it raises before it changes anything.
+        tds = []
+        for td in self._innermost_tensordicts():
+            keys = td.keys(include_nested=True)
+            if (
+                td.is_locked
+                or not (old and new)
+                or old not in keys
+                or (safe and new in keys)
+            ):
+                td.rename_key_(old_key, new_key, safe=safe)
+            else:
+                tds.append((td, keys))
+        for i, (td, keys) in enumerate(tds):
+            # A tensordict that is in the stack more than once is renamed the
+            # first time. It is found with `is`, not id(): torch.compile
+            # guards on the id of each member and would recompile for every
+            # new stack.
+            if old in keys or not any(td is other for other, _ in islice(tds, i)):
+                td.rename_key_(old_key, new_key, safe=safe)
         return self
 
     def where(
