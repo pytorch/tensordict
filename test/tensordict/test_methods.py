@@ -1706,6 +1706,7 @@ class TestTensorDicts(TestTensorDictsBase):
             pytest.skip("UnbatchedTensor masked_fill_ has dimension mismatch")
             return
         mask = torch.zeros(td.shape, dtype=torch.bool, device=device).bernoulli_()
+        td_before = td.to_tensordict()
         if td_name == "td_params":
             td_set = td.data
         else:
@@ -1714,6 +1715,9 @@ class TestTensorDicts(TestTensorDictsBase):
         assert new_td is td_set
         for item in td.values():
             assert (item[mask] == -10).all(), item[mask]
+        # the entries outside the mask keep their values
+        for key in td.keys(True, True):
+            assert (td.get(key)[~mask] == td_before.get(key)[~mask]).all(), key
 
     def test_masking(self, td_name, device):
         torch.manual_seed(1)
