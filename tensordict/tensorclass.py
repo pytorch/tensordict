@@ -2318,8 +2318,11 @@ def _memmap_(
     share_non_tensor: bool = False,
     existsok: bool = True,
     robust_key,
+    non_tensordict: dict | None = None,
 ):
-    _non_tensordict = dict(self._non_tensordict)
+    if non_tensordict is None:
+        non_tensordict = self._non_tensordict
+    _non_tensordict = dict(non_tensordict)
     cls = type(self)
 
     if not memmaped and prefix is not None:
@@ -5069,6 +5072,17 @@ class NonTensorDataBase(TensorClass):
             _metadata["memmap_prefix"] = prefix
             _metadata["memmaped"] = memmaped
 
+        # memmap_prefix, memmaped and _share_non_tensor describe the current
+        # memmap, not the data: leave them out of meta.json (memmap_prefix is
+        # a Path, which would be pickled into other.pickle).
+        non_tensordict = dict(self._non_tensordict)
+        if self._metadata is not None:
+            non_tensordict["_metadata"] = {
+                key: value
+                for key, value in self._metadata.items()
+                if key not in ("memmap_prefix", "memmaped", "_share_non_tensor")
+            } or None
+
         out = _memmap_(
             self,
             prefix=prefix,
@@ -5081,6 +5095,7 @@ class NonTensorDataBase(TensorClass):
             share_non_tensor=share_non_tensor,
             existsok=existsok,
             robust_key=robust_key,
+            non_tensordict=non_tensordict,
         )
         _metadata["_share_non_tensor"] = share_non_tensor
         out._non_tensordict["_metadata"] = _metadata
