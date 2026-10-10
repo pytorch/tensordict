@@ -3,10 +3,10 @@
 Keys, nested keys and locking
 =============================
 
-A tensordict groups related tensors in a tree, and one key reaches any of
-them: a string for the top level, a tuple of strings for a nested entry. A
-lock fixes the set of keys, so that no code adds, replaces or removes an entry
-by mistake.
+A tensordict groups related tensors in a tree. One key reads any of them: a
+string for the top level, a tuple of strings for a nested entry. A lock fixes
+the set of keys, so that no code adds, replaces or removes an entry by
+mistake.
 
 Nested tensordicts and nested keys
 ----------------------------------
@@ -46,9 +46,9 @@ A tuple key in the constructor also creates nested entries:
 ``TensorDict({("x", "y"): torch.zeros(3)}, batch_size=[3])`` has a nested
 tensordict ``"x"`` with the key ``"y"``.
 
-If the keys are fixed when you write the code, a
+If you know the keys when you write the code, a
 :class:`~tensordict.TensorClass` gives you typed attributes in place of string
-keys, with editor completion (see :ref:`tensorclass-guide`).
+keys, and your editor completes them (see :ref:`tensorclass-guide`).
 
 Valid keys
 ----------

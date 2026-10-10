@@ -83,10 +83,10 @@ and ``>=`` keep non-tensor entries, such as strings, as they are (see
 compare the non-tensor values, and give a boolean tensor at their keys.
 
 When it can, tensordict computes a pointwise operation with the fused
-``torch._foreach_<op>`` kernels, one call for all the leaves. Inside a
-:mod:`torch.func` transform such as :func:`torch.vmap`, which has no batching
-rule for the ``_foreach`` ops, it applies the operation to one leaf at a time
-instead. Inside :func:`torch.compile`, ``td * t`` with a tensor ``t`` breaks
+``torch._foreach_<op>`` kernels, one call for all the leaves. The
+:mod:`torch.func` transforms, such as :func:`torch.vmap`, have no batching
+rule for the ``_foreach`` ops. Inside them, tensordict applies the operation
+to one leaf at a time. Inside :func:`torch.compile`, ``td * t`` with a tensor ``t`` breaks
 the graph: call ``td.mul(t)`` instead. :ref:`compile` gives the details.
 
 Broadcasting with a tensor

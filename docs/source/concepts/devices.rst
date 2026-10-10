@@ -111,9 +111,9 @@ Temporary moves
 ~~~~~~~~~~~~~~~
 
 ``to()`` also works as a context manager. In the ``with`` block, you work on
-the moved or cast tensordict. At the end of the block, the entries of the
-original tensordict get the values from the block, on their original device
-and with their original dtype. The entries that the block adds are added to
+the moved or cast tensordict. At the end of the block, the values go back
+into the entries of the original tensordict, which keep their original device
+and dtype. The entries that the block adds are added to
 the original tensordict too. They keep the dtype that they have in the block.
 If the original tensordict has a device, they go to that device:
 

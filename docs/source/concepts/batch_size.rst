@@ -5,8 +5,8 @@ Batch size, shapes and indexing
 
 The batch size is the shape that all the entries of a
 :class:`~tensordict.TensorDict` share at the front. With it, one index, one
-``reshape`` or one ``unbind`` applies to every tensor of the group, and a
-tensor of the wrong shape raises an error when you add it.
+``reshape`` or one ``unbind`` applies to every tensor of the group. A tensor
+of the wrong shape raises an error when you add it.
 
 Batch size and batch dimensions
 -------------------------------

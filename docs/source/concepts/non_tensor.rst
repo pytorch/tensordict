@@ -3,10 +3,10 @@
 Non-tensor data and unbatched entries
 =====================================
 
-A tensordict can carry strings, labels and other Python objects next to its
-tensors, and indexing and stacking keep them aligned with the batch. It can
-also hold a tensor that belongs to the whole batch, such as a parameter that
-all the elements share: shape operations leave it as it is.
+A tensordict can store strings, labels and other Python objects next to its
+tensors. Indexing and stacking keep them aligned with the batch. A tensordict
+can also hold a tensor that belongs to the whole batch, such as a parameter
+that all the elements share. Shape operations leave that tensor as it is.
 
 Non-tensor data
 ---------------
@@ -266,8 +266,8 @@ a :class:`~tensordict.NonTensorStack`, as for
 :func:`~torch.unsqueeze` also keeps one :class:`~tensordict.MetaData`, and
 makes a :class:`~tensordict.NonTensorStack` from a
 :class:`~tensordict.NonTensorData`. Use :class:`~tensordict.MetaData` for a
-value that is the same for every element, such as a label or a configuration
-dict, and that must not become a stack.
+value that must not become a stack, such as a label or a configuration dict
+that is the same for every element.
 
 Non-tensor data in other operations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
