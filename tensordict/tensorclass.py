@@ -25,7 +25,7 @@ from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
-from types import NoneType, UnionType
+from types import FunctionType, NoneType, UnionType
 from typing import (
     AbstractSet,
     Any,
@@ -1052,6 +1052,44 @@ def _raise_reserved_field_name(name: str) -> None:
     )
 
 
+def _attribute_functions(value: Any) -> tuple[FunctionType, ...]:
+    """Return the functions behind a method, classmethod, staticmethod or property."""
+    if isinstance(value, FunctionType):
+        return (value,)
+    if isinstance(value, property):
+        functions = (value.fget, value.fset, value.fdel)
+    elif isinstance(value, (classmethod, staticmethod)):
+        functions = (value.__func__,)
+    else:
+        return ()
+    return tuple(func for func in functions if isinstance(func, FunctionType))
+
+
+@functools.cache
+def _unchecked_copy(func: FunctionType) -> FunctionType:
+    """Return a copy of a TensorDict method that runtime type-checkers skip.
+
+    Tensorclasses get the copy, so that marking it leaves the TensorDict method as
+    is. The copy is named after the attribute of TensorClass that holds it, where
+    pickle finds it.
+    """
+    copied = FunctionType(
+        func.__code__,
+        func.__globals__,
+        func.__name__,
+        func.__defaults__,
+        func.__closure__,
+    )
+    copied.__kwdefaults__ = func.__kwdefaults__
+    copied.__dict__.update(func.__dict__)
+    copied.__doc__ = func.__doc__
+    copied.__annotations__ = dict(func.__annotations__)
+    copied.__module__ = __name__
+    copied.__qualname__ = f"TensorClass.{func.__name__}"
+    copied.__no_type_check__ = True
+    return copied
+
+
 @dataclass_transform()
 def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     def __torch_function__(
@@ -1096,6 +1134,19 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
                 for tensordict_result in result
             )
         return _from_tensordict_with_copy(tensorclass_instance, result)
+
+    # Python 3.14+ evaluates the annotations of a method when they are first
+    # read, and looks their names up in the namespace of the class (PEP 649).
+    # Read those of the methods in the class body now, before the methods
+    # added below (bool, int, set...) shadow the builtins that they name.
+    attrs_before = dict(cls.__dict__)
+    for value in attrs_before.values():
+        for func in _attribute_functions(value):
+            try:
+                func.__annotations__  # noqa: B018
+            except Exception:
+                # e.g. a name defined later in the module: read on first use
+                pass
 
     _is_non_tensor = getattr(cls, "_is_non_tensor", False)
 
@@ -1300,7 +1351,7 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         cls.extend = _extend
     for method_name in _METHOD_FROM_TD:
         if not hasattr(cls, method_name):
-            setattr(cls, method_name, getattr(TensorDict, method_name))
+            setattr(cls, method_name, _unchecked_copy(getattr(TensorDict, method_name)))
     for method_name in _FALLBACK_METHOD_FROM_TD:
         if not hasattr(cls, method_name):
             setattr(cls, method_name, _wrap_td_method(method_name))
@@ -1343,9 +1394,11 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     # below): load_memmap falls back on the class it is called on when the
     # saved class cannot be found by name.
     if not hasattr(cls, "load_memmap") and "load_memmap" not in expected_keys:
-        cls.load_memmap = classmethod(TensorDictBase.load_memmap.__func__)
+        cls.load_memmap = classmethod(
+            _unchecked_copy(TensorDictBase.load_memmap.__func__)
+        )
     if not hasattr(cls, "load") and "load" not in expected_keys:
-        cls.load = classmethod(TensorDictBase.load.__func__)
+        cls.load = classmethod(_unchecked_copy(TensorDictBase.load.__func__))
     if not hasattr(cls, "load_memmap_") and "load_memmap_" not in expected_keys:
         cls.load_memmap_ = _load_memmap_
     if not hasattr(cls, "_load_memmap"):
@@ -1418,6 +1471,24 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
                 setattr(cls, name, property(functools.partial(_getattr, item=name)))
 
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
+
+    # A runtime type-checker that decorates the class (e.g. beartype) checks
+    # every method in its namespace. Mark the methods added above with PEP
+    # 484's __no_type_check__ so that it skips them: their annotations name
+    # builtins that the class shadows (bool, int, type...), and some do not
+    # hold for tensorclasses (e.g. the device can be None). __init__ keeps the
+    # annotations of the fields (or of a user-defined __init__), which
+    # checkers such as jaxtyping check.
+    module_globals = globals()
+    for name, value in cls.__dict__.items():
+        if name == "__init__" or attrs_before.get(name) is value:
+            continue
+        for func in _attribute_functions(value):
+            # A function of this module, or a wrapper of one (e.g. deprecated)
+            if func.__annotations__ and (
+                func.__globals__ is module_globals or func.__module__ == __name__
+            ):
+                func.__no_type_check__ = True
 
     _register_tensor_class(cls)
     try:
@@ -4186,7 +4257,7 @@ def _patch_tc(cls):
 
     # # Methods from lists
     for method_name in _METHOD_FROM_TD:
-        setattr(cls, method_name, getattr(TensorDict, method_name))
+        setattr(cls, method_name, _unchecked_copy(getattr(TensorDict, method_name)))
     for method_name in _FALLBACK_METHOD_FROM_TD:
         setattr(cls, method_name, _wrap_td_method(method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD_FORCE:
