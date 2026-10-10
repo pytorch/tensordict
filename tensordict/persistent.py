@@ -371,6 +371,10 @@ class _H5Backend(_PersistentBackend):
         try:
             file.move(old_key, new_key)
         except ValueError as err:
+            # h5py raises ValueError for a missing source too; an existing
+            # destination is reported first, as in _ZarrBackend.move
+            if old_key not in file and new_key not in file:
+                raise KeyError(f"key {old_key} not found in TensorDict.") from err
             raise KeyError(f"key {new_key} already present in TensorDict.") from err
 
     def getstate(self, file) -> dict:
