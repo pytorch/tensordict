@@ -84,6 +84,8 @@ uv_pip_install \
   "pybind11[global]>=2.13" \
   pyyaml \
   scipy \
+  psutil \
+  "hydra-core<1.4" \
   orjson \
   ninja \
   pyvers \
