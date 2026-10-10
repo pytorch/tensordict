@@ -42,6 +42,7 @@ from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
     _load_metadata,
+    _NESTED_TENSORS_AS_LISTS,
     _register_tensor_class,
     _select_entry,
     _UNSET,
@@ -2488,6 +2489,17 @@ class TensorDict(TensorDictBase):
                     #  but we could iterate just once.
                     #  Ideally we should make a "dirty" list of items then call unravel_key on all of them.
                     if not is_leaf(type(val)):
+                        # Skip the values without entries, such as the tensors in
+                        # non_tensor_items. The cheap checks come first: a TensorDict
+                        # has entries, and the default is_leaf and
+                        # _NESTED_TENSORS_AS_LISTS only reject tensor collections.
+                        if (
+                            type(val) is not TensorDict
+                            and is_leaf is not _default_is_leaf
+                            and is_leaf is not _NESTED_TENSORS_AS_LISTS
+                            and not _is_tensor_collection(type(val))
+                        ):
+                            continue
                         for _key, _val in val.items(
                             include_nested=include_nested,
                             leaves_only=leaves_only,
