@@ -3076,6 +3076,23 @@ class TestProbabilisticTensorDictModule:
         assert torch.equal(torch.get_rng_state(), state_before)
         assert torch.equal(sample, td["loc"])
 
+    @pytest.mark.parametrize("param", ["logits", "probs"])
+    def test_onehot_categorical_rsample(self, param):
+        torch.manual_seed(0)
+        logits = torch.randn(3, 4, requires_grad=True)
+        if param == "logits":
+            dist = OneHotCategorical(logits=logits)
+        else:
+            dist = OneHotCategorical(probs=logits.softmax(-1))
+        assert dist.rsample().shape == (3, 4)
+        sample = dist.rsample((2,))
+        assert sample.shape == (2, 3, 4)
+        assert ((sample == 0) | (sample == 1)).all()
+        assert (sample.sum(-1) == 1).all()
+        (sample * torch.arange(1.0, 5.0)).sum().backward()
+        assert logits.grad is not None
+        assert logits.grad.abs().sum() > 0
+
     # ------------------------------------------------------------------
     # generator argument: Generator object, int seed, and tensordict-key forms
     # ------------------------------------------------------------------
