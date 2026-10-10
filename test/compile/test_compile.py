@@ -1554,6 +1554,18 @@ class TestTC:
         )
         assert (reshape(data) == reshape_c(data)).all()
 
+    def test_tc_view_cm_unset_field(self, mode):
+        # Setting the unset field c inside the context drops its None placeholder.
+        def set_in_view(tc):
+            with tc.view(-1) as flat:
+                flat.c = flat.b + 1
+            return tc.c
+
+        set_in_view_c = torch.compile(set_in_view, fullgraph=True, mode=mode)
+        data = MyClass(a=None, b=torch.zeros(2, 2), batch_size=[2, 2])
+        torch.testing.assert_close(set_in_view_c(data), torch.ones(2, 2))
+        torch.testing.assert_close(data.to_dict()["c"], torch.ones(2, 2))
+
     def test_tc_torch_where(self, mode):
         def where(mask, td0, td1):
             return torch.reshape(torch.where(mask, td0, td1), (2, 2))

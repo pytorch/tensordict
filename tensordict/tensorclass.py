@@ -20,6 +20,7 @@ import pickle
 import shutil
 import sys
 import warnings
+import weakref
 from collections.abc import Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
@@ -72,6 +73,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _LOCK_ERROR,
     _REPR_OPTIONS,
     _resolve_expand_shape,
+    _strong_ref,
     _td_fields,
     _TENSORCLASS_MEMO,
     _unravel_key_to_tuple,
@@ -196,7 +198,6 @@ _TD_PASS_THROUGH = {
 # Methods to be executed from tensordict, any ref to self means 'tensorclass'
 _METHOD_FROM_TD = [
     "__enter__",
-    "__exit__",
     "__iter__",
     "dumps",
     "load_",
@@ -1298,6 +1299,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         cls.update_at_ = _update_at_
     if not hasattr(cls, "extend"):
         cls.extend = _extend
+    if not hasattr(cls, "__exit__"):
+        cls.__exit__ = _exit
     for method_name in _METHOD_FROM_TD:
         if not hasattr(cls, method_name):
             setattr(cls, method_name, getattr(TensorDict, method_name))
@@ -2742,6 +2745,51 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
         )
 
 
+def _write_back_dest(td_ref, tc_ref):
+    # Returns tc._tensordict, which the context manager writes back into on exit,
+    # as td_ref() did. tc_ref is for _exit, which updates tc._non_tensordict.
+    return td_ref()
+
+
+def _record_tensorclass(tc, result, last_op):
+    # ``with tc.view(-1) as f:`` writes f back into tc._tensordict on exit, the
+    # object that the last op of f refers to. Also refer to tc.
+    name, (args, kwargs, td_ref) = last_op
+    if type(td_ref) is functools.partial and td_ref.func is _write_back_dest:
+        # flatten_keys/unflatten_keys of a locked TensorDict return their cached
+        # result again: record the tensorclass again, do not wrap twice
+        td_ref = td_ref.args[0]
+    if td_ref() is tc._tensordict:
+        tc_ref = _strong_ref(tc) if is_compiling() else weakref.ref(tc)
+        dest = functools.partial(_write_back_dest, td_ref, tc_ref)
+        result._last_op = (name, (args, kwargs, dest))
+
+
+def _exit(self, exc_type, exc_val, exc_tb):
+    queue = getattr(self._tensordict, "_last_op_queue", None)
+    last_op = queue[-1] if queue else None
+    result = TensorDict.__exit__(self, exc_type, exc_val, exc_tb)
+    if exc_type is None and last_op is not None:
+        dest = last_op[1][2]
+        if type(dest) is functools.partial and dest.func is _write_back_dest:
+            tc = dest.args[1]()
+            if tc is not None and tc.__dict__["_non_tensordict"]:
+                # The write-back keeps the None placeholders of tc for the
+                # fields it writes. Drop them, as update() does. The fields
+                # unset in self are not written, so only the others need a check.
+                non_tensordict = tc.__dict__["_non_tensordict"]
+                source_non_tensordict = self.__dict__["_non_tensordict"]
+                maybe_written = [
+                    key for key in non_tensordict if key not in source_non_tensordict
+                ]
+                if maybe_written:
+                    keys = tc.__dict__["_tensordict"].keys()
+                    for key in maybe_written:
+                        if key in keys:
+                            del non_tensordict[key]
+    return result
+
+
 def _wrap_td_method(
     funcname, *, copy_non_tensor=False, no_wrap=False, is_property=False
 ):
@@ -2759,6 +2807,11 @@ def _wrap_td_method(
             if copy_non_tensor and non_tensordict:
                 # use tree_map to copy
                 non_tensordict = tree_map(_identity, non_tensordict)
+            if non_tensordict:
+                # self has unset fields, whose placeholders _exit may drop
+                last_op = result._last_op
+                if last_op is not None:
+                    _record_tensorclass(self, result, last_op)
             return self._from_tensordict(result, non_tensordict, safe=False)
         return result
 
@@ -4183,6 +4236,8 @@ def _patch_tc(cls):
     cls.load = TensorDictBase.load
     cls.load_memmap_ = _load_memmap_
     cls.from_dict_instance = _from_dict_instance
+
+    cls.__exit__ = _exit
 
     # # Methods from lists
     for method_name in _METHOD_FROM_TD:

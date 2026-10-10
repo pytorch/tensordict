@@ -3506,6 +3506,51 @@ class TestTensorClass:
         assert data.X is not None
         assert (data.X == 0).all()
 
+    @pytest.mark.parametrize(
+        "op,args",
+        [
+            ("view", (-1,)),
+            ("permute", (1, 0)),
+            ("unsqueeze", (0,)),
+            ("flatten", (0, 1)),
+        ],
+    )
+    def test_shape_cm_unset_field(self, op, args):
+        # Setting an unset field inside the context must drop its None
+        # placeholder in the original object, as setting it there does.
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+            z: torch.Tensor = None
+            s: str = None
+
+        tc = TC(x=torch.zeros(2, 3), batch_size=[2, 3])
+        with getattr(tc, op)(*args) as tc_op:
+            tc_op.z = torch.ones(tc_op.batch_size)
+            tc_op.s = "value"
+        z = torch.ones(2, 3)
+        torch.testing.assert_close(tc.z, z)
+        torch.testing.assert_close(tc.to_dict()["z"], z)
+        torch.testing.assert_close(tc.to_tensordict(retain_none=True)["z"], z)
+        assert tc.s == tc.to_dict()["s"] == "value"
+        assert "z=None" not in repr(tc)
+        assert "s=None" not in repr(tc)
+
+    def test_shape_cm_locked_cached_result(self):
+        # flatten_keys and unflatten_keys of a locked tensorclass return their
+        # cached result again. Calling them more times than the recursion limit
+        # must not raise.
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+            z: torch.Tensor = None
+
+        tc = TC(x=torch.zeros(2, 3), batch_size=[2, 3]).lock_()
+        for _ in range(1100):
+            with tc.flatten_keys():
+                pass
+            tc.unflatten_keys()
+
     def test_weakref_attr(self):
         @tensorclass
         class Y:
