@@ -1376,16 +1376,20 @@ class TestTensorDicts(TestTensorDictsBase):
         index = torch.tensor([[0, 1, 2], [1, 2, 0], [2, 0, 1]])
         if npy:
             index = index.numpy()
+        # the index varies along both dims of the block, which can't both
+        # take the name of the indexed dim: names are unique
         td_idx = td[:, index]
         assert tensor_example[:, index].shape == td_idx.shape
-        # TODO: this multiple dims with identical names should not be allowed
-        assert td_idx.names == [names[0], names[1], names[1], *names[2:]]
+        assert td_idx.names == [names[0], None, None, *names[2:]]
         td_idx = td[0, index]
         assert tensor_example[0, index].shape == td_idx.shape
-        assert td_idx.names == [names[1], names[1], *names[2:]]
+        assert td_idx.names == [None, None, *names[2:]]
         td_idx = td[..., index, :, :]
         assert tensor_example[..., index, :, :].shape == td_idx.shape
-        assert td_idx.names == [names[0], names[1], names[1], *names[2:]]
+        assert td_idx.names == [names[0], None, None, *names[2:]]
+        # along a dim of size 1, the index does not vary
+        td_idx = td[:, index[:1]]
+        assert td_idx.names == [names[0], None, names[1], *names[2:]]
 
     def test_inferred_view_size(self, td_name, device):
         if td_name in ("permute_td", "sub_td2"):
@@ -2655,10 +2659,7 @@ class TestTensorDicts(TestTensorDictsBase):
             out = td.pop("z", default)
             assert (out == default).all()
 
-            with pytest.raises(
-                KeyError,
-                match=re.escape(r"You are trying to pop key"),
-            ):
+            with pytest.raises(KeyError, match='key "z" not found in'):
                 td.pop("z")
 
     def test_popitem(self, td_name, device):

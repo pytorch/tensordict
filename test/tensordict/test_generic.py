@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import gc
 import importlib.util
+import inspect
 import os
 import pickle
 import platform
@@ -20,13 +21,14 @@ from collections import UserDict
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, get_type_hints
 
 import numpy as np
 import pytest
 import tensordict.base as tensordict_base
 import torch
 from tensordict import (
+    is_leaf_nontensor,
     lazy_stack,
     LazyStackedTensorDict,
     set_capture_non_tensor_stack,
@@ -1807,6 +1809,37 @@ class TestGeneric:
     @pytest.mark.parametrize(
         "index",
         [
+            (0, 0, 0),
+            (slice(None),) * 3,
+            5,
+            (slice(None), -5),
+            torch.ones(5, dtype=torch.bool),
+            torch.ones(3, 5, dtype=torch.bool),
+            (slice(None), torch.ones(2, dtype=torch.bool)),
+            (-1, torch.ones(2, dtype=torch.bool)),
+            (None, 5),
+            ([0, 1], [0, 1, 2]),
+        ],
+    )
+    def test_getitem_invalid_index_without_entries(self, index):
+        # torch finds an invalid index when it indexes the entries, so a
+        # tensordict checks the index against its batch size when it has none,
+        # and raises the error that torch raises
+        with pytest.raises(IndexError) as torch_error:
+            torch.zeros(3, 4)[index]
+        for td in (
+            TensorDict(batch_size=[3, 4]),
+            TensorDict({"a": torch.zeros(3, 4, 2)}, [3, 4]),
+        ):
+            with pytest.raises(IndexError) as error:
+                td[index]
+            assert str(error.value) == str(torch_error.value)
+            with pytest.raises(IndexError):
+                td[index] = TensorDict()
+
+    @pytest.mark.parametrize(
+        "index",
+        [
             [0, 2],
             torch.tensor([0, 2]),
             (slice(None), [0, 1]),
@@ -1953,6 +1986,75 @@ class TestGeneric:
 
         assert leaves == set()
         assert leaves_nested == {("a", "b", "c")}
+
+    @pytest.mark.parametrize("stack", [False, True])
+    @pytest.mark.parametrize("sort", [False, True])
+    @pytest.mark.parametrize("include_nested", [False, True])
+    @pytest.mark.parametrize("leaves_only", [False, True])
+    @pytest.mark.parametrize("is_leaf", ["default", "nontensor", "custom"])
+    def test_keys_view_iteration(
+        self, stack, sort, include_nested, leaves_only, is_leaf, request
+    ):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+
+        td = TensorDict(
+            a=torch.zeros(3, 1),
+            nested=TensorDict(
+                b=torch.zeros(3),
+                c=TensorDict(d=torch.zeros(3, 2), batch_size=[3]),
+                batch_size=[3],
+            ),
+            tc=MyClass(x=torch.zeros(3, 4), batch_size=[3]),
+            nt=NonTensorData("a string", batch_size=[3]),
+            batch_size=[3],
+        )
+        if stack:
+            if not include_nested and leaves_only and is_leaf != "default":
+                request.applymarker(
+                    pytest.mark.xfail(
+                        strict=True,
+                        reason="LazyStackedTensorDict.entry_class gives "
+                        "LazyStackedTensorDict for tensorclass and non-tensor "
+                        "entries, so flat leaves_only views drop them",
+                    )
+                )
+            td = lazy_stack([td[0], td[1]])
+        leaves = {"a", ("nested", "b"), ("nested", "c", "d"), ("tc", "x")}
+        if not leaves_only:
+            expected = leaves | {"nested", ("nested", "c"), "tc", "nt"}
+        elif is_leaf == "default":
+            expected = leaves
+        elif is_leaf == "nontensor":
+            expected = leaves | {"nt"}
+        else:
+            # the custom is_leaf rejects tensors
+            expected = {"tc"}
+        if not include_nested:
+            expected = {key for key in expected if isinstance(key, str)}
+        is_leaf = {
+            "default": None,
+            "nontensor": is_leaf_nontensor,
+            "custom": lambda cls: cls is MyClass,
+        }[is_leaf]
+        keys = td.keys(include_nested, leaves_only, is_leaf=is_leaf, sort=sort)
+        # list() and tuple() ask the view for its length first: they must
+        # give the same keys as a plain loop.
+        listed = list(keys)
+        assert listed == [key for key in keys]  # noqa: C416
+        assert tuple(listed) == tuple(keys)
+        assert len(listed) == len(expected)
+        assert set(listed) == expected
+        if sort:
+            assert listed == sorted(
+                expected,
+                key=lambda key: ".".join(key) if isinstance(key, tuple) else key,
+            )
+        # len() of nested and leaves_only lazy-stack views counts only the
+        # top-level keys: the lazy-keys-len branch fixes it.
+        if not stack:
+            assert len(keys) == len(expected)
 
     def test_load_device(self, tmpdir):
         t = nn.Transformer(
@@ -2393,6 +2495,26 @@ class TestGeneric:
 
         with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
             td.set("b", torch.randn(4, 5), inplace=True, non_blocking=False)
+
+    def test_mixin_method_annotations(self):
+        # The mixins under tensordict/_base/ import TensorDictBase for type
+        # checking only. Annotations that name it must still resolve at run
+        # time, as they did when these methods were defined in tensordict.base.
+        unresolved = {}
+        for mixin in tensordict_base._TENSORDICTBASE_MIXINS:
+            for name, attr in vars(mixin).items():
+                func = getattr(attr, "__func__", attr)
+                if name.startswith("_") or not inspect.isfunction(func):
+                    continue
+                try:
+                    get_type_hints(func)
+                except NameError as err:
+                    if err.name in vars(tensordict_base):
+                        unresolved[name] = err.name
+                except TypeError:
+                    # Annotations such as "str" | None fail for other reasons.
+                    pass
+        assert not unresolved, unresolved
 
     @pytest.mark.parametrize("dist_of_callables", [False, True])
     def test_merge_tensordicts(self, dist_of_callables):
@@ -2934,6 +3056,79 @@ class TestGeneric:
         td.roll(1, 0, inplace=True)
         gc.collect()
         assert ref() is None
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_roll_feature_dims(self, inplace):
+        # dims are batch dims: negative dims and the default (flattened batch)
+        # must leave the feature dims of the leaves in place
+        a = torch.arange(24).view(2, 3, 4)
+        b = torch.arange(12).view(2, 3, 2)
+        td = TensorDict({"a": a, "nested": TensorDict({"b": b}, [2, 3, 2])}, [2, 3])
+
+        out = td.clone().roll(1, -1, inplace=inplace)
+        assert (out["a"] == a.roll(1, 1)).all()
+        assert (out["nested", "b"] == b.roll(1, 1)).all()
+
+        out = td.clone().roll(1, inplace=inplace)
+        assert (out["a"] == a.view(6, 4).roll(1, 0).view(2, 3, 4)).all()
+        assert (out["nested", "b"] == b.view(6, 2).roll(1, 0).view(2, 3, 2)).all()
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    @pytest.mark.parametrize("dims", [None, ()])
+    def test_roll_flat_batch_edge_cases(self, dims, inplace):
+        # empty dims roll the flattened batch like None, as in torch, and an
+        # empty feature dim does not make the flattened batch ambiguous
+        b = torch.arange(12).view(2, 3, 2)
+        td = TensorDict(
+            {"z": torch.zeros(2, 3, 0), "nested": TensorDict({"b": b}, [2, 3, 2])},
+            [2, 3],
+        )
+        out = td.clone().roll(1, dims, inplace=inplace)
+        assert out["z"].shape == (2, 3, 0)
+        assert (out["nested", "b"] == b.view(6, 2).roll(1, 0).view(2, 3, 2)).all()
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_roll_flat_batch_keeps_nested_names(self, inplace):
+        # rolling the flattened batch reshapes each nested tensordict, which
+        # must not drop its dim names
+        nested = TensorDict(
+            {"b": torch.zeros(2, 3, 2)}, [2, 3, 2], names=["x", "y", "z"]
+        )
+        td = TensorDict({"nested": nested}, [2, 3], names=["x", "y"])
+        out = td.roll(1, inplace=inplace)
+        assert out.names == ["x", "y"]
+        assert out["nested"].names == ["x", "y", "z"]
+
+    def test_roll_flat_batch_inplace_rebinds_nested(self):
+        # like the other in-place paths, roll(inplace=True) replaces the nested
+        # leaves instead of writing into them: a tensor the caller still holds
+        # is left untouched, and an expanded leaf can be rolled
+        b = torch.arange(12).view(2, 3, 2)
+        e = torch.arange(2).expand(2, 3, 2)
+        td = TensorDict({"nested": TensorDict({"b": b, "e": e}, [2, 3, 2])}, [2, 3])
+        td.roll(1, inplace=True)
+        assert (b == torch.arange(12).view(2, 3, 2)).all()
+        assert (td["nested", "b"] == b.view(6, 2).roll(1, 0).view(2, 3, 2)).all()
+        assert (td["nested", "e"] == e).all()
+
+    @pytest.mark.parametrize(
+        "dims,batch_size,leaf_reps",
+        [
+            ((2,), [2, 6], (1, 2, 1)),
+            ((2, 1), [4, 3], (2, 1, 1)),
+            ((3, 1, 1), [3, 2, 3], (3, 1, 1, 1)),
+        ],
+    )
+    def test_tile_feature_dims(self, dims, batch_size, leaf_reps):
+        # dims are aligned with the batch dims, feature dims are not tiled
+        a = torch.arange(24).view(2, 3, 4)
+        td = TensorDict(
+            {"a": a, "nested": TensorDict({"b": a.clone()}, [2, 3, 4])}, [2, 3]
+        )
+        out = td.tile(dims)
+        assert out.batch_size == torch.Size(batch_size)
+        assert (out["a"] == a.tile(leaf_reps)).all()
+        assert (out["nested", "b"] == a.tile(leaf_reps)).all()
 
     @pytest.mark.parametrize("inplace", [True, False])
     def test_gather_inplace(self, inplace):

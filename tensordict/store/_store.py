@@ -633,6 +633,13 @@ class TensorDictStore(TensorDictBase):
             tensor = tensor.to(self._device)
         return tensor
 
+    def _is_tensor_entry(self, key_path: str) -> bool:
+        """Whether the entry at ``key_path`` exists and holds a tensor."""
+        if self._meta_cache is not None and key_path in self._meta_cache:
+            return True
+        meta = self._run_sync(self._aget_metadata(key_path))
+        return bool(meta) and meta.get("is_non_tensor") != "1"
+
     async def _aget_metadata(self, key_path: str) -> dict:
         """Retrieve metadata for a key without downloading tensor data."""
         raw = await self._client.hgetall(self._meta_key(key_path))
@@ -1530,7 +1537,7 @@ class TensorDictStore(TensorDictBase):
     ):
         inplace = self._convert_inplace(inplace, key)
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(value, check_shape=True, key=key)
         if self.is_locked and not ignore_lock:
             if not inplace:
                 raise RuntimeError(_LOCK_ERROR)
@@ -1593,7 +1600,7 @@ class TensorDictStore(TensorDictBase):
         # Direct set with full key path
         key_path = self._full_key_path(_KEY_SEP.join(key))
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(value, check_shape=True, key=key)
         if self.is_locked and not inplace:
             raise RuntimeError(_LOCK_ERROR)
 
@@ -1620,7 +1627,7 @@ class TensorDictStore(TensorDictBase):
 
     def _set_at_str(self, key, value, idx, *, validated, non_blocking):
         key_path = self._full_key_path(key)
-        if not isinstance(value, torch.Tensor):
+        if not isinstance(value, torch.Tensor) and not self._is_tensor_entry(key_path):
             # Non-tensor indexed write: RMW on the JSON array
             self._run_sync(self._aset_non_tensor_at(key_path, value, idx))
             return self

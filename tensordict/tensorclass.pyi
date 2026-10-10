@@ -1539,7 +1539,7 @@ class TensorClass:
     @overload
     def to(
         self,
-        device: int | torch.device | None = ...,
+        device: DeviceType | None = ...,
         dtype: torch.dtype | None = ...,
         non_blocking: bool = ...,
         inplace: bool = False,
