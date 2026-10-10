@@ -584,6 +584,13 @@ def test_to_overloads_accept_str_device(path, class_name):
         assert str in get_args(device_type), ast.unparse(annotation)
 
 
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+def test_py_typed_marker():
+    # PEP 561: mypy ignores the annotations and stubs of an installed package
+    # that does not ship this marker.
+    assert (pathlib.Path(tensordict.__file__).parent / "py.typed").is_file()
+
+
 def test_sorted_methods():
     from tensordict.tensorclass import (
         _FALLBACK_METHOD_FROM_TD,
