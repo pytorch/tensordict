@@ -765,6 +765,16 @@ class TestNonTensorData:
         td[()] = TensorDict(a="s1", batch_size=batch_size)
         assert td.get("a").tolist() == expected
 
+    @pytest.mark.parametrize("cls", [NonTensorData, MetaData])
+    def test_set_at_failed_keeps_data(self, cls):
+        # The data is not an entry of the wrapped TensorDict, so set_at_ raises.
+        # It used to delete the data first, after which reading it raised.
+        data = cls("a", batch_size=[3])
+        with pytest.raises(KeyError):
+            data.set_at_("data", "b", 0)
+        assert data.data == "a"
+        assert data.tolist() == ["a", "a", "a"]
+
     def test_setitem_edge_case(self):
         s = NonTensorStack("a string")
         t = NonTensorStack("another string")

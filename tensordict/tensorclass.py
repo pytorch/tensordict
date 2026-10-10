@@ -3519,9 +3519,12 @@ def _del_(self, key):
 def _set_at_(
     self, key: NestedKey, value: Any, idx: IndexType, non_blocking: bool = False
 ):
-    if key in self._non_tensordict:
+    in_non_tensordict = key in self._non_tensordict
+    self._tensordict.set_at_(key, value, idx, non_blocking=non_blocking)
+    # Drop the non-tensor value only after the write succeeded
+    if in_non_tensordict:
         del self._non_tensordict[key]
-    return self._tensordict.set_at_(key, value, idx, non_blocking=non_blocking)
+    return self
 
 
 def _get(self, key: NestedKey, *args, **kwargs):
