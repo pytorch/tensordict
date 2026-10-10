@@ -2228,6 +2228,43 @@ class TestSkipExisting:
         assert td["value"].item() == 10
         assert td["next", "memory"].item() == 1
 
+    def test_nested_sequence_restores_mode(self):
+        # The inner and outer sequences share the decorator of
+        # TensorDictSequential.forward: the inner call must not change the
+        # mode that the outer call restores.
+        class Inner(TensorDictModuleBase):
+            in_keys = ["in"]
+            out_keys = ["out"]
+
+            def __init__(self):
+                super().__init__()
+                self.seq = TensorDictSequential(
+                    TensorDictModule(lambda x: x + 1, in_keys=["in"], out_keys=["out"])
+                )
+
+            @set_skip_existing(True)
+            def forward(self, tensordict):
+                return self.seq(tensordict)
+
+        module = TensorDictSequential(Inner())
+        td = module(TensorDict({"in": torch.zeros(())}, []))
+        assert (td["out"] == 1).all()
+        assert skip_existing() is False
+
+    def test_exception_restores_mode(self):
+        # The forward changes the mode without restoring it, then raises: the
+        # decorator of TensorDictModule.forward must restore the mode it saw.
+        def fail(x):
+            set_skip_existing(True).__enter__()
+            raise ValueError("fail")
+
+        module = TensorDictModule(fail, in_keys=["in"], out_keys=["out"])
+        with set_skip_existing(["other"]):
+            with pytest.raises(ValueError, match="fail"):
+                module(TensorDict({"in": torch.zeros(())}, []))
+            assert skip_existing() == ["other"]
+        assert skip_existing() is False
+
 
 @pytest.mark.parametrize("out_d_key", [("d", "e"), ["d"], ["d", "e"]])
 @pytest.mark.parametrize("unpack", [True, False])
@@ -5153,6 +5190,17 @@ class TestTensorClassModule(TensorClassModuleBase[InputTensorClass, OutputTensor
         )
 
 
+class NestedInputModule(TensorClassModuleBase[OutputTensorClass, AddDiffResult]):
+    """Test module that reads the fields of a nested TensorClass input."""
+
+    def forward(self, x: OutputTensorClass) -> AddDiffResult:
+        return AddDiffResult(
+            added=x.input.a + x.result.added,
+            substracted=x.input.b - x.result.substracted,
+            batch_size=x.batch_size,
+        )
+
+
 class TestTensorClassModuleForward:
     """Tests for TensorClassModule forward pass."""
 
@@ -5172,6 +5220,14 @@ class TestTensorClassModuleForward:
         td_output = td_module(value.to_tensordict())
         assert td_output["result", "added"] == 15
         assert td_output["result", "substracted"] == 5
+
+    def test_td_forward_nested_input(self) -> None:
+        """Test that the wrapper passes nested inputs to forward as TensorClasses."""
+        td_module = NestedInputModule().as_td_module()
+        value = TestTensorClassModule()(InputTensorClass(a=10, b=5, batch_size=[]))
+        td_output = td_module(value.to_tensordict())
+        assert td_output["added"] == 25
+        assert td_output["substracted"] == 0
 
     def test_wrapper_keys(self) -> None:
         """Test that wrapper correctly extracts in_keys and out_keys."""
@@ -5279,6 +5335,22 @@ class TestEdgeCases:
             match="Only TensorClassModuleBase implementations with both input and output type as TensorClass",
         ):
             module.as_td_module()
+
+    def test_field_named_fields(self) -> None:
+        """Test that a field named ``fields`` is read as a key."""
+
+        class FieldsInput(TensorClass):
+            fields: torch.Tensor
+
+        class FieldsModule(TensorClassModuleBase[FieldsInput, AddDiffResult]):
+            def forward(self, x: FieldsInput) -> AddDiffResult:
+                return AddDiffResult(
+                    added=x.fields + 1, substracted=x.fields - 1, batch_size=[]
+                )
+
+        td_module = FieldsModule().as_td_module()
+        assert td_module.in_keys == ["fields"]
+        assert td_module(TensorDict(fields=torch.ones(())))["added"] == 2
 
     def test_batch_size_preservation(self) -> None:
         """Test that batch size is correctly preserved through forward pass."""

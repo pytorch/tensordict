@@ -11,6 +11,7 @@ import copy
 import dataclasses
 import importlib.util
 import inspect
+import itertools
 import json
 import os
 import pathlib
@@ -24,7 +25,17 @@ from dataclasses import field
 from multiprocessing import Pool
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, ClassVar, Generic, get_origin, Optional, Tuple, TypeVar, Union
+from typing import (
+    Any,
+    ClassVar,
+    Generic,
+    get_args,
+    get_origin,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 import numpy as np
 import pytest
@@ -40,6 +51,7 @@ from tensordict import (
     MetaData,
     NonTensorData,
     set_capture_non_tensor_stack,
+    set_get_defaults_to_none,
     set_list_to_stack,
     TensorClass,
     tensorclass,
@@ -49,7 +61,11 @@ from tensordict import (
 from tensordict._lazy import _PermutedTensorDict, _ViewedTensorDict
 from tensordict._td import lazy_stack
 from tensordict._utils_options import _set_capture_non_tensor_stack, _set_list_to_stack
-from tensordict.base import _GENERIC_NESTED_ERR
+from tensordict.base import (
+    _GENERIC_NESTED_ERR,
+    _get_defaults_to_none,
+    _set_get_defaults_to_none,
+)
 from tensordict.tensorclass import from_dataclass
 from tensordict.utils import _check_recursive_properties
 from torch import Tensor
@@ -267,9 +283,6 @@ _TENSORCLASS_STUB_EXCLUSIONS = {
     # Forwards to LazyStackedTensorDict.extend, so it works only when the
     # tensorclass wraps a lazy stack; TensorDictBase has no extend.
     "extend",
-    # Iteration goes through __getitem__ at runtime; the stub declares
-    # __iter__ so that type checkers know what a loop yields.
-    "__iter__",
 }
 
 
@@ -290,10 +303,43 @@ def test_tensorclass_instance_methods(form):
         class X(TensorClass):
             x: torch.Tensor
 
+    # The fields of X are its own attributes, not TensorClass API.
+    exclusions |= {field.name for field in dataclasses.fields(X)}
     stub_attrs = _get_class_attrs_from_pyi(
         str(_TENSORDICT_DIR / "tensorclass.pyi"), "TensorClass"
     )
     _check_stub_class(stub_attrs, X, exclusions)
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.parametrize(
+    "path,class_name",
+    [
+        ("_tensorcollection.pyi", "TensorCollection"),
+        ("tensorclass.pyi", "TensorClass"),
+        ("_base/device.py", "_DeviceOps"),
+    ],
+)
+def test_to_overloads_accept_str_device(path, class_name):
+    # Type checkers must accept td.to("cpu") and td.to(device="cuda").
+    with open(_TENSORDICT_DIR / path, "r") as f:
+        tree = ast.parse(f.read())
+    (class_node,) = (
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == class_name
+    )
+    device_annotations = [
+        arg.annotation
+        for node in class_node.body
+        if isinstance(node, ast.FunctionDef) and node.name == "to"
+        for arg in node.args.args + node.args.kwonlyargs
+        if arg.arg == "device"
+    ]
+    assert device_annotations
+    for annotation in device_annotations:
+        device_type = eval(ast.unparse(annotation), vars(tensordict.utils))
+        assert str in get_args(device_type), ast.unparse(annotation)
 
 
 def test_sorted_methods():
@@ -411,7 +457,9 @@ class TestTensorClass:
         else:
             assert data.x.device.type == data.y.device.type == "meta"
             assert x.device.type == "cpu"
-        with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+        with pytest.raises(
+            RuntimeError, match="batch dimension mismatch.* for key 'y'"
+        ):
             Data(x=x, y=torch.zeros(2), batch_size=[3], device=device)
         with pytest.raises(TypeError, match="torch.Size"):
             Data(x=x, y=y, batch_size="bad")
@@ -422,7 +470,13 @@ class TestTensorClass:
         with pytest.raises(ValueError, match="already set"):
             Data(x, x=x, y=y)
         if not tensor_only:
-            with pytest.raises(AttributeError, match="expected attributes"):
+            with pytest.raises(
+                AttributeError,
+                match=re.escape(
+                    "Cannot set the attribute 'extra': Data has no such field. "
+                    "Its fields are ['x', 'y']."
+                ),
+            ):
                 Data(x=x, y=y, extra=x)
         # None values must still enter non-tensor storage.
         assert Data(x=x, y=None, batch_size=[3]).y is None
@@ -482,6 +536,30 @@ class TestTensorClass:
 
         assert data.get_at(("td", "missing"), 0, "else") == "else"
         assert data.get_at(("td", "missing"), 0) is None
+
+    @pytest.mark.parametrize("defaults_to_none", [True, False])
+    def test_get_default_set_get_defaults_to_none(self, defaults_to_none):
+        @tensorclass
+        class Data:
+            a: torch.Tensor
+
+        data = Data(a=torch.zeros(3), batch_size=[3])
+        set_back = _get_defaults_to_none()
+        try:
+            with pytest.warns(
+                DeprecationWarning, match="set_get_defaults_to_none.*0.17"
+            ):
+                set_get_defaults_to_none(defaults_to_none)
+            if defaults_to_none:
+                assert data.get("b") is None
+                assert data.get_at("b", 0) is None
+            else:
+                with pytest.raises(AttributeError):
+                    data.get("b")
+                with pytest.raises(AttributeError):
+                    data.get_at("b", 0)
+        finally:
+            _set_get_defaults_to_none(set_back)
 
     def test_backward(self):
         @tensorclass
@@ -1425,8 +1503,19 @@ class TestTensorClass:
         ):
             data[1][1][1]
 
-        with pytest.raises(ValueError, match="Invalid indexing arguments."):
+        with pytest.raises(
+            ValueError,
+            match=re.escape(
+                "Invalid indexing arguments: 'X'. A tensorclass is indexed along its "
+                "batch dimensions; to read a field, use the attribute or get('X')."
+            ),
+        ):
             data["X"]
+        with pytest.raises(
+            ValueError,
+            match=re.escape("to write a field, use the attribute or set('X', value)"),
+        ):
+            data["X"] = X
 
     def test_grad(self):
         @tensorclass
@@ -1464,6 +1553,29 @@ class TestTensorClass:
             batch_size=[],
         )
         assert len(myc2) == 0
+
+    def test_iter(self):
+        myc = MyData(
+            X=torch.arange(6).view(3, 2),
+            y=torch.rand(3, 2, 4),
+            z="test_tensorclass",
+            batch_size=[3],
+        )
+        elements = list(myc)
+        assert len(elements) == 3
+        for i, element in enumerate(elements):
+            assert type(element) is MyData
+            assert element.batch_size == torch.Size([])
+            assert (element.X == myc.X[i]).all()
+            assert element.z == "test_tensorclass"
+
+        myc0d = myc[0]
+        with pytest.raises(TypeError, match="iteration over a 0-d tensordict"):
+            iter(myc0d)
+
+        # NonTensorData indexing has no bound check: iteration must stop at the batch size
+        ntd = NonTensorData("a string", batch_size=[3])
+        assert len(list(itertools.islice(ntd, 4))) == 3
 
     def test_multiprocessing(self):
         with Pool(os.cpu_count()) as p:
@@ -1847,7 +1959,13 @@ class TestTensorClass:
         ):
             data.set("z", TensorDict({"smth": torch.zeros(1)}, []))
         # check that you can't write any attribute
-        with pytest.raises(AttributeError, match=re.escape("Cannot set the attribute")):
+        with pytest.raises(
+            AttributeError,
+            match=re.escape(
+                "Cannot set the attribute 'newattr': MyDataParent has no such field. "
+                "Its fields are ['X', 'k', 'v', 'y', 'z']."
+            ),
+        ):
             data.set("newattr", TensorDict({"smth": torch.zeros(1)}, []))
 
         # Testing nested cases
@@ -2036,7 +2154,13 @@ class TestTensorClass:
         ):
             data.z = TensorDict({"smth": torch.zeros(1)}, [])
         # check that you can't write any attribute
-        with pytest.raises(AttributeError, match=re.escape("Cannot set the attribute")):
+        with pytest.raises(
+            AttributeError,
+            match=re.escape(
+                "Cannot set the attribute 'newattr': MyDataParent has no such field. "
+                "Its fields are ['W', 'X', 'k', 'v', 'y', 'z']."
+            ),
+        ):
             data.newattr = TensorDict({"smth": torch.zeros(1)}, [])
         # Testing nested cases
         data_nest.X = torch.zeros(3, 4, 5)
@@ -3393,6 +3517,180 @@ class TestNesting:
         assert td_double.device == torch.device("cpu")
 
 
+class NestedPose(TensorClass):
+    q: torch.Tensor
+
+
+class NestedObs(TensorClass):
+    a: NestedPose
+    x: torch.Tensor
+
+
+class NestedObsOptional(TensorClass):
+    a: Optional[NestedPose] = None
+    x: torch.Tensor | None = None
+
+
+class NestedObsAutocast(TensorClass["autocast"]):
+    a: NestedPose
+    x: torch.Tensor
+
+
+class NestedObsDeep(TensorClass):
+    obs: NestedObs
+    y: torch.Tensor
+
+
+class NestedPoseDerived(NestedPose):
+    extra: torch.Tensor
+
+
+class NestedAnyTensorClass(TensorClass):
+    a: TensorClass
+
+
+class NestedLabeled(TensorClass):
+    x: torch.Tensor
+    label: NonTensorData
+
+
+_NestedT = TypeVar("_NestedT")
+
+
+class NestedGenericPose(TensorClass, Generic[_NestedT]):
+    q: torch.Tensor
+
+
+class NestedObsGeneric(TensorClass):
+    a: NestedGenericPose[int]
+
+
+def _nested_obs_td():
+    return TensorDict(
+        a=TensorDict(q=torch.randn(5, 4), batch_size=[5]),
+        x=torch.zeros(5),
+        batch_size=[5],
+    )
+
+
+class TestFromTensorDictNested:
+    """from_tensordict builds the fields annotated with a tensorclass (gh-1929)."""
+
+    @pytest.mark.parametrize("cls", [NestedObs, NestedObsOptional, NestedObsAutocast])
+    def test_from_tensordict_nested(self, cls):
+        td = _nested_obs_td()
+        obs = cls.from_tensordict(td)
+        assert type(obs.a) is NestedPose
+        assert type(obs.a.q) is torch.Tensor
+        assert (obs.a.q == td["a", "q"]).all()
+
+    def test_from_tensordict_nested_round_trip(self):
+        obs = NestedObs(
+            a=NestedPose(q=torch.randn(5, 4), batch_size=[5]),
+            x=torch.zeros(5),
+            batch_size=[5],
+        )
+        deep = NestedObsDeep(obs=obs, y=torch.ones(5), batch_size=[5])
+        back = NestedObsDeep.from_tensordict(deep.to_tensordict())
+        assert type(back.obs) is NestedObs
+        assert type(back.obs.a) is NestedPose
+        assert (back == deep).all()
+
+    def test_from_tensordict_nested_input_unchanged(self):
+        td = _nested_obs_td()
+        obs = NestedObs.from_tensordict(td)
+        assert type(obs.a) is NestedPose
+        # The input keeps its TensorDict entry and shares the leaves.
+        assert type(td["a"]) is TensorDict
+        assert td["a"]["q"] is obs.a.q
+        assert td["x"] is obs.x
+        obs.a.q.add_(1)
+        assert (td["a", "q"] == obs.a.q).all()
+
+    def test_from_tensordict_nested_locked(self):
+        td = _nested_obs_td().lock_()
+        obs = NestedObs.from_tensordict(td)
+        assert type(obs.a) is NestedPose
+        assert obs.is_locked
+
+    def test_from_tensordict_no_nested_entry_aliases_input(self):
+        td = TensorDict(x=torch.zeros(5), batch_size=[5])
+        obs = NestedObsOptional.from_tensordict(td)
+        assert obs._tensordict is td
+        assert obs.a is None
+
+    def test_from_tensordict_nested_lazy_stack(self):
+        # Only TensorDict inputs are rebuilt: other backends are wrapped as
+        # they are.
+        td = lazy_stack([_nested_obs_td(), _nested_obs_td()])
+        obs = NestedObs.from_tensordict(td)
+        assert obs._tensordict is td
+        assert isinstance(obs.a, LazyStackedTensorDict)
+
+    def test_from_dict_nested(self):
+        obs = NestedObs.from_dict(_nested_obs_td().to_dict(), batch_size=[5])
+        assert type(obs.a) is NestedPose
+
+    def test_from_tensordict_nested_generic(self):
+        obs = NestedObsGeneric.from_tensordict(_nested_obs_td().exclude("x"))
+        assert type(obs.a) is NestedGenericPose
+
+    def test_from_tensordict_deep_copies_once(self, monkeypatch):
+        deep = NestedObsDeep(
+            obs=NestedObs(
+                a=NestedPose(q=torch.randn(5, 4), batch_size=[5]),
+                x=torch.zeros(5),
+                batch_size=[5],
+            ),
+            y=torch.ones(5),
+            batch_size=[5],
+        )
+        copies = []
+        copy = TensorDict.copy
+
+        def counting_copy(self):
+            copies.append(self)
+            return copy(self)
+
+        monkeypatch.setattr(TensorDict, "copy", counting_copy)
+        back = NestedObsDeep.from_tensordict(deep.to_tensordict())
+        assert type(back.obs.a) is NestedPose
+        assert len(copies) == 1
+
+    def test_from_tensordict_undeclared_keys(self):
+        # A field annotated with NestedPose holds a subclass with more fields:
+        # the entry stays a TensorDict.
+        obs = NestedObs(
+            a=NestedPoseDerived(
+                q=torch.zeros(5, 4), extra=torch.ones(5), batch_size=[5]
+            ),
+            x=torch.zeros(5),
+            batch_size=[5],
+        )
+        back = NestedObs.from_tensordict(obs.to_tensordict())
+        assert type(back.a) is TensorDict
+        assert (back.a["extra"] == 1).all()
+        auto = NestedObsAutocast(a=back.a, x=torch.zeros(5), batch_size=[5])
+        assert type(auto.a) is TensorDict
+
+    def test_from_tensordict_base_tensorclass_annotation(self):
+        # TensorClass declares no fields: the entry stays a TensorDict.
+        td = _nested_obs_td().exclude("x")
+        obs = NestedAnyTensorClass.from_tensordict(td)
+        assert obs._tensordict is td
+        assert type(obs.a) is TensorDict
+
+    def test_from_tensordict_non_tensor_stack(self):
+        stacked = torch.stack(
+            [
+                NestedLabeled(x=torch.zeros(()), label="a"),
+                NestedLabeled(x=torch.zeros(()), label="b"),
+            ]
+        )
+        back = NestedLabeled.from_tensordict(stacked.to_tensordict())
+        assert back.label == ["a", "b"]
+
+
 @tensorclass(autocast=True)
 class AutoCast:
     tensor: torch.Tensor
@@ -3623,6 +3921,17 @@ class TestAutoCasting:
         assert not isinstance(obj.tc["td"], TensorDict)
         assert obj.tc["tc"] is None
 
+    def test_autocast_tensordict_for_tensorclass_field(self):
+        q = torch.randn(5, 4)
+        obs = NestedObsAutocast(
+            a=TensorDict(q=q, batch_size=[5]), x=torch.zeros(5), batch_size=[5]
+        )
+        assert type(obs.a) is NestedPose
+        assert obs.a.q is q
+        obs.a = TensorDict(q=q + 1, batch_size=[5])
+        assert type(obs.a) is NestedPose
+        assert (obs.a.q == q + 1).all()
+
     def test_autocast_func(self):
         @tensorclass(autocast=True)
         class FuncAutoCast:
@@ -3820,6 +4129,110 @@ class TestShadow:
                 class MyClass:  # noqa: F811
                     sum: torch.Tensor
                     other: torch.Tensor
+
+    # Every member of a tensorclass is a reserved field name, except "data" and
+    # "fields", which a field replaces, and the "_is_non_tensor" field of
+    # NonTensorData.
+    @pytest.mark.parametrize(
+        "make_cls",
+        [
+            lambda ann: tensorclass(type("MyClass", (), {"__annotations__": ann})),
+            lambda ann: tensorclass(tensor_only=True)(
+                type("MyClass", (), {"__annotations__": ann})
+            ),
+            lambda ann: type("MyClass", (TensorClass,), {"__annotations__": ann}),
+            lambda ann: type(
+                "MyClass", (TensorClass["frozen"],), {"__annotations__": ann}
+            ),
+            lambda ann: type(
+                "MyClass", (TensorClass["tensor_only"],), {"__annotations__": ann}
+            ),
+        ],
+        ids=["decorator", "decorator-tensor_only", "subclass", "frozen", "tensor_only"],
+    )
+    def test_reserved_field_names_cover_members(self, make_cls):
+        from tensordict.tensorclass import _is_reserved_field_name
+
+        MyClass = make_cls({"x": torch.Tensor})
+        c = MyClass(x=torch.zeros(3), batch_size=[3])
+        names = {
+            name
+            for name in set(dir(MyClass)).union(vars(c))
+            if not (name.startswith("__") and name.endswith("__"))
+        }
+        names -= {"x", "data", "fields", "_is_non_tensor"}
+        assert {name for name in names if not _is_reserved_field_name(name)} == set()
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "from_tensordict",
+            "extend",
+            "_tensordict",
+            "_non_tensordict",
+            "_type_hints",
+            "_set_dict_warn_msg",
+            "_get_non_tensor",
+            "_send",
+            "_transform_keys",
+        ],
+    )
+    @pytest.mark.parametrize("subclass", [False, True])
+    def test_no_shadow_tensorclass_member_name(self, name, subclass):
+        # The first six exist on tensorclasses but not on TensorDict. The others
+        # are private TensorDict methods that TensorDict code calls on nested
+        # tensor collections, which a tensorclass forwards to its TensorDict.
+        annotations = {name: torch.Tensor, "other": torch.Tensor}
+        with pytest.raises(
+            AttributeError,
+            match=rf"Attribute name {name} can't be used .* pass shadow=True",
+        ):
+            if subclass:
+                type("MyClass", (TensorClass,), {"__annotations__": annotations})
+            else:
+                tensorclass(type("MyClass", (), {"__annotations__": annotations}))
+
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_private_tensordict_name_as_field(self, tensor_only):
+        # "_cache" is a private TensorDict attribute that only the cache decorator
+        # of TensorDict methods reads, on the TensorDict, so it is a valid field
+        # name.
+        @tensorclass(tensor_only=tensor_only)
+        class MyClass:
+            x: torch.Tensor
+            _cache: torch.Tensor
+
+        c = MyClass(x=torch.zeros(3), _cache=torch.ones(3), batch_size=[3])
+        assert (c._cache == 1).all()
+        assert (torch.stack([c, c])[1, 0]._cache == 1).all()
+        c._cache = torch.full((3,), 2.0)
+        assert (c.get("_cache") == 2).all()
+
+    @pytest.mark.parametrize("name", ["data", "fields"])
+    @pytest.mark.parametrize(
+        "base",
+        [
+            None,
+            "tensor_only",
+            TensorClass,
+            TensorClass["frozen"],
+            TensorClass["shadow"],
+        ],
+        ids=["decorator", "decorator-tensor_only", "subclass", "frozen", "shadow"],
+    )
+    def test_field_replaces_member(self, name, base):
+        annotations = {name: torch.Tensor, "other": torch.Tensor}
+        if base is None or base == "tensor_only":
+            MyClass = tensorclass(tensor_only=base == "tensor_only")(
+                type("MyClass", (), {"__annotations__": annotations})
+            )
+        else:
+            MyClass = type("MyClass", (base,), {"__annotations__": annotations})
+        assert [f.name for f in dataclasses.fields(MyClass)] == [name, "other"]
+        c = MyClass(**{name: torch.ones(3), "other": torch.zeros(3)}, batch_size=[3])
+        assert (getattr(c, name) == 1).all()
+        assert getattr(c[0], name) == 1
+        assert (getattr(torch.stack([c, c]), name) == 1).all()
 
     @pytest.mark.parametrize("subclass", [False, True])
     @pytest.mark.parametrize("frozen", [False, True])
@@ -4133,6 +4546,44 @@ class TestSubClassing:
         assert is_called
         assert (s.a == 0).all()
         assert (s.b == 2).all()
+
+    def test_subclassing_redeclared_field(self):
+        # The fields have no class attribute, so a subclass that declares a
+        # field again does not take a default from its base.
+        class Base(TensorClass):
+            a: torch.Tensor
+            s: str
+
+        class SubClass(Base):
+            a: torch.Tensor
+            t: str
+
+        assert not hasattr(Base, "a")
+        assert all(
+            field.default is dataclasses.MISSING
+            for field in dataclasses.fields(SubClass)
+        )
+        obj = SubClass(a=torch.zeros(3), s="s", t="t", batch_size=[3])
+        assert (obj.a == 0).all()
+        assert obj.s == "s"
+        assert obj.t == "t"
+
+    def test_subclassing_setattr_object_setattr(self):
+        # A custom __setattr__ that calls object.__setattr__ stores the fields
+        # in the instance __dict__, from which they are read.
+        class Base(TensorClass):
+            a: torch.Tensor
+            s: str
+
+        class SubClass(Base):
+            def __setattr__(self, key, value):
+                object.__setattr__(self, key, value)
+
+        obj = SubClass(a=torch.zeros(3), s="s", batch_size=[3])
+        assert (obj.a == 0).all()
+        assert obj.s == "s"
+        obj.s = "u"
+        assert obj.s == "u"
 
     # Regression test for GitHub issue #1469: the metaclass __getitem__ used to
     # read every subscript as a list of flags, so a generic TensorClass could not
