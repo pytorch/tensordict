@@ -3509,7 +3509,7 @@ def _del_(self, key):
     if len(key) > 1:
         td = self.get(key[0])
         td.del_(key[1:])
-        return
+        return self
     if key[0] in self._tensordict.keys():
         self._tensordict.del_(key[0])
         # self.set(key[0], None)
@@ -3517,7 +3517,7 @@ def _del_(self, key):
         self._non_tensordict[key[0]] = None
     else:
         raise KeyError(f"Key {key} could not be found in tensorclass {self}.")
-    return
+    return self
 
 
 def _set_at_(

@@ -1174,6 +1174,26 @@ class TestTensorClass:
         MyData = tensorclass(MyData)
         torch.testing.assert_close(MyData().X, torch.ones(3))
 
+    def test_del_returns_self(self):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            y: torch.Tensor = None
+            td: TensorDict = None
+
+        data = MyClass(
+            x=torch.zeros(3),
+            td=TensorDict(a=torch.zeros(3), b=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        # A tensor field, a field that is None and a nested key
+        assert data.del_("x") is data
+        assert "x" not in data.keys()
+        assert data.del_("y") is data
+        assert data.y is None
+        assert data.del_(("td", "a")) is data
+        assert list(data.td.keys()) == ["b"]
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_device(self, device):
         data = MyData(
