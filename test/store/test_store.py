@@ -2089,6 +2089,20 @@ class TestTensorClassStore:
             store.clear_redis()
             store.close()
 
+    def test_clear_redis_deletes_tensorclass_key(self, store_kwargs):
+        import redis
+
+        tc = _MyData(obs=torch.randn(5, 3), reward=torch.randn(5), batch_size=[5])
+        store = TensorDictStore.from_tensordict(tc, **store_kwargs)
+        td_id = store._td_id
+        store.clear_redis()
+        store.close()
+        client = redis.Redis(port=store_kwargs["port"], db=store_kwargs["db"])
+        try:
+            assert client.keys(f"*{td_id}*") == []
+        finally:
+            client.close()
+
 
 class TestNonTensorIndexing:
     """Tests for per-element non-tensor indexing (ISSUE #1) and writing
