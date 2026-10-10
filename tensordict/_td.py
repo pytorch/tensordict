@@ -779,7 +779,7 @@ class TensorDict(TensorDictBase):
         )
         if self._has_names():
             names = self.names
-            names = [names[i] for i in dims_list]
+            names = [names[i] for i in dims_list] + names[len(dims_list) :]
         else:
             names = None
         result = self._fast_apply(
@@ -797,15 +797,10 @@ class TensorDict(TensorDictBase):
         if dim is None:
             names = list(self.names) if self._has_names() else None
             if names is not None:
-                batch_size, names = _zip_strict(
-                    *[
-                        (size, name)
-                        for size, name in _zip_strict(batch_size, names)
-                        if size != 1
-                    ]
-                )
-            else:
-                batch_size = [size for size in batch_size if size != 1]
+                names = [
+                    name for size, name in _zip_strict(batch_size, names) if size != 1
+                ]
+            batch_size = [size for size in batch_size if size != 1]
             batch_size = torch.Size(batch_size)
             if batch_size == self.batch_size:
                 return self
