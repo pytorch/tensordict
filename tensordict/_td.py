@@ -2213,7 +2213,11 @@ class TensorDict(TensorDictBase):
             return self._clone_recurse()
 
         if not recurse and is_compiling():
-            result = TensorDict(batch_size=self.batch_size, device=self.device)
+            result = TensorDict(
+                batch_size=self.batch_size,
+                device=self.device,
+                names=self._maybe_names(),
+            )
             schema = self._locked_schema
             _src = self._tensordict
             _dst = result._tensordict

@@ -616,6 +616,8 @@ class TestTD:
             )
             return (
                 td.clone(),
+                td.copy(),
+                td.clone(False),
                 td.select("a"),
                 td + 1,
                 td[:2],
@@ -625,8 +627,10 @@ class TestTD:
 
         ops_c = torch.compile(ops, fullgraph=True, mode=mode)
         td = TensorDict(a=torch.zeros(3, 2), batch_size=[3, 2], names=["x", "y"])
-        clone, select, add, index, stack, nested = ops_c(td)
+        clone, copy, shallow_clone, select, add, index, stack, nested = ops_c(td)
         assert clone.names == ["x", "y"]
+        assert copy.names == ["x", "y"]
+        assert shallow_clone.names == ["x", "y"]
         assert select.names == ["x", "y"]
         assert add.names == ["x", "y"]
         assert index.names == ["x", "y"]
