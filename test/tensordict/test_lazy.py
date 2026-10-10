@@ -462,6 +462,29 @@ class TestLazyStackedTensorDict:
         else:
             td1.norm()
 
+    def test_auto_device(self):
+        # The device of a lazy stack is read from its members, so auto_device_
+        # sets it on them, also when the lazy stack is nested in a tensordict.
+        cpu = torch.device("cpu")
+        stack = lazy_stack([TensorDict(a=torch.zeros(2)), TensorDict(a=torch.zeros(2))])
+        assert stack.auto_device_() is stack
+        assert stack.device == cpu
+        assert [td.device for td in stack.tensordicts] == [cpu, cpu]
+
+        td = TensorDict(
+            x=torch.zeros(2),
+            stack=lazy_stack(
+                [TensorDict(a=torch.zeros(2)), TensorDict(a=torch.zeros(2))]
+            ),
+            batch_size=[2],
+        )
+        assert td.auto_device_().device == cpu
+        assert td["stack"].device == cpu
+
+        # Members whose leaves have different shapes, which cannot be stacked
+        stack = lazy_stack([TensorDict(a=torch.zeros(2)), TensorDict(a=torch.zeros(3))])
+        assert stack.auto_device_().device == cpu
+
     @set_list_to_stack(True)
     def test_best_intention_stack(self):
         td0 = TensorDict({"a": 1, "b": TensorDict({"c": 2}, [])}, [])
