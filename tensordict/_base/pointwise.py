@@ -1220,7 +1220,7 @@ class _PointwiseOps:
         r"""Performs a bitwise AND operation between ``self`` and :attr:`other`.
 
         .. math::
-            \text{{out}}_i = \text{{input}}_i \land \text{{other}}_i
+            \text{out}_i = \text{input}_i \land \text{other}_i
 
         Args:
             other (TensorDictBase or torch.Tensor): the tensor or TensorDict to perform the bitwise AND with.
@@ -1274,7 +1274,7 @@ class _PointwiseOps:
         r"""Performs a logical AND operation between ``self`` and :attr:`other`.
 
         .. math::
-            \text{{out}}_i = \text{{input}}_i \land \text{{other}}_i
+            \text{out}_i = \text{input}_i \land \text{other}_i
 
         Args:
             other (TensorDictBase or torch.Tensor): the tensor or TensorDict to perform the logical AND with.
@@ -1329,7 +1329,7 @@ class _PointwiseOps:
         r"""Adds :attr:`other`, scaled by :attr:`alpha`, to ``self``.
 
         .. math::
-            \text{{out}}_i = \text{{input}}_i + \text{{alpha}} \times \text{{other}}_i
+            \text{out}_i = \text{input}_i + \text{alpha} \times \text{other}_i
 
         Args:
             other (TensorDictBase or torch.Tensor): the tensor or TensorDict to add to ``self``.
@@ -1641,7 +1641,7 @@ class _PointwiseOps:
         r"""Subtracts :attr:`other`, scaled by :attr:`alpha`, from ``self``.
 
         .. math::
-            \text{{out}}_i = \text{{input}}_i - \text{{alpha}} \times \text{{other}}_i
+            \text{out}_i = \text{input}_i - \text{alpha} \times \text{other}_i
 
         Supports broadcasting,
         type promotion, and integer, float, and complex inputs.
@@ -1726,7 +1726,7 @@ class _PointwiseOps:
         r"""Subtracts ``self`` from ``other`` scaled by ``alpha``, leaf by leaf.
 
         .. math::
-            \text{{out}}_i = \text{{alpha}} \times \text{{other}}_i - \text{{self}}_i
+            \text{out}_i = \text{alpha} \times \text{other}_i - \text{self}_i
 
         .. warning::
             This formula differs from :func:`torch.rsub`, which computes
@@ -1868,7 +1868,7 @@ class _PointwiseOps:
         r"""Multiplies :attr:`other` to ``self``.
 
         .. math::
-            \text{{out}}_i = \text{{input}}_i \times \text{{other}}_i
+            \text{out}_i = \text{input}_i \times \text{other}_i
 
         Supports broadcasting, type promotion, and integer, float, and complex inputs.
 
