@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import collections
 import importlib.util
 import math
 import operator
@@ -835,6 +836,16 @@ class TestNonTensorData:
         td[()] = TensorDict(a="s1", batch_size=batch_size)
         assert td.get("a").tolist() == expected
 
+    @pytest.mark.parametrize("cls", [NonTensorData, MetaData])
+    def test_set_at_failed_keeps_data(self, cls):
+        # The data is not an entry of the wrapped TensorDict, so set_at_ raises.
+        # It used to delete the data first, after which reading it raised.
+        data = cls("a", batch_size=[3])
+        with pytest.raises(KeyError):
+            data.set_at_("data", "b", 0)
+        assert data.data == "a"
+        assert data.tolist() == ["a", "a", "a"]
+
     def test_setitem_edge_case(self):
         s = NonTensorStack("a string")
         t = NonTensorStack("another string")
@@ -1481,6 +1492,37 @@ class TestNonTensorData:
         assert isinstance(tdu.squeeze().get("foo"), NonTensorData)
         assert isinstance(tdu.squeeze(0)["foo"], int)
         assert isinstance(tdu.squeeze(0).get("foo"), NonTensorData)
+
+    def test_to_dict_numpy_namedtuple_non_unique_stack(self):
+        # retain_none=False drops a stack of None values and keeps a stack of
+        # different values, whose .data raises AttributeError
+        td = TensorDict(
+            a=torch.zeros(2),
+            s=NonTensorStack("x", "y"),
+            n=NonTensorStack(None, None),
+            batch_size=[2],
+        )
+        as_dict = td.to_dict(retain_none=False)
+        assert list(as_dict) == ["a", "s"]
+        assert as_dict["s"] == ["x", "y"]
+        as_numpy = td.numpy()
+        assert list(as_numpy) == ["a", "s"]
+        assert isinstance(as_numpy["a"], np.ndarray)
+        assert as_numpy["s"] == ["x", "y"]
+        as_namedtuple = td.to_namedtuple()
+        assert as_namedtuple._fields == ("a", "s")
+        assert as_namedtuple.s == ["x", "y"]
+
+        # from_pytree stores a list of tensors in a namedtuple as a
+        # NonTensorStack, and to_pytree rebuilds the namedtuple with
+        # to_namedtuple
+        NT = collections.namedtuple("NT", ["a", "b"])
+        nt = NT(a=torch.zeros(3), b=[torch.zeros(2), torch.ones(3)])
+        nt_recon = TensorDict.from_pytree(nt).to_pytree()
+        assert type(nt_recon) is NT
+        assert (nt_recon.a == nt.a).all()
+        assert len(nt_recon.b) == 2
+        assert all((x == y).all() for x, y in zip(nt_recon.b, nt.b))
 
     def test_view(self):
         td = NonTensorStack(*[str(i) for i in range(60)])
