@@ -147,9 +147,9 @@ Call a module with tensors
 
 You can also call a module with tensors, from code that does not use
 tensordicts. Pass each input as a keyword argument named after its key in
-``in_keys``. The module builds a tensordict from the arguments, runs, and
-returns the output tensors instead of a tensordict: one tensor if there is
-one key in ``out_keys``, and a tuple in the order of ``out_keys`` otherwise.
+``in_keys``. The module builds a tensordict from the arguments and runs. It
+returns the output tensors instead of a tensordict: one tensor if
+``out_keys`` has one key, else a tuple in the order of ``out_keys``.
 
   >>> class Net(nn.Module):
   ...     def __init__(self):
