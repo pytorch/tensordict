@@ -2505,6 +2505,51 @@ class TestSelectOutKeys:
                 ):
                     mod2 = mod.select_out_keys(out_d_key)
 
+    def test_tdmodule_missing_in_key(self, out_d_key, unpack):
+        # strict=False passes the missing in_key "b" as None
+        mod = TensorDictModule(
+            lambda x, y: (x + 2, x + 2 if y is None else y + 2, x),
+            in_keys=["a", "b"],
+            out_keys=["c", "d", "e"],
+        )
+        if unpack:
+            mod.select_out_keys(*out_d_key)
+            td = mod(TensorDict(a=torch.zeros(())))
+            assert set(td.keys()) == {"a", *out_d_key}
+            td = mod(TensorDict(a=torch.zeros(())), tensordict_out=TensorDict())
+            assert set(td.keys()) == {*out_d_key}
+        else:
+            with pytest.raises(
+                (RuntimeError, ValueError),
+                match=r"key should be a |Can't select non existent",
+            ):
+                mod.select_out_keys(out_d_key)
+
+    def test_tdbase_missing_in_key(self, out_d_key, unpack):
+        class MyModule(TensorDictModuleBase):
+            in_keys = ["a", "b"]
+            out_keys = ["c", "d", "e"]
+
+            def forward(self, tensordict):
+                tensordict["c"] = tensordict["a"] + 2
+                tensordict["d"] = tensordict.get("b", tensordict["a"]) + 2
+                tensordict["e"] = tensordict["d"] + 2
+                return tensordict
+
+        mod = MyModule()
+        if unpack:
+            mod.select_out_keys(*out_d_key)
+            td = mod(TensorDict(a=torch.zeros(())))
+            assert set(td.keys()) == {"a", *out_d_key}
+            td = mod(tensordict=TensorDict(a=torch.zeros(())))
+            assert set(td.keys()) == {"a", *out_d_key}
+        else:
+            with pytest.raises(
+                (RuntimeError, ValueError),
+                match=r"key should be a |Can't select non existent",
+            ):
+                mod.select_out_keys(out_d_key)
+
     def test_tdmodule_wrap(self, out_d_key, unpack):
         mod = TensorDictModuleWrapper(
             TensorDictModule(
@@ -3421,6 +3466,29 @@ class TestEnsembleModule:
         assert lin.reset_parameters.call_count == 2, (
             f"Reset parameters called {lin.reset_parameters.call_count} times should be 2"
         )
+
+    def test_reset_parameters_recursive_warning(self):
+        """Ensure we warn about child modules other than self.module, but not about params_td"""
+        module = TensorDictModule(nn.Linear(2, 3), in_keys=["a"], out_keys=["b"])
+        ens = EnsembleModule(module, num_copies=2)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "error", message="EnsembleModule.reset_parameters_recursive"
+            )
+            ens.reset_parameters_recursive(ens.params_td)
+        ens.extra = nn.Linear(1, 1)
+        with pytest.warns(UserWarning, match="only resets parameters of self.module"):
+            ens.reset_parameters_recursive(ens.params_td)
+
+    @pytest.mark.parametrize("batch_size", [[4], [2, 3]])
+    def test_reset_parameters_recursive_batch_size(self, batch_size):
+        """Ensure the returned parameters keep the batch dims of the input"""
+        module = TensorDictModule(nn.Linear(2, 3), in_keys=["a"], out_keys=["b"])
+        ens = EnsembleModule(module, num_copies=2)
+        params = TensorDict.from_module(module).expand(*batch_size).clone().detach()
+        out = ens.reset_parameters_recursive(params)
+        assert out.batch_size == params.batch_size
+        assert (out == params).all()
 
 
 class TestTensorDictParams:
