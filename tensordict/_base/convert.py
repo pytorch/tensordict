@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import collections
 import importlib.util
+import numbers
 import uuid
 import weakref
 from collections import UserDict
@@ -75,6 +76,14 @@ try:
     from functorch import dim as ftdim
 except ImportError:
     from tensordict.utils import _ftdim_mock as ftdim
+
+
+def _int_batch_dims(batch_dims):
+    # for backward compatibility, from_any ignores a batch_dims that is not an
+    # int for dataclasses and h5py files
+    if isinstance(batch_dims, numbers.Integral) and not isinstance(batch_dims, bool):
+        return batch_dims
+    return None
 
 
 class _Conversion:
@@ -1544,6 +1553,20 @@ class _Conversion:
 
                 return NonTensorStack.from_list(obj)
         if is_dataclass(obj):
+            dataclass_batch_dims = _int_batch_dims(batch_dims)
+            if auto_batch_size and dataclass_batch_dims is not None:
+                try:
+                    return cls.from_dataclass(
+                        obj,
+                        auto_batch_size=auto_batch_size,
+                        batch_dims=dataclass_batch_dims,
+                        device=device,
+                        batch_size=batch_size,
+                    )
+                except Exception:
+                    # for backward compatibility, a batch_dims that cannot be
+                    # applied, for example to a nested NonTensorStack, is ignored
+                    pass
             return cls.from_dataclass(
                 obj,
                 auto_batch_size=auto_batch_size,
@@ -1565,11 +1588,22 @@ class _Conversion:
             import h5py
 
             if isinstance(obj, h5py.File):
+                from tensordict import TensorDict
                 from tensordict.persistent import PersistentTensorDict
 
+                if not auto_batch_size and batch_size is not None:
+                    try:
+                        return PersistentTensorDict(
+                            group=obj,
+                            batch_size=TensorDict._parse_batch_size(None, batch_size),
+                        )
+                    except Exception:
+                        # for backward compatibility, a batch size that is not a
+                        # size or that the file does not take is ignored
+                        pass
                 obj = PersistentTensorDict(group=obj)
                 if auto_batch_size:
-                    obj.auto_batch_size_()
+                    obj.auto_batch_size_(batch_dims=_int_batch_dims(batch_dims))
                 return obj
         return obj
 

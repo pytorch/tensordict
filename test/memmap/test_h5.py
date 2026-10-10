@@ -142,6 +142,25 @@ def test_auto_batch_size(tmpdir):
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+@pytest.mark.parametrize("batch_dims", [None, 1, 2])
+def test_from_any_batch_size(tmpdir, batch_dims):
+    filename = Path(tmpdir) / "file.h5"
+    with h5py.File(filename, "w") as f:
+        f["a"] = np.zeros((3, 4, 5))
+        f["b/c"] = np.zeros((3, 4, 5, 6))
+        f["b/d"] = np.zeros((3, 4, 5))
+    expected = torch.Size([3, 4, 5][:batch_dims])
+    with h5py.File(filename, "r") as f:
+        td = TensorDict.from_any(f, auto_batch_size=True, batch_dims=batch_dims)
+        assert td.batch_size == expected
+        assert td["b"].batch_size == expected
+        td = TensorDict.from_any(f, batch_size=expected)
+        assert td.batch_size == expected
+        assert td["b"].batch_size == expected
+        assert TensorDict.from_any(f, batch_size=3).batch_size == (3,)
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_kwargs_passthrough_nested(tmpdir):
     # create_dataset kwargs must reach the leaves of nested tensordicts too
     # https://github.com/pytorch/tensordict/issues/1758

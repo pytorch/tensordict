@@ -1361,6 +1361,37 @@ class TestGeneric:
         assert is_tensorclass(obj_tc)
         assert not is_tensorclass(obj_td)
 
+    @pytest.mark.parametrize("batch_dims", [None, 1, 2])
+    def test_from_any_dataclass_batch_dims(self, batch_dims):
+        @dataclass
+        class MyClass:
+            a: torch.Tensor
+            b: Any
+
+        obj = MyClass(
+            a=torch.zeros(3, 4, 5),
+            b=MyClass(a=torch.zeros(3, 4, 5, 6), b=torch.zeros(3, 4, 5)),
+        )
+        td = TensorDict.from_any(obj, auto_batch_size=True, batch_dims=batch_dims)
+        expected = torch.Size([3, 4, 5][:batch_dims])
+        assert td.batch_size == expected
+        assert td["b"].batch_size == expected
+        td_dataclass = TensorDict.from_dataclass(
+            obj, auto_batch_size=True, batch_dims=batch_dims
+        )
+        assert td_dataclass.batch_size == expected
+
+    def test_from_any_dataclass_batch_dims_non_tensor_stack(self):
+        @dataclass
+        class MyClass:
+            a: torch.Tensor
+            b: Any
+
+        obj = MyClass(a=torch.zeros(3, 4, 5), b=[["x", "y"], ["z", "w"], ["u", "v"]])
+        td = TensorDict.from_any(obj, auto_batch_size=True, batch_dims=1)
+        assert td.batch_size == (3,)
+        assert td.get("b").batch_size == (3, 2)
+
     @pytest.mark.parametrize("batch_size", [None, [3, 4]])
     @pytest.mark.parametrize("batch_dims", [None, 1, 2])
     @pytest.mark.parametrize("device", get_available_devices())
