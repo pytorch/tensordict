@@ -1311,6 +1311,33 @@ class TestTDSequence:
 
         assert "output" in output
 
+    @pytest.mark.parametrize("inplace", [False, "empty"])
+    def test_tdseq_inplace_false_keeps_input(self, inplace):
+        # https://github.com/pytorch/tensordict/issues/2257
+        model = TensorDictSequential(
+            TensorDictModule(
+                lambda x: x + 1,
+                in_keys=["x"],
+                out_keys=[("nested", "y")],
+            ),
+            TensorDictModule(
+                lambda y: y * 2,
+                in_keys=[("nested", "y")],
+                out_keys=["z"],
+            ),
+            inplace=inplace,
+        )
+        input = TensorDict(
+            x=torch.zeros(2),
+            nested=TensorDict(a=torch.zeros(2), batch_size=[2]),
+            batch_size=[2],
+        )
+        output = model(input)
+        assert output is not input
+        assert set(input.keys(True, True)) == {"x", ("nested", "a")}
+        assert (output["nested", "y"] == 1).all()
+        assert (output["z"] == 2).all()
+
     def test_ordered_dict(self):
         linear = nn.Linear(3, 4)
         linear.weight.data.fill_(0)
@@ -2920,6 +2947,30 @@ class TestProbabilisticTensorDictModule:
                 assert "input" in output, (module_inplace, inplace)
 
         assert "output" in output
+
+    @set_composite_lp_aggregate(False)
+    @pytest.mark.parametrize("inplace", [False, "empty"])
+    def test_tdprobseq_inplace_false_keeps_input(self, inplace):
+        # https://github.com/pytorch/tensordict/issues/2257
+        model = ProbabilisticTensorDictSequential(
+            TensorDictModule(
+                lambda x: x + 1,
+                in_keys=["input"],
+                out_keys=["output"],
+            ),
+            ProbabilisticTensorDictModule(
+                in_keys={"logits": "output"},
+                out_keys=["sample"],
+                return_log_prob=True,
+                distribution_class=Categorical,
+            ),
+            inplace=inplace,
+        )
+        input = TensorDict(input=torch.zeros((5,)))
+        output = model(input)
+        assert output is not input
+        assert set(input.keys()) == {"input"}
+        assert {"output", "sample", "sample_log_prob"} <= set(output.keys())
 
     @pytest.mark.parametrize("return_log_prob", [True, False])
     @set_composite_lp_aggregate(False)
