@@ -2094,8 +2094,20 @@ class LazyStackedTensorDict(TensorDictBase):
                 :class:`~torch.strided`.
 
         """
+        try:
+            names = self.names
+        except ValueError:
+            if self._has_names():
+                raise
+            # Only some of the stacked tensordicts have names. As in
+            # contiguous(), the dims are left unnamed, but the name of the
+            # stack dim is kept.
+            names = None
+            if self._td_dim_name is not None:
+                names = [None] * self.batch_dims
+                names[self.stack_dim] = self._td_dim_name
         result = TensorDict._new_unsafe(
-            batch_size=self.batch_size, device=self.device, names=self.names
+            batch_size=self.batch_size, device=self.device, names=names
         )
         for key in self._exclusive_keys():
             list_of_entries = [
