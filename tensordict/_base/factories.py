@@ -35,7 +35,9 @@ def from_any(
 
     .. seealso:: :meth:`~tensordict.TensorDictBase.from_any` for more information.
     """
-    return TensorDictBase.from_any(
+    from tensordict import TensorDict
+
+    return TensorDict.from_any(
         obj,
         auto_batch_size=auto_batch_size,
         batch_dims=batch_dims,
@@ -56,7 +58,9 @@ def from_tuple(
 
     .. seealso:: :meth:`TensorDictBase.from_tuple` for more information.
     """
-    return TensorDictBase.from_tuple(
+    from tensordict import TensorDict
+
+    return TensorDict.from_tuple(
         obj,
         auto_batch_size=auto_batch_size,
         batch_dims=batch_dims,

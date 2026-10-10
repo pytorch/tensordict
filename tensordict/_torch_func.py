@@ -84,6 +84,11 @@ def _flatten(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
     return td.flatten(*args, **kwargs)
 
 
+@implements_for_td(torch.reshape)
+def _reshape(td: T, shape: Sequence[int]) -> T:
+    return td.reshape(shape)
+
+
 @implements_for_td(torch.flip)
 def _flip(td: T, dims: Sequence[int]) -> T:
     return td.flip(dims)
@@ -119,6 +124,17 @@ def _narrow(td: T, dim: int, start: int, length: int) -> T:
 @implements_for_td(torch.tile)
 def _tile(td: T, dims: Sequence[int]) -> T:
     return td.tile(dims)
+
+
+@implements_for_td(torch.repeat_interleave)
+def _repeat_interleave(
+    td: T,
+    repeats: Tensor | int,
+    dim: int | None = None,
+    *,
+    output_size: int | None = None,
+) -> T:
+    return td.repeat_interleave(repeats, dim, output_size=output_size)
 
 
 @implements_for_td(torch.broadcast_to)
@@ -852,9 +868,10 @@ def _stack(
                     if not is_not_init:
                         new_tensor_shape = _shape(tensor)
                         if tensor_shape is not None:
-                            if len(new_tensor_shape) != len(tensor_shape) or not all(
-                                s1 == s2 and s1 != -1
-                                for s1, s2 in _zip_strict(_shape(tensor), tensor_shape)
+                            # _shape gives -1 for the ragged dims of nested tensors
+                            if (
+                                new_tensor_shape != tensor_shape
+                                or -1 in new_tensor_shape
                             ):
                                 # Nested tensors will require a lazy stack
                                 if maybe_dense_stack:
@@ -960,6 +977,34 @@ def _split(
     td: TensorDict, split_size_or_sections: int | list[int], dim: int = 0
 ) -> list[TensorDictBase]:
     return td.split(split_size_or_sections, dim)
+
+
+@implements_for_td(torch.tensor_split)
+def _tensor_split(
+    td: T,
+    indices_or_sections: int | Sequence[int] | Tensor | None = None,
+    /,
+    dim: int = 0,
+    *,
+    sections: int | None = None,
+    indices: Sequence[int] | None = None,
+    tensor_indices_or_sections: Tensor | None = None,
+) -> tuple[T, ...]:
+    # torch.tensor_split names this argument after its type: sections (int),
+    # indices (sequence of ints) or tensor_indices_or_sections (tensor)
+    if indices_or_sections is None:
+        if sections is not None:
+            indices_or_sections = sections
+        elif indices is not None:
+            indices_or_sections = indices
+        else:
+            indices_or_sections = tensor_indices_or_sections
+    return td.tensor_split(indices_or_sections, dim)
+
+
+@implements_for_td(torch.chunk)
+def _chunk(td: T, chunks: int, dim: int = 0) -> tuple[T, ...]:
+    return td.chunk(chunks, dim)
 
 
 @implements_for_td(torch.where)

@@ -16,7 +16,7 @@ import warnings
 import weakref
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Tuple, Type, TYPE_CHECKING
+from typing import Any, Callable, overload, Tuple, Type, TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -371,6 +371,10 @@ class _H5Backend(_PersistentBackend):
         try:
             file.move(old_key, new_key)
         except ValueError as err:
+            # h5py raises ValueError for a missing source too; an existing
+            # destination is reported first, as in _ZarrBackend.move
+            if old_key not in file and new_key not in file:
+                raise KeyError(f"key {old_key} not found in TensorDict.") from err
             raise KeyError(f"key {new_key} already present in TensorDict.") from err
 
     def getstate(self, file) -> dict:
@@ -1232,6 +1236,12 @@ class PersistentTensorDict(TensorDictBase):
             return np.asarray(idx)
         return idx
 
+    @overload
+    def __getitem__(self, item: str | tuple[str, ...]) -> Any: ...
+
+    @overload
+    def __getitem__(self, item: IndexType) -> TensorDictBase: ...
+
     def __getitem__(self, item: IndexType) -> Self | Tensor | TensorCollection | Any:
         if isinstance(item, str) or (
             isinstance(item, tuple) and _unravel_key_to_tuple(item)
@@ -1944,7 +1954,7 @@ class PersistentTensorDict(TensorDictBase):
         non_blocking: bool = False,
     ) -> PersistentTensorDict:
         if not validated:
-            value = self._validate_value(value, check_shape=idx is None)
+            value = self._validate_value(value, check_shape=idx is None, key=key)
         value = self._to_numpy(value)
         if not inplace:
             if idx is not None:
