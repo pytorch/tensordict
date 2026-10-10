@@ -241,7 +241,8 @@ Efficiency of pointwise operations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When possible, ``torch._foreach_<op>`` fused kernels will be used to speed up the computation of the pointwise
-operation.
+operation. Inside a ``torch.func`` transform such as :func:`torch.vmap`, which has no batching rule for the
+``_foreach`` ops, the operation is applied to one tensor at a time instead.
 
 Handling Missing Entries
 ~~~~~~~~~~~~~~~~~~~~~~~~
