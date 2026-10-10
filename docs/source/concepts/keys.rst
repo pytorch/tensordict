@@ -141,6 +141,8 @@ to the tensor that is already there:
 - ``td.set_(key, value)`` copies ``value`` into the existing tensor. If the key
   does not exist, it raises a ``KeyError``.
 
+For example:
+
   >>> td = TensorDict(a=torch.zeros(3), batch_size=[3])
   >>> old = td["a"]
   >>> _ = td.set("a", torch.ones(3))
@@ -263,6 +265,8 @@ operations:
   ``inplace=True``.
 - Remove or rename an entry: ``del``, ``pop`` and ``rename_key_``.
 
+For example, a new key in a nested tensordict raises:
+
   >>> td = TensorDict(a=torch.zeros(3), nested={"b": torch.zeros(3)}, batch_size=[3])
   >>> _ = td.lock_()
   >>> td["nested", "c"] = torch.zeros(3)
@@ -279,6 +283,8 @@ tensordict:
 - An assignment to a batch index, such as ``td[0] = other``.
 - An in-place method of the tensordict, such as ``td.add_(1)`` or
   ``td.zero_()``, or of one tensor, such as ``td["a"].add_(1)``.
+
+For example:
 
   >>> _ = td.set_("a", torch.ones(3))
   >>> td["a"].add_(1)

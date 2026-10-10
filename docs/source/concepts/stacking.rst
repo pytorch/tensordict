@@ -77,6 +77,8 @@ A lazy stack reads and writes the original tensordicts:
   tensordicts. A new key goes to each of them.
 - Any other index returns a new lazy stack, for example ``stacked[:, 0]``.
 
+For example:
+
   >>> stacked[0] is tds[0]
   True
   >>> stacked["a"] = torch.ones(3, 10)
@@ -144,7 +146,9 @@ Which function to use
 ---------------------
 
 The table gives the type that each function returns, for a list of two
-tensordicts of each kind. "Raises" means that the function raises an error.
+tensordicts of each kind. "Lazy stack" means a
+:class:`~tensordict.LazyStackedTensorDict`, and "raises" means that the
+function raises an error.
 
 .. list-table::
    :header-rows: 1
@@ -158,26 +162,26 @@ tensordicts of each kind. "Raises" means that the function raises an error.
      - ``pad_sequence``
    * - Same keys and shapes
      - ``TensorDict``
-     - ``LazyStackedTensorDict``
+     - lazy stack
      - ``TensorDict``
      - ``TensorDict``
      - ``TensorDict``
    * - Entry shapes differ
      - raises
-     - ``LazyStackedTensorDict``
-     - ``LazyStackedTensorDict``
+     - lazy stack
+     - lazy stack
      - raises
      - raises, unless only the ``pad_dim`` dimension differs
    * - Keys differ
      - raises
-     - ``LazyStackedTensorDict``
-     - ``LazyStackedTensorDict``
+     - lazy stack
+     - lazy stack
      - raises ``KeyError``
      - raises ``TypeError``
    * - Batch sizes differ (same number of dimensions)
      - raises
-     - ``LazyStackedTensorDict``, ``-1`` in the batch size
-     - ``LazyStackedTensorDict``, ``-1`` in the batch size
+     - lazy stack, ``-1`` in the batch size
+     - lazy stack, ``-1`` in the batch size
      - ``TensorDict``
      - ``TensorDict`` (padded)
    * - Tensorclass instances
@@ -187,16 +191,17 @@ tensordicts of each kind. "Raises" means that the function raises an error.
      - the tensorclass
      - the tensorclass
    * - Lazy stacks
-     - ``LazyStackedTensorDict``
-     - ``LazyStackedTensorDict``
-     - ``LazyStackedTensorDict``
-     - ``LazyStackedTensorDict``
+     - lazy stack
+     - lazy stack
+     - lazy stack
+     - lazy stack
      - ``TensorDict``
 
-Use this rule to choose:
+Use these rules to choose:
 
 - If the inputs always have the same keys and shapes, use ``torch.stack``. It
-  gives a regular TensorDict that is fast to read.
+  gives a regular TensorDict: a read returns the stored tensor, without a new
+  stack.
 - If you must write back into the inputs, or if the keys or shapes can differ,
   use ``lazy_stack``.
 - If the inputs usually match but sometimes do not, use
@@ -227,6 +232,8 @@ arguments to :meth:`~tensordict.LazyStackedTensorDict.get`:
   ``padding_side`` (``"right"`` or ``"left"``).
 - ``as_nested_tensor=True`` returns a nested tensor (:mod:`torch.nested`). The
   default layout is ``torch.jagged``. Set another one with ``layout``.
+
+For example, with three sequences of lengths 2, 3 and 1:
 
   >>> _ = torch.manual_seed(0)
   >>> episodes = lazy_stack([TensorDict(obs=torch.randn(n, 2)) for n in [2, 3, 1]])
