@@ -13,8 +13,8 @@ TensorDict: the dict form
 -------------------------
 
 All the entries of a TensorDict share their first dimensions, called the
-batch size. This TensorDict holds the state of 4 robots: 7 joint angles each,
-and a camera image in a nested TensorDict:
+batch size. This TensorDict holds the state of 4 robots: 7 joint angles for
+each robot, and the camera images in a nested TensorDict:
 
   >>> import torch
   >>> from tensordict import TensorDict
@@ -55,8 +55,8 @@ boxes for each image:
 
   >>> from tensordict import TensorClass
   >>> class Box(TensorClass):
-  ...     low: torch.Tensor  # [*batch, 2]
-  ...     high: torch.Tensor  # [*batch, 2]
+  ...     low: torch.Tensor  # [*batch, 2], the lower corner
+  ...     high: torch.Tensor  # [*batch, 2], the upper corner
   ...
   ...     def area(self) -> torch.Tensor:
   ...         return (self.high - self.low).prod(-1)

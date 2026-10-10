@@ -170,7 +170,7 @@ TensorClass: the class form
 
 :class:`~tensordict.TensorClass` is the class form of a TensorDict. You
 declare the fields as class annotations, like a dataclass, and you add your
-own methods. The fields keep the tensor behavior of a TensorDict: a batch
+own methods. A TensorClass has the tensor behavior of a TensorDict: the batch
 size, indexing, shape operations and the batch-size check. This class holds a
 batch of images and their labels:
 
@@ -200,7 +200,8 @@ Three other containers have the same operations:
   ``TensorDictBase``, with ``td["key"]`` access and class inheritance to add
   fields.
 - :class:`~tensordict.LazyStackedTensorDict` holds elements of different
-  shapes. :func:`~tensordict.lazy_stack` makes one (see below).
+  shapes. :func:`~tensordict.lazy_stack` makes one, as the stacking section
+  below shows.
 - :class:`~tensordict.PersistentTensorDict` reads its data from an HDF5 or
   Zarr file on disk.
 

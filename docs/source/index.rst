@@ -22,6 +22,12 @@ function body is two lines:
 
   >>> import torch
   >>> from tensordict import TensorDict
+  >>> def shuffle_and_split(batch):
+  ...     batch = batch[torch.randperm(len(batch))]
+  ...     return batch.split(len(batch) // 2)
+
+Build a TensorDict from the four tensors, then call the function:
+
   >>> batch = TensorDict(
   ...     images=torch.randn(32, 3, 64, 64),
   ...     labels=torch.randint(10, (32,)),
@@ -29,9 +35,6 @@ function body is two lines:
   ...     weights=torch.rand(32),
   ...     batch_size=[32],  # the leading dimension that all tensors share
   ... )
-  >>> def shuffle_and_split(batch):
-  ...     batch = batch[torch.randperm(len(batch))]
-  ...     return batch.split(len(batch) // 2)
   >>> first, second = shuffle_and_split(batch)
   >>> first["images"].shape
   torch.Size([16, 3, 64, 64])
@@ -41,10 +44,10 @@ The new function names no tensor, so it does not change when you add one.
 TensorDict: keys at run time, like a dict
 -----------------------------------------
 
-A TensorDict holds the group with a shared batch size, so indexing,
-reshaping, stacking and ``.to(device)`` apply to every tensor at once. A
-``dict`` value becomes a nested TensorDict, and a tuple of keys reads its
-entries:
+You add and read keys at run time, as in a ``dict``. A ``dict`` value becomes
+a nested TensorDict, and a tuple of keys reads its entries. The tensors share
+the batch size, so indexing, reshaping, stacking and ``.to(device)`` apply to
+every tensor at once, nested ones too:
 
   >>> batch["meta"] = {"id": torch.arange(32)}
   >>> batch[:8]["meta", "id"].shape
