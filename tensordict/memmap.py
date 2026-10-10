@@ -318,7 +318,7 @@ class MemoryMappedTensor(torch.Tensor):
 
         Keyword Args:
             filename (path to a file): the path to the file where the tensor
-                should be stored. If ``None``, the tensor lives in anonymous
+                is stored. If ``None``, the tensor lives in anonymous
                 shared memory.
             existsok (bool, optional): if ``True``, the file will overwrite
                 an existing file. Defaults to ``False``.

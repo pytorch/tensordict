@@ -4360,7 +4360,7 @@ class _TensorClassMeta(abc.ABCMeta):
 class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
     """A base class for dataclass-like containers of tensors.
 
-    Subclass :class:`TensorClass` and annotate fields, as you would with
+    Subclass :class:`TensorClass` and annotate fields, as with
     :func:`dataclasses.dataclass`. The instances behave like a
     :class:`~tensordict.TensorDict`: they have a batch size, and they support
     indexing, reshaping, ``to(device)``, :func:`torch.stack`,
@@ -4522,10 +4522,10 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
     keyword form: ``class Foo(TensorClass, autocast=True)``. Editors complete
     the annotated fields on instances.
 
-    .. note:: ``TensorClass`` itself is not a tensorclass: the dataclass
-        machinery runs only on its subclasses. The reason is that a
-        non-frozen base cannot have a frozen subclass, and the base cannot
-        know whether a subclass asks for ``frozen``.
+    .. note:: ``TensorClass`` itself is not a tensorclass: only its
+        subclasses become dataclasses. The reason is that a non-frozen base
+        cannot have a frozen subclass, and the base cannot know whether a
+        subclass sets ``frozen``.
 
     .. seealso::
 
