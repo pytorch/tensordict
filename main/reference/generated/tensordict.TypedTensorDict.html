@@ -226,7 +226,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4879+gd5543926d.d20261010)
+                  main (0.14.0.dev4880+ge1a3f716d.d20261010)
                 </div>
               
             
@@ -8417,7 +8417,8 @@ dtype and device for all tensors in this TensorDict.</p></li>
 If <code class="docutils literal notranslate"><span class="pre">None</span></code> (default), the leaves are copied with <code class="docutils literal notranslate"><span class="pre">non_blocking=True</span></code>
 and, when the target device is not a CUDA device (e.g. device-to-host
 copies), the tensordict synchronizes once after all the copies have been
-issued. If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the copies are non-blocking and no synchronization
+issued (under <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>, these copies are blocking instead).
+If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the copies are non-blocking and no synchronization
 is performed: the caller is responsible for synchronizing before reading
 the results. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, the copies are blocking.</p></li>
 <li><p><strong>memory_format</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.memory_format" title="(in PyTorch v2.14)"><em>torch.memory_format</em></a><em>, </em><em>optional</em>) – the desired memory
