@@ -12,70 +12,29 @@ Most examples use the ``meta`` device in place of a GPU. Every PyTorch build
 has it: a tensor on the ``meta`` device has a shape and a dtype, but no data.
 The examples that need a CUDA device are marked ``+SKIP``.
 
-The device of a tensordict
---------------------------
-
-A tensordict has a :attr:`~tensordict.TensorDict.device` attribute. By
-default, it is ``None``, also if all the leaves (the tensors at the end of
-each key path) are on the same device:
-
-    >>> import torch
-    >>> from tensordict import TensorDict
-    >>> td = TensorDict(a=torch.zeros(3), batch_size=[3])
-    >>> print(td.device)
-    None
-
-The value changes what happens to the entries that you add:
-
-- If ``device`` is a device, each entry that you add, at construction or
-  later, is moved to that device. Nested tensordicts get the same device.
-- If ``device`` is ``None``, each entry keeps its device. The leaves can be
-  on different devices.
-
-In this example, ``td`` has the ``meta`` device, and ``mixed`` has no device:
-
-    >>> td = TensorDict(a=torch.zeros(3), batch_size=[3], device="meta")
-    >>> td["b"] = torch.ones(3)  # a CPU tensor
-    >>> td["b"].device
-    device(type='meta')
-    >>> td["n"] = {"c": torch.ones(3)}
-    >>> td["n"].device, td["n", "c"].device
-    (device(type='meta'), device(type='meta'))
-    >>> mixed = TensorDict(a=torch.zeros(3), b=torch.zeros(3, device="meta"), batch_size=[3])
-    >>> print(mixed.device)
-    None
-
-Two methods change the attribute and do not move any leaf:
-
-- :meth:`~tensordict.TensorDict.auto_device_` sets ``device`` to the device
-  of the leaves if they are all on one device, and to ``None`` otherwise.
-- :meth:`~tensordict.TensorDict.clear_device_` sets ``device`` to ``None``.
-
-Here, all the leaves are on the CPU:
-
-    >>> TensorDict(a=torch.zeros(3), batch_size=[3]).auto_device_().device
-    device(type='cpu')
-
 Move and cast with ``to()``
 ---------------------------
 
 :meth:`~tensordict.TensorDict.to` takes the same arguments as
-:meth:`torch.Tensor.to`. It returns a new tensordict, and sets its
-``device`` attribute when you give a device:
+:meth:`torch.Tensor.to`, and applies them to each leaf (each tensor at the end
+of a key path). It returns a new tensordict, and sets its ``device`` attribute
+(see `The device of a tensordict`_) when you give a device:
 
-    >>> td = TensorDict(a=torch.zeros(3), i=torch.arange(3), batch_size=[3])
-    >>> td.to("meta").device
+    >>> import torch
+    >>> from tensordict import TensorDict
+    >>> batch = TensorDict(images=torch.zeros(4, 3, 8, 8), labels=torch.arange(4), batch_size=[4])
+    >>> batch.to("meta").device
     device(type='meta')
-    >>> td64 = td.to(torch.float64)
-    >>> td64["a"].dtype, td64["i"].dtype
+    >>> batch64 = batch.to(torch.float64)
+    >>> batch64["images"].dtype, batch64["labels"].dtype
     (torch.float64, torch.float64)
-    >>> both = td.to("meta", torch.float16)
-    >>> both["a"].device, both["a"].dtype
+    >>> both = batch.to("meta", torch.float16)
+    >>> both["images"].device, both["images"].dtype
     (device(type='meta'), torch.float16)
 
-A dtype casts every leaf, also the integer and boolean leaves. To cast only
-some of them, see `Per-leaf device and dtype casting`_. These forms also
-work:
+A dtype casts every leaf, also the integer and boolean leaves, such as
+``labels`` here. To cast only some of them, see `Per-leaf device and dtype
+casting`_. These forms also work:
 
 - ``td.to(tensor)`` uses the device and the dtype of ``tensor``.
 - ``td.to(other=other_td)`` uses the device of ``other_td``, and its dtype if
@@ -138,6 +97,47 @@ on the CPU. This example needs a CUDA device:
     device(type='cpu')
     >>> bool((td_cpu == 1).all())  # doctest: +SKIP
     True
+
+The device of a tensordict
+--------------------------
+
+A tensordict has a :attr:`~tensordict.TensorDict.device` attribute. By
+default, it is ``None``, also if all the leaves are on the same device:
+
+    >>> td = TensorDict(a=torch.zeros(3), batch_size=[3])
+    >>> print(td.device)
+    None
+
+The value changes what happens to the entries that you add:
+
+- If ``device`` is a device, each entry that you add, at construction or
+  later, is moved to that device. Nested tensordicts get the same device.
+- If ``device`` is ``None``, each entry keeps its device. The leaves can be
+  on different devices.
+
+In this example, ``td`` has the ``meta`` device, and ``mixed`` has no device:
+
+    >>> td = TensorDict(a=torch.zeros(3), batch_size=[3], device="meta")
+    >>> td["b"] = torch.ones(3)  # a CPU tensor
+    >>> td["b"].device
+    device(type='meta')
+    >>> td["n"] = {"c": torch.ones(3)}
+    >>> td["n"].device, td["n", "c"].device
+    (device(type='meta'), device(type='meta'))
+    >>> mixed = TensorDict(a=torch.zeros(3), b=torch.zeros(3, device="meta"), batch_size=[3])
+    >>> print(mixed.device)
+    None
+
+Two methods change the attribute and do not move any leaf:
+
+- :meth:`~tensordict.TensorDict.auto_device_` sets ``device`` to the device
+  of the leaves if they are all on one device, and to ``None`` otherwise.
+- :meth:`~tensordict.TensorDict.clear_device_` sets ``device`` to ``None``.
+
+Here, all the leaves are on the CPU:
+
+    >>> TensorDict(a=torch.zeros(3), batch_size=[3]).auto_device_().device
+    device(type='cpu')
 
 Per-leaf device and dtype casting
 ---------------------------------
