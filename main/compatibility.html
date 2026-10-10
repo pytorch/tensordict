@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4747+gef7c9ceea.d20261010)
+                  main (0.14.0.dev4748+g0cd8d443d.d20261010)
                 </div>
               
             
@@ -490,6 +490,18 @@ The table below summarises which operations work on each combination.</p>
 <p>Memory-mapped TensorDicts are locked after <code class="docutils literal notranslate"><span class="pre">memmap_()</span></code>.  Use
 <code class="docutils literal notranslate"><span class="pre">set_()</span></code> and <code class="docutils literal notranslate"><span class="pre">update_()</span></code> for in-place writes instead of attribute
 assignment or <code class="docutils literal notranslate"><span class="pre">update()</span></code>.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>When a field is annotated with another tensorclass (<code class="docutils literal notranslate"><span class="pre">a:</span> <span class="pre">Pose</span></code> or
+<code class="docutils literal notranslate"><span class="pre">a:</span> <span class="pre">Pose</span> <span class="pre">|</span> <span class="pre">None</span></code>) and the input is a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> whose entry for it
+is a tensordict, <code class="docutils literal notranslate"><span class="pre">from_tensordict</span></code> builds a <code class="docutils literal notranslate"><span class="pre">Pose</span></code> from that entry,
+recursively. The <code class="docutils literal notranslate"><span class="pre">Pose</span></code> is set in a shallow copy of the input: the leaves
+are shared, but the input keeps its tensordict entry and does not see the
+entries set later on the tensorclass. An entry with keys that <code class="docutils literal notranslate"><span class="pre">Pose</span></code>
+does not declare stays a tensordict. Other backends are wrapped as they
+are and the nested entry stays a tensordict, since setting a tensorclass
+in them would write to their storage.</p>
 </div>
 <section id="building-a-tensorclass-on-each-backend">
 <h3>Building a TensorClass on each backend<a class="headerlink" href="#building-a-tensorclass-on-each-backend" title="Permalink to this heading">¶</a></h3>

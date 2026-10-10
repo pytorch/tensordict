@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4747+gef7c9ceea.d20261010)
+                  main (0.14.0.dev4748+g0cd8d443d.d20261010)
                 </div>
               
             
@@ -1042,16 +1042,36 @@ fields remain <code class="docutils literal notranslate"><span class="pre">None<
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorAttrs.from_tensordict">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_tensordict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">non_tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><span class="pre">dict</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">safe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></span><a class="headerlink" href="#tensordict.TensorAttrs.from_tensordict" title="Permalink to this definition">¶</a></dt>
-<dd><p>Tensor class wrapper to instantiate a new tensor class object.</p>
+<dd><p>Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> is a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, the entries of the fields
+annotated with a tensorclass (or <code class="docutils literal notranslate"><span class="pre">Optional</span></code> of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+<code class="docutils literal notranslate"><span class="pre">tensordict</span></code>, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>tensordict</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – Dictionary of tensor types</p></li>
-<li><p><strong>non_tensordict</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><em>dict</em></a>) – Dictionary with non-tensor and nested tensor class objects</p></li>
-<li><p><strong>safe</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – Whether to raise an error if the tensordict is not a TensorDictBase instance</p></li>
+<li><p><strong>tensordict</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – the tensordict that holds the tensor fields.</p></li>
+<li><p><strong>non_tensordict</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><em>dict</em></a><em>, </em><em>optional</em>) – the values of the non-tensor fields. The
+fields that neither argument holds are set to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>safe</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, raise an error when <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> is not
+a <a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a>. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Pose</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">q</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Obs</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">a</span><span class="p">:</span> <span class="n">Pose</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">obs</span> <span class="o">=</span> <span class="n">Obs</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">Pose</span><span class="p">(</span><span class="n">q</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">5</span><span class="p">]),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">5</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">Obs</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">obs</span><span class="o">.</span><span class="n">to_tensordict</span><span class="p">())</span><span class="o">.</span><span class="n">a</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span>
+<span class="go">'Pose'</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <dl class="py method">
