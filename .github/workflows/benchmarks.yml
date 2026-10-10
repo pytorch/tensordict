@@ -176,6 +176,20 @@ jobs:
           name: GPU-benchmark-results
           path: gpu-results
 
+      # GitHub push protection reads a 15-digit number that starts with 1000,
+      # such as the fractional part of a mean of 32.100025873592784 usec, as a
+      # secret of type "BII - UID" and rejects the push to gh-pages. Round the
+      # results so that the steps below write at most 12 significant digits.
+      # Also drop the fields that the steps below do not read, such as the
+      # timings of every round: they make the files about 500 MB, and the
+      # action fails with "Invalid string length" once a file is larger than
+      # the longest string that Node.js can hold, about 512 MiB. This changes
+      # the downloaded files only, not the uploaded artifacts.
+      - name: Round benchmark results and drop the fields the action does not read
+        run: |
+          python3 .github/scripts/round_benchmark_results.py \
+            cpu-results/output.json gpu-results/output.json
+
       - name: Store CPU benchmark results
         uses: benchmark-action/github-action-benchmark@v1
         with:
