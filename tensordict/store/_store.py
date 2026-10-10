@@ -2582,9 +2582,21 @@ class TensorDictStore(TensorDictBase):
         existsok,
         robust_key,
     ):
-        raise RuntimeError(
-            f"Cannot call memmap on a {type(self).__name__} in-place. "
-            "Call `to_tensordict()` first."
+        if inplace:
+            raise RuntimeError(
+                f"Cannot call memmap on a {type(self).__name__} in-place. "
+                "Call `to_tensordict()` first."
+            )
+        return self.to_tensordict()._memmap_(
+            prefix=prefix,
+            copy_existing=copy_existing,
+            executor=executor,
+            futures=futures,
+            inplace=False,
+            like=like,
+            share_non_tensor=share_non_tensor,
+            existsok=existsok,
+            robust_key=robust_key,
         )
 
     def make_memmap(self, key, shape, *, dtype=None, robust_key=True):

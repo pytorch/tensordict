@@ -505,7 +505,9 @@ class _StoreStackElementView(TensorDictBase):
         )
 
     def _memmap_(self, **kw):
-        raise RuntimeError(f"Cannot call memmap on a {type(self).__name__}.")
+        if kw["inplace"]:
+            raise RuntimeError(f"Cannot call memmap on a {type(self).__name__}.")
+        return self.to_tensordict()._memmap_(**kw)
 
     def make_memmap(self, key, shape, *, dtype=None, robust_key=True):
         raise RuntimeError(f"Cannot make memmap on a {type(self).__name__}.")
@@ -2266,7 +2268,21 @@ class LazyStackedTensorDictStore(TensorDictBase):
         existsok,
         robust_key,
     ):
-        raise RuntimeError(f"Cannot call memmap on a {type(self).__name__} in-place.")
+        if inplace:
+            raise RuntimeError(
+                f"Cannot call memmap on a {type(self).__name__} in-place."
+            )
+        return self.to_tensordict()._memmap_(
+            prefix=prefix,
+            copy_existing=copy_existing,
+            executor=executor,
+            futures=futures,
+            inplace=False,
+            like=like,
+            share_non_tensor=share_non_tensor,
+            existsok=existsok,
+            robust_key=robust_key,
+        )
 
     def make_memmap(self, key, shape, *, dtype=None, robust_key=True):
         raise RuntimeError(

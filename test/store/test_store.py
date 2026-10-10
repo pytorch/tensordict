@@ -458,6 +458,24 @@ class TestTensorDictStore:
         with pytest.raises(NotImplementedError):
             store_td.share_memory_()
 
+    def test_memmap(self, store_td, tmp_path):
+        """memmap and save write a memory-mapped copy; only memmap_ raises."""
+        source = TensorDict(
+            {"obs": torch.randn(10, 3), "nested": {"a": torch.randn(10, 2)}}, [10]
+        )
+        store_td.update(source)
+        for out in (
+            store_td.memmap(tmp_path / "memmap"),
+            store_td.save(tmp_path / "save"),
+            store_td.memmap(),
+        ):
+            assert type(out) is TensorDict
+            assert out.is_memmap() and out.is_locked
+            assert (out == source).all()
+        assert (TensorDict.load_memmap(tmp_path / "save") == source).all()
+        with pytest.raises(RuntimeError, match="in-place"):
+            store_td.memmap_(tmp_path / "memmap_")
+
     def test_close_releases_event_loop(self, store_kwargs):
         """close() closes the event loop, which releases the sockets that it holds."""
         td = TensorDictStore(batch_size=[5], **store_kwargs)
@@ -1387,6 +1405,25 @@ class TestLazyStackedTensorDictStore:
             local = store_td.to_local()
         assert isinstance(local, TensorDict)
         assert local.batch_size == torch.Size([5, 4])
+
+    def test_memmap(self, store_stack, tmp_path):
+        """memmap and save write a memory-mapped copy; only memmap_ raises."""
+        store_td, tds, lazy_td = store_stack
+        source = lazy_td.to_tensordict()
+        for out in (
+            store_td.memmap(tmp_path / "memmap"),
+            store_td.save(tmp_path / "save"),
+            store_td.memmap(),
+        ):
+            assert type(out) is TensorDict
+            assert out.is_memmap() and out.is_locked
+            assert (out == source).all()
+        assert (TensorDict.load_memmap(tmp_path / "save") == source).all()
+        elem = store_td[1].memmap(tmp_path / "elem")
+        assert elem.is_memmap()
+        assert (elem == tds[1]).all()
+        with pytest.raises(RuntimeError, match="in-place"):
+            store_td.memmap_(tmp_path / "memmap_")
 
     # ---- td[idx].to_tensordict() pattern ----
 
