@@ -1973,6 +1973,11 @@ class TensorDictStore(TensorDictBase):
                 batch_size = input_dict.batch_size
             else:
                 batch_size = torch.Size([])
+                if auto_batch_size:
+                    input_dict = TensorDict(
+                        input_dict, batch_size=batch_size
+                    ).auto_batch_size_()
+                    batch_size = input_dict.batch_size
 
         connect_kwargs = {}
         if unix_socket_path is not None:
