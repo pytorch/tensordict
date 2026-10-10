@@ -336,6 +336,23 @@ class TestNonTensorData:
         assert td.roll(1, 0, inplace=True) is td
         assert td.get("query").tolist() == [["b", "d"], ["a", "c"]]
         assert td.get("x").tolist() == [[1, 3], [0, 2]]
+        # and in a nested td with an extra batch dim, when the flattened batch
+        # is rolled
+        td = TensorDict(
+            nested=TensorDict(
+                query=NonTensorStack.from_list([["a", "b"], ["c", "d"], ["e", "f"]]),
+                x=torch.arange(6).view(3, 2),
+                batch_size=[3, 2],
+            ),
+            batch_size=[3],
+        )
+        assert td.roll(1, inplace=True) is td
+        assert td.get(("nested", "query")).tolist() == [
+            ["e", "f"],
+            ["a", "b"],
+            ["c", "d"],
+        ]
+        assert td.get(("nested", "x")).tolist() == [[4, 5], [0, 1], [2, 3]]
 
         grid = NonTensorStack.from_list([["a", "b", "c"], ["d", "e", "f"]])
         assert grid.reshape(2, 3) is grid
