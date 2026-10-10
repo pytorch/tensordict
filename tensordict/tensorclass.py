@@ -2852,18 +2852,9 @@ def _update(
             for k, v in input_dict_or_td.__dict__["_non_tensordict"].items()
             if v is not None
         }
-        self._tensordict.update(
-            input_dict_or_td.__dict__["_tensordict"],
-            clone=clone,
-            inplace=inplace,
-            keys_to_update=keys_to_update,
-            non_blocking=non_blocking,
-            update_batch_size=update_batch_size,
-            ignore_lock=ignore_lock,
-            is_leaf=is_leaf,
-        )
-        self._non_tensordict.update(non_tensordict)
-        return self
+        input_dict_or_td = input_dict_or_td.__dict__["_tensordict"]
+    else:
+        non_tensordict = None
 
     self._tensordict.update(
         input_dict_or_td,
@@ -2881,6 +2872,8 @@ def _update(
         ntd = {k: val for k, val in self._non_tensordict.items() if k not in keys}
         self._non_tensordict.clear()
         self._non_tensordict.update(ntd)
+    if non_tensordict:
+        self._non_tensordict.update(non_tensordict)
     return self
 
 
