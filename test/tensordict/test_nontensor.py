@@ -574,6 +574,53 @@ class TestNonTensorData:
         assert nd[1, 1].data == 0
         assert nd[1, 2].data == "final"
 
+    @pytest.mark.parametrize("cls", [NonTensorData, MetaData])
+    def test_init(self, cls):
+        # NonTensorData and MetaData fill _non_tensordict without going
+        # through set(): the result must be the one set() gives.
+        x = cls(data="x", batch_size=[3], device="cpu", names=["n"], lock=True)
+        assert x.data == "x"
+        assert x.batch_size == (3,)
+        assert x.device == torch.device("cpu")
+        assert x.names == ["n"]
+        assert x.is_locked
+        assert x._non_tensordict == {
+            "data": "x",
+            "_metadata": None,
+            "_is_non_tensor": True,
+        }
+        assert x._tensordict.is_empty()
+        # A NonTensorData value is unwrapped, as set() does.
+        assert cls(cls(NonTensorData("y"))).data == "y"
+        assert cls("z", {"k": 1})._metadata == {"k": 1}
+        assert cls("z", _metadata={"k": 1})._metadata == {"k": 1}
+        with pytest.raises(TypeError, match="missing 1 required positional argument"):
+            cls()
+        with pytest.raises(AttributeError, match="Cannot set the attribute 'foo'"):
+            cls(data=1, foo=2)
+
+    def test_is_non_tensor(self):
+        from tensordict.tensorclass import is_non_tensor as tc_is_non_tensor
+
+        non_tensors = [
+            NonTensorData("a"),
+            MetaData("a"),
+            NonTensorStack(NonTensorData("a"), NonTensorData("b")),
+        ]
+        others = [
+            torch.zeros(()),
+            TensorDict(),
+            self.SomeTensorClass(a="a", b=torch.zeros(())),
+            "a",
+            None,
+        ]
+        for obj in non_tensors:
+            assert tc_is_non_tensor(obj)
+            assert is_non_tensor(obj)
+        for obj in others:
+            assert not tc_is_non_tensor(obj)
+            assert not is_non_tensor(obj)
+
     @set_list_to_stack(True)
     def test_linked_list(self):
         td = TensorDict(a=["foo", "bar"], batch_size=(2,))
