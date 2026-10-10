@@ -15,6 +15,7 @@ from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
 from copy import copy, deepcopy
 from functools import wraps
+from itertools import islice
 from pathlib import Path
 from textwrap import indent
 from typing import (
@@ -126,6 +127,8 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
     tensordict: LazyStackedTensorDict
 
     def __len__(self) -> int:
+        if self.include_nested or self.leaves_only:
+            return super().__len__()
         return len(self._keys())
 
     def _keys(self) -> list[str]:
@@ -3555,11 +3558,43 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return self
 
+    def _innermost_tensordicts(self) -> list[TensorDictBase]:
+        """The members of the stack, with the members of its nested lazy stacks in their place."""
+        tds = []
+        for td in self.tensordicts:
+            if isinstance(td, LazyStackedTensorDict):
+                tds.extend(td._innermost_tensordicts())
+            else:
+                tds.append(td)
+        return tds
+
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> Self:
-        for td in self.tensordicts:
-            td.rename_key_(old_key, new_key, safe=safe)
+        old = _unravel_key_to_tuple(old_key)
+        new = _unravel_key_to_tuple(new_key)
+        # Check every tensordict before any renames the key, so that a call
+        # that raises leaves the stack unchanged: a tensordict that cannot
+        # rename it raises before it changes anything.
+        tds = []
+        for td in self._innermost_tensordicts():
+            keys = td.keys(include_nested=True)
+            if (
+                td.is_locked
+                or not (old and new)
+                or old not in keys
+                or (safe and new in keys)
+            ):
+                td.rename_key_(old_key, new_key, safe=safe)
+            else:
+                tds.append((td, keys))
+        for i, (td, keys) in enumerate(tds):
+            # A tensordict that is in the stack more than once is renamed the
+            # first time. It is found with `is`, not id(): torch.compile
+            # guards on the id of each member and would recompile for every
+            # new stack.
+            if old in keys or not any(td is other for other, _ in islice(tds, i)):
+                td.rename_key_(old_key, new_key, safe=safe)
         return self
 
     def where(
@@ -3576,16 +3611,23 @@ class LazyStackedTensorDict(TensorDictBase):
         if condition.ndim < self.ndim:
             condition = expand_right(condition, self.batch_size)
         condition = condition.unbind(self.stack_dim)
+        # A 0-dim tensor goes whole to each member, as a scalar does
         if _is_tensor_collection(type(other)) or (
             isinstance(other, Tensor)
+            and other.ndim > 0
             and other.shape[: self.stack_dim] == self.shape[: self.stack_dim]
         ):
             other = other.unbind(self.stack_dim)
 
             def where(td, cond, other, pad):
-                if cond.numel() > 1:
+                if cond.numel() > 1 or isinstance(other, Tensor):
                     return td.where(cond, other, pad=pad)
-                return other if not cond else td
+                # The condition selects a whole member. Copy its tensors so the
+                # result shares no memory with the inputs (clone would also
+                # deep-copy non-tensor data)
+                return (other if not cond else td).apply(
+                    torch.clone, filter_empty=False
+                )
 
             result = lazy_stack(
                 [
@@ -5180,7 +5222,9 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 def _iter_items_lazystack(
     tensordict: LazyStackedTensorDict, return_none_for_het_values: bool = False
 ) -> Iterator[tuple[str, CompatibleType]]:
-    for key in tensordict.tensordicts[0].keys():
+    # The keys of every member, as keys() lists them: a sub-tensordict that
+    # only some members have cannot be stacked.
+    for key in tensordict._key_list():
         values = tensordict._maybe_get_list(key)
         if values is not None:
             yield key, values
