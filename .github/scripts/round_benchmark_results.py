@@ -4,7 +4,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Round the results in pytest-benchmark JSON files before they go to gh-pages.
+"""Round and slim pytest-benchmark JSON files before they go to gh-pages.
 
 benchmark-action/github-action-benchmark writes ``stats.ops``,
 ``stats.stddev`` and ``stats.mean`` of each benchmark to
@@ -12,9 +12,15 @@ benchmark-action/github-action-benchmark writes ``stats.ops``,
 protection reads a 15-digit number that starts with 1000, such as the
 fractional part of ``32.100025873592784``, as a secret of type "BII - UID",
 and rejects the push to gh-pages. This script rounds the three values so that
-the action writes them with at most 12 significant digits, and leaves the other
-fields alone. It writes the files back without indentation, which about halves
-their size.
+the action writes them with at most 12 significant digits.
+
+It also drops the fields that the action does not read, such as the timings of
+every round in ``stats.data`` and ``machine_info``. They make up almost all of
+the file, and the action fails with "Invalid string length" when the file is
+larger than the longest string that Node.js can hold, about 512 MiB.
+
+The script rewrites the files in place. Run it on copies: the workflow runs it
+on the downloaded artifacts, not on the uploaded ones.
 
 Usage::
 
@@ -89,13 +95,27 @@ def round_mean(seconds: float) -> float:
     return seconds
 
 
-def round_benchmark_results(results: dict) -> None:
-    """Round the values the action reads from each benchmark in ``results``."""
-    for benchmark in results["benchmarks"]:
-        stats = benchmark["stats"]
-        stats["ops"] = round_value(stats["ops"])
-        stats["stddev"] = round_value(stats["stddev"])
-        stats["mean"] = round_mean(stats["mean"])
+def round_benchmark_results(results: dict) -> dict:
+    """Return the fields of ``results`` that the action reads, rounded.
+
+    ``extractPytestResult`` in the action's ``src/extract.ts`` reads only
+    ``fullname`` and ``stats.ops``, ``stats.stddev``, ``stats.mean`` and
+    ``stats.rounds`` of each benchmark.
+    """
+    return {
+        "benchmarks": [
+            {
+                "fullname": benchmark["fullname"],
+                "stats": {
+                    "ops": round_value(benchmark["stats"]["ops"]),
+                    "stddev": round_value(benchmark["stats"]["stddev"]),
+                    "mean": round_mean(benchmark["stats"]["mean"]),
+                    "rounds": benchmark["stats"]["rounds"],
+                },
+            }
+            for benchmark in results["benchmarks"]
+        ]
+    }
 
 
 def main() -> None:
@@ -104,9 +124,8 @@ def main() -> None:
     for path in parser.parse_args().paths:
         with path.open() as file:
             results = json.load(file)
-        round_benchmark_results(results)
         with path.open("w") as file:
-            json.dump(results, file)
+            json.dump(round_benchmark_results(results), file)
 
 
 if __name__ == "__main__":

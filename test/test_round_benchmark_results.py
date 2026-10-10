@@ -25,13 +25,24 @@ _SPEC.loader.exec_module(round_benchmark_results)
 
 def _benchmark(ops, stddev, mean):
     return {
-        "fullname": "benchmarks/test_x.py::test_x",
+        "group": None,
+        "name": "test_x[cpu]",
+        "fullname": "benchmarks/test_x.py::test_x[cpu]",
+        "params": {"device": "cpu"},
+        "param": "cpu",
+        "extra_info": {},
+        "options": {"min_rounds": 5},
         "stats": {
-            "ops": ops,
-            "stddev": stddev,
+            "min": mean,
+            "max": mean,
             "mean": mean,
+            "stddev": stddev,
             "rounds": 3,
+            "median": mean,
+            "ops": ops,
+            "total": 3 * mean,
             "data": [mean, mean, mean],
+            "iterations": 1,
         },
     }
 
@@ -73,14 +84,17 @@ def test_round_mean_shortens_random_means():
         assert mean == pytest.approx(seconds, rel=1e-10, abs=0.0)
 
 
-def test_main_rounds_only_the_values_the_action_reads(tmp_path):
+def test_main_keeps_only_the_values_the_action_reads_rounded(tmp_path):
     # The value that push protection rejected for commit ea27b1c2a.
     ops = 10.100043678007761
     stddev = 0.000015181885534602878
     mean = 32.100025873592784e-6
     results = {
         "machine_info": {"node": "runner"},
+        "commit_info": {"id": "ea27b1c2a43772d5277011a15da24a19781e102d"},
         "benchmarks": [_benchmark(ops, stddev, mean)],
+        "datetime": "2026-10-10T13:44:14+00:00",
+        "version": "5.1.0",
     }
     path = tmp_path / "output.json"
     path.write_text(json.dumps(results))
@@ -88,10 +102,13 @@ def test_main_rounds_only_the_values_the_action_reads(tmp_path):
     subprocess.run([sys.executable, str(_SCRIPT_PATH), str(path)], check=True)
 
     rounded = json.loads(path.read_text())
-    stats = rounded["benchmarks"][0]["stats"]
+    assert list(rounded) == ["benchmarks"]
+    (benchmark,) = rounded["benchmarks"]
+    assert list(benchmark) == ["fullname", "stats"]
+    assert benchmark["fullname"] == "benchmarks/test_x.py::test_x[cpu]"
+    stats = benchmark["stats"]
+    assert list(stats) == ["ops", "stddev", "mean", "rounds"]
     assert repr(stats["ops"]) == "10.100043678"
     assert repr(stats["stddev"]) == "1.51818855346e-05"
     assert repr(stats["mean"] * 1e6) == "32.1000258736"
     assert stats["rounds"] == 3
-    assert stats["data"] == [mean, mean, mean]
-    assert rounded["machine_info"] == results["machine_info"]
