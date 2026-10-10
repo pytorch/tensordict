@@ -1073,6 +1073,28 @@ class TestNamedDims(TestTensorDictsBase):
         assert tdu.batch_size == torch.Size([1])
         assert tdu.names == [None]
 
+    @pytest.mark.parametrize(
+        "batch_size,names",
+        [
+            ([3], ["a"]),
+            ([2, 3], ["a", "b"]),
+            ([3, 1], ["a", "b"]),
+            ([2, 3], [None, "b"]),
+        ],
+    )
+    def test_prod_keepdim_names(self, batch_size, names):
+        # keepdim=True keeps the name of the reduced dim, as sum and mean do
+        td = TensorDict(
+            a=torch.rand(*batch_size, 4), batch_size=batch_size, names=names
+        )
+        for dim in range(-len(batch_size), len(batch_size)):
+            result = td.prod(dim, keepdim=True)
+            assert result.names == names
+            assert result.names == td.sum(dim, keepdim=True).names
+        # the result stacks with a slice of the input, as for sum
+        stacked = LazyStackedTensorDict.lazy_stack([td.prod(0, keepdim=True), td[:1]])
+        assert stacked.to_tensordict().names == [None, *names]
+
     def test_unsqueeze_td(self):
         td = self.unsqueezed_td("cpu")
         with pytest.raises(
