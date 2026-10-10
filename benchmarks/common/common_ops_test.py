@@ -8,7 +8,7 @@ import argparse
 
 import pytest
 import torch
-from tensordict import is_tensor_collection, TensorDict
+from tensordict import is_tensor_collection, LazyStackedTensorDict, TensorDict
 from tensordict.utils import _unravel_key_to_tuple, unravel_key, unravel_key_list
 
 
@@ -128,6 +128,14 @@ def big_nested_stacked_td_locked():
     return ((big_nested_stacked_td()[0][0].lock_(),), {})
 
 
+def big_nested_lazy_stacked_td():
+    # big_nested_stacked_td is a TensorDict (torch.stack stacks densely)
+    return (
+        (LazyStackedTensorDict.lazy_stack(big_nested_td((3, 10))[0][0].unbind(1), 1),),
+        {},
+    )
+
+
 def test_plain_set_nested(benchmark):
     td = big_nested_td()[0][0]
     key = tuple(str(j) for j in range(20, 0, -1))
@@ -235,6 +243,21 @@ def test_keys_stack_nested_locked(benchmark):
     td = big_nested_stacked_td_locked()[0][0]
     list(td.keys(True))
     benchmark(lambda: list(td.keys(True)))
+
+
+def test_keys_lazy_stack_nested(benchmark):
+    td = big_nested_lazy_stacked_td()[0][0]
+    benchmark(lambda: list(td.keys(True)))
+
+
+def test_keys_lazy_stack_nested_leaf(benchmark):
+    td = big_nested_lazy_stacked_td()[0][0]
+    benchmark(lambda: list(td.keys(True, True)))
+
+
+def test_keys_lazy_stack_nested_leaf_loop(benchmark):
+    td = big_nested_lazy_stacked_td()[0][0]
+    benchmark(lambda: [key for key in td.keys(True, True)])  # noqa: C416
 
 
 def test_values(benchmark):
