@@ -23,12 +23,13 @@ jobs:
   test-gpu:
     strategy:
       matrix:
-        python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        # torch nightlies have no Python 3.10 wheels since 2.15
+        python_version: ["3.12"]
+        cuda_arch_version: ["13.0"]
       fail-fast: false
     runs-on: mt-l-x86aavx2-11-41-a10g
     container:
-      image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
+      image: "nvidia/cuda:13.0.0-devel-ubuntu22.04"
       options: --gpus all
     timeout-minutes: 90
     permissions:
@@ -83,7 +84,9 @@ jobs:
   test-cpu:
     strategy:
       matrix:
-        python_version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]
+        # torch nightlies have no Python 3.10 wheels since 2.15: 3.10 runs in
+        # test-stable-cpu and test-oldest-cpu
+        python_version: ["3.11", "3.12", "3.13", "3.14", "3.14t"]
       fail-fast: false
     runs-on: mt-l-x86iavx512-48-384
     container:

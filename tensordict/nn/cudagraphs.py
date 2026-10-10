@@ -107,6 +107,11 @@ class CudaGraphModule:
         - In-place writes to the input tensors inside the function (e.g. ``x.add_(1)``) do not reach the caller's
           inputs once the graph is captured: the graph reads and writes its own copies of the inputs.
 
+        - The inputs are copied into the graph's buffers, and the graph is replayed, on the current stream. As for any
+          CUDA operation, inputs written on another stream must be ordered before the call by the caller, e.g. with
+          ``torch.cuda.current_stream().wait_stream(producer_stream)``. Consecutive calls share the graph's buffers:
+          issue them from one stream, or order each call after the previous one in the same way.
+
     .. warning::
         ``CudaGraphModule`` is not an :class:`~torch.nn.Module` by design, to discourage gathering parameters
         of the input module and passing them to an optimizer.
@@ -250,6 +255,10 @@ class CudaGraphModule:
                         sorting_keys=self._graph_input_keys,
                         default="intersection",
                     )
+                    # The copies and the replay run on the current stream, so the
+                    # replay reads the new inputs without a host synchronization. The
+                    # copies are blocking so that the caller may overwrite a (pinned)
+                    # CPU input as soon as the call returns.
                     if len(src_keys) == len(self._graph_input_keys):
                         if [val.shape for val in src_vals] != self._graph_input_shapes:
                             for key, val, shape in zip(
@@ -257,9 +266,7 @@ class CudaGraphModule:
                             ):
                                 self._check_entry_shape(key, val.shape, shape)
                         if src_vals:
-                            torch._foreach_copy_(
-                                self._graph_input_vals, src_vals, non_blocking=True
-                            )
+                            torch._foreach_copy_(self._graph_input_vals, src_vals)
                     else:
                         graph_keys = self._graph_inputs.keys(include_nested=True)
                         input_keys = tensordict.keys(include_nested=True)
@@ -287,8 +294,7 @@ class CudaGraphModule:
                                     tensordict.get_item_shape(key),
                                     self._graph_inputs.get_item_shape(key),
                                 )
-                        self._graph_inputs.update_(tensordict, non_blocking=True)
-                    torch.cuda.synchronize(self.device)
+                        self._graph_inputs.update_(tensordict)
                     self.graph.replay()
                     if self._out_matches_in:
                         # Clone: the graph overwrites ``self._out`` on the next replay.
@@ -403,7 +409,6 @@ class CudaGraphModule:
                         self._maybe_copy_onto_(arg_src, arg_dest, srcs, dests)
                     if dests:
                         torch._foreach_copy_(dests, srcs)
-                    torch.cuda.synchronize(self.device)
                     self.graph.replay()
                     if self._return_unchanged:
                         result = self._out

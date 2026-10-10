@@ -863,6 +863,49 @@ def _value_at_new_dim(td: TensorDictBase, value):
     return value.expand(batch_size)[0]
 
 
+def _flatten_nested_dicts(source: dict) -> dict:
+    """Return ``source`` with the entries of its nested dicts under nested keys."""
+    result = {}
+    for key, value in source.items():
+        if isinstance(value, dict):
+            for subkey, subvalue in _flatten_nested_dicts(value).items():
+                result[(key, subkey)] = subvalue
+        else:
+            result[key] = value
+    return result
+
+
+def _select_entry(key: tuple, value: Any, keys_to_update: list[tuple]) -> Any:
+    """Return the part of the entry ``key: value`` that ``keys_to_update`` selects, or ``None``.
+
+    As in ``update_``, the leaves to update are those whose key starts with one
+    of ``keys_to_update``. The entry is kept whole if one of them is a prefix of
+    ``key``, and a tensor collection keeps only the leaves to update.
+    """
+    subkeys = []
+    for key_to_update in keys_to_update:
+        if key[: len(key_to_update)] == key_to_update:
+            return value
+        if key_to_update[: len(key)] == key:
+            subkeys.append(key_to_update[len(key) :])
+    if not subkeys or not _is_tensor_collection(type(value)):
+        return None
+    leaves = [
+        leaf
+        for leaf in value.keys(True, True, is_leaf=_is_leaf_nontensor)
+        if any(
+            _unravel_key_to_tuple(leaf)[: len(subkey)] == subkey for subkey in subkeys
+        )
+    ]
+    if not leaves:
+        return None
+    try:
+        return value.select(*leaves)
+    except NotImplementedError:
+        # PersistentTensorDict and the stores have no select
+        return value.to_tensordict().select(*leaves)
+
+
 class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     """TensorDictBase is an abstract parent class for TensorDicts, a torch.Tensor data container."""
 
@@ -920,7 +963,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             string = "..."
         return f"{type(self).__name__}(\n{string})"
 
-    def __iter__(self) -> Iterator:
+    def __iter__(self) -> Iterator[TensorDictBase]:
         """Iterates over the first batch dimension of the tensordict.
 
         Raises:
@@ -959,6 +1002,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         raise RuntimeError(
             "key must be a NestedKey (a str or a possibly tuple of str)."
         )
+
+    @overload
+    def __getitem__(self, index: str | tuple[str, ...]) -> Any: ...
+
+    @overload
+    def __getitem__(self, index: IndexType) -> Self: ...
 
     def __getitem__(self, index: IndexType) -> Self | Tensor | TensorCollection | Any:
         """Indexes all tensors according to the provided index.
@@ -3419,14 +3468,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         if keys_to_update is not None:
             if len(keys_to_update) == 0:
                 return self
-            keys_to_update = unravel_key_list(keys_to_update)
+            keys_to_update = [
+                _unravel_key_to_tuple(key) for key in unravel_key_list(keys_to_update)
+            ]
+        if isinstance(input_dict_or_td, dict):
+            input_dict_or_td = _flatten_nested_dicts(input_dict_or_td)
         for key, value in input_dict_or_td.items():
             firstkey, *nextkeys = _unravel_key_to_tuple(key)
-            if keys_to_update and not any(
-                firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
-                for ktu in keys_to_update
-            ):
-                continue
+            if keys_to_update:
+                value = _select_entry((firstkey, *nextkeys), value, keys_to_update)
+                if value is None:
+                    continue
             if not isinstance(value, _ACCEPTED_CLASSES):
                 raise TypeError(
                     f"Expected value to be one of types {_ACCEPTED_CLASSES} "
@@ -3625,6 +3677,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def is_empty(self) -> bool:
         """Checks if the tensordict contains any leaf."""
+        if is_compiling():
+            # Dynamo cannot close a key generator that is left before its end.
+            return not list(self.keys(True, True))
         for _ in self.keys(True, True):
             return False
         return True
