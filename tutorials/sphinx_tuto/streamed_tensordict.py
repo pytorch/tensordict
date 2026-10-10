@@ -6,10 +6,12 @@ Building tensordicts from streams
 
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
-Sensors, transaction logs and other sources produce streams of data, often at
-different rates. To process such streams, you often group the incoming values
-into buckets: one bucket for each fixed time window. This tutorial groups two
-streams, at 7 Hz and 3 Hz, into one-second buckets with tensordict.
+Sensors, robots and transaction logs produce streams of data, often at
+different rates. To process a stream in batches, you group the incoming values
+into buckets, one for each fixed time window. The buckets have different
+lengths, so they do not fit in one tensor. This tutorial groups two streams,
+at 7 Hz and 3 Hz, into one-second buckets with a lazy stack of tensordicts. It
+is for readers who batch data whose size changes from one batch to the next.
 
 What you will learn:
 
@@ -26,10 +28,8 @@ introduces lazy stacks.
 Stacking tensordicts with different shapes
 ------------------------------------------
 
-The goal is to group the incoming data into buckets that you read and process
-at a lower rate. The buckets do not have a regular shape: one bucket can hold
-more values than another, so you cannot stack them into one tensor. For
-example, the first and second buckets of data can be as follows:
+One bucket can hold more values than another. For example, the first two
+buckets can be as follows:
 
 """
 
@@ -135,7 +135,7 @@ async def wait7hz() -> None:
     generate_task = asyncio.create_task(generate_numbers(7, queue))
     collect_data_task = asyncio.create_task(collect_data(queue, timeout=1))
     values = await collect_data_task
-    # The ``generate_task`` has not been terminated
+    # generate_task still runs: stop it
     generate_task.cancel()
     print(values)
 
@@ -169,7 +169,7 @@ class StreamedTensorDict(LazyStackedTensorDict):
     ) -> TensorDictBase:
         td = cls(stack_dim=0)
 
-        # We construct a queue for each stream
+        # one queue for each stream
         queues = [asyncio.Queue() for _ in range(len(streams))]
         tasks = []
         for stream, queue in zip(streams.values(), queues):
@@ -228,11 +228,11 @@ print("values per bucket of bucket0 (about 7)", td["bucket0"].offsets().diff())
 # Conclusion
 # ----------
 #
-# In this tutorial, you grouped tensordicts with different tensor shapes with
-# :func:`~tensordict.lazy_stack`. You built a
+# You can now batch data whose size changes from one batch to the next. Group
+# the tensordicts with :func:`~tensordict.lazy_stack`, grow the
 # :class:`~tensordict.LazyStackedTensorDict` one bucket at a time with
-# ``append``, and you converted it into nested tensors with ``densify``. The
-# same pattern works for any stream that you read in fixed time windows.
+# ``append``, and convert it into nested tensors with ``densify``. The same
+# pattern works for any stream that you read in fixed time windows.
 #
 # Further reading
 # ---------------

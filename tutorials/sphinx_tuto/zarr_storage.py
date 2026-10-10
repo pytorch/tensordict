@@ -4,9 +4,11 @@ Storing TensorDicts in zarr
 
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
-This tutorial shows how to store tensordicts in `zarr <https://zarr.dev>`_
-stores. It also says when to choose zarr over the memory-mapped and HDF5
-backends, and how to set the chunks and the compression for your workload.
+`zarr <https://zarr.dev>`_ splits each array into chunks that you can read,
+write and compress one at a time. The same tree of groups and arrays can go to
+a local directory, a single zip file or an S3-compatible object store. This
+tutorial is for readers who store tensordicts outside the local disk, or who
+share them with other zarr tools.
 
 What you will learn:
 
@@ -26,12 +28,12 @@ The zarr backend needs ``zarr>=3.0``. To install it, run
 ##############################################################################
 # Why zarr?
 # ---------
-# zarr is an array format that splits each array into chunks. You can read,
-# write and compress each chunk on its own. For local checkpoints, the
-# memory-mapped format (see the :ref:`saving guide <saving>`) is faster. Use
-# zarr when the data is stored somewhere else: the same tree of groups and
-# arrays can go to a local directory, a single zip file, or an S3-compatible
-# object store. xarray and dask also read and write zarr.
+# For local checkpoints, the memory-mapped format (see the
+# :ref:`saving guide <saving>`) is faster. The difference is largest for
+# tensordicts with many small leaves (the tensors at the ends of the nested
+# keys), because zarr pays one store round trip per array. Use zarr when the
+# data must be on object storage, when xarray or dask must read it (both read
+# and write zarr), or when you need compression per chunk.
 
 import tempfile
 from pathlib import Path
@@ -115,9 +117,9 @@ td.to_zarr(root / "compressed.zarr", chunks=(16, 3, 32, 32), compressors=ZstdCod
 # Alternative stores
 # ------------------
 # The ``filename`` argument accepts any ``zarr.abc.store.Store``. A
-# ``ZipStore`` packs the whole tree into one file, which is easy to copy or
-# send. Write a zip store once, and read it many times: a zip file cannot
-# replace an entry.
+# ``ZipStore`` packs the whole tree into one file that you can copy or send.
+# Write a zip store once, and read it many times: a zip file cannot replace an
+# entry.
 #
 # .. note::
 #
@@ -176,16 +178,11 @@ for i in range(4):
 ##############################################################################
 # Conclusion
 # ----------
-# In this tutorial, you saved a tensordict to zarr and loaded it again, and
-# read parts of entries with ``get_at``. You set chunks and compression, wrote
-# a zip store, and filled a pre-allocated buffer. The zarr store is a
-# :class:`~tensordict.PersistentTensorDict`, like an HDF5 file.
-#
-# Use ``to_zarr`` and ``from_zarr`` when your data must be on object storage,
-# when xarray or dask must read it, or when you need compression per chunk.
-# For local checkpoints, use the memory-mapped format. It is faster, in
-# particular for tensordicts with many small leaves, because zarr pays one
-# store round trip per array.
+# You can now save a tensordict to zarr and load it again, and read parts of
+# its entries with ``get_at`` without loading the store. You can set chunks
+# and compression, pack a store into a zip file, and fill a pre-allocated
+# buffer. The zarr store is a :class:`~tensordict.PersistentTensorDict`, like
+# an HDF5 file. For local checkpoints, use the memory-mapped format instead.
 #
 # Further reading
 # ---------------

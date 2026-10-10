@@ -3,9 +3,10 @@ Devices and memory-mapped tensors
 =================================
 **Author**: `Tom Begley <https://github.com/tcbegley>`_
 
-This tutorial shows how to choose where the contents of a
-:class:`~tensordict.TensorDict` are stored: on a device, or in memory-mapped
-files.
+One call moves all the tensors of a :class:`~tensordict.TensorDict` to a
+device, and one call stores them in memory-mapped files. This tutorial is for
+readers who move groups of tensors between the CPU and a GPU, or who work with
+datasets that do not fit in RAM.
 
 What you will learn:
 
@@ -198,11 +199,12 @@ assert (loaded == tensordict).all()
 # Conclusion
 # ----------
 #
-# In this tutorial, you set the device of a :class:`~tensordict.TensorDict`,
-# moved it to another device, and removed its device. You converted a
-# tensordict to memory-mapped tensors with ``memmap_``, and allocated an empty
-# memory-mapped buffer with ``memmap_like``. Last, you saved memory-mapped
-# tensors to a directory and loaded them again with ``load_memmap``.
+# You can now set the device of a :class:`~tensordict.TensorDict`, move it to
+# another device, and remove its device. You can convert a tensordict to
+# memory-mapped tensors with ``memmap_``, or allocate an empty memory-mapped
+# buffer with ``memmap_like``. With ``prefix=``, the memory maps go to a
+# directory, and ``load_memmap`` loads them again, in this process or in
+# another one.
 #
 # Further reading
 # ---------------
