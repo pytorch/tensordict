@@ -25,6 +25,7 @@ from tensordict import (
     LazyStackedTensorDict,
     MetaData,
     NonTensorData,
+    NonTensorStack,
     tensorclass,
     TensorDict,
     TensorDictParams,
@@ -59,7 +60,13 @@ from torch._dynamo.testing import CompileCounterWithBackend, EagerAndRecordGraph
 from torch._dynamo.utils import counters
 from torch._inductor.utils import fresh_cache
 from torch.testing._internal.two_tensor import TwoTensor
-from torch.utils._pytree import SUPPORTED_NODES, tree_flatten, tree_map, tree_unflatten
+from torch.utils._pytree import (
+    SUPPORTED_NODES,
+    tree_flatten,
+    tree_leaves,
+    tree_map,
+    tree_unflatten,
+)
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
@@ -261,6 +268,19 @@ def test_unravel_key_invalid_fullgraph(fn, key):
 
     _, compiled_msg = torch.compile(f, fullgraph=True, backend="eager")(torch.zeros(()))
     assert compiled_msg == msg
+
+
+@pytest.mark.parametrize("values", ["aaaa", "abcd"])
+def test_tree_leaves_nontensor_stack(values):
+    # Flattening a tensordict does not read the data of its NonTensorStack
+    # entries, which Dynamo cannot trace.
+    def fn(td):
+        return [leaf + 1 for leaf in tree_leaves(td) if isinstance(leaf, torch.Tensor)]
+
+    td = TensorDict(a=torch.zeros(4, 3), batch_size=[4])
+    td.set("s", NonTensorStack(*values))
+    (out,) = torch.compile(fn, fullgraph=True, backend="eager")(td)
+    assert (out == 1).all()
 
 
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
@@ -1351,6 +1371,20 @@ class TestTC:
         assert add_one_c(data.clone()).a.c == 1
         assert add_one_c(data) is data
 
+    def test_tc_tensor_only_assign_none(self, mode):
+        class TensorOnly(TensorClass["tensor_only"]):
+            x: torch.Tensor
+            y: torch.Tensor | None = None
+
+        def clear(tc):
+            tc.y = None
+            return tc.x + 1
+
+        clear_c = torch.compile(clear, fullgraph=True, mode=mode)
+        data = TensorOnly(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+        assert (clear_c(data) == 1).all()
+        assert data.y is None
+
     def test_tc_arithmetic(self, mode):
         def add_one(td):
             return td + 1
@@ -2213,6 +2247,40 @@ class TestExport:
             strict=strict,
         )
         torch.testing.assert_close(exported_module.module()(x=x), m(x))
+
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_export_td_input_non_tensor(self, strict):
+        # The exported module compares the spec of its input with the spec of
+        # the example input, which holds a batched non-tensor entry.
+        class Mod(torch.nn.Module):
+            def forward(self, td):
+                return td["a"] * 2
+
+        def make():
+            return TensorDict(a=torch.randn(4, 3), s="a string", batch_size=[4])
+
+        ep = torch.export.export(Mod(), (make(),), strict=strict)
+        td = make()
+        torch.testing.assert_close(ep.module()(td), td["a"] * 2)
+
+    def test_export_td_output_non_tensor(self):
+        # The non-tensor entry of the output is rebuilt with the batch size of
+        # the output. Not with strict=True: there _tensordict_unflatten first
+        # builds the entry with batch size [0], which TD_CHECK_INVARIANTS
+        # rejects before the entry is set again with the right batch size.
+        class Mod(torch.nn.Module):
+            def forward(self, td):
+                return td.apply(lambda x: x * 2)
+
+        def make():
+            return TensorDict(a=torch.randn(4, 3), s="a string", batch_size=[4])
+
+        ep = torch.export.export(Mod(), (make(),), strict=False)
+        td = make()
+        out = ep.module()(td)
+        torch.testing.assert_close(out["a"], td["a"] * 2)
+        assert out.get("s").batch_size == torch.Size([4])
+        assert out.get_non_tensor("s") == "a string"
 
 
 @pytest.mark.skipif(not _has_onnx, reason="ONNX is not available")

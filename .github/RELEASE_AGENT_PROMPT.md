@@ -392,9 +392,12 @@ gh workflow run release.yml -R pytorch/tensordict --ref "release/$VERSION" \
 ```
 
 The URL of the draft release contains `untagged-...` until the release is
-published. When the run succeeds, it has attached the wheels to the draft
-release and published them to PyPI. Check that PyPI has the same wheels as
-the dry run, then install the release in a new environment:
+published. The run attaches the wheels to the draft release, publishes them
+to PyPI, and then points the stable docs at `X.Y` in the "Update Stable Docs"
+job. That job waits up to 120 minutes for the docs build of the tag to create
+the `X.Y` folder on `gh-pages`. When "Publish to PyPI" has succeeded, check
+that PyPI has the same wheels as the dry run, then install the release in a
+new environment:
 
 ```bash
 curl -fsS "https://pypi.org/pypi/tensordict/$VERSION/json" | python3 -c 'import json, sys; print("\n".join(sorted(u["filename"] for u in json.load(sys.stdin)["urls"])))'
@@ -411,8 +414,8 @@ the repository; leave it out for a release of an older line.
 gh release edit "v$VERSION" -R pytorch/tensordict --draft=false --latest
 ```
 
-Report the PyPI and GitHub links. conda-forge needs nothing: its bot opens the
-feedstock update and merges it.
+Report the PyPI and GitHub links, and whether "Update Stable Docs" succeeded.
+conda-forge needs nothing: its bot opens the feedstock update and merges it.
 
 ## If something fails
 
@@ -432,7 +435,9 @@ feedstock update and merges it.
   run on the same branch waits for the first one instead of cancelling it.
 - **The docs build of the tag fails:** re-run it from its run page. For a new
   minor version, the "Update Stable Docs" job of the real run needs the `X.Y`
-  folder that this build creates on `gh-pages`.
+  folder that this build creates on `gh-pages`. If that job gave up waiting,
+  re-run it once the docs build has succeeded. PyPI and the draft release do
+  not depend on it.
 
 ## One-time setup (done)
 

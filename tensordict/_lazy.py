@@ -425,14 +425,11 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
         self.stack_dim = stack_dim
         self._reset_batch_size(td0, tensordicts, device, num_tds, strict_shape)
-        # The stack dim can be at most the number of batch dims of the members,
-        # len(self.batch_size) - 1. An empty stack built without a batch size
-        # does not know that number until members are added, and accepts stack
-        # dims 0 and 1.
-        if num_tds or batch_size is not None:
-            max_stack_dim = len(self.batch_size) - 1
-        else:
-            max_stack_dim = 1
+        # With members, the stack dim can be at most their number of batch dims,
+        # len(self.batch_size) - 1. An empty stack takes the batch size of the
+        # members that append, insert or extend add, even if it was built with a
+        # batch size, so it also accepts a stack dim of len(self.batch_size).
+        max_stack_dim = len(self.batch_size) - 1 if num_tds else len(self.batch_size)
         if stack_dim > max_stack_dim:
             raise RuntimeError(
                 f"Stack dim {stack_dim} is too big for batch size {self.batch_size}."
