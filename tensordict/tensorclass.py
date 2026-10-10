@@ -3707,7 +3707,9 @@ def _grad(self):
     grad = self._tensordict._grad
     if grad is None:
         return None
-    return self._from_tensordict(self._tensordict.grad, self._non_tensordict)
+    # Pass a copy: _from_tensordict writes None into it for each field
+    # without a grad, and that None must not reach self.
+    return self._from_tensordict(self._tensordict.grad, dict(self._non_tensordict))
 
 
 def _state_dict(
