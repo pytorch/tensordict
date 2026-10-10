@@ -105,12 +105,13 @@ class _Serialization:
                 Defaults to ``True``.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> data = TensorDict({"1": 1, "2": 2, "3": {"3": 3}}, [])
             >>> sd = data.state_dict()
-            >>> print(sd)
-            OrderedDict([('1', tensor(1)), ('2', tensor(2)), ('3.3', tensor(3))])
-            >>> print(sd._metadata)
-            OrderedDict([('', {'batch_size': torch.Size([]), 'device': None}), ('3', {'batch_size': torch.Size([]), 'device': None})])
+            >>> print(dict(sd))
+            {'1': tensor(1), '2': tensor(2), '3.3': tensor(3)}
+            >>> print(dict(sd._metadata))
+            {'': {'batch_size': torch.Size([]), 'device': None}, '3': {'batch_size': torch.Size([]), 'device': None}}
 
         """
         if destination is None:
@@ -182,10 +183,11 @@ class _Serialization:
                 key comparison.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> data = TensorDict({"1": 1, "2": 2, "3": {"3": 3}}, [])
             >>> data_zeroed = TensorDict({"1": 0, "2": 0, "3": {"3": 0}}, [])
             >>> sd = data.state_dict()
-            >>> data_zeroed.load_state_dict(sd)
+            >>> _ = data_zeroed.load_state_dict(sd)
             >>> print(data_zeroed["3", "3"])
             tensor(3)
 
@@ -524,7 +526,12 @@ class _Serialization:
         pin_memory: bool = False,
         metadata: bool = False,
     ) -> None:
-        """Consolidates the tensordict content in a single storage for fast serialization.
+        """Copies all the leaves into one contiguous storage, and returns a tensordict of views of it.
+
+        A consolidated tensordict pickles and moves between devices faster,
+        because its leaves are one block of memory. The result is locked (see
+        :meth:`~.lock_`): you can write into its leaves in place, but you
+        cannot add or remove entries.
 
         Args:
             filename (Path, optional): an optional file path for a memory-mapped tensor
@@ -558,7 +565,7 @@ class _Serialization:
                 Defaults to ``False``.
             pin_memory (bool, optional): whether the consolidated data should be placed in pinned
                 memory. Defaults to ``False``.
-            metadata (bool, optional): if ``True``, the metadata will be stored alongisde the
+            metadata (bool, optional): if ``True``, the metadata will be stored alongside the
                 common storage. If a filename is provided, this is without effect.
                 Storing the metadata can be useful when one wants to control how serialization
                 is achieved, as TensorDict handles the pickling/unpickling of consolidated TDs
@@ -570,23 +577,20 @@ class _Serialization:
 
         Examples:
             >>> import pickle
-            >>> import tempfile
             >>> import torch
-            >>> import tqdm
-            >>> from torch.utils.benchmark import Timer
             >>> from tensordict import TensorDict
             >>> data = TensorDict({"a": torch.zeros(()), "b": {"c": torch.zeros(())}})
             >>> data_consolidated = data.consolidate()
-            >>> # check that the data has a single data_ptr()
+            >>> # All the leaves share one storage.
             >>> assert torch.tensor([
             ...     v.untyped_storage().data_ptr() for v in data_consolidated.values(True, True)
             ... ]).unique().numel() == 1
-            >>> # Serializing the tensordict will be faster with data_consolidated
-            >>> with open("data.pickle", "wb") as f:
-            ...    print("regular", Timer("pickle.dump(data, f)", globals=globals()).adaptive_autorange())
-            >>> with open("data_c.pickle", "wb") as f:
-            ...     print("consolidated", Timer("pickle.dump(data_consolidated, f)", globals=globals()).adaptive_autorange())
-
+            >>> data_consolidated.is_consolidated(), data_consolidated.is_locked
+            (True, True)
+            >>> # A consolidated tensordict pickles as one buffer.
+            >>> restored = pickle.loads(pickle.dumps(data_consolidated))
+            >>> (restored == data).all()
+            True
 
         """
         if self.is_consolidated():

@@ -182,6 +182,7 @@ class _Reductions:
         Examples:
             >>> from tensordict import TensorDict
             >>> import torch
+            >>> _ = torch.manual_seed(0)
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
             ...     b=TensorDict(
@@ -234,7 +235,7 @@ class _Reductions:
                 device=None,
                 is_shared=False)
             >>> td.min(reduce=True)
-            tensor(-2.9953)
+            tensor(-3.1537)
 
         """
         result = self._cast_reduction(
@@ -348,6 +349,7 @@ class _Reductions:
         Examples:
             >>> from tensordict import TensorDict
             >>> import torch
+            >>> _ = torch.manual_seed(0)
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
             ...     b=TensorDict(
@@ -400,7 +402,7 @@ class _Reductions:
                 device=None,
                 is_shared=False)
             >>> td.max(reduce=True)
-            tensor(3.2942)
+            tensor(4.1015)
 
         """
         result = self._cast_reduction(
@@ -469,6 +471,7 @@ class _Reductions:
         Examples:
             >>> from tensordict import TensorDict
             >>> import torch
+            >>> _ = torch.manual_seed(0)
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
             ...     b=TensorDict(
@@ -587,6 +590,7 @@ class _Reductions:
         Examples:
             >>> from tensordict import TensorDict
             >>> import torch
+            >>> _ = torch.manual_seed(0)
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
             ...     b=TensorDict(
@@ -719,7 +723,7 @@ class _Reductions:
 
         Keyword Args:
             dtype (torch.dtype, optional): the desired data type of returned tensor.
-                If specified, the input tensor is casted to dtype before the operation is performed.
+                If specified, the input tensor is cast to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
@@ -732,6 +736,7 @@ class _Reductions:
         Examples:
             >>> from tensordict import TensorDict
             >>> import torch
+            >>> _ = torch.manual_seed(0)
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
             ...     b=TensorDict(
@@ -770,7 +775,7 @@ class _Reductions:
                 device=None,
                 is_shared=False)
             >>> td.mean(reduce=True)
-            tensor(-0.0547)
+            tensor(0.0456)
             >>> td.mean(dim="feature")
             TensorDict(
                 fields={
@@ -878,7 +883,7 @@ class _Reductions:
 
         Keyword Args:
             dtype (torch.dtype, optional): the desired data type of returned tensor.
-                If specified, the input tensor is casted to dtype before the operation is performed.
+                If specified, the input tensor is cast to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
@@ -887,6 +892,7 @@ class _Reductions:
         Examples:
             >>> from tensordict import TensorDict
             >>> import torch
+            >>> _ = torch.manual_seed(0)
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
             ...     b=TensorDict(
@@ -925,7 +931,7 @@ class _Reductions:
                 device=None,
                 is_shared=False)
             >>> td.nanmean(reduce=True)
-            tensor(-0.0547)
+            tensor(0.0456)
             >>> td.nanmean(dim="feature")
             TensorDict(
                 fields={
@@ -1011,7 +1017,7 @@ class _Reductions:
 
         Keyword Args:
             dtype (torch.dtype, optional): the desired data type of returned tensor.
-                If specified, the input tensor is casted to dtype before the operation is performed.
+                If specified, the input tensor is cast to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
@@ -1020,6 +1026,7 @@ class _Reductions:
         Examples:
             >>> from tensordict import TensorDict
             >>> import torch
+            >>> _ = torch.manual_seed(0)
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
             ...     b=TensorDict(
@@ -1057,8 +1064,8 @@ class _Reductions:
                 batch_size=torch.Size([]),
                 device=None,
                 is_shared=False)
-            >>> td.prod(reduce=True)
-            tensor(-0.)
+            >>> td.prod(reduce=True)  # the product of many values below 1 underflows to 0
+            tensor(0.)
             >>> td.prod(dim="feature")
             TensorDict(
                 fields={
@@ -1165,7 +1172,7 @@ class _Reductions:
 
         Keyword Args:
             dtype (torch.dtype, optional): the desired data type of returned tensor.
-                If specified, the input tensor is casted to dtype before the operation is performed.
+                If specified, the input tensor is cast to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
@@ -1178,6 +1185,7 @@ class _Reductions:
         Examples:
             >>> from tensordict import TensorDict
             >>> import torch
+            >>> _ = torch.manual_seed(0)
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
             ...     b=TensorDict(
@@ -1216,7 +1224,7 @@ class _Reductions:
                 device=None,
                 is_shared=False)
             >>> td.sum(reduce=True)
-            tensor(-0.)
+            tensor(21.9029)
             >>> td.sum(dim="feature")
             TensorDict(
                 fields={
@@ -1305,7 +1313,7 @@ class _Reductions:
 
         Keyword Args:
             dtype (torch.dtype, optional): the desired data type of returned tensor.
-                If specified, the input tensor is casted to dtype before the operation is performed.
+                If specified, the input tensor is cast to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
@@ -1314,6 +1322,7 @@ class _Reductions:
         Examples:
             >>> from tensordict import TensorDict
             >>> import torch
+            >>> _ = torch.manual_seed(0)
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
             ...     b=TensorDict(
@@ -1352,7 +1361,7 @@ class _Reductions:
                 device=None,
                 is_shared=False)
             >>> td.nansum(reduce=True)
-            tensor(-0.)
+            tensor(21.9029)
             >>> td.nansum(dim="feature")
             TensorDict(
                 fields={
@@ -1446,6 +1455,8 @@ class _Reductions:
                 achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
                 shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
                 with the same structure as ``self`` with reduced feature dimensions will be returned.
+                With ``dim="feature"``, a leaf that has no feature dimension (as ``b.d`` in the
+                example) gives NaN, and torch warns that the degrees of freedom are ``<= 0``.
             keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
@@ -1454,10 +1465,15 @@ class _Reductions:
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
+            key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
+                If provided, all keys in the result will be transformed using this function.
+                For string keys, the function receives a string. For tuple keys, it receives a tuple.
+                Only applied when ``reduce=False``. Default: ``None``.
 
         Examples:
             >>> from tensordict import TensorDict
             >>> import torch
+            >>> _ = torch.manual_seed(0)
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
             ...     b=TensorDict(
@@ -1496,8 +1512,8 @@ class _Reductions:
                 device=None,
                 is_shared=False)
             >>> td.std(reduce=True)
-            tensor(1.0006)
-            >>> td.std(dim="feature")
+            tensor(1.0353)
+            >>> td.std(dim="feature")  # b.d has no feature dimension: NaN and a UserWarning
             TensorDict(
                 fields={
                     a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -1593,6 +1609,8 @@ class _Reductions:
                 achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
                 shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
                 with the same structure as ``self`` with reduced feature dimensions will be returned.
+                With ``dim="feature"``, a leaf that has no feature dimension (as ``b.d`` in the
+                example) gives NaN, and torch warns that the degrees of freedom are ``<= 0``.
             keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
@@ -1601,10 +1619,15 @@ class _Reductions:
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
+            key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
+                If provided, all keys in the result will be transformed using this function.
+                For string keys, the function receives a string. For tuple keys, it receives a tuple.
+                Only applied when ``reduce=False``. Default: ``None``.
 
         Examples:
             >>> from tensordict import TensorDict
             >>> import torch
+            >>> _ = torch.manual_seed(0)
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
             ...     b=TensorDict(
@@ -1643,8 +1666,8 @@ class _Reductions:
                 device=None,
                 is_shared=False)
             >>> td.var(reduce=True)
-            tensor(1.0006)
-            >>> td.var(dim="feature")
+            tensor(1.0719)
+            >>> td.var(dim="feature")  # b.d has no feature dimension: NaN and a UserWarning
             TensorDict(
                 fields={
                     a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -1762,6 +1785,7 @@ class _Reductions:
         Examples:
             >>> from tensordict import TensorDict
             >>> import torch
+            >>> _ = torch.manual_seed(0)
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
             ...     b=TensorDict(
@@ -1800,7 +1824,7 @@ class _Reductions:
                 device=None,
                 is_shared=False)
             >>> td.quantile(0.5, reduce=True)  # single median value
-            tensor(0.1234)
+            tensor(0.0603)
             >>> td.quantile(0.5, dim="feature")  # median along feature dimensions
             TensorDict(
                 fields={
