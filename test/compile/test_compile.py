@@ -1977,6 +1977,25 @@ class TestExport:
         td = make()
         torch.testing.assert_close(ep.module()(td), td["a"] * 2)
 
+    def test_export_td_output_non_tensor(self):
+        # The non-tensor entry of the output is rebuilt with the batch size of
+        # the output. Not with strict=True: there _tensordict_unflatten first
+        # builds the entry with batch size [0], which TD_CHECK_INVARIANTS
+        # rejects before the entry is set again with the right batch size.
+        class Mod(torch.nn.Module):
+            def forward(self, td):
+                return td.apply(lambda x: x * 2)
+
+        def make():
+            return TensorDict(a=torch.randn(4, 3), s="a string", batch_size=[4])
+
+        ep = torch.export.export(Mod(), (make(),), strict=False)
+        td = make()
+        out = ep.module()(td)
+        torch.testing.assert_close(out["a"], td["a"] * 2)
+        assert out.get("s").batch_size == torch.Size([4])
+        assert out.get_non_tensor("s") == "a string"
+
 
 @pytest.mark.skipif(not _has_onnx, reason="ONNX is not available")
 class TestONNXExport:

@@ -13,7 +13,13 @@ from tensordict.persistent import PersistentTensorDict
 # implement_for and is_compiling stay importable from here for the deprecated
 # tensordict.implement_for and tensordict.is_compiling aliases of
 # tensordict/__init__.py, until 0.17.
-from tensordict.utils import _shape, implement_for, is_compiling  # noqa: F401
+from tensordict.utils import (  # noqa: F401
+    _is_tensorclass,
+    _shape,
+    implement_for,
+    is_compiling,
+    is_non_tensor,
+)
 from torch.compiler import is_dynamo_compiling
 from torch.utils._pytree import Context, MappingKey, register_pytree_node
 
@@ -60,6 +66,54 @@ class _PytreeBatchSize:
         return f"{type(self).__name__}({list(self.batch_size)})"
 
 
+class _NonUniqueNonTensorStack:
+    """A NonTensorStack entry without a unique value, in a pytree context.
+
+    _tensordict_constructor raises ``error`` for it, as set_non_tensor does
+    with the stack. Two of them compare equal when the stacks have the same
+    values.
+    """
+
+    __slots__ = ("values", "error")
+
+    def __init__(self, values: list, error: str) -> None:
+        self.values = values
+        self.error = error
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, _NonUniqueNonTensorStack):
+            return NotImplemented
+        return self.values == other.values
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self.values})"
+
+
+def _pytree_non_tensor_data(d: TensorDictBase) -> dict | tuple:
+    # The non-tensor fields of a tensorclass, or the data of the non-tensor
+    # entries of a tensordict: _tensordict_constructor rebuilds each entry
+    # from its data with set_non_tensor. Storing the entries would make
+    # comparing two contexts call NonTensorData.__eq__, which returns a tensor
+    # when the entry has a batch size.
+    if _is_tensorclass(type(d)):
+        # A dict: the fields of a NonTensorData rebuilt by set_non_tensor are
+        # in another order than those of the original entry.
+        return dict(d.non_tensor_items())
+    items = []
+    for key, value in d.non_tensor_items():
+        entry = value
+        try:
+            # set_non_tensor unwraps its value in the same way.
+            while is_non_tensor(value):
+                value = value.data
+        except AttributeError as err:
+            if not isinstance(entry, LazyStackedTensorDict):
+                raise
+            value = _NonUniqueNonTensorStack(entry.tolist(), str(err))
+        items.append((key, value))
+    return tuple(items)
+
+
 def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
     items = tuple(d.items())
     if items:
@@ -74,7 +128,7 @@ def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
         "names": d.names if d._has_names() else None,
         "device": d.device,
         "constructor": _constructor(type(d)),
-        "non_tensor_data": d.non_tensor_items(),
+        "non_tensor_data": _pytree_non_tensor_data(d),
         "cls": type(d),
     }
     if is_dynamo_compiling():
@@ -251,6 +305,8 @@ def _tensordict_constructor(
         device=device,
     )
     for key, item in non_tensor_items:
+        if isinstance(item, _NonUniqueNonTensorStack):
+            raise AttributeError(item.error)
         result.set_non_tensor(key, item)
     return result
 
