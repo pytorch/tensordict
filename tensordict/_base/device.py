@@ -377,7 +377,7 @@ class _DeviceOps:
     # Conversion (device or dtype)
     @overload
     def to(
-        self: T,
+        self,
         device: DeviceType | None = ...,
         dtype: torch.dtype | None = ...,
         non_blocking: bool = ...,
@@ -385,16 +385,16 @@ class _DeviceOps:
     ) -> Self: ...
 
     @overload
-    def to(self: T, dtype: torch.dtype, non_blocking: bool = ...) -> Self: ...
+    def to(self, dtype: torch.dtype, non_blocking: bool = ...) -> Self: ...
 
     @overload
-    def to(self: T, tensor: Tensor, non_blocking: bool = ...) -> Self: ...
+    def to(self, tensor: Tensor, non_blocking: bool = ...) -> Self: ...
 
     @overload
-    def to(self: T, *, other: T, non_blocking: bool = ...) -> Self: ...
+    def to(self, *, other: T, non_blocking: bool = ...) -> Self: ...
 
     @overload
-    def to(self: T, *, batch_size: torch.Size) -> Self: ...
+    def to(self, *, batch_size: torch.Size) -> Self: ...
 
     def _to_cuda_with_pin_mem(
         self,

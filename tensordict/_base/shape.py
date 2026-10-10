@@ -908,7 +908,7 @@ class _ShapeOps:
         return torch.stack(tensors, dim, out=out)
 
     @classmethod
-    def stack(cls, input, dim: int = 0, *, out: Any | None = None):
+    def stack(cls, input, dim: int = 0, *, out: Any | None = None) -> Any:
         """Stacks tensordicts into a single tensordict along the given dimension.
 
         This call is equivalent to calling :func:`torch.stack` but is compatible with torch.compile.
@@ -921,7 +921,7 @@ class _ShapeOps:
         return _stack(input, dim, out=out)
 
     @classmethod
-    def cat(cls, input, dim: int = 0, *, out: Any | None = None):
+    def cat(cls, input, dim: int = 0, *, out: Any | None = None) -> Any:
         """Concatenates tensordicts into a single tensordict along the given dimension.
 
         This call is equivalent to calling :func:`torch.cat` but is compatible with torch.compile.

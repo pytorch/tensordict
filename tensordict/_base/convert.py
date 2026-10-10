@@ -869,7 +869,7 @@ class _Conversion:
         non_blocking: bool = False,
         preserve_module_state: bool | None = True,
         memo: Any | None = None,  # deprecated
-    ):
+    ) -> Any:
         """Writes the content of a TensorDictBase instance onto a given nn.Module attributes, recursively.
 
         ``to_module`` can also be used a context manager to temporarily populate a module with a collection of
