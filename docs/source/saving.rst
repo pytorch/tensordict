@@ -82,7 +82,7 @@ sub-module:
 To load the checkpoint into a model, call
 :meth:`~tensordict.TensorDictBase.to_module` with ``inplace=True``. It copies
 each value into the existing parameter of the model, so the parameters stay
-:class:`~torch.nn.Parameter` instances in memory:
+:class:`~torch.nn.parameter.Parameter` instances in memory:
 
   >>> new_model = nn.Sequential(nn.Linear(3, 4), nn.ReLU(), nn.Linear(4, 2))
   >>> loaded = TensorDict.load_memmap(root / "checkpoint")

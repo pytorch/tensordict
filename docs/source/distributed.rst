@@ -330,9 +330,9 @@ Several transfers and custom groups
 -----------------------------------
 
 ``send``, ``recv``, ``isend`` and ``irecv`` mark the message of each leaf with
-a tag: ``init_tag``, ``init_tag + 1``, and so on. Two tensordicts can go
-from one rank to the same rank at the same time. Then give them tag ranges
-that do not overlap, and pass the same ``init_tag`` on both sides. With
+a tag: ``init_tag``, ``init_tag + 1``, and so on. If two tensordicts go
+from one rank to another at the same time, give them tag ranges that do not
+overlap. Pass the same ``init_tag`` on both sides. With
 ``pseudo_rand=True``, the tags are pseudo-random numbers instead. Generating
 them costs about 10 µs for each leaf.
 
@@ -356,7 +356,7 @@ them costs about 10 µs for each leaf.
 Each method takes a ``group``. For ``send`` and ``recv``, ``dst`` and ``src``
 are global ranks. To give a rank relative to the group, pass ``group_dst`` or
 ``group_src`` instead. With them, a standalone
-:class:`~torch.distributed.ProcessGroup` that you built against a store also
+``ProcessGroup`` that you built against a store also
 works. :func:`torch.distributed.new_group` must be called by all ranks, also
 the ranks that are not in the group:
 
