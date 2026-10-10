@@ -25,6 +25,7 @@ from typing import Any, get_type_hints
 
 import numpy as np
 import pytest
+import tensordict
 import tensordict.base as tensordict_base
 import torch
 from tensordict import (
@@ -1413,6 +1414,106 @@ class TestGeneric:
         assert isinstance(td, TensorDict)
         assert td.batch_size == (3,)
         assert (td == TensorDict.from_tuple(obj, batch_size=[3])).all()
+
+    @pytest.mark.parametrize(
+        "name,args,kwargs",
+        [
+            ["from_dict", ({"a": torch.zeros(3), "b": {"c": torch.ones(3, 2)}},), {}],
+            [
+                "from_dict",
+                ({"a": torch.zeros(3, 2)},),
+                {"auto_batch_size": True, "batch_dims": 1},
+            ],
+            [
+                "from_namedtuple",
+                (namedtuple("NT", ["a", "b"])(torch.zeros(3), torch.ones(3, 2)),),
+                {"auto_batch_size": True},
+            ],
+            [
+                "from_struct_array",
+                (
+                    np.array(
+                        [(9, 81.0), (3, 27.0)], dtype=[("age", "i4"), ("weight", "f4")]
+                    ),
+                ),
+                {},
+            ],
+            [
+                "from_pytree",
+                ({"a": torch.zeros(3), "b": (torch.ones(3, 2),)},),
+                {"batch_size": [3]},
+            ],
+            ["fromkeys", (["a", "b"], 1), {}],
+            ["from_module", (nn.Linear(2, 3),), {"lock": True}],
+            ["from_modules", (nn.Linear(2, 3), nn.Linear(2, 3)), {}],
+        ],
+    )
+    def test_module_level_constructor(self, name, args, kwargs):
+        # The functions documented in td.rst match the classmethods they forward
+        # to. The defaults of from_dict(auto_batch_size) and from_module(lock)
+        # differ between the two (#1954), so those cases pass them explicitly.
+        out = getattr(tensordict, name)(*args, **kwargs)
+        expected = getattr(TensorDict, name)(*args, **kwargs)
+        assert type(out) is type(expected)
+        assert out.batch_size == expected.batch_size
+        assert out.is_locked == expected.is_locked
+        assert set(out.keys(True, True)) == set(expected.keys(True, True))
+        assert (out == expected).all()
+
+    def test_module_level_stack(self):
+        td0 = TensorDict(a=torch.zeros(3), b={"c": torch.ones(3, 2)}, batch_size=[3])
+        td1 = td0 + 1
+        out = tensordict.stack([td0, td1], dim=1)
+        assert type(out) is TensorDict
+        assert out.batch_size == (3, 2)
+        assert (out == torch.stack([td0, td1], dim=1)).all()
+
+        out = tensordict.maybe_dense_stack([td0, td1])
+        assert type(out) is TensorDict
+        assert (out == torch.stack([td0, td1])).all()
+        # Different keys cannot be stacked densely, so the result is a lazy stack
+        td2 = TensorDict(a=torch.zeros(3), d=torch.ones(3), batch_size=[3])
+        out = tensordict.maybe_dense_stack([td0, td2])
+        assert isinstance(out, LazyStackedTensorDict)
+        assert out.batch_size == (2, 3)
+        assert out[0] is td0
+        assert out[1] is td2
+
+    def test_module_level_save_load_memmap(self, tmp_path):
+        td = TensorDict(a=torch.zeros(3), b={"c": torch.ones(3, 2)}, batch_size=[3])
+        tensordict.save(td, tmp_path / "saved")
+        assert not td.is_memmap()
+        loaded = tensordict.load(tmp_path / "saved")
+        assert type(loaded) is TensorDict
+        assert loaded.batch_size == td.batch_size
+        assert (loaded == td).all()
+
+        out = tensordict.memmap(td, tmp_path / "memmap")
+        assert type(out) is TensorDict
+        assert out.is_memmap()
+        assert (out == td).all()
+        assert (TensorDict.load_memmap(tmp_path / "memmap") == td).all()
+
+    def test_module_level_from_consolidated(self, tmp_path):
+        td = TensorDict(a=torch.zeros(3), b={"c": torch.ones(3, 2)}, batch_size=[3])
+        td.consolidate(filename=tmp_path / "td.consolidated")
+        out = tensordict.from_consolidated(tmp_path / "td.consolidated")
+        assert type(out) is TensorDict
+        assert out.batch_size == td.batch_size
+        assert (out == td).all()
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not installed")
+    @pytest.mark.xfail(
+        strict=True,
+        raises=TypeError,
+        reason="tensordict.from_h5 passes device to TensorDict.from_h5 (#1942)",
+    )
+    def test_module_level_from_h5(self, tmp_path):
+        path = tmp_path / "data.h5"
+        with h5py.File(path, "w") as file:
+            file["a"] = np.arange(3)
+        out = tensordict.from_h5(path)
+        assert (out["a"] == torch.arange(3)).all()
 
     def test_from_dataclass(self):
         @dataclass
