@@ -1022,6 +1022,7 @@ _TENSORCLASS_MEMBER_NAMES = frozenset(dir(TensorDict)).union(
         "_set_dict_warn_msg",
         "_shadow",
         "_tensor_only",
+        "_tensorclass_fields",
         "_tensordict_fields",
         "_type_hints",
         # instance attributes
