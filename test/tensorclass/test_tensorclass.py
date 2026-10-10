@@ -2884,6 +2884,30 @@ class TestTensorClass:
         assert tc3.update() is tc3
         assert tc3.update_() is tc3
 
+    @pytest.mark.parametrize("source", ["dict", "kwargs", "tensorclass"])
+    def test_update_unset_field(self, source):
+        # update() must drop the None placeholder of a field it writes, as set() does.
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+            z: torch.Tensor = None
+
+        tc = TC(x=torch.zeros(3), batch_size=[3])
+        z = torch.ones(3)
+        if source == "dict":
+            tc.update({"z": z})
+        elif source == "kwargs":
+            tc.update(z=z)
+        else:
+            tc.update(TC(x=torch.zeros(3), z=z, batch_size=[3]))
+        torch.testing.assert_close(tc.z, z)
+        torch.testing.assert_close(tc.to_dict()["z"], z)
+        torch.testing.assert_close(tc.to_tensordict(retain_none=True)["z"], z)
+        assert "z=None" not in repr(tc)
+        other = TC(x=torch.zeros(3), z=torch.zeros(3), batch_size=[3])
+        other.load_state_dict(tc.state_dict())
+        torch.testing.assert_close(other.z, z)
+
     def test_replace(self):
         @tensorclass
         class MyDataNested:

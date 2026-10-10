@@ -2889,6 +2889,20 @@ def _update(
             ignore_lock=ignore_lock,
             is_leaf=is_leaf,
         )
+        # Drop the placeholders of the fields just written, as the TensorDict
+        # branch below does. The fields in the source's _non_tensordict are
+        # unset there, so only the other keys need a check.
+        self_non_tensordict = self._non_tensordict
+        if self_non_tensordict:
+            source_non_tensordict = input_dict_or_td.__dict__["_non_tensordict"]
+            maybe_written = [
+                key for key in self_non_tensordict if key not in source_non_tensordict
+            ]
+            if maybe_written:
+                keys = self._tensordict.keys()
+                for key in maybe_written:
+                    if key in keys:
+                        del self_non_tensordict[key]
         self._non_tensordict.update(non_tensordict)
         return self
 
