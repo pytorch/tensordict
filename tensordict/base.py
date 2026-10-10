@@ -1151,13 +1151,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         index: IndexType,
         value: Any,
     ) -> None:
-        from tensordict._td import _SubTensorDict
-
         istuple = isinstance(index, tuple)
         if istuple or isinstance(index, str):
             # try:
             index_unravel = _unravel_key_to_tuple(index)
             if index_unravel:
+                from tensordict._td import _SubTensorDict
+
                 if value is self:
                     raise ValueError(_SELF_NESTING_ERROR.format(index))
                 self._set_tuple(
@@ -1173,7 +1173,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 )
                 return
 
-        if is_tensorclass(value) and not is_non_tensor(value):
+        if (
+            # is_tensorclass reads this class attribute: skip the call for the
+            # values whose class does not have it, such as tensordicts
+            (isinstance(value, type) or getattr(type(value), "_is_tensorclass", False))
+            and is_tensorclass(value)
+            and not is_non_tensor(value)
+        ):
             # write the fields key by key, as a tensorclass __setitem__ does;
             # NonTensorData keeps the leaf path (its _tensordict is empty)
             value = value._tensordict
@@ -1185,7 +1191,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         if isinstance(index, tuple) and len(index) == 1:
             index = index[0]
-        if _is_new_dim_index(index):
+        if (
+            # skip the call for the indices that _is_new_dim_index rejects first
+            index is None or index is True or isinstance(index, torch.Tensor)
+        ) and _is_new_dim_index(index):
             # None and True add a dim of size 1, and the value is written to it
             # (False selects nothing, as a 0-d False mask does)
             if not self.batch_dims:
