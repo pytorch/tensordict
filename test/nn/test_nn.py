@@ -29,6 +29,7 @@ import torch
 from _utils_internal import is_npu_available
 from functorch import make_functional_with_buffers as make_functional_functorch
 from tensordict import (
+    is_leaf_nontensor,
     is_tensor_collection,
     NonTensorData,
     NonTensorStack,
@@ -3794,6 +3795,31 @@ class TestTensorDictParams:
         assert not param_td["a", "b", "c"].requires_grad
         assert not param_td.get("e").requires_grad
         assert not param_td.get(("a", "b", "c")).requires_grad
+
+    @pytest.mark.parametrize("is_leaf", [is_leaf_nontensor, is_tensor_collection])
+    def test_items_values_is_leaf(self, is_leaf):
+        td = TensorDict(
+            a=torch.ones(3),
+            s=NonTensorData("hi"),
+            sub=TensorDict(b=torch.ones(3), t=NonTensorData("x")),
+        )
+        param_td = TensorDictParams(td, no_convert=True)
+        # items() and values() list the keys that keys() lists for is_leaf
+        keys = list(param_td.keys(True, True, is_leaf=is_leaf))
+        if is_leaf is is_leaf_nontensor:
+            assert keys == ["a", "s", ("sub", "b"), ("sub", "t")]
+        else:
+            assert keys == ["s", ("sub", "t"), "sub"]
+        expected = [param_td._param_td.get(key) for key in keys]
+        items = list(param_td.items(True, True, is_leaf=is_leaf))
+        assert [key for key, _ in items] == keys
+        assert all(item is exp for (_, item), exp in zip(items, expected))
+        values = list(param_td.values(True, True, is_leaf=is_leaf))
+        assert len(values) == len(keys)
+        assert all(value is exp for value, exp in zip(values, expected))
+        assert [key for key, _ in param_td.non_tensor_items()] == ["s"]
+        nested = [key for key, _ in param_td.non_tensor_items(include_nested=True)]
+        assert nested == ["s", ("sub", "t")]
 
     def test_tdparams_clone(self):
         td = TensorDict(
