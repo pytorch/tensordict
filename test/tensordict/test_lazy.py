@@ -882,6 +882,12 @@ class TestLazyStackedTensorDict:
             [named, named.clone()], stack_dim_name="s"
         )
         assert td.densify().names == ["s", "n"]
+        # The names of nested lazy stacks are kept.
+        inner = LazyStackedTensorDict.lazy_stack(
+            [unnamed, unnamed.clone()], stack_dim_name="s"
+        )
+        td = lazy_stack([inner, inner.clone()])
+        assert td.densify().names == [None, "s", None]
 
     def test_lazy_get(self):
         inner_td = lazy_stack(
