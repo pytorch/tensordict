@@ -151,9 +151,28 @@ python -m torch.utils.collect_env
 
 # TorchRL validates its standalone Triton GRU numerics in its own CI. Keep this
 # reverse-dependency job focused on TensorDict interoperability.
+#
+# The other deselected tests fail now and then at the pinned TorchRL revision,
+# for reasons inside TorchRL:
+# - test_multiagent_reset_mlp is unseeded and fails when any parameter that
+#   reset_parameters() draws lands within rtol=1e-5 of its old value or of
+#   another agent's value: once in about 500 runs for [True-False-3]. Not
+#   fixed in TorchRL yet.
+# - test_ddpg_prioritized_weights is unseeded. TorchRL seeds it in 5ef3c124.
+# - test_rssm_rollout_higher_order_scan_matches_loop compares float32 CUDA
+#   gradients with rtol=5e-5. TorchRL raises rtol to 1e-3 in d7c14b23.
+# - test_env_that_errors with the multiprocess collectors: when one worker dies
+#   first, _check_for_faulty_process closes the others, and shutdown then calls
+#   is_alive() on a closed process. TorchRL fixes the shutdown in 0e3f69bc.
+# Drop each of the last three once TORCHRL_REF includes its fix.
 MUJOCO_GL=egl python -m pytest test --instafail -v --durations 20 \
   --ignore test/test_distributed.py \
   --ignore test/llm \
   --deselect test/modules/test_dreamer_components.py::test_public_block_gru_triton_gradient_parity \
   --deselect test/modules/test_dreamer_components.py::test_public_block_gru_triton_compile_recurrent_loss \
+  --deselect test/modules/test_multiagent_models.py::TestMultiAgent::test_multiagent_reset_mlp \
+  --deselect test/objectives/test_ddpg.py::TestDDPG::test_ddpg_prioritized_weights \
+  --deselect test/modules/test_dreamer_components.py::TestDreamerV3Components::test_rssm_rollout_higher_order_scan_matches_loop \
+  --deselect "test/test_collectors.py::TestCollectorGeneric::test_env_that_errors[MultiSyncCollector]" \
+  --deselect "test/test_collectors.py::TestCollectorGeneric::test_env_that_errors[MultiAsyncCollector]" \
   --timeout=120
