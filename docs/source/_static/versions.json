@@ -1,0 +1,63 @@
+[
+  {
+    "name": "main (unstable)",
+    "version": "main",
+    "url": "https://docs.pytorch.org/tensordict/main/"
+  },
+  {
+    "name": "0.14 (stable)",
+    "version": "0.14",
+    "url": "https://docs.pytorch.org/tensordict/stable/",
+    "preferred": true
+  },
+  {
+    "name": "0.13",
+    "version": "0.13",
+    "url": "https://docs.pytorch.org/tensordict/0.13/"
+  },
+  {
+    "name": "0.12",
+    "version": "0.12",
+    "url": "https://docs.pytorch.org/tensordict/0.12/"
+  },
+  {
+    "name": "0.11",
+    "version": "0.11",
+    "url": "https://docs.pytorch.org/tensordict/0.11/"
+  },
+  {
+    "name": "0.10",
+    "version": "0.10",
+    "url": "https://docs.pytorch.org/tensordict/0.10/"
+  },
+  {
+    "name": "0.9",
+    "version": "0.9",
+    "url": "https://docs.pytorch.org/tensordict/0.9/"
+  },
+  {
+    "name": "0.8",
+    "version": "0.8",
+    "url": "https://docs.pytorch.org/tensordict/0.8/"
+  },
+  {
+    "name": "0.7",
+    "version": "0.7",
+    "url": "https://docs.pytorch.org/tensordict/0.7/"
+  },
+  {
+    "name": "0.6",
+    "version": "0.6",
+    "url": "https://docs.pytorch.org/tensordict/0.6/"
+  },
+  {
+    "name": "0.5",
+    "version": "0.5",
+    "url": "https://docs.pytorch.org/tensordict/0.5/"
+  },
+  {
+    "name": "0.4",
+    "version": "0.4",
+    "url": "https://docs.pytorch.org/tensordict/0.4/"
+  }
+]

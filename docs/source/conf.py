@@ -28,8 +28,9 @@ import os
 import re
 import sys
 
-import pytorch_sphinx_theme
+import pytorch_sphinx_theme2
 import tensordict
+from sphinx import addnodes
 from sphinx.domains.python import ObjectEntry
 from sphinx.util.inspect import stringify_signature
 
@@ -42,7 +43,8 @@ author = "Torch Contributors"
 # built documents.
 # version: The short X.Y version.
 # release: The full version, including alpha/beta/rc tags.
-if os.environ.get("TENSORDICT_SANITIZE_VERSION_STR_IN_DOCS", None):
+RELEASE = bool(os.environ.get("TENSORDICT_SANITIZE_VERSION_STR_IN_DOCS", None))
+if RELEASE:
     # Turn 1.11.0aHASH into 1.11 (major.minor only)
     version = release = ".".join(tensordict.__version__.split(".")[:2])
     html_title = " ".join((project, version, "documentation"))
@@ -90,6 +92,9 @@ sphinx_gallery_conf = {
     "download_all_examples": True,
     # The teaching order of index.rst (docs/source/gallery_order.py).
     "within_subsection_order": "gallery_order.TutorialOrder",
+    # The first cell of each notebook installs tensordict, so that the notebook
+    # runs in Google Colab.
+    "first_notebook_cell": "%pip install tensordict",
 }
 
 # The zarr tutorial needs zarr>=3, which requires Python>=3.11; skip it (with a
@@ -113,7 +118,12 @@ autodoc_typehints_format = "short"
 python_use_unqualified_type_names = True
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ["_templates"]
+# The theme keeps its templates (layout, header, footer, tutorial buttons) in
+# a "templates" directory that Sphinx does not search by itself.
+templates_path = [
+    "_templates",
+    os.path.join(os.path.dirname(pytorch_sphinx_theme2.__file__), "templates"),
+]
 
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
@@ -135,17 +145,80 @@ exclude_patterns = ["reference/generated/tutorials/README.rst"]
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = "pytorch_sphinx_theme"
-html_theme_path = [pytorch_sphinx_theme.get_html_theme_path()]
+html_theme = "pytorch_sphinx_theme2"
+html_theme_path = [pytorch_sphinx_theme2.get_html_theme_path()]
+
+# The version switcher reads this list of versions. The file is
+# docs/source/_static/versions.json: the upload job of docs.yml copies the
+# _static directory of each main build to the root of gh-pages, which
+# publishes the file at this URL. Add each new minor release to it.
+switcher_json_url = "https://docs.pytorch.org/tensordict/_static/versions.json"
+
+html_baseurl = "https://docs.pytorch.org/tensordict/stable/"
 html_theme_options = {
-    # "pytorch_project": "tensordict",
-    "collapse_navigation": False,
-    "display_version": True,
-    "logo_only": True,
-    "pytorch_project": "docs",
-    "navigation_with_keys": True,
     "analytics_id": "GTM-T8XT4PS",
+    "pytorch_project": "tensordict",
+    "canonical_url": html_baseurl,
+    "logo": {"text": "tensordict"},
+    "switcher": {
+        "json_url": switcher_json_url,
+        "version_match": version if RELEASE else "main",
+    },
+    # The build must not depend on the published site: a new version is in
+    # the list only after its build is on gh-pages.
+    "check_switcher": False,
+    "show_version_warning_banner": True,
+    "navbar_start": ["navbar-logo", "version-switcher"],
+    "header_links_before_dropdown": 6,
+    "icon_links": [
+        {
+            "name": "GitHub",
+            "url": "https://github.com/pytorch/tensordict",
+            "icon": "fa-brands fa-github",
+        },
+        {
+            "name": "PyPI",
+            "url": "https://pypi.org/project/tensordict/",
+            "icon": "fa-brands fa-python",
+        },
+        {
+            "name": "PyTorch Forum",
+            "url": "https://discuss.pytorch.org/",
+            "icon": "fa-brands fa-discourse",
+        },
+    ],
+    "use_edit_page_button": True,
+    "show_toc_level": 2,
+    # The sidebar lists every page (see _templates/sidebar-nav-bs.html); open
+    # only the branch of the current page.
+    "collapse_navigation": True,
+    "navigation_with_keys": False,
 }
+
+theme_variables = pytorch_sphinx_theme2.get_theme_variables()
+
+# ``github_*`` and ``doc_path`` build the "Edit on GitHub" links and the
+# tutorial buttons (Run in Google Colab, Download Notebook, View on GitHub).
+html_context = {
+    "theme_variables": theme_variables,
+    "library_links": theme_variables.get("library_links", []),
+    # Show the tutorial buttons on the sphinx-gallery pages.
+    "has_sphinx_gallery": True,
+    "display_github": True,
+    "github_url": "https://github.com",
+    "github_user": "pytorch",
+    "github_repo": "tensordict",
+    "github_version": "main",
+    "doc_path": "docs/source",
+    # The "Send Feedback" button opens an issue in this repository.
+    "feedback_url": "https://github.com/pytorch/tensordict",
+    # Colab opens the notebooks that gh-pages serves for this version.
+    "colab_branch": f"gh-pages/{version if RELEASE else 'main'}",
+}
+html_js_files = [
+    # Points the "View on GitHub" button of a tutorial to its source file.
+    "js/tutorial_links.js",
+]
 
 # Output file base name for HTML help builder.
 htmlhelp_basename = "PyTorchdoc"
@@ -378,7 +451,90 @@ def _alias_shared_methods(app, env):
                 )
 
 
+# -- Header navigation ---------------------------------------------------------
+#
+# The theme puts each page of the toctrees of index.rst in the header. These
+# toctrees list every page of the site, so the header shows one menu per
+# toctree caption instead: "Get started", "User guide", "How-to guides",
+# "Tutorials" and "API reference". The captions "Tutorials: basics",
+# "Tutorials: storage", ... share the "Tutorials" menu.
+
+_header_sections = {}
+
+
+def _doc_title(env, docname):
+    title = env.titles.get(docname)
+    return title.astext() if title is not None else docname
+
+
+def _docs_under(env, docname):
+    # The page and every page that its toctrees include, at any depth.
+    found, todo = set(), [docname]
+    while todo:
+        doc = todo.pop()
+        if doc not in found:
+            found.add(doc)
+            todo.extend(env.toctree_includes.get(doc, []))
+    return found
+
+
+def _build_header_sections(app):
+    env = app.env
+    sections = {}
+    for toctree in env.get_doctree(app.config.root_doc).findall(addnodes.toctree):
+        caption = toctree.get("caption") or ""
+        name = caption.split(":")[0].strip()
+        docnames = [ref for _, ref in toctree["entries"] if ref in env.all_docs]
+        if name and docnames:
+            sections.setdefault(name, []).extend(docnames)
+    result = []
+    for name, docnames in sections.items():
+        if len(docnames) == 1:
+            # A section with one page, such as reference/index: its menu lists
+            # the pages of its toctree.
+            url = docnames[0]
+            children = env.toctree_includes.get(url, [])
+        else:
+            # Open the index page of the folder, such as the gallery index
+            # tutorials/index, if all the pages are in one folder that has one.
+            folders = {doc.rpartition("/")[0] for doc in docnames}
+            folder_index = f"{folders.pop()}/index" if len(folders) == 1 else ""
+            url = folder_index if folder_index in env.all_docs else docnames[0]
+            children = docnames
+        members = set()
+        for doc in [url, *docnames]:
+            members |= _docs_under(env, doc)
+        result.append(
+            {
+                "title": name,
+                "url": url,
+                "children": [
+                    {"title": _doc_title(env, doc), "url": doc} for doc in children
+                ],
+                "members": members,
+            }
+        )
+    return result
+
+
+def _set_header_nav(app, pagename, templatename, context, doctree):
+    # Runs after the theme's handler, and replaces the list that it builds.
+    if app.builder.name not in _header_sections:
+        _header_sections[app.builder.name] = _build_header_sections(app)
+    context["hierarchical_header_nav"] = [
+        {
+            "title": section["title"],
+            "url": section["url"],
+            "current": pagename in section["members"],
+            "children": section["children"],
+            "external": False,
+        }
+        for section in _header_sections[app.builder.name]
+    ]
+
+
 def setup(app):
+    app.connect("html-page-context", _set_header_nav, priority=600)
     app.connect("autodoc-process-signature", _process_signature)
     app.connect("autodoc-skip-member", _skip_shared_member)
     app.connect("missing-reference", _resolve_shared_method)
