@@ -15,8 +15,9 @@ import tempfile
 import warnings
 import weakref
 from functools import wraps
+from numbers import Number
 from pathlib import Path
-from typing import Any, Callable, Tuple, Type, TYPE_CHECKING
+from typing import Any, Callable, overload, Tuple, Type, TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -1236,6 +1237,12 @@ class PersistentTensorDict(TensorDictBase):
             return np.asarray(idx)
         return idx
 
+    @overload
+    def __getitem__(self, item: str | tuple[str, ...]) -> Any: ...
+
+    @overload
+    def __getitem__(self, item: IndexType) -> TensorDictBase: ...
+
     def __getitem__(self, item: IndexType) -> Self | Tensor | TensorCollection | Any:
         if isinstance(item, str) or (
             isinstance(item, tuple) and _unravel_key_to_tuple(item)
@@ -1263,6 +1270,25 @@ class PersistentTensorDict(TensorDictBase):
             # convert to tensor
             index = torch.tensor(index)
         sub_td = self._get_sub_tensordict(index)
+        if isinstance(value, Number):
+            # write the scalar into every tensor entry, in the dtype of the
+            # entry and expanded to the indexed shape, which h5py needs for an
+            # index tensor. As in a TensorDictStore, the non-tensor entries are
+            # left as they are.
+            entries = {}
+            for key, metadata in self._items_metadata(
+                include_nested=True, leaves_only=True
+            ):
+                # with h5, the leaves include non-tensor entries stored as numbers
+                if self.entry_class(key) is torch.Tensor:
+                    shape = sub_td.batch_size + metadata["shape"][self.batch_dims :]
+                    entries[key] = torch.as_tensor(
+                        value, dtype=metadata["dtype"]
+                    ).expand(shape)
+            # cast first: a scalar that a dtype cannot hold raises before any write
+            for key, item in entries.items():
+                sub_td.set_(key, item)
+            return
         err_set_batch_size = None
         if not isinstance(value, TensorDictBase):
             value = TensorDict.from_dict(value, batch_size=[])

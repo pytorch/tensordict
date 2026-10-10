@@ -842,6 +842,13 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 if issubclass(tdist, D.Independent):
                     tdist = type(dist.base_dist)
                 interaction_type = _DETERMINISTIC_REGISTER.get(tdist)
+                if (
+                    interaction_type is InteractionType.DETERMINISTIC
+                    and isinstance(dist, D.Independent)
+                    and hasattr(dist.base_dist, "deterministic_sample")
+                ):
+                    # Independent leaves the samples of its base unchanged
+                    return dist.base_dist.deterministic_sample
                 if interaction_type is None:
                     try:
                         support = dist.support

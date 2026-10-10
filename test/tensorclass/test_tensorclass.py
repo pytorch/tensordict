@@ -19,6 +19,7 @@ import pickle
 import re
 import sys
 import textwrap
+import warnings
 import weakref
 from collections import UserDict
 from dataclasses import field
@@ -66,7 +67,7 @@ from tensordict.base import (
     _get_defaults_to_none,
     _set_get_defaults_to_none,
 )
-from tensordict.tensorclass import from_dataclass
+from tensordict.tensorclass import _TensorClassMeta, from_dataclass
 from tensordict.utils import _check_recursive_properties
 from torch import Tensor
 
@@ -281,8 +282,9 @@ def test_tensorclass_stub_methods():
 
 # Names on which the TensorClass stub and runtime tensorclasses differ on purpose.
 _TENSORCLASS_STUB_EXCLUSIONS = {
-    # Forwards to LazyStackedTensorDict.extend, so it works only when the
-    # tensorclass wraps a lazy stack; TensorDictBase has no extend.
+    # Deprecated (removed in TensorDict 0.17). It forwards to
+    # LazyStackedTensorDict.extend, so it works only when the tensorclass wraps
+    # a lazy stack; TensorDictBase has no extend.
     "extend",
 }
 
@@ -441,6 +443,114 @@ Obs(a=torch.Tensor(), non_blocking=True)
     assert 'incompatible type "str"' in errors
     assert 'Unexpected keyword argument "extra"' in errors
     assert 'Unexpected keyword argument "non_blocking"' in errors
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+def test_tensorclass_stub_init_subclass():
+    # The class keywords (class X(TensorClass, autocast=True)) go to the
+    # metaclass at runtime; the stub declares them on __init_subclass__.
+    with open(_TENSORDICT_DIR / "tensorclass.pyi", "r") as f:
+        tree = ast.parse(f.read())
+    (stub_class,) = (
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "TensorClass"
+    )
+    (init_subclass,) = (
+        node
+        for node in stub_class.body
+        if isinstance(node, ast.FunctionDef) and node.name == "__init_subclass__"
+    )
+    class_kwargs = {arg.arg for arg in init_subclass.args.kwonlyargs}
+
+    meta_params = inspect.signature(_TensorClassMeta.__new__).parameters.values()
+    assert class_kwargs == {
+        param.name for param in meta_params if param.default is not param.empty
+    }
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_tensorclass_stub_static_types(tmp_path, monkeypatch):
+    from mypy import api
+
+    # Check tensorclass.pyi alone: the modules it imports are reduced to the
+    # names these checks need, or to Any. Mypy also searches the working
+    # directory, which must not hold the tensordict sources.
+    monkeypatch.chdir(tmp_path)
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    package.mkdir(parents=True)
+    torch_package = stubs / "torch"
+    torch_package.mkdir()
+    torch_package.joinpath("__init__.pyi").write_text(
+        """from typing import Any
+
+class Tensor: ...
+class device: ...
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    package.joinpath("__init__.pyi").write_text(
+        "from .tensorclass import TensorClass as TensorClass\n"
+    )
+    package.joinpath("utils.pyi").write_text(
+        """from typing import Any, TypeAlias
+
+import torch
+
+DeviceType: TypeAlias = torch.device | str | int
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    package.joinpath("tensorclass.pyi").write_text(
+        (_TENSORDICT_DIR / "tensorclass.pyi").read_text()
+    )
+
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.11
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+
+    valid = tmp_path / "valid.py"
+    valid.write_text(
+        """from typing import assert_type
+import torch
+from tensordict import TensorClass
+
+class Obs(TensorClass):
+    a: torch.Tensor
+    label: str = "x"
+
+class Flagged(TensorClass, autocast=True, tensor_only=False):
+    a: torch.Tensor
+
+t = torch.Tensor()
+obs = Obs(t, "s", batch_size=[3], device="cpu", names=["n"], lock=False)
+Flagged(a=t, batch_size=3)
+assert_type(obs.a, torch.Tensor)
+assert_type(obs[0], Obs)
+assert_type(obs.unbind(0), tuple[Obs, ...])
+assert_type(obs.to("cpu"), Obs)
+assert_type(obs + 1, Obs)
+assert_type(1 + obs, Obs)
+assert_type(obs * 2.0, Obs)
+assert_type(-obs, Obs)
+assert_type(obs == obs, Obs)
+for item in obs:
+    assert_type(item, Obs)
+"""
+    )
+    stdout, stderr, status = api.run(["--config-file", str(config), str(valid)])
+    assert status == 0, stdout + stderr
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
@@ -1173,6 +1283,26 @@ class TestTensorClass:
             MyData = dataclasses.dataclass(MyData)
         MyData = tensorclass(MyData)
         torch.testing.assert_close(MyData().X, torch.ones(3))
+
+    def test_del_returns_self(self):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            y: torch.Tensor = None
+            td: TensorDict = None
+
+        data = MyClass(
+            x=torch.zeros(3),
+            td=TensorDict(a=torch.zeros(3), b=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        # A tensor field, a field that is None and a nested key
+        assert data.del_("x") is data
+        assert "x" not in data.keys()
+        assert data.del_("y") is data
+        assert data.y is None
+        assert data.del_(("td", "a")) is data
+        assert list(data.td.keys()) == ["b"]
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_device(self, device):
@@ -2012,6 +2142,17 @@ class TestTensorClass:
         data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
         data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
         assert data.repeat_interleave(2, dim=1).shape == torch.Size((3, 8))
+        repeated = torch.repeat_interleave(data, 2, 1)
+        assert type(repeated) is type(data)
+        assert repeated.shape == torch.Size((3, 8))
+        assert repeated.y.shape == torch.Size((3, 8))
+        assert repeated.z == z
+        repeated = torch.repeat_interleave(
+            data, repeats=torch.tensor([1, 2, 3, 4]), dim=1, output_size=10
+        )
+        assert type(repeated) is type(data)
+        assert repeated.shape == torch.Size((3, 10))
+        assert repeated.y.shape == torch.Size((3, 10))
 
     def test_repeat_interleave_tensor(self):
         class MyDataNested(TensorClass):
@@ -2054,6 +2195,31 @@ class TestTensorClass:
         assert (stacked_tc.X == 1).all()
         assert isinstance(stacked_tc._tensordict, TensorDict)
         assert stacked_tc.z == stacked_tc.y.z == z
+
+        for reshaped in (
+            torch.reshape(data, (4, 3)),
+            torch.reshape(data, shape=(4, 3)),
+        ):
+            assert type(reshaped) is type(data)
+            assert reshaped.shape == torch.Size([4, 3])
+            assert reshaped.y.shape == torch.Size([4, 3])
+            assert reshaped.z == reshaped.y.z == z
+
+    def test_shape_ops_minus_one(self):
+        # A -1 keeps the size of its dim in expand and broadcast_to, and is
+        # inferred in unflatten, as for tensors
+        @tensorclass
+        class MyDataMinusOne:
+            X: torch.Tensor
+            z: str
+
+        data = MyDataMinusOne(X=torch.zeros(1, 6, 4), z="z", batch_size=[1, 6])
+        for out in (data.expand(2, -1, 6), data.broadcast_to((2, -1, -1))):
+            assert out.shape == (2, 1, 6)
+            assert out.X.shape == (2, 1, 6, 4)
+        out = data.unflatten(1, (3, -1))
+        assert out.shape == (1, 3, 2)
+        assert out.X.shape == (1, 3, 2, 4)
 
     def test_set(self):
         @tensorclass
@@ -2591,6 +2757,86 @@ class TestTensorClass:
         assert data_split[2].batch_size == torch.Size([3, 1])
         assert data_split[2].batch_size == torch.Size([3, 1])
 
+        for torch_split in (
+            torch.tensor_split(data_out, (1, 4, 5), 1),
+            torch.tensor_split(data_out, indices=[1, 4, 5], dim=1),
+            torch.tensor_split(data_out, torch.tensor([1, 4, 5]), 1),
+        ):
+            assert len(torch_split) == 4
+            for split, expected in zip(torch_split, data_split):
+                assert type(split) is type(data_out)
+                assert split.batch_size == expected.batch_size
+                assert split.y.batch_size == expected.batch_size
+                assert split.z == "test_tensorclass"
+        torch_split = torch.tensor_split(data_out, sections=4, dim=1)
+        assert [split.batch_size[1] for split in torch_split] == [2, 2, 1, 1]
+        assert all(type(split) is type(data_out) for split in torch_split)
+
+    def test_torch_chunk(self):
+        @tensorclass
+        class MyDataNested:
+            X: torch.Tensor
+            z: str
+            y: "MyDataNested" = None
+
+        data_in = MyDataNested(
+            X=torch.ones(3, 6, 5), z="test_tensorclass", batch_size=[3, 6]
+        )
+        data_out = MyDataNested(
+            X=torch.ones(3, 6, 5), z="test_tensorclass", y=data_in, batch_size=[3, 6]
+        )
+        for chunks in (
+            torch.chunk(data_out, 4, 1),
+            torch.chunk(data_out, chunks=4, dim=1),
+        ):
+            assert len(chunks) == len(data_out.chunk(4, 1)) == 3
+            for chunk in chunks:
+                assert type(chunk) is type(data_out)
+                assert chunk.batch_size == torch.Size([3, 2])
+                assert chunk.y.batch_size == torch.Size([3, 2])
+                assert chunk.z == "test_tensorclass"
+
+    def test_torch_where(self):
+        @tensorclass
+        class MyDataNested:
+            X: torch.Tensor
+            z: str
+            y: "MyDataNested" = None
+
+        def make(value):
+            data_in = MyDataNested(
+                X=torch.full((3, 4, 5), value), z="test_tensorclass", batch_size=[3, 4]
+            )
+            return MyDataNested(
+                X=torch.full((3, 4, 5), value),
+                z="test_tensorclass",
+                y=data_in,
+                batch_size=[3, 4],
+            )
+
+        data0, data1 = make(0.0), make(1.0)
+        mask = torch.zeros(3, 4, dtype=torch.bool)
+        mask[0] = True
+        for result in (
+            torch.where(mask, data1, data0),
+            torch.where(mask, input=data1, other=data0),
+            torch.where(mask, data1, 0.0),
+        ):
+            assert type(result) is type(data0)
+            assert result.batch_size == data0.batch_size
+            assert result.z == "test_tensorclass"
+            assert (result.X[mask] == 1).all()
+            assert (result.X[~mask] == 0).all()
+            assert (result.y.X[mask] == 1).all()
+            assert (result.y.X[~mask] == 0).all()
+        # out is filled, and the result wraps its tensordict
+        out = make(2.0)
+        result = torch.where(mask, data1, data0, out=out)
+        assert result._tensordict is out._tensordict
+        assert (out.X[~mask] == 0).all()
+        with pytest.raises(TypeError, match="missing 2 required positional"):
+            torch.where(data0)
+
     def test_update(self):
         @tensorclass
         class MyDataNested:
@@ -2653,6 +2899,30 @@ class TestTensorClass:
         tc3 = TC(a=torch.zeros(3), b=torch.zeros(3), batch_size=[3])
         assert tc3.update() is tc3
         assert tc3.update_() is tc3
+
+    @pytest.mark.parametrize("source", ["dict", "kwargs", "tensorclass"])
+    def test_update_unset_field(self, source):
+        # update() must drop the None placeholder of a field it writes, as set() does.
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+            z: torch.Tensor = None
+
+        tc = TC(x=torch.zeros(3), batch_size=[3])
+        z = torch.ones(3)
+        if source == "dict":
+            tc.update({"z": z})
+        elif source == "kwargs":
+            tc.update(z=z)
+        else:
+            tc.update(TC(x=torch.zeros(3), z=z, batch_size=[3]))
+        torch.testing.assert_close(tc.z, z)
+        torch.testing.assert_close(tc.to_dict()["z"], z)
+        torch.testing.assert_close(tc.to_tensordict(retain_none=True)["z"], z)
+        assert "z=None" not in repr(tc)
+        other = TC(x=torch.zeros(3), z=torch.zeros(3), batch_size=[3])
+        other.load_state_dict(tc.state_dict())
+        torch.testing.assert_close(other.z, z)
 
     def test_replace(self):
         @tensorclass
@@ -3085,6 +3355,43 @@ class TestTensorClass:
         assert "z" in ctd.keys()
         assert "y" in ctd.keys()
         assert ("y", "x") in ctd.keys(True)
+
+    @pytest.mark.parametrize("source_type", ["tensorclass", "tensordict", "dict"])
+    def test_update_at_(self, source_type):
+        @tensorclass
+        class TC:
+            a: torch.Tensor
+            b: torch.Tensor
+
+        tc = TC(a=torch.zeros(4, 3), b=torch.zeros(4), batch_size=[4])
+        a, b = tc.a, tc.b
+        source = TC(a=torch.ones(2, 3), b=torch.ones(2), batch_size=[2])
+        if source_type == "tensordict":
+            source = source.to_tensordict()
+        elif source_type == "dict":
+            source = source.to_dict()
+        assert tc.update_at_(source, slice(1, 3)) is tc
+        # the values are written in place, at the index only
+        assert tc.a is a and tc.b is b
+        assert (tc.b == torch.tensor([0.0, 1.0, 1.0, 0.0])).all()
+        assert (tc.a == tc.b.unsqueeze(-1)).all()
+
+        tc.update_at_(source, slice(2, 4), keys_to_update=["a"])
+        assert (tc.a[:, 0] == torch.tensor([0.0, 1.0, 1.0, 1.0])).all()
+        assert (tc.b == torch.tensor([0.0, 1.0, 1.0, 0.0])).all()
+
+    @pytest.mark.parametrize("source_type", ["tensordict", "dict"])
+    def test_update_at_lazy_stack(self, source_type):
+        @tensorclass
+        class TC:
+            a: torch.Tensor
+
+        tc = lazy_stack([TC(a=torch.zeros(3), batch_size=[]) for _ in range(4)])
+        source = TensorDict(a=torch.ones(2, 3), batch_size=[2])
+        if source_type == "dict":
+            source = source.to_dict()
+        tc.update_at_(source, slice(1, 3))
+        assert (tc.a[:, 0] == torch.tensor([0.0, 1.0, 1.0, 0.0])).all()
 
     def test_type(self):
         data = MyData(
@@ -4400,6 +4707,83 @@ class TestShadow:
                 setattr(c, name, torch.full((3,), 2.0))
                 assert (getattr(c, name) == 2).all()
                 assert (c.get(name) == 2).all()
+
+
+class TestDeprecations:
+    @pytest.mark.parametrize("subclass", [False, True])
+    def test_fields(self, subclass):
+        if subclass:
+
+            class MyClass(TensorClass):
+                x: torch.Tensor
+
+        else:
+
+            @tensorclass
+            class MyClass:
+                x: torch.Tensor
+
+        c = MyClass(x=torch.zeros(3), batch_size=[3])
+        for obj in (MyClass, c):
+            with pytest.warns(
+                DeprecationWarning, match=r"fields\(\) .* removed in TensorDict 0\.17"
+            ) as record:
+                assert obj.fields() == dataclasses.fields(MyClass)
+            assert record[0].filename == __file__
+
+    def test_extend(self):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+
+        c = MyClass(x=torch.zeros(3), batch_size=[3])
+        stack = lazy_stack([c, c])
+        with pytest.warns(
+            DeprecationWarning, match=r"extend\(\) .* removed in TensorDict 0\.17"
+        ) as record:
+            stack.extend(lazy_stack([c])._tensordict)
+        assert record[0].filename == __file__
+        assert stack.batch_size == torch.Size([3, 3])
+
+    @pytest.mark.parametrize(
+        "args,kwargs", [((), {"safe": True}), ((None, False), {})], ids=["kw", "pos"]
+    )
+    def test_from_tensordict_safe(self, args, kwargs):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+
+        td = TensorDict(x=torch.zeros(3), batch_size=[3])
+        with pytest.warns(
+            DeprecationWarning, match=r"safe=\.\.\.\) .* removed in TensorDict 0\.17"
+        ) as record:
+            c = MyClass.from_tensordict(td, *args, **kwargs)
+        assert record[0].filename == __file__
+        assert c._tensordict is td
+
+    # The library code that builds and converts tensorclasses does not call the
+    # deprecated members.
+    @pytest.mark.parametrize(
+        "base", [None, TensorClass, TensorClass["tensor_only"], TensorClass["frozen"]]
+    )
+    def test_no_warning_internally(self, base):
+        from tensordict.nn.tensorclass_module import _tensor_class_keys
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            annotations = {"x": torch.Tensor, "y": torch.Tensor}
+            if base is None:
+                MyClass = tensorclass(
+                    type("MyClass", (), {"__annotations__": annotations})
+                )
+            else:
+                MyClass = type("MyClass", (base,), {"__annotations__": annotations})
+            td = TensorDict(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+            c = MyClass.from_tensordict(td)
+            MyClass._from_tensordict(td, safe=False)
+            MyClass.from_dict(td.to_dict(), auto_batch_size=True)
+            torch.stack([c, c])[0].clone()
+            assert _tensor_class_keys(MyClass) == [("x",), ("y",)]
 
 
 class TestVMAP:

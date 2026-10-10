@@ -973,7 +973,15 @@ def _parse_to(*args, **kwargs):
     else:
         non_blocking = kwargs.get("non_blocking", False)
         convert_to_format = kwargs.get("convert_to_format")
-        if len(args) > 0:
+        if len(args) > 0 and isinstance(args[0], torch.dtype):
+            # td.to(dtype)
+            device = kwargs.get("device")
+            dtype = args[0]
+        elif len(args) > 0 and isinstance(args[0], torch.Tensor):
+            # td.to(tensor)
+            device = args[0].device
+            dtype = args[0].dtype
+        elif len(args) > 0:
             device = torch.device(args[0])
             if len(args) > 1:
                 dtype = args[1]
@@ -1915,6 +1923,33 @@ def _get_shape_from_args(*args, kwarg_name="size", **kwargs):
     return size
 
 
+def _resolve_expand_shape(shape: Sequence[int], batch_size: torch.Size) -> torch.Size:
+    """Replaces the ``-1`` sizes of an ``expand`` shape and checks the shape, as :meth:`torch.Tensor.expand` does.
+
+    The shapes are aligned on the right. A ``-1`` keeps the size of the matching dim of
+    ``batch_size``. The other sizes must match the existing size, or expand a dim of size
+    1. The sizes of new leading dims are left as they are.
+    """
+    num_new_dims = len(shape) - len(batch_size)
+    if num_new_dims < 0:
+        # too few sizes: left to the caller, which raises
+        return shape
+    resolved = list(shape)
+    for i, size in enumerate(shape):
+        if i < num_new_dims:
+            continue
+        existing = batch_size[i - num_new_dims]
+        if size == -1:
+            resolved[i] = existing
+        elif size != existing and existing != 1:
+            raise RuntimeError(
+                f"The expanded size of the tensor ({size}) must match the existing size "
+                f"({existing}) at non-singleton dimension {i}.  Target sizes: "
+                f"{list(shape)}.  Tensor sizes: {list(batch_size)}"
+            )
+    return torch.Size(resolved)
+
+
 # Imports of ``tensordict.utils.Buffer`` resolve to this empty placeholder,
 # as they have since torch.nn.Buffer was added (torch 2.5).
 class Buffer:  # noqa: D101
@@ -2649,15 +2684,6 @@ def _lock_warn():
 _lock_warn = assume_constant_result(_lock_warn)
 
 
-def _check_inbuild():
-    if not torch._dynamo.config.inline_inbuilt_nn_modules:
-        raise RuntimeError(
-            "to_module requires torch._dynamo.config.inline_inbuilt_nn_modules to be set to True."
-        )
-
-
-_check_inbuild = assume_constant_result(_check_inbuild)
-
 _zip_strict = functools.partial(zip, strict=True)
 
 
@@ -2674,25 +2700,27 @@ def _pin_mem(q_in, q_out):
 
 
 def _infer_size_impl(shape: List[int], numel: int) -> List[int]:
-    # A local copy of  torch.jit._shape_functions.infer_size_impl which is skipped by torch.compile
+    # A local copy of torch.jit._shape_functions.infer_size_impl, which is skipped
+    # by torch.compile. It raises RuntimeError, as torch.Tensor.view does, where
+    # the original raises AssertionError.
     newsize = 1
     infer_dim: int | None = None
     for dim in range(len(shape)):
         if shape[dim] == -1:
             if infer_dim is not None:
-                raise AssertionError("only one dimension can be inferred")
+                raise RuntimeError("only one dimension can be inferred")
             infer_dim = dim
         elif shape[dim] >= 0:
             newsize *= shape[dim]
         else:
-            raise AssertionError(
+            raise RuntimeError(
                 f"invalid shape dimensions in {list(shape)}: sizes must be non-negative or -1"
             )
     if not (
-        numel == newsize
+        (infer_dim is None and numel == newsize)
         or (infer_dim is not None and newsize > 0 and numel % newsize == 0)
     ):
-        raise AssertionError(
+        raise RuntimeError(
             f"invalid shape {list(shape)} for a batch of {numel} elements"
         )
     out = _copy(shape)
