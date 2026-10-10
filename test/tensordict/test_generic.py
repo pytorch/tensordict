@@ -1867,6 +1867,49 @@ class TestGeneric:
         expected_c[index] = 7.5
         assert (td["c"] == expected_c).all()
 
+    @pytest.mark.parametrize(
+        "write",
+        [
+            "setitem",
+            "sub_setitem",
+            "mask",
+            "update_at_",
+            "sub_update_at_",
+            "sub_set_at_",
+        ],
+    )
+    def test_setitem_tensorclass_value(self, write):
+        # a tensorclass value is written key by key, as a tensordict value is
+        @tensorclass
+        class Data:
+            x: torch.Tensor
+            s: str
+
+        value = Data(x=torch.ones(2, 3), s="new", batch_size=[2])
+        index = slice(1, 3)
+        if write in ("setitem", "sub_setitem", "mask"):
+            td = TensorDict(x=torch.zeros(4, 3), s="old", batch_size=[4])
+            if write == "setitem":
+                td[index] = value
+            elif write == "sub_setitem":
+                td._get_sub_tensordict(slice(None))[index] = value
+            else:
+                td[torch.tensor([False, True, True, False])] = value
+            written = td
+        else:
+            td = TensorDict(
+                tc=Data(x=torch.zeros(4, 3), s="old", batch_size=[4]), batch_size=[4]
+            )
+            if write == "update_at_":
+                td.update_at_({"tc": value}, index)
+            elif write == "sub_update_at_":
+                td._get_sub_tensordict(slice(None)).update_at_({"tc": value}, index)
+            else:
+                td._get_sub_tensordict(slice(None)).set_at_("tc", value, index)
+            written = td["tc"]._tensordict
+        assert (written["x"] == torch.tensor([0.0, 1.0, 1.0, 0.0])[:, None]).all()
+        assert written.get("s").tolist() == ["old", "new", "new", "old"]
+
     def test_getitem_scalar_bool_0d(self):
         td = TensorDict({"a": torch.tensor(1.0)}, [])
         assert td[True].batch_size == torch.Size([1])

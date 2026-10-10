@@ -24,6 +24,7 @@ from warnings import warn
 
 import numpy as np
 import torch
+from tensordict import base as _td_base
 from tensordict._archive import _memmap_tensor_from_path
 from tensordict._indexing import (
     _entry_index,
@@ -33,7 +34,6 @@ from tensordict._indexing import (
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
-    _ACCEPTED_CLASSES,
     _default_is_leaf,
     _device_recorder,
     _expand_to_match_shape,
@@ -3034,9 +3034,9 @@ class _SubTensorDict(TensorDictBase):
                 for ktu in keys_to_update
             ):
                 continue
-            if not isinstance(value, tuple(_ACCEPTED_CLASSES)):
+            if not isinstance(value, _td_base._ACCEPTED_CLASSES):
                 raise TypeError(
-                    f"Expected value to be one of types {_ACCEPTED_CLASSES} "
+                    f"Expected value to be one of types {_td_base._ACCEPTED_CLASSES} "
                     f"but got {type(value)}"
                 )
             if clone:
