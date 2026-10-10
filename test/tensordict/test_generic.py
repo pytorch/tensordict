@@ -18,6 +18,7 @@ import threading
 import warnings
 import weakref
 from collections import namedtuple, UserDict
+from collections.abc import MutableMapping
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,6 +41,7 @@ from tensordict import (
 )
 from tensordict._indexing import convert_ellipsis_to_idx
 from tensordict._td import is_tensor_collection
+from tensordict._tensorcollection import TensorCollection
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _NESTED_TENSORS_AS_LISTS, TensorDictBase
 from tensordict.functional import dense_stack_tds, merge_tensordicts, pad, pad_sequence
@@ -2727,6 +2729,19 @@ class TestGeneric:
                     # Annotations such as "str" | None fail for other reasons.
                     pass
         assert not unresolved, unresolved
+
+    def test_tensordictbase_mixin_bases(self):
+        # TensorDictBase lists its mixins by name so that type checkers can
+        # follow them. They must stay in the order of _TENSORDICTBASE_MIXINS.
+        mixins = tensordict_base._TENSORDICTBASE_MIXINS
+        assert TensorDictBase.__bases__ == (*mixins, MutableMapping, TensorCollection)
+        assert TensorDictBase.__mro__ == (
+            TensorDictBase,
+            *mixins,
+            *MutableMapping.__mro__[:-1],
+            TensorCollection,
+            object,
+        )
 
     @pytest.mark.parametrize("dist_of_callables", [False, True])
     def test_merge_tensordicts(self, dist_of_callables):
