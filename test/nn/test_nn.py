@@ -5456,6 +5456,36 @@ class TestTensorClassModuleForward:
         assert td_output["result", "added"] == 15
         assert td_output["result", "substracted"] == 5
 
+    def test_td_forward_extra_keys(self) -> None:
+        """Test that the wrapper ignores the entries that are not input fields."""
+        td_module = TestTensorClassModule().as_td_module()
+        td = TensorDict(a=10, b=5, other=0)
+        td_output = td_module(td)
+        assert td_output["result", "added"] == 15
+        assert td_output["result", "substracted"] == 5
+        assert set(td_output["input"].keys()) == {"a", "b"}
+        assert set(td.keys()) == {"a", "b", "other"}
+
+    def test_td_forward_in_sequence(self) -> None:
+        """Test that the wrapper runs after another module in a TensorDictSequential."""
+        seq = TensorDictSequential(
+            TensorDictModule(lambda a: a + 1, in_keys=["a"], out_keys=["c"]),
+            TestTensorClassModule().as_td_module(),
+        )
+        td_output = seq(TensorDict(a=10, b=5))
+        assert td_output["result", "added"] == 15
+        assert td_output["result", "substracted"] == 5
+        assert set(td_output["input"].keys()) == {"a", "b"}
+
+    def test_td_forward_nested_input_extra_keys(self) -> None:
+        """Test that the wrapper ignores the entries next to nested input fields."""
+        value = TestTensorClassModule()(InputTensorClass(a=10, b=5, batch_size=[]))
+        td = value.to_tensordict()
+        td["other"] = torch.zeros(())
+        td_output = NestedInputModule().as_td_module()(td)
+        assert td_output["added"] == 25
+        assert td_output["substracted"] == 0
+
 
 @pytest.mark.skipif(not _has_onnx, reason="ONNX is not available")
 class TestONNXExport:
