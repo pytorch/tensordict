@@ -3254,6 +3254,41 @@ class TestGeneric:
         assert (d["a"] == torch.tensor([[1, 1], [2, 0]])).all()
         assert d["b"] == ["asd", "efg"]
 
+    @pytest.mark.parametrize("return_mask", [False, True])
+    def test_pad_sequence_nontensor_batch_dim(self, return_mask):
+        # pad_dim is a batch dim: non-tensor entries are padded as pad() pads
+        # them, with None in the pad slots.
+        d1 = TensorDict(
+            {"a": torch.ones(3, 2), "b": "asd", ("c", "d"): "x"}, batch_size=[3]
+        )
+        d2 = TensorDict(
+            {"a": torch.ones(5, 2), "b": "efg", ("c", "d"): "y"}, batch_size=[5]
+        )
+        d = pad_sequence([d1, d2], return_mask=return_mask)
+        assert d.batch_size == torch.Size([2, 5])
+        assert d.get("b").batch_size == torch.Size([2, 5])
+        assert d.get("b").tolist() == [["asd"] * 3 + [None] * 2, ["efg"] * 5]
+        assert d[0].get("b").tolist() == pad(d1, [0, 2]).get("b").tolist()
+        assert d.get(("c", "d")).tolist() == [["x"] * 3 + [None] * 2, ["y"] * 5]
+        if return_mask:
+            assert d["masks", "a"].tolist() == [[True] * 3 + [False] * 2, [True] * 5]
+
+    def test_pad_sequence_nontensor_out(self):
+        # Non-tensor entries are padded only up to the batch size of out
+        d1 = TensorDict({"a": torch.ones(3, 2), "b": "asd"}, batch_size=[3])
+        d2 = TensorDict({"a": torch.ones(5, 2), "b": "efg"}, batch_size=[5])
+        d = pad_sequence([d1, d2], out=TensorDict(batch_size=[2, 5]))
+        assert d.get("b").tolist() == [["asd"] * 3 + [None] * 2, ["efg"] * 5]
+        # an out without the pad dim keeps the stack as it is
+        d = pad_sequence([d1, d2], out=TensorDict(batch_size=[2]))
+        assert d.get("b").tolist() == [["asd"] * 3, ["efg"] * 5]
+        # no tensor entries: nothing to pad to
+        d = pad_sequence(
+            [d1.exclude("a")[:3], d2.exclude("a")[:3]],
+            out=TensorDict(batch_size=[2, 3]),
+        )
+        assert d.get("b").tolist() == [["asd"] * 3, ["efg"] * 3]
+
     def test_pad_sequence_single_nontensor(self):
         d1 = TensorDict({"a": torch.tensor([1, 1]), "b": "asd"})
         d = pad_sequence([d1])
