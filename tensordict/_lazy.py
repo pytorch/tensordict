@@ -3827,6 +3827,11 @@ class LazyStackedTensorDict(TensorDictBase):
                     f"Batch sizes in tensordicts differs: stack has "
                     f"batch_size={batch_size}, new_value has batch_size={_batch_size}."
                 )
+            if -1 in self._batch_size:
+                # keep the dims where the members differ
+                batch_size = [
+                    s for i, s in enumerate(self._batch_size) if i != self.stack_dim
+                ]
         else:
             batch_size = tensordict.batch_size
 
@@ -3852,32 +3857,40 @@ class LazyStackedTensorDict(TensorDictBase):
     def extend(self, tensordict: list[T] | T) -> None:
         """Extends the lazy stack with new tensordicts."""
         if _is_tensor_collection(type(tensordict)):
-            tensordict = list(tensordict.unbind(self.stack_dim))
+            tensordict = tensordict.unbind(self.stack_dim)
+        # a generator would otherwise be used up by the type check
+        tensordict = list(tensordict)
+        if not tensordict:
+            return
         if any(not isinstance(tensordict, TensorDictBase) for tensordict in tensordict):
             raise TypeError(
                 "Expected new value to be TensorDictBase instance but got "
                 f"{[type(tensordict) for tensordict in tensordict]} instead."
             )
-        if self.tensordicts:
-            batch_size = self.tensordicts[0].batch_size
-            device = self.tensordicts[0].device
+        # an empty stack checks the new members against the first one
+        td0 = self.tensordicts[0] if self.tensordicts else tensordict[0]
+        batch_size = td0.batch_size
+        device = td0.device
 
-            for _td in tensordict:
-                _batch_size = _td.batch_size
-                _device = _td.device
+        for _td in tensordict:
+            _batch_size = _td.batch_size
+            _device = _td.device
 
-                if device != _device:
-                    raise ValueError(
-                        f"Devices differ: stack has device={device}, new value has "
-                        f"device={_device}."
-                    )
-                if _batch_size != batch_size:
-                    raise ValueError(
-                        f"Batch sizes in tensordicts differs: stack has "
-                        f"batch_size={batch_size}, new_value has batch_size={_batch_size}."
-                    )
-        else:
-            batch_size = tensordict.batch_size
+            if device != _device:
+                raise ValueError(
+                    f"Devices differ: stack has device={device}, new value has "
+                    f"device={_device}."
+                )
+            if _batch_size != batch_size:
+                raise ValueError(
+                    f"Batch sizes in tensordicts differs: stack has "
+                    f"batch_size={batch_size}, new_value has batch_size={_batch_size}."
+                )
+        if self.tensordicts and -1 in self._batch_size:
+            # keep the dims where the members differ
+            batch_size = [
+                s for i, s in enumerate(self._batch_size) if i != self.stack_dim
+            ]
 
         self.tensordicts.extend(tensordict)
 
