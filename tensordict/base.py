@@ -631,6 +631,9 @@ def _unflatten_state_dict(flat_sd):
 
 
 def _is_tensor_collection(datatype: type) -> bool:
+    if datatype is Tensor:
+        # The most common entry type: skip is_compiling() and the memo lookup.
+        return False
     is_dynamo = is_compiling()
     out = None
     if not is_dynamo:
@@ -690,6 +693,8 @@ def _default_is_leaf(cls: Type) -> bool:
     # Only check for _pass_through attribute, not _is_non_tensor
     # This ensures NonTensorData is NOT considered a leaf (preserving original behavior)
     # while UnbatchedTensor IS considered a leaf
+    if cls is Tensor:
+        return True
     return not _is_tensor_collection(cls) or getattr(cls, "_pass_through", False)
 
 
@@ -707,6 +712,8 @@ def _is_leaf_nontensor(cls: Type) -> bool:
 
     .. seealso:: :meth:`~tensordict.default_is_leaf`.
     """
+    if cls is Tensor:
+        return True
     if _is_tensor_collection(cls):
         return _pass_through_cls(cls)
     return issubclass(cls, torch.Tensor)
@@ -4809,6 +4816,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         any_set = False
         if is_leaf is None:
             is_leaf = _default_is_leaf
+        is_sub_td = isinstance(self, _SubTensorDict)
 
         for key, item in self.items():
             if (
@@ -4847,7 +4855,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 # (indicated by batch_size being set) keep their payload unchanged
                 # but must expose the new TensorDict-facing batch metadata.
                 # For other ops (data ops like zero_), apply the function normally.
-                if _is_unbatched(item) and batch_size is not None:
+                if batch_size is not None and _is_unbatched(item):
                     item_trsf = item._with_batch_size(batch_size)
                 else:
                     _others = [
@@ -4867,7 +4875,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     if result is None:
                         result = make_result()
                     any_set = True
-                if isinstance(self, _SubTensorDict):
+                if is_sub_td:
                     result.set(key, item_trsf, inplace=inplace)
                 else:
                     result._set_str(
@@ -6144,8 +6152,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         if not recurse:
             result = self._select(set_shared=False)
         else:
-            # simply exclude the leaves
-            result = self._exclude(*self.keys(True, True), set_shared=False)
+            # simply exclude the leaves. A comprehension walks the keys once:
+            # unpacking the view would call its __len__, which walks them too.
+            leaves = [key for key in self.keys(True, True)]  # noqa: C416
+            result = self._exclude(*leaves, set_shared=False)
         if batch_size is not None:
             result.batch_size = batch_size
         if device is not NO_DEFAULT:
