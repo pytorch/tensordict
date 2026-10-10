@@ -423,23 +423,31 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     """A TensorDictBase subclass with typed field declarations and backend composition.
 
     TypedTensorDict combines TensorDict's tensor operations with TypedDict-style
-    field declarations.  Subclasses declare fields as class annotations and get:
+    field declarations. Subclasses declare fields as class annotations and get:
 
     - Typed attribute access (``state.eta``)
     - Typed construction (``PredictorState(eta=..., X=..., beta=..., batch_size=...)``)
     - Inheritance (``class ObservedState(PredictorState): ...``)
     - Default-valued fields for optional pipeline branches
     - Full TensorDict interop (``.to()``, ``.clone()``, slicing, ``**state`` spreading)
-    - Backend composition via ``from_tensordict`` (H5, Redis, lazy stacks, …)
+    - Backend composition via ``from_tensordict`` (H5, Redis, lazy stacks, and others)
+
+    Use it instead of a :class:`~tensordict.TensorClass` when you need a
+    :class:`~tensordict.TensorDictBase` subclass: ``state["key"]`` access,
+    ``**state`` unpacking, or typed access to an existing backend. Use a
+    :class:`~tensordict.TensorClass` instead when fields hold non-tensor
+    values that must come back as plain Python objects.
+    :ref:`choosing-a-container` compares the containers, and
+    :ref:`typed-tensordict-guide` is the user guide.
 
     Internally, a ``TypedTensorDict`` delegates all storage to an internal
-    ``_source`` attribute (a ``TensorDictBase`` instance).  Direct construction
-    creates a ``TensorDict`` as ``_source``; ``from_tensordict`` stores the
-    given backend directly, enabling zero-copy typed access to any backend.
+    ``_source`` attribute (a ``TensorDictBase`` instance). Direct construction
+    creates a ``TensorDict`` as ``_source``. ``from_tensordict`` stores the
+    given backend directly, so the typed access to that backend makes no copy.
 
     Examples:
         >>> import torch
-        >>> from tensordict import TypedTensorDict
+        >>> from tensordict import TensorDict, TypedTensorDict
         >>> from torch import Tensor
         >>>
         >>> class PredictorState(TypedTensorDict):
