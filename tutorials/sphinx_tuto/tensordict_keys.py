@@ -9,7 +9,7 @@ This tutorial shows how to read, write, rename and delete the keys of a
 What you will learn:
 
 - How to set and get entries, and what happens when a key is missing.
-- How to check that a key exists, and how to iterate over the keys.
+- How to find out if a key exists, and how to iterate over the keys.
 - How to read and write nested entries with tuples of strings.
 - How to flatten nested keys, and how to select and exclude keys.
 """
@@ -156,8 +156,8 @@ tensordict.set(("nested", "b"), torch.rand(2, 3))
 print(tensordict)
 
 ##############################################################################
-# Iterating over a TensorDict's contents
-# --------------------------------------
+# Iterating over the contents of a TensorDict
+# -------------------------------------------
 # To iterate over the keys of a ``TensorDict``, use the ``.keys()`` method.
 #
 # .. note::
@@ -199,8 +199,8 @@ for key, value in tensordict.items(include_nested=True):
 ##############################################################################
 # Checking for existence of a key
 # -------------------------------
-# To check that a key exists in a ``TensorDict``, use the ``in`` operator. It
-# also accepts nested keys as tuples of strings. Each check is a ``dict``
+# To find out if a key exists in a ``TensorDict``, use the ``in`` operator. It
+# also accepts nested keys as tuples of strings. Each ``in`` test is a ``dict``
 # lookup at each level of nesting, so its cost does not grow with the number
 # of keys.
 

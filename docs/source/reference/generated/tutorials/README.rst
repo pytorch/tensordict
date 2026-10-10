@@ -1,9 +1,11 @@
 Tutorials
 =========
 
-These tutorials run from top to bottom, on a CPU, and the documentation build
-executes them. Each one ends with a "Further reading" list that links the
-guides and the API reference. Read them in this order:
+Each tutorial is a script that runs from top to bottom on a CPU. The
+documentation build runs every script, so the output on each page comes from
+the code above it. Each tutorial ends with a "Further reading" list of the
+guides and API pages that go deeper. The sidebar lists the tutorials in four
+groups, in reading order:
 
 - Basics: keys, indexing, shapes, pre-allocation and lazy stacks of streamed data.
 - Storage: devices and memory-mapped tensors, the zarr backend, and a

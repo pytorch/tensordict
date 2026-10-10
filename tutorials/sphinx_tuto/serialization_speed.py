@@ -74,7 +74,7 @@ except ImportError:
 # times after one warmup run. These values keep the documentation build
 # short. ``SCALE`` scales the payload linearly (``SCALE = 8`` for 1 GiB). For
 # smaller error bars, increase ``N_REPEATS``. The plots show the median and
-# not the mean, because a disk write is sometimes much slower than the others
+# not the mean. A disk write is sometimes much slower than the others
 # (page-cache writeback), and one slow write changes the mean.
 
 SCALE = 0.5

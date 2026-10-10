@@ -200,9 +200,9 @@ assert (loaded == tensordict).all()
 #
 # In this tutorial, you set the device of a :class:`~tensordict.TensorDict`,
 # moved it to another device, and removed its device. You converted a
-# tensordict to memory-mapped tensors with ``memmap_``, allocated an empty
-# memory-mapped buffer with ``memmap_like``, and saved memory-mapped tensors to
-# a directory and loaded them again with ``load_memmap``.
+# tensordict to memory-mapped tensors with ``memmap_``, and allocated an empty
+# memory-mapped buffer with ``memmap_like``. Last, you saved memory-mapped
+# tensors to a directory and loaded them again with ``load_memmap``.
 #
 # Further reading
 # ---------------

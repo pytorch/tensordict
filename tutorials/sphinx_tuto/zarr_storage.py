@@ -5,8 +5,8 @@ Storing TensorDicts in zarr
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
 This tutorial shows how to store tensordicts in `zarr <https://zarr.dev>`_
-stores, when to choose zarr over the memory-mapped and HDF5 backends, and how
-to set the chunks and the compression for your workload.
+stores. It also says when to choose zarr over the memory-mapped and HDF5
+backends, and how to set the chunks and the compression for your workload.
 
 What you will learn:
 
@@ -123,8 +123,8 @@ td.to_zarr(root / "compressed.zarr", chunks=(16, 3, 32, 32), compressors=ZstdCod
 #
 #    ``to_zarr`` writes the metadata file of each group, then writes it again
 #    to add attributes. A zip file cannot replace an entry, so the zip gets a
-#    second entry with the same name, and Python's ``zipfile`` raises a
-#    ``UserWarning: Duplicate name: 'zarr.json'`` for each group. Reading
+#    second entry with the same name. For each group, the ``zipfile`` module
+#    of Python warns ``UserWarning: Duplicate name: 'zarr.json'``. Reading
 #    the store works: ``zipfile`` returns the last entry, which has all the
 #    attributes. The example below hides this warning.
 
@@ -175,9 +175,9 @@ for i in range(4):
 ##############################################################################
 # Conclusion
 # ----------
-# In this tutorial, you saved a tensordict to zarr and loaded it again, read
-# parts of entries with ``get_at``, set chunks and compression, wrote a zip
-# store, and filled a pre-allocated buffer. The zarr store is a
+# In this tutorial, you saved a tensordict to zarr and loaded it again, and
+# read parts of entries with ``get_at``. You set chunks and compression, wrote
+# a zip store, and filled a pre-allocated buffer. The zarr store is a
 # :class:`~tensordict.PersistentTensorDict`, like an HDF5 file.
 #
 # Use ``to_zarr`` and ``from_zarr`` when your data must be on object storage,
