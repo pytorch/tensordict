@@ -18,7 +18,6 @@ import warnings
 import weakref
 from collections import defaultdict
 from collections.abc import KeysView
-from contextlib import nullcontext
 from dataclasses import is_dataclass
 from functools import wraps
 from numbers import Number
@@ -2889,19 +2888,16 @@ def _is_list_tensor_compatible(t) -> Tuple[bool, tuple | None, type | None]:
 
 
 class _ContextManager:
+    # Reading or writing one attribute is atomic, so no lock is needed: the
+    # mode is read on every call of a tensordict.nn module.
     def __init__(self, default=None):
         self._mode: Any | None = default
-        self._lock = threading.Lock()
 
     def get_mode(self) -> Any | None:
-        cm = self._lock if not is_compiling() else nullcontext()
-        with cm:
-            return self._mode
+        return self._mode
 
     def set_mode(self, type: Any | None) -> None:
-        cm = self._lock if not is_compiling() else nullcontext()
-        with cm:
-            self._mode = type
+        self._mode = type
 
 
 def _maybe_correct_neg_dim(
