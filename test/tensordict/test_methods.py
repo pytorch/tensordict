@@ -4746,10 +4746,9 @@ class TestTensorDicts(TestTensorDictsBase):
             td.copy_at_(newdata, slice(1, None, 2))
         assert td.get("val").tolist() == [0] * 10
 
-        td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
-        with pytest.warns(FutureWarning, match="fast=None.*deprecated"):
+        with pytest.raises(TypeError, match="fast=None"):
             td.copy_at_(newdata, slice(1, None, 2), fast=None)
-        assert td.get("val").tolist() == [0, 1] * 5
+        assert td.get("val").tolist() == [0] * 10
 
     # This is needed because update in lazy permute/view etc does not behave correctly when
     # legacy is False. When these classes will be deprecated, we can just remove the decorator

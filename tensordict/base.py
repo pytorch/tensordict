@@ -37,7 +37,6 @@ from typing import (
     TYPE_CHECKING,
     TypeVar,
 )
-from warnings import warn
 
 import numpy as np
 import torch
@@ -411,47 +410,14 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
 __base__setattr__ = torch.nn.Module.__setattr__
 
 
-_TO_MODULE_PRESERVE_MODULE_STATE_WARNING = (
-    "TensorDict.to_module() is replacing an existing nn.Parameter in the "
-    "destination module with a tensor leaf that is not an nn.Parameter. This "
-    "historical behavior can remove the key from module.state_dict(). Starting "
-    "with TensorDict 0.14, to_module() preserves existing module parameter and "
-    "buffer registrations by default. Passing preserve_module_state=None is "
-    "deprecated; pass False to request the historical replacement behavior or "
-    "True to preserve registrations explicitly. Support for None will be "
-    "removed in TensorDict 0.15."
-)
-
-
-def _warn_to_module_preserve_module_state(memo) -> None:
-    if memo is None:
-        warn(
-            _TO_MODULE_PRESERVE_MODULE_STATE_WARNING,
-            FutureWarning,
-            stacklevel=3,
-        )
-        return
-    if memo.get("preserve_module_state_warned", False):
-        return
-    memo["preserve_module_state_warned"] = True
-    warn(
-        _TO_MODULE_PRESERVE_MODULE_STATE_WARNING,
-        FutureWarning,
-        stacklevel=3,
-    )
-
-
 def _maybe_preserve_module_state(
     module: torch.nn.Module,
     name: str,
     tensor: torch.Tensor,
     *,
-    preserve_module_state: bool | None,
-    memo,
+    preserve_module_state: bool,
 ) -> torch.Tensor:
-    if preserve_module_state is False or (
-        preserve_module_state is None and isinstance(tensor, torch.nn.Parameter)
-    ):
+    if not preserve_module_state:
         return tensor
     try:
         param = module._parameters.get(name, NO_DEFAULT)
@@ -462,9 +428,7 @@ def _maybe_preserve_module_state(
         and param is not None
         and isinstance(tensor, torch.Tensor)
     ):
-        if preserve_module_state is None and not isinstance(tensor, torch.nn.Parameter):
-            _warn_to_module_preserve_module_state(memo)
-        elif preserve_module_state and (
+        if (
             not isinstance(tensor, torch.nn.Parameter)
             or tensor.requires_grad != param.requires_grad
         ):
@@ -493,8 +457,7 @@ def _set_tensor_dict(
     inplace: bool,
     *,
     return_swap: bool,
-    preserve_module_state: bool | None,
-    memo,
+    preserve_module_state: bool,
 ) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
     if (
@@ -541,14 +504,12 @@ def _set_tensor_dict(
         tensor = out
         out = out_tmp
     elif (
-        preserve_module_state is not False
+        preserve_module_state
         and was_parameter
         and out is not None
         and isinstance(tensor, torch.Tensor)
     ):
-        if preserve_module_state is None and not isinstance(tensor, torch.nn.Parameter):
-            _warn_to_module_preserve_module_state(memo)
-        elif preserve_module_state and (
+        if (
             not isinstance(tensor, torch.nn.Parameter)
             or tensor.requires_grad != out.requires_grad
         ):
@@ -3697,7 +3658,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         idx: IndexType,
         non_blocking: bool = False,
         *,
-        fast: bool | None = True,
+        fast: bool = True,
     ) -> Self:
         """Copies values from ``tensordict`` into ``self`` at the specified index.
 
@@ -3715,28 +3676,24 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 to the host.
 
         Keyword Args:
-            fast (bool or None, optional): controls whether ``copy_at_`` may
+            fast (bool, optional): controls whether ``copy_at_`` may
                 fall back to :meth:`~tensordict.TensorDictBase.update_at_`.
                 If ``True``, only the optimized tensor-only path is used and a
                 ``RuntimeError`` is raised when the fast path is not available.
                 If ``False``, this method delegates directly to ``update_at_``.
-                If ``None``, the deprecated compatibility behavior warns and
-                falls back to ``update_at_`` when the fast path is unavailable.
                 Defaults to ``True``.
+
+                .. versionchanged:: 0.15
+                    ``fast=None``, deprecated in 0.14, is no longer accepted.
 
         Returns:
             self
         """
         if fast is None:
-            warnings.warn(
-                "copy_at_(..., fast=None) is deprecated and falls back to "
-                "update_at_ when the optimized tensor-only copy path is "
-                "unavailable. Starting with TensorDict 0.14, copy_at_ defaults "
-                "to fast=True. Pass fast=False to request the general update "
-                "semantics explicitly; support for fast=None will be removed "
-                "in TensorDict 0.15.",
-                FutureWarning,
-                stacklevel=2,
+            raise TypeError(
+                "copy_at_(..., fast=None) is no longer supported. Pass "
+                "fast=True to require the optimized tensor-only copy path, or "
+                "fast=False for the general update_at_ semantics."
             )
         elif fast is False:
             return self.update_at_(tensordict, idx, non_blocking=non_blocking)
