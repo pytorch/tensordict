@@ -1169,7 +1169,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     ) -> Iterator[CompatibleType]:
         if is_leaf is None:
             is_leaf = _default_is_leaf
-        for v in self._param_td.values(include_nested, leaves_only, sort=sort):
+        for v in self._param_td.values(
+            include_nested, leaves_only, is_leaf=is_leaf, sort=sort
+        ):
             if not is_leaf(type(v)):
                 yield v
                 continue
@@ -1256,7 +1258,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     ) -> Iterator[CompatibleType]:
         if is_leaf is None:
             is_leaf = _default_is_leaf
-        for k, v in self._param_td.items(include_nested, leaves_only, sort=sort):
+        for k, v in self._param_td.items(
+            include_nested, leaves_only, is_leaf=is_leaf, sort=sort
+        ):
             if not is_leaf(type(v)):
                 yield k, v
                 continue
