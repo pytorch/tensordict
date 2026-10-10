@@ -340,8 +340,8 @@ Load such data with the tensorclass itself, e.g.
 class it is called on when its name matches the saved one.
 
 Loading pickled non-tensor data without passing ``allow_pickle`` emits a
-``FutureWarning`` in TensorDict 0.14; the default becomes
-``allow_pickle=False`` (which refuses to load it) in 0.15. Pass
+``FutureWarning`` in TensorDict 0.14 and 0.15; the default becomes
+``allow_pickle=False`` (which refuses to load it) in 0.16. Pass
 ``allow_pickle=True`` only for trusted data. See :ref:`saving` for details.
 
 Edge cases
