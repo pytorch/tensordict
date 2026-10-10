@@ -48,6 +48,7 @@ from tensordict.tensorclass import NonTensorData, NonTensorStack
 from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
+    _unravel_key_to_tuple,
     assert_allclose_td,
     is_non_tensor,
     is_tensorclass,
@@ -2262,6 +2263,69 @@ class TestGeneric:
         # top-level keys: the lazy-keys-len branch fixes it.
         if not stack:
             assert len(keys) == len(expected)
+
+    @pytest.mark.parametrize("stack", [False, True])
+    def test_items_nested_deep(self, stack):
+        # items(True) builds each key from the keys of the level below.
+        td = TensorDict(
+            {
+                ".".join([str(j) for j in range(i)] + ["t"]): torch.zeros(3)
+                for i in range(1, 8)
+            },
+            batch_size=[3],
+        ).unflatten_keys(".")
+        if stack:
+            td = lazy_stack([td[0], td[1]])
+        items = list(td.items(True))
+        keys = [key for key, _ in items]
+        # the keys view walks the levels in another order
+        assert len(set(keys)) == len(keys)
+        assert set(keys) == set(td.keys(True))
+        assert ("0", "1", "2", "3", "4", "5", "t") in keys
+        for key, value in items:
+            if type(key) is not str:
+                assert type(key) is tuple
+                assert all(type(part) is str for part in key)
+            if not stack:
+                assert td.get(key) is value
+
+    def test_items_nested_unravels_child_keys(self):
+        # items(True) gives _unravel_key_to_tuple((key, child_key)) for every
+        # key that the items() of a child yields, whatever its shape.
+        child_keys = ["a", ("b", "c"), ("d", ("e",)), ("f", 1), (), 7, ("g", "h")]
+
+        class ChildTD(TensorDict):
+            def items(
+                self,
+                include_nested=False,
+                leaves_only=False,
+                is_leaf=None,
+                *,
+                sort=False,
+            ):
+                if not include_nested:
+                    yield from super().items(
+                        include_nested, leaves_only, is_leaf, sort=sort
+                    )
+                    return
+                for i, key in enumerate(child_keys):
+                    yield key, torch.full((3,), i)
+
+        td = TensorDict(x=torch.zeros(3), batch_size=[3])
+        td._tensordict["child"] = ChildTD(batch_size=[3])
+        keys = [key for key, _ in td.items(True)]
+        assert keys == ["x", "child"] + [
+            _unravel_key_to_tuple(("child", key)) for key in child_keys
+        ]
+        assert keys[2:] == [
+            ("child", "a"),
+            ("child", "b", "c"),
+            ("child", "d", "e"),
+            (),
+            (),
+            (),
+            ("child", "g", "h"),
+        ]
 
     def test_load_device(self, tmpdir):
         t = nn.Transformer(
