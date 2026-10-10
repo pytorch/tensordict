@@ -1158,6 +1158,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 )
                 return
 
+        if is_tensorclass(value) and not is_non_tensor(value):
+            # write the fields key by key, as a tensorclass __setitem__ does;
+            # NonTensorData keeps the leaf path (its _tensordict is empty)
+            value = value._tensordict
+
         # we must use any and because using Ellipsis in index can break with some indices
         if index is Ellipsis or (
             isinstance(index, tuple) and any(idx is Ellipsis for idx in index)
