@@ -1,405 +1,330 @@
 .. _saving:
 
-Saving TensorDict and tensorclass objects
-=========================================
+Save and load tensordicts
+=========================
 
-While we can just save a tensordict with :func:`~torch.save`, this
-will create a single file with the whole content of the data structure.
-One can easily imagine situations where this is sub-optimal!
+This page shows how to write a tensordict to disk and read it back: model
+checkpoints, datasets, and single files that you give to other people or
+tools. To keep a dataset that is larger than memory on disk, or in HDF5, zarr
+or Redis, see :ref:`storage`.
 
-TensorDict serialization API mainly relies on :class:`~tensordict.MemoryMappedTensor`
-which is used to write tensors independently on disk with a data structure
-that mimics the TensorDict's one.
+The examples on this page run in order and share one temporary directory,
+``root``:
 
-Because each leaf is written to an independent file, saving can be spread over
-several threads, and loading is lazy: the files are memory-mapped and only read
-when accessed. A speed comparison with :func:`~torch.save` and other formats is
-given below. This document explains how to create and interact with data
-stored on disk using TensorDict.
-
-Saving memory-mapped TensorDicts
---------------------------------
-
-When a tensordict is dumped as a mmap data structure, each entry corresponds
-to a single ``*.memmap`` file, and the directory structure is determined by the
-key structure: generally, nested keys correspond to sub-directories.
-
-Saving a data structure as a structured set of memory-mapped tensors has the following
-advantages:
-
-- The saved data can be partially loaded. If a large model is saved on disk but
-  only parts of its weights need to be loaded onto a module created in a separate
-  script, only these weights will be loaded in memory.
-- Tensor and JSON-compatible data have a pickle-free loading path that only
-  reads structured metadata and memory buffers.
-- Saving is fast: because the data is written in several independent files,
-  we can amortize the IO overhead by launching several concurrent threads that
-  each access a dedicated file on their own.
-- The structure of the saved data is apparent: the directory tree is indicative
-  of the data content.
-
-However, this approach also has some disadvantages:
-
-- Not every data type can be saved. :obj:`~tensordict.tensorclass` allows to save
-  any non-tensor data: if these data can be represented in a json file, a json
-  format will be used. Otherwise, non-tensor data will be saved independently
-  with Python pickle as a fallback. Pass ``allow_pickle=True`` when loading
-  that fallback from a trusted source.
-  The :class:`~tensordict.NonTensorData` class can be used to represent non-tensor
-  data in a regular :class:`~tensordict.TensorDict` instance.
-
-Pickled non-tensor data
------------------------
-
-In TensorDict 0.14, omitting ``allow_pickle`` preserves compatibility by
-loading pickled non-tensor fields with a :class:`FutureWarning`. The default
-will become ``False`` in 0.15. Applications handling less-trusted artifacts
-can enforce that boundary now:
-
-  >>> untrusted = TensorDict.load_memmap(path, allow_pickle=False)  # doctest: +SKIP
-
-If a trusted save contains arbitrary Python objects that could not be
-represented as JSON, acknowledge that trust explicitly:
-
-  >>> trusted = TensorDict.load_memmap(path, allow_pickle=True)  # doctest: +SKIP
-
-Never enable ``allow_pickle`` for an artifact from an untrusted source:
-pickle payloads can execute arbitrary code. Saves without a pickle sidecar do
-not need this option. The same policy can be passed to ``load_memmap_`` and
-``memmap_refresh_``.
-
-Filesystem considerations
--------------------------
-
-Keep the save directory (or archive's parent directory) writable only by
-trusted principals. Existing symbolic links are rejected when creating
-individual memory-map files, but a path-based API cannot protect against a
-process that can replace names in the parent directory concurrently. Prefer
-:class:`tempfile.TemporaryDirectory` or another private directory over
-predictable names in a shared ``/tmp`` directory.
-
-Robust key encoding is enabled by default and keeps TensorDict keys within
-their save prefix. ``robust_key=False`` exists only to interoperate with
-legacy layouts; do not use it with untrusted keys or metadata. Individual
-memory-map leaf files overwrite existing regular files by default
-(``existsok=True``); pass ``existsok=False`` to reject a colliding leaf path.
-The metadata file is still refreshed when reusing an existing save directory,
-so ``existsok=False`` does not reserve the directory as a whole.
-
-tensordict's memory-mapped API relies on four core methods:
-:meth:`~tensordict.TensorDictBase.memmap_`, :meth:`~tensordict.TensorDictBase.memmap`,
-:meth:`~tensordict.TensorDictBase.memmap_like` and :meth:`~tensordict.TensorDictBase.load_memmap`.
-
-The :meth:`~tensordict.TensorDictBase.memmap_` and :meth:`~tensordict.TensorDictBase.memmap`
-methods will write the data on disk with or without modifying the tensordict
-instance that contains the data. These methods can be used to serialize a model
-on disk (we use multiple threads to speed up serialization):
-
-  >>> model = nn.Transformer()
-  >>> weights = TensorDict.from_module(model)
-  >>> weights_disk = weights.memmap("/path/to/saved/dir", num_threads=32)
-  >>> new_weights = TensorDict.load_memmap("/path/to/saved/dir")
-  >>> assert (weights_disk == new_weights).all()
-
-The :meth:`~tensordict.TensorDictBase.memmap_like` is to be used when a dataset
-needs to be preallocated on disk, the typical usage being:
-
-  >>> def make_datum(): # used for illustration purposes
-  ...    return TensorDict({"image": torch.randint(255, (3, 64, 64)), "label": 0}, batch_size=[])
-  >>> dataset_size = 1_000_000
-  >>> datum = make_datum() # creates a single instance of a TensorDict datapoint
-  >>> data = datum.expand(dataset_size) # does NOT require more memory usage than datum, since it's only a view on datum!
-  >>> data_disk = data.memmap_like("/path/to/data")  # creates the two memory-mapped tensors on disk
-  >>> del data # data is not needed anymore
-
-As illustrated above, when converting entries of a :class:`~tensordict.TensorDict`
-to :class:`~tensordict.MemoryMappedTensor`, it is possible to control where
-the memory maps are saved on disk so that they persist and can
-be loaded at a later date. If the ``prefix`` argument of the three serialization
-methods above is omitted, each tensor is instead stored in an anonymous
-temporary mapping: on Linux, an unlinked file in shared memory (``/dev/shm``,
-i.e. in RAM) when it has enough free space; on other platforms (or when
-``/dev/shm`` is too small), an unlinked temporary file or, on Windows, a named
-shared-memory block. Such tensors have no associated file name, do not persist
-and cannot be reloaded with :meth:`~tensordict.TensorDictBase.load_memmap`.
-
-When a ``prefix`` is specified, the data structure follows the TensorDict's one:
-
+  >>> import tempfile
+  >>> from pathlib import Path
   >>> import torch
   >>> from tensordict import TensorDict
-  >>> td = TensorDict({"a": torch.rand(10), "b": {"c": torch.rand(10)}}, [10])
-  >>> td.memmap_(prefix="tensordict")
+  >>> tmp = tempfile.TemporaryDirectory()
+  >>> root = Path(tmp.name)
 
-yields the following directory structure
+Choose a format
+---------------
 
-.. code-block::
+.. list-table::
+   :header-rows: 1
+   :widths: 40 30 30
 
-  tensordict
-  ├── a.memmap
-  ├── b
-  │   ├── c.memmap
-  │   └── meta.json
-  └── meta.json
+   * - To do this
+     - Use
+     - Section
+   * - Save a model checkpoint, then load all of it or one sub-module
+     - :meth:`~tensordict.TensorDictBase.save`,
+       :meth:`~tensordict.TensorDictBase.load_memmap`
+     - `Save a checkpoint`_
+   * - Give the data to someone as one file that loads lazily
+     - ``td.save("data.tdz")``
+     - `Single-file archives`_
+   * - Open the data as fast as possible, or pickle it fast
+     - :meth:`~tensordict.TensorDictBase.consolidate`,
+       :func:`~tensordict.from_consolidated`
+     - `Consolidated files`_
+   * - Give the file to code that calls :func:`torch.load`
+     - :func:`torch.save`
+     - `torch.save and torch.load`_
+   * - Give the tensors to code that expects a flat state dict
+     - :meth:`~tensordict.TensorDictBase.state_dict`
+     - `state_dict and load_state_dict`_
+   * - Load a file that you did not write
+     - ``allow_pickle``, ``weights_only``
+     - `Load data that you did not write`_
+   * - Preallocate a dataset on disk and fill it one sample at a time
+     - :meth:`~tensordict.TensorDictBase.memmap_like`,
+       :meth:`~tensordict.TensorDictBase.from_schema`
+     - :ref:`storage`
+   * - Store chunked, compressed or remote data (HDF5, zarr, Redis)
+     - :class:`~tensordict.PersistentTensorDict`,
+       :class:`~tensordict.store.TensorDictStore`
+     - :ref:`storage`
 
-The ``meta.json`` files contain all the relevant information to rebuild the
-tensordict, such as device, batch-size, but also the tensordict subtypes.
-This means that :meth:`~tensordict.TensorDict.load_memmap` will be able to
-reconstruct complex nested structures where sub-tensordicts have different types
-than parents, such as a tensorclass stored in a :class:`~tensordict.TensorDict`:
+Save a checkpoint
+-----------------
 
-  >>> from tensordict import TensorDict, tensorclass, TensorDictBase
-  >>> from tensordict.utils import print_directory_tree
-  >>> import torch
-  >>> import tempfile
-  >>> td_list = [TensorDict({"item": i}, batch_size=[]) for i in range(4)]
-  >>> @tensorclass
-  ... class MyClass:
-  ...     data: torch.Tensor
-  ...     metadata: str
-  >>> tc = MyClass(torch.randn(3), metadata="some text", batch_size=[])
-  >>> data = TensorDict({"td_list": torch.stack(td_list), "tensorclass": tc}, [])
-  >>> with tempfile.TemporaryDirectory() as tempdir:
-  ...     data.memmap_(tempdir)
-  ...
-  ...     loaded_data = TensorDictBase.load_memmap(tempdir)
-  ...     assert (loaded_data == data).all()
-  ...     tree = print_directory_tree(tempdir)
-  >>> type(loaded_data["tensorclass"]) is MyClass
+:meth:`~tensordict.TensorDictBase.save` writes each leaf (each tensor of the
+tensordict) to its own file, in a directory tree that follows the keys.
+:meth:`~tensordict.TensorDictBase.load_memmap` reads the tree back. The
+loaded leaves are :class:`~tensordict.MemoryMappedTensor` instances:
+tensordict maps each file into memory, and reads it from disk only when you
+use its tensor.
+
+:meth:`~tensordict.TensorDictBase.from_module` collects the parameters and
+buffers of a model in a tensordict, with one nested tensordict for each
+sub-module:
+
+  >>> from torch import nn
+  >>> _ = torch.manual_seed(0)
+  >>> model = nn.Sequential(nn.Linear(3, 4), nn.ReLU(), nn.Linear(4, 2))
+  >>> params = TensorDict.from_module(model)
+  >>> _ = params.save(root / "checkpoint")
+  >>> sorted(p.name for p in (root / "checkpoint").iterdir())
+  ['0', '2', 'meta.json']
+
+To load the checkpoint into a model, call
+:meth:`~tensordict.TensorDictBase.to_module` with ``inplace=True``. It copies
+each value into the existing parameter of the model, so the parameters stay
+:class:`~torch.nn.parameter.Parameter` instances in memory:
+
+  >>> new_model = nn.Sequential(nn.Linear(3, 4), nn.ReLU(), nn.Linear(4, 2))
+  >>> loaded = TensorDict.load_memmap(root / "checkpoint")
+  >>> _ = loaded.to_module(new_model, inplace=True)
+  >>> torch.equal(new_model[0].weight, model[0].weight)
   True
 
-``print_directory_tree`` writes the tree through the ``tensordict`` logger (one
-``INFO`` record per line) and also returns it as a string. The logged messages
-are:
+Without ``inplace=True``, ``to_module`` tries to make a parameter from each
+memory-mapped leaf and raises ``RuntimeError: Creating a Parameter from an
+instance of type MemoryMappedTensor requires that detach() returns an
+instance of the same type``.
 
-.. code-block::
+To load one sub-module, pass its key to ``subpath``. tensordict then reads
+only that part of the tree. ``subpath`` takes a nested key, such as
+``("encoder", "0")``, or a path, such as ``"encoder/0"``:
 
-  Directory size: 673.00 B
-  tmp5h_fgq76/
-      meta.json
-      tensorclass/
-          _tensordict/
-              data.memmap
-              meta.json
-              metadata/
-                  meta.json
-          meta.json
-      td_list/
-          item.memmap
-          meta.json
+  >>> last_layer = TensorDict.load_memmap(root / "checkpoint", subpath="2")
+  >>> _ = last_layer.to_module(new_model[2], inplace=True)
+  >>> last_layer["weight"].shape
+  torch.Size([2, 4])
 
+To see the keys, shapes and dtypes of a checkpoint without reading the
+tensors, load it on the ``"meta"`` device:
 
-Handling existing ``MemoryMappedTensor``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  >>> TensorDict.load_memmap(root / "checkpoint", device="meta")["0", "weight"]
+  tensor(..., device='meta', size=(4, 3))
 
-If the :class:`~tensordict.TensorDict` already contains
-:class:`~tensordict.MemoryMappedTensor` entries there are a few
-possible behaviours.
+The methods have several names:
 
-- If ``prefix`` is not specified and :meth:`~tensordict.TensorDict.memmap` is called
-  twice, the resulting `TensorDict` will contain the same data as the original one.
+- :meth:`~tensordict.TensorDictBase.save`,
+  :meth:`~tensordict.TensorDictBase.dumps` and
+  :meth:`~tensordict.TensorDictBase.memmap` are the same method. They return
+  a new tensordict whose leaves are the memory-mapped tensors.
+- :meth:`~tensordict.TensorDictBase.memmap_` writes the same files, and
+  replaces the leaves of the tensordict itself.
+- :meth:`~tensordict.TensorDictBase.load` and
+  :meth:`~tensordict.TensorDictBase.load_memmap` are the same method.
 
-    >>> td = TensorDict({"a": 1}, [])
-    >>> td0 = td.memmap()
-    >>> td1 = td0.memmap()
-    >>> td0["a"] is td1["a"]
-    True
+``memmap``, ``memmap_`` and ``save`` lock the tensordict that they return.
+On a locked tensordict, you can write into the tensors in place, but you
+cannot add, remove or replace entries (see :ref:`keys`).
 
-- If ``prefix`` is specified and differs from the prefix of the existing
-  :class:`~tensordict.MemoryMappedTensor` instances, an exception is raised,
-  unless `copy_existing=True` is passed:
+To write several files at the same time, pass ``num_threads``. Threads help
+when the tensordict has a few large leaves, and slow the save down when it
+has many small ones. In one measurement, ``num_threads=4`` saved the weights
+of :class:`torch.nn.Transformer` (184 leaves, 168 MiB) 1.6 times as fast as
+one thread, and saved 2000 small leaves 3 times as slowly. Measure both on
+your data.
 
-    >>> with tempfile.TemporaryDirectory() as tmpdir_0:
-    ...     td0 = td.memmap(tmpdir_0)
-    ...     td0 = td.memmap(tmpdir_0)  # works, results are just overwritten
-    ...     with tempfile.TemporaryDirectory() as tmpdir_1:
-    ...         td1 = td0.memmap(tmpdir_1)  # breaks!
-    Traceback (most recent call last):
-    ...
-    RuntimeError: A filename was provided but the tensor already has a file associated (...). To copy the tensor onto the new location, pass copy_existing=True.
-    >>> with tempfile.TemporaryDirectory() as tmpdir_0:
-    ...     td0 = td.memmap(tmpdir_0)
-    ...     with tempfile.TemporaryDirectory() as tmpdir_1:
-    ...         td1 = td0.memmap(tmpdir_1, copy_existing=True)  # works!
-    ...         td_load = TensorDict.load_memmap(tmpdir_1)
-    ...         assert (td_load == td).all()
+If you do not give a path, ``memmap`` and ``memmap_`` put each tensor in an
+anonymous temporary file. On Linux, the file is in shared memory
+(``/dev/shm``) when it has room. These tensors have no file name, the data
+disappears when the process ends, and ``load_memmap`` cannot read it. Use this
+to share data between processes (see :ref:`data-loading`).
 
-  This feature is implemented to prevent users from inadvertently copying memory-mapped
-  tensors from one location to another.
+Tensors that already have a file
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Copy-on-write loading
-~~~~~~~~~~~~~~~~~~~~~
+If a leaf is already a memory-mapped tensor, ``memmap`` without a path
+returns the same tensor:
 
-By default, :meth:`~tensordict.TensorDictBase.load_memmap` maps each file of a
-directory shared if the process can write it, so in-place writes to the leaves
-reach the files. Data that is only read can be loaded with ``mode="r"``
-instead: the files are then mapped copy-on-write, and in-place writes stay in
-memory.
+  >>> td = TensorDict({"a": 1}, [])
+  >>> td0 = td.memmap()
+  >>> td1 = td0.memmap()
+  >>> td0["a"] is td1["a"]
+  True
 
-  >>> td = TensorDict.load_memmap("/path/to/dataset", mode="r")
-  >>> td["a"].add_(1)  # the file is unchanged
+If you save it to another location, ``memmap`` raises an error, so that you do
+not copy a large file by accident. To copy it, pass ``copy_existing=True``:
 
-Prefer ``mode="r"`` for datasets on network file systems. On some of them
-(e.g. Lustre), page faults on a shared writable mapping take write locks, so
-readers of the same files on different nodes block each other.
-``mode="r+"`` requests the shared mapping explicitly and raises an error if a
-file is not writable.
+  >>> td0 = td.memmap(root / "first")
+  >>> td1 = td0.memmap(root / "second")
+  Traceback (most recent call last):
+  ...
+  RuntimeError: A filename was provided but the tensor already has a file associated (...). To copy the tensor onto the new location, pass copy_existing=True.
+  >>> td1 = td0.memmap(root / "second", copy_existing=True)
+  >>> TensorDict.load_memmap(root / "second")["a"]
+  MemoryMappedTensor(1)
 
-Single-file memmap archives
----------------------------
+Write to the files after you load them
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A memory-mapped directory is convenient to work with locally, but shipping it
-around means copying many small files. Passing a path ending in ``".tdz"``
-(or ``archive=True``) to :meth:`~tensordict.TensorDictBase.save`,
-:meth:`~tensordict.TensorDictBase.dumps` or
-:meth:`~tensordict.TensorDictBase.memmap` writes the exact same data layout
-as a **single file** instead:
+The ``mode`` argument of ``load_memmap`` sets what happens when you change a
+loaded tensor in place:
 
-  >>> td = TensorDict({"a": torch.rand(10), "b": {"c": torch.rand(10)}}, [10])
-  >>> td.save("data.tdz")
-  >>> td2 = TensorDict.load_memmap("data.tdz")
-  >>> assert (td == td2).all()
+- Default (``mode=None``): if the process can write a file, in-place writes
+  to its leaf go to the file. If it cannot, the file is loaded as with
+  ``"r"``.
+- ``mode="r"``: the files are mapped copy-on-write. In-place writes stay in
+  memory, and the files do not change.
+- ``mode="r+"``: in-place writes go to the files. If a file is not writable,
+  ``load_memmap`` raises a ``PermissionError``.
 
-The archive is a standard zip file whose entries replicate the memmap
-directory tree (``meta.json`` files and ``*.memmap`` payloads). Tensor
-payloads are stored uncompressed and aligned, so
-:meth:`~tensordict.TensorDictBase.load_memmap` memory-maps the archive once
-and exposes every leaf as a zero-copy view into the mapping: metadata aside,
-nothing is read from disk until a tensor is actually accessed. Because the
-entry tree is the directory tree, the two representations are freely
-convertible -- with :func:`~tensordict.pack_memmap` /
-:func:`~tensordict.unpack_memmap`, or with any zip tool:
+In this example, the reader with ``mode="r"`` changes memory only, and the
+writer with the default mode changes the file:
+
+  >>> _ = TensorDict(a=torch.zeros(3), batch_size=[3]).save(root / "data")
+  >>> reader = TensorDict.load_memmap(root / "data", mode="r")
+  >>> _ = reader["a"].add_(1)
+  >>> TensorDict.load_memmap(root / "data")["a"]
+  MemoryMappedTensor([0., 0., 0.])
+  >>> writer = TensorDict.load_memmap(root / "data")
+  >>> _ = writer["a"].add_(1)
+  >>> TensorDict.load_memmap(root / "data")["a"]
+  MemoryMappedTensor([1., 1., 1.])
+
+If many nodes read the same files on a network file system, use
+``mode="r"``. On some of these file systems (for example Lustre), a page
+fault on a shared writable mapping takes a write lock. Readers on different
+nodes then block each other. On Linux, a copy-on-write mapping counts
+against the memory commit limit. If a file is larger than RAM plus swap, it
+can fail to map with ``mode="r"``. In that case, use the default mode.
+
+Save to one file
+----------------
+
+A directory has one file for each leaf. To get one file instead, use an
+archive, a consolidated file or :func:`torch.save`:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 30 15 15 20
+
+   * - Format
+     - Write, then read
+     - Lazy load
+     - Load one sub-tree
+     - Use it to
+   * - Archive (``.tdz``)
+     - ``td.save("x.tdz")``, ``TensorDict.load_memmap("x.tdz")``
+     - Yes
+     - Yes (``subpath``)
+     - Give a checkpoint or a dataset to other people, or copy it to a
+       network file system
+   * - Consolidated file
+     - ``td.consolidate("x.bin")``, ``from_consolidated("x.bin")``
+     - Yes
+     - No
+     - Open the data in the shortest time
+   * - ``torch.save``
+     - ``torch.save(td, "x.pt")``, ``torch.load("x.pt")``
+     - With ``torch.load(..., mmap=True)``
+     - No
+     - Give the data to code that calls ``torch.load``
+
+Single-file archives
+~~~~~~~~~~~~~~~~~~~~
+
+If the path ends with ``".tdz"``, or if you pass ``archive=True``,
+:meth:`~tensordict.TensorDictBase.save` (and ``memmap`` and ``dumps``) writes
+one file instead of a directory:
+
+  >>> td = TensorDict(a=torch.rand(10), b={"c": torch.rand(10)}, batch_size=[10])
+  >>> _ = td.save(root / "data.tdz")
+  >>> td2 = TensorDict.load_memmap(root / "data.tdz")
+  >>> (td == td2).all()
+  True
+
+The archive is a standard zip file. Its entries are the files of the
+directory tree (the ``meta.json`` files and the ``*.memmap`` tensor files).
+The tensor payloads are not compressed, and they are aligned, so
+``load_memmap`` maps the archive once and makes each leaf a view into the
+mapping. Apart from the metadata, tensordict reads a tensor from disk only
+when you use it.
+
+Because the entries are the directory tree, you can convert an archive to a
+directory and back, with :func:`~tensordict.pack_memmap` and
+:func:`~tensordict.unpack_memmap` or with any zip tool:
 
 .. code-block:: bash
 
-  unzip data.tdz -d data_dir                # yields a loadable memmap directory
-  (cd data_dir && zip -0 -r ../data.zip .)  # yields a loadable archive
+  unzip data.tdz -d data_dir                # gives a directory that load_memmap reads
+  (cd data_dir && zip -0 -r ../data.zip .)  # gives an archive that load_memmap reads
 
-Partial loading works as with directories: the ``subpath`` argument of
-:meth:`~tensordict.TensorDictBase.load_memmap` selects a nested tensordict
-without touching the rest of the archive:
+``subpath`` works as with a directory. tensordict then reads only that part
+of the archive:
 
-  >>> sub = TensorDict.load_memmap("model.tdz", subpath="encoder/layers")
+  >>> TensorDict.load_memmap(root / "data.tdz", subpath="b")["c"].shape
+  torch.Size([10])
 
-Archives can optionally be compressed (``compression="deflate"`` among
-others). Compressed leaves cannot be memory-mapped and are decompressed in
-memory on first access, so this is a trade-off reserved for archival storage;
-data such as ``uint8`` images or boolean masks compress well, whereas float
-weights barely do.
+An archive loads differently from a directory in two ways:
 
-.. note::
-  Two differences with directory-backed tensordicts are worth keeping in
-  mind. First, by default an archive-loaded tensordict behaves like the
-  result of :func:`~tensordict.from_consolidated`: leaves are
-  views into a single storage and in-place writes do **not** propagate to
-  the file. Second, archives written by external zip tools (without payload
-  alignment) load correctly, but misaligned leaves are copied in memory
-  rather than viewed.
+- By default, the leaves are views into one storage, as with
+  :func:`~tensordict.from_consolidated`. In-place writes change memory only,
+  not the file. To write to the file, load with ``mode="r+"``.
+- An archive made by another zip tool loads correctly. If a payload is not
+  aligned, tensordict copies that leaf into memory instead of making a view.
 
-Write-through loading is available as an explicit opt-in with
-``mode="r+"``, restoring the directory semantics for a single file:
+This example writes zeros to the archive through ``mode="r+"``:
 
-  >>> td = TensorDict.load_memmap("data.tdz", mode="r+")
-  >>> td["a"].add_(1)  # written to the archive
+  >>> td = TensorDict.load_memmap(root / "data.tdz", mode="r+")
+  >>> _ = td["a"].zero_()
+  >>> TensorDict.load_memmap(root / "data.tdz")["a"].sum()
+  tensor(0.)
 
-The preallocation workflow of :meth:`~tensordict.TensorDictBase.memmap_like`
-works with archives as well: pointing it at a ``".tdz"`` path creates a
-zero-filled archive and returns a write-through tensordict backed by it,
-i.e. a dataset buffer that lives in a single file:
+An in-place write does not update the CRC-32 checksum that the zip format
+stores for each entry. ``load_memmap`` does not read the checksums. Before
+you give a changed archive to a tool that verifies them, such as ``unzip``
+or :func:`~tensordict.unpack_memmap`, call
+:func:`~tensordict.refresh_archive_checksums`:
 
-  >>> data = datum.expand(1_000_000)
-  >>> buffer = data.memmap_like("/path/to/data.tdz")
-  >>> buffer[0] = datum  # written to the archive
+  >>> from tensordict import refresh_archive_checksums
+  >>> _ = refresh_archive_checksums(root / "data.tdz")
 
-In-place writes leave the per-entry CRC-32 checksums of the zip format
-stale. :meth:`~tensordict.TensorDictBase.load_memmap` never verifies
-checksums, so this is harmless within tensordict, but call
-:func:`~tensordict.refresh_archive_checksums` before handing a modified
-archive to tools that do verify them (``unzip``,
-:func:`~tensordict.unpack_memmap`, ...).
+To compress an archive, pass ``compression="deflate"``, ``"bzip2"`` or
+``"lzma"``. tensordict cannot memory-map a compressed leaf: it decompresses
+the leaf into memory the first time you use it, and ``mode="r+"`` raises an
+error. Use compression for archival storage. ``uint8`` images and boolean
+masks compress well, float weights do not.
 
-How do the three on-disk representations (memmap directory, consolidated
-file, archive) compare speed-wise, including against ``torch.save``,
-safetensors and zarr? The tensordict formats, ``torch.save`` and
-safetensors all load lazily through ``mmap``, so bulk read throughput is
-essentially identical; the differences are in the per-entry overheads.
-Opening scales with the number of entries and favors the single-file
-formats (one metadata parse instead of one file open per leaf). Saving an
-archive streams the tensor bytes into the file in a single pass and is
-comparable to a directory save, with a per-entry overhead that shows for
-many-small-leaf layouts. Copying the saved artifact is where single files
-shine: a directory pays per-file latency, which dominates for
-many-small-leaf layouts on local disk and grows with round-trip time on
-network filesystems. Note that ``torch.save`` and safetensors are measured
-on their fastest paths (flat tensor dicts, ``torch.load(mmap=True,
-weights_only=True)`` and mmap-backed loading respectively) and do not
-represent tensordict structure natively: keys are flattened at save time
-and the nesting rebuilt at load time. zarr
-(:meth:`~tensordict.TensorDictBase.to_zarr` /
-:meth:`~tensordict.TensorDictBase.from_zarr`, see :ref:`storage`) also
-opens lazily but does not memory-map its payload, so bulk reads pay a
-copy, and each array is a store round-trip, which shows on
-many-tiny-leaf layouts; its strengths are elsewhere -- chunking,
-compression and object-store backends.
+Consolidated files
+~~~~~~~~~~~~~~~~~~
 
-.. figure:: /tutorials/images/sphx_glr_serialization_speed_002.png
-   :width: 100%
-   :alt: Barplots comparing save (single- and multithreaded) and open
-         times of memmap directories, consolidated files, zip archives,
-         torch.save files and safetensors files across two tensordict
-         layouts, with the median time printed above each bar.
-   :target: tutorials/serialization_speed.html
+:meth:`~tensordict.TensorDictBase.consolidate` copies all the leaves into one
+contiguous storage, and makes each leaf a view into it. With a file name, the
+storage is a memory-mapped file. :func:`~tensordict.from_consolidated` opens
+the file again:
 
-   Serialization timings across formats and layouts (lower is better;
-   median over 32 runs printed above each bar, interquartile range as
-   error bars; hatched bars are multithreaded saves). The figure is
-   generated on the machine that builds this documentation -- click it to
-   open the corresponding tutorial and download the script. For a larger
-   offline run (bigger payloads, more layouts, read and copy timings),
-   see ``benchmarks/scripts/serialization_formats_bench.py``.
+  >>> from tensordict import from_consolidated
+  >>> td = TensorDict(a=torch.zeros(3), b={"c": torch.ones(3)}, batch_size=[3])
+  >>> td_c = td.consolidate(root / "data.bin")
+  >>> from_consolidated(root / "data.bin")["b", "c"]
+  tensor([1., 1., 1.])
 
-Consolidated serialization
---------------------------
+``consolidate`` returns a locked tensordict. If you unlock it with
+:meth:`~tensordict.TensorDictBase.unlock_`, it is no longer consolidated:
 
-For fast transfer (e.g. across the network, or to GPU), you can consolidate all
-leaf tensors into a single contiguous buffer using
-:meth:`~tensordict.TensorDictBase.consolidate`:
+  >>> td_c.is_locked, td_c.is_consolidated()
+  (True, True)
+  >>> td_c.unlock_().is_consolidated()
+  False
 
-  >>> td = TensorDict(a=torch.randn(1000), b={"c": torch.randn(1000)}, batch_size=[1000])
-  >>> td_c = td.consolidate()
+A consolidated tensordict also pickles faster, because pickle sees one
+storage instead of one tensor for each leaf. In one measurement, pickling a
+tensordict with 1000 small leaves took 34 ms, and 0.3 ms once consolidated
+(``consolidate()`` itself took 9 ms). :ref:`distributed` uses the same
+layout to send a tensordict as one message. See
+:meth:`~tensordict.TensorDictBase.consolidate` for its other options
+(``num_threads``, ``device``, ``pin_memory``, ``share_memory``).
 
-A consolidated tensordict can be pickled much faster than a regular one because
-it becomes a single storage + metadata dict.  It can also be saved to disk as
-a memory-mapped file:
-
-  >>> td_c = td.consolidate("/path/to/storage.memmap")
-
-See :meth:`~tensordict.TensorDictBase.consolidate` for the full API, including
-options like ``num_threads``, ``device``, ``pin_memory``, and ``share_memory``.
-
-Serialization speed
--------------------
-
-The figure below compares the speed of the main serialization paths
-(in-memory consolidation, consolidation to a memory-mapped file, and
-per-leaf directory save), single-threaded and multithreaded, on a payload
-made of a few large leaves and one made of many small leaves. It is
-generated when this documentation is built, so it reflects the machine
-that built these docs; each bar is an average over several runs.
-
-.. figure:: /tutorials/images/sphx_glr_serialization_speed_001.png
-   :alt: Serialization speed of consolidate (in memory and to file) and save, single-threaded and multithreaded.
-   :target: tutorials/serialization_speed.html
-
-   TensorDict serialization speed. Click the figure to open the
-   corresponding tutorial.
-
-To measure your own hardware, download the script from the
-:ref:`serialization speed tutorial <sphx_glr_tutorials_serialization_speed.py>`
-(or run ``python tutorials/sphinx_tuto/serialization_speed.py`` from a
-tensordict checkout) — it only needs ``matplotlib`` on top of tensordict.
-
-torch.save / torch.load
------------------------
+torch.save and torch.load
+-------------------------
 
 A tensordict saved with :func:`torch.save` can be loaded with
 :func:`torch.load` and ``weights_only=True``, the default since PyTorch 2.6.
@@ -410,126 +335,284 @@ consolidated tensordicts, and non-tensor values made of Python builtins such
 as strings, numbers, lists and dicts:
 
   >>> td = TensorDict(a=torch.zeros(3), b={"c": "text"}, batch_size=[3])
-  >>> torch.save(td, "td.pt")
-  >>> td = torch.load("td.pt", weights_only=True)
+  >>> torch.save(td, root / "td.pt")
+  >>> torch.load(root / "td.pt", weights_only=True)["b", "c"]
+  'text'
 
-Other classes are not allowlisted. This includes tensorclasses and the
-types of other non-tensor values, such as NumPy arrays: loading stops with
-an ``Unsupported global`` error that names the missing class or function.
-If the file comes from a trusted source, allowlist it yourself:
+Other classes are not allowlisted. This includes tensorclasses and the types
+of other non-tensor values, such as NumPy arrays or dates. Loading stops with
+an ``Unsupported global`` error that names the missing class or function:
 
-  >>> with torch.serialization.safe_globals([MyClass]):
-  ...     tc = torch.load("tc.pt", weights_only=True)
+  >>> import datetime
+  >>> from tensordict import NonTensorData
+  >>> td = TensorDict(date=NonTensorData(datetime.date(2024, 1, 1)))
+  >>> torch.save(td, root / "date.pt")
+  >>> torch.load(root / "date.pt", weights_only=True)
+  Traceback (most recent call last):
+  ...
+  _pickle.UnpicklingError: Weights only load failed...Unsupported global: GLOBAL datetime.date was not an allowed global by default...
+
+If the file comes from a source that you trust, allowlist the class. For a
+tensorclass, allowlist the tensorclass:
+
+  >>> with torch.serialization.safe_globals([datetime.date]):
+  ...     td = torch.load(root / "date.pt", weights_only=True)
+  >>> td["date"]
+  datetime.date(2024, 1, 1)
 
 A tensordict with :class:`~tensordict.MemoryMappedTensor` leaves cannot be
 loaded with ``weights_only=True``. Save it with
-:meth:`~tensordict.TensorDictBase.memmap` and load it with
+:meth:`~tensordict.TensorDictBase.save` and load it with
 :meth:`~tensordict.TensorDictBase.load_memmap` instead.
 
-state_dict / load_state_dict
-----------------------------
+state_dict and load_state_dict
+------------------------------
 
-TensorDict and tensorclass support :meth:`~tensordict.TensorDictBase.state_dict` and
-:meth:`~tensordict.TensorDictBase.load_state_dict`, following the same conventions as
-:meth:`torch.nn.Module.state_dict`.
-
-By default, ``state_dict()`` returns a **flat** :class:`~collections.OrderedDict` with
-dot-separated keys, just like ``nn.Module``:
+:meth:`~tensordict.TensorDictBase.state_dict` and
+:meth:`~tensordict.TensorDictBase.load_state_dict` follow the conventions of
+:meth:`torch.nn.Module.state_dict`. By default, ``state_dict()`` returns a
+flat :class:`~collections.OrderedDict` with dot-separated keys, as
+``nn.Module`` does:
 
   >>> td = TensorDict({"a": 1, "b": {"c": 2}}, [])
   >>> sd = td.state_dict()
-  >>> print(sd)
-  OrderedDict([('a', tensor(1)), ('b.c', tensor(2))])
+  >>> dict(sd)
+  {'a': tensor(1), 'b.c': tensor(2)}
 
-Metadata (``batch_size``, ``device``) is stored in an ``_metadata`` attribute on the
-returned ``OrderedDict``, keyed by dot-separated prefix (``""`` for root, ``"b"`` for a
-nested tensordict at key ``"b"``). This mirrors ``nn.Module``'s metadata convention
-and replaces the legacy ``__batch_size`` / ``__device`` sentinel keys.
+The metadata (``batch_size``, ``device``) is in the ``_metadata`` attribute of
+the returned ``OrderedDict``. It has one entry for each dot-separated prefix:
+``""`` for the root, ``"b"`` for the nested tensordict at key ``"b"``. This is
+the metadata convention of ``nn.Module``. It replaces the old
+``__batch_size`` and ``__device`` keys.
 
-A nested format can be obtained by passing ``flatten=False``:
+To get a nested state dict, pass ``flatten=False``:
 
   >>> sd_nested = td.state_dict(flatten=False)
-  >>> print(sd_nested)
-  OrderedDict([('a', tensor(1)), ('b', OrderedDict([('c', tensor(2))]))])
+  >>> {key: dict(value) if isinstance(value, dict) else value for key, value in sd_nested.items()}
+  {'a': tensor(1), 'b': {'c': tensor(2)}}
 
-:meth:`~tensordict.TensorDictBase.load_state_dict` **auto-detects** the format of the
-incoming state-dict: flat (with ``_metadata`` and dot-separated keys), nested (with
-per-level ``_metadata``), and the legacy format (with ``__batch_size`` / ``__device``
-sentinel keys) are all supported transparently:
+``load_state_dict`` finds the format of its input: flat (with ``_metadata``
+and dot-separated keys), nested (with ``_metadata`` at each level), or the
+old format (with ``__batch_size`` and ``__device`` keys):
 
   >>> td_zero = td.clone().zero_()
-  >>> td_zero.load_state_dict(sd)       # flat format
-  >>> assert (td_zero == td).all()
-  >>> td_zero.zero_()
-  >>> td_zero.load_state_dict(sd_nested)  # nested format
-  >>> assert (td_zero == td).all()
+  >>> _ = td_zero.load_state_dict(sd)
+  >>> (td_zero == td).all()
+  True
+  >>> _ = td_zero.zero_().load_state_dict(sd_nested)
+  >>> (td_zero == td).all()
+  True
 
-For tensorclass objects, ``state_dict()`` exposes the logical field names as keys.
-Non-tensor fields are stored in ``_metadata`` rather than appearing as data keys:
+For a tensorclass, the keys of ``state_dict()`` are the names of the tensor
+fields. The non-tensor fields are in ``_metadata``:
 
+  >>> from tensordict import tensorclass
   >>> @tensorclass
-  ... class MyClass:
+  ... class Labeled:
   ...     x: torch.Tensor
   ...     label: str
-  >>> tc = MyClass(x=torch.randn(3), label="hello", batch_size=[])
-  >>> sd = tc.state_dict()
-  >>> print(list(sd.keys()))          # only tensor fields
+  >>> sd = Labeled(x=torch.randn(3), label="hello", batch_size=[]).state_dict()
+  >>> list(sd.keys())
   ['x']
-  >>> print(sd._metadata[""]["_non_tensor"])  # non-tensor fields
+  >>> sd._metadata[""]["_non_tensor"]
   {'label': 'hello'}
 
-Legacy: TorchSnapshot compatibility
------------------------------------
+Load data that you did not write
+--------------------------------
 
-.. warning::
-  torchsnapshot maintenance has been discontinued.  The section below is kept
-  for reference only; we recommend using the memory-mapped API above for new
-  projects.
+Pickle can run any code when it loads a file. tensordict uses pickle in two
+places on disk: ``other.pickle`` files in a saved directory or archive, and
+:func:`torch.save` files.
 
-TensorDict is compatible with `torchsnapshot <https://github.com/pytorch/torchsnapshot>`_.
-TorchSnapshot saves each tensor independently, with a data structure that
-mimics the TensorDict's one.
+Non-tensor values, such as strings, are stored in
+:class:`~tensordict.NonTensorData` entries or in tensorclass fields (see
+:ref:`non-tensor-data`). When you save them, tensordict writes the values that
+JSON can represent to ``meta.json``. It writes the other values to an
+``other.pickle`` file next to it:
 
-**In-memory loading**
+  >>> run = TensorDict(
+  ...     x=torch.zeros(3),
+  ...     config=NonTensorData({"lr": 0.1}),
+  ...     date=NonTensorData(datetime.date(2024, 1, 1)),
+  ...     batch_size=[3],
+  ... )
+  >>> _ = run.save(root / "run")
+  >>> sorted(p.name for p in (root / "run" / "config").iterdir())
+  ['meta.json']
+  >>> sorted(p.name for p in (root / "run" / "date").iterdir())
+  ['meta.json', 'other.pickle']
 
-.. code-block:: Python
+The ``allow_pickle`` argument of ``load_memmap`` sets whether tensordict loads
+the ``other.pickle`` files:
 
-  >>> import uuid
-  >>> import torchsnapshot
-  >>> from tensordict import TensorDict
-  >>> import torch
-  >>>
-  >>> tensordict_source = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [])
-  >>> state = {"state": tensordict_source}
-  >>> path = f"/tmp/{uuid.uuid4()}"
-  >>> snapshot = torchsnapshot.Snapshot.take(app_state=state, path=path)
-  >>> # later
-  >>> snapshot = torchsnapshot.Snapshot(path=path)
-  >>> tensordict_target = TensorDict()
-  >>> target_state = {"state": tensordict_target}
-  >>> snapshot.restore(app_state=target_state)
-  >>> assert (tensordict_source == tensordict_target).all()
+- ``allow_pickle=False``: if the data has a pickle file, ``load_memmap``
+  raises a ``RuntimeError``. Use this for data from a source that you do not
+  trust.
+- ``allow_pickle=True``: ``load_memmap`` loads the pickle files. Use this only
+  for data from a source that you trust.
+- No value: tensordict 0.14 loads the pickle files and emits a
+  ``FutureWarning``. The default changes to ``False`` in tensordict 0.15.
 
-**Big-dataset loading (memory-mapped)**
+The ``date`` value of the example above is in a pickle file:
 
-.. code-block:: Python
+  >>> TensorDict.load_memmap(root / "run", allow_pickle=False)
+  Traceback (most recent call last):
+  ...
+  RuntimeError: Refusing to load pickled non-tensor data from a memory-mapped TensorDict. ...
+  >>> TensorDict.load_memmap(root / "run", allow_pickle=True)["date"]
+  datetime.date(2024, 1, 1)
 
-  >>> td = TensorDict({"a": torch.randn(3), "b": TensorDict({"c": torch.randn(3, 1)}, [3, 1])}, [3])
-  >>> td.memmap_()
-  >>> assert isinstance(td["b", "c"], MemoryMappedTensor)
-  >>>
-  >>> app_state = {
-  ...     "state": torchsnapshot.StateDict(tensordict=td.state_dict(keep_vars=True))
-  ... }
-  >>> snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=f"/tmp/{uuid.uuid4()}")
-  >>>
-  >>> td_dest = TensorDict({"a": torch.zeros(3), "b": TensorDict({"c": torch.zeros(3, 1)}, [3, 1])}, [3])
-  >>> td_dest.memmap_()
-  >>> assert isinstance(td_dest["b", "c"], MemoryMappedTensor)
-  >>> app_state = {
-  ...     "state": torchsnapshot.StateDict(tensordict=td_dest.state_dict(keep_vars=True))
-  ... }
-  >>> snapshot.restore(app_state=app_state)
-  >>> assert (td_dest == td).all()
-  >>> assert (td_dest["b"].batch_size == td["b"].batch_size)
-  >>> assert isinstance(td_dest["b", "c"], MemoryMappedTensor)
+Data without a pickle file loads with ``allow_pickle=False``. ``load_memmap_``
+and ``memmap_refresh_`` take the same argument. For :func:`torch.load`, keep
+``weights_only=True`` and allowlist only the classes that you trust (see
+`torch.save and torch.load`_).
+
+tensordict also checks the files that it writes and reads:
+
+- When it creates a leaf file, it raises an error if the path is a symbolic
+  link. It cannot stop another process that renames files in the parent directory at
+  the same time. Keep the save directory, or the parent directory of an
+  archive, writable only by users that you trust. Use
+  :class:`tempfile.TemporaryDirectory` or another private directory, not a
+  fixed name in a shared ``/tmp``.
+- Keys are encoded so that every file stays inside the save directory, also
+  for keys that contain ``/`` or ``..``. ``robust_key=False`` turns this off
+  for old layouts. Do not use it with keys or metadata that you do not trust.
+- A save overwrites a leaf file that already exists. To get an error instead,
+  pass ``existsok=False``. ``save`` still rewrites the metadata files of a
+  directory that it reuses.
+
+Two other features unpickle what they receive: the
+:class:`~tensordict.store.TensorDictStore` Redis backend (see
+:ref:`storage`) and the metadata of the ``torch.distributed`` methods (see
+:ref:`distributed`).
+
+The directory layout
+--------------------
+
+The directory tree follows the keys: each leaf is a ``*.memmap`` file, and
+each nested tensordict is a sub-directory. The ``meta.json`` file of each
+directory holds what ``load_memmap`` needs to rebuild that level. This is the
+batch size, the device, the shape and dtype of each leaf, the class of the
+tensordict, and the non-tensor values that JSON can represent:
+
+  >>> td = TensorDict({"a": torch.rand(10), "b": {"c": torch.rand(10)}}, [10])
+  >>> _ = td.memmap_(root / "tree")
+  >>> sorted(str(p.relative_to(root / "tree")) for p in (root / "tree").rglob("*"))
+  ['a.memmap', 'b', 'b/c.memmap', 'b/meta.json', 'meta.json']
+
+Because ``meta.json`` stores the class of each level, ``load_memmap`` rebuilds
+nested structures whose levels have different types, such as a tensorclass
+inside a :class:`~tensordict.TensorDict` or a stack of tensordicts:
+
+  >>> td_list = [TensorDict({"item": i}, batch_size=[]) for i in range(4)]
+  >>> @tensorclass
+  ... class Record:
+  ...     data: torch.Tensor
+  ...     metadata: str
+  >>> data = TensorDict(
+  ...     td_list=torch.stack(td_list),
+  ...     record=Record(torch.randn(3), metadata="some text", batch_size=[]),
+  ... )
+  >>> _ = data.memmap_(root / "mixed")
+  >>> loaded = TensorDict.load_memmap(root / "mixed")
+  >>> type(loaded["record"]) is Record
+  True
+  >>> loaded["record"].metadata
+  'some text'
+
+:func:`~tensordict.utils.print_directory_tree` logs the tree and its size
+through the ``tensordict`` logger, and returns it as a string.
+
+A ``set`` value cannot be saved: ``save`` raises a ``TypeError`` because
+JSON cannot represent it. Convert it to a list first.
+
+Memory-mapped tensors
+---------------------
+
+A :class:`~tensordict.MemoryMappedTensor` is a tensor whose data is in a file
+on disk. You create it with constructors like those of torch (``empty``,
+``zeros``, ``from_tensor``, ...), and tensordict manages the file. Use it:
+
+- To work with contiguous data that is larger than the memory.
+- To send data to other processes. If all the processes can read the same
+  file, a memory-mapped tensor is sent as a file name and the metadata to
+  rebuild it. An indexed memory-mapped tensor is sent the same way if its
+  storage is still that of the original tensor.
+- To read a few items. Indexing reads only those items, which is faster
+  than opening many separate files.
+
+Apart from its file, you create and index a memory-mapped tensor like a
+regular tensor:
+
+  >>> from tensordict import MemoryMappedTensor
+  >>> images = MemoryMappedTensor.empty(
+  ...     (100, 3, 64, 64), dtype=torch.uint8, filename=root / "images.memmap"
+  ... )
+  >>> mini_batch = images[:10]  # a view on the first 10 images
+  >>> # open the file again, here or in another process
+  >>> images = MemoryMappedTensor.from_filename(
+  ...     root / "images.memmap", dtype=torch.uint8, shape=(100, 3, 64, 64)
+  ... )
+  >>> images.shape
+  torch.Size([100, 3, 64, 64])
+
+Speed
+-----
+
+All the formats that this page describes, and safetensors, load lazily
+through ``mmap``. Reading all the data takes about the same time with each
+of them. The differences come from a cost for each leaf, so they grow with
+the number of leaves. In one run of
+``benchmarks/scripts/serialization_formats_bench.py`` with 100 MB of data:
+
+- Open: a single file parses one metadata block, and a directory opens one
+  file for each leaf. With 2000 leaves, opening took 122 ms for a directory,
+  50 ms for an archive and 13 ms for a consolidated file.
+- Save: a directory save is the fastest. With 8 leaves, an archive took 25
+  times as long as a directory (845 ms and 34 ms). With 2000 leaves, it took
+  3.4 times as long.
+- Copy: a directory has a cost for each file, and on a network file system
+  this cost grows with the round-trip time. With 2000 leaves, copying a
+  directory took 112 ms, and copying a single file took 34 to 51 ms.
+- zarr (:meth:`~tensordict.TensorDictBase.to_zarr`, see :ref:`storage`)
+  opens lazily but does not memory-map, so a read copies the data. Each leaf
+  costs one round trip to the store: with 2000 leaves, saving took 17.6 s
+  (0.33 s for a directory).
+
+``torch.save`` and safetensors are measured on their fastest path: a flat
+dict of tensors, loaded with ``torch.load(mmap=True, weights_only=True)`` and
+with the memory-mapped loader of safetensors. Neither format stores the
+tensordict structure: the keys are flattened at save time and nested again
+at load time.
+
+The figure comes from the :ref:`serialization speed tutorial
+<sphx_glr_tutorials_serialization_speed.py>`, which runs when this
+documentation is built. Download its script to measure your own machine.
+
+.. figure:: /tutorials/images/sphx_glr_serialization_speed_002.png
+   :width: 100%
+   :alt: Bar charts of the save and open times of memmap directories,
+         consolidated files, zip archives, torch.save files and safetensors
+         files, for two tensordict layouts.
+   :target: tutorials/serialization_speed.html
+
+   Save time (single-threaded and multithreaded) and open time for each
+   format and layout, on the machine that built this documentation. Lower
+   is better. Each bar is the median of 32 runs, and the error bars show the
+   interquartile range. Hatched bars are multithreaded saves.
+
+See also
+--------
+
+- :ref:`storage`: preallocate a dataset on disk, and the HDF5, zarr and
+  Redis backends.
+- :ref:`data-loading`: read a saved dataset with a ``DataLoader``, and share
+  it between processes.
+- The reference of :meth:`~tensordict.TensorDictBase.memmap`,
+  :meth:`~tensordict.TensorDictBase.load_memmap`,
+  :meth:`~tensordict.TensorDictBase.consolidate` and
+  :class:`~tensordict.MemoryMappedTensor`, and the saving methods in
+  :ref:`api-methods-saving`.
+- Tutorials: :ref:`sphx_glr_tutorials_tensordict_memory.py` and
+  :ref:`sphx_glr_tutorials_serialization_speed.py`.
