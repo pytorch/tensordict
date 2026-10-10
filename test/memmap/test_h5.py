@@ -311,6 +311,16 @@ class TestH5Indexing:
         for key in td.keys(True, True):
             assert (h5td.get(key) == td.get(key)).all(), key
 
+    def test_stack_items(self, data):
+        # h5td[idx] is a lazy view of the file, not a lazy stack
+        td, h5td = data
+        result = torch.stack([h5td[0], h5td[3]])
+        expected = torch.stack([td[0], td[3]])
+        assert type(result) is TensorDict
+        assert result.batch_size == expected.batch_size
+        for key in expected.keys(True, True):
+            assert (result.get(key) == expected.get(key)).all(), key
+
     def test_index_reads_only_selected_rows(self, data, monkeypatch):
         # Slicing must not load whole datasets from storage
         _, h5td = data
