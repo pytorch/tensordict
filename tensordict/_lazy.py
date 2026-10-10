@@ -4020,6 +4020,18 @@ class LazyStackedTensorDict(TensorDictBase):
                 tds = self._new_lazy_unsafe(
                     *list(tds.chunk(shape[k], dim=k)), stack_dim=k
                 )
+            # An empty range (i > j) means that the new shape removes dims,
+            # starting at dim i. They have size 1 unless the stack has no
+            # elements. If they all have size 1, unbind them: like the
+            # flatten branch, and unlike squeeze, unbind works on every
+            # member type.
+            n_removed = self.batch_dims - len(shape)
+            if (
+                n_removed > 0
+                and self.batch_size[i : i + n_removed].count(1) == n_removed
+            ):
+                for _ in range(n_removed):
+                    (tds,) = tds.unbind(i)
             if self.is_locked:
                 return tds.lock_()
             return tds
