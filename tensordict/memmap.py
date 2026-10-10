@@ -362,6 +362,14 @@ class MemoryMappedTensor(torch.Tensor):
             tensor.filename = filename
         elif handler is not None:
             tensor._handler = handler
+        if getattr(storage, "filename", None) is not None:
+            # Pickling reads these to map the file again, as for from_tensor.
+            # Other storages have no file to map, even when a filename is
+            # given, so they still cannot be pickled.
+            tensor._index = None
+            tensor._parent_shape = (
+                shape if isinstance(shape, torch.Tensor) else tensor.shape
+            )
         if index is not None:
             return tensor[index]
         return tensor

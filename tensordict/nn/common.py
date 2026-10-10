@@ -1182,7 +1182,9 @@ class TensorDictModule(TensorDictModuleBase):
                 kwargs.update(
                     {
                         kwarg: tensordict._get_tuple_maybe_non_tensor(
-                            _unravel_key_to_tuple(in_key), default=default
+                            _unravel_key_to_tuple(in_key),
+                            default,
+                            **self._get_kwargs,
                         )
                         for kwarg, in_key in _zip_strict(self._kwargs, self.in_keys)
                     }
