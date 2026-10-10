@@ -67,7 +67,7 @@ from tensordict.base import (
     _get_defaults_to_none,
     _set_get_defaults_to_none,
 )
-from tensordict.tensorclass import from_dataclass
+from tensordict.tensorclass import _TensorClassMeta, from_dataclass
 from tensordict.utils import _check_recursive_properties
 from torch import Tensor
 
@@ -443,6 +443,114 @@ Obs(a=torch.Tensor(), non_blocking=True)
     assert 'incompatible type "str"' in errors
     assert 'Unexpected keyword argument "extra"' in errors
     assert 'Unexpected keyword argument "non_blocking"' in errors
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+def test_tensorclass_stub_init_subclass():
+    # The class keywords (class X(TensorClass, autocast=True)) go to the
+    # metaclass at runtime; the stub declares them on __init_subclass__.
+    with open(_TENSORDICT_DIR / "tensorclass.pyi", "r") as f:
+        tree = ast.parse(f.read())
+    (stub_class,) = (
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "TensorClass"
+    )
+    (init_subclass,) = (
+        node
+        for node in stub_class.body
+        if isinstance(node, ast.FunctionDef) and node.name == "__init_subclass__"
+    )
+    class_kwargs = {arg.arg for arg in init_subclass.args.kwonlyargs}
+
+    meta_params = inspect.signature(_TensorClassMeta.__new__).parameters.values()
+    assert class_kwargs == {
+        param.name for param in meta_params if param.default is not param.empty
+    }
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_tensorclass_stub_static_types(tmp_path, monkeypatch):
+    from mypy import api
+
+    # Check tensorclass.pyi alone: the modules it imports are reduced to the
+    # names these checks need, or to Any. Mypy also searches the working
+    # directory, which must not hold the tensordict sources.
+    monkeypatch.chdir(tmp_path)
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    package.mkdir(parents=True)
+    torch_package = stubs / "torch"
+    torch_package.mkdir()
+    torch_package.joinpath("__init__.pyi").write_text(
+        """from typing import Any
+
+class Tensor: ...
+class device: ...
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    package.joinpath("__init__.pyi").write_text(
+        "from .tensorclass import TensorClass as TensorClass\n"
+    )
+    package.joinpath("utils.pyi").write_text(
+        """from typing import Any, TypeAlias
+
+import torch
+
+DeviceType: TypeAlias = torch.device | str | int
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    package.joinpath("tensorclass.pyi").write_text(
+        (_TENSORDICT_DIR / "tensorclass.pyi").read_text()
+    )
+
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.11
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+
+    valid = tmp_path / "valid.py"
+    valid.write_text(
+        """from typing import assert_type
+import torch
+from tensordict import TensorClass
+
+class Obs(TensorClass):
+    a: torch.Tensor
+    label: str = "x"
+
+class Flagged(TensorClass, autocast=True, tensor_only=False):
+    a: torch.Tensor
+
+t = torch.Tensor()
+obs = Obs(t, "s", batch_size=[3], device="cpu", names=["n"], lock=False)
+Flagged(a=t, batch_size=3)
+assert_type(obs.a, torch.Tensor)
+assert_type(obs[0], Obs)
+assert_type(obs.unbind(0), tuple[Obs, ...])
+assert_type(obs.to("cpu"), Obs)
+assert_type(obs + 1, Obs)
+assert_type(1 + obs, Obs)
+assert_type(obs * 2.0, Obs)
+assert_type(-obs, Obs)
+assert_type(obs == obs, Obs)
+for item in obs:
+    assert_type(item, Obs)
+"""
+    )
+    stdout, stderr, status = api.run(["--config-file", str(config), str(valid)])
+    assert status == 0, stdout + stderr
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
@@ -2014,6 +2122,17 @@ class TestTensorClass:
         data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
         data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
         assert data.repeat_interleave(2, dim=1).shape == torch.Size((3, 8))
+        repeated = torch.repeat_interleave(data, 2, 1)
+        assert type(repeated) is type(data)
+        assert repeated.shape == torch.Size((3, 8))
+        assert repeated.y.shape == torch.Size((3, 8))
+        assert repeated.z == z
+        repeated = torch.repeat_interleave(
+            data, repeats=torch.tensor([1, 2, 3, 4]), dim=1, output_size=10
+        )
+        assert type(repeated) is type(data)
+        assert repeated.shape == torch.Size((3, 10))
+        assert repeated.y.shape == torch.Size((3, 10))
 
     def test_repeat_interleave_tensor(self):
         class MyDataNested(TensorClass):
@@ -2056,6 +2175,15 @@ class TestTensorClass:
         assert (stacked_tc.X == 1).all()
         assert isinstance(stacked_tc._tensordict, TensorDict)
         assert stacked_tc.z == stacked_tc.y.z == z
+
+        for reshaped in (
+            torch.reshape(data, (4, 3)),
+            torch.reshape(data, shape=(4, 3)),
+        ):
+            assert type(reshaped) is type(data)
+            assert reshaped.shape == torch.Size([4, 3])
+            assert reshaped.y.shape == torch.Size([4, 3])
+            assert reshaped.z == reshaped.y.z == z
 
     def test_set(self):
         @tensorclass
@@ -2592,6 +2720,86 @@ class TestTensorClass:
         assert data_split[1].batch_size == torch.Size([3, 3])
         assert data_split[2].batch_size == torch.Size([3, 1])
         assert data_split[2].batch_size == torch.Size([3, 1])
+
+        for torch_split in (
+            torch.tensor_split(data_out, (1, 4, 5), 1),
+            torch.tensor_split(data_out, indices=[1, 4, 5], dim=1),
+            torch.tensor_split(data_out, torch.tensor([1, 4, 5]), 1),
+        ):
+            assert len(torch_split) == 4
+            for split, expected in zip(torch_split, data_split):
+                assert type(split) is type(data_out)
+                assert split.batch_size == expected.batch_size
+                assert split.y.batch_size == expected.batch_size
+                assert split.z == "test_tensorclass"
+        torch_split = torch.tensor_split(data_out, sections=4, dim=1)
+        assert [split.batch_size[1] for split in torch_split] == [2, 2, 1, 1]
+        assert all(type(split) is type(data_out) for split in torch_split)
+
+    def test_torch_chunk(self):
+        @tensorclass
+        class MyDataNested:
+            X: torch.Tensor
+            z: str
+            y: "MyDataNested" = None
+
+        data_in = MyDataNested(
+            X=torch.ones(3, 6, 5), z="test_tensorclass", batch_size=[3, 6]
+        )
+        data_out = MyDataNested(
+            X=torch.ones(3, 6, 5), z="test_tensorclass", y=data_in, batch_size=[3, 6]
+        )
+        for chunks in (
+            torch.chunk(data_out, 4, 1),
+            torch.chunk(data_out, chunks=4, dim=1),
+        ):
+            assert len(chunks) == len(data_out.chunk(4, 1)) == 3
+            for chunk in chunks:
+                assert type(chunk) is type(data_out)
+                assert chunk.batch_size == torch.Size([3, 2])
+                assert chunk.y.batch_size == torch.Size([3, 2])
+                assert chunk.z == "test_tensorclass"
+
+    def test_torch_where(self):
+        @tensorclass
+        class MyDataNested:
+            X: torch.Tensor
+            z: str
+            y: "MyDataNested" = None
+
+        def make(value):
+            data_in = MyDataNested(
+                X=torch.full((3, 4, 5), value), z="test_tensorclass", batch_size=[3, 4]
+            )
+            return MyDataNested(
+                X=torch.full((3, 4, 5), value),
+                z="test_tensorclass",
+                y=data_in,
+                batch_size=[3, 4],
+            )
+
+        data0, data1 = make(0.0), make(1.0)
+        mask = torch.zeros(3, 4, dtype=torch.bool)
+        mask[0] = True
+        for result in (
+            torch.where(mask, data1, data0),
+            torch.where(mask, input=data1, other=data0),
+            torch.where(mask, data1, 0.0),
+        ):
+            assert type(result) is type(data0)
+            assert result.batch_size == data0.batch_size
+            assert result.z == "test_tensorclass"
+            assert (result.X[mask] == 1).all()
+            assert (result.X[~mask] == 0).all()
+            assert (result.y.X[mask] == 1).all()
+            assert (result.y.X[~mask] == 0).all()
+        # out is filled, and the result wraps its tensordict
+        out = make(2.0)
+        result = torch.where(mask, data1, data0, out=out)
+        assert result._tensordict is out._tensordict
+        assert (out.X[~mask] == 0).all()
+        with pytest.raises(TypeError, match="missing 2 required positional"):
+            torch.where(data0)
 
     def test_update(self):
         @tensorclass
