@@ -5177,6 +5177,26 @@ class TestAsTDM:
         a = A()
         assert a.func(TensorDict(c=0))["d"] == 1
 
+    def test_method_instances(self):
+        # Each instance runs the method with its own self, and the decorated
+        # method does not keep the first instance alive.
+        class A:
+            def __init__(self, k):
+                self.k = k
+
+            @as_tensordict_module(in_keys="c", out_keys="d")
+            def func(self, c):
+                return c * self.k
+
+        a, b = A(2), A(10)
+        assert a.func(TensorDict(c=1))["d"] == 2
+        assert b.func(TensorDict(c=1))["d"] == 10
+        assert a.func(c=torch.tensor(1)) == 2
+        assert b.func(c=torch.tensor(1)) == 10
+        a_ref = weakref.ref(a)
+        del a
+        assert a_ref() is None
+
     @pytest.mark.parametrize("in_keys", ["c", ["c"]])
     @pytest.mark.parametrize("out_keys", ["d", ["d"]])
     def test_free_func(self, in_keys, out_keys):
