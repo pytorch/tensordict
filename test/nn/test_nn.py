@@ -5202,6 +5202,15 @@ class TestToModule:
         torch.testing.assert_close(module.weight, params["weight"])
         torch.testing.assert_close(module.bias, params["bias"])
 
+    def test_to_module_rejects_preserve_module_state_none(self, as_module):
+        module = nn.Linear(4, 2)
+        weight = module.weight
+        params = TensorDict.from_module(module, as_module=as_module).data.clone()
+
+        with pytest.raises(TypeError, match="preserve_module_state=None"):
+            params.to_module(module, preserve_module_state=None)
+        assert module.weight is weight
+
     @pytest.mark.parametrize("parameter_source", [False, True])
     def test_to_module_can_preserve_module_state(self, as_module, parameter_source):
         module = nn.Linear(4, 2)
