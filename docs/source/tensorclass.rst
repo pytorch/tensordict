@@ -5,69 +5,100 @@
 TensorClass
 ===========
 
-A *tensorclass* is a class that you declare like a :func:`~dataclasses.dataclass`
-and that has the operations of a :class:`~tensordict.TensorDict`: indexing,
-reshaping, ``to(device)``, ``torch.stack`` and ``torch.cat``, and saving to
-disk. Its fields are typed attributes, not string keys. This page is for users
-who want a container with a fixed set of fields, methods of their own, and
-completion and type checks in their IDE.
+A *tensorclass* is a class for tensor data. You declare its fields with type
+annotations, as in a :func:`~dataclasses.dataclass`, and you write its methods
+once. A method then runs on one item or on a batch of any shape, and compiles
+with ``torch.compile(fullgraph=True)``. The instances have the tensor
+operations of a :class:`~tensordict.TensorDict`: indexing, reshaping,
+``to(device)``, ``torch.stack``, ``torch.cat`` and saving to disk.
 
-You can declare a tensorclass in two ways:
+  >>> import torch
+  >>> from tensordict import TensorClass
+  >>> class Particles(TensorClass):
+  ...     pos: torch.Tensor  # [*batch, 3]
+  ...     vel: torch.Tensor  # [*batch, 3]
+  ...     mass: torch.Tensor  # [*batch]
+  ...
+  ...     def step(self, force: torch.Tensor, dt: float) -> "Particles":
+  ...         vel = self.vel + dt * force / self.mass.unsqueeze(-1)
+  ...         return Particles(
+  ...             pos=self.pos + dt * vel, vel=vel, mass=self.mass, batch_size=self.batch_size
+  ...         )
+  >>> _ = torch.manual_seed(0)
+  >>> systems = Particles(  # 64 systems of 1,000 particles each
+  ...     pos=torch.randn(64, 1000, 3),
+  ...     vel=torch.zeros(64, 1000, 3),
+  ...     mass=torch.ones(64, 1000),
+  ...     batch_size=[64, 1000],
+  ... )
+  >>> systems = systems.step(torch.randn(64, 1000, 3), dt=0.01)  # all 64 systems
+  >>> one = systems[0].step(torch.randn(1000, 3), dt=0.01)  # one system
+  >>> type(one).__name__, one.batch_size
+  ('Particles', torch.Size([1000]))
+  >>> grid = systems.reshape(8, 8, 1000).step(torch.randn(8, 8, 1000, 3), dt=0.01)
+  >>> grid.batch_size
+  torch.Size([8, 8, 1000])
+  >>> step = torch.compile(Particles.step, fullgraph=True)
+  >>> force = torch.randn(64, 1000, 3)
+  >>> torch.allclose(step(systems, force, 0.01).pos, systems.step(force, 0.01).pos)
+  True
 
-- Subclass :class:`~tensordict.TensorClass`. Use this form in new code. Static
-  type checkers understand it without a plugin.
-- Decorate a class with :func:`~tensordict.tensorclass`. This form is kept for
-  backward compatibility and to convert ``@dataclass`` code. See
-  :ref:`tensorclass-legacy-decorator`.
+``step`` has no loop over the systems and no shape argument. The *batch size*
+(``[64, 1000]`` here) is the leading dimensions that all the fields share (see
+:ref:`batch-size`). An index or a ``reshape`` applies to these dimensions and
+returns a ``Particles``. So the same method runs on one system or on a grid
+of systems. The compiled ``step`` gives the same result as the eager
+``step``. The class declares its fields, so your editor completes
+``self.pos``, and a type checker reads the fields as the signature of the
+constructor (see :ref:`tensorclass-static-typing`).
 
-To compare a tensorclass with :class:`~tensordict.TypedTensorDict` and the
-other containers, see :ref:`choosing-a-container`.
+Read the quick start and :ref:`tensorclass-methods` first. Each later section
+describes one feature: read it when you need that feature. To compare a
+tensorclass with a ``TensorDict`` and the other containers, see
+:ref:`choosing-a-container`.
 
 Quick start
 -----------
 
-Declare each field with a type annotation. Then pass the values and the batch
-size to the constructor. The *batch size* is the leading dimensions that all
-the fields share (see :ref:`batch-size`).
+Subclass :class:`~tensordict.TensorClass` and annotate each field. Then pass
+the values and the batch size to the constructor:
 
   >>> from typing import Optional
-  >>> import torch
-  >>> from tensordict import TensorClass
-  >>> class MyData(TensorClass):
-  ...     floatdata: torch.Tensor
-  ...     intdata: torch.Tensor
-  ...     non_tensordata: str
-  ...     nested: Optional["MyData"] = None
-  >>> data = MyData(
-  ...     floatdata=torch.randn(3, 4, 5),
-  ...     intdata=torch.randint(10, (3, 4, 1)),
-  ...     non_tensordata="test",
-  ...     batch_size=[3, 4],
+  >>> class Reading(TensorClass):
+  ...     signal: torch.Tensor
+  ...     count: torch.Tensor
+  ...     sensor: str
+  ...     backup: Optional["Reading"] = None
+  >>> data = Reading(
+  ...     signal=torch.randn(3, 4, 5),
+  ...     count=torch.randint(10, (3, 4, 1)),
+  ...     sensor="lidar",
+  ...     batch_size=[3, 4],  # for example, 3 robots and 4 time steps
   ... )
   >>> print(data)
-  MyData(
-      floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-      intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
-      non_tensordata=NonTensorData(data=test, batch_size=torch.Size([3, 4]), device=None),
-      nested=None,
+  Reading(
+      count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+      sensor=NonTensorData(data=lidar, batch_size=torch.Size([3, 4]), device=None),
+      signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+      backup=None,
       batch_size=torch.Size([3, 4]),
       device=None,
       is_shared=False)
 
-The ``nested`` annotation is a string because the class refers to itself.
+The ``backup`` annotation is a string because the class refers to itself.
 Another way is ``from __future__ import annotations`` at the top of the
 module. If you do not pass ``batch_size``, it is ``torch.Size([])``, and the
 tensorclass has no batch dimensions.
 
 Read and assign the fields as attributes. A field that is not a tensor
-(``non_tensordata`` here) returns its plain value:
+(``sensor`` here) returns its plain value:
 
-  >>> data.non_tensordata
-  'test'
-  >>> data.nested = MyData(
-  ...     floatdata=torch.randn(3, 4, 5),
-  ...     intdata=torch.randint(10, (3, 4, 1)),
-  ...     non_tensordata="nested_test",
+  >>> data.sensor
+  'lidar'
+  >>> data.backup = Reading(
+  ...     signal=torch.randn(3, 4, 5),
+  ...     count=torch.randint(10, (3, 4, 1)),
+  ...     sensor="radar",
   ...     batch_size=[3, 4],
   ... )
 
@@ -77,35 +108,267 @@ tensorclass. Fields that are not tensors keep their value:
   >>> sub = data[:2]
   >>> sub.batch_size
   torch.Size([2, 4])
-  >>> sub.nested.floatdata.shape
+  >>> sub.backup.signal.shape
   torch.Size([2, 4, 5])
-  >>> sub.nested.non_tensordata
-  'nested_test'
+  >>> sub.backup.sensor
+  'radar'
 
-The shape and device operations of :class:`~tensordict.TensorDict` (``stack``,
-``cat``, ``reshape``, ``to``, ``clone``, ``apply``, and the others) work on a
-tensorclass and return an instance of the same class:
+The shape and device operations of :class:`~tensordict.TensorDict` work on a
+tensorclass: ``stack``, ``cat``, ``reshape``, ``to``, ``clone``, ``apply`` and
+the others. They return an instance of the same class:
 
   >>> data2 = data.clone()
   >>> cat_tc = torch.cat([data, data2], 0)
   >>> type(cat_tc).__name__, cat_tc.batch_size
-  ('MyData', torch.Size([6, 4]))
+  ('Reading', torch.Size([6, 4]))
 
 A tensorclass is not a :class:`~tensordict.TensorDictBase` and not a
 :class:`~collections.abc.Mapping`. A string index raises an error, because an
 index always applies to the batch dimensions. To read a field by name, use
 ``get``:
 
-  >>> data["intdata"]
+  >>> data["count"]
   Traceback (most recent call last):
   ...
-  ValueError: Invalid indexing arguments: 'intdata'. A tensorclass is indexed along its batch dimensions; to read a field, use the attribute or get('intdata').
-  >>> data.get("intdata").shape
+  ValueError: Invalid indexing arguments: 'count'. A tensorclass is indexed along its batch dimensions; to read a field, use the attribute or get('count').
+  >>> data.get("count").shape
   torch.Size([3, 4, 1])
 
 To test whether an object is a tensordict or a tensorclass, use
 :func:`~tensordict.is_tensor_collection`. ``to_tensordict()`` returns a copy
 of the data as a :class:`~tensordict.TensorDict`.
+
+.. _tensorclass-methods:
+
+Methods
+-------
+
+A tensorclass is a Python class: you can add methods, properties, class
+methods and class constants to it. Of the dataclass features,
+``__post_init__``, field defaults and a custom ``__init__`` work, with the
+rules below.
+
+Methods and properties
+~~~~~~~~~~~~~~~~~~~~~~
+
+Methods and properties can read and assign the fields. A method that calls a
+tensordict operation, such as ``apply``, returns an instance of the class. A
+property is not a field: it is not stored and not in ``keys()``. Use
+:class:`typing.ClassVar` for a constant of the class. It is not a field
+either:
+
+  >>> from typing import ClassVar
+  >>> class Logits(TensorClass):
+  ...     logits: torch.Tensor
+  ...     temperature: ClassVar[float] = 2.0
+  ...
+  ...     @classmethod
+  ...     def uniform(cls, batch, n):
+  ...         return cls(logits=torch.zeros(batch, n), batch_size=[batch])
+  ...
+  ...     @property
+  ...     def probs(self):
+  ...         return (self.logits / self.temperature).softmax(-1)
+  ...
+  ...     @probs.setter
+  ...     def probs(self, value):
+  ...         self.logits = value.log() * self.temperature
+  ...
+  ...     def detached(self):
+  ...         return self.apply(lambda t: t.detach())
+  >>> x = Logits.uniform(2, 4)
+  >>> x.probs[0]
+  tensor([0.2500, 0.2500, 0.2500, 0.2500])
+  >>> x.probs = torch.tensor([0.4, 0.2, 0.2, 0.2]).expand(2, 4)
+  >>> x.probs[0]
+  tensor([0.4000, 0.2000, 0.2000, 0.2000])
+  >>> list(x.keys())
+  ['logits']
+  >>> type(x.detached()).__name__, x[0].probs.shape
+  ('Logits', torch.Size([4]))
+
+``__post_init__``
+~~~~~~~~~~~~~~~~~
+
+As in a dataclass, ``__post_init__`` runs after the generated ``__init__``.
+Use it to compute a default value, or to make sure that the fields are valid:
+
+  >>> class Batch(TensorClass):
+  ...     obs: torch.Tensor
+  ...     mask: torch.Tensor = None
+  ...
+  ...     def __post_init__(self):
+  ...         if self.mask is None:
+  ...             self.mask = torch.ones(self.batch_size, dtype=torch.bool)
+  >>> b = Batch(obs=torch.zeros(3, 2), batch_size=[3])
+  >>> b.mask
+  tensor([True, True, True])
+
+``__post_init__`` also runs each time tensordict makes a new instance from an
+existing one: an index, ``clone``, ``torch.stack``, ``apply`` and
+``from_tensordict``. Do little work in it, and make sure that a second run
+gives the same result. In the example above, the second run finds a mask and
+keeps it.
+
+A custom ``__init__``
+~~~~~~~~~~~~~~~~~~~~~
+
+If the class defines ``__init__``, it replaces the generated one. When it
+runs, the instance already exists, with the ``batch_size``, ``device`` and
+``names`` that the caller passed as keyword arguments. Assign the fields as
+attributes. To set the batch size from the data, assign ``self.batch_size``
+after the fields:
+
+  >>> class Points(TensorClass):
+  ...     xyz: torch.Tensor
+  ...
+  ...     def __init__(self, n: int):
+  ...         self.xyz = torch.zeros(n, 3)
+  ...         self.batch_size = [n]
+  >>> Points(4).batch_size
+  torch.Size([4])
+  >>> Points(4)[:2].batch_size
+  torch.Size([2])
+
+These rules apply to a custom ``__init__``:
+
+- If it does not set a required field, the constructor raises
+  ``TypeError: Points.__init__() did not set the required field 'xyz'``.
+- Indexing, ``clone``, ``torch.stack`` and the other operations make new
+  instances without a call to ``__init__``. So ``__init__`` must only fill
+  the fields, and the fields must be enough to rebuild the instance.
+- As in a dataclass, a custom ``__init__`` does not call ``__post_init__``.
+  If you need it, call it yourself.
+- ``super().__init__(...)`` with fields works when the parent class is a
+  tensorclass with fields: it runs the generated ``__init__`` of the parent.
+  If the parent is :class:`~tensordict.TensorClass` itself, a call with fields
+  raises ``NotImplementedError``. Assign the fields instead.
+
+Overriding ``__setattr__`` and ``__getitem__``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A ``__setattr__`` or ``__getitem__`` that the class defines replaces the one
+of the tensorclass. For the cases that you do not handle, call the method of
+``super()``. A custom ``__setattr__`` also runs when the constructor sets the
+fields:
+
+  >>> class Clamped(TensorClass):
+  ...     x: torch.Tensor
+  ...
+  ...     def __setattr__(self, key, value):
+  ...         if key == "x":
+  ...             value = value.clamp(0, 1)
+  ...         super().__setattr__(key, value)
+  >>> c = Clamped(x=torch.tensor([-1.0, 2.0]), batch_size=[2])
+  >>> c.x
+  tensor([0., 1.])
+
+Fields that are not tensors
+---------------------------
+
+A field can hold a value that is not a tensor, such as a string. The
+tensorclass stores it in a wrapper.
+
+``NonTensorData`` and ``MetaData``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Two wrappers exist, and they differ when you stack instances:
+
+- :class:`~tensordict.NonTensorData` is the default. It keeps one value per
+  batch element. Stacking instances gives a
+  :class:`~tensordict.NonTensorStack`, and attribute access returns a list of
+  the values, even when all the values are equal.
+- :class:`~tensordict.MetaData` holds one value for the whole batch. Stacking
+  ``MetaData("cfg")`` with ``MetaData("cfg")`` returns ``MetaData("cfg")``.
+  Stacking items with different values returns a ``NonTensorStack``, as for
+  ``NonTensorData``. Use ``MetaData`` for a value that is the same for every
+  element, such as a label or a configuration dict.
+
+To use ``MetaData``, assign a ``MetaData`` instance to the field:
+
+  >>> from tensordict import MetaData
+  >>> class Sample(TensorClass):
+  ...     x: torch.Tensor
+  ...     label: str
+  >>> a = Sample(x=torch.zeros(()), label="cfg")
+  >>> torch.stack([a, a]).label
+  LinkedList(['cfg', 'cfg'])
+  >>> m = Sample(x=torch.zeros(()), label=MetaData("cfg"))
+  >>> torch.stack([m, m]).label
+  'cfg'
+
+``LinkedList`` is a subclass of :class:`list`. For the full rules of
+non-tensor values in tensordicts, see :ref:`non-tensor-data`.
+
+Fields set to ``None``
+~~~~~~~~~~~~~~~~~~~~~~
+
+A field can be ``None`` at first and get a value later. The value that you
+assign decides how the field is stored: a tensor is stored as a tensor, and a
+string as ``NonTensorData``:
+
+  >>> from typing import Any
+  >>> class Slots(TensorClass):
+  ...     X: Any
+  ...     y: Any
+  >>> slots = Slots(X=None, y=None, batch_size=[3, 4])
+  >>> slots.X = torch.ones(3, 4, 5)
+  >>> slots.y = "testing"
+  >>> print(slots)
+  Slots(
+      X=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+      y=NonTensorData(data=testing, batch_size=torch.Size([3, 4]), device=None),
+      batch_size=torch.Size([3, 4]),
+      device=None,
+      is_shared=False)
+
+Comparison, item assignment and concatenation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``==`` and ``!=`` compare two tensorclasses field by field, also the nested
+ones. The result is a tensorclass with a boolean tensor for each field. For a
+field that is not a tensor, the boolean tensor has the batch shape, and it is
+``False`` where the values differ:
+
+  >>> print(data == data2)
+  Reading(
+      backup=Reading(
+          count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+          sensor=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
+          signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
+          backup=None,
+          batch_size=torch.Size([3, 4]),
+          device=None,
+          is_shared=False),
+      count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+      sensor=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
+      signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
+      batch_size=torch.Size([3, 4]),
+      device=None,
+      is_shared=False)
+  >>> data2.sensor = "camera"
+  >>> (data == data2).sensor.any()
+  tensor(False)
+
+An item assignment writes the values that are not tensors element by element,
+with no warning when they differ from the rest of the batch. The field then
+holds one value per element (a :class:`~tensordict.NonTensorStack`), and
+attribute access returns a nested list of those values, with one level per
+batch dimension:
+
+  >>> data[0] = data2[0]
+  >>> [row[0] for row in data.sensor]
+  ['camera', 'lidar', 'lidar']
+
+``torch.cat`` and ``torch.stack`` keep the non-tensor value of each element.
+If the inputs differ on a non-tensor field, the field of the result is a
+``NonTensorStack``, and attribute access returns the nested list of values.
+``torch.stack`` does this even when all the inputs have the same value.
+``torch.cat`` of inputs that have one same value keeps that value:
+
+  >>> cat_tc = torch.cat([data, data2], dim=0)
+  >>> [row[0] for row in cat_tc.sensor]
+  ['camera', 'lidar', 'lidar', 'camera', 'camera', 'camera']
 
 Class options
 -------------
@@ -222,11 +485,11 @@ auto-cast:
 Auto-casting reads the annotations with :func:`typing.get_type_hints`. If one
 annotation of the class does not resolve, tensordict warns
 ``type_hints are none, cannot perform auto-casting`` and casts no field of the
-class. An annotation does not resolve when it is a string (or when the module
-uses ``from __future__ import annotations``) and names a class that is not
-visible from the module. A tensorclass that is defined inside a function and
-that another class refers to is the usual case. Define such classes at module
-level.
+class. An annotation does not resolve when it names a class that is not
+visible from the module, and the annotation is a string (or the module uses
+``from __future__ import annotations``). The usual case is a tensorclass that is defined
+inside a function, and that another class refers to. Define such classes at
+module level.
 
 .. _tensorclass-frozen:
 
@@ -260,231 +523,6 @@ frozen class cannot subclass a tensorclass that is not frozen: this raises
 checkers read a subclass without the flag as not frozen and report it, so
 repeat ``frozen=True`` on the subclass (for mypy, see
 :ref:`tensorclass-static-typing`).
-
-Custom methods
---------------
-
-A tensorclass is a regular Python class. You can add methods, properties,
-class methods and class constants to it. Of the dataclass features,
-``__post_init__``, field defaults and a custom ``__init__`` work as described
-below.
-
-Methods and properties
-~~~~~~~~~~~~~~~~~~~~~~
-
-Methods and properties can read and assign the fields. A method that calls a
-tensordict operation, such as ``apply``, returns an instance of the class. A
-property is not a field: it is not stored and not in ``keys()``. Use
-:class:`typing.ClassVar` for a constant of the class. It is not a field
-either:
-
-  >>> from typing import ClassVar
-  >>> class Logits(TensorClass):
-  ...     logits: torch.Tensor
-  ...     temperature: ClassVar[float] = 2.0
-  ...
-  ...     @classmethod
-  ...     def uniform(cls, batch, n):
-  ...         return cls(logits=torch.zeros(batch, n), batch_size=[batch])
-  ...
-  ...     @property
-  ...     def probs(self):
-  ...         return (self.logits / self.temperature).softmax(-1)
-  ...
-  ...     @probs.setter
-  ...     def probs(self, value):
-  ...         self.logits = value.log() * self.temperature
-  ...
-  ...     def detached(self):
-  ...         return self.apply(lambda t: t.detach())
-  >>> x = Logits.uniform(2, 4)
-  >>> x.probs[0]
-  tensor([0.2500, 0.2500, 0.2500, 0.2500])
-  >>> x.probs = torch.tensor([0.4, 0.2, 0.2, 0.2]).expand(2, 4)
-  >>> x.probs[0]
-  tensor([0.4000, 0.2000, 0.2000, 0.2000])
-  >>> list(x.keys())
-  ['logits']
-  >>> type(x.detached()).__name__, x[0].probs.shape
-  ('Logits', torch.Size([4]))
-
-``__post_init__``
-~~~~~~~~~~~~~~~~~
-
-As in a dataclass, ``__post_init__`` runs after the generated ``__init__``.
-Use it to compute a default value, or to make sure that the fields are valid:
-
-  >>> class Batch(TensorClass):
-  ...     obs: torch.Tensor
-  ...     mask: torch.Tensor = None
-  ...
-  ...     def __post_init__(self):
-  ...         if self.mask is None:
-  ...             self.mask = torch.ones(self.batch_size, dtype=torch.bool)
-  >>> b = Batch(obs=torch.zeros(3, 2), batch_size=[3])
-  >>> b.mask
-  tensor([True, True, True])
-
-``__post_init__`` also runs each time tensordict makes a new instance from an
-existing one: an index, ``clone``, ``torch.stack``, ``apply`` and
-``from_tensordict``. Do little work in it, and make sure that a second run
-gives the same result. In the example above, the second run finds a mask and keeps it.
-
-A custom ``__init__``
-~~~~~~~~~~~~~~~~~~~~~
-
-If the class defines ``__init__``, it replaces the generated one. When it
-runs, the instance already exists, with the ``batch_size``, ``device`` and
-``names`` that the caller passed as keyword arguments. Assign the fields as
-attributes. To set the batch size from the data, assign ``self.batch_size``
-after the fields:
-
-  >>> class Points(TensorClass):
-  ...     xyz: torch.Tensor
-  ...
-  ...     def __init__(self, n: int):
-  ...         self.xyz = torch.zeros(n, 3)
-  ...         self.batch_size = [n]
-  >>> Points(4).batch_size
-  torch.Size([4])
-  >>> Points(4)[:2].batch_size
-  torch.Size([2])
-
-These rules apply to a custom ``__init__``:
-
-- If it does not set a required field, the constructor raises
-  ``TypeError: Points.__init__() did not set the required field 'xyz'``.
-- Indexing, ``clone``, ``torch.stack`` and the other operations make new
-  instances without a call to ``__init__``. So ``__init__`` must only fill
-  the fields, and the fields must be enough to rebuild the instance.
-- As in a dataclass, a custom ``__init__`` does not call ``__post_init__``.
-  Call it yourself if you need it.
-- ``super().__init__(...)`` with fields works when the parent class is a
-  tensorclass with fields: it runs the generated ``__init__`` of the parent. If
-  the parent is :class:`~tensordict.TensorClass` itself, a call with fields
-  raises ``NotImplementedError``. Assign the fields instead.
-
-Overriding ``__setattr__`` and ``__getitem__``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-A ``__setattr__`` or ``__getitem__`` that the class defines replaces the one
-of the tensorclass. Call the method of ``super()`` for the cases that you do
-not handle. A custom ``__setattr__`` also runs when the constructor sets the
-fields:
-
-  >>> class Clamped(TensorClass):
-  ...     x: torch.Tensor
-  ...
-  ...     def __setattr__(self, key, value):
-  ...         if key == "x":
-  ...             value = value.clamp(0, 1)
-  ...         super().__setattr__(key, value)
-  >>> c = Clamped(x=torch.tensor([-1.0, 2.0]), batch_size=[2])
-  >>> c.x
-  tensor([0., 1.])
-
-Non-tensor data: ``NonTensorData`` and ``MetaData``
----------------------------------------------------
-
-A field can hold a value that is not a tensor, such as a string. The
-tensorclass stores it in a wrapper. Two wrappers exist, and they differ when
-you stack instances:
-
-- :class:`~tensordict.NonTensorData` is the default. It keeps one value per
-  batch element. Stacking instances gives a
-  :class:`~tensordict.NonTensorStack`, and attribute access returns a list of
-  the values, even when all the values are equal.
-- :class:`~tensordict.MetaData` holds one value for the whole batch. Stacking
-  ``MetaData("cfg")`` with ``MetaData("cfg")`` returns ``MetaData("cfg")``.
-  Stacking items with different values returns a ``NonTensorStack``, as for
-  ``NonTensorData``. Use ``MetaData`` for a value that is the same for every
-  element, such as a label or a configuration dict.
-
-To use ``MetaData``, assign a ``MetaData`` instance to the field:
-
-  >>> from tensordict import MetaData
-  >>> class Sample(TensorClass):
-  ...     x: torch.Tensor
-  ...     label: str
-  >>> a = Sample(x=torch.zeros(()), label="cfg")
-  >>> torch.stack([a, a]).label
-  LinkedList(['cfg', 'cfg'])
-  >>> m = Sample(x=torch.zeros(()), label=MetaData("cfg"))
-  >>> torch.stack([m, m]).label
-  'cfg'
-
-``LinkedList`` is a subclass of :class:`list`. For the full rules of
-non-tensor values in tensordicts, see :ref:`non-tensor-data`.
-
-Fields set to ``None``
-----------------------
-
-A field can be ``None`` at first and get a value later. The value that you
-assign decides how the field is stored: a tensor is stored as a tensor, and a
-string as ``NonTensorData``:
-
-  >>> from typing import Any
-  >>> class Slots(TensorClass):
-  ...     X: Any
-  ...     y: Any
-  >>> slots = Slots(X=None, y=None, batch_size=[3, 4])
-  >>> slots.X = torch.ones(3, 4, 5)
-  >>> slots.y = "testing"
-  >>> print(slots)
-  Slots(
-      X=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-      y=NonTensorData(data=testing, batch_size=torch.Size([3, 4]), device=None),
-      batch_size=torch.Size([3, 4]),
-      device=None,
-      is_shared=False)
-
-Comparison, item assignment and concatenation
----------------------------------------------
-
-``==`` and ``!=`` compare two tensorclasses field by field, also the nested
-ones. The result is a tensorclass with a boolean tensor for each field. For a
-field that is not a tensor, the boolean tensor has the batch shape, and it is
-``False`` where the values differ:
-
-  >>> print(data == data2)
-  MyData(
-      floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
-      intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-      nested=MyData(
-          floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
-          intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-          non_tensordata=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
-          nested=None,
-          batch_size=torch.Size([3, 4]),
-          device=None,
-          is_shared=False),
-      non_tensordata=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
-      batch_size=torch.Size([3, 4]),
-      device=None,
-      is_shared=False)
-  >>> data2.non_tensordata = "test_new"
-  >>> (data == data2).non_tensordata.any()
-  tensor(False)
-
-An item assignment writes the values that are not tensors element by element,
-with no warning when they differ from the rest of the batch. The field then
-holds one value per element (a :class:`~tensordict.NonTensorStack`), and
-attribute access returns a nested list of those values, with one level per
-batch dimension:
-
-  >>> data[0] = data2[0]
-  >>> [row[0] for row in data.non_tensordata]
-  ['test_new', 'test', 'test']
-
-``torch.cat`` and ``torch.stack`` keep the non-tensor value of each element.
-If the inputs differ on a non-tensor field, the field of the result is a
-``NonTensorStack``, and attribute access returns the nested list of values.
-``torch.stack`` does this even when all the inputs have the same value.
-``torch.cat`` of inputs that have one same value keeps that value:
-
-  >>> cat_tc = torch.cat([data, data2], dim=0)
-  >>> [row[0] for row in cat_tc.non_tensordata]
-  ['test_new', 'test', 'test', 'test_new', 'test_new', 'test_new']
 
 Converting a dataclass
 ----------------------
@@ -522,40 +560,43 @@ original class if the loading process can import that class:
   >>> with tempfile.TemporaryDirectory() as path:
   ...     _ = data.memmap(path)
   ...     data_loaded = TensorDict.load_memmap(path)
-  ...     assert isinstance(data_loaded, MyData)
+  ...     assert isinstance(data_loaded, Reading)
   ...     assert (data_loaded == data).all()
 
 The class is saved by its module and name. Another program cannot find a
 class that you defined in ``__main__`` (a script or a notebook) under that
 name. To load such data, call ``load_memmap`` on the class itself, for example
-``MyData.load_memmap(path)``. ``load_memmap`` uses the class that you call it
+``Reading.load_memmap(path)``. ``load_memmap`` uses the class that you call it
 on if its name matches the saved name.
 
 If the saved data has pickled non-tensor values and you do not pass
 ``allow_pickle``, loading emits a ``FutureWarning`` in tensordict 0.14. In
 0.15, the default becomes ``allow_pickle=False``, which raises an error
-instead of loading them.
-Pass ``allow_pickle=True`` only for data that you trust. See :ref:`saving` for
-the other formats.
+instead of loading them. Pass ``allow_pickle=True`` only for data that you
+trust. For the other formats, see :ref:`saving`.
 
 Tensorclasses as module inputs and outputs
 ------------------------------------------
 
 For a module whose inputs and outputs are tensorclasses, subclass
 :class:`~tensordict.nn.TensorClassModuleBase`. Its generic parameters declare
-the input and output types for type checkers and IDEs. Its ``as_td_module()`` method returns a module
-that you can put in a :class:`~tensordict.nn.TensorDictSequential`. See
-:ref:`modules-guide` for an example.
+the input and output types for type checkers and IDEs. Its ``as_td_module()``
+method returns a module that you can put in a
+:class:`~tensordict.nn.TensorDictSequential`. See :ref:`modules-guide` for an
+example.
 
 ``torch.compile``
 -----------------
 
 Tensorclasses work with :func:`torch.compile`, :mod:`torch.func` and
-:func:`torch.export.export`. :ref:`compile` lists what makes a function
-recompile or break its graph, and the workarounds. Two of them concern
-tensorclasses: a function that returns a string field recompiles for each new
-string, and a compiled function that flattens a pytree recompiles after a new
-tensorclass is defined.
+:func:`torch.export.export`. The ``Particles`` example at the top of this page
+compiles a method with ``fullgraph=True``. :ref:`compile` lists what makes a
+function recompile or break its graph, and the workarounds. Two of them
+concern tensorclasses:
+
+- A function that returns a string field recompiles for each new string.
+- A compiled function that flattens a pytree recompiles after a new
+  tensorclass is defined.
 
 .. _tensorclass-static-typing:
 
@@ -575,8 +616,8 @@ the wrong type is an error:
   >>> obs = Obs(a=[0.0, 1.0, 2.0], batch_size=[3])  # error: a list is not a Tensor
 
 The constructor converts a list, a NumPy array or a Python number that you
-pass to a ``torch.Tensor`` field, but a type checker expects a tensor there.
-Pass ``torch.as_tensor(value)``. Tensordict methods such as ``reshape`` and
+pass to a ``torch.Tensor`` field. A type checker expects a tensor there, so
+pass ``torch.as_tensor(value)``. Tensordict methods such as ``reshape`` and
 an index return the type of the class.
 
 The three forms of the class options differ for type checkers:
@@ -584,12 +625,12 @@ The three forms of the class options differ for type checkers:
 - pyright accepts the bracket form (``TensorClass["autocast"]``) and the
   keyword form (``class Foo(TensorClass, autocast=True)``).
 - mypy does not evaluate :meth:`~object.__class_getitem__` in a list of base
-  classes and rejects the bracket form. Use the keyword form in code that mypy
-  checks.
+  classes and rejects the bracket form. In code that mypy reads, use the
+  keyword form.
 - Type checkers do not understand the decorator form. They know the fields of
   a ``@tensorclass`` class, but not its tensordict methods or its
-  ``batch_size`` and ``device`` arguments. Use a subclass of ``TensorClass``
-  in code that a type checker reads.
+  ``batch_size`` and ``device`` arguments. In code that a type checker reads,
+  use a subclass of ``TensorClass``.
 
 mypy reports each ``frozen=True`` tensorclass as "Frozen dataclass cannot
 inherit from a non-frozen dataclass". These statements hold for pyright
@@ -604,14 +645,14 @@ The :func:`~tensordict.tensorclass` decorator is the original way to declare a
 tensorclass. It is kept for backward compatibility, and it is the shortest way
 to convert a body of ``@dataclass`` code. In new code, subclass
 :class:`~tensordict.TensorClass` instead: it has the same behavior, and type
-checkers understand it.
+checkers understand it without a plugin.
 
   >>> @tensorclass
-  ... class LegacyData:
-  ...     floatdata: torch.Tensor
-  ...     intdata: torch.Tensor
-  ...     non_tensordata: str
-  ...     nested: Optional["LegacyData"] = None
+  ... class LegacyReading:
+  ...     signal: torch.Tensor
+  ...     count: torch.Tensor
+  ...     sensor: str
+  ...     backup: Optional["LegacyReading"] = None
 
 The decorator accepts each flag as a keyword argument:
 ``@tensorclass(autocast=True)``, ``@tensorclass(frozen=True, tensor_only=True)``.
