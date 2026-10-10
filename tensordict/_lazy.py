@@ -126,6 +126,8 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
     tensordict: LazyStackedTensorDict
 
     def __len__(self) -> int:
+        if self.include_nested or self.leaves_only:
+            return super().__len__()
         return len(self._keys())
 
     def _keys(self) -> list[str]:
@@ -867,6 +869,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 value,
                 non_blocking=non_blocking,
                 check_shape=not (isinstance(value, list) and list_to_stack()),
+                key=key,
             )
             validated = True
         if self._is_vmapped:
@@ -922,7 +925,7 @@ class LazyStackedTensorDict(TensorDictBase):
         #         )
         #     inplace = has_key
         if not validated:
-            value = self._validate_value(value, non_blocking=non_blocking)
+            value = self._validate_value(value, non_blocking=non_blocking, key=key)
             validated = True
         if self._is_vmapped:
             value = self._hook_in(value)
@@ -1631,9 +1634,10 @@ class LazyStackedTensorDict(TensorDictBase):
             return first._get_tuple(key[1:], default=default, **kwargs)
         except AttributeError as err:
             if "has no attribute" in str(err):
+                rest = key[1] if len(key) == 2 else key[1:]
                 raise ValueError(
-                    f"Expected a TensorDictBase instance but got {type(first)} instead"
-                    f" for key '{key[1:]}' in tensordict:\n{self}."
+                    f"{key[0]!r} is a {type(first).__name__}, not a tensordict, "
+                    f"so it has no entry {rest!r}."
                 )
 
     @classmethod
@@ -3110,8 +3114,11 @@ class LazyStackedTensorDict(TensorDictBase):
             value = default
         else:
             raise KeyError(
-                f"You are trying to pop key `{key}` which is not in dict "
-                f"without providing default value."
+                _KEY_ERROR.format(
+                    key,
+                    type(self).__name__,
+                    sorted(self.keys(include_nested=isinstance(key, tuple)), key=str),
+                )
             )
         return value
 
@@ -5166,7 +5173,9 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 def _iter_items_lazystack(
     tensordict: LazyStackedTensorDict, return_none_for_het_values: bool = False
 ) -> Iterator[tuple[str, CompatibleType]]:
-    for key in tensordict.tensordicts[0].keys():
+    # The keys of every member, as keys() lists them: a sub-tensordict that
+    # only some members have cannot be stacked.
+    for key in tensordict._key_list():
         values = tensordict._maybe_get_list(key)
         if values is not None:
             yield key, values
