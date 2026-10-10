@@ -738,6 +738,16 @@ class TestTD:
         assert nested.names == ["n"]
         assert nested["sub"].names == ["n"]
 
+    def test_to_memory_format(self, mode):
+        def to_channels_last(td):
+            return td.to(memory_format=torch.channels_last)
+
+        td = TensorDict({"a": torch.randn(1, 2, 3, 4)}, batch_size=[1])
+        to_channels_last_c = torch.compile(to_channels_last, fullgraph=True, mode=mode)
+        td_c = to_channels_last_c(td)
+        assert td_c["a"].is_contiguous(memory_format=torch.channels_last)
+        torch.testing.assert_close(td_c["a"], td["a"])
+
     @pytest.mark.skipif(
         not torch.cuda.is_available(), reason="cuda required to test device casting"
     )
