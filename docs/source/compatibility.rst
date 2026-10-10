@@ -95,8 +95,8 @@ table:
 When a field is annotated with another tensorclass (``a: Pose`` or
 ``a: Pose | None``) and the input is a ``TensorDict`` whose entry for it is a
 tensordict, ``from_tensordict`` builds a ``Pose`` from that entry,
-recursively. The ``Pose`` is set in a shallow copy of the input: the leaves
-are shared, but the input keeps its tensordict entry and does not see the
+recursively. The ``Pose`` is set in a shallow copy of the input. The leaves
+are shared, but the input keeps its tensordict entry, and it does not see the
 entries set later on the tensorclass. An entry with keys that ``Pose`` does
 not declare stays a tensordict. Other backends are wrapped as they are, and
 the nested entry stays a tensordict, because a tensorclass set in them would
