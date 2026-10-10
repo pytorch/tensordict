@@ -1140,6 +1140,27 @@ class TestGeneric:
         assert td2.get("key1").shape == torch.Size([3, 7, 4, 5, 6])
         assert td2.get("key2").shape == torch.Size([3, 7, 4, 5, 10])
 
+    def test_expand_minus_one(self):
+        # A -1 keeps the size of its dim, as in torch.Tensor.expand
+        td = TensorDict(
+            {"a": torch.zeros(1, 3, 4), "b": {"c": torch.zeros(1, 3)}}, [1, 3]
+        )
+        parent = TensorDict({"a": torch.zeros(2, 1, 3, 4)}, [2, 1, 3])
+        sub_td = parent._get_sub_tensordict(0)
+        for shape in [(2, -1, 3), (5, -1, -1), (-1, -1)]:
+            expected = torch.zeros(1, 3).expand(shape).shape
+            for out in (
+                td.expand(*shape),
+                td.broadcast_to(shape),
+                sub_td.expand(*shape),
+                sub_td.broadcast_to(shape),
+            ):
+                assert out.batch_size == expected
+                assert out["a"].shape == (*expected, 4)
+            assert td.expand(*shape)["b"].batch_size == expected
+        with pytest.raises(RuntimeError, match="leading, non-existing dimension"):
+            td.expand(-1, 1, 3)
+
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize(
         "td_type", ["tensordict", "view", "unsqueeze", "squeeze", "stack"]
@@ -3446,6 +3467,20 @@ class TestGeneric:
         )
         with pytest.raises(NotImplementedError, match="unflatten"):
             lst.unflatten(0, (3, 1), inplace=True)
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_unflatten_minus_one(self, inplace):
+        # The -1 is inferred, as in torch.unflatten
+        td = TensorDict(
+            {"a": torch.zeros(2, 6, 4), "b": {"c": torch.zeros(2, 6)}}, [2, 6]
+        )
+        out = td.unflatten(1, (3, -1), inplace=inplace)
+        assert out.batch_size == out["b"].batch_size == (2, 3, 2)
+        assert out["a"].shape == (2, 3, 2, 4)
+        with pytest.raises(RuntimeError, match="don't multiply up"):
+            TensorDict({}, [2, 6]).unflatten(1, (4, -1))
+        # the -1 of a ragged dim stays
+        assert TensorDict({}, [2, -1]).unflatten(1, (1, -1)).batch_size == (2, 1, -1)
 
     @pytest.mark.parametrize("inplace", [True, False])
     def test_contiguous_inplace(self, inplace):

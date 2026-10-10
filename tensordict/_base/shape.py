@@ -30,6 +30,7 @@ from tensordict.utils import (
     _is_tensorclass,
     _is_unbatched,
     _maybe_correct_neg_dim,
+    _resolve_expand_shape,
     _zip_strict,
     is_non_tensor,
     lazy_legacy,
@@ -73,6 +74,8 @@ class _ShapeOps:
                 f"the number of sizes provided ({len(shape)}) must be greater or equal to the number of "
                 f"dimensions in the TensorDict ({tensordict_dims})"
             )
+        if -1 in shape:
+            shape = _resolve_expand_shape(shape, self.batch_size)
 
         # new shape compatibility check
         for old_dim, new_dim in zip(self.batch_size, shape[-tensordict_dims:]):
@@ -1862,6 +1865,8 @@ class _ShapeOps:
             torch.Size([2, 3])
         """
         shape = torch.Size(shape)
+        if -1 in shape:
+            shape = _resolve_expand_shape(shape, self.batch_size)
 
         def _broadcast_to(tensor):
             return tensor.broadcast_to(shape + tensor.shape[self.ndim :])
@@ -2098,6 +2103,14 @@ class _ShapeOps:
             >>> assert (td == td_unflat).all()
         """
         dim = _maybe_correct_neg_dim(dim, self.batch_size)
+        if -1 in unflattened_size and -1 not in self.batch_size:
+            # Infer the -1 as torch.unflatten does, which raises for sizes that
+            # don't fit. A batch with a -1 (a ragged dim) is left as it is.
+            unflattened_size = (
+                torch.empty(self.batch_size, device="meta")
+                .unflatten(dim, unflattened_size)
+                .shape[dim : dim + len(unflattened_size)]
+            )
 
         def unflatten(tensor):
             return torch.unflatten(

@@ -1004,6 +1004,30 @@ class TestLazyStackedTensorDict:
         td = lazy_stack([inner, inner.clone()])
         assert td.densify().names == [None, "s", None]
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_expand_minus_one(self, stack_dim):
+        # A -1 keeps the size of its dim, as in torch.Tensor.expand
+        td = lazy_stack(
+            [TensorDict(a=torch.arange(3), batch_size=[3]) for _ in range(2)], stack_dim
+        )
+        batch = torch.zeros(td.batch_size)
+        for shape in [(4, -1, -1), (4, *td.batch_size[:1], -1), (-1, -1)]:
+            expected = batch.expand(shape).shape
+            assert td.expand(*shape).batch_size == expected
+            assert td.broadcast_to(shape).batch_size == expected
+            assert td.expand(*shape)["a"].shape == expected
+        single = lazy_stack([TensorDict(a=torch.arange(3), batch_size=[3])])
+        assert single.expand(4, -1, 3).batch_size == (4, 1, 3)
+        with pytest.raises(RuntimeError, match="leading, non-existing dimension"):
+            td.expand(-1, *td.batch_size)
+        # the -1 of a ragged dim stays
+        ragged = lazy_stack(
+            [TensorDict(a=torch.zeros(n, 4), batch_size=[n]) for n in (2, 3)]
+        )
+        assert ragged.expand(3, -1, -1).batch_size == (3, 2, -1)
+        ragged.update_at_(TensorDict({}, []), 0)
+        assert ragged.batch_size == (2, -1)
+
     def test_lazy_get(self):
         inner_td = lazy_stack(
             [

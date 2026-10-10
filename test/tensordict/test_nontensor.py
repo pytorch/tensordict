@@ -553,6 +553,18 @@ class TestNonTensorData:
         assert d_expand.shape == (2, 3)
         assert d_expand.tolist() == [[0 for _ in range(3)] for _ in range(2)]
 
+    def test_expand_minus_one(self):
+        # A -1 keeps the size of its dim, as in torch.Tensor.expand
+        d = NonTensorData(0, batch_size=(1, 3))
+        for shape in [(2, -1, 3), (2, -1, -1), (-1, -1)]:
+            assert d.expand(*shape).shape == torch.zeros(1, 3).expand(shape).shape
+        assert d.expand(2, -1, 3).tolist() == [[[0, 0, 0]], [[0, 0, 0]]]
+        stack = NonTensorStack(
+            NonTensorData(0, batch_size=(3,)), NonTensorData(1, batch_size=(3,))
+        )
+        assert stack.expand(4, -1, -1).tolist() == [[[0] * 3, [1] * 3]] * 4
+        assert stack.broadcast_to((4, -1, 3)).shape == (4, 2, 3)
+
     @pytest.mark.parametrize(
         "in_out", [(None, None), (0, -1), (None, 0), (0, None), (0, 0)]
     )

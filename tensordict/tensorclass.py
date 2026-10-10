@@ -73,6 +73,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _KeyDependentDefaultDict,
     _LOCK_ERROR,
     _REPR_OPTIONS,
+    _resolve_expand_shape,
     _td_fields,
     _TENSORCLASS_MEMO,
     _unravel_key_to_tuple,
@@ -5343,6 +5344,8 @@ class NonTensorData(NonTensorDataBase):
     def expand(self, *args, **kwargs) -> T:
         # tensordict_dims = self.batch_dims
         shape = _get_shape_from_args(*args, **kwargs)
+        if -1 in shape:
+            shape = _resolve_expand_shape(shape, self.batch_size)
 
         # Replicate self until we have the appropriate batch size
         out = self

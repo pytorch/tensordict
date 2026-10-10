@@ -87,6 +87,7 @@ from tensordict.utils import (
     _parse_to,
     _recursive_unbind_list,
     _REPR_OPTIONS,
+    _resolve_expand_shape,
     _shape,
     _td_fields,
     _unravel_key_to_tuple,
@@ -3387,6 +3388,8 @@ class LazyStackedTensorDict(TensorDictBase):
             shape = tuple(args[0])
         else:
             shape = args
+        if -1 in shape:
+            shape = _resolve_expand_shape(shape, self.batch_size)
         # We need to reprod the elements if shape is (1,)
         if shape[self.stack_dim - self.ndim] != len(self.tensordicts):
             if len(self.tensordicts) == 1:

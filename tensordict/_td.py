@@ -83,6 +83,7 @@ from tensordict.utils import (
     _parse_to,
     _pass_through,
     _prune_selected_keys,
+    _resolve_expand_shape,
     _set_item,
     _set_max_batch_size,
     _shape,
@@ -3199,6 +3200,8 @@ class _SubTensorDict(TensorDictBase):
             shape = tuple(args[0])
         else:
             shape = args
+        if -1 in shape:
+            shape = _resolve_expand_shape(shape, self.batch_size)
 
         def expand(x):
             return x.expand((*shape, *x.shape[self.ndim :]))
