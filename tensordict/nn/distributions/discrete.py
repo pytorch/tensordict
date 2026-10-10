@@ -27,6 +27,28 @@ def _treat_categorical_params(
 
 
 def rand_one_hot(values: torch.Tensor, do_softmax: bool = True) -> torch.Tensor:
+    """Draws a one-hot sample along the last dimension of ``values``.
+
+    Args:
+        values (torch.Tensor): the logits, or the probabilities if
+            ``do_softmax=False``, along the last dimension.
+        do_softmax (bool, optional): if ``True``, apply a softmax to ``values``
+            first. Defaults to ``True``.
+
+    Returns:
+        a ``torch.long`` tensor with the shape of ``values``, with one ``1``
+        per row of the last dimension.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict.nn import rand_one_hot
+        >>> _ = torch.manual_seed(0)
+        >>> rand_one_hot(torch.tensor([0.0, 2.0, 1.0]))
+        tensor([0, 1, 0])
+        >>> rand_one_hot(torch.tensor([[0.1, 0.9], [0.8, 0.2]]), do_softmax=False)
+        tensor([[0, 1],
+                [1, 0]])
+    """
     if do_softmax:
         values = values.softmax(-1)
     out = values.cumsum(-1) > torch.rand_like(values[..., :1])
@@ -37,8 +59,37 @@ def rand_one_hot(values: torch.Tensor, do_softmax: bool = True) -> torch.Tensor:
 class OneHotCategorical(D.Categorical):
     """One-hot categorical distribution.
 
-    This class behaves excacly as torch.distributions.Categorical except that it reads and produces one-hot encodings
-    of the discrete tensors.
+    This class behaves exactly as torch.distributions.Categorical except that it reads and produces one-hot encodings
+    of the discrete tensors. :meth:`sample`, :attr:`mode` and
+    :attr:`deterministic_sample` return ``torch.long`` one-hot tensors, and
+    :meth:`log_prob` takes one.
+
+    :meth:`rsample` returns a straight-through sample: its values are one-hot,
+    and its gradient is the gradient of a
+    :class:`~torch.distributions.RelaxedOneHotCategorical` sample with
+    temperature 1.
+
+    Args:
+        logits (torch.Tensor, optional): the unnormalized log-probabilities,
+            with the categories along the last dimension. A last dimension of
+            size 1 is removed first.
+        probs (torch.Tensor, optional): the probabilities, as for ``logits``.
+            Pass ``logits`` or ``probs``, not both.
+        **kwargs: passed to :class:`~torch.distributions.Categorical`, for
+            example ``validate_args``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict.nn.distributions import OneHotCategorical
+        >>> _ = torch.manual_seed(0)
+        >>> dist = OneHotCategorical(logits=torch.tensor([0.0, 2.0, 1.0]))
+        >>> dist.mode
+        tensor([0, 1, 0])
+        >>> dist.sample((2,))
+        tensor([[0, 0, 1],
+                [0, 1, 0]])
+        >>> dist.log_prob(torch.tensor([0, 1, 0]))
+        tensor(-0.4076)
 
     """
 
