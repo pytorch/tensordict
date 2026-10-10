@@ -1624,6 +1624,47 @@ class TestLazyStackedTensorDict:
         with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
             lstd.insert(index, TensorDict({"a": torch.ones(17)}, [17], device=device))
 
+    @pytest.mark.parametrize("dim", range(2))
+    def test_lazy_stacked_extend(self, dim):
+        td = TensorDict({"a": torch.zeros(4)}, [4])
+        lstd = LazyStackedTensorDict(stack_dim=dim)
+        lstd.extend([])
+        # an empty stack takes the batch size of the new members, as append does
+        lstd.extend([td, td.clone()])
+        # a generator is not used up by the type check
+        lstd.extend(td.clone() for _ in range(2))
+        lstd.extend([])
+        lstd.extend(torch.stack([TensorDict({"a": torch.ones(4)}, [4])] * 2, dim))
+
+        bs = [4]
+        bs.insert(dim, 6)
+        assert lstd.batch_size == torch.Size(bs)
+        expected = torch.stack([torch.zeros(4)] * 4 + [torch.ones(4)] * 2, dim)
+        torch.testing.assert_close(lstd["a"], expected)
+
+        with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
+            LazyStackedTensorDict(stack_dim=dim).extend(
+                [td, TensorDict({"a": torch.ones(17)}, [17])]
+            )
+
+    @pytest.mark.parametrize("dim", range(3))
+    @pytest.mark.parametrize("method", ["append", "insert", "extend"])
+    def test_lazy_stacked_add_heterogeneous(self, dim, method):
+        # the dims where the members differ stay -1, as in lazy_stack
+        td0 = TensorDict({"a": torch.zeros(4, 2)}, [4, 2])
+        td1 = TensorDict({"a": torch.zeros(4, 3)}, [4, 3])
+        lstd = lazy_stack([td0, td1], dim)
+        if method == "append":
+            lstd.append(td0.clone())
+        elif method == "insert":
+            lstd.insert(0, td0.clone())
+        else:
+            lstd.extend([td0.clone(), td0.clone()])
+
+        bs = [4, -1]
+        bs.insert(dim, len(lstd.tensordicts))
+        assert lstd.batch_size == torch.Size(bs)
+
     def test_lazy_stack_view_full_size(self):
         tds = LazyStackedTensorDict(*[TensorDict(a=i) for i in range(60)], stack_dim=0)
         tdview = tds.view(3, 4, 5)
