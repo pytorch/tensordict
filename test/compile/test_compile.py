@@ -20,6 +20,7 @@ from packaging import version
 from tensordict import (
     assert_close,
     from_dataclass,
+    LazyStackedTensorDict,
     NonTensorData,
     tensorclass,
     TensorDict,
@@ -27,11 +28,13 @@ from tensordict import (
     TypedTensorDict,
 )
 from tensordict._unbatched import UnbatchedTensor
+from tensordict.base import _get_defaults_to_none, _set_get_defaults_to_none
 from tensordict.nn import (
     CudaGraphModule,
     InteractionType,
     ProbabilisticTensorDictModule as Prob,
     set_composite_lp_aggregate,
+    set_interaction_type,
     TensorDictModule,
     TensorDictModule as Mod,
     TensorDictSequential as Seq,
@@ -394,6 +397,14 @@ class TestTD:
         unbind_c = torch.compile(unbind, fullgraph=True, mode=mode)
         data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
         assert (unbind(data)[-1] == unbind_c(data)[-1]).all()
+
+    def test_iter(self, mode):
+        def iterate(td):
+            return torch.stack([t["a", "b"] + 1 for t in td])
+
+        iterate_c = torch.compile(iterate, fullgraph=True, mode=mode)
+        data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
+        assert (iterate(data) == iterate_c(data)).all()
 
     def test_items(self, mode):
         def items(td):
@@ -1162,6 +1173,25 @@ class TestTC:
         assert compiled.a.b == 2
         assert add_self_c(data) is not data
 
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_tc_from_tensordict_nested(self, mode, locked):
+        def from_td(td):
+            return MyClass.from_tensordict(td)
+
+        from_td_c = torch.compile(from_td, fullgraph=True, mode=mode)
+        td = MyClass(
+            a=MyClass(a=MyClass(a=None, b=torch.zeros(())), b=torch.zeros(())),
+            b=torch.ones(()),
+        ).to_tensordict()
+        if locked:
+            td.lock_()
+        compiled = from_td_c(td)
+        assert isinstance(compiled.a, MyClass)
+        assert isinstance(compiled.a.a, MyClass)
+        assert compiled.a.b == 0
+        assert compiled.is_locked is locked
+        assert isinstance(td["a"], TensorDict)
+
     @pytest.mark.parametrize("index_type", ["slice", "tensor", "int"])
     def test_tc_index(self, index_type, mode):
         if index_type == "slice":
@@ -1250,6 +1280,26 @@ class TestTC:
         )
         assert (reshape(data) == reshape_c(data)).all()
 
+    def test_tc_get_defaults_to_none(self, mode):
+        # The AttributeError is caught in the compiled function: with
+        # fullgraph=True, dynamo reports an uncaught one as Unsupported.
+        def get_missing(td):
+            try:
+                return td.get("missing")
+            except AttributeError:
+                return "AttributeError"
+
+        get_missing_c = torch.compile(get_missing, fullgraph=True, mode=mode)
+        data = MyClass(a=None, b=torch.zeros(()))
+        set_back = _get_defaults_to_none()
+        try:
+            _set_get_defaults_to_none(True)
+            assert get_missing_c(data) is None
+            _set_get_defaults_to_none(False)
+            assert get_missing_c(data) == "AttributeError"
+        finally:
+            _set_get_defaults_to_none(set_back)
+
     def test_tc_unbind(self, mode):
         def unbind(td):
             return td.unbind(0)
@@ -1259,6 +1309,16 @@ class TestTC:
             a=MyClass(a=None, b=torch.arange(4), batch_size=[4]), batch_size=[4]
         )
         assert (unbind(data)[-1] == unbind_c(data)[-1]).all()
+
+    def test_tc_iter(self, mode):
+        def iterate(tc):
+            return torch.stack([t.a.b + 1 for t in tc])
+
+        iterate_c = torch.compile(iterate, fullgraph=True, mode=mode)
+        data = MyClass(
+            a=MyClass(a=None, b=torch.arange(4), batch_size=[4]), batch_size=[4]
+        )
+        assert (iterate(data) == iterate_c(data)).all()
 
     @pytest.mark.parametrize("recurse", [True, False])
     def test_tc_clone(self, recurse, mode):
@@ -1575,6 +1635,26 @@ class TestNN:
         assert sample.shape == td["loc"].shape
         if not mean_raises:
             torch.testing.assert_close(sample, td["loc"])
+
+    def test_prob_module_interaction_type_change(self, mode):
+        # The interaction type is read from a global mode object: the compiled
+        # module must follow a change of that mode between calls.
+        prob_mod = Prob(
+            in_keys=["loc", "scale"],
+            out_keys=["sample"],
+            distribution_class=torch.distributions.Normal,
+        )
+        td = TensorDict(loc=torch.zeros(1000), scale=torch.ones(1000))
+        prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
+        with set_interaction_type(InteractionType.MEAN):
+            sample = prob_mod_c(td.copy())["sample"]
+        torch.testing.assert_close(sample, td["loc"])
+        with set_interaction_type(InteractionType.RANDOM):
+            sample = prob_mod_c(td.copy())["sample"]
+        assert (sample != td["loc"]).all()
+        with set_interaction_type(InteractionType.MEAN):
+            sample = prob_mod_c(td.copy())["sample"]
+        torch.testing.assert_close(sample, td["loc"])
 
 
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
@@ -2093,6 +2173,136 @@ class TestCudaGraphs:
             assert tdout is not td
             assert "y" not in td
             assert tdout["y"] == td["x"] + 1
+
+    def test_tdmodule_outputs_do_not_alias(self, compiled):
+        # Every replay writes into the same input and output buffers: the
+        # tensordicts returned by earlier calls, the capture call included,
+        # must keep their own values.
+        tdmodule = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
+        tdmodule = self._make_cudagraph(tdmodule, compiled)
+        tds = [
+            tdmodule(TensorDict(x=torch.full((3,), float(i)), batch_size=[3]))
+            for i in range(6)
+        ]
+        for i, td in enumerate(tds):
+            torch.testing.assert_close(td["x"], torch.full((3,), float(i)))
+            torch.testing.assert_close(td["y"], torch.full((3,), float(i + 1)))
+
+    def test_tdmodule_structure_change_raises(self, compiled):
+        if not torch.cuda.is_available():
+            pytest.skip("CudaGraphModule only replays graphs on CUDA")
+        tdmodule = TensorDictModule(
+            lambda x, z: x + z, in_keys=["x", "z"], out_keys=["y"]
+        )
+        tdmodule = self._make_cudagraph(tdmodule, compiled)
+        for _ in range(4):
+            tdmodule(
+                TensorDict(
+                    x=torch.randn(3), z=torch.randn(3), w=torch.randn(3), batch_size=[3]
+                )
+            )
+        # A key that is not an in_key may be missing.
+        td = tdmodule(TensorDict(x=torch.ones(3), z=torch.ones(3), batch_size=[3]))
+        torch.testing.assert_close(td["y"], torch.full((3,), 2.0))
+        with pytest.raises(KeyError, match="missing the in_keys \\['z'\\]"):
+            tdmodule(TensorDict(x=torch.randn(3), batch_size=[3]))
+        with pytest.raises(ValueError, match="captured with batch_size"):
+            tdmodule(TensorDict(x=torch.randn(1), z=torch.randn(1), batch_size=[1]))
+
+    def test_tdmodule_entry_shape_change_raises(self, compiled):
+        # Same batch size, entry of another shape: it must not be broadcast into
+        # the captured buffer, or fail in the copy.
+        if not torch.cuda.is_available():
+            pytest.skip("CudaGraphModule only replays graphs on CUDA")
+        tdmodule = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
+        tdmodule = self._make_cudagraph(tdmodule, compiled)
+        for _ in range(4):
+            tdmodule(TensorDict(x=torch.zeros(3, 4), w=torch.zeros(3), batch_size=[3]))
+        match = r"entry 'x' of shape torch.Size\(\[3, 4\]\) but got shape"
+        for shape in ((3, 1), (3, 5)):
+            # Every captured entry is present.
+            with pytest.raises(ValueError, match=match):
+                tdmodule(
+                    TensorDict(x=torch.zeros(shape), w=torch.zeros(3), batch_size=[3])
+                )
+            # A captured entry that is not an in_key is missing.
+            with pytest.raises(ValueError, match=match):
+                tdmodule(TensorDict(x=torch.zeros(shape), batch_size=[3]))
+        # Captured on a lazy stack, replayed on a dense tensordict.
+        tdmodule = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
+        tdmodule = self._make_cudagraph(tdmodule, compiled)
+        for _ in range(4):
+            tdmodule(
+                LazyStackedTensorDict(
+                    *TensorDict(x=torch.zeros(3, 4), batch_size=[3]).unbind(0)
+                )
+            )
+        with pytest.raises(ValueError, match=match):
+            tdmodule(TensorDict(x=torch.zeros(3, 1), batch_size=[3]))
+
+    def test_tdmodule_uncaptured_in_key_missing(self, compiled):
+        # An in_key that the captured input did not hold is not reported missing.
+        if not torch.cuda.is_available():
+            pytest.skip("CudaGraphModule only replays graphs on CUDA")
+        func = self._make_cudagraph(
+            lambda td: td.set("y", td["x"] + 1),
+            compiled,
+            in_keys=["x", "unused"],
+            out_keys=["y"],
+        )
+        for _ in range(4):
+            func(TensorDict(x=torch.zeros(3), w=torch.zeros(3), batch_size=[3]))
+        td = func(TensorDict(x=torch.ones(3), batch_size=[3]))
+        torch.testing.assert_close(td["y"], torch.full((3,), 2.0))
+
+    @pytest.mark.parametrize("capture_lazy", [True, False])
+    def test_tdmodule_lazy_and_dense_inputs(self, compiled, capture_lazy):
+        # Captured on a lazy stack and replayed on a dense tensordict, or the
+        # reverse: the leaves have other keys, and must still be copied.
+        if not torch.cuda.is_available():
+            pytest.skip("CudaGraphModule only replays graphs on CUDA")
+
+        def make(value, lazy):
+            td = TensorDict(x=torch.full((2, 3), value), batch_size=[2])
+            return LazyStackedTensorDict(*td.unbind(0), stack_dim=0) if lazy else td
+
+        tdmodule = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
+        tdmodule = self._make_cudagraph(tdmodule, compiled)
+        for _ in range(4):
+            tdmodule(make(0.0, capture_lazy))
+        td = tdmodule(make(5.0, not capture_lazy))
+        torch.testing.assert_close(td["y"], torch.full((2, 3), 6.0))
+
+    def test_non_tdmodule_shape_change_raises(self, compiled):
+        if not torch.cuda.is_available():
+            pytest.skip("CudaGraphModule only replays graphs on CUDA")
+        func = self._make_cudagraph(lambda x: x + 1, compiled)
+        for _ in range(4):
+            func(torch.randn(3))
+        with pytest.raises(ValueError, match="captured with an input of shape"):
+            func(torch.randn(1))
+        func = self._make_cudagraph(lambda td: td["x"] + 1, compiled)
+        for _ in range(4):
+            func(TensorDict(x=torch.randn(3), batch_size=[3]))
+        with pytest.raises(ValueError, match="captured with batch_size"):
+            func(TensorDict(x=torch.randn(1), batch_size=[1]))
+
+    def test_td_input_non_tdmodule_writes_input(self, compiled):
+        # The function adds a key to its input: the capture must run on a
+        # tensordict with the warmup structure, or a compiled function
+        # recompiles during capture.
+        def func(td):
+            return td.set("y", td.get("x") + 1)
+
+        func = self._make_cudagraph(func, compiled)
+        for _ in range(4):
+            td = TensorDict(x=torch.randn(3), batch_size=[3])
+            out = func(td)
+            torch.testing.assert_close(out["y"], td["x"] + 1)
+
+    def test_repr(self, compiled):
+        func = self._make_cudagraph(lambda x: x + 1, compiled, warmup=3)
+        assert "warmup=3" in repr(func)
 
     def test_td_input_non_tdmodule(self, compiled):
         func = lambda x: x + 1
