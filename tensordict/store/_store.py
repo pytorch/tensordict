@@ -1261,6 +1261,9 @@ class TensorDictStore(TensorDictBase):
         stored value is returned as-is (broadcast semantics).
         """
         encoding = meta.get("encoding", "json")
+        if encoding not in ("json", "json_array"):
+            # pickle bytes are not UTF-8: only JSON is decoded
+            return pickle.loads(data)
         text = data.decode() if isinstance(data, bytes) else data
 
         if encoding == "json_array":
@@ -1282,9 +1285,7 @@ class TensorDictStore(TensorDictBase):
             return stack
 
         # Scalar encoding — return the single stored value (broadcast).
-        if encoding == "json":
-            return json.loads(text)
-        return pickle.loads(data)
+        return json.loads(text)
 
     # ---- TensorDictBase interface: batch_size / device / names ----
 
