@@ -29,6 +29,7 @@ from tensordict._td import (
 )
 from tensordict.base import (
     _register_tensor_class,
+    _UNSET,
     is_tensor_collection,
     T,
     TensorDictBase,
@@ -36,6 +37,7 @@ from tensordict.base import (
 from tensordict.utils import (
     _as_context_manager,
     _erase_cache_first,
+    _GENERIC_NESTED_ERR,
     _is_tensorclass,
     _KEY_ERROR,
     _lock_blocked,
@@ -1711,6 +1713,28 @@ class TensorDictStore(TensorDictBase):
 
         return self
 
+    def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
+        key_tuple = _unravel_key_to_tuple(key)
+        if not key_tuple:
+            raise KeyError(_GENERIC_NESTED_ERR.format(key))
+        out = self.get(key_tuple, _UNSET)
+        if out is _UNSET:
+            if default is NO_DEFAULT:
+                raise KeyError(
+                    _KEY_ERROR.format(
+                        key_tuple[0] if len(key_tuple) == 1 else key_tuple,
+                        type(self).__name__,
+                        sorted(self.keys(include_nested=len(key_tuple) > 1), key=str),
+                    )
+                )
+            return default
+        if isinstance(out, TensorDictStore):
+            # A nested entry is a view that reads from the store, and del_
+            # deletes its data: return a copy of it.
+            out = out.to_tensordict()
+        self.del_(key_tuple)
+        return out
+
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> TensorDictStore:
@@ -2308,6 +2332,10 @@ class TensorDictStore(TensorDictBase):
             raise KeyError(f"popitem(): {type(self).__name__} is empty")
         key = keys_list[-1]
         value = self.get(key)
+        if isinstance(value, TensorDictStore):
+            # A nested entry is a view that reads from the store, and del_
+            # deletes its data: return a copy of it.
+            value = value.to_tensordict()
         self.del_(key)
         return key, value
 

@@ -517,6 +517,29 @@ class TestTensorDictStore:
         remaining = list(store_td.keys())
         assert len(remaining) == 1
 
+    def test_pop_nested(self, store_td):
+        """pop and popitem return the data of a nested entry that they delete."""
+        a, c, d = torch.randn(10, 2), torch.randn(10, 3), torch.randn(10)
+        store_td["nested", "a"] = a
+        store_td["nested", "b", "c"] = c
+        store_td["other", "d"] = d
+
+        value = store_td.pop(("nested", "b"))
+        assert isinstance(value, TensorDict)
+        assert torch.equal(value["c"], c)
+        assert ("nested", "b") not in store_td.keys(include_nested=True)
+
+        value = store_td.pop("other")
+        assert isinstance(value, TensorDict)
+        assert torch.equal(value["d"], d)
+        assert "other" not in store_td.keys()
+
+        key, value = store_td.popitem()
+        assert key == "nested"
+        assert isinstance(value, TensorDict)
+        assert torch.equal(value["a"], a)
+        assert list(store_td.keys()) == []
+
     def test_rename_key(self, store_td):
         """Test rename_key_."""
         tensor = torch.randn(10, 3)
