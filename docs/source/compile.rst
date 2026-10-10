@@ -17,8 +17,8 @@ and tensorclasses are registered as pytree nodes, so :mod:`torch.func` and
 :func:`torch.compile`, Dynamo traces the Python code of tensordict like user
 code: indexing, ``apply``, arithmetic, reductions (see :ref:`operations`),
 shape operations, stacking and construction all end up in the graph. Most
-operations compile with ``fullgraph=True``. With that flag, a graph break raises an error instead of
-splitting the function into several graphs.
+operations compile with ``fullgraph=True``. With that flag, a graph break
+raises an error instead of splitting the function into several graphs.
 
   >>> import torch
   >>> from tensordict import TensorDict, tensorclass
@@ -100,8 +100,9 @@ Strings in the output
   Each distinct ``str`` value of a tensorclass field or of a
   :class:`~tensordict.NonTensorData` entry (see :ref:`non-tensor-data`)
   recompiles the function when the function returns it, for instance
-  through ``apply``, ``clone`` or the constructor of a tensorclass. Dynamo specializes the graph on the value.
-  Reading only the tensors does not recompile. Return tensors from the
+  through ``apply``, ``clone`` or the constructor of a tensorclass. Dynamo
+  specializes the graph on the value. Reading only the tensors does not
+  recompile. Return tensors from the
   compiled function and rebuild the tensorclass outside, or keep the strings
   out of the compiled function.
 
