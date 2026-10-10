@@ -51,7 +51,6 @@ from tensordict.base import (
 )
 from tensordict.utils import (
     _as_context_manager,
-    _check_inbuild,
     _is_dataclass as is_dataclass,
     _is_list_tensor_compatible,
     _is_namedtuple,
@@ -955,8 +954,6 @@ class _Conversion:
 
         if is_dynamo is None:
             is_dynamo = is_compiling()
-        if is_dynamo:
-            _check_inbuild()
 
         if not use_state_dict and isinstance(module, TensorDictBase):
             if return_swap:

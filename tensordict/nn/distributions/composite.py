@@ -291,6 +291,13 @@ class CompositeDistribution(d.Distribution, Mapping):
                     return dist.mean
                 if interaction_type == "random":
                     return dist.rsample() if dist.has_rsample else dist.sample()
+                if (
+                    interaction_type == "deterministic"
+                    and isinstance(dist, d.Independent)
+                    and hasattr(dist.base_dist, "deterministic_sample")
+                ):
+                    # Independent leaves the samples of its base unchanged
+                    return dist.base_dist.deterministic_sample
                 if interaction_type is None:
                     try:
                         support = dist.support
