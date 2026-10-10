@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4885+g7d48fd08b.d20261010)
+                  main (0.14.0.dev4886+g2bd8597e3.d20261010)
                 </div>
               
             
@@ -424,10 +424,10 @@ given flags turned on”. The three forms below are equivalent:</p>
 <span class="gp">... </span>    <span class="n">integer</span><span class="p">:</span> <span class="nb">int</span>
 </pre></div>
 </div>
-<p>The bracket form is usually the most readable when you stack several flags and it is the form
-static type-checkers (mypy/pyright) understand via <a class="reference external" href="https://docs.python.org/3/reference/datamodel.html#object.__class_getitem__" title="(in Python v3.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">__class_getitem__()</span></code></a>. The kwargs
-form is convenient if the flag value is computed; the decorator form is best when migrating
-plain <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code> code.</p>
+<p>The bracket form is usually the most readable when you stack several flags. Pyright understands
+it via <a class="reference external" href="https://docs.python.org/3/reference/datamodel.html#object.__class_getitem__" title="(in Python v3.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">__class_getitem__()</span></code></a>; mypy rejects it, so use the kwargs form in code checked
+by mypy. The kwargs form is also convenient if the flag value is computed; the decorator form is
+best when migrating plain <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code> code.</p>
 <p>Several flags can be combined inside the brackets:</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">"nocast"</span><span class="p">,</span> <span class="s2">"frozen"</span><span class="p">]):</span>
@@ -495,9 +495,10 @@ flags:</p>
 </pre></div>
 </div>
 <p><strong>Type-checking.</strong> <code class="docutils literal notranslate"><span class="pre">TensorClass[...]</span></code> is implemented via <a class="reference external" href="https://docs.python.org/3/reference/datamodel.html#object.__class_getitem__" title="(in Python v3.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">__class_getitem__()</span></code></a>,
-so mypy and pyright resolve it to the (parametrized) class itself rather than to a generic
-parameter. Annotated fields propagate as expected and editors offer attribute completion on
-instances.</p>
+so pyright resolves it to the (parametrized) class itself rather than to a generic parameter.
+Mypy does not evaluate <code class="docutils literal notranslate"><span class="pre">__class_getitem__</span></code> in a list of base classes and rejects the bracket
+form; use <code class="docutils literal notranslate"><span class="pre">class</span> <span class="pre">Foo(TensorClass,</span> <span class="pre">autocast=True)</span></code> instead. Annotated fields propagate as
+expected and editors offer attribute completion on instances.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p><code class="docutils literal notranslate"><span class="pre">TensorClass</span></code> itself is <em>not</em> decorated as a tensorclass — the dataclass machinery

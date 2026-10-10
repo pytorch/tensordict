@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4885+g7d48fd08b.d20261010)
+                  main (0.14.0.dev4886+g2bd8597e3.d20261010)
                 </div>
               
             
@@ -465,9 +465,13 @@ in three equivalent forms — pick whichever reads best:</p>
 <span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="nb">int</span>
 </pre></div>
 </div>
-<p>The bracket form is the one that static type-checkers (mypy, pyright) resolve
-correctly via <a class="reference external" href="https://docs.python.org/3/reference/datamodel.html#object.__class_getitem__" title="(in Python v3.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">__class_getitem__()</span></code></a>, so IDE completion on instance
-attributes works without further configuration.</p>
+<p>Pyright accepts the bracket and the kwargs forms. Mypy does not evaluate
+<a class="reference external" href="https://docs.python.org/3/reference/datamodel.html#object.__class_getitem__" title="(in Python v3.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">__class_getitem__()</span></code></a> in a list of base classes and rejects the
+bracket form, so use the kwargs form (<code class="docutils literal notranslate"><span class="pre">class</span> <span class="pre">Foo(TensorClass,</span> <span class="pre">autocast=True)</span></code>)
+in code checked by mypy.</p>
+<p>Type-checkers do not understand the decorator form: they know the fields of a
+<code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> class but neither its TensorDict methods nor its
+<code class="docutils literal notranslate"><span class="pre">batch_size</span></code> and <code class="docutils literal notranslate"><span class="pre">device</span></code> arguments. Use inheritance in type-checked code.</p>
 <p>The available flags are:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">autocast</span></code> — coerce values back to the field’s annotated type when reading.
