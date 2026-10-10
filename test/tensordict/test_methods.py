@@ -2659,10 +2659,7 @@ class TestTensorDicts(TestTensorDictsBase):
             out = td.pop("z", default)
             assert (out == default).all()
 
-            with pytest.raises(
-                KeyError,
-                match=re.escape(r"You are trying to pop key"),
-            ):
+            with pytest.raises(KeyError, match='key "z" not found in'):
                 td.pop("z")
 
     def test_popitem(self, td_name, device):

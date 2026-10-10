@@ -14,6 +14,7 @@ import pickle
 import threading
 import uuid
 import weakref
+from numbers import Number
 from typing import Any, Callable, Literal, Sequence, Tuple, Type, TYPE_CHECKING
 
 import torch
@@ -39,6 +40,7 @@ from tensordict.utils import (
     _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
+    expand_as_right,
     is_non_tensor,
     NestedKey,
     unravel_key,
@@ -60,6 +62,7 @@ _KEY_SEP = "."
 # tensordict.store._lazy uses.
 from tensordict.store._utils import (  # noqa: F401
     _bytes_to_tensor,
+    _check_indexed_value,
     _compute_byte_ranges,
     _compute_covering_range,
     _decode_meta,
@@ -1363,6 +1366,23 @@ class TensorDictStore(TensorDictBase):
         if isinstance(index, list):
             index = torch.tensor(index)
 
+        _check_indexed_value(self, value)
+        if isinstance(value, Number):
+            # a scalar is written to every tensor entry, in its dtype; the
+            # non-tensor entries are left as they are
+            key_paths = [
+                self._full_key_path(_KEY_SEP.join(_unravel_key_to_tuple(key)))
+                for key in self.keys(include_nested=True, leaves_only=True)
+            ]
+            non_tensor = {}
+            tensor_paths = self._run_sync(
+                self._aget_metadata_batch(key_paths, non_tensor=non_tensor)
+            )
+            self._run_sync(
+                self._abatch_set_at({kp: (value, index) for kp in tensor_paths})
+            )
+            return
+
         if not isinstance(value, TensorDictBase):
             value = TensorDict.from_dict(value, batch_size=[])
 
@@ -1537,7 +1557,7 @@ class TensorDictStore(TensorDictBase):
     ):
         inplace = self._convert_inplace(inplace, key)
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(value, check_shape=True, key=key)
         if self.is_locked and not ignore_lock:
             if not inplace:
                 raise RuntimeError(_LOCK_ERROR)
@@ -1600,7 +1620,7 @@ class TensorDictStore(TensorDictBase):
         # Direct set with full key path
         key_path = self._full_key_path(_KEY_SEP.join(key))
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(value, check_shape=True, key=key)
         if self.is_locked and not inplace:
             raise RuntimeError(_LOCK_ERROR)
 
@@ -2343,7 +2363,7 @@ class TensorDictStore(TensorDictBase):
     def masked_fill_(self, mask, value):
         for key in self.keys(include_nested=True, leaves_only=True):
             tensor = self.get(key)
-            tensor = tensor.masked_fill(mask, value)
+            tensor = tensor.masked_fill(expand_as_right(mask, tensor), value)
             self.set_(key, tensor)
         return self
 

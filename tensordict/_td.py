@@ -323,6 +323,7 @@ class TensorDict(TensorDictBase):
                         value,
                         check_shape=True,
                         non_blocking=sub_non_blocking,
+                        key=key,
                     )
                 else:
                     # Tuple keys need nested TensorDict creation via the
@@ -1181,7 +1182,7 @@ class TensorDict(TensorDictBase):
             ) and (device is None or value.device == device)
         if not validated:
             value = self._validate_value(
-                value, check_shape=True, non_blocking=non_blocking
+                value, check_shape=True, non_blocking=non_blocking, key=key
             )
         if not inplace:
             if self._is_locked and not ignore_lock:
@@ -2658,7 +2659,7 @@ class _SubTensorDict(TensorDictBase):
         parent = self._source
         if not validated:
             value = self._validate_value(
-                value, check_shape=True, non_blocking=non_blocking
+                value, check_shape=True, non_blocking=non_blocking, key=key
             )
             validated = True
         if not inplace:
