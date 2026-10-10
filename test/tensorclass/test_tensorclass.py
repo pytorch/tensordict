@@ -303,6 +303,8 @@ def test_tensorclass_instance_methods(form):
         class X(TensorClass):
             x: torch.Tensor
 
+    # The fields of X are its own attributes, not TensorClass API.
+    exclusions |= {field.name for field in dataclasses.fields(X)}
     stub_attrs = _get_class_attrs_from_pyi(
         str(_TENSORDICT_DIR / "tensorclass.pyi"), "TensorClass"
     )
@@ -4513,6 +4515,44 @@ class TestSubClassing:
         assert is_called
         assert (s.a == 0).all()
         assert (s.b == 2).all()
+
+    def test_subclassing_redeclared_field(self):
+        # The fields have no class attribute, so a subclass that declares a
+        # field again does not take a default from its base.
+        class Base(TensorClass):
+            a: torch.Tensor
+            s: str
+
+        class SubClass(Base):
+            a: torch.Tensor
+            t: str
+
+        assert not hasattr(Base, "a")
+        assert all(
+            field.default is dataclasses.MISSING
+            for field in dataclasses.fields(SubClass)
+        )
+        obj = SubClass(a=torch.zeros(3), s="s", t="t", batch_size=[3])
+        assert (obj.a == 0).all()
+        assert obj.s == "s"
+        assert obj.t == "t"
+
+    def test_subclassing_setattr_object_setattr(self):
+        # A custom __setattr__ that calls object.__setattr__ stores the fields
+        # in the instance __dict__, from which they are read.
+        class Base(TensorClass):
+            a: torch.Tensor
+            s: str
+
+        class SubClass(Base):
+            def __setattr__(self, key, value):
+                object.__setattr__(self, key, value)
+
+        obj = SubClass(a=torch.zeros(3), s="s", batch_size=[3])
+        assert (obj.a == 0).all()
+        assert obj.s == "s"
+        obj.s = "u"
+        assert obj.s == "u"
 
     # Regression test for GitHub issue #1469: the metaclass __getitem__ used to
     # read every subscript as a list of flags, so a generic TensorClass could not

@@ -619,11 +619,11 @@ _FALLBACK_METHOD_FROM_TD_COPY = [
 def is_non_tensor(obj) -> bool:
     """A local implementation of is_non_tensor.
 
-    The utils implementation does an attribute check, but here we have access to the classes
-    which is more immediate.
+    NonTensorDataBase and NonTensorStack set ``_is_non_tensor = True`` on the class. Reading
+    it from the type is faster than ``isinstance``, whose ABCMeta check runs Python code.
 
     """
-    return isinstance(obj, (NonTensorDataBase, NonTensorStack))
+    return getattr(type(obj), "_is_non_tensor", False) is True
 
 
 class _tensorclass_dec:
@@ -1163,6 +1163,14 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             except AttributeError:
                 pass
 
+    if not tensor_only and not shadow:
+        for field in dataclasses.fields(cls):
+            setattr(
+                cls,
+                field.name,
+                _FieldGetter(field.name, _is_non_tensor and field.name == "data"),
+            )
+
     if tensor_only:
         for field in dataclasses.fields(cls):
             name = field.name
@@ -1203,6 +1211,7 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             tensor_only,
             _has_custom_setattr,
             _custom_init=user_init is not None,
+            _is_non_tensor=_is_non_tensor,
         )
     cls._from_tensordict = classmethod(_from_tensordict)
     cls.from_tensordict = classmethod(_from_tensordict_public)
@@ -1495,6 +1504,7 @@ def _init_wrapper(
     tensor_only: bool,
     _has_custom_setattr: bool = False,
     _custom_init: bool = False,
+    _is_non_tensor: bool = False,
 ) -> Callable:
     init_sig = inspect.signature(__init__)
     params = list(init_sig.parameters.values())
@@ -1521,6 +1531,31 @@ def _init_wrapper(
         )
         and set(required_params) == required_fields
     )
+    # Non-tensor carriers (NonTensorData, MetaData) keep every field in
+    # _non_tensordict, so their constructor can fill that dict directly
+    # instead of routing each field through set(). The defaults are only
+    # collected for these classes: Dynamo cannot wrap a closure dict that
+    # holds a tensor default (as in ``x: torch.Tensor = torch.zeros(3)``).
+    can_init_non_tensor = (
+        _is_non_tensor
+        and not _custom_init
+        and not shadow
+        and not tensor_only
+        and not _has_custom_setattr
+        and all(
+            field.init and field.default_factory is dataclasses.MISSING
+            for field in fields
+        )
+    )
+    if can_init_non_tensor:
+        non_tensor_defaults = {
+            field.name: field.default
+            for field in fields
+            if field.default is not dataclasses.MISSING
+        }
+        non_tensor_required = required_fields - non_tensor_defaults.keys()
+    else:
+        non_tensor_defaults = non_tensor_required = None
     # if not required_params and hasattr(cls, "__init_parent__"):
     #     init_sig_parent = inspect.signature(cls.__init_parent__)
     #     params_parent = list(init_sig_parent.parameters.values())
@@ -1683,6 +1718,37 @@ def _init_wrapper(
                     if lock:
                         td.lock_()
                     return
+            if (
+                can_init_non_tensor
+                and type(self) is cls
+                and not cls._autocast
+                and cls.set is _set
+                and kwargs.keys() <= required_fields
+                and non_tensor_required <= kwargs.keys()
+            ):
+                # Same result as set() with a non-tensor self: every value,
+                # unwrapped from NonTensorData, goes to _non_tensordict.
+                non_tensordict = {}
+                for key, value in kwargs.items():
+                    while is_non_tensor(value):
+                        value = value.data
+                    non_tensordict[key] = value
+                for key, value in non_tensor_defaults.items():
+                    non_tensordict.setdefault(key, value)
+                td = TensorDict._new_unsafe(
+                    {},
+                    batch_size=torch.Size(batch_size),
+                    device=device,
+                    names=names,
+                )
+                object.__setattr__(self, "_tensordict", td)
+                object.__setattr__(self, "_non_tensordict", non_tensordict)
+                object.__setattr__(self, "_is_initialized", True)
+                if hasattr(cls, "__post_init__"):
+                    self.__post_init__()
+                if lock:
+                    td.lock_()
+                return
         else:
             if args:
                 raise RuntimeError(
@@ -2514,6 +2580,46 @@ def _getattr(self, item: str, **kwargs) -> Any:
             return out.data if hasattr(out, "data") else out.tolist(as_linked_list=True)
         return _wrap_method(self, item, out)
     raise AttributeError(item)
+
+
+# Reads a field of a tensorclass instance, as the field branch of _getattr does.
+# Tensorclasses that are neither tensor_only nor shadow have one per field, so
+# that x.field does not first fail the normal attribute lookup and then go
+# through __getattr__. It defines no __set__, so an entry of the instance
+# __dict__ (which a custom __setattr__ can write with object.__setattr__) still
+# comes first. On the class it raises AttributeError, as the field had no class
+# attribute before: otherwise dataclass() would take it as the default of a
+# field that a subclass declares again. It has no docstring, so that Sphinx and
+# help() do not show one for every field.
+class _FieldGetter:
+    __slots__ = ("_check_shared", "_name")
+
+    def __init__(self, name: str, check_shared: bool):
+        self._name = name
+        # True for the data field of NonTensorData and MetaData.
+        self._check_shared = check_shared
+
+    def __get__(self, obj, objtype=None):
+        name = self._name
+        if obj is None:
+            raise AttributeError(
+                f"type object {objtype.__name__!r} has no attribute {name!r}"
+            )
+        _non_tensordict = obj._non_tensordict
+        td = obj._tensordict
+        if _non_tensordict and name in _non_tensordict and name not in td.keys():
+            out = _non_tensordict[name]
+            if self._check_shared and (td._is_shared or td._is_memmap):
+                return _from_shared_nontensor(out)
+            return out
+        out = td._get_str(name, NO_DEFAULT)
+        if is_non_tensor(out):
+            return (
+                out.data
+                if not isinstance(out, NonTensorStack)
+                else out.tolist(as_linked_list=True)
+            )
+        return out
 
 
 SET_ATTRIBUTES = (
