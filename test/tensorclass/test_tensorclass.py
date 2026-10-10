@@ -829,6 +829,24 @@ class TestTensorClass:
             assert obj.is_locked
         assert not obj.is_locked
 
+    def test_lock_context_manager_restores_on_error(self):
+        # lock_() and unlock_() undo their change also when the body raises
+        @tensorclass
+        class MyClass:
+            X: torch.Tensor
+
+        obj = MyClass(X=torch.zeros(2), batch_size=[])
+        with pytest.raises(ValueError, match="error in the body"):
+            with obj.lock_():
+                raise ValueError("error in the body")
+        assert not obj.is_locked
+        obj.lock_()
+        with pytest.raises(ValueError, match="error in the body"):
+            with obj.unlock_():
+                raise ValueError("error in the body")
+        assert obj.is_locked
+        assert not obj._tensordict._last_op_queue
+
     def test_to_dict(self):
         @tensorclass
         class TestClass:
