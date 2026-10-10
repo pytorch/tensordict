@@ -17,7 +17,7 @@ import sys
 import threading
 import warnings
 import weakref
-from collections import UserDict
+from collections import namedtuple, UserDict
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +28,8 @@ import pytest
 import tensordict.base as tensordict_base
 import torch
 from tensordict import (
+    from_any,
+    from_tuple,
     is_leaf_nontensor,
     lazy_stack,
     LazyStackedTensorDict,
@@ -1369,6 +1371,33 @@ class TestGeneric:
         d = D(a=0)
         assert TensorDict.from_any(d)["a"] == 0
         assert isinstance(TensorDict.from_any(d)["a"], torch.Tensor)
+
+    def test_module_level_from_any_from_tuple(self):
+        # tensordict.from_any and tensordict.from_tuple match the classmethods,
+        # also for dicts and for containers that hold a dict
+        @dataclass
+        class MyClass:
+            d: dict
+
+        NT = namedtuple("NT", ["a", "d"])
+        objs = [
+            {"a": torch.zeros(3), "b": {"c": torch.ones(3, 2)}},
+            UserDict(a=torch.zeros(3)),
+            (torch.zeros(3), {"x": torch.ones(3)}),
+            NT(a=torch.zeros(3), d={"x": torch.ones(3)}),
+            MyClass(d={"x": torch.ones(3)}),
+        ]
+        for obj in objs:
+            td = from_any(obj, auto_batch_size=True)
+            expected = TensorDict.from_any(obj, auto_batch_size=True)
+            assert isinstance(td, TensorDict)
+            assert td.batch_size == expected.batch_size == (3,)
+            assert (td == expected).all()
+        obj = (torch.zeros(3), {"x": torch.ones(3)})
+        td = from_tuple(obj, batch_size=[3])
+        assert isinstance(td, TensorDict)
+        assert td.batch_size == (3,)
+        assert (td == TensorDict.from_tuple(obj, batch_size=[3])).all()
 
     def test_from_dataclass(self):
         @dataclass

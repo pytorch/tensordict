@@ -17,7 +17,6 @@ import math
 import operator
 from typing import List, overload, Sequence, TYPE_CHECKING
 
-import numpy as np
 import torch
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
@@ -153,7 +152,7 @@ class _ShapeOps:
             return self.apply(expand_as, other, batch_size=other.batch_size)
         return self.expand(other.shape)
 
-    def unbind(self, dim: int) -> tuple[T, ...]:
+    def unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
         """Returns a tuple of indexed tensordicts, unbound along the indicated dimension.
 
         Examples:
@@ -1361,7 +1360,7 @@ class _ShapeOps:
 
         if not len(dims_list) and not self.batch_dims:
             return self
-        if np.array_equal(dims_list, range(self.batch_dims)):
+        if list(dims_list) == list(range(self.batch_dims)):
             return self
         min_dim, max_dim = -self.batch_dims, self.batch_dims - 1
         seen = [False for dim in range(max_dim + 1)]
