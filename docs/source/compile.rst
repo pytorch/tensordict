@@ -16,8 +16,8 @@ and tensorclasses are registered as pytree nodes, so :mod:`torch.func` and
 :func:`torch.export.export` see their tensors as leaves. Inside
 :func:`torch.compile`, Dynamo traces the Python code of tensordict like user
 code: indexing, ``apply``, arithmetic, reductions (see :ref:`operations`),
-shape operations, stacking and construction all end up in the graph. Most operations compile with
-``fullgraph=True``. With that flag, a graph break raises an error instead of
+shape operations, stacking and construction all end up in the graph. Most
+operations compile with ``fullgraph=True``. With that flag, a graph break raises an error instead of
 splitting the function into several graphs.
 
   >>> import torch
@@ -65,8 +65,8 @@ Another key set
 Writing into an input tensordict
   ``td["y"] = ...``, ``td.set``, ``td.update`` and a
   :class:`~tensordict.nn.TensorDictModule` (which writes its ``out_keys`` into
-  its input, see :ref:`modules-guide`) recompile whenever the key set of the input changes, even when
-  the key written already exists. Dynamo guards on all the keys of a dict that
+  its input, see :ref:`modules-guide`) recompile whenever the key set of the
+  input changes, even when the key written already exists. Dynamo guards on all the keys of a dict that
   the function writes into
   (`#1606 <https://github.com/pytorch/tensordict/issues/1606>`_,
   `pytorch/pytorch#175858 <https://github.com/pytorch/pytorch/issues/175858>`_).
@@ -99,8 +99,7 @@ Lazy stacks of another length
 Strings in the output
   Each distinct ``str`` value of a tensorclass field or of a
   :class:`~tensordict.NonTensorData` entry (see :ref:`non-tensor-data`)
-  recompiles the function when the
-  function returns it, for instance through ``apply``, ``clone`` or the
+  recompiles the function when the function returns it, for instance through ``apply``, ``clone`` or the
   constructor of a tensorclass. Dynamo specializes the graph on the value.
   Reading only the tensors does not recompile. Return tensors from the
   compiled function and rebuild the tensorclass outside, or keep the strings
