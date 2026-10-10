@@ -1664,31 +1664,6 @@ class TestLazyStackedTensorDict:
         assert len(ltd4.tensordicts) == 4
         assert_allclose_td(ltd4, ltd)
 
-    @pytest.mark.parametrize(
-        "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "prod"]
-    )
-    def test_reduction_feature_full(self, reduction):
-        td = TensorDict.lazy_stack(
-            [
-                TensorDict.lazy_stack(
-                    [
-                        TensorDict(
-                            a=torch.ones(3, 4),
-                            b=torch.zeros(3, 4, 5),
-                            batch_size=[3, 4],
-                        )
-                        for _ in range(2)
-                    ],
-                    1,
-                )
-                for _ in range(5)
-            ],
-            -1,
-        )
-        assert td.shape == (3, 2, 4, 5)
-        tensor = getattr(td, reduction)(dim="feature", reduce=True)
-        assert tensor.shape == td.shape
-
     @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize("dim", [0, 1])
     @pytest.mark.parametrize(
@@ -1718,6 +1693,31 @@ class TestLazyStackedTensorDict:
         )
         with pytest.raises(RuntimeError, match="repeats must have the same size"):
             lazy.repeat_interleave(torch.tensor(repeats), dim=0)
+
+    @pytest.mark.parametrize(
+        "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "prod"]
+    )
+    def test_reduction_feature_full(self, reduction):
+        td = TensorDict.lazy_stack(
+            [
+                TensorDict.lazy_stack(
+                    [
+                        TensorDict(
+                            a=torch.ones(3, 4),
+                            b=torch.zeros(3, 4, 5),
+                            batch_size=[3, 4],
+                        )
+                        for _ in range(2)
+                    ],
+                    1,
+                )
+                for _ in range(5)
+            ],
+            -1,
+        )
+        assert td.shape == (3, 2, 4, 5)
+        tensor = getattr(td, reduction)(dim="feature", reduce=True)
+        assert tensor.shape == td.shape
 
     @set_list_to_stack(True)
     def test_set_list_stack(self):
