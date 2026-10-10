@@ -16,6 +16,7 @@ import struct
 import threading
 import uuid
 import weakref
+from numbers import Number
 from typing import Any, Callable, Sequence, Tuple, Type
 
 import torch
@@ -37,6 +38,7 @@ from tensordict.base import (
 from tensordict.store._store import _has_redis, _KEY_SEP, Self, STORE_BACKENDS
 from tensordict.store._utils import (
     _bytes_to_tensor,
+    _check_indexed_value,
     _compute_byte_ranges,
     _compute_covering_range,
     _decode_meta,
@@ -254,16 +256,27 @@ class _StoreStackElementView(TensorDictBase):
         if index_unravel:
             return self.set(index_unravel, value, inplace=True)
 
-        if not isinstance(value, TensorDictBase):
-            value = TensorDict.from_dict(value, batch_size=[])
+        _check_indexed_value(self, value)
+        if isinstance(value, Number):
+            # a scalar is written to every entry, which casts it to its dtype
+            items = [
+                (key, value) for key in self.keys(include_nested=True, leaves_only=True)
+            ]
+        else:
+            if not isinstance(value, TensorDictBase):
+                value = TensorDict.from_dict(value, batch_size=[])
+            items = [
+                (key, value.get(key))
+                for key in value.keys(include_nested=True, leaves_only=True)
+            ]
 
-        for key in value.keys(include_nested=True, leaves_only=True):
+        for key, item in items:
             key_tuple = _unravel_key_to_tuple(key)
             key_path = _KEY_SEP.join(key_tuple)
             existing = (
                 self._get_str(key_tuple[0]) if len(key_tuple) == 1 else self.get(key)
             )
-            existing[index] = value.get(key)
+            existing[index] = item
             self._run_sync(
                 self._parent._aset_element_key(self._element_idx, key_path, existing)
             )
@@ -1487,6 +1500,14 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
         if isinstance(index, list):
             index = torch.tensor(index)
+
+        _check_indexed_value(self, value)
+        if isinstance(value, Number):
+            # a scalar is written to every entry, in its dtype
+            self._run_sync(
+                self._abatch_set_at({kp: (value, index) for kp in self._get_all_keys()})
+            )
+            return
 
         # Integer assignment on stack dim: write element
         if (

@@ -14,6 +14,7 @@ import pickle
 import threading
 import uuid
 import weakref
+from numbers import Number
 from typing import Any, Callable, Literal, Sequence, Tuple, Type, TYPE_CHECKING
 
 import torch
@@ -61,6 +62,7 @@ _KEY_SEP = "."
 # tensordict.store._lazy uses.
 from tensordict.store._utils import (  # noqa: F401
     _bytes_to_tensor,
+    _check_indexed_value,
     _compute_byte_ranges,
     _compute_covering_range,
     _decode_meta,
@@ -1363,6 +1365,23 @@ class TensorDictStore(TensorDictBase):
         # Index-based assignment: bypass _SubTensorDict, batch SETRANGE
         if isinstance(index, list):
             index = torch.tensor(index)
+
+        _check_indexed_value(self, value)
+        if isinstance(value, Number):
+            # a scalar is written to every tensor entry, in its dtype; the
+            # non-tensor entries are left as they are
+            key_paths = [
+                self._full_key_path(_KEY_SEP.join(_unravel_key_to_tuple(key)))
+                for key in self.keys(include_nested=True, leaves_only=True)
+            ]
+            non_tensor = {}
+            tensor_paths = self._run_sync(
+                self._aget_metadata_batch(key_paths, non_tensor=non_tensor)
+            )
+            self._run_sync(
+                self._abatch_set_at({kp: (value, index) for kp in tensor_paths})
+            )
+            return
 
         if not isinstance(value, TensorDictBase):
             value = TensorDict.from_dict(value, batch_size=[])

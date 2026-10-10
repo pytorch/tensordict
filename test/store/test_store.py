@@ -1215,6 +1215,21 @@ class TestLazyStackedTensorDictStore:
         expected[index] = -2
         torch.testing.assert_close(store_td["a"], expected)
 
+    @pytest.mark.parametrize("index", [1, [0, 2], (slice(None), [1, 3])])
+    def test_setitem_scalar(self, store_stack, index):
+        store_td, tds, lazy_td = store_stack
+        store_td[index] = -2
+        lazy_td[index] = -2
+        torch.testing.assert_close(store_td["a"], lazy_td["a"])
+        torch.testing.assert_close(store_td["b"], lazy_td["b"])
+        # an element of the stack takes a scalar too
+        element = store_td[3]
+        element[1] = 5
+        lazy_td[3, 1] = 5
+        torch.testing.assert_close(store_td["a"], lazy_td["a"])
+        with pytest.raises(TypeError, match="not a tensor"):
+            store_td[index] = torch.ones(3)
+
     def test_nd_mask(self, store_stack):
         """A 2-D mask over the stack dim and an inner dim, as on the lazy stack."""
         store_td, tds, lazy_td = store_stack
@@ -1699,6 +1714,37 @@ class TestNonTensorIndexing:
             # Before any per-element write, all elements should be the same
             assert store[0]["label"] == "placeholder"
             assert store[3]["label"] == "placeholder"
+        finally:
+            store.clear_redis()
+            store.close()
+
+    @pytest.mark.parametrize(
+        "index",
+        [3, [0, 2], torch.tensor([1, 3]), slice(1, 4), [True, False] * 2 + [True]],
+    )
+    def test_setitem_scalar(self, store_kwargs, index):
+        """A scalar is written to every tensor entry, in its dtype, as in a
+        TensorDict; the non-tensor entries are left as they are."""
+        td = TensorDict(
+            {
+                "count": torch.zeros(5, 2, dtype=torch.long),
+                "obs": torch.zeros(5, 4),
+                "nested": {"x": torch.zeros(5)},
+                "label": "placeholder",
+            },
+            [5],
+        )
+        store = TensorDictStore.from_tensordict(td, **store_kwargs)
+        try:
+            store[index] = -3.5
+            expected = td.exclude("label")
+            expected[index] = -3.5
+            for key in ("count", "obs", ("nested", "x")):
+                torch.testing.assert_close(store[key], expected[key])
+            assert store[0]["label"] == "placeholder"
+            assert store[4]["label"] == "placeholder"
+            with pytest.raises(TypeError, match="not a tensor"):
+                store[index] = torch.ones(4)
         finally:
             store.clear_redis()
             store.close()
