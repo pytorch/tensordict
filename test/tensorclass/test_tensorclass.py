@@ -1799,6 +1799,31 @@ class TestTensorClass:
         assert a.grad.x is not None
         assert a.grad.z is None
 
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_grad_keeps_self(self, tensor_only):
+        # .grad holds None for a field without a grad. Neither that None nor
+        # later writes into the grad may reach the instance.
+        @tensorclass(tensor_only=tensor_only)
+        class MyClass:
+            x: torch.Tensor
+            y: torch.Tensor | None = None
+
+        a = MyClass(
+            x=torch.zeros(3, requires_grad=True), y=torch.ones(3), batch_size=[3]
+        )
+        (a.x * 2).sum().backward()
+        grad = a.grad
+        assert (grad.x == 2).all()
+        assert grad.y is None
+        torch.testing.assert_close(a.to_dict()["y"], torch.ones(3))
+        torch.testing.assert_close(
+            a.to_tensordict(retain_none=True)["y"], torch.ones(3)
+        )
+        assert repr(a).count("y=") == 1
+        grad.x = None
+        assert grad.x is None
+        assert isinstance(a.to_dict()["x"], torch.Tensor)
+
     def test_len(self):
         myc = MyData(
             X=torch.rand(2, 3, 4),
