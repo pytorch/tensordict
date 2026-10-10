@@ -6,4 +6,4 @@
 .. auto{{ objtype }}:: {{ name }}
 
 .. minigallery:: {{ fullname }}
-    :add-heading: Tutorials that use {{ name }}
+    :add-heading: Tutorials that use ``{{ name }}``

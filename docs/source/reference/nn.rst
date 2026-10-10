@@ -53,7 +53,8 @@ Modules with tensorclass inputs and outputs
 -------------------------------------------
 
 A :class:`TensorClassModuleBase` subclass declares the tensorclass types
-of its input and output, so that a type checker can check them.
+of its input and output, so that a type checker can report a wrong field
+name or type.
 :meth:`TensorClassModuleBase.as_td_module` returns a
 :class:`TensorClassModuleWrapper`, which reads and writes a tensordict, so
 that you can put the module in a :class:`TensorDictSequential`.

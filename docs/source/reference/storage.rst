@@ -14,8 +14,8 @@ Key-value stores
 .. module:: tensordict.store
 
 A :class:`~tensordict.store.TensorDictStore` keeps its entries on a server
-that speaks the Redis protocol, such as Redis or Dragonfly. The data stays
-on the server, and each read fetches it. A
+that speaks the Redis protocol, such as Redis or Dragonfly. The data is on
+the server, and each read gets it from the server. A
 :class:`~tensordict.store.LazyStackedTensorDictStore` is a lazy stack of
 tensordicts on such a server, so that its entries can have different
 shapes. You need the ``redis`` package and a running server.

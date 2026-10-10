@@ -13,10 +13,10 @@ attributes, not string keys. To declare one, subclass
 the class options and static type checking, see :ref:`tensorclass-guide`.
 
 A tensorclass has the methods of :class:`~tensordict.TensorDictBase`,
-listed by task in :ref:`api-tensordict-methods`. A method that returns a
-``TensorDict`` for a ``TensorDict`` returns an instance of the tensorclass
-for a tensorclass: ``select``, ``clone``, ``to``, ``apply``, indexing and
-reshaping are examples.
+listed by task in :ref:`api-tensordict-methods`. On a tensorclass, the
+methods that return a ``TensorDict`` on a ``TensorDict`` return an
+instance of the tensorclass. Examples are ``select``, ``clone``, ``to``,
+``apply``, indexing and reshaping.
 
 Tensorclasses
 -------------

@@ -65,7 +65,7 @@ Debugging and profiling
 the directory of a saved tensordict. ``timeit`` and ``logger`` are the
 timer and the logger that tensordict uses in its own code. ``Buffer`` is
 an empty class, kept so that old imports of ``tensordict.utils.Buffer``
-still work. Use :class:`torch.nn.Buffer` instead.
+still work. Use :class:`torch.nn.Buffer <torch.nn.parameter.Buffer>` instead.
 
 .. autosummary::
     :toctree: generated/

@@ -13,9 +13,9 @@ their leading dimensions, the *batch size*. It supports many
 :meth:`~tensordict.TensorDictBase.to`, and applies each one to every entry.
 For an introduction, see :ref:`overview`.
 
-This page lists the container classes, then the methods that all
-tensordicts share, grouped by task, and the functions of the
-``tensordict`` module in the same groups.
+This page lists the container classes and the methods that all
+tensordicts share, grouped by task. Each group also lists the functions
+of the ``tensordict`` module for the same task.
 
 Containers
 ----------
@@ -31,7 +31,8 @@ Its subclasses keep their entries in different places:
 - :class:`PersistentTensorDict` reads and writes its entries in an HDF5 or
   zarr file. See :ref:`storage`.
 - :class:`TensorDictParams` is a tensordict and a :class:`torch.nn.Module`.
-  The parent module sees its tensors as parameters and buffers.
+  If a module holds one, the parameters and buffers of the module include
+  its tensors.
 
 :class:`MemoryMappedTensor` is not a tensordict. It is a tensor whose data
 is in a file, and the type of the entries of a memory-mapped tensordict.
@@ -568,8 +569,9 @@ whole tensordict. See :ref:`operations`.
 Apply, modules and gradients
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Apply a function to every entry, map a function over the batch, put the
-parameters of a module in a tensordict and back, and compute gradients.
+Apply a function to every entry, and map a function over the batch. Put
+the parameters of a module in a tensordict and back, and compute
+gradients.
 See :ref:`operations`, :ref:`modules-guide` and :ref:`compile`.
 
 .. rubric:: Methods
@@ -611,9 +613,9 @@ See :ref:`operations`, :ref:`modules-guide` and :ref:`compile`.
 Saving, loading and file formats
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Save a tensordict to disk and load it again, write its entries to
-memory-mapped files, and read or write other formats: HDF5, zarr, CSV,
-JSON, Parquet, MDS and key-value stores.
+Save a tensordict to disk and load it again, and write its entries to
+memory-mapped files. Other methods read and write HDF5, zarr, CSV, JSON,
+Parquet and MDS files, and key-value stores.
 ``memmap(return_early=True)`` returns a
 :class:`~tensordict.utils.TensorDictFuture`. See :ref:`saving` and
 :ref:`storage`.
@@ -742,7 +744,8 @@ Other functions
 Type checks and testing
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-Check the type of an object, and compare two tensordicts in tests.
+Test whether an object is a tensordict, a tensorclass or non-tensor data,
+and compare two tensordicts in tests.
 
 .. autosummary::
     :toctree: generated/

@@ -21,4 +21,4 @@ documentation.
 {%- endif %}
 
 .. minigallery:: {{ fullname }}
-    :add-heading: Tutorials that use {{ name }}
+    :add-heading: Tutorials that use ``{{ name }}``
