@@ -1343,6 +1343,38 @@ class TestNonTensorData:
         ):
             td[1::2] = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
 
+        # A shared bool only takes what a shared int takes
+        td = TensorDict({"val": NonTensorData(data=True, batch_size=[])}, [])
+        td.share_memory_()
+        with pytest.raises(TypeError, match="cannot be interpreted as an integer"):
+            td.update_(TensorDict({"val": NonTensorData(data=None, batch_size=[])}, []))
+
+    @pytest.mark.parametrize("strategy", ["shared", "memmap"])
+    @pytest.mark.parametrize(
+        "val0,val1",
+        [
+            (2**40, 2**41),
+            (True, False),
+            ("x" * 150, "y" * 150),
+            # Kept unshared, like the unsupported types: no in-place update
+            (b"abc", None),
+        ],
+        ids=["int64", "bool", "long_str", "bytes"],
+    )
+    def test_shared_values(self, val0, val1, strategy, tmpdir):
+        # Sharing keeps the type and the whole value
+        td = TensorDict({"val": NonTensorData(data=val0, batch_size=[])}, [])
+        if strategy == "shared":
+            td.share_memory_()
+        else:
+            td.memmap_(tmpdir, share_non_tensor=True)
+        assert type(td["val"]) is type(val0)
+        assert td["val"] == val0
+        if val1 is not None:
+            td.update_(TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []))
+            assert type(td["val"]) is type(val1)
+            assert td["val"] == val1
+
     def _update_stack(self, td):
         td[1::2] = TensorDict({"val": NonTensorData(data=3, batch_size=[5])}, [5])
 

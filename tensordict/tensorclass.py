@@ -14,6 +14,7 @@ import inspect
 import multiprocessing.managers
 import multiprocessing.sharedctypes
 import numbers
+import operator
 import os
 import pickle
 import shutil
@@ -6190,27 +6191,27 @@ _register_tensor_class(NonTensorStack)
 
 
 def _share_memory_nontensor(data, manager: Manager):
-    if isinstance(data, int):
-        return mp.Value(ctypes.c_int, data)
-    if isinstance(data, float):
-        return mp.Value(ctypes.c_double, data)
+    # bool is a subclass of int: check it first so that it stays a bool.
     if isinstance(data, bool):
         return mp.Value(ctypes.c_bool, data)
-    if isinstance(data, bytes):
-        return mp.Value(ctypes.c_byte, data)
+    if isinstance(data, int):
+        return mp.Value(ctypes.c_longlong, data)
+    if isinstance(data, float):
+        return mp.Value(ctypes.c_double, data)
     if isinstance(data, dict):
         result = manager.dict()
         result.update(data)
         return result
     if isinstance(data, str):
-        result = mp.Array(ctypes.c_char, 100)
         data = data.encode("utf-8")
+        result = mp.Array(ctypes.c_char, max(100, len(data)))
         result[: len(data)] = data
         return result
     if isinstance(data, list):
         result = manager.list()
         result.extend(data)
         return result
+    # bytes also end up here: a c_char array would be read back as a str.
     # In all other cases, we just return the tensor. It's ok because the content
     # will be passed to the remote process using regular serialization. We will
     # lock the update in _update_shared_nontensor though.
@@ -6242,6 +6243,10 @@ def _update_shared_nontensor(nontensor, val):
         nontensor.clear()
         nontensor.update(val)
     elif isinstance(nontensor, multiprocessing.sharedctypes.Synchronized):
+        if isinstance(nontensor.get_obj(), ctypes.c_bool):
+            # c_bool stores the truth value of any object: take only what an
+            # int slot takes
+            val = operator.index(val)
         nontensor.value = val
     elif isinstance(nontensor, multiprocessing.sharedctypes.SynchronizedArray):
         val = val.encode("utf-8")
