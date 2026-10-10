@@ -24,10 +24,12 @@ env:
 jobs:
   analyze-flaky-tests:
     runs-on: ubuntu-latest
-    # Every job that pushes to gh-pages joins this group, so they push one at a
-    # time. With `queue: max`, later jobs wait instead of being cancelled.
+    # One report at a time, since each one appends to flaky/data.json. With
+    # `queue: max`, later ones wait instead of being cancelled. Other jobs that
+    # push to gh-pages write other folders, and the push below rebases onto
+    # them.
     concurrency:
-      group: gh-pages
+      group: gh-pages-flaky
       queue: max
     outputs:
       flaky_count: ${{ steps.analyze.outputs.flaky_count }}
@@ -146,7 +148,16 @@ jobs:
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git add flaky/
           git diff --staged --quiet || git commit -m "Update flaky test report - $(date -u +%Y-%m-%d)"
-          git push
+          for attempt in 1 2 3 4 5; do
+            if git push; then
+              break
+            elif [[ "${attempt}" == 5 ]]; then
+              echo "::error::Could not push to gh-pages after ${attempt} attempts."
+              exit 1
+            fi
+            sleep $((attempt * 10))
+            git pull --rebase origin gh-pages
+          done
 
   notify:
     needs: analyze-flaky-tests
