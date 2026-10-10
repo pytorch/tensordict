@@ -973,7 +973,7 @@ def _parse_to(*args, **kwargs):
         )
     else:
         non_blocking = kwargs.get("non_blocking", False)
-        convert_to_format = kwargs.get("convert_to_format")
+        convert_to_format = kwargs.get("memory_format")
         if len(args) > 0:
             device = torch.device(args[0])
             if len(args) > 1:

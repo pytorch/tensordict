@@ -470,7 +470,8 @@ class _DeviceOps:
                 is performed: the caller is responsible for synchronizing before reading
                 the results. If ``False``, the copies are blocking.
             memory_format (torch.memory_format, optional): the desired memory
-                format for 4D parameters and buffers in this tensordict.
+                format for the 4D and 5D tensors in this tensordict, as in
+                :meth:`torch.nn.Module.to`.
             batch_size (torch.Size, optional): resulting batch-size of the
                 output tensordict.
             other (TensorDictBase, optional): TensorDict instance whose dtype
@@ -508,7 +509,8 @@ class _DeviceOps:
 
         Returns:
             a new tensordict instance if the device differs from the tensordict
-            device and/or if the dtype is passed. The same tensordict otherwise.
+            device and/or if the dtype or memory format is passed. The same
+            tensordict otherwise.
             ``batch_size`` only modifications are done in-place.
 
         .. note::
@@ -574,10 +576,15 @@ class _DeviceOps:
         ) = _parse_to(*args, **kwargs)
         result = self
 
-        if device is not None and dtype is None and device == self.device:
+        if (
+            device is not None
+            and dtype is None
+            and convert_to_format is None
+            and device == self.device
+        ):
             return result
 
-        if self.is_consolidated() and dtype is None:
+        if self.is_consolidated() and dtype is None and convert_to_format is None:
             return self._to_consolidated(
                 device=device,
                 pin_memory=non_blocking_pin,
@@ -595,11 +602,16 @@ class _DeviceOps:
         if convert_to_format is not None:
 
             def to(tensor):
+                # As in nn.Module.to, the memory format applies to 4D and 5D tensors
+                if tensor.dim() in (4, 5):
+                    return tensor.to(
+                        device,
+                        dtype,
+                        non_blocking=sub_non_blocking,
+                        memory_format=convert_to_format,
+                    )
                 return tensor.to(
-                    device,
-                    dtype,
-                    non_blocking=sub_non_blocking,
-                    convert_to_format=convert_to_format,
+                    device=device, dtype=dtype, non_blocking=sub_non_blocking
                 )
 
         else:
@@ -610,7 +622,7 @@ class _DeviceOps:
                 )
 
         apply_kwargs = {}
-        if device is not None or dtype is not None:
+        if device is not None or dtype is not None or convert_to_format is not None:
             if non_blocking_pin and num_threads != 0:
                 if num_threads is None:
                     num_threads = max(1, torch.get_num_threads() // 2)
