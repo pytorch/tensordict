@@ -282,16 +282,13 @@ class TensorDict(TensorDictBase):
             self._batch_size = self._parse_batch_size(source, batch_size)
             # Always materialize _td_dim_names on the instance so its presence
             # in self.__dict__ is invariant for Dynamo. Without this, a TD
-            # constructed inside a compiled region (where the branch below is
-            # skipped) would only have the class-level default, while a sibling
-            # TD coming from _new_unsafe would have an instance attribute, and
+            # with only the class-level default and a sibling TD coming from
+            # _new_unsafe, which has an instance attribute, would differ, and
             # Dynamo would recompile on the difference
             # (`not ___dict_contains('_td_dim_names', __dict__)` guard).
             self._td_dim_names = None
-            # TODO: this breaks when stacking tensorclasses with dynamo
             is_eager = not is_compiling()
-            if is_eager:
-                self._set_names(names)
+            self._set_names(names)
 
             # Fast path: use dict.update() to establish all keys in one
             # bulk operation, then validate values individually. This
