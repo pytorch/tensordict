@@ -189,9 +189,12 @@ html_theme_options = {
     ],
     "use_edit_page_button": True,
     "show_toc_level": 2,
-    # The sidebar lists every page (see _templates/sidebar-nav-bs.html); open
-    # only the branch of the current page.
+    # The sidebar lists every page (see _templates/sidebar-nav-bs.html), down
+    # to the pages of the API reference, and opens only the branch of the
+    # current page. The method pages are one level deeper: listing them would
+    # add 400 links to every page.
     "collapse_navigation": True,
+    "navigation_depth": 2,
     "navigation_with_keys": False,
 }
 
@@ -215,6 +218,7 @@ html_context = {
     # Colab opens the notebooks that gh-pages serves for this version.
     "colab_branch": f"gh-pages/{version if RELEASE else 'main'}",
 }
+html_css_files = ["css/custom.css"]
 html_js_files = [
     # Points the "View on GitHub" button of a tutorial to its source file.
     "js/tutorial_links.js",

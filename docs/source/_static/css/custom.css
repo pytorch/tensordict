@@ -1,0 +1,5 @@
+/* Show the whole name of the version in the version switcher, such as
+   "0.14 (stable)". The theme cuts the name after 5.5rem. */
+button.btn.version-switcher__button {
+  max-width: none;
+}
