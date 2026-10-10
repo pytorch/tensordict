@@ -632,6 +632,63 @@ class TestLazyStackedTensorDict:
             ),
         )
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize(
+        "batch_size,other_batch_size",
+        [
+            ((2, 3), (4, 2, 3)),
+            ((2, 3), (1, 3)),
+            ((2, 3), (2, 1)),
+            ((2, 1), (2, 4)),
+            ((1, 3), (4, 1, 3)),
+        ],
+    )
+    def test_comparison_broadcast(self, stack_dim, batch_size, other_batch_size):
+        # Comparisons broadcast the two batch sizes, as for dense tensordicts
+        torch.manual_seed(0)
+        dense = TensorDict(a=torch.randint(3, (*batch_size, 2)), batch_size=batch_size)
+        lazy = lazy_stack(list(dense.unbind(stack_dim)), stack_dim)
+        other = TensorDict(
+            a=torch.randint(3, (*other_batch_size, 2)), batch_size=other_batch_size
+        )
+        for op in ("__eq__", "__ne__", "__lt__", "__ge__"):
+            result = getattr(lazy, op)(other)
+            expected = getattr(dense, op)(other)
+            assert result.batch_size == expected.batch_size
+            assert torch.equal(result["a"], expected["a"])
+
+    def test_comparison_broadcast_ragged(self):
+        lazy = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(3, 1), batch_size=[3]),
+                TensorDict(a=torch.ones(3, 2), batch_size=[3]),
+            ]
+        )
+        others = [
+            lazy_stack(
+                [
+                    TensorDict(a=torch.zeros(4, 3, 1), batch_size=[4, 3]),
+                    TensorDict(a=torch.zeros(4, 3, 2), batch_size=[4, 3]),
+                ],
+                1,
+            ),
+            lazy_stack(
+                [
+                    TensorDict(a=torch.zeros(1, 1), batch_size=[1]),
+                    TensorDict(a=torch.zeros(1, 2), batch_size=[1]),
+                ]
+            ),
+        ]
+        for other in others:
+            result = lazy == other
+            assert isinstance(result, LazyStackedTensorDict)
+            assert result.batch_size == torch.broadcast_shapes(
+                lazy.batch_size, other.batch_size
+            )
+            # the first member holds zeros, the second ones
+            assert result[..., 0, :]["a"].all()
+            assert not result[..., 1, :]["a"].any()
+
     @pytest.mark.parametrize("device", [None, *get_available_devices()])
     @pytest.mark.parametrize("use_file", [False, True])
     def test_consolidate(self, device, use_file, tmpdir):

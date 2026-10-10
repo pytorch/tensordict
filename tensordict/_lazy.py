@@ -2824,24 +2824,28 @@ class LazyStackedTensorDict(TensorDictBase):
             # we may want to broadcast it instead
             other = TensorDict.from_dict(other, batch_size=self.batch_size)
         if _is_tensor_collection(type(other)):
+            self_expand = self
             if other.batch_size != self.batch_size:
-                if self.ndim < other.ndim:
-                    self_expand = self.expand(other.batch_size)
-                elif self.ndim > other.ndim:
-                    other = other.expand(self.batch_size)
-                    self_expand = self
-                else:
+                # Broadcast the batch sizes, as TensorDict comparisons do
+                try:
+                    shape = torch.broadcast_shapes(self.batch_size, other.batch_size)
+                except RuntimeError as err:
                     raise RuntimeError(
                         f"Could not compare tensordicts with shapes {self.shape} and {other.shape}"
-                    )
-            else:
-                self_expand = self
+                    ) from err
+                if other.batch_size != shape:
+                    other = other.expand(shape)
+                if self.batch_size != shape:
+                    self_expand = self.expand(shape)
+                    if not isinstance(self_expand, LazyStackedTensorDict):
+                        # expand returns a dense TensorDict when it can
+                        return getattr(self_expand, comparison_str)(other)
             out = []
             for td0, td1 in _zip_strict(
                 self_expand.tensordicts, other.unbind(self_expand.stack_dim)
             ):
                 out.append(getattr(td0, comparison_str)(td1))
-            return LazyStackedTensorDict.lazy_stack(out, self.stack_dim)
+            return LazyStackedTensorDict.lazy_stack(out, self_expand.stack_dim)
         if isinstance(other, (numbers.Number, Tensor)):
             return LazyStackedTensorDict.lazy_stack(
                 [getattr(td, comparison_str)(other) for td in self.tensordicts],
