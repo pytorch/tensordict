@@ -453,6 +453,15 @@ class TestNamedDims(TestTensorDictsBase):
         assert tdp.is_locked
         assert tdp["sub"].is_locked
 
+    def test_permute_leading_dims(self):
+        # an order for the leading dims only leaves the other dims, and their
+        # names, in place
+        td = TensorDict({"sub": {}}, batch_size=[2, 3, 4], names=["x", "y", "z"])
+        tdp = td.permute(1, 0)
+        assert tdp.batch_size == torch.Size([3, 2, 4])
+        assert tdp.names == ["y", "x", "z"]
+        assert tdp["sub"].names == ["y", "x", "z"]
+
     def test_permute_td(self):
         td = self.unsqueezed_td("cpu")
         with pytest.raises(
@@ -620,6 +629,27 @@ class TestNamedDims(TestTensorDictsBase):
         td.names = ["a", "b", "c", "d"]
         tds = td.squeeze(1)
         assert tds.names == ["a", "c", "d"]
+
+    def test_squeeze_all_singleton_dims(self):
+        # squeeze() of a named tensordict whose dims all have size 1, or of the
+        # 0-dim tensordict that squeeze(dim) leaves, gives a 0-dim tensordict
+        td = TensorDict(
+            {"a": torch.zeros(1, 1, 2)}, batch_size=[1, 1], names=["x", "y"]
+        )
+        for tds in (
+            td.squeeze(),
+            torch.squeeze(td),
+            td.squeeze(1).squeeze(0).squeeze(),
+        ):
+            assert tds.batch_size == torch.Size([])
+            assert tds.names == []
+            assert tds["a"].shape == torch.Size([2])
+        # the same when it is nested in a tensordict that is squeezed
+        parent = TensorDict({"td": td}, batch_size=[1], names=["x"])
+        tds = parent.squeeze()
+        assert tds.batch_size == torch.Size([])
+        assert tds.names == []
+        assert tds["td", "a"].shape == torch.Size([1, 2])
 
     def test_squeeze_td(self):
         td = self.squeezed_td("cpu")
