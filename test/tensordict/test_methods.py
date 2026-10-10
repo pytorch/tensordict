@@ -5052,6 +5052,173 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (inputs.grad == 1).all()
 
 
+# The unary pointwise methods of tensordict/_base/pointwise.py, each with an
+# in-place form named "<op>_".
+_POINTWISE_UNARY_OPS = (
+    "abs",
+    "acos",
+    "asin",
+    "atan",
+    "ceil",
+    "cos",
+    "cosh",
+    "erf",
+    "erfc",
+    "exp",
+    "expm1",
+    "floor",
+    "frac",
+    "lgamma",
+    "log",
+    "log10",
+    "log1p",
+    "log2",
+    "neg",
+    "reciprocal",
+    "round",
+    "sigmoid",
+    "sign",
+    "sin",
+    "sinh",
+    "sqrt",
+    "tan",
+    "tanh",
+    "trunc",
+)
+# Input ranges: the default keeps acos and asin in their domain, the positive
+# range keeps log*, sqrt and reciprocal in theirs, and the wide range keeps
+# ceil, floor, frac, round and trunc from being the identity or a constant.
+_POINTWISE_DEFAULT_RANGE = (-0.95, 0.95)
+_POINTWISE_POSITIVE_RANGE = (0.05, 0.95)
+_POINTWISE_WIDE_RANGE = (-2.9, 2.9)
+_POINTWISE_RANGES = {
+    **dict.fromkeys(
+        ("log", "log10", "log2", "sqrt", "reciprocal"), _POINTWISE_POSITIVE_RANGE
+    ),
+    **dict.fromkeys(("ceil", "floor", "frac", "round", "trunc"), _POINTWISE_WIDE_RANGE),
+}
+# name: (number of tensordict operands, other positional args, keyword args).
+# The same arguments are passed to the method and to the torch function.
+_POINTWISE_BINARY_OPS = {
+    "add": (1, (), {"alpha": 2.0}),
+    "sub": (1, (), {"alpha": 2.0}),
+    "maximum": (1, (), {}),
+    "minimum": (1, (), {}),
+    "lerp": (1, (0.3,), {}),
+    "addcdiv": (2, (), {"value": 0.5}),
+    "addcmul": (2, (), {"value": 0.5}),
+}
+_POINTWISE_TD_NAMES = (
+    "td",
+    "nested_td",
+    "nested_stacked_td",
+    "sub_td",
+    "memmap_td",
+    "td_h5",
+)
+_H5_INPLACE_XFAIL = pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="In-place pointwise methods on a PersistentTensorDict leave the "
+    "h5 file unchanged (#2217)",
+)
+
+
+@pytest.mark.parametrize(
+    "td_name,device",
+    [
+        [td_name, device]
+        for td_name, device in TestTensorDictsBase.TYPES_DEVICES
+        if td_name in _POINTWISE_TD_NAMES
+    ],
+)
+class TestPointwise(TestTensorDictsBase):
+    """Compares the pointwise methods with the torch function applied to each leaf."""
+
+    def _float_td(self, td_name, device, value_range):
+        td = getattr(self, td_name)(device)
+        td.unlock_()
+        # "c" holds integers, which the in-place forms cannot write a float into
+        del td["c"]
+        td.apply_(lambda x: x.uniform_(*value_range))
+        return td
+
+    def _operand(self, td, value_range):
+        # A tensordict of the same structure as td, with other values. A lazy
+        # stack gets a lazy stack: arithmetic with a dense tensordict raises (#1932).
+        if isinstance(td, PersistentTensorDict):
+            other = td.to_tensordict()
+        else:
+            other = td.clone()
+        return other.apply_(lambda x: x.uniform_(*value_range))
+
+    @pytest.mark.parametrize("op", _POINTWISE_UNARY_OPS)
+    def test_unary(self, td_name, device, op):
+        value_range = _POINTWISE_RANGES.get(op, _POINTWISE_DEFAULT_RANGE)
+        td = self._float_td(td_name, device, value_range)
+        expected = {key: getattr(torch, op)(val) for key, val in td.items(True, True)}
+        out = getattr(td, op)()
+        assert out is not td
+        assert set(out.keys(True, True)) == set(expected)
+        for key, val in expected.items():
+            torch.testing.assert_close(out.get(key), val)
+
+    @pytest.mark.parametrize("op", _POINTWISE_UNARY_OPS)
+    def test_unary_(self, td_name, device, op, request):
+        if td_name == "td_h5":
+            request.applymarker(_H5_INPLACE_XFAIL)
+        value_range = _POINTWISE_RANGES.get(op, _POINTWISE_DEFAULT_RANGE)
+        td = self._float_td(td_name, device, value_range)
+        expected = {key: getattr(torch, op)(val) for key, val in td.items(True, True)}
+        assert getattr(td, op + "_")() is td
+        for key, val in expected.items():
+            torch.testing.assert_close(td.get(key), val)
+
+    @pytest.mark.parametrize("inplace", [False, True])
+    @pytest.mark.parametrize("op", sorted(_POINTWISE_BINARY_OPS))
+    def test_binary(self, td_name, device, op, inplace, request):
+        if inplace and td_name == "td_h5":
+            request.applymarker(_H5_INPLACE_XFAIL)
+        num_operands, args, kwargs = _POINTWISE_BINARY_OPS[op]
+        # addcdiv divides by its second operand, which must not be close to 0
+        td = self._float_td(td_name, device, _POINTWISE_POSITIVE_RANGE)
+        operands = [
+            self._operand(td, _POINTWISE_POSITIVE_RANGE) for _ in range(num_operands)
+        ]
+        expected = {
+            key: getattr(torch, op)(
+                val, *[operand.get(key) for operand in operands], *args, **kwargs
+            )
+            for key, val in td.items(True, True)
+        }
+        if inplace:
+            assert getattr(td, op + "_")(*operands, *args, **kwargs) is td
+            out = td
+        else:
+            out = getattr(td, op)(*operands, *args, **kwargs)
+            assert out is not td
+        assert set(out.keys(True, True)) == set(expected)
+        for key, val in expected.items():
+            torch.testing.assert_close(out.get(key), val)
+
+
+@pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
+@pytest.mark.parametrize("op", _POINTWISE_UNARY_OPS)
+def test_pointwise_unary_vmap(op):
+    # Under vmap, _foreach calls torch.Tensor.<op> instead of torch._foreach_<op>
+    value_range = _POINTWISE_RANGES.get(op, _POINTWISE_DEFAULT_RANGE)
+    td = TensorDict(
+        a=torch.empty(4, 3).uniform_(*value_range),
+        nested=TensorDict(b=torch.empty(4, 2).uniform_(*value_range), batch_size=[4]),
+        batch_size=[4],
+    )
+    expected = td.apply(getattr(torch, op))
+    assert_allclose_td(torch.vmap(lambda t: getattr(t, op)())(td), expected)
+    assert_allclose_td(
+        torch.vmap(lambda t: getattr(t.clone(), op + "_")())(td), expected
+    )
+
+
 class TestEmptyTensorMemmapRoundtrip:
     @pytest.mark.parametrize("archive", [False, True])
     def test_empty_tensor_leaves(self, tmp_path, archive):
