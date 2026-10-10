@@ -684,7 +684,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     * Homogeneous: all stack elements have the same shape per key.
       Byte offsets are computed arithmetically (no offset table stored).
-    * Heterogeneous: element shapes may differ per key.  An offset
+    * Heterogeneous: element shapes can differ per key.  An offset
       table (packed int64 array of *N+1* byte offsets) is stored alongside
       the data blob, and per-element shapes are persisted in the metadata
       hash.
