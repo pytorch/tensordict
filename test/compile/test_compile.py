@@ -28,6 +28,7 @@ from tensordict import (
     TypedTensorDict,
 )
 from tensordict._unbatched import UnbatchedTensor
+from tensordict.base import _get_defaults_to_none, _set_get_defaults_to_none
 from tensordict.nn import (
     CudaGraphModule,
     InteractionType,
@@ -1250,6 +1251,26 @@ class TestTC:
             a=MyClass(a=None, b=torch.arange(4), batch_size=[4]), batch_size=[4]
         )
         assert (reshape(data) == reshape_c(data)).all()
+
+    def test_tc_get_defaults_to_none(self, mode):
+        # The AttributeError is caught in the compiled function: with
+        # fullgraph=True, dynamo reports an uncaught one as Unsupported.
+        def get_missing(td):
+            try:
+                return td.get("missing")
+            except AttributeError:
+                return "AttributeError"
+
+        get_missing_c = torch.compile(get_missing, fullgraph=True, mode=mode)
+        data = MyClass(a=None, b=torch.zeros(()))
+        set_back = _get_defaults_to_none()
+        try:
+            _set_get_defaults_to_none(True)
+            assert get_missing_c(data) is None
+            _set_get_defaults_to_none(False)
+            assert get_missing_c(data) == "AttributeError"
+        finally:
+            _set_get_defaults_to_none(set_back)
 
     def test_tc_unbind(self, mode):
         def unbind(td):

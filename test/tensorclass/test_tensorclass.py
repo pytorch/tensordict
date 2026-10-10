@@ -50,6 +50,7 @@ from tensordict import (
     MetaData,
     NonTensorData,
     set_capture_non_tensor_stack,
+    set_get_defaults_to_none,
     set_list_to_stack,
     TensorClass,
     tensorclass,
@@ -59,7 +60,11 @@ from tensordict import (
 from tensordict._lazy import _PermutedTensorDict, _ViewedTensorDict
 from tensordict._td import lazy_stack
 from tensordict._utils_options import _set_capture_non_tensor_stack, _set_list_to_stack
-from tensordict.base import _GENERIC_NESTED_ERR
+from tensordict.base import (
+    _GENERIC_NESTED_ERR,
+    _get_defaults_to_none,
+    _set_get_defaults_to_none,
+)
 from tensordict.tensorclass import from_dataclass
 from tensordict.utils import _check_recursive_properties
 from torch import Tensor
@@ -523,6 +528,30 @@ class TestTensorClass:
 
         assert data.get_at(("td", "missing"), 0, "else") == "else"
         assert data.get_at(("td", "missing"), 0) is None
+
+    @pytest.mark.parametrize("defaults_to_none", [True, False])
+    def test_get_default_set_get_defaults_to_none(self, defaults_to_none):
+        @tensorclass
+        class Data:
+            a: torch.Tensor
+
+        data = Data(a=torch.zeros(3), batch_size=[3])
+        set_back = _get_defaults_to_none()
+        try:
+            with pytest.warns(
+                DeprecationWarning, match="set_get_defaults_to_none.*0.17"
+            ):
+                set_get_defaults_to_none(defaults_to_none)
+            if defaults_to_none:
+                assert data.get("b") is None
+                assert data.get_at("b", 0) is None
+            else:
+                with pytest.raises(AttributeError):
+                    data.get("b")
+                with pytest.raises(AttributeError):
+                    data.get_at("b", 0)
+        finally:
+            _set_get_defaults_to_none(set_back)
 
     def test_backward(self):
         @tensorclass
