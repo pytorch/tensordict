@@ -5519,6 +5519,24 @@ class TestTensorOnly:
         delattr(x, "c")
         assert not hasattr(x, "c")
 
+    def test_tensor_only_assign_none(self):
+        # Assigning None clears a field that holds a tensor, as set() does.
+        x = self.TensorOnly(
+            torch.zeros(3), torch.zeros(3), torch.ones(3), batch_size=[3]
+        )
+        x.c = None
+        assert x.c is None
+        assert x.clone().c is None
+        assert x[0].c is None
+        assert x.to_dict()["c"] is None
+        # On a locked instance, it raises and keeps the tensor.
+        x.c = torch.ones(3)
+        x.lock_()
+        with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+            x.c = None
+        assert (x.c == 1).all()
+        assert (x.to_dict()["c"] == 1).all()
+
     @pytest.mark.parametrize("mapping_type", [dict, UserDict])
     def test_tensor_only_tensordict_mapping(self, mapping_type):
         @tensorclass(tensor_only=True)

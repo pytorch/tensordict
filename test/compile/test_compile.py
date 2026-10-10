@@ -1351,6 +1351,20 @@ class TestTC:
         assert add_one_c(data.clone()).a.c == 1
         assert add_one_c(data) is data
 
+    def test_tc_tensor_only_assign_none(self, mode):
+        class TensorOnly(TensorClass["tensor_only"]):
+            x: torch.Tensor
+            y: torch.Tensor | None = None
+
+        def clear(tc):
+            tc.y = None
+            return tc.x + 1
+
+        clear_c = torch.compile(clear, fullgraph=True, mode=mode)
+        data = TensorOnly(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+        assert (clear_c(data) == 1).all()
+        assert data.y is None
+
     def test_tc_arithmetic(self, mode):
         def add_one(td):
             return td + 1
