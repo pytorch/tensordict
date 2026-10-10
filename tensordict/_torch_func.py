@@ -648,16 +648,19 @@ def _lazy_cat(
             )
         if out.stack_dim != dim:
             index_base = (slice(None),) * out.stack_dim
+            # the members of out lack the stack dim, so later dims shift by one
+            sub_dim = dim - 1 if dim > out.stack_dim else dim
             for i, sub_dest in enumerate(out.tensordicts):
                 index = index_base + (i,)
                 tds_to_cat = [_td[index] for _td in list_of_tensordicts]
-                torch.cat(tds_to_cat, dim, out=sub_dest)
+                torch.cat(tds_to_cat, sub_dim, out=sub_dest)
         else:
             init_idx = 0
             for td_in in list_of_tensordicts:
                 sub_dest = out.tensordicts[init_idx : init_idx + td_in.shape[dim]]
-                init_idx += init_idx + td_in.shape[dim]
-                LazyStackedTensorDict.maybe_dense_stack(sub_dest, out.stack_dim).update(
+                init_idx += td_in.shape[dim]
+                # write into the members of out (a dense stack would copy them)
+                LazyStackedTensorDict.lazy_stack(sub_dest, out.stack_dim).update(
                     td_in, inplace=True
                 )
 

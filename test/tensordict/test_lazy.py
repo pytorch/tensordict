@@ -526,6 +526,35 @@ class TestLazyStackedTensorDict:
             index = (slice(None),) * cat_dim + (slice(td_lazy.shape[cat_dim], None),)
             assert assert_allclose_td(res[index], td_lazy_2)
 
+    @pytest.mark.parametrize("num_inputs", [2, 3])
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("out_stack_dim", [0, 1])
+    @pytest.mark.parametrize("cat_dim", [0, 1])
+    def test_cat_lazy_stack_out(self, num_inputs, stack_dim, out_stack_dim, cat_dim):
+        # The members of out have the same shapes, so they could be stacked densely
+        inputs = []
+        for i in range(num_inputs):
+            batch_size = [2, 3]
+            batch_size[cat_dim] = i + 1
+            td = TensorDict(
+                {
+                    "a": torch.randn(*batch_size, 4),
+                    ("nested", "b"): torch.randn(batch_size),
+                },
+                batch_size,
+            )
+            inputs.append(td.to_lazystack(stack_dim))
+        expected = torch.cat([td.to_tensordict() for td in inputs], cat_dim)
+        out = lazy_stack(
+            [td.clone() for td in torch.zeros_like(expected).unbind(out_stack_dim)],
+            out_stack_dim,
+        )
+        data_ptrs = [td["a"].data_ptr() for td in out.tensordicts]
+
+        assert torch.cat(inputs, cat_dim, out=out) is out
+        assert [td["a"].data_ptr() for td in out.tensordicts] == data_ptrs
+        assert assert_allclose_td(out, expected)
+
     def test_cat_mixed_lazy_dense_stack_dim(self):
         td_lazy = LazyStackedTensorDict(
             *[
