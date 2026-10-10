@@ -609,6 +609,22 @@ class TestGeneric:
         assert td_c_device["d"] == "a string!"
         assert len(dataptrs) == 1
 
+    @pytest.mark.parametrize("non_blocking", [None, False, True])
+    @pytest.mark.parametrize("storage_device", [None, "meta"])
+    def test_consolidate_to_meta(self, storage_device, non_blocking):
+        # Meta tensors hold no data, so a meta target or storage needs no sync.
+        td = TensorDict(
+            {"a": torch.zeros(3), "b": {"c": torch.ones(3, 2)}}, batch_size=[3]
+        )
+        td_c = td.consolidate(device=storage_device)
+        td_meta = td_c.to("meta", non_blocking=non_blocking)
+        assert td_meta.device == torch.device("meta")
+        assert td_meta.is_consolidated()
+        assert td_meta.is_locked
+        assert td_meta["a"].device.type == "meta"
+        assert td_meta["b", "c"].device.type == "meta"
+        assert td_meta["b", "c"].shape == (3, 2)
+
     def test_consolidated_locking_behavior(self):
         """Test that consolidated TensorDicts are automatically locked and unlock properly."""
         td = TensorDict(
@@ -4209,6 +4225,15 @@ class TestGeneric:
 
             td0 = td0.squeeze(0)
             assert_shared(td0)
+
+            # Indexing propagates the shared status if it gives a view
+            td0 = td[0]
+            assert_shared(td0)
+
+            # torch reads a bool as a 0-d mask, which copies
+            for index in (True, False, (0, True), torch.tensor(True)):
+                td0 = td[index]
+                assert_not_shared(td0)
 
     def test_sorted_keys(self):
         td = TensorDict(

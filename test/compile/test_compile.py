@@ -34,6 +34,7 @@ from tensordict.nn import (
     InteractionType,
     ProbabilisticTensorDictModule as Prob,
     set_composite_lp_aggregate,
+    set_interaction_type,
     TensorDictModule,
     TensorDictModule as Mod,
     TensorDictSequential as Seq,
@@ -1637,6 +1638,26 @@ class TestNN:
         if not mean_raises:
             torch.testing.assert_close(sample, td["loc"])
 
+    def test_prob_module_interaction_type_change(self, mode):
+        # The interaction type is read from a global mode object: the compiled
+        # module must follow a change of that mode between calls.
+        prob_mod = Prob(
+            in_keys=["loc", "scale"],
+            out_keys=["sample"],
+            distribution_class=torch.distributions.Normal,
+        )
+        td = TensorDict(loc=torch.zeros(1000), scale=torch.ones(1000))
+        prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
+        with set_interaction_type(InteractionType.MEAN):
+            sample = prob_mod_c(td.copy())["sample"]
+        torch.testing.assert_close(sample, td["loc"])
+        with set_interaction_type(InteractionType.RANDOM):
+            sample = prob_mod_c(td.copy())["sample"]
+        assert (sample != td["loc"]).all()
+        with set_interaction_type(InteractionType.MEAN):
+            sample = prob_mod_c(td.copy())["sample"]
+        torch.testing.assert_close(sample, td["loc"])
+
 
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestFunctional:
@@ -1847,6 +1868,50 @@ class TestExport:
         out = ep.module()(torch.randn(4, 6, 8))
         assert out.batch_size == torch.Size([4, 6])
         torch.testing.assert_close(out["y"], out["x"] * 2)
+
+    class _TDInOutModule(torch.nn.Module):
+        def forward(self, td: TensorDict) -> TensorDict:
+            return TensorDict(c=td["a"] * 2 + td["b"], batch_size=td.batch_size)
+
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_export_td_input(self, strict):
+        td = TensorDict(a=torch.randn(4, 3), b=torch.randn(4, 1), batch_size=[4])
+        ep = torch.export.export(self._TDInOutModule(), (td,), strict=strict)
+        out = ep.module()(td)
+        assert out.batch_size == torch.Size([4])
+        torch.testing.assert_close(out["c"], td["a"] * 2 + td["b"])
+
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_export_td_input_dynamic_batch_size(self, strict):
+        td = TensorDict(a=torch.randn(4, 3), b=torch.randn(4, 1), batch_size=[4])
+        batch = torch.export.Dim("batch", min=2)
+        ep = torch.export.export(
+            self._TDInOutModule(),
+            (td,),
+            strict=strict,
+            # One entry per leaf of the tensordict, in key order.
+            dynamic_shapes=([{0: batch}, {0: batch}],),
+        )
+        td = TensorDict(a=torch.randn(5, 3), b=torch.randn(5, 1), batch_size=[5])
+        out = ep.module()(td)
+        assert out.batch_size == torch.Size([5])
+        torch.testing.assert_close(out["c"], td["a"] * 2 + td["b"])
+
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_export_td_input_empty_nested(self, strict):
+        # The nested td has no tensor: its batch size comes from the spec.
+        class Mod(torch.nn.Module):
+            def forward(self, td):
+                return td["a"] * 2, td.batch_size, td["nested"].batch_size
+
+        td = TensorDict(
+            nested=TensorDict(batch_size=[4]), a=torch.randn(4, 3), batch_size=[4]
+        )
+        ep = torch.export.export(Mod(), (td,), strict=strict)
+        out, batch_size, nested_batch_size = ep.module()(td)
+        torch.testing.assert_close(out, td["a"] * 2)
+        assert tuple(batch_size) == (4,)
+        assert tuple(nested_batch_size) == (4,)
 
     @pytest.mark.parametrize("strict", [False])  # , True])
     def test_export_with_td_params(self, strict):

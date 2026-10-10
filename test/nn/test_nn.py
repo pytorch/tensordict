@@ -2228,6 +2228,43 @@ class TestSkipExisting:
         assert td["value"].item() == 10
         assert td["next", "memory"].item() == 1
 
+    def test_nested_sequence_restores_mode(self):
+        # The inner and outer sequences share the decorator of
+        # TensorDictSequential.forward: the inner call must not change the
+        # mode that the outer call restores.
+        class Inner(TensorDictModuleBase):
+            in_keys = ["in"]
+            out_keys = ["out"]
+
+            def __init__(self):
+                super().__init__()
+                self.seq = TensorDictSequential(
+                    TensorDictModule(lambda x: x + 1, in_keys=["in"], out_keys=["out"])
+                )
+
+            @set_skip_existing(True)
+            def forward(self, tensordict):
+                return self.seq(tensordict)
+
+        module = TensorDictSequential(Inner())
+        td = module(TensorDict({"in": torch.zeros(())}, []))
+        assert (td["out"] == 1).all()
+        assert skip_existing() is False
+
+    def test_exception_restores_mode(self):
+        # The forward changes the mode without restoring it, then raises: the
+        # decorator of TensorDictModule.forward must restore the mode it saw.
+        def fail(x):
+            set_skip_existing(True).__enter__()
+            raise ValueError("fail")
+
+        module = TensorDictModule(fail, in_keys=["in"], out_keys=["out"])
+        with set_skip_existing(["other"]):
+            with pytest.raises(ValueError, match="fail"):
+                module(TensorDict({"in": torch.zeros(())}, []))
+            assert skip_existing() == ["other"]
+        assert skip_existing() is False
+
 
 @pytest.mark.parametrize("out_d_key", [("d", "e"), ["d"], ["d", "e"]])
 @pytest.mark.parametrize("unpack", [True, False])
@@ -2467,6 +2504,51 @@ class TestSelectOutKeys:
                     match=r"key should be a |Can't select non existent",
                 ):
                     mod2 = mod.select_out_keys(out_d_key)
+
+    def test_tdmodule_missing_in_key(self, out_d_key, unpack):
+        # strict=False passes the missing in_key "b" as None
+        mod = TensorDictModule(
+            lambda x, y: (x + 2, x + 2 if y is None else y + 2, x),
+            in_keys=["a", "b"],
+            out_keys=["c", "d", "e"],
+        )
+        if unpack:
+            mod.select_out_keys(*out_d_key)
+            td = mod(TensorDict(a=torch.zeros(())))
+            assert set(td.keys()) == {"a", *out_d_key}
+            td = mod(TensorDict(a=torch.zeros(())), tensordict_out=TensorDict())
+            assert set(td.keys()) == {*out_d_key}
+        else:
+            with pytest.raises(
+                (RuntimeError, ValueError),
+                match=r"key should be a |Can't select non existent",
+            ):
+                mod.select_out_keys(out_d_key)
+
+    def test_tdbase_missing_in_key(self, out_d_key, unpack):
+        class MyModule(TensorDictModuleBase):
+            in_keys = ["a", "b"]
+            out_keys = ["c", "d", "e"]
+
+            def forward(self, tensordict):
+                tensordict["c"] = tensordict["a"] + 2
+                tensordict["d"] = tensordict.get("b", tensordict["a"]) + 2
+                tensordict["e"] = tensordict["d"] + 2
+                return tensordict
+
+        mod = MyModule()
+        if unpack:
+            mod.select_out_keys(*out_d_key)
+            td = mod(TensorDict(a=torch.zeros(())))
+            assert set(td.keys()) == {"a", *out_d_key}
+            td = mod(tensordict=TensorDict(a=torch.zeros(())))
+            assert set(td.keys()) == {"a", *out_d_key}
+        else:
+            with pytest.raises(
+                (RuntimeError, ValueError),
+                match=r"key should be a |Can't select non existent",
+            ):
+                mod.select_out_keys(out_d_key)
 
     def test_tdmodule_wrap(self, out_d_key, unpack):
         mod = TensorDictModuleWrapper(
