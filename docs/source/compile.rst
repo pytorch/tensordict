@@ -15,10 +15,10 @@ How tensordicts compile
 and tensorclasses are registered as pytree nodes, so :mod:`torch.func` and
 :func:`torch.export.export` see their tensors as leaves. Inside
 :func:`torch.compile`, Dynamo traces the Python code of tensordict like user
-code: indexing, ``apply``, arithmetic, reductions, shape operations, stacking
-and construction all end up in the graph. Most operations compile with
-``fullgraph=True``. With that flag, a graph break raises an error instead of
-splitting the function into several graphs.
+code: indexing, ``apply``, arithmetic, reductions (see :ref:`operations`),
+shape operations, stacking and construction all end up in the graph. Most
+operations compile with ``fullgraph=True``. With that flag, a graph break
+raises an error instead of splitting the function into several graphs.
 
   >>> import torch
   >>> from tensordict import TensorDict, tensorclass
@@ -65,9 +65,9 @@ Another key set
 Writing into an input tensordict
   ``td["y"] = ...``, ``td.set``, ``td.update`` and a
   :class:`~tensordict.nn.TensorDictModule` (which writes its ``out_keys`` into
-  its input) recompile whenever the key set of the input changes, even when
-  the key written already exists. Dynamo guards on all the keys of a dict that
-  the function writes into
+  its input, see :ref:`modules-guide`) recompile whenever the key set of the
+  input changes, even when the key written already exists. Dynamo guards on
+  all the keys of a dict that the function writes into
   (`#1606 <https://github.com/pytorch/tensordict/issues/1606>`_,
   `pytorch/pytorch#175858 <https://github.com/pytorch/pytorch/issues/175858>`_).
   A write into a nested tensordict only depends on the keys of that nested
@@ -98,10 +98,11 @@ Lazy stacks of another length
 
 Strings in the output
   Each distinct ``str`` value of a tensorclass field or of a
-  :class:`~tensordict.NonTensorData` entry recompiles the function when the
-  function returns it, for instance through ``apply``, ``clone`` or the
-  constructor of a tensorclass. Dynamo specializes the graph on the value.
-  Reading only the tensors does not recompile. Return tensors from the
+  :class:`~tensordict.NonTensorData` entry (see :ref:`non-tensor-data`)
+  recompiles the function when the function returns it, for instance
+  through ``apply``, ``clone`` or the constructor of a tensorclass. Dynamo
+  specializes the graph on the value. Reading only the tensors does not
+  recompile. Return tensors from the
   compiled function and rebuild the tensorclass outside, or keep the strings
   out of the compiled function.
 
@@ -159,7 +160,7 @@ nightly. Other versions can word them differently.
    * - ``memmap``, ``memmap_like``, ``share_memory_``, ``to_namedtuple``,
        ``data_ptr``
      - Eager-only operations (files, shared memory, Python classes built at
-       run time).
+       run time). See :ref:`devices` and :ref:`saving`.
      - Call them outside the compiled function.
    * - ``loss.backward()`` or ``torch.autograd.grad`` inside the compiled
        function
@@ -196,6 +197,10 @@ inputs. The gradient is a tensordict with the structure of the input:
 
   >>> grads = torch.func.grad(lambda t: (t["a"] ** 2).sum())(td)
   >>> torch.testing.assert_close(grads["a"], 2 * td["a"])
+
+For Jacobians and Hessians of functions that take and return tensordicts,
+and for ``torch.autograd.grad`` and ``backward`` on tensordicts, see the
+"Gradients" section of :ref:`operations`.
 
 To call a module with other parameters, extract them with
 :meth:`~tensordict.TensorDict.from_module` and swap them in with
@@ -362,3 +367,13 @@ For example:
   ...     ]
   >>> outputs[0]["action"].shape
   torch.Size([8, 4])
+
+See also
+--------
+
+- :ref:`operations`: arithmetic, ``apply``, reductions and gradients with
+  tensordicts.
+- :ref:`modules-guide`: :class:`~tensordict.nn.TensorDictModule` and the
+  other modules of ``tensordict.nn``.
+- :ref:`devices`: ``to()``, pinned memory and shared memory.
+- :ref:`fx`: FX tracing of tensordict modules, a prototype.

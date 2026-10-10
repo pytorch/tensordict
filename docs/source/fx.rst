@@ -1,14 +1,28 @@
-Tracing TensorDictModule
-========================
+.. _fx:
 
-We support tracing execution of :class:`~tensordict.nn.TensorDictModule` to create FX graphs. Simply import ``symbolic_trace`` from ``tensordict.prototype.fx`` instead of ``torch.fx``.
+FX tracing (prototype)
+======================
 
-.. note:: Support for ``torch.fx`` is highly experimental and subject to change. Use with caution, and raise an issue if you try it out and encounter problems.
+:func:`tensordict.prototype.fx.symbolic_trace` traces a
+:class:`~tensordict.nn.TensorDictModule` or a
+:class:`~tensordict.nn.TensorDictSequential` into a :mod:`torch.fx` graph
+that you can read and transform. Use it instead of
+:func:`torch.fx.symbolic_trace`, which raises ``TypeError: 'TensorDictModule'
+object is not subscriptable`` on a :class:`~tensordict.nn.TensorDictModule`.
+
+.. warning::
+
+    ``tensordict.prototype.fx`` is a prototype. Its API can change without a
+    deprecation period. To make a module faster or to export it, use
+    :func:`torch.compile` or :func:`torch.export.export` (see
+    :ref:`compile`). If you find a problem, open an issue.
 
 Tracing a ``TensorDictModule``
 ------------------------------
 
-We'll illustrate with an example from the overview. We create a :class:`~tensordict.nn.TensorDictModule`, trace it, and inspect the graph and generated code.
+This example creates a :class:`~tensordict.nn.TensorDictModule` (see
+:ref:`modules-guide`), traces it, and prints the graph and the generated
+code.
 
 .. code-block::
    :caption: Tracing a TensorDictModule
@@ -47,7 +61,7 @@ We'll illustrate with an example from the overview. We create a :class:`~tensord
        sigmoid = torch.sigmoid(linear)
        return (linear, sigmoid)
 
-We can check that a forward pass with each module results in the same outputs.
+A forward pass with each module gives the same outputs:
 
    >>> tensordict = TensorDict({"input": torch.randn(32, 100)}, [32])
    >>> module_out = module(tensordict, tensordict_out=TensorDict())
@@ -63,9 +77,11 @@ We can check that a forward pass with each module results in the same outputs.
 Tracing a ``TensorDictSequential``
 ----------------------------------
 
-We can also trace :class:`~tensordict.nn.TensorDictSequential`. In this case the entire execution of the module is traced into a single graph, eliminating intermediate reads and writes on the input :class:`~tensordict.TensorDict`.
-
-We demonstrate by tracing the sequential example from the overview.
+:func:`~tensordict.prototype.fx.symbolic_trace` also traces a
+:class:`~tensordict.nn.TensorDictSequential`. The whole sequence becomes one
+graph: each module gets its inputs from the outputs of the modules before it
+in the graph, not from the input :class:`~tensordict.TensorDict`. This
+example traces a sequence of two modules:
 
 .. code-block::
    :caption: Tracing TensorDictSequential
@@ -109,17 +125,45 @@ We demonstrate by tracing the sequential example from the overview.
        softmax = torch.softmax(mul, dim = 1);  mul = None
        return (_0_fc2, softmax)
 
-In this case the generated graph and code is a bit more complicated. We can visualize it as follows (requires ``pydot``)
+The graph of this module has more nodes. To draw it, install the ``pydot``
+package and the Graphviz ``dot`` program:
 
 .. code-block::
-   :caption: Visualising the graph
+   :caption: Visualizing the graph
 
+   >>> import os
+   >>> import tempfile
    >>> from torch.fx.passes.graph_drawer import FxGraphDrawer
    >>> g = FxGraphDrawer(graph_module, "sequential")
-   >>> with open("graph.svg", "wb") as f:
-   ...     f.write(g.get_dot_graph().create_svg())
+   >>> path = os.path.join(tempfile.mkdtemp(), "graph.svg")
+   >>> with open(path, "wb") as f:
+   ...     _ = f.write(g.get_dot_graph().create_svg())
 
-Which results in the following visualisation
+The result is this drawing:
 
 .. image:: _static/img/graph.svg
    :alt: Visualization of the traced graph.
+
+Limitations
+-----------
+
+The traced module is a ``TDGraphModule``. It differs from the module that it
+traces:
+
+- It ignores ``selected_out_keys`` of a
+  :class:`~tensordict.nn.TensorDictSequential`. It writes every
+  ``out_keys`` entry of every module in the sequence, also the intermediate
+  ones, such as ``("intermediate", "x")`` above.
+- It takes a tensordict only. A call with tensors as keyword arguments, such
+  as ``graph_module(x=torch.randn(32, 100))``, raises ``TypeError``.
+- It writes its outputs into the input tensordict, unless you pass
+  ``tensordict_out``.
+
+See also
+--------
+
+- :ref:`compile`: :func:`torch.compile` and :func:`torch.export.export`
+  with tensordicts and tensordict modules.
+- :ref:`modules-guide`: :class:`~tensordict.nn.TensorDictModule` and
+  :class:`~tensordict.nn.TensorDictSequential`.
+- The PyTorch documentation of :mod:`torch.fx`.

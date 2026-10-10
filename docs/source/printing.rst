@@ -1,18 +1,19 @@
-Printing and Display
+.. _printing:
+
+Printing and display
 ====================
 
-Why printing a TensorDict is more useful than printing a tensor
----------------------------------------------------------------
+This page shows what ``print(td)`` displays for a
+:class:`~tensordict.TensorDict`. It also shows how to select the attributes
+in the display with :class:`~tensordict.set_printoptions`, and how to
+rebuild a tensordict from a printed one. The full list of options is in `Available options`_.
 
-When working with PyTorch tensors, calling ``print(tensor)`` dumps the raw
-numerical content.  In practice, however, most ``print`` calls during debugging
-are motivated by a single question: *what does this tensor look like?*  You want
-its shape, dtype, device, maybe whether it requires a gradient -- not a wall of
-floating-point numbers.
+What ``print`` shows
+--------------------
 
-Because a :class:`~tensordict.TensorDict` groups multiple tensors under named
-keys, its ``__repr__`` gives you exactly that -- a structured, at-a-glance
-summary of every tensor it contains:
+``print(td)`` shows the structure of a tensordict, not the values of its
+tensors: the key, shape, device and dtype of each field, and the batch size
+and device of the tensordict:
 
     >>> import torch
     >>> from tensordict import TensorDict
@@ -30,31 +31,28 @@ summary of every tensor it contains:
         device=None,
         is_shared=False)
 
-No data is printed, no truncation ellipses, no guessing at dimensionality.
-One glance tells you the names, shapes, dtypes and devices of everything in
-the batch.
-
 Configuring the display with ``set_printoptions``
 -------------------------------------------------
 
-By default, every attribute is shown for backward compatibility.  In many
-situations, though, some of those attributes are noise.  For instance, if all
-your work is on CPU and nothing is shared, ``device=cpu`` and
-``is_shared=False`` are repeated on every line without adding information.
+By default, the repr shows the shape, device, dtype and ``is_shared`` of each
+field, and the batch size, device and ``is_shared`` of the tensordict. Some
+of these attributes can be noise. For instance, if all your work is on the
+CPU and nothing is shared, ``device=cpu`` and ``is_shared=False`` are
+repeated on every line without adding information.
 
-:class:`~tensordict.set_printoptions` lets you control exactly which attributes
-appear.  It works as a **global setter**, a **context manager** or a
-**decorator**, following the same pattern as :class:`~tensordict.set_lazy_legacy`.
-Its role is similar to :func:`torch.set_printoptions`, which is a plain function
-rather than a context manager or decorator.
+:class:`~tensordict.set_printoptions` selects the attributes that appear. It
+works as a global setter, a context manager or a decorator, as
+:class:`torch.no_grad` does for the last two. Its role is similar to
+:func:`torch.set_printoptions`, which is a plain function and not a context
+manager or a decorator.
 
 Global configuration
 ~~~~~~~~~~~~~~~~~~~~
 
-Call ``set_printoptions(...).set()`` to change the defaults for the
-rest of the process.  ``show_device`` and ``show_is_shared`` control the
-TensorDict-level lines, ``show_field_device`` and ``show_field_is_shared`` the
-per-field attributes:
+Call ``set_printoptions(...).set()`` to change the defaults for the rest of
+the process. ``show_device`` and ``show_is_shared`` control the lines of the
+tensordict, and ``show_field_device`` and ``show_field_is_shared`` the
+attributes of each field:
 
     >>> from tensordict import set_printoptions
     >>> set_printoptions(
@@ -70,9 +68,9 @@ per-field attributes:
             label: Tensor(shape=torch.Size([32]), dtype=torch.int64)},
         batch_size=torch.Size([32]))
 
-``set()`` only changes the options it is given, so calling
-``set_printoptions().set()`` without arguments does not reset anything.  To go
-back to the defaults, set the changed options again explicitly:
+``set()`` changes only the options that it gets, so
+``set_printoptions().set()`` without arguments does not reset anything. To go
+back to the defaults, set the changed options again:
 
     >>> set_printoptions(
     ...     show_device=True,
@@ -84,29 +82,49 @@ back to the defaults, set the changed options again explicitly:
 Scoped configuration (context manager)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Use the context-manager form when you only want the change for a specific
-block of code.  The previous settings are automatically restored on exit:
+Use the context manager to change the options for one block of code. At the
+end of the block, the previous options come back:
 
-    >>> from tensordict import set_printoptions
     >>> with set_printoptions(show_dtype=False, show_field_is_shared=False):
     ...     print(td)  # dtype and per-field is_shared hidden
+    TensorDict(
+        fields={
+            image: Tensor(shape=torch.Size([32, 3, 64, 64]), device=cpu),
+            label: Tensor(shape=torch.Size([32]), device=cpu)},
+        batch_size=torch.Size([32]),
+        device=None,
+        is_shared=False)
     >>> print(td)  # back to defaults
+    TensorDict(
+        fields={
+            image: Tensor(shape=torch.Size([32, 3, 64, 64]), device=cpu, dtype=torch.float32, is_shared=False),
+            label: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.int64, is_shared=False)},
+        batch_size=torch.Size([32]),
+        device=None,
+        is_shared=False)
 
 Decorator
 ~~~~~~~~~
 
-You can also decorate a function so that every ``repr`` call inside it uses
-the specified options:
+Decorate a function to use the options for every ``repr`` call in it. Here,
+``show_is_shared=False`` hides the ``is_shared=`` line of the tensordict:
 
     >>> @set_printoptions(show_is_shared=False)
-    ... def summarise(td):
+    ... def summarize(td):
     ...     print(td)
+    >>> summarize(td)
+    TensorDict(
+        fields={
+            image: Tensor(shape=torch.Size([32, 3, 64, 64]), device=cpu, dtype=torch.float32, is_shared=False),
+            label: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.int64, is_shared=False)},
+        batch_size=torch.Size([32]),
+        device=None)
 
 Compact shapes-only display (``verbose=False``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you mainly care about shapes and find the other attributes noisy, pass
-``verbose=False`` to hide device, dtype, and is_shared information in one shot:
+To see only the shapes, pass ``verbose=False``. It hides the device, dtype
+and ``is_shared`` information in one argument:
 
     >>> with set_printoptions(verbose=False):
     ...     print(td)
@@ -116,9 +134,8 @@ If you mainly care about shapes and find the other attributes noisy, pass
             label: Tensor(shape=torch.Size([32]))},
         batch_size=torch.Size([32]))
 
-``verbose=True`` (the default) is a no-op and preserves backward
-compatibility.  Explicit keyword arguments always take precedence over
-``verbose``, so you can mix the two:
+``verbose=True`` (the default) changes nothing. Explicit keyword arguments
+take precedence over ``verbose``, so you can mix the two:
 
     >>> with set_printoptions(verbose=False, show_dtype=True):
     ...     print(td)
@@ -131,8 +148,7 @@ compatibility.  Explicit keyword arguments always take precedence over
 Available options
 ~~~~~~~~~~~~~~~~~
 
-**TensorDict-level** (these control lines in the outer ``TensorDict(...)``
-block):
+These options control the lines of the outer ``TensorDict(...)`` block:
 
 ====================  ===========  ===================================================
 Option                Default      Description
@@ -142,8 +158,8 @@ Option                Default      Description
 ``show_is_shared``    ``True``     Show the ``is_shared=`` line.
 ====================  ===========  ===================================================
 
-**Tensor-level** (these control what appears inside each
-``Tensor(...)`` field descriptor):
+These options control the attributes in the ``Tensor(...)`` description of
+each field:
 
 ========================  ===========  ============================================
 Option                    Default      Description
@@ -154,7 +170,7 @@ Option                    Default      Description
 ``show_field_is_shared``  ``True``     Show the ``is_shared=`` attribute.
 ========================  ===========  ============================================
 
-**Shortcut**:
+This option is a shortcut for several of the options above:
 
 ====================  ===========  ===================================================
 Option                Default      Description
@@ -165,7 +181,8 @@ Option                Default      Description
                                    Explicit keyword arguments override ``verbose``.
 ====================  ===========  ===================================================
 
-**Extended attributes** (off by default -- opt-in for deeper debugging):
+These options add attributes that are hidden by default, and change the order
+of the keys:
 
 ======================  ==================  =============================================
 Option                  Default             Description
@@ -190,16 +207,16 @@ Querying the current settings
     >>> get_printoptions()
     {'show_batch_size': True, 'show_device': True, ...}
 
-
 Reconstructing a TensorDict from its printed representation
 -----------------------------------------------------------
 
-When debugging, it is common to receive a TensorDict repr as a string -- for
-example, pasted from a log file or a colleague's terminal.
-:func:`~tensordict.parse_tensor_dict_string` can reconstruct a dummy
-:class:`~tensordict.TensorDict` from that string.  The resulting object has the
-correct structure, batch size, device and dtypes, but all tensor values are
-replaced by zeros (since the repr does not contain actual data):
+When you debug, you can get a tensordict repr as a string, for example from a
+log file or from the terminal of a colleague.
+:func:`~tensordict.parse_tensor_dict_string` builds a
+:class:`~tensordict.TensorDict` from that string. The result has the keys,
+shapes, dtypes and batch size of the printed tensordict, and its device if
+the device has no index. All the values are zeros, because the repr does not
+contain the data:
 
     >>> from tensordict import parse_tensor_dict_string
     >>> s = """TensorDict(
@@ -215,12 +232,31 @@ replaced by zeros (since the repr does not contain actual data):
     >>> td["image"].shape
     torch.Size([32, 3, 64, 64])
 
-.. note::
+:func:`~tensordict.parse_tensor_dict_string` is a debugging aid. It reads only
+the default print format, with ``shape=``, ``device=``, ``dtype=`` and
+``is_shared=`` for each field, and it has these limits:
 
-    :func:`~tensordict.parse_tensor_dict_string` currently only works with the
-    default print format -- the one that includes ``shape=``,
-    ``device=``, ``dtype=`` and ``is_shared=`` for every field.
-    If field attributes have been hidden, or extra ones (such as the ``plain``
-    value summary) added, via :class:`~tensordict.set_printoptions`,
-    the regex parser will not find the expected fields and reconstruction will
-    fail.
+- If :class:`~tensordict.set_printoptions` hid a field attribute or added one
+  (for example ``plain=True``), the parser finds no fields. It returns a
+  tensordict with the batch size and no tensor entries, and it does not
+  raise an error.
+- It drops non-tensor fields
+  (`#1956 <https://github.com/pytorch/tensordict/issues/1956>`_), and fields
+  on a device with an index, such as ``cuda:0``, without an error. The repr
+  of a tensordict with ``device=cuda:0`` raises
+  ``ValueError: Device not found in the string``.
+- It reads one level of nesting. With two levels or more, the result also
+  has a wrong copy of each deeper tensordict at the top level.
+- It reads keys that contain only letters, digits and ``_``. A key such as
+  ``my-key`` comes back as ``key``.
+- It does not keep ``is_shared``, and it returns a
+  :class:`~tensordict.TensorDict` for the repr of a lazy stack.
+
+See also
+--------
+
+- The reference entries of :class:`~tensordict.set_printoptions`,
+  :func:`~tensordict.get_printoptions` and
+  :func:`~tensordict.parse_tensor_dict_string`.
+- :ref:`devices`: what ``device=None`` in the repr means.
+- :ref:`non-tensor-data`: how non-tensor entries appear in the repr.
