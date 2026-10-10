@@ -19,7 +19,7 @@ from typing import Any, Callable, Literal, Sequence, Tuple, Type, TYPE_CHECKING
 
 import torch
 from tensordict._deprecation import deprecated
-from tensordict._indexing import _as_tuple, _getitem_batch_size
+from tensordict._indexing import _as_tuple, _getitem_batch_size, convert_ellipsis_to_idx
 from tensordict._td import (
     _TensorDictKeysView,
     _unravel_key_to_tuple,
@@ -28,6 +28,7 @@ from tensordict._td import (
     TensorDict,
 )
 from tensordict.base import (
+    _is_leaf_nontensor,
     _register_tensor_class,
     _UNSET,
     is_tensor_collection,
@@ -1648,6 +1649,26 @@ class TensorDictStore(TensorDictBase):
 
     def _set_at_str(self, key, value, idx, *, validated, non_blocking):
         key_path = self._full_key_path(key)
+        nested = False
+        if is_tensor_collection(value) and not is_non_tensor(value):
+            all_keys = self._get_all_keys()
+            nested = any(k.startswith(key_path + _KEY_SEP) for k in all_keys)
+        if nested:
+            # The store holds a tensordict at key: write each leaf of value under
+            # its full key, as store[key][idx] = value does. That would create
+            # the leaves that the store lacks, so check first that it has them.
+            for subkey in value.keys(True, True, is_leaf=_is_leaf_nontensor):
+                subkey = _unravel_key_to_tuple(subkey)
+                if _KEY_SEP.join((key_path, *subkey)) not in all_keys:
+                    raise KeyError(
+                        f"key {(key, *subkey)} not found in {type(self).__name__}"
+                    )
+            if isinstance(idx, tuple) and any(i is Ellipsis for i in idx):
+                # an Ellipsis stands for the batch dims, as on a TensorDict;
+                # store[key][idx] = value would read it on the dims of each leaf
+                idx = convert_ellipsis_to_idx(idx, self.batch_size)
+            TensorDictStore._new_nested(parent=self, key_prefix=key_path)[idx] = value
+            return self
         if not isinstance(value, torch.Tensor) and not self._is_tensor_entry(key_path):
             # Non-tensor indexed write: RMW on the JSON array
             self._run_sync(self._aset_non_tensor_at(key_path, value, idx))

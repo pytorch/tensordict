@@ -319,6 +319,8 @@ Compiling TensorDictModules
 Since v0.5, TensorDict components are compatible with :func:`~torch.compile`.
 For instance, a :class:`~tensordict.nn.TensorDictSequential` module can be compiled with
 ``torch.compile``.
+See :ref:`compile` for what recompiles or breaks the graph, and for
+:class:`~tensordict.nn.CudaGraphModule`.
 
 Distributions
 -------------

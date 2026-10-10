@@ -2,7 +2,9 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from collections import defaultdict
+# defaultdict stays importable from here for the deprecated
+# tensordict.defaultdict alias of tensordict/__init__.py, until 0.17.
+from collections import defaultdict  # noqa: F401
 from typing import Any, Dict, List, Tuple
 
 import torch
@@ -14,7 +16,12 @@ from tensordict.persistent import PersistentTensorDict
 # implement_for and is_compiling stay importable from here for the deprecated
 # tensordict.implement_for and tensordict.is_compiling aliases of
 # tensordict/__init__.py, until 0.17.
-from tensordict.utils import _shape, implement_for, is_compiling  # noqa: F401
+from tensordict.utils import (  # noqa: F401
+    _is_tensorclass,
+    _shape,
+    implement_for,
+    is_compiling,
+)
 from torch.compiler import is_dynamo_compiling
 from torch.utils._pytree import Context, MappingKey, register_pytree_node
 
@@ -231,7 +238,11 @@ def _register_lazy_td_node(cls):
 
 
 def _constructor(cls):
-    return _CONSTRUCTORS[cls]
+    # Not a module-level dict: Dynamo guards on all the keys of a global dict
+    # read with a non-constant key, so a class added later would recompile.
+    if _is_tensorclass(cls):
+        return _tensorclass_constructor
+    return _tensordict_constructor
 
 
 def _tensorclass_constructor(
@@ -277,10 +288,6 @@ def _lazy_tensordict_constructor(
     for key, item in non_tensor_items:
         result.set_non_tensor(key, item)
     return result
-
-
-_CONSTRUCTORS = defaultdict(lambda: _tensordict_constructor)
-_CONSTRUCTORS[LazyStackedTensorDict] = _lazy_tensordict_constructor
 
 
 for cls in PYTREE_REGISTERED_TDS:

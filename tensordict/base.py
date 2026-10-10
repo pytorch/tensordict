@@ -61,6 +61,7 @@ from tensordict.utils import (
     _CloudpickleWrapper,
     _convert_list_to_stack,
     _erase_cache_first,
+    _foreach,
     _GENERIC_NESTED_ERR,
     _get_item,
     _index_preserve_data_ptr,
@@ -87,6 +88,7 @@ from tensordict.utils import (
     capture_non_tensor_stack,
     DeviceType,
     expand_as_right,
+    ftdim,
     IndexType,
     is_batchedtensor,
     is_non_tensor,
@@ -640,6 +642,19 @@ def _register_tensor_class(cls):
     _ACCEPTED_CLASSES = set(_ACCEPTED_CLASSES)
     _ACCEPTED_CLASSES.add(cls)
     _ACCEPTED_CLASSES = tuple(_ACCEPTED_CLASSES)
+
+
+def _is_accepted_class(cls: type) -> bool:
+    """Returns True if ``cls`` is a subclass of one of the ``_ACCEPTED_CLASSES``."""
+    if is_compiling():
+        # Dynamo guards on the length of _ACCEPTED_CLASSES, which
+        # _register_tensor_class rebinds each time a tensorclass is defined,
+        # so the frame would recompile. Every registered class is a subclass
+        # of one of these three, or a tensorclass.
+        return issubclass(
+            cls, (Tensor, TensorDictBase, ftdim.Tensor)
+        ) or _is_tensorclass(cls)
+    return issubclass(cls, _ACCEPTED_CLASSES)
 
 
 _TENSOR_COLLECTION_MEMO = {}
@@ -3440,8 +3455,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 if len(other_val) != len(vals):
                     vals = dict(zip(keys, vals))
                     vals = [vals[k] for k in new_keys]
-                copy_fn = _foreach_copy_compiled if is_compiling() else _foreach_copy_
-                copy_fn(vals, other_val, non_blocking=non_blocking)
+                # _foreach_copy_compiled cannot run under a torch.func transform
+                # (vmap), _foreach can. Same check as in _foreach, which explains it.
+                if (
+                    is_compiling()
+                    and torch._C._functorch.get_dynamic_layer_stack_depth() == 0
+                ):
+                    _foreach_copy_compiled(vals, other_val, non_blocking=non_blocking)
+                else:
+                    _foreach("copy_", vals, other_val, non_blocking=non_blocking)
                 return self
             named = True
 
@@ -3540,7 +3562,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 value = _select_entry((firstkey, *nextkeys), value, keys_to_update)
                 if value is None:
                     continue
-            if not isinstance(value, _ACCEPTED_CLASSES):
+            if not _is_accepted_class(type(value)):
                 raise TypeError(
                     f"Expected value to be one of types {_ACCEPTED_CLASSES} "
                     f"but got {type(value)}"
@@ -5646,7 +5668,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         """
         keys, vals = self._items_list(True, True, collapse=True)
-        vals = torch._foreach_norm(vals, dtype=dtype)
+        vals = _foreach("norm", vals, dtype=dtype)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -5681,7 +5703,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             foreach_vals = dict(
                 _zip_strict(
                     foreach_vals.keys(),
-                    torch._foreach_add(tuple(foreach_vals.values()), 0),
+                    _foreach("add", tuple(foreach_vals.values()), 0),
                 )
             )
         if iter_vals:
@@ -5836,7 +5858,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 value, non_blocking=_device_recorder.marked or non_blocking
             )
             is_tc = True
-        elif not issubclass(cls, _ACCEPTED_CLASSES):
+        elif not _is_accepted_class(cls):
             # If cls is not a tensor
             try:
                 value = self._convert_to_tensor(value)
@@ -5903,7 +5925,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             value = self._convert_to_tensordict(
                 value, non_blocking=_device_recorder.marked or non_blocking
             )
-        elif not issubclass(cls, _ACCEPTED_CLASSES):
+        elif not _is_accepted_class(cls):
             # If cls is not a tensor
             try:
                 value = self._convert_to_tensor(value)
@@ -5942,7 +5964,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 value, non_blocking=_device_recorder.marked or non_blocking
             )
             is_tc = True
-        elif not issubclass(cls, _ACCEPTED_CLASSES):
+        elif not _is_accepted_class(cls):
             # If cls is not a tensor
             try:
                 value = self._convert_to_tensor(value)
@@ -6002,7 +6024,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             value = self._convert_to_tensordict(
                 value, non_blocking=_device_recorder.marked or non_blocking
             )
-        elif not issubclass(cls, _ACCEPTED_CLASSES):
+        elif not _is_accepted_class(cls):
             # If cls is not a tensor
             try:
                 value = self._convert_to_tensor(value)
