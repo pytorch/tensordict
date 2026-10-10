@@ -84,6 +84,10 @@ Another batch size
   The first call with a new batch size recompiles once with dynamic shapes
   (automatic dynamic shapes), and later sizes reuse that graph.
   ``torch.compile(fn, dynamic=True)`` avoids the second compilation.
+  ``torch._dynamo.mark_dynamic`` on an entry does not: the batch size holds
+  Python ints, and a function that builds a tensordict with
+  ``batch_size=td.batch_size`` then raises ``ConstraintViolationError``
+  (pytorch/tensordict#2077).
   ``split``, ``chunk``, ``unbind`` and ``tolist`` recompile for each batch
   size, also after that.
 
@@ -248,8 +252,9 @@ list for a nested tensordict:
 
 Without ``dynamic_shapes``, a call with another batch size fails a guard of
 the exported program (``AssertionError: Guard failed``). Non-strict export
-does not support tensordicts with dimension names or non-tensor entries: use
-``strict=True`` for them, and keep the non-tensor entries out of the output.
+does not support tensordicts with dimension names or non-tensor entries
+(pytorch/tensordict#2073, pytorch/tensordict#2074): use ``strict=True`` for
+them, and keep the non-tensor entries out of the output.
 To export a :class:`~tensordict.nn.TensorDictModule` so that it takes and
 returns plain tensors, see the :doc:`tutorials/export` tutorial. If the process
 also creates a :class:`~tensordict.nn.CudaGraphModule`, see the warning in
@@ -310,9 +315,10 @@ The replay follows these rules:
   Issue consecutive calls from one stream, or order them in the same way.
 * Arguments that are not tensors (a ``float``, a ``str``) must not change
   after the capture. If the function takes a tensordict, the replay uses the
-  captured values and ignores the new ones without an error, and every tensor
-  must be an entry of the tensordict, not a separate argument. If the
-  function takes tensors, a changed value raises a ``ValueError``.
+  captured values and ignores the new ones without an error
+  (pytorch/tensordict#2075), and every tensor must be an entry of the
+  tensordict, not a separate argument. If the function takes tensors, a
+  changed value raises a ``ValueError``.
 
 .. warning::
 
@@ -323,7 +329,7 @@ The replay follows these rules:
   ``EXCLUDE_TD_FROM_PYTREE=1`` to silence the warning). After that,
   :func:`torch.export.export` and :func:`torch.func.grad` no longer accept
   these tensordicts. :func:`torch.vmap` still does, and tensorclasses stay
-  registered.
+  registered (pytorch/tensordict#2076).
 
 ``mode="reduce-overhead"``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
