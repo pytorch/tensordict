@@ -764,16 +764,28 @@ _BACKENDS: dict[str, Type[_PersistentBackend]] = {
 
 
 class PersistentTensorDict(TensorDictBase):
-    """Persistent TensorDict implementation.
+    """A tensordict whose entries live in an HDF5 file or a Zarr store.
 
-    :class:`PersistentTensorDict` instances provide an interface with data stored
-    on disk such that access to this data is made easy while still taking advantage
-    from the fast access provided by the backend.
+    The HDF5 backend (``backend="h5"``) needs ``h5py``. The Zarr backend
+    (``backend="zarr"``) needs ``zarr>=3.0``. Each read of an entry loads it
+    from the file into a new tensor, so ``ptd["a"] is ptd["a"]`` is
+    ``False``, and in-place changes to the tensor that you read do not reach
+    the file. Writes (``ptd["a"] = value``) go to the file.
 
-    Like other :class:`TensorDictBase` subclasses, :class:`PersistentTensorDict`
-    has a ``device`` attribute. This does *not* mean that the data is being stored
-    on that device, but rather that when loaded, the data will be cast onto
-    the desired device.
+    Use it to read or write existing HDF5 or Zarr data. To keep tensordict
+    data on disk for fast reloads, use :meth:`~tensordict.TensorDictBase.memmap`
+    instead. :ref:`storage` compares the storage backends, and
+    :ref:`choosing-a-container` compares the containers.
+
+    Open a file with :meth:`from_h5` or :meth:`from_zarr`. Create one from
+    data with :meth:`from_dict`. Call :meth:`close` when you are done: the
+    file stays open when the object goes out of scope. To load every entry
+    into memory, call :meth:`~tensordict.TensorDictBase.to_tensordict`.
+
+    Like other :class:`~tensordict.TensorDictBase` subclasses,
+    :class:`PersistentTensorDict` has a ``device`` attribute. This does not
+    mean that the data is stored on that device: the entries are cast to it
+    when they are read.
 
     Keyword Args:
         batch_size (torch.Size or compatible): the tensordict batch size.
@@ -783,11 +795,16 @@ class PersistentTensorDict(TensorDictBase):
             Exclusive with ``group``.
         group (h5py.Group or zarr.Group, optional): a file or a group that
             contains data. Exclusive with ``filename``.
-        mode (str, optional): Reading mode. Defaults to ``"r"``.
+        mode (str, optional): how the file is opened, as in :class:`h5py.File`:
+            ``"r"`` (read only), ``"r+"`` (read and write, the file must
+            exist), ``"w"`` (create, or truncate an existing file), ``"w-"``
+            or ``"x"`` (create, fail if the file exists), ``"a"`` (read and
+            write, create the file if needed). Defaults to ``"r"``.
         backend (str, optional): storage backend, ``"h5"`` (requires ``h5py``) or
             ``"zarr"`` (requires ``zarr>=3.0``). Defaults to ``"h5"``.
-        device (torch.device or compatible, optional): device of the tensordict.
-            Defaults to ``None`` (ie. default PyTorch device).
+        device (torch.device or compatible, optional): the device that the
+            entries are cast to when they are read. Defaults to ``None``: the
+            entries are read on CPU and ``ptd.device`` is ``None``.
         validate_batch_size (bool, optional): if ``True``, the batch size is
             checked against the stored array shapes at construction time (this
             requires iterating over the store metadata). Defaults to ``True``.
@@ -797,11 +814,13 @@ class PersistentTensorDict(TensorDictBase):
             by default; pass ``chunks=...`` and/or ``compressors=...`` to override.
 
     .. note::
-        Currently, PersistentTensorDict instances are not closed when getting out-of-scope.
-        This means that it is the responsibility of the user to close them if necessary.
+        PersistentTensorDict instances are not closed when they go out of
+        scope. Call :meth:`close` to close the file.
 
     Examples:
         >>> import tempfile
+        >>> import torch
+        >>> from tensordict import PersistentTensorDict
         >>> with tempfile.NamedTemporaryFile() as f:
         ...     data = PersistentTensorDict(filename=f.name, batch_size=[3], mode="w")
         ...     data["a", "b"] = torch.randn(3, 4)
@@ -893,7 +912,9 @@ class PersistentTensorDict(TensorDictBase):
             filename (str): The path to the h5 file.
 
         Keyword Args:
-            mode (str, optional): Reading mode. Defaults to ``"r"``.
+            mode (str, optional): how the file is opened: ``"r"`` (read only),
+                ``"r+"`` (read and write), or another mode of :class:`h5py.File`
+                (see :class:`PersistentTensorDict`). Defaults to ``"r"``.
             batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to None (batch-size automatically
                 determined).
 
@@ -901,13 +922,23 @@ class PersistentTensorDict(TensorDictBase):
             A PersistentTensorDict representation of the input h5 file.
 
         Examples:
-            >>> ptd = PersistentTensorDict.from_h5("path/to/file.h5")
-            >>> print(ptd)
+            >>> import os
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import PersistentTensorDict
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     filename = os.path.join(tmpdir, "file.h5")
+            ...     PersistentTensorDict.from_dict(
+            ...         {"key1": torch.zeros(3), "key2": torch.ones(3)}, filename
+            ...     ).close()
+            ...     ptd = PersistentTensorDict.from_h5(filename)
+            ...     print(ptd)
+            ...     ptd.close()
             PersistentTensorDict(
                 fields={
                     key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
                     key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([]),
+                batch_size=torch.Size([3]),
                 device=None,
                 is_shared=False)
         """
@@ -941,13 +972,26 @@ class PersistentTensorDict(TensorDictBase):
             A PersistentTensorDict representation of the input zarr store.
 
         Examples:
-            >>> ptd = PersistentTensorDict.from_zarr("path/to/store.zarr")
-            >>> print(ptd)
+            >>> import os
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import PersistentTensorDict
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     store = os.path.join(tmpdir, "store.zarr")
+            ...     PersistentTensorDict.from_dict(
+            ...         {"key1": torch.zeros(3), "key2": torch.ones(3)},
+            ...         store,
+            ...         batch_size=[3],
+            ...         backend="zarr",
+            ...     ).close()
+            ...     ptd = PersistentTensorDict.from_zarr(store)
+            ...     print(ptd)
+            ...     ptd.close()
             PersistentTensorDict(
                 fields={
                     key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
                     key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([]),
+                batch_size=torch.Size([3]),
                 device=None,
                 is_shared=False)
         """
@@ -985,11 +1029,13 @@ class PersistentTensorDict(TensorDictBase):
             filename (str or path): path to the h5 file or zarr store.
 
         Keyword Args:
-            auto_batch_size (bool, optional): if ``True``, the batch size will be computed automatically.
-                Defaults to ``False``.
+            auto_batch_size (bool, optional): not used. The batch size comes
+                from ``batch_size``, or from the input as described there,
+                whatever the value of this argument. Defaults to ``False``.
             batch_size (tensordict batch-size, optional): if provided, batch size
-                of the tensordict. If not, the batch size will be gathered from the
-                input structure (if present) or determined automatically.
+                of the tensordict. If not, a tensordict input keeps its batch
+                size, and a dict input gets the largest leading shape that all
+                its entries share.
             device (torch.device or compatible, optional): the device where to
                 expect the tensor once they are returned. Defaults to ``None``
                 (on cpu by default).
@@ -999,7 +1045,21 @@ class PersistentTensorDict(TensorDictBase):
                 (h5 backend) or :meth:`zarr.Group.create_array` (zarr backend).
 
         Returns:
-            A :class:`PersitentTensorDict` instance linked to the newly created file.
+            A :class:`PersistentTensorDict` instance linked to the newly created file.
+
+        Examples:
+            >>> import os
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import PersistentTensorDict
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     ptd = PersistentTensorDict.from_dict(
+            ...         {"a": torch.zeros(3, 4), "b": {"c": torch.ones(3)}},
+            ...         os.path.join(tmpdir, "data.h5"),
+            ...     )
+            ...     print(ptd.batch_size, ptd["b", "c"])
+            ...     ptd.close()
+            torch.Size([3]) tensor([1., 1., 1.])
 
         """
         backend_cls = _BACKENDS.get(backend)
