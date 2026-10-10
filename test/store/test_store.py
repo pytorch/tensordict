@@ -388,6 +388,25 @@ class TestTensorDictStore:
         result = store_td["obs"]
         assert torch.allclose(result, torch.full((10, 3), 42.0))
 
+    def test_masked_fill_(self, store_td):
+        """masked_fill_ fills the masked batch elements, as on a TensorDict."""
+        source = TensorDict(
+            {
+                "a": torch.zeros(10, 10),
+                "b": torch.zeros(10, 2),
+                "c": torch.zeros(10),
+                "nested": TensorDict({"d": torch.zeros(10, 4)}, [10]),
+            },
+            [10],
+        )
+        store_td.update(source)
+        mask = torch.zeros(10, dtype=torch.bool)
+        mask[[1, 4]] = True
+        assert store_td.masked_fill_(mask, 1.0) is store_td
+        expected = source.masked_fill_(mask, 1.0)
+        for key in expected.keys(include_nested=True, leaves_only=True):
+            torch.testing.assert_close(store_td[key], expected[key])
+
     def test_is_contiguous(self, store_td):
         """Redis TDs are not contiguous."""
         assert not store_td.is_contiguous()
@@ -1404,6 +1423,17 @@ class TestLazyStackedTensorDictStore:
         view["a"] = new_a
         reread = store_td[0]["a"]
         assert torch.allclose(reread, new_a)
+
+    def test_view_masked_fill_(self, store_stack):
+        """rltd[1].masked_fill_ fills the masked rows of element 1 only."""
+        store_td, tds, lazy_td = store_stack
+        mask = torch.tensor([True, False, False, True])
+        view = store_td[1]
+        assert view.masked_fill_(mask, 1.0) is view
+        expected = tds[1].clone().masked_fill_(mask, 1.0)
+        for key in ("a", "b"):
+            torch.testing.assert_close(store_td[1][key], expected[key])
+            torch.testing.assert_close(store_td[0][key], tds[0][key])
 
     def test_view_shape_change_raises(self, store_stack):
         """Changing element shape through the view should raise."""
