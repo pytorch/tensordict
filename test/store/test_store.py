@@ -1892,6 +1892,130 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    # ---- del_, entry_class, contiguous, popitem, chunk, (un)flatten_keys ----
+
+    @staticmethod
+    def _nested_lazy_td():
+        return lazy_stack(
+            [
+                TensorDict(
+                    a=torch.arange(3.0) + i,
+                    n=TensorDict(
+                        b=torch.full((3, 2), float(i)),
+                        m=TensorDict(c=torch.full((3,), -float(i)), batch_size=[3]),
+                        batch_size=[3],
+                    ),
+                    batch_size=[3],
+                )
+                for i in range(5)
+            ]
+        )
+
+    def test_del_(self, store_kwargs):
+        """del_ removes a leaf, or every leaf under a sub-tensordict, as on a lazy stack."""
+        lazy_td = self._nested_lazy_td()
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            for key in (("n", "b"), "n"):
+                for td in (store_td, lazy_td):
+                    assert td.del_(key) is td
+                assert set(store_td.keys(True, True)) == set(lazy_td.keys(True, True))
+                assert_allclose_td(store_td.to_tensordict(), lazy_td.to_tensordict())
+            assert list(store_td.keys()) == ["a"]
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_entry_class(self, store_kwargs):
+        lazy_td = self._nested_lazy_td()
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            for key in ("a", ("n", "b"), ("n", "m", "c")):
+                assert store_td.entry_class(key) is torch.Tensor
+                assert store_td.entry_class(key) is lazy_td.entry_class(key)
+            with pytest.raises(KeyError, match="not found"):
+                store_td.entry_class("missing")
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.xfail(
+        strict=True,
+        raises=AssertionError,
+        reason="entry_class returns LazyStackedTensorDictStore for a "
+        "sub-tensordict, but get returns a TensorDict (#2221)",
+    )
+    def test_entry_class_sub_tensordict(self, store_kwargs):
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            self._nested_lazy_td(), **store_kwargs
+        )
+        try:
+            for key in ("n", ("n", "m")):
+                assert store_td.entry_class(key) is type(store_td.get(key))
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize("canonical", [False, True])
+    def test_contiguous(self, store_stack, canonical):
+        store_td, _, lazy_td = store_stack
+        out = store_td.contiguous(canonical=canonical)
+        assert type(out) is TensorDict
+        assert_allclose_td(out, lazy_td.contiguous(canonical=canonical))
+
+    def test_popitem(self, store_stack):
+        """popitem removes and returns the last key, as on a lazy stack."""
+        store_td, _, lazy_td = store_stack
+        for expected_key in ("b", "a"):
+            key, value = store_td.popitem()
+            assert key == expected_key
+            torch.testing.assert_close(value, lazy_td[key])
+            assert key not in store_td.keys()
+        assert len(store_td.keys()) == 0
+        with pytest.raises(KeyError, match="is empty"):
+            store_td.popitem()
+
+    @pytest.mark.parametrize("dim", [0, 1])
+    def test_chunk(self, store_stack, dim):
+        store_td, _, lazy_td = store_stack
+        chunks = store_td.chunk(2, dim)
+        expected = lazy_td.chunk(2, dim)
+        assert len(chunks) == len(expected) == 2
+        for chunk, expected_chunk in zip(chunks, expected):
+            assert type(chunk) is TensorDict
+            assert_allclose_td(chunk, expected_chunk.to_tensordict())
+
+    @pytest.mark.parametrize("separator", [".", "/"])
+    def test_flatten_keys(self, store_kwargs, separator):
+        lazy_td = self._nested_lazy_td()
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            out = store_td.flatten_keys(separator)
+            assert type(out) is TensorDict
+            assert_allclose_td(out, lazy_td.flatten_keys(separator).to_tensordict())
+            with pytest.raises(ValueError, match="Cannot call flatten_keys in_place"):
+                store_td.flatten_keys(separator, inplace=True)
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_unflatten_keys(self, store_kwargs):
+        # The store joins nested keys with ".", so the flat keys use "/"
+        lazy_td = self._nested_lazy_td()
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_td.flatten_keys("/"), **store_kwargs
+        )
+        try:
+            assert set(store_td.keys()) == {"a", "n/b", "n/m/c"}
+            out = store_td.unflatten_keys("/")
+            assert type(out) is TensorDict
+            assert_allclose_td(out, lazy_td.to_tensordict())
+            with pytest.raises(ValueError, match="Cannot call unflatten_keys in_place"):
+                store_td.unflatten_keys("/", inplace=True)
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
 
 class TestBackendParam:
     """Tests for backend parameter."""
