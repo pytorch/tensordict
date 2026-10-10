@@ -3,31 +3,31 @@
 Load data and share it between processes
 ========================================
 
-This page shows how to read a tensordict in batches with a
-:class:`~torch.utils.data.DataLoader`, and how to share a tensordict between
-processes on one node: worker processes, ``torch.multiprocessing`` and
-:meth:`~tensordict.TensorDictBase.map`. To store a dataset that is larger than
-memory, see :ref:`storage`. To send tensordicts between nodes, see
-:ref:`distributed`.
+A tensordict with a batch dimension is a dataset. A
+:class:`~torch.utils.data.DataLoader` reads each batch from it with one index
+operation, and the batch is a tensordict. Processes on one node can also share
+one tensordict, in shared memory or in memory-mapped files, and see the writes
+of the other processes.
 
 Use a tensordict as a dataset
 -----------------------------
 
-A tensordict with a batch dimension is a map-style dataset: ``len(td)`` is
-the size of its first batch dimension, and ``td[i]`` is one sample (see
-:ref:`batch-size`). It also has ``__getitems__``, so the ``DataLoader`` reads
-each batch with one index operation, and the batch is a tensordict. Pass
-``collate_fn=lambda x: x`` to keep that batch as it is:
+A tensordict is a map-style dataset: ``len(td)`` is the size of its first
+batch dimension, and ``td[i]`` is one sample (see :ref:`batch-size`). It also
+has ``__getitems__``, which reads a whole batch with one index operation.
+Pass ``collate_fn=lambda x: x`` to keep that batch as it is:
 
   >>> import torch
   >>> from torch.utils.data import DataLoader
   >>> from tensordict import TensorDict
   >>> _ = torch.manual_seed(0)
-  >>> data = TensorDict(x=torch.randn(10, 3), y=torch.arange(10), batch_size=[10])
+  >>> data = TensorDict(
+  ...     image=torch.randn(10, 1, 8, 8), label=torch.arange(10), batch_size=[10]
+  ... )
   >>> loader = DataLoader(data, batch_size=4, shuffle=True, collate_fn=lambda x: x)
   >>> batches = list(loader)
-  >>> [batch["y"].tolist() for batch in batches]
-  [[7, 9, 2, 6], [1, 8, 4, 0], [3, 5]]
+  >>> [batch["label"].tolist() for batch in batches]
+  [[5, 1, 2, 7], [9, 4, 6, 3], [0, 8]]
   >>> type(batches[0]).__name__, batches[0].batch_size
   ('TensorDict', torch.Size([4]))
 
@@ -53,29 +53,30 @@ worker processes, this gives the same batches:
 A dataset that returns tensordicts
 ----------------------------------
 
-A dataset can return one tensordict for each sample. Examples are a list of
+A dataset can return one tensordict for each sample, for example a list of
 tensordicts, or a :class:`~torch.utils.data.Dataset` whose ``__getitem__``
 builds a tensordict. The ``DataLoader`` then gets a list of tensordicts for
-each batch. The default ``collate_fn`` raises the same ``TypeError``. Pass
-``collate_fn=torch.stack`` to stack the list into one tensordict:
+each batch, and the default ``collate_fn`` raises the same ``TypeError``.
+Pass ``collate_fn=torch.stack`` to stack the list into one tensordict:
 
-  >>> samples = [TensorDict(x=torch.randn(3), y=i) for i in range(10)]
+  >>> samples = [TensorDict(features=torch.randn(3), label=i) for i in range(10)]
   >>> batch = next(iter(DataLoader(samples, batch_size=4, collate_fn=torch.stack)))
-  >>> batch.batch_size, batch["y"]
+  >>> batch.batch_size, batch["label"]
   (torch.Size([4]), tensor([0, 1, 2, 3]))
 
 If the samples have different shapes, ``torch.stack`` raises an error. Pass
 :func:`~tensordict.lazy_stack` instead. It returns a
 :class:`~tensordict.LazyStackedTensorDict`, which keeps each sample as it is
-(see :ref:`stacking`):
+(see :ref:`stacking`). This example loads point clouds with different numbers
+of points:
 
   >>> from tensordict import lazy_stack
-  >>> ragged = [TensorDict(x=torch.randn(i + 1)) for i in range(4)]
-  >>> batch = next(iter(DataLoader(ragged, batch_size=4, collate_fn=lazy_stack)))
+  >>> clouds = [TensorDict(points=torch.randn(n, 3)) for n in (5, 2, 7, 3)]
+  >>> batch = next(iter(DataLoader(clouds, batch_size=4, collate_fn=lazy_stack)))
   >>> type(batch).__name__, batch.batch_size
   ('LazyStackedTensorDict', torch.Size([4]))
-  >>> [sample["x"].shape for sample in batch.unbind(0)]
-  [torch.Size([1]), torch.Size([2]), torch.Size([3]), torch.Size([4])]
+  >>> [cloud["points"].shape for cloud in batch.unbind(0)]
+  [torch.Size([5, 3]), torch.Size([2, 3]), torch.Size([7, 3]), torch.Size([3, 3])]
 
 Batch samplers
 --------------
@@ -87,7 +88,7 @@ the list of indices of each batch, and ``collate_fn`` gets the tensordict:
   >>> from torch.utils.data import BatchSampler, SequentialSampler
   >>> sampler = BatchSampler(SequentialSampler(data), batch_size=4, drop_last=True)
   >>> loader = DataLoader(data, sampler=sampler, batch_size=None, collate_fn=lambda x: x)
-  >>> [batch["y"].tolist() for batch in loader]
+  >>> [batch["label"].tolist() for batch in loader]
   [[0, 1, 2, 3], [4, 5, 6, 7]]
 
 Worker processes and pinned memory
@@ -99,10 +100,11 @@ worker processes. Each worker gets the dataset when it starts:
 - With the ``fork`` start method (the default on Linux up to Python 3.13),
   the worker inherits a copy-on-write view of the memory of the main process.
 - With ``spawn`` (the default on macOS and Windows) and ``forkserver`` (the
-  default on Linux from Python 3.14), the dataset is pickled to each worker.
-  A memory-mapped tensordict is pickled as its file names, so the workers
-  open the same files and do not copy the data. A ``lambda`` cannot be
-  pickled: define ``collate_fn`` as a function at the top level of a module.
+  default on Linux from Python 3.14), the ``DataLoader`` pickles the dataset
+  to each worker. A memory-mapped tensordict pickles as its file names, so
+  the workers open the same files and do not copy the data. Pickle cannot
+  send a ``lambda``, so define ``collate_fn`` as a function at the top level
+  of a module.
 
 The worker examples start processes, so they are complete scripts. Save one
 to a file and run it with ``python``:
@@ -124,26 +126,28 @@ to a file and run it with ``python``:
    if __name__ == "__main__":
        with tempfile.TemporaryDirectory() as path:
            data = TensorDict(
-               x=torch.randn(1_000, 3), y=torch.arange(1_000), batch_size=[1_000]
+               image=torch.randn(1_000, 1, 8, 8),
+               label=torch.arange(1_000),
+               batch_size=[1_000],
            ).memmap_(path)
            loader = DataLoader(
                data, batch_size=100, shuffle=True, num_workers=2, collate_fn=keep_batch
            )
-           total = sum(batch["y"].sum().item() for batch in loader)
+           total = sum(batch["label"].sum().item() for batch in loader)
            print(total)  # 499500
 
 With ``pin_memory=True``, the ``DataLoader`` calls
 :meth:`~tensordict.TensorDictBase.pin_memory` on each batch, which pins every
-leaf. Pinned memory lets ``to(device, non_blocking=True)`` copy the batch to
-the GPU while the CPU goes on. These lines need a GPU, so they are not run
+leaf. From pinned memory, ``to(device, non_blocking=True)`` copies the batch
+to the GPU while the CPU goes on. These lines need a GPU, so they are not run
 when this page is tested:
 
   >>> loader = DataLoader(data, batch_size=4, collate_fn=lambda x: x, pin_memory=True)  # doctest: +SKIP
   >>> batch = next(iter(loader)).to("cuda", non_blocking=True)  # doctest: +SKIP
 
 Without a ``DataLoader``, ``td.to("cuda", non_blocking_pin=True)`` pins the
-leaves with several threads (``num_threads``) and copies them to the GPU. See
-:ref:`devices`.
+leaves with several threads (``num_threads``), and copies them to the GPU
+(see :ref:`devices`).
 
 Share a tensordict between processes
 ------------------------------------
@@ -151,13 +155,13 @@ Share a tensordict between processes
 :meth:`~tensordict.TensorDictBase.share_memory_` moves each tensor of a
 tensordict to shared memory. When you then pass the tensordict to another
 process, as an argument or through a ``torch.multiprocessing`` queue, that
-process uses the same memory. The writes of each process are visible to the
-others, without a copy.
+process uses the same memory. Each process sees the writes of the others,
+without a copy.
 
-``share_memory_`` locks the tensordict: you can write into its tensors in
-place (``td[i] = ...``, ``td["x"].add_(1)``, ``td.update_(other)``), but you
-cannot add or replace entries. This script starts four processes, and each
-one fills one row:
+``share_memory_`` locks the tensordict, so write into its tensors in place,
+for example with ``td[i] = ...`` or ``td["x"].add_(1)`` (see
+:ref:`keys-locking`). In this script, four processes each simulate one
+system, and write its state into one row:
 
 .. code-block:: python
 
@@ -167,18 +171,18 @@ one fills one row:
    from tensordict import TensorDict
 
 
-   def fill_row(td, i):
-       td[i] = TensorDict(x=torch.full((3,), float(i)))
+   def simulate(systems, i):
+       systems[i] = TensorDict(state=torch.full((3,), float(i)))
 
 
    if __name__ == "__main__":
-       td = TensorDict(x=torch.zeros(4, 3), batch_size=[4]).share_memory_()
-       processes = [mp.Process(target=fill_row, args=(td, i)) for i in range(4)]
+       systems = TensorDict(state=torch.zeros(4, 3), batch_size=[4]).share_memory_()
+       processes = [mp.Process(target=simulate, args=(systems, i)) for i in range(4)]
        for p in processes:
            p.start()
        for p in processes:
            p.join()
-       print(td["x"][:, 0])  # tensor([0., 1., 2., 3.])
+       print(systems["state"][:, 0])  # tensor([0., 1., 2., 3.])
 
 Call ``share_memory_`` before you start the processes. Without it, the
 result depends on the start method. With ``fork``, the child writes into a
@@ -186,11 +190,11 @@ copy, and the parent does not see the writes. With ``spawn``, PyTorch moves
 the tensors to shared memory when it pickles them, so the parent sees the
 writes.
 
-The same works with ``memmap_()`` instead of ``share_memory_()``. The tensors
-are then in files: memory-mapped files in a directory if you give a path,
-anonymous temporary files if you do not. Use files when the data is larger
-than RAM, or when processes that you start later must open the data. Shared
-memory is limited by the size of ``/dev/shm``.
+``memmap_()`` works in the same way as ``share_memory_()``, with the tensors
+in files: memory-mapped files in a directory if you give a path, and
+anonymous temporary files if you do not. Use files if the data is larger than
+RAM, or if processes that you start later must open the data. The size of
+``/dev/shm`` limits shared memory.
 
 A queue works the same way. The process that gets the tensordict uses the
 memory of the process that sent it:
@@ -204,18 +208,18 @@ memory of the process that sent it:
 
 
    def consume(queue):
-       td = queue.get()
-       td["x"].add_(100)
+       systems = queue.get()
+       systems["state"].add_(100)
 
 
    if __name__ == "__main__":
        queue = mp.Queue()
-       td = TensorDict(x=torch.zeros(4, 3), batch_size=[4]).share_memory_()
+       systems = TensorDict(state=torch.zeros(4, 3), batch_size=[4]).share_memory_()
        p = mp.Process(target=consume, args=(queue,))
        p.start()
-       queue.put(td)
+       queue.put(systems)
        p.join()
-       print(td["x"][0])  # tensor([100., 100., 100.])
+       print(systems["state"][0])  # tensor([100., 100., 100.])
 
 Several processes on one dataset on disk
 ----------------------------------------
@@ -223,8 +227,9 @@ Several processes on one dataset on disk
 Processes can also open a memory-mapped dataset by its path, with
 :meth:`~tensordict.TensorDictBase.load_memmap`. Readers that do not change the
 data can pass ``mode="r"`` (see :ref:`saving`). tensordict does not lock the
-files: give each writer its own rows. This script preallocates a dataset on
-disk, fills it from two processes, and reads it back:
+files, so give each writer its own rows (see :ref:`storage-sharing`). This
+script preallocates a dataset on disk, fills it from two processes, and reads
+it back:
 
 .. code-block:: python
 
@@ -268,10 +273,11 @@ Process a dataset in parallel with map
 :meth:`~tensordict.TensorDictBase.map` splits a tensordict into chunks along
 one dimension, calls a function on each chunk in a pool of processes, and
 concatenates the results. If the tensordict is memory-mapped or in shared
-memory, the chunks go to the workers without a copy. The function gets a
-locked chunk of a memory-mapped tensordict, so it must return a new
-tensordict instead of adding keys to its input. If you pass a preallocated
-memory-mapped tensordict as ``out``, the workers write the results into it:
+memory, the chunks go to the workers without a copy. Return a new
+tensordict from the function, and do not add keys to its input: the chunk of
+a memory-mapped tensordict is locked. If you pass a preallocated
+memory-mapped tensordict as ``out``, the workers write the results into it.
+This script computes the kinetic energy of 8 particles in two processes:
 
 .. code-block:: python
 
@@ -282,16 +288,22 @@ memory-mapped tensordict as ``out``, the workers write the results into it:
    from tensordict import TensorDict
 
 
-   def double(chunk):
-       return TensorDict(y=chunk["x"] * 2, batch_size=chunk.batch_size)
+   def kinetic_energy(chunk):
+       energy = 0.5 * chunk["mass"] * (chunk["vel"] ** 2).sum(-1)
+       return TensorDict(energy=energy, batch_size=chunk.batch_size)
 
 
    if __name__ == "__main__":
        with tempfile.TemporaryDirectory() as path:
-           data = TensorDict(x=torch.arange(8.0), batch_size=[8]).memmap_()
-           out = TensorDict(y=torch.zeros(8), batch_size=[8]).memmap_like(path)
-           data.map(double, num_workers=2, chunksize=2, out=out)
-           print(out["y"][:4])  # MemoryMappedTensor([0., 2., 4., 6.])
+           particles = TensorDict(
+               mass=torch.ones(8),
+               vel=torch.arange(8.0).unsqueeze(-1).repeat(1, 3),
+               batch_size=[8],
+           ).memmap_()
+           out = TensorDict(energy=torch.zeros(8), batch_size=[8]).memmap_like(path)
+           particles.map(kinetic_energy, num_workers=2, chunksize=2, out=out)
+           # MemoryMappedTensor([ 0.0000,  1.5000,  6.0000, 13.5000])
+           print(out["energy"][:4])
 
 ``map`` also takes ``num_chunks``, a ``pool`` that you create, and a
 ``generator`` that seeds each worker. :meth:`~tensordict.TensorDictBase.map_iter`

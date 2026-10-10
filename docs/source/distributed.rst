@@ -3,18 +3,17 @@
 Distributed tensordicts
 =======================
 
-This page shows how to send tensordicts between processes with
-:mod:`torch.distributed`: from one rank to another, and with collectives
-such as broadcast and all-reduce. It also covers UCXX pipes, which stream
-tensordicts between nodes without a process group, and datasets on a shared
-file system. To share a tensordict between processes on one node, see
-:ref:`data-loading`.
+A tensordict sends, receives and reduces all its tensors with one call:
+``td.send(dst=1)`` sends every leaf to rank 1, and ``td.all_reduce()``
+reduces every leaf over all ranks of :mod:`torch.distributed`. To stream
+tensordicts between two nodes without a process group, use a UCXX pipe. To
+share a tensordict between processes on one node, see :ref:`data-loading`.
 
 Choose a method
 ---------------
 
-All these methods are methods of :class:`~tensordict.TensorDictBase`, and
-also work on tensorclasses.
+These are methods of :class:`~tensordict.TensorDictBase`, so they also work
+on tensorclasses.
 
 .. list-table::
    :header-rows: 1
@@ -63,8 +62,8 @@ Every process must join a process group before it calls these methods (see
 :func:`torch.distributed.init_process_group`). The script below starts two
 processes on one machine, with the ``gloo`` backend on CPU, and runs one
 example in each. Each example on this page is a function of ``rank`` and
-``world_size``. To run it, add it to the script and pass its name to ``run``
-in the last line:
+``world_size``. To run an example, add it to the script, and pass its name to
+``run`` in the last line:
 
 .. code-block:: python
 
@@ -110,8 +109,8 @@ in the last line:
    if __name__ == "__main__":
        run(send_recv)
 
-On several machines, or with GPUs, start one process per GPU with
-``torchrun``, call ``dist.init_process_group("nccl")`` and
+On several machines, or with GPUs, start one process for each GPU with
+``torchrun``. Call ``dist.init_process_group("nccl")`` and
 ``torch.cuda.set_device(rank)``, and put the tensordicts on the GPU. The
 calls on this page do not change.
 
@@ -129,8 +128,8 @@ With ``consolidated=True``, ``send`` sends all the leaves as one message
 instead. It first calls :meth:`~tensordict.TensorDictBase.consolidate`, which
 copies the leaves into one storage (see :ref:`saving`), unless the tensordict
 is consolidated already. This is faster when the tensordict has many small
-leaves. With 100 leaves of 256 bytes, on one machine with ``gloo``, a
-consolidated send was 34 times as fast as a send per leaf. The receiver must
+leaves. In one measurement with 100 leaves of 256 bytes, on one machine with
+``gloo``, a consolidated send was 34 times as fast as a send per leaf. The receiver must
 hold a consolidated tensordict with the same keys, shapes and dtypes:
 
 .. code-block:: python
@@ -222,6 +221,8 @@ the group must call them:
        else:
            td = TensorDict.from_remote_init(src=0, use_broadcast=True)
            print(td["obs"].shape)  # torch.Size([2, 84])
+
+.. _distributed-collectives:
 
 Collectives
 -----------
@@ -355,10 +356,10 @@ them costs about 10 µs for each leaf.
 
 Each method takes a ``group``. For ``send`` and ``recv``, ``dst`` and ``src``
 are global ranks. To give a rank relative to the group, pass ``group_dst`` or
-``group_src`` instead. With them, a standalone
-``ProcessGroup`` that you built against a store also
-works. :func:`torch.distributed.new_group` must be called by all ranks, also
-the ranks that are not in the group:
+``group_src`` instead. With them, a standalone ``ProcessGroup`` that you
+built against a store also works. All ranks must call
+:func:`torch.distributed.new_group`, also the ranks that are not in the
+group:
 
 .. code-block:: python
 
@@ -375,14 +376,18 @@ A dataset on a shared file system
 ---------------------------------
 
 If the nodes share a file system (for example NFS or Lustre), they can open
-the same memory-mapped tensordict, and no tensor goes over the network. Make
-one rank preallocate the files with
-:meth:`~tensordict.TensorDictBase.from_schema` (see :ref:`storage`), which
-does not allocate the dataset in memory. tensordict does not lock the files
-or order the writes between ranks. Give each rank its own rows, and wait at
-a barrier before you read the rows of the other ranks. Ranks that only read
-can load the files with ``mode="r"`` (see :ref:`saving`). The script of
-`Run the examples`_ imports ``shutil`` and ``tempfile`` for this example:
+the same memory-mapped tensordict. No tensor then goes over the network:
+
+1. On one rank, preallocate the files with
+   :meth:`~tensordict.TensorDictBase.from_schema` (see :ref:`storage`). It
+   does not allocate the dataset in memory.
+2. On each rank, write only its own rows. tensordict does not order the
+   writes between ranks (see :ref:`storage-sharing`).
+3. Wait at a barrier before you read the rows of the other ranks. Ranks that
+   only read can load the files with ``mode="r"`` (see :ref:`saving`).
+
+The script of `Run the examples`_ imports ``shutil`` and ``tempfile`` for
+this example:
 
 .. code-block:: python
 
@@ -404,7 +409,7 @@ can load the files with ``mode="r"`` (see :ref:`saving`). The script of
        data["label"][rows] = rows
        dist.barrier()
        reader = TensorDict.load_memmap(path, mode="r")
-       print(rank, reader["label"][:4])  # tensor([0, 1, 2, 3]) on every rank
+       print(rank, reader["label"][:4])  # MemoryMappedTensor([0, 1, 2, 3]) on every rank
        dist.barrier()
        if rank == 0:
            shutil.rmtree(path)
@@ -423,7 +428,7 @@ trainer. Compared with ``send`` and ``recv`` of ``torch.distributed``:
   buffer. It does not allocate memory or parse metadata.
 - UCX selects the transport: TCP, InfiniBand verbs or RoCE.
 - If the tensors are on a GPU and GPUDirect RDMA is available, the buffer
-  goes from GPU memory to the network without a copy to the CPU.
+  goes from GPU memory to the network, with no copy in CPU memory.
 - The API uses :mod:`asyncio`, and has synchronous wrappers.
 
 The classes are in the private module ``tensordict._ucxx``, and they need
@@ -433,8 +438,8 @@ is tested: ``ucxx`` is not installed on the machines that test it.
 Install UCXX
 ~~~~~~~~~~~~
 
-UCXX needs Linux, Python 3.11 or later, and the UCX system libraries. The
-``pip`` packages are built for CUDA:
+UCXX needs Linux, Python 3.11+ and the UCX system libraries. The ``pip``
+packages are built for CUDA:
 
 .. code-block:: bash
 
@@ -442,9 +447,9 @@ UCXX needs Linux, Python 3.11 or later, and the UCX system libraries. The
    pip install ucxx-cu13   # CUDA 13
    conda install -c conda-forge -c rapidsai ucxx
 
-For InfiniBand, the host needs ``rdma-core`` (or MOFED 5.0 or later) and
-Linux 5.6 or later. For GPUDirect RDMA, the ``nvidia_peermem`` kernel module
-must be loaded. To see the InfiniBand devices and the module:
+For InfiniBand, the host needs ``rdma-core`` (or MOFED 5.0+) and Linux
+5.6+. For GPUDirect RDMA, load the ``nvidia_peermem`` kernel module. To list
+the InfiniBand devices and see whether the module is loaded:
 
 .. code-block:: bash
 
@@ -534,9 +539,9 @@ a ``while`` loop instead.
 
 ``pipe.send(td)``, ``pipe.recv()`` and ``pipe.close()`` are synchronous
 wrappers. If no event loop runs in the thread, each call runs the coroutine
-with :func:`asyncio.run`. Do not call them from a coroutine or a callback of
-a running event loop: they wait for a coroutine that the same loop must
-run, so the call does not return. ``TensorDictPipe.listen`` and
+with :func:`asyncio.run`. Do not call them from a coroutine, or from a
+callback of a running event loop. They wait for a coroutine that the same
+loop must run, so the call never returns. ``TensorDictPipe.listen`` and
 ``TensorDictPipe.connect`` are coroutines only.
 
 GPU tensors
@@ -606,11 +611,11 @@ To handle each connection yourself, iterate over the server:
 Benchmarks
 ~~~~~~~~~~
 
-These numbers were measured for the pull request that added UCXX
-(`#1611 <https://github.com/pytorch/tensordict/pull/1611>`_, March 2026), on
-two nodes with NVIDIA H200 GPUs and 400 Gb/s InfiniBand, with
-``nvidia_peermem`` loaded. They were not measured again for this page. The
-script is ``benchmarks/distributed/bench_transport.py``. It needs a Ray
+These numbers come from the pull request that added UCXX
+(`#1611 <https://github.com/pytorch/tensordict/pull/1611>`_, March 2026). It
+measured them on two nodes with NVIDIA H200 GPUs and 400 Gb/s InfiniBand,
+with ``nvidia_peermem`` loaded. This page does not repeat the measurement.
+The script is ``benchmarks/distributed/bench_transport.py``. It needs a Ray
 cluster of two nodes, or the ``RANK``, ``MASTER_ADDR`` and ``PEER_ADDR``
 environment variables.
 
