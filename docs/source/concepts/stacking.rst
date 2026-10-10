@@ -3,44 +3,46 @@
 Stacking and variable-size data
 ===============================
 
-This page explains how to join tensordicts into one, which function returns
-which type, and how to store data whose shapes differ from one element to the
-next. It also shows how to fill a tensordict one element at a time. It assumes
-that you know the batch size (see :ref:`batch-size`).
+:func:`torch.stack` and :func:`torch.cat` join tensordicts as they join
+tensors, so a list of samples becomes one batch in one call. A lazy stack also
+joins tensordicts whose keys or shapes differ, such as graphs with different
+numbers of nodes or sequences of different lengths.
 
 Dense stacking: torch.stack and torch.cat
 -----------------------------------------
 
 :func:`torch.stack` puts tensordicts along a new batch dimension.
-:func:`torch.cat` joins them along an existing batch dimension. Both return a
-regular :class:`~tensordict.TensorDict`, with one new tensor for each key. This
-is a dense stack: it copies the data, so a later change to the result does not
-change the inputs. :func:`tensordict.stack` and :func:`tensordict.cat` are the
-same functions.
+:func:`torch.cat` joins them along an existing batch dimension. Here, each
+tensordict holds the 3-D positions of 2 particles:
 
   >>> import torch
   >>> from tensordict import TensorDict
-  >>> a = TensorDict(obs=torch.zeros(2, 3), batch_size=[2])
-  >>> b = TensorDict(obs=torch.ones(2, 3), batch_size=[2])
+  >>> a = TensorDict(pos=torch.zeros(2, 3), batch_size=[2])
+  >>> b = TensorDict(pos=torch.ones(2, 3), batch_size=[2])
   >>> stacked = torch.stack([a, b])
   >>> type(stacked).__name__, stacked.batch_size
   ('TensorDict', torch.Size([2, 2]))
-  >>> torch.stack([a, b], dim=1)["obs"].shape
+  >>> torch.stack([a, b], dim=1)["pos"].shape
   torch.Size([2, 2, 3])
   >>> torch.cat([a, b]).batch_size
   torch.Size([4])
+
+Both return a regular :class:`~tensordict.TensorDict`, with one new tensor for
+each key. This is a dense stack: it copies the data, so a later change to the
+result does not change the inputs. :func:`tensordict.stack` and
+:func:`tensordict.cat` are the same functions.
 
 ``torch.stack`` raises a ``RuntimeError`` if the tensordicts do not have the
 same keys, the same batch size, and the same shape for each entry.
 ``torch.cat`` accepts different sizes along the joined dimension, but it
 raises a ``KeyError`` if the keys differ:
 
-  >>> c = TensorDict(obs=torch.zeros(2, 4), batch_size=[2])
+  >>> c = TensorDict(pos=torch.zeros(2, 2), batch_size=[2])  # 2-D positions
   >>> torch.stack([a, c])
   Traceback (most recent call last):
   ...
-  RuntimeError: The shapes of the tensors to stack is incompatible: torch.Size([2, 4]) vs torch.Size([2, 3]) for key obs.
-  >>> torch.stack([a, TensorDict(action=torch.zeros(2, 3), batch_size=[2])])
+  RuntimeError: The shapes of the tensors to stack is incompatible: torch.Size([2, 2]) vs torch.Size([2, 3]) for key pos.
+  >>> torch.stack([a, TensorDict(vel=torch.zeros(2, 3), batch_size=[2])])
   Traceback (most recent call last):
   ...
   RuntimeError: The sets of keys in the tensordicts to stack are exclusive. Consider using `LazyStackedTensorDict.maybe_dense_stack` instead.
@@ -52,14 +54,18 @@ Lazy stacks
 
 A lazy stack is a :class:`~tensordict.LazyStackedTensorDict`. It keeps the list
 of the original tensordicts, and it stacks their entries only when you read
-them. :func:`~tensordict.lazy_stack` always returns one:
+them. :func:`~tensordict.lazy_stack` always returns one. In this example, each
+tensordict holds 10 time steps of one robot:
 
   >>> from tensordict import lazy_stack
-  >>> tds = [TensorDict(a=torch.zeros(10), b=torch.zeros(10, 5), batch_size=[10]) for _ in range(3)]
+  >>> tds = [
+  ...     TensorDict(battery=torch.zeros(10), joints=torch.zeros(10, 4), batch_size=[10])
+  ...     for _ in range(3)
+  ... ]
   >>> stacked = lazy_stack(tds)  # no data is stacked here
   >>> type(stacked).__name__, stacked.batch_size
   ('LazyStackedTensorDict', torch.Size([3, 10]))
-  >>> stacked["a"].shape  # stacks the "a" entries only
+  >>> stacked["battery"].shape  # stacks the "battery" entries only
   torch.Size([3, 10])
 
 You also get a lazy stack from :func:`torch.stack` or :func:`torch.cat` of lazy
@@ -81,8 +87,8 @@ For example:
 
   >>> stacked[0] is tds[0]
   True
-  >>> stacked["a"] = torch.ones(3, 10)
-  >>> tds[0]["a"].sum()
+  >>> stacked["battery"] = torch.ones(3, 10)
+  >>> tds[0]["battery"].sum()
   tensor(10.)
 
 Each read of an entry stacks the values again, and allocates a new tensor. If
@@ -94,8 +100,8 @@ write to it does not change the original tensordicts:
   >>> dense = stacked.contiguous()
   >>> type(dense).__name__
   'TensorDict'
-  >>> dense["a"] += 1
-  >>> tds[0]["a"].sum()  # not changed
+  >>> dense["battery"] += 1
+  >>> tds[0]["battery"].sum()  # not changed
   tensor(10.)
 
 :meth:`~tensordict.LazyStackedTensorDict.to_tensordict` does the same.
@@ -119,21 +125,21 @@ cannot read them from the stack. Read them from one tensordict of the stack
 instead:
 
   >>> mixed = lazy_stack([
-  ...     TensorDict(obs=torch.zeros(3), batch_size=[3]),
-  ...     TensorDict(obs=torch.zeros(3), action=torch.zeros(3), batch_size=[3]),
+  ...     TensorDict(pos=torch.zeros(3), batch_size=[3]),
+  ...     TensorDict(pos=torch.zeros(3), charge=torch.zeros(3), batch_size=[3]),
   ... ])
   >>> list(mixed.keys())
-  ['obs']
-  >>> mixed[1]["action"].shape
+  ['pos']
+  >>> mixed[1]["charge"].shape
   torch.Size([3])
 
 A lazy stack also accepts tensordicts with different batch sizes, if they have
 the same number of batch dimensions. The batch size then shows ``-1`` for each
-dimension that differs:
+dimension that differs. Here, two systems have 2 and 4 particles:
 
   >>> ragged = lazy_stack([
-  ...     TensorDict(obs=torch.zeros(2, 3), batch_size=[2]),
-  ...     TensorDict(obs=torch.zeros(4, 3), batch_size=[4]),
+  ...     TensorDict(pos=torch.zeros(2, 3), batch_size=[2]),
+  ...     TensorDict(pos=torch.zeros(4, 3), batch_size=[4]),
   ... ])
   >>> ragged.batch_size
   torch.Size([2, -1])
@@ -215,8 +221,7 @@ Variable-size data
 
 Some data does not have the same shape for each element: sequences of
 different lengths, graphs with different numbers of nodes, strings. A dense
-TensorDict cannot hold it, because each entry is one tensor. This section lists
-the options.
+TensorDict cannot hold it, because each entry is one tensor.
 
 Lazy stacks
 ~~~~~~~~~~~
@@ -233,27 +238,28 @@ arguments to :meth:`~tensordict.LazyStackedTensorDict.get`:
 - ``as_nested_tensor=True`` returns a nested tensor (:mod:`torch.nested`). The
   default layout is ``torch.jagged``. Set another one with ``layout``.
 
-For example, with three sequences of lengths 2, 3 and 1:
+For example, with three graphs of 2, 3 and 1 nodes, and 2 features for each
+node:
 
   >>> _ = torch.manual_seed(0)
-  >>> episodes = lazy_stack([TensorDict(obs=torch.randn(n, 2)) for n in [2, 3, 1]])
-  >>> episodes
+  >>> graphs = lazy_stack([TensorDict(nodes=torch.randn(n, 2)) for n in [2, 3, 1]])
+  >>> graphs
   LazyStackedTensorDict(
       fields={
-          obs: Tensor(shape=torch.Size([3, -1, 2]), device=cpu, dtype=torch.float32, is_shared=False)},
+          nodes: Tensor(shape=torch.Size([3, -1, 2]), device=cpu, dtype=torch.float32, is_shared=False)},
       exclusive_fields={
       },
       batch_size=torch.Size([3]),
       device=None,
       is_shared=False,
       stack_dim=0)
-  >>> [t.shape for t in episodes.get("obs", as_list=True)]
+  >>> [t.shape for t in graphs.get("nodes", as_list=True)]
   [torch.Size([2, 2]), torch.Size([3, 2]), torch.Size([1, 2])]
-  >>> episodes.get("obs", as_padded_tensor=True).shape
+  >>> graphs.get("nodes", as_padded_tensor=True).shape
   torch.Size([3, 3, 2])
-  >>> episodes.get("obs", as_nested_tensor=True).is_nested
+  >>> graphs.get("nodes", as_nested_tensor=True).is_nested
   True
-  >>> episodes[1]["obs"].shape
+  >>> graphs[1]["nodes"].shape
   torch.Size([3, 2])
 
 :meth:`~tensordict.LazyStackedTensorDict.densify` turns the whole lazy stack
@@ -261,9 +267,17 @@ into a regular TensorDict. The entries with different shapes become nested
 tensors. Pass ``layout=torch.jagged``: the default, ``torch.strided``, gives a
 warning from PyTorch, which recommends the jagged layout.
 
-  >>> dense = episodes.densify(layout=torch.jagged)
-  >>> type(dense).__name__, dense["obs"].is_nested
+  >>> dense = graphs.densify(layout=torch.jagged)
+  >>> type(dense).__name__, dense["nodes"].is_nested
   ('TensorDict', True)
+
+A TensorDict can also hold a nested tensor with the ``torch.jagged`` layout
+directly. Its first dimension is a batch dimension:
+
+  >>> nt = torch.nested.nested_tensor([torch.ones(2, 2), torch.ones(3, 2)], layout=torch.jagged)
+  >>> data = TensorDict(nodes=nt, batch_size=[2])
+  >>> data[1]["nodes"].shape
+  torch.Size([3, 2])
 
 Padding with pad_sequence
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -272,31 +286,20 @@ Padding with pad_sequence
 the longest one along ``pad_dim``, and stacks them. With ``return_mask=True``,
 it adds a ``"masks"`` entry that marks the values that are not padding. Use it
 to get one dense TensorDict, for example for a model that takes a padded
-batch:
+batch. Here, three recordings of a 2-channel sensor have 2, 3 and 1 samples:
 
   >>> from tensordict import pad_sequence
-  >>> tds = [TensorDict(obs=torch.ones(n, 2)) for n in [2, 3, 1]]
+  >>> tds = [TensorDict(signal=torch.ones(n, 2)) for n in [2, 3, 1]]
   >>> padded = pad_sequence(tds, return_mask=True)
-  >>> padded["obs"].shape
+  >>> padded["signal"].shape
   torch.Size([3, 3, 2])
-  >>> padded["masks", "obs"]
+  >>> padded["masks", "signal"]
   tensor([[ True,  True, False],
           [ True,  True,  True],
           [ True, False, False]])
 
 ``pad_sequence`` raises a ``RuntimeError`` for 0-dim entries ("Cannot pad
 scalars"). Give such entries one dimension, or stack them separately.
-
-Nested tensors
-~~~~~~~~~~~~~~
-
-A TensorDict can also hold a nested tensor with the ``torch.jagged`` layout
-directly. Its first dimension is a batch dimension:
-
-  >>> nt = torch.nested.nested_tensor([torch.ones(2, 2), torch.ones(3, 2)], layout=torch.jagged)
-  >>> data = TensorDict(obs=nt, batch_size=[2])
-  >>> data[1]["obs"].shape
-  torch.Size([3, 2])
 
 Strings and other Python objects
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -328,15 +331,16 @@ Lazy pre-allocation
 To fill a tensordict one element at a time, create an empty tensordict with
 the full batch size, and assign each element to an index. The first assignment
 creates each entry, filled with zeros, with the batch size of the tensordict.
-The next assignments write into these entries in place:
+The next assignments write into these entries in place. In this example, a
+simulation writes one state for each of its ``N`` steps:
 
   >>> N = 4
-  >>> def step(i):
-  ...     return TensorDict(obs=torch.full((3,), float(i)), info={"step": torch.tensor(i)})
+  >>> def simulate(i):
+  ...     return TensorDict(pos=torch.full((3,), float(i)), info={"step": torch.tensor(i)})
   >>> data = TensorDict(batch_size=[N])
   >>> for i in range(N):
-  ...     data[i] = step(i)
-  >>> data["obs"]
+  ...     data[i] = simulate(i)
+  >>> data["pos"]
   tensor([[0., 0., 0.],
           [1., 1., 1.],
           [2., 2., 2.],
