@@ -1,496 +1,83 @@
 .. currentmodule:: tensordict
 
-tensorclass
-===========
-
-A *tensorclass* is a dataclass-like container that inherits all of
-:class:`~tensordict.TensorDict`'s machinery — indexing, reshaping,
-``to(device)``, ``stack``/``cat``, memory-mapped serialization, ``torch.compile``
-support — while exposing your fields as typed attributes rather than string
-keys. Tensorclasses let you constrain a container to a known set of fields,
-attach custom methods, and get IDE/type-checker support out of the box.
-
-There are two equivalent entry points:
-
-* :class:`~tensordict.TensorClass` — the **inheritance-based** API. Recommended
-  for new code. Static type-checkers understand it without help, and the
-  parametric form ``TensorClass["autocast", ...]`` makes the configuration
-  explicit at the class declaration site.
-* :func:`~tensordict.tensorclass` — the **decorator** form. Kept for
-  backwards-compatibility and for migrating plain ``@dataclass`` code. See
-  :ref:`tensorclass-legacy-decorator` below.
-
-Quick start
------------
-
-.. code-block::
-
-  >>> from __future__ import annotations
-  >>> from typing import Optional
-  >>> import torch
-  >>> from tensordict import TensorClass
-  >>>
-  >>> class MyData(TensorClass):
-  ...     floatdata: torch.Tensor
-  ...     intdata: torch.Tensor
-  ...     non_tensordata: str
-  ...     nested: Optional[MyData] = None
-  ...
-  ...     def check_nested(self):
-  ...         assert self.nested is not None
-  >>>
-  >>> data = MyData(
-  ...   floatdata=torch.randn(3, 4, 5),
-  ...   intdata=torch.randint(10, (3, 4, 1)),
-  ...   non_tensordata="test",
-  ...   batch_size=[3, 4],
-  ... )
-  >>> print("data:", data)
-  data: MyData(
-      floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-      intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
-      non_tensordata=NonTensorData(data=test, batch_size=torch.Size([3, 4]), device=None),
-      nested=None,
-      batch_size=torch.Size([3, 4]),
-      device=None,
-      is_shared=False)
-  >>> data.nested = MyData(
-  ...     floatdata=torch.randn(3, 4, 5),
-  ...     intdata=torch.randint(10, (3, 4, 1)),
-  ...     non_tensordata="nested_test",
-  ...     batch_size=[3, 4],
-  ... )
-
-If the batch size is omitted it defaults to an empty shape. With a non-empty
-batch size, tensor fields are indexed elementwise and non-tensor fields are
-preserved:
-
-.. code-block::
-
-  >>> print("indexed:", data[:2])
-  indexed: MyData(
-      floatdata=Tensor(shape=torch.Size([2, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-      intdata=Tensor(shape=torch.Size([2, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
-      nested=MyData(
-          floatdata=Tensor(shape=torch.Size([2, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-          intdata=Tensor(shape=torch.Size([2, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
-          non_tensordata=NonTensorData(data=nested_test, batch_size=torch.Size([2, 4]), device=None),
-          nested=None,
-          batch_size=torch.Size([2, 4]),
-          device=None,
-          is_shared=False),
-      non_tensordata=NonTensorData(data=test, batch_size=torch.Size([2, 4]), device=None),
-      batch_size=torch.Size([2, 4]),
-      device=None,
-      is_shared=False)
-
-Tensorclasses support attribute mutation (including on nested instances), the
-usual tensor-shape operations (``stack``, ``cat``, ``reshape``, ``to(device)``,
-...), and equality. See the :class:`~tensordict.TensorDict` documentation for
-the full list of operations.
-
-.. code-block::
-
-  >>> data2 = data.clone()
-  >>> cat_tc = torch.cat([data, data2], 0)
-  >>> assert cat_tc.batch_size == torch.Size([6, 4])
-
-Flags
------
-
-The behaviour of a tensorclass is controlled by a handful of flags that can be
-combined, except for the mutually exclusive ones noted below. They can be set
-in three equivalent forms — pick whichever reads best:
-
-.. code-block::
-
-  >>> class Foo(TensorClass["autocast"]):     # bracket form
-  ...     x: int
-  >>> class Foo(TensorClass, autocast=True):  # kwargs form
-  ...     x: int
-  >>> @tensorclass(autocast=True)             # decorator form
-  ... class Foo:
-  ...     x: int
-
-Multiple flags can be combined in the brackets:
-
-.. code-block::
-
-  >>> class Foo(TensorClass["nocast", "frozen"]):
-  ...     x: int
-
-Pyright accepts the bracket and the kwargs forms. Mypy does not evaluate
-:meth:`~object.__class_getitem__` in a list of base classes and rejects the
-bracket form, so use the kwargs form (``class Foo(TensorClass, autocast=True)``)
-in code checked by mypy.
-
-Type-checkers do not understand the decorator form: they know the fields of a
-``@tensorclass`` class but neither its TensorDict methods nor its
-``batch_size`` and ``device`` arguments. Use inheritance in type-checked code.
-
-The available flags are:
-
-* ``autocast`` — coerce values back to the field's annotated type when reading.
-  Useful when a field is conceptually a scalar, string, or enum.
-* ``nocast`` — store tensor-compatible scalars (``int``, ``float``,
-  ``np.ndarray``, ...) as-is, without wrapping them in a tensor.
-* ``tensor_only`` — every field annotation must be a tensor type, a tensor
-  collection (``TensorDict``, a tensorclass) or an optional/union of these;
-  other annotations raise ``TypeError`` when the class is created. Python
-  scalars and numpy arrays are cast to tensors. A value that cannot be cast
-  (e.g. a ``str``) is stored as :class:`~tensordict.NonTensorData` without
-  error, and attribute access returns the ``NonTensorData`` wrapper.
-  Skips the non-tensor storage path and yields measurable speed-ups on
-  attribute access — recommended for performance-critical containers (RL
-  trajectories, model I/O batches).
-* ``frozen`` — immutable instances, in the spirit of
-  ``@dataclass(frozen=True)``. Plays well with ``torch.compile`` and functional
-  code paths.
-* ``shadow`` — opt out of the check that forbids field names colliding with
-  the members of a tensorclass (``batch_size``, ``device``, ``sum``,
-  ``from_tensordict``, ...). A field named ``data`` or ``fields`` is allowed
-  without it and replaces the member of that name.
-
-``autocast``, ``nocast`` and ``tensor_only`` are mutually exclusive. See the
-:class:`~tensordict.TensorClass` docstring for per-flag runnable examples.
-
-.. _tensorclass-autocasting:
-
-Auto-casting
-~~~~~~~~~~~~
-
-.. warning:: Auto-casting is an experimental feature and subject to changes in
-  the future.
-
-With ``autocast`` enabled, methods such as ``__setattr__``, ``update``,
-``update_`` and ``from_dict`` will attempt to cast type-annotated entries to
-the desired TensorDict / tensorclass instance (except in cases detailed below).
-For instance, the following code casts the ``td`` dictionary to a
-:class:`~tensordict.TensorDict` and the ``tc`` entry to a ``MyClass`` instance:
-
-    >>> class MyClass(TensorClass["autocast"]):
-    ...     tensor: torch.Tensor
-    ...     td: TensorDict
-    ...     tc: MyClass
-    ...
-    >>> obj = MyClass(
-    ...     tensor=torch.randn(()),
-    ...     td={"a": torch.randn(())},
-    ...     tc={"tensor": torch.randn(()), "td": None, "tc": None})
-    >>> assert isinstance(obj.tensor, torch.Tensor)
-    >>> assert isinstance(obj.tc, MyClass)
-    >>> assert isinstance(obj.td, TensorDict)
-
-.. note:: Type-annotated items that include a ``typing.Optional`` or
-  ``typing.Union`` will not be compatible with auto-casting, but other items in
-  the tensorclass will:
-
-    >>> class MyClass(TensorClass["autocast"]):
-    ...     tensor: torch.Tensor
-    ...     tc_autocast: MyClass = None
-    ...     tc_not_autocast: Optional[MyClass] = None
-    >>> obj = MyClass(
-    ...     tensor=torch.randn(()),
-    ...     tc_autocast={"tensor": torch.randn(())},
-    ...     tc_not_autocast={"tensor": torch.randn(())},
-    ... )
-    >>> assert isinstance(obj.tc_autocast, MyClass)
-    >>> # because the type is Optional or Union, auto-casting is disabled for
-    >>> # that variable.
-    >>> assert not isinstance(obj.tc_not_autocast, MyClass)
-
-  If at least one item in the class is annotated using the ``type0 | type1``
-  semantic, the whole class auto-casting capabilities are deactivated.
-  Because tensorclass supports non-tensor leaves, setting a dictionary in
-  these cases will lead to setting it as a plain dictionary instead of a
-  tensor collection subclass (``TensorDict`` or tensorclass).
-
-.. note:: Auto-casting isn't enabled for leaves (tensors). The reason is that
-  this feature isn't compatible with type annotations that contain the
-  ``type0 | type1`` type-hint semantics, which are widespread. Allowing
-  auto-casting on leaves would result in very similar code having drastically
-  different behaviour depending on small annotation differences.
-
-Performance with ``tensor_only``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The default tensorclass attribute getter first looks in the tensor storage and
-then falls back to the non-tensor storage. ``tensor_only`` skips that fallback,
-which makes ``self.field`` a direct dict lookup. For containers that genuinely
-hold only tensors (think batched observations, actions, rewards in RL, or model
-inputs/outputs) this can save a meaningful share of per-step overhead.
-
-    >>> class TrajectoryBatch(TensorClass["tensor_only"]):
-    ...     obs: torch.Tensor
-    ...     action: torch.Tensor
-    ...     reward: torch.Tensor
-
-Non-tensor inputs that are tensor-castable (Python scalars, numpy arrays) are
-still accepted — they are converted to tensors at assignment time. Values that
-cannot be cast, such as strings, are stored as
-:class:`~tensordict.NonTensorData` without error, and attribute access returns
-the ``NonTensorData`` wrapper rather than the plain value.
-
-Immutability with ``frozen``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-``frozen=True`` makes instances immutable, mirroring ``@dataclass(frozen=True)``.
-Frozen tensorclasses are a good fit for state objects passed through
-``torch.compile`` or functional pipelines where in-place mutation would be a
-correctness hazard.
-
-    >>> class State(TensorClass["frozen"]):
-    ...     params: torch.Tensor
-    ...     step: torch.Tensor
-    >>> s = State(params=torch.zeros(3), step=torch.zeros((), dtype=torch.long))
-    >>> s.step = s.step + 1   # raises dataclasses.FrozenInstanceError
-
-``frozen`` is inherited: a non-frozen subclass cannot inherit from a frozen
-base, and vice versa.
-
-A subclass of a frozen tensorclass is frozen even without the flag, but type
-checkers read it as non-frozen and report it: repeat ``frozen=True`` on the
-subclass (see :ref:`tensorclass-static-typing` for mypy).
-
-Migrating from a plain dataclass
---------------------------------
-
-If you already have a ``@dataclass``, :func:`~tensordict.from_dataclass` will
-build a tensorclass type or instance from it without rewriting the class
-definition:
-
-.. code-block::
-
-  >>> from dataclasses import dataclass
-  >>> from tensordict import from_dataclass
-  >>>
-  >>> @dataclass
-  ... class X:
-  ...     a: int
-  ...     b: torch.Tensor
-  >>>
-  >>> XTc = from_dataclass(X, autocast=True)   # convert the type
-  >>> x_tc = from_dataclass(X(a=0, b=torch.zeros(())))  # convert an instance
-
-The same configuration flags (``autocast``, ``nocast``, ``frozen``,
-``tensor_only``, ``shadow``) are accepted.
-
-Non-tensor data: ``NonTensorData`` vs ``MetaData``
---------------------------------------------------
-
-Tensorclasses transparently support non-tensor fields. Two wrappers carry such
-values and they differ in how they react to shape operations:
-
-* :class:`~tensordict.NonTensorData` — the default. Behaves like a regular
-  TensorDict entry under shape operations: stacking a list of
-  ``NonTensorData`` items along a new dimension keeps every value, expansion
-  broadcasts to the requested shape, indexing returns the corresponding entry.
-* :class:`~tensordict.MetaData` — broadcasts a single value across the batch.
-  Stacking ``MetaData("a")`` and ``MetaData("a")`` returns ``MetaData("a")``;
-  stacking with a different value raises. Use this for static, per-class
-  metadata (a string label, a configuration dict) that should not multiply
-  under batching.
-
-Typed ``nn.Module`` I/O
------------------------
-
-For modules whose inputs and outputs are tensorclasses, use
-:class:`~tensordict.nn.TensorClassModuleBase`. The generic parameters declare
-the input and output types, giving IDE completion, refactor safety, and an
-``as_td_module()`` adapter for use inside
-:class:`~tensordict.nn.TensorDictSequential` pipelines. See the
-:doc:`nn` reference for a complete example.
-
-``torch.compile`` and cudagraphs
---------------------------------
-
-Tensorclasses are designed to compile well. A few practical notes:
-
-* Prefer ``frozen=True`` for state objects when you can — the compiler reasons
-  about immutable containers more cleanly than about mutable ones.
-* ``tensor_only=True`` containers avoid the non-tensor lookup branch and tend
-  to produce simpler graphs.
-* Avoid data-dependent shapes (``.item()`` on a tensor that controls a Python
-  branch) and prefer :func:`torch.where` over Python ``if``/``else`` on tensor
-  values.
-
-See :ref:`compile` for what recompiles or breaks the graph, and how to work
-around it.
-
-Serialization
--------------
-
-A tensorclass instance can be saved with the ``memmap`` method. Tensor data is
-written as memory-mapped tensors and JSON-serializable non-tensor data is
-written as JSON; remaining non-tensor data is written with Python ``pickle``
-(to an ``other.pickle`` file, or ``pickle.pkl`` for stacked values).
-
-Loading is done with :meth:`~tensordict.TensorDict.load_memmap`. The instance
-recovers its original type provided the tensorclass is importable in the
-loading process:
-
-  >>> data.memmap("path/to/saved/directory")
-  >>> data_loaded = TensorDict.load_memmap("path/to/saved/directory")
-  >>> assert isinstance(data_loaded, type(data))
-
-The class is saved under its module and name. A class defined in ``__main__``
-(a script or a notebook) cannot be found under that name by another program.
-Load such data with the tensorclass itself, e.g.
-``MyClass.load_memmap("path/to/saved/directory")``: ``load_memmap`` uses the
-class it is called on when its name matches the saved one.
-
-Loading pickled non-tensor data without passing ``allow_pickle`` emits a
-``FutureWarning`` in TensorDict 0.14; the default becomes
-``allow_pickle=False`` (which refuses to load it) in 0.15. Pass
-``allow_pickle=True`` only for trusted data. See :ref:`saving` for details.
-
-Edge cases
-----------
-
-Tensorclasses support equality and inequality operators, including for nested
-instances. Non-tensor fields are compared as well: the returned tensorclass has
-boolean tensor leaves for both tensor and non-tensor fields, with the batch
-shape for non-tensor fields (``False`` where the values differ).
-
-.. code-block::
-
-  >>> print(data == data2)
-  MyData(
-      floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
-      intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-      nested=MyData(
-          floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
-          intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-          non_tensordata=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
-          nested=None,
-          batch_size=torch.Size([3, 4]),
-          device=None,
-          is_shared=False),
-      non_tensordata=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
-      batch_size=torch.Size([3, 4]),
-      device=None,
-      is_shared=False)
-  >>> data2.non_tensordata = "test_new"
-  >>> (data == data2).non_tensordata.any()
-  tensor(False)
-
-Item assignment writes non-tensor values element-wise and emits no warning
-when they differ from the rest of the batch. The field then holds one value per
-element (a :class:`~tensordict.NonTensorStack`), and attribute access returns a
-nested ``list`` of those values, with one nesting level per batch dimension:
-
-.. code-block::
-
-  >>> data2.non_tensordata = "test_new"
-  >>> data[0] = data2[0]
-  >>> [row[0] for row in data.non_tensordata]
-  ['test_new', 'test', 'test']
-
-``torch.cat`` and ``torch.stack`` keep the non-tensor value of every element.
-If the inputs disagree on a non-tensor field, the field of the result is a
-:class:`~tensordict.NonTensorStack` and attribute access returns the nested
-list of values. ``torch.stack`` does this even when all inputs share the same
-value, whereas ``torch.cat`` of inputs that share a single value keeps that
-value as is.
-
-.. code-block::
-
-  >>> data2.non_tensordata = "test_new"
-  >>> stack_tc = torch.cat([data, data2], dim=0)
-  >>> [row[0] for row in stack_tc.non_tensordata]
-  ['test_new', 'test', 'test', 'test_new', 'test_new', 'test_new']
-
-Pre-allocation
---------------
-
-Fields can be initialised to ``None`` and assigned later. While ``None``, the
-attribute is stored as non-tensor / meta data; on assignment the appropriate
-storage is selected based on the value's type.
-
-.. code-block::
-
-  >>> class MyClass(TensorClass):
-  ...     X: Any
-  ...     y: Any
-  >>>
-  >>> data = MyClass(X=None, y=None, batch_size=[3, 4])
-  >>> data.X = torch.ones(3, 4, 5)
-  >>> data.y = "testing"
-  >>> print(data)
-  MyClass(
-      X=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-      y=NonTensorData(data=testing, batch_size=torch.Size([3, 4]), device=None),
-      batch_size=torch.Size([3, 4]),
-      device=None,
-      is_shared=False)
-
-.. _tensorclass-static-typing:
-
-Static type checking
---------------------
-
-Type checkers read the fields of a :class:`~tensordict.TensorClass` subclass
-as its constructor signature, as they do for a ``@dataclass``, followed by the
-keyword-only ``batch_size``, ``device``, ``names`` and ``lock`` arguments. A
-missing field, an unknown keyword argument or a value of the wrong type is an
-error:
-
-.. code-block::
-
-  >>> class Obs(TensorClass):
-  ...     a: torch.Tensor
-  ...     label: str = "x"
-  >>> obs = Obs(torch.zeros(3), batch_size=[3])      # accepted
-  >>> obs = Obs(a=[0.0, 1.0, 2.0], batch_size=[3])   # list is not a Tensor
-
-The constructor casts lists, NumPy arrays and Python numbers passed to a
-``torch.Tensor`` field, but a type checker expects a tensor there: pass
-``torch.as_tensor(value)``.
-
-Mypy reports any ``frozen=True`` tensorclass as "Frozen dataclass cannot
-inherit from a non-frozen dataclass".
-
-.. _tensorclass-legacy-decorator:
-
-Legacy: the ``@tensorclass`` decorator
---------------------------------------
-
-The :func:`~tensordict.tensorclass` decorator is the original way to declare a
-tensorclass. It is kept for backwards compatibility and remains the most
-convenient option when migrating a body of ``@dataclass`` code. New code is
-encouraged to use :class:`~tensordict.TensorClass` instead, which carries
-identical semantics with better static-type-checker support.
-
-.. code-block::
-
-  >>> from __future__ import annotations
-  >>> from typing import Optional
-  >>> from tensordict import tensorclass
-  >>> import torch
-  >>>
-  >>> @tensorclass
-  ... class MyData:
-  ...     floatdata: torch.Tensor
-  ...     intdata: torch.Tensor
-  ...     non_tensordata: str
-  ...     nested: Optional[MyData] = None
-
-All flags described above are accepted as keyword arguments to the decorator:
-``@tensorclass(autocast=True)``, ``@tensorclass(frozen=True, tensor_only=True)``,
-etc.
-
-API reference
+.. _api-tensorclass:
+
+tensorclass and non-tensor data
+===============================
+
+A *tensorclass* is a class that you declare like a dataclass and that has
+the operations of a :class:`~tensordict.TensorDict`. Its fields are typed
+attributes, not string keys. To declare one, subclass
+:class:`~tensordict.TensorClass`, or decorate a class with
+:func:`~tensordict.tensorclass`. For how to declare fields, auto-casting,
+the class options and static type checking, see :ref:`tensorclass-guide`.
+
+A tensorclass has the methods of :class:`~tensordict.TensorDictBase`,
+listed by task in :ref:`api-tensordict-methods`. On a tensorclass, the
+methods that return a ``TensorDict`` on a ``TensorDict`` return an
+instance of the tensorclass. Examples are ``select``, ``clone``, ``to``,
+``apply``, indexing and reshaping.
+
+Tensorclasses
 -------------
 
 .. autosummary::
     :toctree: generated/
-    :template: td_template.rst
+    :template: tensordict_class.rst
 
     TensorClass
+
+.. autosummary::
+    :toctree: generated/
+    :template: function.rst
+
     tensorclass
-    NonTensorData
-    MetaData
-    NonTensorStack
-    TensorAttrs
-    UnbatchedTensor
     from_dataclass
+
+Non-tensor data
+---------------
+
+A tensordict or a tensorclass can hold values that are not tensors, such
+as strings or Python objects. It wraps each one in a
+:class:`~tensordict.NonTensorData`, and a stack of them in a
+:class:`~tensordict.NonTensorStack`. If you stack
+:class:`~tensordict.MetaData` entries that hold the same object, the
+result is one ``MetaData``, not a ``NonTensorStack``.
+:class:`~tensordict.TensorAttrs` describes the device, dtype and shape of
+an entry: :meth:`~tensordict.TensorDictBase.attrs` returns them. See
+:ref:`non-tensor-data`.
+
+.. autosummary::
+    :toctree: generated/
+    :template: tensordict_class.rst
+
+    NonTensorDataBase
+    NonTensorData
+    NonTensorStack
+    MetaData
+    TensorAttrs
+
+Entries that ignore the batch shape
+-----------------------------------
+
+An :class:`~tensordict.UnbatchedTensor` is a tensor that shape operations
+on its tensordict (indexing, reshaping, stacking) leave unchanged.
+Operations on its data, such as arithmetic or
+:meth:`~tensordict.TensorDictBase.to`, still apply to it. See
+:ref:`unbatched-tensor`.
+
+.. autosummary::
+    :toctree: generated/
+    :template: class.rst
+
+    UnbatchedTensor
+
+See also
+--------
+
+- :ref:`tensorclass-guide`: declare and use a tensorclass.
+- :ref:`choosing-a-container`: tensorclass, ``TypedTensorDict`` or
+  ``TensorDict``.
+- :ref:`api-typed-tensordict`: the other container with typed fields.
+- The tutorials :doc:`/tutorials/tensorclass_fashion` and
+  :doc:`/tutorials/tensorclass_imagenet`.

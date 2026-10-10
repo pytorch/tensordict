@@ -1,10 +1,34 @@
-API Reference
+.. _api-reference:
+
+API reference
 =============
 
+The API reference documents each public class and function of
+tensordict. To learn how the pieces fit together, start with
+:ref:`overview` and the user guide. Each page starts with a short
+description of its names, and each name has its own page.
+
+- :ref:`api-tensordict`: the container classes (``TensorDict``,
+  ``LazyStackedTensorDict``, ``PersistentTensorDict``, ...), the methods
+  that all tensordicts share, grouped by task, and the functions of the
+  ``tensordict`` module.
+- :ref:`api-tensorclass`: ``TensorClass``, the ``@tensorclass``
+  decorator, and the classes that hold non-tensor data.
+- :ref:`api-typed-tensordict`: ``TypedTensorDict``, a tensordict with
+  declared fields.
+- :ref:`api-nn`: the modules of ``tensordict.nn``, the probabilistic
+  modules and distributions, and FX tracing.
+- :ref:`api-storage`: the tensordicts on key-value servers
+  (``tensordict.store``), and UCXX transport.
+- :ref:`api-utils`: the helpers and types of ``tensordict.utils``.
+
 .. toctree::
-    :maxdepth: 2
+    :hidden:
+    :maxdepth: 1
 
     td
-    nn
     tc
     ttd
+    nn
+    storage
+    utils
