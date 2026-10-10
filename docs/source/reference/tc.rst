@@ -314,6 +314,9 @@ Tensorclasses are designed to compile well. A few practical notes:
   branch) and prefer :func:`torch.where` over Python ``if``/``else`` on tensor
   values.
 
+See :ref:`compile` for what recompiles or breaks the graph, and how to work
+around it.
+
 Serialization
 -------------
 

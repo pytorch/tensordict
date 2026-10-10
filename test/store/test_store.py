@@ -16,6 +16,7 @@ from tensordict import (
     assert_allclose_td,
     is_tensor_collection,
     lazy_stack,
+    NonTensorData,
     NonTensorStack,
     TensorDict,
 )
@@ -966,6 +967,47 @@ class TestTensorDictStore:
         assert torch.allclose(full[:3], torch.zeros(3, 3))
         assert torch.allclose(full[4:], torch.zeros(6, 3))
 
+    @pytest.mark.parametrize(
+        "index",
+        [3, slice(2, 5), [0, 9], torch.tensor([1, 3]), torch.arange(10) < 4, (..., 3)],
+    )
+    def test_set_at_update_at_nested(self, store_td, index):
+        """set_at_ and update_at_ write each leaf of a tensordict value at the
+        index, as on a TensorDict."""
+        td = TensorDict(
+            a=torch.zeros(10),
+            n=TensorDict(
+                b=torch.zeros(10),
+                m=TensorDict(c=torch.zeros(10, 2, dtype=torch.long), batch_size=[10]),
+                batch_size=[10],
+            ),
+            batch_size=[10],
+        )
+        td["n"].set_non_tensor("s", "x")
+        store_td.update(td)
+        value = td[index] + 1
+        value["n"].set_non_tensor("s", "y")
+        nested = value["n"] + 1
+        nested.set_non_tensor("s", "z")
+        for target in (store_td, td):
+            target.update_at_(value, index)
+            target.set_at_("n", nested, index)
+            target.set_at_(("n", "m"), nested["m"] + 1, index)
+
+        def check():
+            for key in td.keys(True, True):
+                torch.testing.assert_close(store_td[key], td[key])
+            assert store_td.get(("n", "s")).tolist() == td.get(("n", "s")).tolist()
+
+        check()
+        # a leaf that the store lacks raises before anything is written
+        missing = (nested + 2).set("z", nested["b"])
+        missing.set_non_tensor("s", "w")
+        with pytest.raises(KeyError, match="not found"):
+            store_td.set_at_("n", missing, index)
+        check()
+        assert "z" not in store_td["n"].keys()
+
     # ---- Metadata caching tests ----
 
     def test_cache_metadata_default(self, store_td):
@@ -1370,6 +1412,48 @@ class TestLazyStackedTensorDictStore:
         store_td.set_at_("a", -2, index)
         expected[index] = -2
         torch.testing.assert_close(store_td["a"], expected)
+
+    @pytest.mark.parametrize(
+        "index",
+        [3, slice(1, 4), [0, 4], (slice(None), 1), (..., 1), torch.arange(5) > 2],
+    )
+    def test_set_at_update_at_nested(self, store_kwargs, index):
+        """set_at_ and update_at_ write each leaf of a tensordict value at the
+        index, as on a lazy stack."""
+        td = TensorDict(
+            a=torch.zeros(5, 4),
+            n=TensorDict(
+                b=torch.zeros(5, 4),
+                m=TensorDict(
+                    c=torch.zeros(5, 4, 2, dtype=torch.long), batch_size=[5, 4]
+                ),
+                batch_size=[5, 4],
+            ),
+            batch_size=[5, 4],
+        )
+        lazy_td = lazy_stack(list(td.unbind(0)))
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            value = td[index] + 1
+            for target in (store_td, lazy_td):
+                target.update_at_(value, index)
+                target.set_at_("n", value["n"] + 1, index)
+                target.set_at_(("n", "m"), value["n", "m"] + 2, index)
+
+            def check():
+                for key in lazy_td.keys(True, True):
+                    torch.testing.assert_close(store_td[key], lazy_td[key])
+
+            check()
+            # a leaf that the store lacks raises before anything is written
+            missing = (value["n"] + 3).set("z", value["n", "b"])
+            with pytest.raises(KeyError):
+                store_td.set_at_("n", missing, index)
+            check()
+            assert "z" not in store_td["n"].keys()
+        finally:
+            store_td.clear_redis()
+            store_td.close()
 
     @pytest.mark.parametrize("index", [1, [0, 2], (slice(None), [1, 3])])
     def test_setitem_scalar(self, store_stack, index):
@@ -2357,6 +2441,50 @@ class TestNonTensorIndexing:
             with pytest.raises(TypeError, match="Non-tensor indexed writes"):
                 store[0, :] = TensorDict({"obs": torch.ones(2), "label": "z"}, [2])
             torch.testing.assert_close(store["obs"], obs)
+        finally:
+            store.clear_redis()
+            store.close()
+
+    @pytest.mark.parametrize("key", ["label", ("nested", "label")])
+    @pytest.mark.parametrize("method", ["from_tensordict", "set"])
+    def test_non_tensor_stack_write(self, store_kwargs, key, method):
+        """A NonTensorStack written whole is stored per element, as indexed
+        writes store it, so indexed reads and writes follow the index."""
+        td = TensorDict({"obs": torch.arange(5.0)}, [5])
+        td[key] = NonTensorStack(*[f"s{i}" for i in range(5)])
+        if method == "from_tensordict":
+            store = TensorDictStore.from_tensordict(td, **store_kwargs)
+        else:
+            store = TensorDictStore(batch_size=[5], **store_kwargs)
+            store["obs"] = td["obs"]
+            store[key] = td.get(key)
+        try:
+            assert store[1:3][key] == td[1:3][key] == ["s1", "s2"]
+            assert store[1][key] == "s1"
+            assert store.get_at(key, 1) == "s1"
+            assert store[key] == td[key]
+            assert isinstance(store.get(key), NonTensorStack)
+            assert store.flip(0)[key] == td.flip(0)[key]
+            assert store.roll(1, 0)[key] == td.roll(1, 0)[key]
+            store.set_at_(key, "z", 2)
+            assert store[key] == ["s0", "s1", "z", "s3", "s4"]
+        finally:
+            store.clear_redis()
+            store.close()
+
+    def test_non_tensor_blob_read(self, store_kwargs):
+        """An entry stored as one blob holds one value for every element: a
+        NonTensorData of a list, or a NonTensorStack written by an earlier
+        version."""
+        store = TensorDictStore(batch_size=[3], **store_kwargs)
+        try:
+            store["shared"] = NonTensorData(["x", "y", "z"], batch_size=[3])
+            # earlier versions stored a whole NonTensorStack as one blob
+            store._run_sync(store._aset_non_tensor("old", ["x", "y", "z"]))
+            for key in ("shared", "old"):
+                assert type(store.get(key)) is list
+                assert store[key] == store[1][key] == ["x", "y", "z"]
+                assert store.get_at(key, 1) == ["x", "y", "z"]
         finally:
             store.clear_redis()
             store.close()

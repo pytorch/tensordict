@@ -9,6 +9,7 @@ import collections
 import importlib
 import inspect
 import pkgutil
+import queue
 import random
 import re
 import sys
@@ -39,6 +40,7 @@ from tensordict.utils import (
     _get_shared_executor,
     _getitem_batch_size,
     _make_cache_key,
+    _pin_mem,
     _TensorDictPropertyError,
     _unravel_key_to_tuple,
     _unravel_keys,
@@ -1008,6 +1010,28 @@ def test_get_shared_executor():
     td = TensorDict({"a": torch.zeros(2), "b": torch.ones(3)})
     td.consolidate(num_threads=2)
     assert executor.submit(lambda: 2).result() == 2
+
+
+def test_pin_mem_stops_when_another_thread_took_the_last_input(monkeypatch):
+    # to(device, non_blocking_pin=True) runs _pin_mem in several threads on one
+    # input queue. A thread that saw an input left must stop, not wait, when
+    # another thread takes that input first.
+    class TakenQueue(queue.SimpleQueue):
+        # Still reports the input that another thread has taken
+        def empty(self):
+            return False
+
+    class Pinnable:
+        def pin_memory(self):
+            return "pinned"
+
+    monkeypatch.setattr(tensordict.utils, "_PIN_MEM_TIMEOUT", 0.1)
+    q_in = TakenQueue()
+    q_in.put_nowait(("a", Pinnable()))
+    q_out = queue.SimpleQueue()
+    _pin_mem(q_in, q_out)
+    assert q_out.get_nowait() == ("a", "pinned")
+    assert q_out.empty()
 
 
 # Modules that another change turns into deprecated shims over private modules.

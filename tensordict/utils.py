@@ -11,6 +11,7 @@ import itertools
 import logging
 import math
 import os
+import queue
 import re
 import threading
 import time
@@ -603,10 +604,15 @@ _TENSORCLASS_MEMO = {}
 
 
 def _is_tensorclass(cls: type) -> bool:
-    out = _TENSORCLASS_MEMO.get(cls)
+    # Under Dynamo the memo is not read: a lookup that misses guards on all the
+    # keys of the memo, so any class memoized later in eager would recompile.
+    is_dynamo = is_compiling()
+    out = None
+    if not is_dynamo:
+        out = _TENSORCLASS_MEMO.get(cls)
     if out is None:
         out = getattr(cls, "_is_tensorclass", False)
-        if not is_compiling():
+        if not is_dynamo:
             _TENSORCLASS_MEMO[cls] = out
     return out
 
@@ -972,7 +978,7 @@ def _parse_to(*args, **kwargs):
         )
     else:
         non_blocking = kwargs.get("non_blocking", False)
-        convert_to_format = kwargs.get("convert_to_format")
+        convert_to_format = kwargs.get("memory_format")
         if len(args) > 0 and isinstance(args[0], torch.dtype):
             # td.to(dtype)
             device = kwargs.get("device")
@@ -2434,6 +2440,44 @@ def _is_unbatched(data) -> bool:
     return out
 
 
+# The _foreach ops whose per-tensor op is not ``torch.Tensor.<name>``:
+# _foreach_maximum and _foreach_minimum dispatch to clamp_min and clamp_max
+# (torch.maximum takes no Python scalar), and _foreach_norm takes the
+# arguments of torch.linalg.vector_norm.
+_FOREACH_PER_TENSOR_OPS = {
+    "maximum": torch.clamp_min,
+    "maximum_": torch.Tensor.clamp_min_,
+    "minimum": torch.clamp_max,
+    "minimum_": torch.Tensor.clamp_max_,
+    "norm": torch.linalg.vector_norm,
+}
+
+
+def _foreach(name: str, tensors, *args, **kwargs):
+    """Calls ``torch._foreach_<name>(tensors, *args, **kwargs)``, one tensor at a time under torch.func.
+
+    functorch has no batching rule for the ``_foreach`` ops, so inside any
+    ``torch.func`` transform (``vmap``, ``grad``, ``jacrev``, ``functionalize``,
+    ...) each tensor goes through ``torch.Tensor.<name>``. Under a transform
+    without ``vmap``, such as ``grad`` alone, the ``_foreach`` ops would work,
+    but they also run one op per tensor. A list or tuple in ``args`` gives one
+    value per tensor; any other value is used for every tensor.
+    """
+    # Dynamo folds the depth to a guarded constant. Do not test
+    # ``peek_interpreter_stack() is None``: Dynamo evaluates it as False.
+    if torch._C._functorch.get_dynamic_layer_stack_depth() == 0:
+        return getattr(torch, "_foreach_" + name)(tensors, *args, **kwargs)
+    op = _FOREACH_PER_TENSOR_OPS.get(name) or getattr(torch.Tensor, name)
+    per_tensor_args = [
+        arg if isinstance(arg, (list, tuple)) else [arg] * len(tensors) for arg in args
+    ]
+    results = [
+        op(tensor, *tensor_args, **kwargs)
+        for tensor, *tensor_args in _zip_strict(tensors, *per_tensor_args)
+    ]
+    return None if name.endswith("_") else results
+
+
 # Set the TD_CHECK_INVARIANTS environment variable (as the CI does) to check the
 # tensordicts that are built without validation, see _check_invariants.
 _CHECK_INVARIANTS = bool(_strtobool(os.environ.get("TD_CHECK_INVARIANTS", "0")))
@@ -2688,8 +2732,15 @@ _zip_strict = functools.partial(zip, strict=True)
 
 
 def _pin_mem(q_in, q_out):
-    while not q_in.empty():
-        input = q_in.get(timeout=_PIN_MEM_TIMEOUT)
+    # All the inputs are queued before the threads start, so an empty queue means
+    # that the other threads took the rest. Checking q_in.empty() before a
+    # blocking get() would race with them: two threads could see the last input,
+    # and the one that lost would raise queue.Empty after _PIN_MEM_TIMEOUT.
+    while True:
+        try:
+            input = q_in.get_nowait()
+        except queue.Empty:
+            return
         try:
             key, val = input[0], input[1].pin_memory()
         except Exception as err:

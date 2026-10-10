@@ -44,7 +44,6 @@ from typing import (
 )
 
 import numpy as np
-import tensordict as tensordict_lib
 import torch
 from tensordict import base as _td_base
 from tensordict._deprecation import deprecated, warn_deprecated
@@ -56,7 +55,7 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 from tensordict._utils_options import _set_capture_non_tensor_stack
 from tensordict.base import (
-    _ACCEPTED_CLASSES,
+    _is_accepted_class,
     _is_leaf_nontensor,
     _is_tensor_collection,
     _register_tensor_class,
@@ -70,7 +69,6 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _is_dataclass as is_dataclass,
     _is_json_serializable,
     _is_tensorclass,
-    _KeyDependentDefaultDict,
     _LOCK_ERROR,
     _REPR_OPTIONS,
     _resolve_expand_shape,
@@ -1502,10 +1500,6 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     # faster than doing instance checks
     cls._is_non_tensor = _is_non_tensor
     cls._is_tensorclass = True
-
-    from tensordict import _pytree
-
-    _pytree._CONSTRUCTORS[cls] = _pytree._tensorclass_constructor
     return cls
 
 
@@ -1984,9 +1978,15 @@ def _init_wrapper(
     return wrapper
 
 
-_cast_funcs = _KeyDependentDefaultDict(_identity)
-_cast_funcs[torch.Tensor] = torch.as_tensor
-_cast_funcs[np.ndarray] = np.asarray
+def _cast_func(cls: type) -> Callable:
+    """Returns the function that casts a value to the type annotation ``cls``."""
+    # Not a module-level dict: Dynamo guards on all the keys of a global dict
+    # read with a non-constant key, so a new type cast in eager would recompile.
+    if cls is torch.Tensor:
+        return torch.as_tensor
+    if cls is np.ndarray:
+        return np.asarray
+    return cls
 
 
 def _new_unsafe(cls, *args, **kwargs) -> T:
@@ -2796,6 +2796,12 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
             f"field. Its fields are {sorted(self.__expected_keys__)}."
         )
     if value is None:
+        # The getter reads the TensorDict first: drop the old value, as set()
+        # does. A TensorDict is checked with a dict lookup, which is much
+        # cheaper than keys().
+        td = self._tensordict
+        if key in (td._tensordict if type(td) is TensorDict else td.keys()):
+            td.del_(key)
         self._non_tensordict[key] = None
         return
     value, _ = _convert_mapping_for_field(key, value, type(self)._tensordict_fields)
@@ -3514,15 +3520,13 @@ def _set(
                 if _fits_tensorclass(target_cls, value):
                     value = target_cls.from_tensordict(value)
                 return set_tensor(value=value)
-            elif value is not None and issubclass(
-                target_cls, tuple(tensordict_lib.base._ACCEPTED_CLASSES)
-            ):
+            elif value is not None and _is_accepted_class(target_cls):
                 try:
                     if not issubclass(value_type, target_cls):
                         if issubclass(target_cls, torch.Tensor):
                             # first convert to tensor to make sure that the dtype is preserved
                             value = torch.as_tensor(value)
-                        cast_val = _cast_funcs[target_cls](value)
+                        cast_val = _cast_func(target_cls)(value)
                     else:
                         cast_val = value
                 except TypeError:
@@ -3531,13 +3535,12 @@ def _set(
                     )
                 return set_tensor(value=cast_val)
             elif value is not None and target_cls is not _AnyType:
-                cast_val = _cast_funcs[target_cls](value)
+                cast_val = _cast_func(target_cls)(value)
                 return set_tensor(value=cast_val, non_tensor=True)
             elif target_cls is _AnyType and _is_castable(value_type):
                 return set_tensor()
             non_tensor = not (
-                isinstance(value, _ACCEPTED_CLASSES)
-                or _is_tensor_collection(value_type)
+                _is_accepted_class(value_type) or _is_tensor_collection(value_type)
             )
         elif (
             issubclass(value_type, torch.Tensor)
@@ -4544,11 +4547,16 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
         return _TensorClassMeta.__getitem__(cls, item)
 
 
+# _TensorClassMeta does not pass the base class itself to tensorclass(), which
+# registers every subclass.
+_register_tensor_class(TensorClass)
+
+
 def _check_equal(a, b):
     # A util to check that two non-tensor data match
     #  We're replacing this by an identity match, not a value check (which will be faster and easier to handle).
     try:
-        if isinstance(a, _ACCEPTED_CLASSES) or isinstance(b, _ACCEPTED_CLASSES):
+        if _is_accepted_class(type(a)) or _is_accepted_class(type(b)):
             iseq = (a == b).all() and a.shape == b.shape
         elif isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
             iseq = (a == b).all() and a.shape == b.shape

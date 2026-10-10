@@ -951,6 +951,40 @@ class TestLazyStackedTensorDict:
             assert clone.shape == torch.Size([1, 0, 2])
             assert clone.device == torch.device("cpu")
 
+    @pytest.mark.parametrize("key", ["a", ("n", "x"), "n"])
+    @pytest.mark.parametrize("op", ["del", "pop"])
+    def test_del_repeated_member(self, key, op):
+        # A member that appears twice in the stack loses the entry once.
+        def make():
+            return TensorDict(
+                a=torch.zeros(3),
+                b=torch.zeros(3),
+                n=TensorDict(x=torch.zeros(3), y=torch.zeros(3), batch_size=[3]),
+                batch_size=[3],
+            )
+
+        def remove(td):
+            if op == "del":
+                del td[key]
+            else:
+                td.pop(key)
+
+        t, u = make(), make()
+        td = lazy_stack([t, t, u])
+        remove(td)
+        for member in (td, t, u):
+            assert key not in member.keys(True)
+        assert "b" in td.keys()
+
+        inner = lazy_stack([make(), make()])
+        td = lazy_stack([inner, inner, lazy_stack([make(), make()])])
+        remove(td)
+        for member in (td, inner, *inner.tensordicts):
+            assert key not in member.keys(True)
+
+        with pytest.raises(KeyError):
+            del td[key]
+
     def test_densify(self):
         td0 = TensorDict(
             a=torch.zeros((1,)),
@@ -1828,6 +1862,47 @@ class TestLazyStackedTensorDict:
         with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
             lstd.insert(index, TensorDict({"a": torch.ones(17)}, [17], device=device))
 
+    @pytest.mark.parametrize("dim", range(2))
+    def test_lazy_stacked_extend(self, dim):
+        td = TensorDict({"a": torch.zeros(4)}, [4])
+        lstd = LazyStackedTensorDict(stack_dim=dim)
+        lstd.extend([])
+        # an empty stack takes the batch size of the new members, as append does
+        lstd.extend([td, td.clone()])
+        # a generator is not used up by the type check
+        lstd.extend(td.clone() for _ in range(2))
+        lstd.extend([])
+        lstd.extend(torch.stack([TensorDict({"a": torch.ones(4)}, [4])] * 2, dim))
+
+        bs = [4]
+        bs.insert(dim, 6)
+        assert lstd.batch_size == torch.Size(bs)
+        expected = torch.stack([torch.zeros(4)] * 4 + [torch.ones(4)] * 2, dim)
+        torch.testing.assert_close(lstd["a"], expected)
+
+        with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
+            LazyStackedTensorDict(stack_dim=dim).extend(
+                [td, TensorDict({"a": torch.ones(17)}, [17])]
+            )
+
+    @pytest.mark.parametrize("dim", range(3))
+    @pytest.mark.parametrize("method", ["append", "insert", "extend"])
+    def test_lazy_stacked_add_heterogeneous(self, dim, method):
+        # the dims where the members differ stay -1, as in lazy_stack
+        td0 = TensorDict({"a": torch.zeros(4, 2)}, [4, 2])
+        td1 = TensorDict({"a": torch.zeros(4, 3)}, [4, 3])
+        lstd = lazy_stack([td0, td1], dim)
+        if method == "append":
+            lstd.append(td0.clone())
+        elif method == "insert":
+            lstd.insert(0, td0.clone())
+        else:
+            lstd.extend([td0.clone(), td0.clone()])
+
+        bs = [4, -1]
+        bs.insert(dim, len(lstd.tensordicts))
+        assert lstd.batch_size == torch.Size(bs)
+
     def test_lazy_stack_view_full_size(self):
         tds = LazyStackedTensorDict(*[TensorDict(a=i) for i in range(60)], stack_dim=0)
         tdview = tds.view(3, 4, 5)
@@ -1903,6 +1978,27 @@ class TestLazyStackedTensorDict:
             LazyStackedTensorDict(*tds, stack_dim=2)
         with pytest.raises(RuntimeError, match="too big for batch size"):
             lazy_stack(tds, 2)
+
+    def test_lazy_stack_empty_stack_dim(self):
+        # An empty stack built without a batch size does not know the batch dims
+        # of its members until they are added: it accepts stack dims 0 and 1
+        td = TensorDict({"a": torch.zeros(3, 4)}, [3])
+        for stack_dim, batch_size in ((0, [2, 3]), (1, [3, 2])):
+            lstd = LazyStackedTensorDict(stack_dim=stack_dim)
+            lstd.append(td)
+            lstd.append(td.clone())
+            assert lstd.batch_size == torch.Size(batch_size)
+            assert lstd["a"].shape == torch.Size([*batch_size, 4])
+        with pytest.raises(RuntimeError, match="too big for batch size"):
+            LazyStackedTensorDict(stack_dim=2)
+        # append takes the batch size of the new members, even if the empty stack
+        # was built with a batch size: with [3], it accepts stack dims 0 to 2
+        lstd = LazyStackedTensorDict(stack_dim=1, batch_size=[])
+        lstd.append(td)
+        assert lstd.batch_size == torch.Size([3, 1])
+        assert LazyStackedTensorDict(stack_dim=2, batch_size=[3]).batch_size == (3, 0)
+        with pytest.raises(RuntimeError, match="too big for batch size"):
+            LazyStackedTensorDict(stack_dim=3, batch_size=[3])
 
     def test_new_methods(self):
         td = TensorDict(

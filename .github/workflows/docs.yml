@@ -141,11 +141,13 @@ jobs:
         ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
     permissions:
       contents: write
-    # Every job that pushes to gh-pages joins this group, so they push one at a
-    # time. With `queue: max`, later jobs wait instead of being cancelled.
+    # One upload per ref at a time. Only the newest docs of a branch matter, so
+    # a newer upload of the same ref cancels the one that is still waiting; the
+    # one that is pushing finishes. Other jobs that push to gh-pages write other
+    # folders, and the push below rebases onto them.
     concurrency:
-      group: gh-pages
-      queue: max
+      group: gh-pages-docs-${{ github.ref }}
+      cancel-in-progress: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/tensordict
@@ -202,4 +204,13 @@ jobs:
         git config user.email 'soumith+bot@pytorch.org'
         git config http.postBuffer 524288000
         git commit -m "auto-generating sphinx docs" || true
-        git push
+        for attempt in 1 2 3 4 5; do
+          if git push; then
+            break
+          elif [[ "${attempt}" == 5 ]]; then
+            echo "::error::Could not push to gh-pages after ${attempt} attempts."
+            exit 1
+          fi
+          sleep $((attempt * 10))
+          git pull --rebase origin gh-pages
+        done

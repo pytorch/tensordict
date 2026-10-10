@@ -425,7 +425,12 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
         self.stack_dim = stack_dim
         self._reset_batch_size(td0, tensordicts, device, num_tds, strict_shape)
-        if stack_dim >= len(self.batch_size):
+        # With members, the stack dim can be at most their number of batch dims,
+        # len(self.batch_size) - 1. An empty stack takes the batch size of the
+        # members that append, insert or extend add, even if it was built with a
+        # batch size, so it also accepts a stack dim of len(self.batch_size).
+        max_stack_dim = len(self.batch_size) - 1 if num_tds else len(self.batch_size)
+        if stack_dim > max_stack_dim:
             raise RuntimeError(
                 f"Stack dim {stack_dim} is too big for batch size {self.batch_size}."
             )
@@ -3179,19 +3184,12 @@ class LazyStackedTensorDict(TensorDictBase):
         # Use check-before-delete pattern for torch.compile compatibility
         key_tuple = _unravel_key_to_tuple(key)
         is_nested = len(key_tuple) > 1
-        ids = set()
-        cur_len = len(ids)
         is_deleted = False
         for td in self.tensordicts:
-            # checking that the td has not been processed yet.
-            # It could be that not all sub-tensordicts have the appropriate
-            # entry but one must have it (or an error is thrown).
-            tdid = id(td)
-            ids.add(tdid)
-            new_cur_len = len(ids)
-            if new_cur_len == cur_len:
-                continue
-            cur_len = new_cur_len
+            # Not all sub-tensordicts need to have the entry, but one must
+            # have it (or an error is thrown). A tensordict that appears twice
+            # in the stack no longer has the entry the second time (no id()
+            # check: under torch.compile it guards on the id of every member).
             if key_tuple[0] in td.keys():
                 if is_nested:
                     # For nested keys, check the full path exists
@@ -3827,6 +3825,11 @@ class LazyStackedTensorDict(TensorDictBase):
                     f"Batch sizes in tensordicts differs: stack has "
                     f"batch_size={batch_size}, new_value has batch_size={_batch_size}."
                 )
+            if -1 in self._batch_size:
+                # keep the dims where the members differ
+                batch_size = [
+                    s for i, s in enumerate(self._batch_size) if i != self.stack_dim
+                ]
         else:
             batch_size = tensordict.batch_size
 
@@ -3852,32 +3855,40 @@ class LazyStackedTensorDict(TensorDictBase):
     def extend(self, tensordict: list[T] | T) -> None:
         """Extends the lazy stack with new tensordicts."""
         if _is_tensor_collection(type(tensordict)):
-            tensordict = list(tensordict.unbind(self.stack_dim))
+            tensordict = tensordict.unbind(self.stack_dim)
+        # a generator would otherwise be used up by the type check
+        tensordict = list(tensordict)
+        if not tensordict:
+            return
         if any(not isinstance(tensordict, TensorDictBase) for tensordict in tensordict):
             raise TypeError(
                 "Expected new value to be TensorDictBase instance but got "
                 f"{[type(tensordict) for tensordict in tensordict]} instead."
             )
-        if self.tensordicts:
-            batch_size = self.tensordicts[0].batch_size
-            device = self.tensordicts[0].device
+        # an empty stack checks the new members against the first one
+        td0 = self.tensordicts[0] if self.tensordicts else tensordict[0]
+        batch_size = td0.batch_size
+        device = td0.device
 
-            for _td in tensordict:
-                _batch_size = _td.batch_size
-                _device = _td.device
+        for _td in tensordict:
+            _batch_size = _td.batch_size
+            _device = _td.device
 
-                if device != _device:
-                    raise ValueError(
-                        f"Devices differ: stack has device={device}, new value has "
-                        f"device={_device}."
-                    )
-                if _batch_size != batch_size:
-                    raise ValueError(
-                        f"Batch sizes in tensordicts differs: stack has "
-                        f"batch_size={batch_size}, new_value has batch_size={_batch_size}."
-                    )
-        else:
-            batch_size = tensordict.batch_size
+            if device != _device:
+                raise ValueError(
+                    f"Devices differ: stack has device={device}, new value has "
+                    f"device={_device}."
+                )
+            if _batch_size != batch_size:
+                raise ValueError(
+                    f"Batch sizes in tensordicts differs: stack has "
+                    f"batch_size={batch_size}, new_value has batch_size={_batch_size}."
+                )
+        if self.tensordicts and -1 in self._batch_size:
+            # keep the dims where the members differ
+            batch_size = [
+                s for i, s in enumerate(self._batch_size) if i != self.stack_dim
+            ]
 
         self.tensordicts.extend(tensordict)
 

@@ -111,6 +111,7 @@ Contents
    overview
    compatibility
    distributed
+   compile
    fx
    saving
    storage

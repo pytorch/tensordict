@@ -20,10 +20,12 @@ from packaging import version
 from tensordict import (
     assert_close,
     from_dataclass,
+    is_tensor_collection,
     lazy_stack,
     LazyStackedTensorDict,
     MetaData,
     NonTensorData,
+    NonTensorStack,
     tensorclass,
     TensorDict,
     TensorDictParams,
@@ -54,11 +56,17 @@ from tensordict.utils import (
     unravel_key,
     unravel_key_list,
 )
-from torch._dynamo.testing import CompileCounterWithBackend
+from torch._dynamo.testing import CompileCounterWithBackend, EagerAndRecordGraphs
 from torch._dynamo.utils import counters
 from torch._inductor.utils import fresh_cache
 from torch.testing._internal.two_tensor import TwoTensor
-from torch.utils._pytree import SUPPORTED_NODES, tree_map
+from torch.utils._pytree import (
+    SUPPORTED_NODES,
+    tree_flatten,
+    tree_leaves,
+    tree_map,
+    tree_unflatten,
+)
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
@@ -129,6 +137,38 @@ def test_vmap_compile():
     funcv(x, y)
     funcv_c = torch.compile(funcv, fullgraph=True)
     funcv_c(x, y)
+
+
+# TensorDict methods that call torch._foreach_*, which has no vmap batching rule
+_VMAP_TD_OPS = {
+    "mul": lambda t: t * 2,
+    "add": lambda t: t + t,
+    "exp": lambda t: t.exp(),
+    "clamp_min": lambda t: t.clamp_min(0.0),
+    "norm": lambda t: t.norm(),
+    "add_": lambda t: t.clone().add_(1),
+    "update_": lambda t: t.clone().update_(t * 2),
+    "grad": torch.func.grad(lambda t: (t * 2).exp().sum(reduce=True)),
+}
+
+
+@pytest.mark.parametrize("op", sorted(_VMAP_TD_OPS))
+def test_vmap_compile_td_ops(op):
+    fn = _VMAP_TD_OPS[op]
+    td = TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4, 2)}, batch_size=[4])
+    expected = torch.stack([fn(td[i]) for i in range(4)])
+    fn_c = torch.compile(torch.vmap(fn), fullgraph=True)
+    assert_close(fn_c(td), expected)
+
+
+def test_compile_td_mul_keeps_foreach():
+    # Outside a torch.func transform the graph keeps the fused _foreach op
+    td = TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4, 2)}, batch_size=[4])
+    backend = EagerAndRecordGraphs()
+    fn_c = torch.compile(lambda t: t * 2, fullgraph=True, backend=backend)
+    assert_close(fn_c(td), td * 2)
+    targets = [node.target for node in backend.graphs[0].graph.nodes]
+    assert torch._foreach_mul in targets
 
 
 @pytest.mark.parametrize(
@@ -228,6 +268,19 @@ def test_unravel_key_invalid_fullgraph(fn, key):
 
     _, compiled_msg = torch.compile(f, fullgraph=True, backend="eager")(torch.zeros(()))
     assert compiled_msg == msg
+
+
+@pytest.mark.parametrize("values", ["aaaa", "abcd"])
+def test_tree_leaves_nontensor_stack(values):
+    # Flattening a tensordict does not read the data of its NonTensorStack
+    # entries, which Dynamo cannot trace.
+    def fn(td):
+        return [leaf + 1 for leaf in tree_leaves(td) if isinstance(leaf, torch.Tensor)]
+
+    td = TensorDict(a=torch.zeros(4, 3), batch_size=[4])
+    td.set("s", NonTensorStack(*values))
+    (out,) = torch.compile(fn, fullgraph=True, backend="eager")(td)
+    assert (out == 1).all()
 
 
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
@@ -704,6 +757,16 @@ class TestTD:
         assert stack.names == ["x", None, "y"]
         assert nested.names == ["n"]
         assert nested["sub"].names == ["n"]
+
+    def test_to_memory_format(self, mode):
+        def to_channels_last(td):
+            return td.to(memory_format=torch.channels_last)
+
+        td = TensorDict({"a": torch.randn(1, 2, 3, 4)}, batch_size=[1])
+        to_channels_last_c = torch.compile(to_channels_last, fullgraph=True, mode=mode)
+        td_c = to_channels_last_c(td)
+        assert td_c["a"].is_contiguous(memory_format=torch.channels_last)
+        torch.testing.assert_close(td_c["a"], td["a"])
 
     @pytest.mark.skipif(
         not torch.cuda.is_available(), reason="cuda required to test device casting"
@@ -1307,6 +1370,20 @@ class TestTC:
         assert add_one(data.clone()).a.c == 1
         assert add_one_c(data.clone()).a.c == 1
         assert add_one_c(data) is data
+
+    def test_tc_tensor_only_assign_none(self, mode):
+        class TensorOnly(TensorClass["tensor_only"]):
+            x: torch.Tensor
+            y: torch.Tensor | None = None
+
+        def clear(tc):
+            tc.y = None
+            return tc.x + 1
+
+        clear_c = torch.compile(clear, fullgraph=True, mode=mode)
+        data = TensorOnly(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+        assert (clear_c(data) == 1).all()
+        assert data.y is None
 
     def test_tc_arithmetic(self, mode):
         def add_one(td):
@@ -2158,6 +2235,40 @@ class TestExport:
             strict=strict,
         )
         torch.testing.assert_close(exported_module.module()(x=x), m(x))
+
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_export_td_input_non_tensor(self, strict):
+        # The exported module compares the spec of its input with the spec of
+        # the example input, which holds a batched non-tensor entry.
+        class Mod(torch.nn.Module):
+            def forward(self, td):
+                return td["a"] * 2
+
+        def make():
+            return TensorDict(a=torch.randn(4, 3), s="a string", batch_size=[4])
+
+        ep = torch.export.export(Mod(), (make(),), strict=strict)
+        td = make()
+        torch.testing.assert_close(ep.module()(td), td["a"] * 2)
+
+    def test_export_td_output_non_tensor(self):
+        # The non-tensor entry of the output is rebuilt with the batch size of
+        # the output. Not with strict=True: there _tensordict_unflatten first
+        # builds the entry with batch size [0], which TD_CHECK_INVARIANTS
+        # rejects before the entry is set again with the right batch size.
+        class Mod(torch.nn.Module):
+            def forward(self, td):
+                return td.apply(lambda x: x * 2)
+
+        def make():
+            return TensorDict(a=torch.randn(4, 3), s="a string", batch_size=[4])
+
+        ep = torch.export.export(Mod(), (make(),), strict=False)
+        td = make()
+        out = ep.module()(td)
+        torch.testing.assert_close(out["a"], td["a"] * 2)
+        assert out.get("s").batch_size == torch.Size([4])
+        assert out.get_non_tensor("s") == "a string"
 
 
 @pytest.mark.skipif(not _has_onnx, reason="ONNX is not available")
@@ -3306,6 +3417,156 @@ class TestGuardCount:
         assert second == 1, (
             f"Mixing eager-built and compile-built TDs recompiled: {second} frames"
         )
+
+    def test_new_type_in_eager_no_recompile(self):
+        # The type predicates must not read their memo under Dynamo: a lookup
+        # that misses guards on all the keys of the memo, which grows each
+        # time eager code checks a new type.
+        def fn(td):
+            return td.apply(lambda x: x + 1)
+
+        td = TensorDict(a=torch.randn(4), b=torch.randn(4, 3), batch_size=[4])
+        torch._dynamo.reset_code_caches()
+        cnt = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=cnt, fullgraph=True)
+        compiled(td)
+        for i in range(3):
+            is_tensor_collection(type(f"_NewType{i}", (), {}))
+            compiled(td)
+        assert cnt.frame_count == 1, f"Recompilation detected: {cnt.frame_count}"
+
+    @pytest.mark.parametrize("op", ["set_scalar", "update_at_", "autocast"])
+    def test_new_tensorclass_in_eager_no_recompile(self, op):
+        # Defining a tensorclass rebinds tensordict.base._ACCEPTED_CLASSES,
+        # which compiled frames must not guard on.
+        @tensorclass(autocast=True)
+        class AutoCast:
+            x: torch.Tensor
+            y: float
+
+        def fn(obj):
+            if op == "set_scalar":
+                obj["c"] = 3.0
+                return obj["a"] + obj["c"]
+            if op == "update_at_":
+                obj.update_at_({"a": torch.ones(())}, 0)
+                return obj["a"] + 1
+            obj.x = [1.0, 2.0, 3.0]
+            obj.y = 2
+            return obj.x + 1
+
+        def make():
+            if op == "set_scalar":
+                return TensorDict(a=torch.zeros(3))
+            if op == "update_at_":
+                return TensorDict(a=torch.zeros(3), batch_size=[3])
+            return AutoCast(x=torch.zeros(3), y=1.0)
+
+        torch._dynamo.reset_code_caches()
+        cnt = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=cnt, fullgraph=True)
+        compiled(make())
+        for i in range(2):
+            tensorclass(
+                type(f"_NewTC{i}", (), {"__annotations__": {"x": torch.Tensor}})
+            )
+            compiled(make())
+        assert cnt.frame_count == 1, f"Recompilation detected: {cnt.frame_count}"
+
+    def test_autocast_new_type_in_eager_no_recompile(self):
+        # Autocasting a field to a type that was never cast to before must not
+        # recompile the compiled frames that autocast.
+        class NewFloat(float):
+            pass
+
+        @tensorclass(autocast=True)
+        class AutoCast:
+            x: torch.Tensor
+
+        @tensorclass(autocast=True)
+        class AutoCastNewFloat:
+            z: NewFloat
+
+        def fn(obj):
+            obj.x = [1.0, 2.0, 3.0]
+            return obj.x + 1
+
+        obj = AutoCast(x=torch.zeros(3))
+        torch._dynamo.reset_code_caches()
+        cnt = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=cnt, fullgraph=True)
+        compiled(obj)
+        assert type(AutoCastNewFloat(z=1.0).z) is NewFloat
+        compiled(obj)
+        assert cnt.frame_count == 1, f"Recompilation detected: {cnt.frame_count}"
+
+    def test_autocast_tensorclass_annotation_eager_and_compiled(self):
+        # The bare TensorClass base is an accepted class in eager mode as under
+        # compile, so a field annotated with it stores the instance in both.
+        class Inner(TensorClass):
+            x: torch.Tensor
+
+        @tensorclass(autocast=True)
+        class Outer:
+            inner: TensorClass
+            y: torch.Tensor
+
+        def fn(obj, value):
+            obj.inner = value
+            return obj.y + 1
+
+        for compiled in (False, True):
+            obj = Outer(inner=Inner(x=torch.zeros(3)), y=torch.zeros(3))
+            value = Inner(x=torch.ones(3))
+            if compiled:
+                torch._dynamo.reset_code_caches()
+                torch.compile(fn, backend="eager", fullgraph=True)(obj, value)
+            else:
+                fn(obj, value)
+            assert obj.inner is value
+            assert "inner" in obj._tensordict.keys()
+
+    def test_eager_flatten_of_new_td_type_no_recompile(self):
+        # The pytree flatten of a td picks its constructor without a module-level
+        # dict that eager flattens of new td types would grow.
+        class FlatState(TypedTensorDict):
+            x: torch.Tensor
+
+        def fn(td):
+            return tree_map(lambda x: x + 1, td)["a"]
+
+        td = TensorDict(a=torch.zeros(4), batch_size=[4])
+        torch._dynamo.reset_code_caches()
+        cnt = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=cnt, fullgraph=True)
+        compiled(td)
+        leaves, spec = tree_flatten(FlatState(x=torch.zeros(4), batch_size=[4]))
+        assert type(tree_unflatten(leaves, spec)) is FlatState
+        compiled(td)
+        assert cnt.frame_count == 1, f"Recompilation detected: {cnt.frame_count}"
+
+    def test_lazy_del_new_stack_no_recompile(self):
+        # del_ on a lazy stack must not guard on the id() of its members.
+        def make():
+            return lazy_stack(
+                [
+                    TensorDict(a=torch.zeros(3), b=torch.zeros(3), batch_size=[3])
+                    for _ in range(2)
+                ]
+            )
+
+        def fn(td):
+            del td["a"]
+            return td["b"] + 1
+
+        torch._dynamo.reset_code_caches()
+        cnt = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=cnt, fullgraph=True)
+        for _ in range(3):
+            td = make()
+            compiled(td)
+            assert "a" not in td.keys()
+        assert cnt.frame_count == 1, f"Recompilation detected: {cnt.frame_count}"
 
 
 class TestNestedCompileRegion:

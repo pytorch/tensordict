@@ -30,6 +30,7 @@ from tensordict._td import (
     TensorDict,
 )
 from tensordict.base import (
+    _is_leaf_nontensor,
     _register_tensor_class,
     is_tensor_collection,
     T,
@@ -60,6 +61,7 @@ from tensordict.utils import (
     _lock_blocked,
     _LOCK_ERROR,
     expand_as_right,
+    is_non_tensor,
     NestedKey,
     unravel_key,
 )
@@ -1672,8 +1674,31 @@ class LazyStackedTensorDictStore(TensorDictBase):
             self._run_sync(self._aset_full_tensor(key_path, torch.as_tensor(value)))
         return self
 
+    def _set_at_items(self, key_path: str, value, idx) -> dict:
+        """Return the items of :meth:`_abatch_set_at` that write ``value`` at ``idx`` under ``key_path``.
+
+        If the store holds a tensordict at ``key_path``, the leaves of a
+        tensordict value are written under their full keys, and an Ellipsis in
+        ``idx`` stands for the batch dims, as on a tensordict. ``_abatch_set_at``
+        reads the metadata of all the keys first, so a leaf that the store lacks
+        raises a ``KeyError`` before anything is written.
+        """
+        prefix = key_path + _KEY_SEP
+        if (
+            is_tensor_collection(value)
+            and not is_non_tensor(value)
+            and any(k.startswith(prefix) for k in self._get_all_keys())
+        ):
+            if isinstance(idx, tuple) and any(i is Ellipsis for i in idx):
+                idx = convert_ellipsis_to_idx(idx, self.batch_size)
+            return {
+                prefix + _KEY_SEP.join(_unravel_key_to_tuple(subkey)): (leaf, idx)
+                for subkey, leaf in value.items(True, True, is_leaf=_is_leaf_nontensor)
+            }
+        return {key_path: (value, idx)}
+
     def _set_at_str(self, key, value, idx, *, validated, non_blocking):
-        items = {key: (value, idx)}
+        items = self._set_at_items(key, value, idx)
         self._run_sync(self._abatch_set_at(items))
         return self
 
@@ -1684,7 +1709,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
                 key[0], value, idx, validated=validated, non_blocking=non_blocking
             )
         key_path = _KEY_SEP.join(key)
-        items = {key_path: (value, idx)}
+        items = self._set_at_items(key_path, value, idx)
         self._run_sync(self._abatch_set_at(items))
         return self
 
