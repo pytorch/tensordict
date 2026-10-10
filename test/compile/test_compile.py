@@ -55,6 +55,7 @@ from tensordict.utils import (
 from torch._dynamo.testing import CompileCounterWithBackend
 from torch._dynamo.utils import counters
 from torch._inductor.utils import fresh_cache
+from torch.testing._internal.two_tensor import TwoTensor
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
@@ -2867,6 +2868,34 @@ class TestGuardCount:
         assert first == (0, 1)
         assert equal == (1, 0)
         assert other_batch_size == (0, 1)
+
+    @pytest.mark.skipif(
+        not _HAS_WRAPPER_SUBCLASS_FIX,
+        reason="The fallback UnbatchedTensor is not a wrapper subclass.",
+    )
+    def test_unbatched_aot_autograd_cache_key_subclass_payload(self):
+        """The cache key of an UnbatchedTensor covers a wrapper subclass payload."""
+
+        class TaggedTwoTensor(TwoTensor):
+            def _stable_hash_for_caching(self):
+                return self.tag
+
+        def key(data):
+            return UnbatchedTensor(data, batch_size=[4])._stable_hash_for_caching()
+
+        def tagged(tag, a):
+            out = TaggedTwoTensor(a, a.clone())
+            out.tag = tag
+            return out
+
+        a = torch.randn(5)
+        two = key(TwoTensor(a, a.clone()))
+        assert two == key(TwoTensor(torch.randn(5), torch.randn(5)))
+        assert two != key(TwoTensor(a.double(), a.double()))
+        assert two != key(a)
+        # A payload with its own stable hash is keyed by that hash.
+        assert key(tagged("x", a)) == key(tagged("x", a.double()))
+        assert key(tagged("x", a)) != key(tagged("y", a))
 
     def test_lock_inside_compile_no_weakref_leftover(self):
         """``lock_()`` called inside a compiled region must not leave a

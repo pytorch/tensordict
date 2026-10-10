@@ -49,10 +49,14 @@ def _cache_key_data(tensor: torch.Tensor):
     """Return the data that the AOTAutograd cache key of ``tensor`` hashes.
 
     Collects what torch's default key reads, so that a wrapper subclass
-    payload keeps its inner tensors and metadata in the key.
+    payload keeps its inner tensors and metadata in the key. Mirrors
+    ``AOTAutogradCachePickler._stable_hash_for_cache_value`` and
+    ``_default_stable_hash_for_caching`` in
+    ``torch/_functorch/_aot_autograd/autograd_cache.py``.
     """
-    # torch._inductor takes seconds to import; the AOTAutograd cache, the only
-    # caller, has imported it already.
+    # Importing this module at the top would add a few tenths of a second to
+    # ``import tensordict`` (about 3 s after a bare ``import torch``); the
+    # AOTAutograd cache, the only caller, has imported it already.
     from torch._inductor.codecache import extract_tensor_metadata_for_cache_key
 
     if hasattr(tensor, "_stable_hash_for_caching"):
