@@ -2588,6 +2588,31 @@ class TestSelectOutKeys:
             ):
                 mod.select_out_keys(out_d_key)
 
+    def test_tdmodule_keeps_other_input_entries(self, out_d_key, unpack):
+        # select_out_keys removes the out-keys that are not selected, and
+        # keeps the input entries, including an in-key that is also an out-key
+        mod = TensorDictModule(
+            lambda x, y: (x + 2, y + 2, x, y, x),
+            in_keys=["a", "b"],
+            out_keys=["c", "d", "e", "b", ("n", "f")],
+        )
+        if unpack:
+            mod.select_out_keys(*out_d_key)
+            td = TensorDict(a=torch.zeros(()), b=torch.ones(()), other=torch.zeros(()))
+            assert mod(td) is td
+            assert set(td.keys(True)) == {"a", "b", "other", *out_d_key}
+            td = TensorDict(
+                a=torch.zeros(()), b=torch.ones(()), n={"g": torch.zeros(())}
+            )
+            mod(td)
+            assert set(td.keys(True)) == {"a", "b", "n", ("n", "g"), *out_d_key}
+        else:
+            with pytest.raises(
+                (RuntimeError, ValueError),
+                match=r"key should be a |Can't select non existent",
+            ):
+                mod.select_out_keys(out_d_key)
+
     def test_tdbase_missing_in_key(self, out_d_key, unpack):
         class MyModule(TensorDictModuleBase):
             in_keys = ["a", "b"]
