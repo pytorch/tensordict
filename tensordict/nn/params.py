@@ -34,6 +34,8 @@ from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 from tensordict.base import (
     _default_is_leaf,
     _is_tensor_collection,
+    _NESTED_TENSORS_AS_LISTS,
+    _NESTED_TENSORS_AS_LISTS_NONTENSOR,
     _register_tensor_class,
     CompatibleType,
     NO_DEFAULT,
@@ -72,13 +74,16 @@ else:
 __all__ = ["TensorDictParams"]
 
 
-def _apply_leaves(data, fn):
+def _apply_leaves(data, fn, *others):
+    # ``others`` have the same structure as ``data``: ``fn`` receives their
+    # matching leaves after the leaf of ``data``.
     if isinstance(data, TensorDict):
         with data.unlock_():
             for key, val in list(data.items()):
+                other_vals = [other._get_str(key, NO_DEFAULT) for other in others]
                 data._set_str(
                     key,
-                    _apply_leaves(val, fn),
+                    _apply_leaves(val, fn, *other_vals),
                     validated=True,
                     inplace=False,
                     non_blocking=False,
@@ -95,14 +100,14 @@ def _apply_leaves(data, fn):
         #     _apply_leaves(_data, fn)
         # return data
     elif isinstance(data, _CustomOpTensorDict):
-        _apply_leaves(data._source, fn)
+        _apply_leaves(data._source, fn, *(other._source for other in others))
         return data
     elif isinstance(data, _SubTensorDict):
         raise RuntimeError(
             "Using a _SubTensorDict within a TensorDictParams isn't permitted."
         )
     else:
-        return fn(data)
+        return fn(data, *others)
 
 
 def _get_args_dict(func, args, kwargs):
@@ -144,6 +149,20 @@ def _maybe_make_param_or_buffer(tensor):
 
         # assert tensor.data.data_ptr() == dataptr
     return tensor
+
+
+def _wrap_like(tensor, orig):
+    # to(), cpu() and cuda() return plain tensors for the leaves they convert:
+    # wrap each like the leaf it replaces. Parameters stay parameters with the
+    # same requires_grad (a parameter with an integer or boolean dtype after
+    # the call becomes a buffer) and buffers stay buffers.
+    if tensor is orig:
+        return tensor
+    if isinstance(orig, nn.Parameter) and (
+        tensor.is_floating_point() or tensor.is_complex()
+    ):
+        return nn.Parameter(tensor, requires_grad=orig.requires_grad)
+    return _maybe_make_param_or_buffer(tensor)
 
 
 class _unlock_and_set:
@@ -192,6 +211,17 @@ class _unlock_and_set:
             return out
 
         return new_func
+
+
+# items() and values() iterate over the wrapped tensordict with its default rule
+# for these is_leaf values. The internal calls pass the two markers to read lazy
+# stacks per member; TensorDictParams reads them stacked.
+_DEFAULT_TRAVERSAL = (
+    None,
+    _default_is_leaf,
+    _NESTED_TENSORS_AS_LISTS,
+    _NESTED_TENSORS_AS_LISTS_NONTENSOR,
+)
 
 
 def _get_post_hook(func):
@@ -684,19 +714,27 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         params = self._param_td.to(*args, **kwargs)
         if params is self._param_td:
             return self
-        return TensorDictParams(params)
+        return self._from_converted(params)
 
     def cpu(self):
         params = self._param_td.cpu()
         if params is self._param_td:
             return self
-        return TensorDictParams(params)
+        return self._from_converted(params)
 
     def cuda(self, device=None):
         params = self._param_td.cuda(device=device)
         if params is self._param_td:
             return self
-        return TensorDictParams(params)
+        return self._from_converted(params)
+
+    def _from_converted(self, params: TensorDictBase) -> TensorDictParams:
+        # Wraps what to(), cpu() or cuda() returned for self._param_td, keeping
+        # the parameters and buffers of self and its no_convert.
+        params = _apply_leaves(params, _wrap_like, self._param_td)
+        out = TensorDictParams(params, no_convert="skip")
+        out.no_convert = self.no_convert
+        return out
 
     def _clone(self, recurse: bool = True) -> TensorDictBase:
         """Clones the TensorDictParams.
@@ -1167,6 +1205,10 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         *,
         sort: bool = False,
     ) -> Iterator[CompatibleType]:
+        if leaves_only and is_leaf not in _DEFAULT_TRAVERSAL:
+            for _, v in self._leaves_from_keys(include_nested, is_leaf, sort):
+                yield v
+            return
         if is_leaf is None:
             is_leaf = _default_is_leaf
         for v in self._param_td.values(include_nested, leaves_only, sort=sort):
@@ -1174,6 +1216,19 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 yield v
                 continue
             yield self._apply_get_post_hook(v)
+
+    def _leaves_from_keys(self, include_nested, is_leaf, sort):
+        # The leaves that keys() lists for is_leaf, with their values. The keys
+        # view only recurses into tensor collections, while the fast path of
+        # TensorDict.items calls items() on any value that is_leaf rejects, and
+        # raises for a tensor.
+        param_td = self._param_td
+        for key in param_td.keys(include_nested, True, is_leaf=is_leaf, sort=sort):
+            if isinstance(key, str):
+                val = param_td._get_str(key, NO_DEFAULT)
+            else:
+                val = param_td._get_tuple(key, NO_DEFAULT)
+            yield key, self._apply_get_post_hook(val)
 
     def state_dict(self, destination=None, prefix="", keep_vars=False, flatten=True):
         # flatten must be True by default to comply with module's state-dict API
@@ -1254,6 +1309,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         *,
         sort: bool = False,
     ) -> Iterator[CompatibleType]:
+        if leaves_only and is_leaf not in _DEFAULT_TRAVERSAL:
+            yield from self._leaves_from_keys(include_nested, is_leaf, sort)
+            return
         if is_leaf is None:
             is_leaf = _default_is_leaf
         for k, v in self._param_td.items(include_nested, leaves_only, sort=sort):

@@ -67,7 +67,9 @@ class CudaGraphModule:
 
         - The function must execute a code that can be exactly re-run using the same buffers. This means that
           dynamic shapes (changing shape in the input or during the code execution) is not supported. In other words,
-          the input must have a constant shape.
+          the input must have a constant shape. After the capture, a tensor input with a different shape, or a
+          tensordict input with a different batch size or an entry of a different shape, raises a ``ValueError``, and
+          a tensordict input that lacks one of the ``in_keys`` raises a ``KeyError``.
         - The output of the function must be detached. If a call to the optimizers is required, put it in the input
           function. For instance, the following function is a valid operator:
 
@@ -98,8 +100,17 @@ class CudaGraphModule:
           The only supported keyword argument is `tensordict_out` in case the input is a tensordict.
 
         - If the module is a :class:`~tensordict.nn.TensorDictModuleBase` instance and the output id matches the input
-          id, then this identity will be preserved during a call to ``CudaGraphModule``. In all other cases, the output
-          will be cloned, irrespective of whether its elements match or do not match one of the inputs.
+          id, then this identity will be preserved during a call to ``CudaGraphModule``, and the outputs written into
+          the input are clones of the graph's output buffers. In all other cases, the output will be cloned,
+          irrespective of whether its elements match or do not match one of the inputs.
+
+        - In-place writes to the input tensors inside the function (e.g. ``x.add_(1)``) do not reach the caller's
+          inputs once the graph is captured: the graph reads and writes its own copies of the inputs.
+
+        - The inputs are copied into the graph's buffers, and the graph is replayed, on the current stream. As for any
+          CUDA operation, inputs written on another stream must be ordered before the call by the caller, e.g. with
+          ``torch.cuda.current_stream().wait_stream(producer_stream)``. Consecutive calls share the graph's buffers:
+          issue them from one stream, or order each call after the previous one in the same way.
 
     .. warning::
         ``CudaGraphModule`` is not an :class:`~torch.nn.Module` by design, to discourage gathering parameters
@@ -231,14 +242,64 @@ class CudaGraphModule:
                     # have rebound entries of ``self._tensordict`` to its outputs
                     # during capture (an output written under an input key), so
                     # ``self._tensordict`` is not a safe update target. Only the
-                    # capture-time input keys live in ``self._graph_inputs``, so
-                    # ``update_`` copies exactly those and ignores extra keys.
-                    self._graph_inputs.update_(tensordict, non_blocking=True)  # type: ignore[attr-defined]
-                    torch.cuda.synchronize(self.device)
+                    # capture-time input leaves are copied; extra keys are ignored.
+                    if tensordict.batch_size != self._graph_batch_size:
+                        raise ValueError(
+                            f"{self.__class__.__name__} was captured with batch_size="
+                            f"{self._graph_batch_size} but got batch_size="
+                            f"{tensordict.batch_size}. CUDA graphs replay fixed shapes."
+                        )
+                    src_keys, src_vals = tensordict._items_list(
+                        True,
+                        True,
+                        sorting_keys=self._graph_input_keys,
+                        default="intersection",
+                    )
+                    # The copies and the replay run on the current stream, so the
+                    # replay reads the new inputs without a host synchronization. The
+                    # copies are blocking so that the caller may overwrite a (pinned)
+                    # CPU input as soon as the call returns.
+                    if len(src_keys) == len(self._graph_input_keys):
+                        if [val.shape for val in src_vals] != self._graph_input_shapes:
+                            for key, val, shape in zip(
+                                src_keys, src_vals, self._graph_input_shapes
+                            ):
+                                self._check_entry_shape(key, val.shape, shape)
+                        if src_vals:
+                            torch._foreach_copy_(self._graph_input_vals, src_vals)
+                    else:
+                        graph_keys = self._graph_inputs.keys(include_nested=True)
+                        input_keys = tensordict.keys(include_nested=True)
+                        missing = [
+                            key
+                            for key in self.in_keys
+                            if key in graph_keys and key not in input_keys
+                        ]
+                        if missing:
+                            raise KeyError(
+                                f"{self.__class__.__name__} input is missing the in_keys "
+                                f"{missing} that the captured graph reads."
+                            )
+                        # Other keys differ, or the layout does (e.g. a lazy stack
+                        # against a dense tensordict): ``update_`` matches the leaves.
+                        graph_leaves = self._graph_inputs.keys(
+                            include_nested=True, leaves_only=True
+                        )
+                        for key in tensordict.keys(
+                            include_nested=True, leaves_only=True
+                        ):
+                            if key in graph_leaves:
+                                self._check_entry_shape(
+                                    key,
+                                    tensordict.get_item_shape(key),
+                                    self._graph_inputs.get_item_shape(key),
+                                )
+                        self._graph_inputs.update_(tensordict)
                     self.graph.replay()
                     if self._out_matches_in:
+                        # Clone: the graph overwrites ``self._out`` on the next replay.
                         result = tensordict.update(  # type-ignore[unreachable]
-                            self._out, keys_to_update=self._selected_keys
+                            self._out, keys_to_update=self._selected_keys, clone=True
                         )
                     elif tensordict_out is not None:
                         result = tensordict_out.update(self._out, clone=True)
@@ -279,11 +340,21 @@ class CudaGraphModule:
                     )
                     with self._warmup_stream_cm():
                         tensordict.apply(self._clone, out=tensordict)
-                        self._tensordict = tensordict.copy()
+                        # A clone, not a copy: the caller keeps ``tensordict``, and the
+                        # replays write their inputs into the leaves the graph reads.
+                        self._tensordict = tensordict.clone()
                         # References to the input leaves as the graph will read
                         # them, kept apart from ``self._tensordict`` whose entries
                         # the module may rebind while it runs under capture.
                         self._graph_inputs = self._tensordict.copy()
+                        (
+                            self._graph_input_keys,
+                            self._graph_input_vals,
+                        ) = self._graph_inputs._items_list(True, True)
+                        self._graph_input_shapes = [
+                            val.shape for val in self._graph_input_vals
+                        ]
+                        self._graph_batch_size = self._graph_inputs.batch_size
                         if tensordict_out is not None:
                             td_out_save = tensordict_out.copy()
                             kwargs["tensordict_out"] = tensordict_out
@@ -320,7 +391,7 @@ class CudaGraphModule:
 
                             self._out.named_apply(
                                 check_tensor_id,
-                                tensordict,
+                                self._graph_inputs,
                                 default=None,
                                 filter_empty=True,
                             )
@@ -338,7 +409,6 @@ class CudaGraphModule:
                         self._maybe_copy_onto_(arg_src, arg_dest, srcs, dests)
                     if dests:
                         torch._foreach_copy_(dests, srcs)
-                    torch.cuda.synchronize(self.device)
                     self.graph.replay()
                     if self._return_unchanged:
                         result = self._out
@@ -381,6 +451,9 @@ class CudaGraphModule:
                         torch.cuda.current_stream(self.device)
                     )
                     with self._warmup_stream_cm():
+                        # Run on fresh copies: a module that writes into a tensordict
+                        # input must see the same structure during the capture.
+                        args, kwargs = tree_map(self._clone, (args, kwargs))
                         this_out = self.module(*args, **kwargs)
                     self._capture_stream.wait_stream(self._warmup_stream)
 
@@ -392,7 +465,7 @@ class CudaGraphModule:
                     self.counter += 1
                     # Check that there is not intersection between the indentity of inputs and outputs, otherwise warn
                     # user.
-                    tree_leaves_input = tree_leaves((args, kwargs))
+                    tree_leaves_input = tree_leaves((self._args, self._kwargs))
                     tree_leaves_output = tree_leaves(out)
                     if not isinstance(tree_leaves_output, tuple):
                         tree_leaves_output = (tree_leaves_output,)
@@ -417,13 +490,31 @@ class CudaGraphModule:
         _call_func = functools.wraps(self.module)(_call)
         self._call_func = _call_func
 
+    def _check_entry_shape(self, key, shape, captured_shape):
+        if shape != captured_shape:
+            raise ValueError(
+                f"{self.__class__.__name__} was captured with the entry {key!r} of "
+                f"shape {captured_shape} but got shape {shape}. CUDA graphs replay "
+                "fixed shapes."
+            )
+
     @staticmethod
     def _maybe_copy_onto_(src, dest, srcs, dests):
         if isinstance(src, torch.Tensor):
+            if src.shape != dest.shape:
+                raise ValueError(
+                    f"CudaGraphModule was captured with an input of shape {dest.shape} "
+                    f"but got shape {src.shape}. CUDA graphs replay fixed shapes."
+                )
             srcs.append(src)
             dests.append(dest)
             return
         if is_tensor_collection(src):
+            if src.batch_size != dest.batch_size:
+                raise ValueError(
+                    f"CudaGraphModule was captured with batch_size={dest.batch_size} "
+                    f"but got batch_size={src.batch_size}. CUDA graphs replay fixed shapes."
+                )
             dest.copy_(src)
             return
         isdiff = False
@@ -485,7 +576,7 @@ class CudaGraphModule:
 
     def __repr__(self):
         module = indent(f"module={self.module}", 4 * " ")
-        warmup = warmup = {self._warmup}
+        warmup = indent(f"warmup={self._warmup}", 4 * " ")
         in_keys = indent(f"in_keys={self.in_keys}", 4 * " ")
         out_keys = indent(f"out_keys={self.out_keys}", 4 * " ")
         return f"{self.__class__.__name__}(\n{module}, \n{warmup}, \n{in_keys}, \n{out_keys}\n)"

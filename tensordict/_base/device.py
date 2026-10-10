@@ -466,7 +466,8 @@ class _DeviceOps:
                 If ``None`` (default), the leaves are copied with ``non_blocking=True``
                 and, when the target device is not a CUDA device (e.g. device-to-host
                 copies), the tensordict synchronizes once after all the copies have been
-                issued. If ``True``, the copies are non-blocking and no synchronization
+                issued (under :func:`torch.compile`, these copies are blocking instead).
+                If ``True``, the copies are non-blocking and no synchronization
                 is performed: the caller is responsible for synchronizing before reading
                 the results. If ``False``, the copies are blocking.
             memory_format (torch.memory_format, optional): the desired memory
@@ -577,7 +578,7 @@ class _DeviceOps:
         if device is not None and dtype is None and device == self.device:
             return result
 
-        if self.is_consolidated() and dtype is None:
+        if self.is_consolidated() and dtype is None and device is not None:
             return self._to_consolidated(
                 device=device,
                 pin_memory=non_blocking_pin,
@@ -587,7 +588,12 @@ class _DeviceOps:
             )
 
         if non_blocking is None:
-            sub_non_blocking = True
+            # Under torch.compile, copies to a non-cuda device are blocking: the
+            # _sync_all that non-blocking copies to such a device need is not
+            # traceable.
+            sub_non_blocking = not (
+                is_compiling() and device is not None and device.type != "cuda"
+            )
             non_blocking = False
         else:
             sub_non_blocking = non_blocking

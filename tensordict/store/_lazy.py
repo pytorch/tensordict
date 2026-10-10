@@ -16,6 +16,7 @@ import struct
 import threading
 import uuid
 import weakref
+from numbers import Number
 from typing import Any, Callable, Sequence, Tuple, Type
 
 import torch
@@ -37,6 +38,7 @@ from tensordict.base import (
 from tensordict.store._store import _has_redis, _KEY_SEP, Self, STORE_BACKENDS
 from tensordict.store._utils import (
     _bytes_to_tensor,
+    _check_indexed_value,
     _compute_byte_ranges,
     _compute_covering_range,
     _decode_meta,
@@ -57,9 +59,25 @@ from tensordict.utils import (
     _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
+    expand_as_right,
     NestedKey,
     unravel_key,
 )
+
+
+def _empty_structure(key_paths: set[str]) -> dict:
+    """Returns the sub-tensordicts of a store as nested empty dicts.
+
+    ``key_paths`` are the leaf paths of the key registry (``"b.c"`` for
+    ``("b", "c")``), so no data is read.
+    """
+    structure: dict = {}
+    for key_path in sorted(key_paths):
+        d = structure
+        for part in key_path.split(_KEY_SEP)[:-1]:
+            d = d.setdefault(part, {})
+    return structure
+
 
 # ---------------------------------------------------------------------------
 # _StoreStackElementView — write-through view for a single stack element
@@ -123,9 +141,9 @@ class _StoreStackElementView(TensorDictBase):
         all_keys = self._get_all_keys()
         key_path = key
 
-        # Nested prefix
+        # Nested prefix, in the order of the keys view
         prefix_check = key_path + _KEY_SEP
-        nested_keys = [k for k in all_keys if k.startswith(prefix_check)]
+        nested_keys = sorted(k for k in all_keys if k.startswith(prefix_check))
         if nested_keys:
             result = self._run_sync(
                 self._parent._abatch_get_element_keys(self._element_idx, nested_keys)
@@ -180,7 +198,7 @@ class _StoreStackElementView(TensorDictBase):
         non_blocking: bool = False,
     ):
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(value, check_shape=True, key=key)
         if self.is_locked and not ignore_lock and not inplace:
             raise RuntimeError(_LOCK_ERROR)
 
@@ -224,7 +242,7 @@ class _StoreStackElementView(TensorDictBase):
             )
         key_path = _KEY_SEP.join(key)
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(value, check_shape=True, key=key)
         if self.is_locked and not inplace:
             raise RuntimeError(_LOCK_ERROR)
         if isinstance(value, torch.Tensor):
@@ -253,16 +271,27 @@ class _StoreStackElementView(TensorDictBase):
         if index_unravel:
             return self.set(index_unravel, value, inplace=True)
 
-        if not isinstance(value, TensorDictBase):
-            value = TensorDict.from_dict(value, batch_size=[])
+        _check_indexed_value(self, value)
+        if isinstance(value, Number):
+            # a scalar is written to every entry, which casts it to its dtype
+            items = [
+                (key, value) for key in self.keys(include_nested=True, leaves_only=True)
+            ]
+        else:
+            if not isinstance(value, TensorDictBase):
+                value = TensorDict.from_dict(value, batch_size=[])
+            items = [
+                (key, value.get(key))
+                for key in value.keys(include_nested=True, leaves_only=True)
+            ]
 
-        for key in value.keys(include_nested=True, leaves_only=True):
+        for key, item in items:
             key_tuple = _unravel_key_to_tuple(key)
             key_path = _KEY_SEP.join(key_tuple)
             existing = (
                 self._get_str(key_tuple[0]) if len(key_tuple) == 1 else self.get(key)
             )
-            existing[index] = value.get(key)
+            existing[index] = item
             self._run_sync(
                 self._parent._aset_element_key(self._element_idx, key_path, existing)
             )
@@ -407,14 +436,15 @@ class _StoreStackElementView(TensorDictBase):
                 existing.fill_(subkey, value)
         else:
             existing = existing.fill_(value)
-            self.set_(key, existing)
+        # a nested entry is read as a new TensorDict, so it is written back too
+        self.set_(key, existing)
         return self
 
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> T:
         return TensorDict(
-            {},
+            _empty_structure(self._get_all_keys()) if recurse else {},
             device=self.device if device is NO_DEFAULT else device,
             batch_size=self.batch_size if batch_size is None else batch_size,
             names=self.names if names is None and self._has_names() else names,
@@ -426,7 +456,7 @@ class _StoreStackElementView(TensorDictBase):
     def masked_fill_(self, mask, value):
         for key in self.keys(include_nested=True, leaves_only=True):
             tensor = self.get(key)
-            tensor = tensor.masked_fill(mask, value)
+            tensor = tensor.masked_fill(expand_as_right(mask, tensor), value)
             self.set_(key, tensor)
         return self
 
@@ -491,7 +521,9 @@ class _StoreStackElementView(TensorDictBase):
         )
 
     def _memmap_(self, **kw):
-        raise RuntimeError(f"Cannot call memmap on a {type(self).__name__}.")
+        if kw["inplace"]:
+            raise RuntimeError(f"Cannot call memmap on a {type(self).__name__}.")
+        return self.to_tensordict()._memmap_(**kw)
 
     def make_memmap(self, key, shape, *, dtype=None, robust_key=True):
         raise RuntimeError(f"Cannot make memmap on a {type(self).__name__}.")
@@ -577,7 +609,9 @@ class _LazyStackedStoreKeysView(_TensorDictKeysView):
         td = self.tensordict
         all_keys = td._get_all_keys()
         seen = set()
-        for full_key in all_keys:
+        # Sorted as in _StoreTDKeysView. _get_str sorts the paths of a nested
+        # tensordict too, so that values() and items() follow this order.
+        for full_key in sorted(all_keys):
             parts = full_key.split(_KEY_SEP)
             if self.include_nested:
                 key = tuple(parts) if len(parts) > 1 else parts[0]
@@ -805,6 +839,15 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     def _is_key_homogeneous(self, meta: dict) -> bool:
         return meta.get("homogeneous", "1") == "1"
+
+    async def _ais_homogeneous(self, key_paths: list[str]) -> list[bool]:
+        """Reads from the metadata which keys hold elements of one shape and dtype."""
+        pipe = self._client.pipeline()
+        for kp in key_paths:
+            pipe.hget(self._meta_key(kp), "homogeneous")
+        flags = await pipe.execute()
+        # as in _is_key_homogeneous, a key without the flag is homogeneous
+        return [flag in (None, b"1", "1") for flag in flags]
 
     def _row_bytes(self, shape: list[int], dtype: torch.dtype) -> int:
         """Byte size of one stack element for a homogeneous key."""
@@ -1487,6 +1530,14 @@ class LazyStackedTensorDictStore(TensorDictBase):
         if isinstance(index, list):
             index = torch.tensor(index)
 
+        _check_indexed_value(self, value)
+        if isinstance(value, Number):
+            # a scalar is written to every entry, in its dtype
+            self._run_sync(
+                self._abatch_set_at({kp: (value, index) for kp in self._get_all_keys()})
+            )
+            return
+
         # Integer assignment on stack dim: write element
         if (
             isinstance(index, int)
@@ -1513,9 +1564,9 @@ class LazyStackedTensorDictStore(TensorDictBase):
         key_path = key
         all_keys = self._get_all_keys()
 
-        # Check nested
+        # Check nested, in the order of the keys view
         prefix_check = key_path + _KEY_SEP
-        nested_keys = [k for k in all_keys if k.startswith(prefix_check)]
+        nested_keys = sorted(k for k in all_keys if k.startswith(prefix_check))
         if nested_keys:
             # Return full stacked tensor for each nested leaf, build TD
             result = self._run_sync(self._abatch_get_at(nested_keys, slice(None)))
@@ -1550,7 +1601,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
         non_blocking: bool = False,
     ):
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(value, check_shape=True, key=key)
         if self.is_locked and not ignore_lock and not inplace:
             raise RuntimeError(_LOCK_ERROR)
 
@@ -1607,7 +1658,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
             )
         key_path = _KEY_SEP.join(key)
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(value, check_shape=True, key=key)
         if self.is_locked and not inplace:
             raise RuntimeError(_LOCK_ERROR)
         if isinstance(value, torch.Tensor):
@@ -1733,19 +1784,34 @@ class LazyStackedTensorDictStore(TensorDictBase):
         async def _arename():
             all_keys = await self._aget_all_keys()
             if old_path in all_keys:
+                moves = [
+                    (self._data_key(old_path), self._data_key(new_path)),
+                    (self._meta_key(old_path), self._meta_key(new_path)),
+                    (self._idx_key(old_path), self._idx_key(new_path)),
+                ]
+                # Only leaves whose elements differ in shape or dtype have an
+                # offset table, and empty leaves may have no data. RENAME fails
+                # on a missing key, so a key that the leaf lacks is deleted at
+                # the destination instead.
                 pipe = self._client.pipeline()
-                pipe.rename(self._data_key(old_path), self._data_key(new_path))
-                pipe.rename(self._meta_key(old_path), self._meta_key(new_path))
+                for src, _ in moves:
+                    pipe.exists(src)
+                found = await pipe.execute()
+                pipe = self._client.pipeline()
+                for (src, dst), src_found in zip(moves, found):
+                    if src_found:
+                        pipe.rename(src, dst)
+                    else:
+                        pipe.delete(dst)
                 pipe.srem(self._keys_registry_key, old_path)
                 pipe.sadd(self._keys_registry_key, new_path)
-                # Try renaming idx key (may not exist for homogeneous)
-                try:
-                    pipe.rename(self._idx_key(old_path), self._idx_key(new_path))
-                except Exception:
-                    pass
                 await pipe.execute()
 
         self._run_sync(_arename())
+        if self._meta_cache is not None:
+            # old_path is gone, and a leaf at new_path may have been replaced
+            self._meta_cache.pop(old_path, None)
+            self._meta_cache.pop(new_path, None)
         return self
 
     def entry_class(self, key: NestedKey) -> type:
@@ -2015,8 +2081,20 @@ class LazyStackedTensorDictStore(TensorDictBase):
     def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
         existing = self.get(key)
         if is_tensor_collection(existing):
-            for subkey in existing.keys():
-                existing.fill_(subkey, value)
+            # existing is a new TensorDict: write its leaves back under their
+            # full keys, except those whose elements differ in shape, which
+            # set_ would write with the shape of the first element
+            key = _unravel_key_to_tuple(key)
+            subkeys = [
+                _unravel_key_to_tuple(k)
+                for k in existing.keys(include_nested=True, leaves_only=True)
+            ]
+            homogeneous = self._run_sync(
+                self._ais_homogeneous([_KEY_SEP.join(key + k) for k in subkeys])
+            )
+            for subkey, is_homogeneous in zip(subkeys, homogeneous):
+                if is_homogeneous:
+                    self.set_(key + subkey, existing.get(subkey).fill_(value))
         else:
             existing = existing.fill_(value)
             self.set_(key, existing)
@@ -2026,7 +2104,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> T:
         return TensorDict(
-            {},
+            _empty_structure(self._get_all_keys()) if recurse else {},
             device=self.device if device is NO_DEFAULT else device,
             batch_size=self.batch_size if batch_size is None else batch_size,
             names=self.names if names is None and self._has_names() else names,
@@ -2242,7 +2320,21 @@ class LazyStackedTensorDictStore(TensorDictBase):
         existsok,
         robust_key,
     ):
-        raise RuntimeError(f"Cannot call memmap on a {type(self).__name__} in-place.")
+        if inplace:
+            raise RuntimeError(
+                f"Cannot call memmap on a {type(self).__name__} in-place."
+            )
+        return self.to_tensordict()._memmap_(
+            prefix=prefix,
+            copy_existing=copy_existing,
+            executor=executor,
+            futures=futures,
+            inplace=False,
+            like=like,
+            share_non_tensor=share_non_tensor,
+            existsok=existsok,
+            robust_key=robust_key,
+        )
 
     def make_memmap(self, key, shape, *, dtype=None, robust_key=True):
         raise RuntimeError(

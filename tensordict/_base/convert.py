@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import collections
 import importlib.util
+import numbers
 import uuid
 import weakref
 from collections import UserDict
@@ -51,7 +52,6 @@ from tensordict.base import (
 )
 from tensordict.utils import (
     _as_context_manager,
-    _check_inbuild,
     _is_dataclass as is_dataclass,
     _is_list_tensor_compatible,
     _is_namedtuple,
@@ -67,6 +67,7 @@ from tensordict.utils import (
 from torch import nn, Tensor
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.nn.utils._named_member_accessor import swap_tensor
+from torch.utils._pytree import is_structseq_instance
 
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
@@ -75,6 +76,14 @@ try:
     from functorch import dim as ftdim
 except ImportError:
     from tensordict.utils import _ftdim_mock as ftdim
+
+
+def _int_batch_dims(batch_dims):
+    # for backward compatibility, from_any ignores a batch_dims that is not an
+    # int for dataclasses and h5py files
+    if isinstance(batch_dims, numbers.Integral) and not isinstance(batch_dims, bool):
+        return batch_dims
+    return None
 
 
 class _Conversion:
@@ -310,7 +319,9 @@ class _Conversion:
         result = None
         if _is_namedtuple(pytree):
             result = TensorDict.from_namedtuple(named_tuple=pytree)
-            if batch_dims is not None:
+            # Without batch_dims, batch_size is ignored here, unlike for lists
+            # and dicts: applying it would raise when it does not fit the leaves.
+            if batch_dims is not None and batch_size is not None:
                 result.batch_size = batch_size
             result["_pytree_type"] = type(pytree)
         elif isinstance(pytree, (list, tuple)):
@@ -955,8 +966,6 @@ class _Conversion:
 
         if is_dynamo is None:
             is_dynamo = is_compiling()
-        if is_dynamo:
-            _check_inbuild()
 
         if not use_state_dict and isinstance(module, TensorDictBase):
             if return_swap:
@@ -1257,10 +1266,12 @@ class _Conversion:
         result = {}
         for key, value in self.items():
             if _is_tensor_collection(type(value)):
+                # NonTensorStack.data raises AttributeError when the stacked
+                # values differ: such a stack is not None, so it is kept.
                 if (
                     not retain_none
                     and _is_non_tensor(type(value))
-                    and value.data is None
+                    and getattr(value, "data", NO_DEFAULT) is None
                 ):
                     continue
                 if tolist_first:
@@ -1544,6 +1555,20 @@ class _Conversion:
 
                 return NonTensorStack.from_list(obj)
         if is_dataclass(obj):
+            dataclass_batch_dims = _int_batch_dims(batch_dims)
+            if auto_batch_size and dataclass_batch_dims is not None:
+                try:
+                    return cls.from_dataclass(
+                        obj,
+                        auto_batch_size=auto_batch_size,
+                        batch_dims=dataclass_batch_dims,
+                        device=device,
+                        batch_size=batch_size,
+                    )
+                except Exception:
+                    # for backward compatibility, a batch_dims that cannot be
+                    # applied, for example to a nested NonTensorStack, is ignored
+                    pass
             return cls.from_dataclass(
                 obj,
                 auto_batch_size=auto_batch_size,
@@ -1565,11 +1590,22 @@ class _Conversion:
             import h5py
 
             if isinstance(obj, h5py.File):
+                from tensordict import TensorDict
                 from tensordict.persistent import PersistentTensorDict
 
+                if not auto_batch_size and batch_size is not None:
+                    try:
+                        return PersistentTensorDict(
+                            group=obj,
+                            batch_size=TensorDict._parse_batch_size(None, batch_size),
+                        )
+                    except Exception:
+                        # for backward compatibility, a batch size that is not a
+                        # size or that the file does not take is ignored
+                        pass
                 obj = PersistentTensorDict(group=obj)
                 if auto_batch_size:
-                    obj.auto_batch_size_()
+                    obj.auto_batch_size_(batch_dims=_int_batch_dims(batch_dims))
                 return obj
         return obj
 
@@ -1765,15 +1801,13 @@ class _Conversion:
         def namedtuple_to_dict(namedtuple_obj):
             if _is_namedtuple(namedtuple_obj):
                 namedtuple_obj = namedtuple_obj._asdict()
-
-            else:
-                from torch.return_types import cummax, cummin, max, min
-
-                if isinstance(namedtuple_obj, (min, cummin, max, cummax)):
-                    namedtuple_obj = {
-                        "values": namedtuple_obj.values,
-                        "indices": namedtuple_obj.indices,
-                    }
+            elif is_structseq_instance(namedtuple_obj):
+                # torch.return_types (the results of max, sort, topk, ...)
+                # are structseqs: named fields, but no _fields or _asdict.
+                namedtuple_obj = {
+                    name: getattr(namedtuple_obj, name)
+                    for name in type(namedtuple_obj).__match_args__
+                }
             for key, value in namedtuple_obj.items():
                 namedtuple_obj[key] = cls.from_any(
                     value, device=device, batch_size=batch_size
