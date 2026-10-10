@@ -681,6 +681,26 @@ class TestNonTensorData:
         assert x[0].non_tensor == "a"
         assert x[1].non_tensor == "b"
 
+    @pytest.mark.parametrize("lazy", [False, True])
+    def test_non_tensor_items(self, lazy):
+        td = TensorDict(
+            a=torch.zeros(3),
+            nested=TensorDict(
+                b=torch.zeros(3), s=NonTensorData("y", batch_size=[3]), batch_size=[3]
+            ),
+            s=NonTensorData("x", batch_size=[3]),
+            batch_size=[3],
+        )
+        expected = [["y"] * 3, ["x"] * 3]
+        if lazy:
+            td = lazy_stack([td, td.clone()])
+            expected = [[value] * 2 for value in expected]
+        assert [key for key, _ in td.non_tensor_items()] == ["s"]
+        # include_nested=True used to raise AttributeError on the tensor leaves
+        items = td.non_tensor_items(include_nested=True)
+        assert [key for key, _ in items] == [("nested", "s"), "s"]
+        assert [val.tolist() for _, val in items] == expected
+
     def test_nontensor_dict(self, non_tensor_data):
         assert (
             TensorDict.from_dict(non_tensor_data.to_dict(), auto_batch_size=True)
