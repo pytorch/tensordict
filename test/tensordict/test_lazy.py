@@ -1843,6 +1843,17 @@ class TestLazyStackedTensorDict:
         with pytest.raises(RuntimeError):
             assert lazy_stack([TensorDict(), td0, td1])
 
+    def test_lazy_stack_stack_dim_too_big(self):
+        # The valid stack dims of two tensordicts of batch size [3] are 0 and 1
+        tds = [
+            TensorDict({"a": torch.zeros(3, 4)}, [3]),
+            TensorDict({"a": torch.ones(3, 4)}, [3]),
+        ]
+        with pytest.raises(RuntimeError, match="too big for batch size"):
+            LazyStackedTensorDict(*tds, stack_dim=2)
+        with pytest.raises(RuntimeError, match="too big for batch size"):
+            lazy_stack(tds, 2)
+
     def test_new_methods(self):
         td = TensorDict(
             dense=torch.randn(1, 10),
