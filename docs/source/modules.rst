@@ -120,6 +120,8 @@ The ``inplace`` argument sets where the module writes its outputs:
 - ``"empty"``: into ``tensordict.empty()``, a new tensordict with no entries
   and the type, batch size and device of the input.
 
+In this example, the module writes into a new tensordict:
+
   >>> module = TensorDictModule(nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"], inplace=False)
   >>> td = TensorDict(obs=torch.randn(5, 3), batch_size=[5])
   >>> out = module(td)
@@ -170,7 +172,11 @@ These rules apply to keyword calls:
   ``RuntimeError: Duplicated argument in args and kwargs.``
 - A module with the out-key ``"_"`` does not support keyword calls. The call
   raises ``KeyError: 'key "_" not found in TensorDict ...'``.
-- The tensordict that the module builds has an empty batch size.
+- The tensordict that :class:`~tensordict.nn.TensorDictModule` builds from
+  the arguments has an empty batch size.
+
+For example, with the nested in-key ``("agent", "obs")`` of the ``shift``
+module above:
 
   >>> shift(agent_obs=torch.zeros(2, 3))[0].shape
   torch.Size([2, 3])
@@ -385,7 +391,8 @@ Skip outputs that are already there
 By default, a module computes its outputs and overwrites the entries that are
 already in the input. Inside :class:`~tensordict.nn.set_skip_existing`, a
 module whose ``out_keys`` are all in the input returns the input unchanged.
-A sequence checks its own ``out_keys`` first, then each module checks its own:
+The rule applies to the ``out_keys`` of a sequence first, then to the
+``out_keys`` of each of its modules:
 
   >>> seq = TensorDictSequential(
   ...     Mod(lambda x: x + 1, in_keys=["x"], out_keys=["h"]),
@@ -403,12 +410,12 @@ A sequence checks its own ``out_keys`` first, then each module checks its own:
 The first module keeps the ``"h"`` that is in the input, and the second module
 computes ``"y"`` from it. These rules apply:
 
-- A module whose ``out_keys`` are also in its ``in_keys`` always runs.
+- A module that reads one of its own ``out_keys`` always runs.
 - ``set_skip_existing(["h"])`` skips only the modules whose ``out_keys`` are
   all in the list.
 - :func:`~tensordict.nn.skip_existing` returns the current value. It is
   ``False`` outside the block.
-- Skipping does not work under :func:`torch.compile`. With
+- Skipping is not compatible with :func:`torch.compile`. With
   ``fullgraph=True``, the call raises an error.
 
 ``set_skip_existing`` also works as a decorator on the ``forward`` of a
@@ -425,7 +432,7 @@ parameters. It reads the parameters of the distribution at ``in_keys``, builds
 ``distribution_class(**params, **distribution_kwargs)``, and writes one value
 at each key of ``out_keys``. The last part of each key in ``in_keys`` must be
 the name of an argument of the distribution, for example ``"loc"`` and
-``"scale"`` for :class:`~torch.distributions.Normal`. A dict ``in_keys`` maps
+``"scale"`` for :class:`~torch.distributions.normal.Normal`. A dict ``in_keys`` maps
 each argument name to a key of the tensordict.
 
 To compute the parameters with a network, put one or more
@@ -471,8 +478,9 @@ that do not sample:
 - :meth:`~tensordict.nn.ProbabilisticTensorDictSequential.log_prob` returns
   the log-probability of the values in the tensordict.
 
-These methods write the intermediate entries (``"params"``, ``"loc"`` and
-``"scale"`` here) into the input tensordict:
+If the sequence returns the distribution of its last module (see
+``return_composite`` below), these methods write the intermediate entries
+(``"params"``, ``"loc"`` and ``"scale"`` here) into the input tensordict:
 
   >>> td = TensorDict(obs=torch.randn(5, 3), batch_size=[5])
   >>> policy.get_dist(td)
@@ -501,8 +509,8 @@ these values:
 - ``DETERMINISTIC``: the ``deterministic_sample`` attribute of the
   distribution. If the distribution does not have one, the module uses the
   mode for distributions with enumerable support (for example
-  :class:`~torch.distributions.Categorical` and
-  :class:`~torch.distributions.Bernoulli`) and the mean for the others. For a
+  :class:`~torch.distributions.categorical.Categorical` and
+  :class:`~torch.distributions.bernoulli.Bernoulli`) and the mean for the others. For a
   distribution class that tensordict does not know, the module chooses from
   its support and warns.
 
@@ -554,7 +562,8 @@ mismatch``.
 
 The ``generator`` argument of
 :class:`~tensordict.nn.ProbabilisticTensorDictModule` makes the samples
-reproducible without a change to the global random state. See its reference.
+reproducible without a change to the global random state. Under
+:func:`torch.compile`, the module ignores it. See its reference.
 
 .. _modules-log-prob-keys:
 
@@ -599,21 +608,24 @@ that the module writes on main:
        the first
 
 The rule for the default: the module adds ``"_log_prob"`` to the last part of
-each out-key. Each log-probability has the shape of its value. A
-:class:`~torch.distributions.Normal` with a value of shape ``[5, 2]`` gives a
-log-probability of shape ``[5, 2]``. To get one log-probability for each
-sample of a vector, use :class:`~torch.distributions.Independent`.
+each out-key. Each log-probability has the shape that the distribution
+gives. A :class:`~torch.distributions.normal.Normal` with a value of shape ``[5, 2]``
+gives a log-probability of shape ``[5, 2]``. To get one log-probability for
+each of the 5 rows, build the distribution as
+``Independent(Normal(loc, scale), 1)``
+(:class:`~torch.distributions.independent.Independent`), which sums over the last
+dimension.
 
-The ``log_prob`` methods follow the same setting. With the default, they
-return a tensor for one distribution, and a tensordict of
-``<name>_log_prob`` entries for a
-:class:`~tensordict.nn.distributions.CompositeDistribution`. With ``True``,
-they return one tensor, summed over all the distributions.
+The ``log_prob`` methods follow the same setting. For one distribution,
+they return a tensor. For a
+:class:`~tensordict.nn.distributions.CompositeDistribution`, they return a
+tensordict of ``<name>_log_prob`` entries with the default, and with ``True``
+one tensor: the sum over all the distributions and their event dimensions.
 
 A module reads the setting when you build it. If the setting is different
-when you call the module, the module raises ``RuntimeError:
-composite_lp_aggregate is set to ...``. Choose the setting before you build
-the modules, and keep it.
+when you call a module with ``return_log_prob=True``, the module raises
+``RuntimeError: composite_lp_aggregate is set to ...``. Choose the setting
+before you build the modules, and keep it.
 
 Several heads: CompositeDistribution
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -672,7 +684,7 @@ probabilistic.
 Parameters as tensordicts
 -------------------------
 
-A model's parameters fit in a tensordict, with one nested key for each
+The parameters of a model fit in a tensordict, with one nested key for each
 submodule. This gives a functional call: run a module with parameters that it
 does not own. Use it for ensembles, target networks, meta-learning and
 per-sample gradients.
@@ -682,7 +694,7 @@ Extract and swap parameters
 
 :meth:`~tensordict.TensorDict.from_module` returns the parameters and buffers
 of a module in a tensordict. The entries are the module's own
-:class:`~torch.nn.Parameter` objects, so an in-place change to them changes
+:class:`~torch.nn.parameter.Parameter` objects, so an in-place change to them changes
 the module. :meth:`~tensordict.TensorDict.to_module` puts the entries of a
 tensordict into a module. Used as a context manager, it puts the original
 parameters back at the end of the block:
@@ -782,7 +794,7 @@ wraps: you can index it, set entries and call ``to_module``. These rules
 apply:
 
 - When you set an entry, ``float16``, ``float32`` and ``float64`` tensors
-  become :class:`~torch.nn.Parameter`. Tensors of all other dtypes, including
+  become :class:`~torch.nn.parameter.Parameter`. Tensors of all other dtypes, including
   ``bfloat16``, complex and ``bool``, become buffers. An optimizer does not see
   a buffer. With ``no_convert=True``, all tensors that are not already
   parameters become buffers.
@@ -793,6 +805,8 @@ apply:
   later add or replace an entry of that tensordict, indexing sees the new
   value, but ``parameters()`` and ``buffers()`` do not. Write through the
   :class:`~tensordict.TensorDictParams` instead.
+
+In this example, only the ``float32`` entry becomes a parameter:
 
   >>> p = TensorDictParams(
   ...     TensorDict(
@@ -813,7 +827,7 @@ Typed modules: TensorClassModuleBase
 and output are :class:`~tensordict.TensorClass` instances instead of
 tensordicts with string keys (see :ref:`tensorclass-guide`). The class gives
 its input and output types as generic parameters. A type checker or an IDE
-can then check the fields that ``forward`` reads and writes. If you rename a
+then knows the fields that ``forward`` reads and writes. If you rename a
 field, the type checker finds the code that still uses the old name.
 
   >>> from tensordict import TensorClass
