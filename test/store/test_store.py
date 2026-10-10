@@ -1506,6 +1506,56 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    # ---- rename_key_ ----
+
+    def test_rename_key(self, store_stack):
+        store_td, tds, lazy_td = store_stack
+        # the elements of "a" have one shape, so "a" has no offset table
+        store_td.rename_key_("a", "c")
+        assert set(store_td.keys()) == {"b", "c"}
+        torch.testing.assert_close(store_td["c"], lazy_td["a"])
+        # replaces "b", whose shape differs
+        store_td.rename_key_("c", "b")
+        assert set(store_td.keys()) == {"b"}
+        torch.testing.assert_close(store_td["b"], lazy_td["a"])
+
+    def test_rename_key_leaf_kinds(self, store_kwargs):
+        tds = [
+            TensorDict(
+                {
+                    "het": torch.randn(3, i + 1),
+                    "empty": torch.randn(3, 0),
+                    "nested": {"x": torch.randn(3, 2)},
+                },
+                batch_size=[3],
+            )
+            for i in range(4)
+        ]
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            # "het" has an offset table, as its elements have different
+            # shapes, "empty" has no data, and ("nested", "x") is a leaf of
+            # one shape in a sub-tensordict
+            store_td.rename_key_("het", "het2")
+            store_td.rename_key_("empty", "empty2")
+            store_td.rename_key_(("nested", "x"), ("nested", "y"))
+            assert set(store_td.keys(True, True)) == {
+                "het2",
+                "empty2",
+                ("nested", "y"),
+            }
+            for i, td in enumerate(tds):
+                torch.testing.assert_close(store_td[i]["het2"], td["het"])
+            assert store_td["empty2"].shape == (4, 3, 0)
+            torch.testing.assert_close(
+                store_td["nested", "y"], torch.stack([td["nested", "x"] for td in tds])
+            )
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     # ---- Write-through view tests ----
 
     def test_view_set_propagates(self, store_stack):
