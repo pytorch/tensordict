@@ -864,6 +864,25 @@ class TestLazyStackedTensorDict:
         assert (td_nest_strided.exclude(("td", "a"))[1] == 1).all()
         assert not td_nest_strided["td", "d", "e"].is_nested
 
+    def test_densify_names(self):
+        named = TensorDict(x=torch.zeros(3), batch_size=[3], names=["n"])
+        unnamed = TensorDict(x=torch.zeros(3), batch_size=[3])
+        # When only some of the stacked tensordicts have names, the dims are
+        # left unnamed, as in contiguous().
+        td = lazy_stack([named, unnamed])
+        assert td.densify().names == td.contiguous().names == [None, None]
+        # The name of the stack dim is kept.
+        td = LazyStackedTensorDict.lazy_stack([named, unnamed], 1, stack_dim_name="s")
+        assert td.densify().names == [None, "s"]
+        td = LazyStackedTensorDict.lazy_stack(
+            [unnamed, unnamed.clone()], stack_dim_name="s"
+        )
+        assert td.densify().names == ["s", None]
+        td = LazyStackedTensorDict.lazy_stack(
+            [named, named.clone()], stack_dim_name="s"
+        )
+        assert td.densify().names == ["s", "n"]
+
     def test_lazy_get(self):
         inner_td = lazy_stack(
             [
