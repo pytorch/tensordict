@@ -5,10 +5,11 @@ tensordict.nn
 
 .. module:: tensordict.nn
 
-The ``tensordict.nn`` package contains modules that read their inputs from
-a tensordict and write their outputs to it. A module reads the entries
-named in its ``in_keys`` and writes the entries named in its ``out_keys``.
-For a guide with examples, see :ref:`modules-guide`.
+This page lists the modules of ``tensordict.nn``, and the probabilistic
+modules, distributions and helpers that go with them. A module reads the
+entries named in its ``in_keys`` from a tensordict, and writes the entries
+named in its ``out_keys`` into it. For a guide with examples, see
+:ref:`modules-guide`.
 
 The page of a module class lists its methods and the methods of its
 tensordict base classes. For the methods of :class:`torch.nn.Module`, see

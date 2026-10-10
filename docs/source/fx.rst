@@ -17,8 +17,8 @@ object is not subscriptable`` on a :class:`~tensordict.nn.TensorDictModule`.
     :func:`torch.compile` or :func:`torch.export.export` (see
     :ref:`compile`). If you find a problem, open an issue.
 
-Tracing a ``TensorDictModule``
-------------------------------
+Trace a ``TensorDictModule``
+----------------------------
 
 This example creates a :class:`~tensordict.nn.TensorDictModule` (see
 :ref:`modules-guide`), traces it, and prints the graph and the generated
@@ -74,8 +74,8 @@ A forward pass with each module gives the same outputs:
    ...     == graph_module_out["outputs", "probabilities"]
    ... ).all()
 
-Tracing a ``TensorDictSequential``
-----------------------------------
+Trace a ``TensorDictSequential``
+--------------------------------
 
 :func:`~tensordict.prototype.fx.symbolic_trace` also traces a
 :class:`~tensordict.nn.TensorDictSequential`. The whole sequence becomes one
@@ -125,7 +125,7 @@ example traces a sequence of two modules:
        softmax = torch.softmax(mul, dim = 1);  mul = None
        return (_0_fc2, softmax)
 
-The graph of this module has more nodes. To draw it, install the ``pydot``
+To draw the graph, install the ``pydot``
 package and the Graphviz ``dot`` program:
 
 .. code-block::
@@ -152,8 +152,8 @@ traces:
 
 - It ignores ``selected_out_keys`` of a
   :class:`~tensordict.nn.TensorDictSequential`. It writes every
-  ``out_keys`` entry of every module in the sequence, also the intermediate
-  ones, such as ``("intermediate", "x")`` above.
+  ``out_keys`` entry of every module in the sequence, including the
+  intermediate ones, such as ``("intermediate", "x")`` above.
 - It takes a tensordict only. A call with tensors as keyword arguments, such
   as ``graph_module(x=torch.randn(32, 100))``, raises ``TypeError``.
 - It writes its outputs into the input tensordict, unless you pass

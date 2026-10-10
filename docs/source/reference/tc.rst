@@ -5,12 +5,16 @@
 tensorclass and non-tensor data
 ===============================
 
-A *tensorclass* is a class that you declare like a dataclass and that has
-the operations of a :class:`~tensordict.TensorDict`. Its fields are typed
-attributes, not string keys. To declare one, subclass
-:class:`~tensordict.TensorClass`, or decorate a class with
-:func:`~tensordict.tensorclass`. For how to declare fields, auto-casting,
-the class options and static type checking, see :ref:`tensorclass-guide`.
+This page lists :class:`~tensordict.TensorClass`, the class form of a
+tensordict, and the classes for non-tensor data and unbatched entries. A
+*tensorclass* is a class that you declare like a dataclass, with typed fields
+and methods, and that has the tensor operations of a
+:class:`~tensordict.TensorDict`. For a guide to fields, auto-casting, the
+class options and static type checking, see :ref:`tensorclass-guide`.
+
+To declare a tensorclass, subclass :class:`~tensordict.TensorClass`. The
+:func:`~tensordict.tensorclass` decorator is the original way, kept for
+existing code (see :ref:`tensorclass-legacy-decorator`).
 
 A tensorclass has the methods of :class:`~tensordict.TensorDictBase`,
 listed by task in :ref:`api-tensordict-methods`. On a tensorclass, the
