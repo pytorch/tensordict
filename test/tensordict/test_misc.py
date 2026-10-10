@@ -519,6 +519,15 @@ class TestPointwiseOps:
         assert "d" not in tdpow
         assert "b" in tdpow
 
+    @pytest.mark.parametrize(
+        "name", ["clamp_min", "clamp_max", "clamp_min_", "clamp_max_"]
+    )
+    def test_clamp_error_is_raised(self, name):
+        td = TensorDict(a=-torch.ones(4, 3), batch_size=[4])
+        other = TensorDict(a=torch.zeros(4, 5), batch_size=[4])
+        with pytest.raises(RuntimeError, match="must match the size"):
+            getattr(td, name)(other)
+
     @pytest.mark.parametrize("shape", [(4,), (3, 4), (2, 3, 4)])
     def test_broadcast_tensor(self, shape):
         torch.manual_seed(0)

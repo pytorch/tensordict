@@ -15,10 +15,35 @@ from _utils_internal import expand_list, get_available_devices, TestTensorDictsB
 from functorch import (
     make_functional_with_buffers as functorch_make_functional_with_buffers,
 )
-from tensordict import LazyStackedTensorDict, TensorDict
+from tensordict import assert_close, LazyStackedTensorDict, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn, vmap
 from torch.utils._pytree import tree_flatten_with_path, tree_map, tree_structure
+
+# TensorDict methods that call torch._foreach_*, applied to one sample of a
+# tensordict with batch_size [4].
+VMAP_TD_OPS = {
+    "mul": lambda t: t * 2,
+    "add": lambda t: t + t,
+    "rsub": lambda t: 1 - t,
+    "neg": lambda t: -t,
+    "exp": lambda t: t.exp(),
+    "maximum": lambda t: t.maximum(t.exp()),
+    "maximum_scalar": lambda t: t.maximum(0.0),
+    "clamp_min": lambda t: t.clamp_min(0.0),
+    "clamp_max": lambda t: t.clamp_max(0.0),
+    "clamp_min_": lambda t: t.clone().clamp_min_(0.0),
+    "clamp_max_": lambda t: t.clone().clamp_max_(0.0),
+    "lerp": lambda t: t.lerp(t.exp(), 0.5),
+    "addcmul": lambda t: t.addcmul(t, t, value=2),
+    "norm": lambda t: t.norm(),
+    "add_": lambda t: t.clone().add_(1),
+    "mul_": lambda t: t.clone().mul_(t),
+    "exp_": lambda t: t.clone().exp_(),
+    "minimum_scalar_": lambda t: t.clone().minimum_(0.0),
+    "update_": lambda t: t.clone().update_(t * 2),
+    "clone_with_device": lambda t: t.to("cpu").clone(),
+}
 
 
 class TestVmap:
@@ -225,6 +250,36 @@ class TestNativeFunctorch:
         assert out[0].shape == torch.Size([4, 3])
         assert out[1].shape == torch.Size([4, 3])
         assert out[0]["a"].shape == torch.Size([4, 3, 1])
+
+    @pytest.mark.parametrize("op", sorted(VMAP_TD_OPS))
+    def test_vmap_td_ops(self, op):
+        # These methods call torch._foreach_*, which has no vmap batching rule
+        fn = VMAP_TD_OPS[op]
+        td = TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4, 2)}, batch_size=[4])
+        expected = torch.stack([fn(td[i]) for i in range(4)])
+        assert_close(vmap(fn)(td), expected)
+
+    def test_vmap_td_inplace_writes_input(self):
+        td = TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4, 2)}, batch_size=[4])
+        expected = td * 2
+        vmap(lambda t: t.mul_(2))(td)
+        assert_close(td, expected)
+
+    @pytest.mark.parametrize("name", ["clamp_min_", "clamp_max_"])
+    def test_vmap_td_clamp_inplace_error(self, name):
+        # Writing a batched value into a closed-over td raises, as for a tensor
+        td = TensorDict(a=-torch.ones(4, 3), batch_size=[4])
+        with pytest.raises(RuntimeError, match="inplace arithmetic"):
+            vmap(lambda x: getattr(td, name)(x))(torch.zeros(2, 4, 3))
+
+    def test_vmap_grad_td(self):
+        td = TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4, 2)}, batch_size=[4])
+
+        def loss(t):
+            return (t * 2).exp().sum(reduce=True)
+
+        grads = vmap(torch.func.grad(loss))(td)
+        assert_close(grads, (td * 2).exp() * 2)
 
 
 class TestSetTensor:

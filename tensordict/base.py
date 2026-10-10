@@ -61,6 +61,7 @@ from tensordict.utils import (
     _CloudpickleWrapper,
     _convert_list_to_stack,
     _erase_cache_first,
+    _foreach,
     _GENERIC_NESTED_ERR,
     _get_item,
     _index_preserve_data_ptr,
@@ -3454,8 +3455,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 if len(other_val) != len(vals):
                     vals = dict(zip(keys, vals))
                     vals = [vals[k] for k in new_keys]
-                copy_fn = _foreach_copy_compiled if is_compiling() else _foreach_copy_
-                copy_fn(vals, other_val, non_blocking=non_blocking)
+                # _foreach_copy_compiled cannot run under a torch.func transform
+                # (vmap), _foreach can. Same check as in _foreach, which explains it.
+                if (
+                    is_compiling()
+                    and torch._C._functorch.get_dynamic_layer_stack_depth() == 0
+                ):
+                    _foreach_copy_compiled(vals, other_val, non_blocking=non_blocking)
+                else:
+                    _foreach("copy_", vals, other_val, non_blocking=non_blocking)
                 return self
             named = True
 
@@ -5660,7 +5668,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         """
         keys, vals = self._items_list(True, True, collapse=True)
-        vals = torch._foreach_norm(vals, dtype=dtype)
+        vals = _foreach("norm", vals, dtype=dtype)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -5695,7 +5703,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             foreach_vals = dict(
                 _zip_strict(
                     foreach_vals.keys(),
-                    torch._foreach_add(tuple(foreach_vals.values()), 0),
+                    _foreach("add", tuple(foreach_vals.values()), 0),
                 )
             )
         if iter_vals:

@@ -55,7 +55,7 @@ from tensordict.utils import (
     unravel_key,
     unravel_key_list,
 )
-from torch._dynamo.testing import CompileCounterWithBackend
+from torch._dynamo.testing import CompileCounterWithBackend, EagerAndRecordGraphs
 from torch._dynamo.utils import counters
 from torch._inductor.utils import fresh_cache
 from torch.testing._internal.two_tensor import TwoTensor
@@ -130,6 +130,38 @@ def test_vmap_compile():
     funcv(x, y)
     funcv_c = torch.compile(funcv, fullgraph=True)
     funcv_c(x, y)
+
+
+# TensorDict methods that call torch._foreach_*, which has no vmap batching rule
+_VMAP_TD_OPS = {
+    "mul": lambda t: t * 2,
+    "add": lambda t: t + t,
+    "exp": lambda t: t.exp(),
+    "clamp_min": lambda t: t.clamp_min(0.0),
+    "norm": lambda t: t.norm(),
+    "add_": lambda t: t.clone().add_(1),
+    "update_": lambda t: t.clone().update_(t * 2),
+    "grad": torch.func.grad(lambda t: (t * 2).exp().sum(reduce=True)),
+}
+
+
+@pytest.mark.parametrize("op", sorted(_VMAP_TD_OPS))
+def test_vmap_compile_td_ops(op):
+    fn = _VMAP_TD_OPS[op]
+    td = TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4, 2)}, batch_size=[4])
+    expected = torch.stack([fn(td[i]) for i in range(4)])
+    fn_c = torch.compile(torch.vmap(fn), fullgraph=True)
+    assert_close(fn_c(td), expected)
+
+
+def test_compile_td_mul_keeps_foreach():
+    # Outside a torch.func transform the graph keeps the fused _foreach op
+    td = TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4, 2)}, batch_size=[4])
+    backend = EagerAndRecordGraphs()
+    fn_c = torch.compile(lambda t: t * 2, fullgraph=True, backend=backend)
+    assert_close(fn_c(td), td * 2)
+    targets = [node.target for node in backend.graphs[0].graph.nodes]
+    assert torch._foreach_mul in targets
 
 
 @pytest.mark.parametrize(
