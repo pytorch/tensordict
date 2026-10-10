@@ -229,9 +229,9 @@ train_collate_transform = nn.Sequential(
 # Representing data with a TensorClass
 # ------------------------------------
 # A tensorclass is the class form of a tensordict: a dataclass whose fields
-# are tensors. Like a :class:`~tensordict.TensorDict`, it has a batch size, and you can index it,
-# move it to a device or memory-map it. Use a tensorclass when you know the
-# fields of your data in advance. To define one, subclass
+# are tensors. Like a :class:`~tensordict.TensorDict`, it has a batch size,
+# and you can index it, move it to a device or memory-map it. Use a
+# tensorclass when you know the fields of your data in advance. To define one, subclass
 # :class:`~tensordict.TensorClass`.
 #
 # A tensorclass can also have methods. The ``from_dataset`` class method below

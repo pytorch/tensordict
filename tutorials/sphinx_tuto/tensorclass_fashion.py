@@ -58,10 +58,10 @@ test_data = datasets.FashionMNIST(
 
 ###############################################################################
 # Like a ``TensorDict``, a tensorclass has a batch size, and you can index it,
-# move it to a device or memory-map it. Use a tensorclass when you know the fields of your
-# data in advance. To define one, subclass :class:`~tensordict.TensorClass`
-# and annotate its fields. The ``@tensorclass`` decorator is the older form of
-# the same thing.
+# move it to a device or memory-map it. Use a tensorclass when you know the
+# fields of your data in advance. To define one, subclass
+# :class:`~tensordict.TensorClass` and annotate its fields. The
+# ``@tensorclass`` decorator is the older form of the same thing.
 #
 # A tensorclass can also have methods. The ``from_dataset`` class method below
 # takes a dataset and returns a tensorclass that holds all its data in

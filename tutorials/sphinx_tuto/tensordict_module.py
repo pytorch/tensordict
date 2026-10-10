@@ -8,11 +8,11 @@ Building models with TensorDictModule
 
 The parts of a model often exchange many named tensors, such as observations,
 hidden states and the parameters of a distribution. You then write code that
-passes each tensor to the right layer. With :class:`~tensordict.nn.TensorDictModule`,
-each layer reads and writes named entries of one
-:class:`~tensordict.TensorDict`, and you chain the layers by these names. This
-tutorial builds a small residual network in this way. It is for readers who
-write PyTorch models.
+passes each tensor to the right layer. With
+:class:`~tensordict.nn.TensorDictModule`, each layer reads and writes named
+entries of one :class:`~tensordict.TensorDict`, and you chain the layers by
+these names. This tutorial builds a small residual network in this way. It is
+for readers who write PyTorch models.
 
 What you will learn:
 
@@ -254,8 +254,8 @@ for name, module in [
 # graph contains only the tensor operations: the same matrix products as the
 # eager ``Regular`` module. Each call of a compiled module also checks the
 # guards of the graph before it runs the generated code. The guards are the
-# conditions under which the graph is valid. On the CPU build of this page, the compiled
-# versions are not faster than the eager ``Regular`` module.
+# conditions under which the graph is valid. On the CPU build of this page,
+# the compiled versions are not faster than the eager ``Regular`` module.
 #
 # On a GPU, the cost to launch each kernel adds up. CUDA graphs replay all the
 # kernels of a call at once. Use ``torch.compile(module, mode="reduce-overhead")``

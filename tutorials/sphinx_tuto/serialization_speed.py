@@ -57,9 +57,9 @@ except ImportError:
 # The two layouts below hold the same number of bytes: 8 large leaves, and 512
 # small leaves. A leaf is a tensor at the end of a nested key. The default
 # payload is 128 MiB per layout, and each measurement runs 8 times after one
-# warmup run. These values keep the documentation build
-# short. ``SCALE`` scales the payload linearly (``SCALE = 8`` for 1 GiB). For
-# smaller error bars, increase ``N_REPEATS``. The plots show the median and
+# warmup run. These values keep the documentation build short. ``SCALE``
+# scales the payload linearly (``SCALE = 8`` for 1 GiB). For smaller error
+# bars, increase ``N_REPEATS``. The plots show the median and
 # not the mean. A disk write is sometimes much slower than the others
 # (page-cache writeback), and one slow write changes the mean.
 
@@ -235,9 +235,9 @@ plt.show()
 # ``torch.save`` and safetensors use their fastest paths. The benchmark writes
 # a flat ``dict`` of tensors with ``torch.save`` or ``save_file``. It opens the
 # file with ``torch.load(mmap=True, weights_only=True)`` or with
-# ``load_file``, which also memory-maps the file. These formats do not store nested keys, so the
-# benchmark flattens the keys before it saves, and rebuilds the nesting when
-# it opens the file. zarr goes through
+# ``load_file``, which also memory-maps the file. These formats do not store
+# nested keys, so the benchmark flattens the keys before it saves, and
+# rebuilds the nesting when it opens the file. zarr goes through
 # :meth:`~tensordict.TensorDictBase.to_zarr` and
 # :meth:`~tensordict.TensorDictBase.from_zarr`, with the default layout (one
 # uncompressed chunk per leaf). zarr does not memory-map its payload: opening
