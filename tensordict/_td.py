@@ -243,8 +243,6 @@ class TensorDict(TensorDictBase):
 
         self._tensordict = _StringOnlyDict()
 
-        # if names and is_compiling():
-        #     graph_break()
         has_device = device is not None
         sub_non_blocking = False
         call_sync = False
@@ -280,14 +278,6 @@ class TensorDict(TensorDictBase):
                     f"sub-type or a dictionary, found type(source)={type(source)}."
                 )
             self._batch_size = self._parse_batch_size(source, batch_size)
-            # Always materialize _td_dim_names on the instance so its presence
-            # in self.__dict__ is invariant for Dynamo. Without this, a TD
-            # with only the class-level default and a sibling TD coming from
-            # _new_unsafe, which has an instance attribute, would differ, and
-            # Dynamo would recompile on the difference
-            # (`not ___dict_contains('_td_dim_names', __dict__)` guard).
-            self._td_dim_names = None
-            is_eager = not is_compiling()
             self._set_names(names)
 
             # Fast path: use dict.update() to establish all keys in one
@@ -297,6 +287,7 @@ class TensorDict(TensorDictBase):
             _tensordict = self._tensordict
             _validate_value = self._validate_value
             _tensordict.update(source)
+            is_eager = not is_compiling()
             # Exact tensors need neither conversion nor collection dispatch.
             # Keep subclasses (including TensorDict subclasses with custom
             # validation), nested tensors and device moves on the general path.

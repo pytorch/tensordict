@@ -589,8 +589,6 @@ class TestTD:
         assert result_unsqueeze_c.shape == torch.Size([1, 3])
 
     def test_names(self, mode):
-        import torch._dynamo.exc
-
         def make_td_with_names(data):
             return TensorDict(data, batch_size=[1, 2], names=["d0", "d1"])
 
@@ -602,7 +600,6 @@ class TestTD:
             make_td_with_names, fullgraph=True, mode=mode
         )
         make_td_with_names(data_dict)
-        # with pytest.raises(torch._dynamo.exc.Unsupported):
         td = make_td_with_names_c(data_dict)
         assert td.names == ["d0", "d1"]
 
