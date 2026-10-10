@@ -1293,6 +1293,19 @@ class TensorDict(TensorDictBase):
                 idx = idx[0]
             dest = tensor_in
             if (
+                isinstance(idx, tuple)
+                and not idx
+                and is_tensorclass(dest)
+                and is_non_tensor(dest)
+            ):
+                # () selects the whole entry, but a NonTensorData cannot be
+                # indexed with it: write the value into the entry, as set_
+                # does, which keeps the batch size of the entry
+                self._set_str(
+                    key, value, inplace=True, validated=True, non_blocking=non_blocking
+                )
+                return self
+            if (
                 isinstance(idx, torch.Tensor)
                 and idx.shape == ()
                 and self.shape == ()
@@ -3241,7 +3254,7 @@ class _SubTensorDict(TensorDictBase):
 
     def masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
         for key, item in self.items():
-            self.set_(key, torch.full_like(item, value))
+            self.set_(key, item.masked_fill(expand_as_right(mask, item), value))
         return self
 
     def masked_fill(self, mask: Tensor, value: float | bool) -> Self:

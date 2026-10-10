@@ -243,6 +243,10 @@ correctness hazard.
 ``frozen`` is inherited: a non-frozen subclass cannot inherit from a frozen
 base, and vice versa.
 
+A subclass of a frozen tensorclass is frozen even without the flag, but type
+checkers read it as non-frozen and report it: repeat ``frozen=True`` on the
+subclass (see :ref:`tensorclass-static-typing` for mypy).
+
 Migrating from a plain dataclass
 --------------------------------
 
@@ -411,6 +415,32 @@ storage is selected based on the value's type.
       batch_size=torch.Size([3, 4]),
       device=None,
       is_shared=False)
+
+.. _tensorclass-static-typing:
+
+Static type checking
+--------------------
+
+Type checkers read the fields of a :class:`~tensordict.TensorClass` subclass
+as its constructor signature, as they do for a ``@dataclass``, followed by the
+keyword-only ``batch_size``, ``device``, ``names`` and ``lock`` arguments. A
+missing field, an unknown keyword argument or a value of the wrong type is an
+error:
+
+.. code-block::
+
+  >>> class Obs(TensorClass):
+  ...     a: torch.Tensor
+  ...     label: str = "x"
+  >>> obs = Obs(torch.zeros(3), batch_size=[3])      # accepted
+  >>> obs = Obs(a=[0.0, 1.0, 2.0], batch_size=[3])   # list is not a Tensor
+
+The constructor casts lists, NumPy arrays and Python numbers passed to a
+``torch.Tensor`` field, but a type checker expects a tensor there: pass
+``torch.as_tensor(value)``.
+
+Mypy reports any ``frozen=True`` tensorclass as "Frozen dataclass cannot
+inherit from a non-frozen dataclass".
 
 .. _tensorclass-legacy-decorator:
 

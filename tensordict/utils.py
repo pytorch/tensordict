@@ -2222,7 +2222,8 @@ def _index_preserve_data_ptr(index):
     # we can't use a list comprehension here because it fails with tensor indices
     if index is None or index is Ellipsis:
         return True
-    if isinstance(index, int):
+    # torch reads a bool as a 0-d mask, which copies
+    if isinstance(index, int) and not isinstance(index, bool):
         return True
     if isinstance(index, slice) and (index.start == 0 or index.start is None):
         return True
