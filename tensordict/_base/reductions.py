@@ -246,7 +246,7 @@ class _Reductions:
             values_only=not return_indices,
             call_on_nested=False,
         )
-        if dim is not NO_DEFAULT and return_indices:
+        if dim is not NO_DEFAULT and dim is not None and return_indices:
             # Split the tensordict
             from torch.return_types import min
 
@@ -412,7 +412,7 @@ class _Reductions:
             values_only=not return_indices,
             call_on_nested=False,
         )
-        if dim is not NO_DEFAULT and return_indices:
+        if dim is not NO_DEFAULT and dim is not None and return_indices:
             # Split the tensordict
             from torch.return_types import max
 
@@ -1859,6 +1859,9 @@ class _Reductions:
     ):
         from tensordict._td import TensorDict
 
+        if dim is None and not keepdim:
+            # dim=None reduces over all the elements, as an omitted dim does
+            dim = NO_DEFAULT
         if further_reduce:
             # It is not very memory-efficient to do this, but it's the easiest to cover all use cases
             if dim is NO_DEFAULT:
@@ -1908,6 +1911,14 @@ class _Reductions:
                     agglomerate, dim=dim, **kwargs_copy
                 )
 
+        # With a 1-d tensor q, torch.quantile adds a first dim of size len(q)
+        # to each leaf, so the batch size of the result starts with it too.
+        q_dims = []
+        if reduction_name == "quantile":
+            q = kwargs["q"]
+            if isinstance(q, torch.Tensor) and q.ndim == 1:
+                q_dims = [q.shape[0]]
+
         # IMPORTANT: do not directly access batch_dims (or any other property)
         # via self.batch_dims otherwise a reference cycle is introduced
         def proc_dim(dim, batch_dims, tuple_ok=True):
@@ -1926,7 +1937,7 @@ class _Reductions:
         dim_needs_proc = (dim is not NO_DEFAULT) and (dim not in ("feature",))
         if dim_needs_proc:
             dim = proc_dim(dim, self.batch_dims, tuple_ok=tuple_ok)
-            if not tuple_ok:
+            if not tuple_ok and dim is not None:
                 dim = dim[0]
         if dim in ("feature",):
             if keepdim:
@@ -1958,7 +1969,7 @@ class _Reductions:
                 return result
 
             if self._has_names():
-                names = list(self.names)
+                names = [None] * len(q_dims) + list(self.names)
             else:
                 names = None
             if not call_on_nested:
@@ -1968,6 +1979,7 @@ class _Reductions:
             return self._fast_apply(
                 reduction,
                 call_on_nested=call_on_nested,
+                batch_size=torch.Size([*q_dims, *self.batch_size]) if q_dims else None,
                 device=self.device,
                 names=names,
             )
@@ -1979,6 +1991,7 @@ class _Reductions:
                     names = [name for i, name in enumerate(self.names) if i not in dim]
                 else:
                     names = [name for i, name in enumerate(self.names) if i != dim]
+                names = [None] * len(q_dims) + names
             if dim is not NO_DEFAULT:
                 kwargs["dim"] = dim
             if keepdim is not NO_DEFAULT:
@@ -2038,7 +2051,7 @@ class _Reductions:
             return self._fast_apply(
                 reduction,
                 call_on_nested=call_on_nested,
-                batch_size=torch.Size(batch_size),
+                batch_size=torch.Size([*q_dims, *batch_size]),
                 device=self.device,
                 names=names,
             )
