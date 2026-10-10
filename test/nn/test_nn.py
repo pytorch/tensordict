@@ -5153,6 +5153,17 @@ class TestTensorClassModule(TensorClassModuleBase[InputTensorClass, OutputTensor
         )
 
 
+class NestedInputModule(TensorClassModuleBase[OutputTensorClass, AddDiffResult]):
+    """Test module that reads the fields of a nested TensorClass input."""
+
+    def forward(self, x: OutputTensorClass) -> AddDiffResult:
+        return AddDiffResult(
+            added=x.input.a + x.result.added,
+            substracted=x.input.b - x.result.substracted,
+            batch_size=x.batch_size,
+        )
+
+
 class TestTensorClassModuleForward:
     """Tests for TensorClassModule forward pass."""
 
@@ -5172,6 +5183,14 @@ class TestTensorClassModuleForward:
         td_output = td_module(value.to_tensordict())
         assert td_output["result", "added"] == 15
         assert td_output["result", "substracted"] == 5
+
+    def test_td_forward_nested_input(self) -> None:
+        """Test that the wrapper passes nested inputs to forward as TensorClasses."""
+        td_module = NestedInputModule().as_td_module()
+        value = TestTensorClassModule()(InputTensorClass(a=10, b=5, batch_size=[]))
+        td_output = td_module(value.to_tensordict())
+        assert td_output["added"] == 25
+        assert td_output["substracted"] == 0
 
     def test_wrapper_keys(self) -> None:
         """Test that wrapper correctly extracts in_keys and out_keys."""
@@ -5279,6 +5298,22 @@ class TestEdgeCases:
             match="Only TensorClassModuleBase implementations with both input and output type as TensorClass",
         ):
             module.as_td_module()
+
+    def test_field_named_fields(self) -> None:
+        """Test that a field named ``fields`` is read as a key."""
+
+        class FieldsInput(TensorClass):
+            fields: torch.Tensor
+
+        class FieldsModule(TensorClassModuleBase[FieldsInput, AddDiffResult]):
+            def forward(self, x: FieldsInput) -> AddDiffResult:
+                return AddDiffResult(
+                    added=x.fields + 1, substracted=x.fields - 1, batch_size=[]
+                )
+
+        td_module = FieldsModule().as_td_module()
+        assert td_module.in_keys == ["fields"]
+        assert td_module(TensorDict(fields=torch.ones(())))["added"] == 2
 
     def test_batch_size_preservation(self) -> None:
         """Test that batch size is correctly preserved through forward pass."""

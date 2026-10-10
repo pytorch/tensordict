@@ -3,12 +3,13 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import itertools
 from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
-from tensordict import NonTensorData, PersistentTensorDict, TensorDict
+from tensordict import NonTensorData, PersistentTensorDict, TensorClass, TensorDict
 from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import is_non_tensor
 from torch import multiprocessing as mp
@@ -334,6 +335,21 @@ class TestH5Indexing:
         assert h5td.get_at("missing", 0, None) is None
         with pytest.raises(KeyError):
             h5td.get_at("missing", 0)
+
+    def test_tensorclass_iter(self, tmp_path):
+        class H5Data(TensorClass):
+            a: torch.Tensor
+
+        td = TensorDict(a=torch.arange(3.0), batch_size=[3])
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        tc = H5Data.from_tensordict(h5td)
+        # Indexing past the end of a persistent tensordict does not raise, so
+        # iteration must stop at the batch size
+        elements = list(itertools.islice(tc, 4))
+        assert len(elements) == 3
+        for i, element in enumerate(elements):
+            assert type(element) is H5Data
+            assert element.a == td["a"][i]
 
     def test_keys_contains(self, data):
         _, h5td = data
