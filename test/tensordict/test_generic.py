@@ -3181,6 +3181,51 @@ class TestGeneric:
         with pytest.raises(NotImplementedError, match="gather"):
             lst.gather(dim=0, index=torch.zeros(3, 4, dtype=torch.long), inplace=True)
 
+    @pytest.mark.parametrize("lazy", [False, True])
+    @pytest.mark.parametrize("with_out", [False, True])
+    @pytest.mark.parametrize(
+        "dim,index",
+        [
+            (1, [[2, 0]]),  # size 1 on dim 0
+            (1, [[2, 0], [1, 3]]),  # size 2 on dim 0
+            (1, [[3, 0, 1, 2, 0]]),  # also longer than the input on dim 1
+            (0, [[1, 0], [2, 2]]),  # size 2 on dim 1
+        ],
+        ids=["size1", "size2", "longer", "dim0"],
+    )
+    def test_gather_smaller_index(self, dim, index, with_out, lazy):
+        # as with torch.gather, the index may be smaller than the input on the
+        # dims that are not gathered, and the leaves follow its shape
+        index = torch.tensor(index)
+        a = torch.arange(24).view(3, 4, 2)
+        b = torch.arange(12).view(3, 4)
+        c = torch.arange(72).view(3, 4, 6)
+        td = TensorDict(
+            a=a,
+            nested=TensorDict(b=b, batch_size=[3, 4]),
+            extra=TensorDict(c=c, batch_size=[3, 4, 6]),
+            batch_size=[3, 4],
+        )
+        if lazy:
+            td = lazy_stack(list(td.unbind(0)))
+        expected = TensorDict(
+            a=a.gather(dim, index.unsqueeze(-1).expand(*index.shape, 2)),
+            nested=TensorDict(b=b.gather(dim, index), batch_size=index.shape),
+            extra=TensorDict(
+                c=c.gather(dim, index.unsqueeze(-1).expand(*index.shape, 6)),
+                batch_size=[*index.shape, 6],
+            ),
+            batch_size=index.shape,
+        )
+        out = torch.full_like(expected, -1) if with_out else None
+        result = td.gather(dim, index, out=out)
+        if with_out:
+            assert result is out
+        assert result.batch_size == index.shape
+        assert result["extra"].batch_size == expected["extra"].batch_size
+        for key in expected.keys(include_nested=True, leaves_only=True):
+            assert torch.equal(result[key], expected[key]), key
+
     @pytest.mark.parametrize("inplace", [True, False])
     def test_reshape_inplace(self, inplace):
         td = self._build_nested_td(batch_size=(3, 4))
