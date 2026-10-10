@@ -460,12 +460,17 @@ class TensorDictStore(TensorDictBase):
         if self._keys_cache[0] is not None:
             self._keys_cache[0].add(key_path)
 
-    async def _aset_non_tensor(self, key_path: str, value: Any):
-        """Store a non-tensor value in Redis."""
+    async def _aset_non_tensor(self, key_path: str, value: Any, array: bool = False):
+        """Store a non-tensor value in Redis.
+
+        With ``array=True``, *value* is the list of the elements along dim 0,
+        stored as a ``json_array`` as indexed writes store it. A value that
+        JSON cannot encode is pickled either way.
+        """
         # Try JSON first, fall back to pickle
         try:
             serialized = json.dumps(value)
-            encoding = "json"
+            encoding = "json_array" if array else "json"
         except (TypeError, ValueError):
             serialized = pickle.dumps(value)
             encoding = "pickle"
@@ -1547,6 +1552,23 @@ class TensorDictStore(TensorDictBase):
             inplace = has_key
         return inplace
 
+    def _write_non_tensor(self, key_path: str, value: Any) -> None:
+        """Write a ``NonTensorData`` or ``NonTensorStack`` value."""
+        from tensordict.tensorclass import NonTensorData, NonTensorStack
+
+        if isinstance(value, NonTensorData):
+            self._run_sync(self._aset_non_tensor(key_path, value.data))
+            return
+        # A stack along a 1-D batch holds one value per element: store them as
+        # indexed writes do, so that indexed reads follow the index. Other
+        # stacks stay one blob, as json_array entries are read as 1-D stacks.
+        array = (
+            isinstance(value, NonTensorStack)
+            and self.batch_dims == 1
+            and value.batch_size == self.batch_size
+        )
+        self._run_sync(self._aset_non_tensor(key_path, value.tolist(), array=array))
+
     def _set_str(
         self,
         key: str,
@@ -1567,13 +1589,7 @@ class TensorDictStore(TensorDictBase):
         key_path = self._full_key_path(key)
 
         if is_non_tensor(value):
-            from tensordict.tensorclass import NonTensorData
-
-            if isinstance(value, NonTensorData):
-                raw_value = value.data
-            else:
-                raw_value = value.tolist()
-            self._run_sync(self._aset_non_tensor(key_path, raw_value))
+            self._write_non_tensor(key_path, value)
             return self
 
         if is_tensor_collection(value):
@@ -1629,12 +1645,7 @@ class TensorDictStore(TensorDictBase):
         if isinstance(value, torch.Tensor):
             self._run_sync(self._aset_tensor(key_path, value))
         elif is_non_tensor(value):
-            from tensordict.tensorclass import NonTensorData
-
-            raw_value = (
-                value.data if isinstance(value, NonTensorData) else value.tolist()
-            )
-            self._run_sync(self._aset_non_tensor(key_path, raw_value))
+            self._write_non_tensor(key_path, value)
         elif is_tensor_collection(value):
             nested_prefix = self._full_key_path(_KEY_SEP.join(key))
             nested = TensorDictStore._new_nested(

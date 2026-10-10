@@ -12,7 +12,13 @@ import pickle
 import numpy as np
 import pytest
 import torch
-from tensordict import is_tensor_collection, lazy_stack, NonTensorStack, TensorDict
+from tensordict import (
+    is_tensor_collection,
+    lazy_stack,
+    NonTensorData,
+    NonTensorStack,
+    TensorDict,
+)
 from tensordict.base import TensorDictBase
 from tensordict.store import LazyStackedTensorDictStore, TensorDictStore
 from tensordict.store._lazy import _StoreStackElementView
@@ -2092,6 +2098,50 @@ class TestNonTensorIndexing:
             with pytest.raises(TypeError, match="Non-tensor indexed writes"):
                 store[0, :] = TensorDict({"obs": torch.ones(2), "label": "z"}, [2])
             torch.testing.assert_close(store["obs"], obs)
+        finally:
+            store.clear_redis()
+            store.close()
+
+    @pytest.mark.parametrize("key", ["label", ("nested", "label")])
+    @pytest.mark.parametrize("method", ["from_tensordict", "set"])
+    def test_non_tensor_stack_write(self, store_kwargs, key, method):
+        """A NonTensorStack written whole is stored per element, as indexed
+        writes store it, so indexed reads and writes follow the index."""
+        td = TensorDict({"obs": torch.arange(5.0)}, [5])
+        td[key] = NonTensorStack(*[f"s{i}" for i in range(5)])
+        if method == "from_tensordict":
+            store = TensorDictStore.from_tensordict(td, **store_kwargs)
+        else:
+            store = TensorDictStore(batch_size=[5], **store_kwargs)
+            store["obs"] = td["obs"]
+            store[key] = td.get(key)
+        try:
+            assert store[1:3][key] == td[1:3][key] == ["s1", "s2"]
+            assert store[1][key] == "s1"
+            assert store.get_at(key, 1) == "s1"
+            assert store[key] == td[key]
+            assert isinstance(store.get(key), NonTensorStack)
+            assert store.flip(0)[key] == td.flip(0)[key]
+            assert store.roll(1, 0)[key] == td.roll(1, 0)[key]
+            store.set_at_(key, "z", 2)
+            assert store[key] == ["s0", "s1", "z", "s3", "s4"]
+        finally:
+            store.clear_redis()
+            store.close()
+
+    def test_non_tensor_blob_read(self, store_kwargs):
+        """An entry stored as one blob holds one value for every element: a
+        NonTensorData of a list, or a NonTensorStack written by an earlier
+        version."""
+        store = TensorDictStore(batch_size=[3], **store_kwargs)
+        try:
+            store["shared"] = NonTensorData(["x", "y", "z"], batch_size=[3])
+            # earlier versions stored a whole NonTensorStack as one blob
+            store._run_sync(store._aset_non_tensor("old", ["x", "y", "z"]))
+            for key in ("shared", "old"):
+                assert type(store.get(key)) is list
+                assert store[key] == store[1][key] == ["x", "y", "z"]
+                assert store.get_at(key, 1) == ["x", "y", "z"]
         finally:
             store.clear_redis()
             store.close()
