@@ -585,7 +585,12 @@ class _DeviceOps:
         ):
             return result
 
-        if self.is_consolidated() and dtype is None and convert_to_format is None:
+        if (
+            self.is_consolidated()
+            and dtype is None
+            and device is not None
+            and convert_to_format is None
+        ):
             return self._to_consolidated(
                 device=device,
                 pin_memory=non_blocking_pin,

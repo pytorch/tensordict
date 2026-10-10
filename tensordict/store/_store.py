@@ -247,6 +247,9 @@ class TensorDictStore(TensorDictBase):
     """
 
     _td_dim_names = None
+    # Set on the shallow copies that _clone(recurse=False) returns: they share
+    # the data and the metadata keys of the store, but not its batch size.
+    _is_shallow_copy = False
 
     def __init__(
         self,
@@ -1285,13 +1288,7 @@ class TensorDictStore(TensorDictBase):
 
     @batch_size.setter
     def batch_size(self, value):
-        old = self._batch_size
-        try:
-            self._batch_size = torch.Size(value)
-            self._check_batch_size(self._batch_size)
-            self._run_sync(self._apersist_metadata())
-        except ValueError:
-            self._batch_size = old
+        self._batch_size_setter(torch.Size(value))
 
     @property
     def device(self) -> torch.device | None:
@@ -2312,10 +2309,12 @@ class TensorDictStore(TensorDictBase):
             return new_td
         else:
             # Shallow clone: same Redis data, new Python wrapper
-            return TensorDictStore._new_nested(
+            out = TensorDictStore._new_nested(
                 parent=self,
                 key_prefix=self._prefix,
             )
+            out._is_shallow_copy = True
+            return out
 
     # ---- Misc required overrides ----
 
@@ -2339,9 +2338,34 @@ class TensorDictStore(TensorDictBase):
         self.del_(key)
         return key, value
 
+    def _check_new_batch_size(self, new_size: torch.Size) -> None:
+        # Check the stored shapes of the tensors instead of fetching them. A
+        # non-tensor value stored once fits any batch size; one written per
+        # element holds a value per element of the first batch dim.
+        prefix = self._prefix + _KEY_SEP if self._prefix else ""
+        key_paths = [k for k in self._get_all_keys() if k.startswith(prefix)]
+        non_tensor = {}
+        shapes = self._run_sync(
+            self._aget_metadata_batch(key_paths, non_tensor=non_tensor)
+        )
+        for key_path, meta in non_tensor.items():
+            if meta.get("encoding") == "json_array":
+                value = self._run_sync(self._aget_tensor(key_path))
+                shapes[key_path] = (value.shape, None)
+        for key_path, (shape, _) in shapes.items():
+            if torch.Size(shape[: len(new_size)]) != new_size:
+                key = unravel_key(tuple(key_path[len(prefix) :].split(_KEY_SEP)))
+                raise RuntimeError(
+                    f"the entry {key} has shape {torch.Size(shape)} which "
+                    f"is incompatible with the batch-size {new_size}."
+                )
+
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._batch_size = new_size
-        self._run_sync(self._apersist_metadata())
+        # Nested views and shallow copies share the metadata keys of the store:
+        # only the store's own handle persists its batch size.
+        if not self._prefix and not self._is_shallow_copy:
+            self._run_sync(self._apersist_metadata())
 
     def zero_(self) -> Self:
         for key in self.keys():
@@ -2428,6 +2452,7 @@ class TensorDictStore(TensorDictBase):
             "_td_dim_names": self._td_dim_names,
             "_cache_metadata": self._cache_metadata,
             "_tensorclass_cls": self._tensorclass_cls,
+            "_is_shallow_copy": self._is_shallow_copy,
         }
         return state
 
@@ -2447,6 +2472,7 @@ class TensorDictStore(TensorDictBase):
         self._redis_kwargs = state["_redis_kwargs"]
         self._td_dim_names = state["_td_dim_names"]
         self._tensorclass_cls = state.get("_tensorclass_cls")
+        self._is_shallow_copy = state.get("_is_shallow_copy", False)
 
         self._locked_tensordicts = []
         self._lock_id = set()
