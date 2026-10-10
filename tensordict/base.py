@@ -3861,8 +3861,24 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     if _is_tensor_collection(cls):
                         # Don't recurse into pass-through values (e.g., UnbatchedTensor)
                         if not is_non_tensor(cls) and not _pass_through(val):
+                            # _unravel_key_to_tuple((k, _key)), with less work:
+                            # no call for a str _key, and a tuple _key is spliced
+                            # in, so that a flat key takes the fast path instead
+                            # of being rebuilt part by part on every level.
+                            k_is_str = isinstance(k, str)
                             yield from (
-                                (_unravel_key_to_tuple((k, _key)), _val)
+                                (
+                                    (
+                                        (k, _key)
+                                        if k_is_str and isinstance(_key, str)
+                                        else _unravel_key_to_tuple(
+                                            (k, *_key)
+                                            if isinstance(_key, tuple) and _key
+                                            else (k, _key)
+                                        )
+                                    ),
+                                    _val,
+                                )
                                 for _key, _val in val.items(
                                     include_nested=include_nested,
                                     leaves_only=leaves_only,

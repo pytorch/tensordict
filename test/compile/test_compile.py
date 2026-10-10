@@ -545,6 +545,23 @@ class TestTD:
         assert keys == keys_c
         torch.utils._pytree.tree_map(assert_eq, vals, vals_c)
 
+    def test_items_nested(self, mode):
+        # Without leaves_only, TensorDict.items goes through TensorDictBase.items.
+        def items(td):
+            keys, vals = zip(*td.items(True))
+            return keys, [val + 1 for val in vals]
+
+        items_c = torch.compile(items, fullgraph=True, mode=mode)
+        data = TensorDict(
+            {"a": {"b": {"c": torch.arange(4)}, "d": torch.arange(4)}}, [4]
+        )
+        keys, vals = items(data)
+        keys_c, vals_c = items_c(data)
+        assert keys == keys_c
+        assert keys == ("a", ("a", "b"), ("a", "b", "c"), ("a", "d"))
+        for val, val_c in zip(vals, vals_c):
+            assert (val == val_c).all()
+
     @pytest.mark.parametrize("recurse", [True, False])
     @pytest.mark.parametrize("lock", [True, False])
     def test_clone(self, recurse, lock, mode):

@@ -2610,9 +2610,17 @@ def _unravel_key_to_tuple(key):
     else:
         # A flat tuple of str, the most common nested key.
         return key if type(key) is tuple else tuple(key)
+    # _append_key_parts(key, result), inline to save a call.
     result = []
-    if not _append_key_parts(key, result):
-        return ()
+    for subkey in key:
+        if isinstance(subkey, str):
+            result.append(subkey)
+        elif (
+            not isinstance(subkey, tuple)
+            or not subkey
+            or not _append_key_parts(subkey, result)
+        ):
+            return ()
     return tuple(result)
 
 
@@ -2654,10 +2662,25 @@ def unravel_key(key):
         return key
     if not isinstance(key, tuple):
         raise RuntimeError("key should be a Sequence<NestedKey>")
-    key = _unravel_key_to_tuple(key)
-    if len(key) == 1:
-        return key[0]
-    return key
+    # The code of _unravel_key_to_tuple, inline to save a call.
+    for subkey in key:
+        if not isinstance(subkey, str):
+            break
+    else:
+        if type(key) is not tuple:
+            key = tuple(key)
+        return key[0] if len(key) == 1 else key
+    result = []
+    for subkey in key:
+        if isinstance(subkey, str):
+            result.append(subkey)
+        elif (
+            not isinstance(subkey, tuple)
+            or not subkey
+            or not _append_key_parts(subkey, result)
+        ):
+            return ()
+    return result[0] if len(result) == 1 else tuple(result)
 
 
 def _unravel_keys(*keys):
@@ -2678,10 +2701,26 @@ def unravel_key_list(keys):
         )
     result = []
     for key in keys:
-        if not isinstance(key, str):
-            key = unravel_key(key)
-            if key == ():
-                raise RuntimeError("key should be a Sequence<NestedKey>")
+        if isinstance(key, str):
+            result.append(key)
+            continue
+        if type(key) is tuple:
+            # A flat tuple of str unravels to itself, or to its only part. A
+            # single str subclass part takes the path below, whose comparison
+            # with () calls the subclass's __eq__.
+            for subkey in key:
+                if not isinstance(subkey, str):
+                    break
+            else:
+                if len(key) > 1:
+                    result.append(key)
+                    continue
+                if key and type(key[0]) is str:
+                    result.append(key[0])
+                    continue
+        key = unravel_key(key)
+        if key == ():
+            raise RuntimeError("key should be a Sequence<NestedKey>")
         result.append(key)
     return result
 

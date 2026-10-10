@@ -530,6 +530,50 @@ def test_unravel_key_matches_reference():
                 unravel_key(key)
 
 
+def _reference_unravel_key_list(keys):
+    result = []
+    for key in keys:
+        if isinstance(key, str):
+            result.append(key)
+            continue
+        if not isinstance(key, tuple):
+            raise RuntimeError("key should be a Sequence<NestedKey>")
+        parts = _reference_unravel_key_to_tuple(key)
+        if not parts:
+            raise RuntimeError("key should be a Sequence<NestedKey>")
+        result.append(parts[0] if len(parts) == 1 else parts)
+    return result
+
+
+def _key_types(key):
+    if isinstance(key, tuple):
+        return (type(key), [type(part) for part in key])
+    return type(key)
+
+
+def test_unravel_key_list_matches_reference():
+    rng = random.Random(1)
+    for _ in range(2000):
+        keys = [_random_key(rng) for _ in range(rng.randint(0, 4))]
+        # flat tuples of str, including single ones
+        keys += [
+            tuple(rng.choice(_VALID_LEAVES) for _ in range(rng.randint(1, 3)))
+            for _ in range(rng.randint(0, 4))
+        ]
+        rng.shuffle(keys)
+        try:
+            expected = _reference_unravel_key_list(keys)
+        except RuntimeError:
+            with pytest.raises(RuntimeError, match="Sequence<NestedKey>"):
+                unravel_key_list(keys)
+            continue
+        result = unravel_key_list(keys)
+        assert result == expected, keys
+        assert [_key_types(key) for key in result] == [
+            _key_types(key) for key in expected
+        ], keys
+
+
 def test_unravel_key_tuple_subclass():
     key = _KeyPair("a", ("b", "c"))
     assert _unravel_key_to_tuple(key) == ("a", "b", "c")

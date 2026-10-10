@@ -715,9 +715,13 @@ def test_unravel_key(benchmark, kind):
     benchmark(unravel_key, _KEYS[kind])
 
 
-@pytest.mark.parametrize("kind", ["str", "mixed"])
+@pytest.mark.parametrize("kind", ["str", "tuple", "mixed"])
 def test_unravel_key_list(benchmark, kind):
-    keys = ["a", "b", "c"] if kind == "str" else list(_KEYS.values())
+    keys = {
+        "str": ["a", "b", "c"],
+        "tuple": [("a", "b"), ("a", "c"), ("next", "reward")],
+        "mixed": list(_KEYS.values()),
+    }[kind]
     benchmark(unravel_key_list, keys)
 
 
