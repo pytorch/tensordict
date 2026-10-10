@@ -1379,6 +1379,25 @@ class TestNonTensorData:
         assert tdv.view(60).tolist() == [str(i) for i in range(60)]
         assert tdv.flatten().tolist() == [str(i) for i in range(60)]
 
+    def test_where_copies_entries(self):
+        # The result has its own entries, which hold the input data as they are
+        class NoDeepCopy:
+            def __deepcopy__(self, memo):
+                raise TypeError("cannot deep-copy")
+
+        condition = torch.tensor([True, False])
+        tensor = NonTensorStack("a", "b")
+        other = NonTensorStack("x", "y")
+        result = tensor.where(condition, other)
+        assert result.tolist() == ["a", "y"]
+        result[0] = "z"
+        result[1] = "z"
+        assert tensor.tolist() == ["a", "b"]
+        assert other.tolist() == ["x", "y"]
+        data = [NoDeepCopy() for _ in range(4)]
+        result = NonTensorStack(*data[:2]).where(condition, NonTensorStack(*data[2:]))
+        assert result.tolist() == [data[0], data[3]]
+
     def test_where(self):
         condition = torch.tensor([True, False])
         tensor = NonTensorStack(
