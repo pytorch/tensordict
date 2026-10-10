@@ -2,9 +2,13 @@
 Batched data loading with tensorclasses
 =======================================
 
-This tutorial loads an image dataset into memory-mapped tensors once, then
-reads it in batches during training. A memory-mapped tensor is a tensor whose
-values are stored in a file and read through the operating system page cache.
+A ``torchvision`` image pipeline opens, decodes and transforms each image
+file again at every epoch, one image at a time. This tutorial stores the
+images once in the memory-mapped fields of a :class:`~tensordict.TensorClass`,
+then reads and transforms whole batches. A memory-mapped tensor is a tensor
+whose values are stored in a file and read through the page cache of the
+operating system. This tutorial is for readers who train from a folder of
+image files.
 
 What you will learn:
 
@@ -32,9 +36,9 @@ memory-mapped tensors and :ref:`tensorclass-guide` for tensorclasses.
 #
 # .. note::
 #
-#   Download the data from `here <https://download.pytorch.org/tutorial/hymenoptera_data.zip>`__
-#   and extract it. This tutorial expects the extracted data in the subdirectory
-#   ``data/``.
+#   Download `hymenoptera_data.zip <https://download.pytorch.org/tutorial/hymenoptera_data.zip>`__
+#   and extract it into ``data/``, so that the images are in
+#   ``data/hymenoptera_data``.
 #
 # .. note::
 #
@@ -57,12 +61,11 @@ from torchvision import datasets, transforms
 
 NUM_WORKERS = int(os.environ.get("NUM_WORKERS", "4"))
 # sphinx_gallery_start_ignore
-# this example can be run locally or in the tensordict CI on the small hymenoptera
-# subset of imagenet, but we also want to be able to compare to runs on larger subsets
-# of imagenet which would be impractical to run in CI. If this script is run with the
-# environment variable RUN_ON_CLUSTER set, then we set everything to run on a larger
-# subset of imagenet. the fraction of images can be set with the FRACTION environment
-# variable, we use the first `len(dataset) // FRACTION` images. Default is 10.
+# This script runs locally and in the tensordict CI on the small hymenoptera
+# subset of ImageNet. Larger subsets of ImageNet are too slow for the CI. To
+# run on a larger subset, set the environment variable RUN_ON_CLUSTER. The
+# script then uses the first `len(dataset) // FRACTION` images, where the
+# FRACTION environment variable defaults to 10.
 RUN_ON_CLUSTER = os.environ.get("RUN_ON_CLUSTER", "False").lower() in (
     "y",
     "yes",
@@ -225,8 +228,8 @@ train_collate_transform = nn.Sequential(
 ##############################################################################
 # Representing data with a TensorClass
 # ------------------------------------
-# A tensorclass is a dataclass whose fields are tensors. Like a
-# :class:`~tensordict.TensorDict`, it has a batch size, and you can index it,
+# A tensorclass is the class form of a tensordict: a dataclass whose fields
+# are tensors. Like a :class:`~tensordict.TensorDict`, it has a batch size, and you can index it,
 # move it to a device or memory-map it. Use a tensorclass when you know the
 # fields of your data in advance. To define one, subclass
 # :class:`~tensordict.TensorClass`.
@@ -415,11 +418,11 @@ measure(val_dataloader_tc, "val, tensorclass DataLoader")
 # Conclusion
 # ----------
 #
-# In this tutorial, you wrote a :class:`~tensordict.TensorClass` with a
+# You can now write a :class:`~tensordict.TensorClass` with a
 # ``from_dataset`` method that stores a dataset in ``uint8`` memory-mapped
-# tensors. You stored the deterministic transforms in the memory map, and you
-# applied the random transforms and the normalization to whole batches in a
-# ``collate_fn``. The data loader reads a batch with one index into the
+# tensors. Apply the deterministic transforms once, when you fill the memory
+# map. Apply the random transforms and the normalization to whole batches, in
+# a ``collate_fn``. The data loader then reads a batch with one index into the
 # memory-mapped tensor, instead of opening one file per image.
 #
 # Further reading
