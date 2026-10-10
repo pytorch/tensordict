@@ -11,6 +11,7 @@ import itertools
 import logging
 import math
 import os
+import queue
 import re
 import threading
 import time
@@ -2731,8 +2732,15 @@ _zip_strict = functools.partial(zip, strict=True)
 
 
 def _pin_mem(q_in, q_out):
-    while not q_in.empty():
-        input = q_in.get(timeout=_PIN_MEM_TIMEOUT)
+    # All the inputs are queued before the threads start, so an empty queue means
+    # that the other threads took the rest. Checking q_in.empty() before a
+    # blocking get() would race with them: two threads could see the last input,
+    # and the one that lost would raise queue.Empty after _PIN_MEM_TIMEOUT.
+    while True:
+        try:
+            input = q_in.get_nowait()
+        except queue.Empty:
+            return
         try:
             key, val = input[0], input[1].pin_memory()
         except Exception as err:
