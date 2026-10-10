@@ -2582,6 +2582,56 @@ class TestGeneric:
         assert td["c", "d", "e"] == 0
         assert td["f", "g", "h"] == 1
 
+    def test_merge_tensordicts_non_tensor(self):
+        # The non-tensor entries of every tensordict are kept, and the first
+        # one wins, as for tensors.
+        td0 = TensorDict(a=torch.zeros(()), s="s0", sub=TensorDict(u="u0"))
+        td1 = TensorDict(
+            b=torch.ones(()),
+            s="s1",
+            t="t1",
+            sub=TensorDict(u="u1", v="v1"),
+            nested=TensorDict(w="w1"),
+        )
+        td2 = TensorDict(t="t2", x="x2")
+        td = merge_tensordicts(td0, td1, td2)
+        assert set(td.keys(True, True, is_leaf=is_leaf_nontensor)) == {
+            "a",
+            "b",
+            "s",
+            "t",
+            "x",
+            ("sub", "u"),
+            ("sub", "v"),
+            ("nested", "w"),
+        }
+        assert td["s"] == "s0"
+        assert td["t"] == "t1"
+        assert td["x"] == "x2"
+        assert td["sub", "u"] == "u0"
+        assert td["sub", "v"] == "v1"
+        assert td["nested", "w"] == "w1"
+        # td0["sub"] has no tensor: the entries merged into it stay out of td0
+        assert set(td0["sub"].keys()) == {"u"}
+        # A sub-tensordict of an earlier tensordict stays
+        td = merge_tensordicts(
+            TensorDict(k=TensorDict(x=torch.zeros(()))), TensorDict(k="k1")
+        )
+        assert td["k", "x"] == 0
+        # Stacks of non-tensor data, also from a lazy stack
+        td0 = TensorDict(a=torch.zeros(2), batch_size=[2])
+        td1 = TensorDict(s=NonTensorStack("x", "y"), batch_size=[2])
+        td = merge_tensordicts(td0, td1)
+        assert td.get("s").tolist() == ["x", "y"]
+        td = merge_tensordicts(td0, lazy_stack([TensorDict(s="x"), TensorDict(s="y")]))
+        assert td.get("s").tolist() == ["x", "y"]
+        # A value that out cannot take is left out, as before
+        td = merge_tensordicts(
+            TensorDict(a=torch.zeros(2, 3), batch_size=[2, 3]),
+            TensorDict(s=NonTensorStack("x", "y"), batch_size=[2]),
+        )
+        assert "s" not in td.keys()
+
     def test_no_batch_size(self):
         td = TensorDict({"a": torch.zeros(3, 4)})
         assert td.batch_size == torch.Size([])
