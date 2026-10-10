@@ -5103,6 +5103,33 @@ class TestGeneric:
             assert getattr(td, reduction)(reduce=True, dim="feature").shape == (3, 4)
             assert getattr(td, reduction)(reduce=True, dim=1).shape == (3, 5)
 
+    @pytest.mark.parametrize("dim", [0, 1, -2, -1])
+    def test_prod_keepdim(self, dim):
+        # keepdim=True keeps the reduced batch dim with size 1, as torch.prod does
+        td = TensorDict(
+            a=torch.rand(2, 3, 4),
+            b=TensorDict(c=torch.rand(2, 3, 4, 5), batch_size=(2, 3, 4)),
+            batch_size=(2, 3),
+        )
+        batch_dim = dim % td.batch_dims
+        result = td.prod(dim, keepdim=True)
+        assert result.batch_size == torch.Size(
+            [1 if i == batch_dim else s for i, s in enumerate(td.batch_size)]
+        )
+        for key in ("a", ("b", "c")):
+            torch.testing.assert_close(
+                result[key], td[key].prod(batch_dim, keepdim=True)
+            )
+
+    @pytest.mark.parametrize("dim", [0, 1])
+    def test_prod_keepdim_reduce(self, dim):
+        # reduce=True reduces the leaves concatenated along dim, as sum does
+        td = TensorDict(a=torch.rand(2, 3, 4), b=torch.rand(2, 3, 4), batch_size=(2, 3))
+        torch.testing.assert_close(
+            td.prod(dim, keepdim=True, reduce=True),
+            torch.cat([td["a"], td["b"]], dim).prod(dim, keepdim=True),
+        )
+
     def test_quantile(self):
         """Test quantile reduction functionality."""
         td = TensorDict(
