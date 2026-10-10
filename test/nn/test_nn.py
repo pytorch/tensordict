@@ -1220,6 +1220,23 @@ class TestTDModule:
         assert (out1 == td["b", "d"]).all()
         assert (out2 == td["e"]).all()
 
+    def test_dispatch_ignored_out_key(self):
+        module = TensorDictModule(
+            lambda x: (x + 1, x - 1, x + 2), in_keys=["x"], out_keys=["y", "_", "z"]
+        )
+        y, z = module(x=torch.zeros(2))
+        assert (y == 1).all()
+        assert (z == 2).all()
+        seq = TensorDictSequential(
+            TensorDictModule(
+                lambda x: (x + 1, x - 1), in_keys=["x"], out_keys=["y", "_"]
+            ),
+            TensorDictModule(lambda y: y * 2, in_keys=["y"], out_keys=["w"]),
+        )
+        y, w = seq(x=torch.zeros(2))
+        assert (y == 1).all()
+        assert (w == 2).all()
+
     def test_dispatch_module_with_additional_parameters(self):
         class MyModule(nn.Identity):
             def forward(self, input, c):

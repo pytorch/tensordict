@@ -313,7 +313,8 @@ class dispatch:
                     out = func(tensordict, *args, **kwargs)
 
                 # This makes dispatch responsible of handling partial outputs (such as selected through select_out_keys)
-                out = tuple(out[key] for key in dest)
+                # The out-key "_" marks an output that is not written.
+                out = tuple(out[key] for key in dest if key != "_")
                 return out[0] if len(out) == 1 else out
 
             if is_method:
