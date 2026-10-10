@@ -1964,6 +1964,22 @@ class TestExport:
         assert tuple(batch_size) == (4,)
         assert tuple(nested_batch_size) == (4,)
 
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_export_td_input_names(self, strict):
+        # Export traces with is_compiling() True. The input spec of non-strict
+        # export must record the dim names, so that the exported module
+        # accepts the named tensordict it was exported with, and the clone
+        # built in forward must keep them.
+        class Mod(torch.nn.Module):
+            def forward(self, td):
+                return td.clone()
+
+        td = TensorDict(a=torch.randn(4, 3), batch_size=[4], names=["n"])
+        ep = torch.export.export(Mod(), (td,), strict=strict)
+        out = ep.module()(td)
+        assert out.names == ["n"]
+        torch.testing.assert_close(out["a"], td["a"])
+
     @pytest.mark.parametrize("strict", [False])  # , True])
     def test_export_with_td_params(self, strict):
         module = torch.nn.Sequential(
