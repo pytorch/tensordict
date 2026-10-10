@@ -68,6 +68,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _get_shape_from_args,
     _is_dataclass as is_dataclass,
     _is_json_serializable,
+    _is_namedtuple,
     _is_tensorclass,
     _KeyDependentDefaultDict,
     _LOCK_ERROR,
@@ -2709,6 +2710,29 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
         )
 
 
+# The torch.return_types that TensorDict.max, min, cummax and cummin return
+_TD_RETURN_TYPES = (
+    torch.return_types.max,
+    torch.return_types.min,
+    torch.return_types.cummax,
+    torch.return_types.cummin,
+)
+
+
+def _tuple_like(result: tuple, items: list) -> tuple:
+    """Returns ``items`` in a tuple of the type of ``result``.
+
+    The ``torch.return_types`` of ``max``, ``min``, ``cummax`` and ``cummin``
+    and namedtuples keep their fields. Other tuples become plain tuples.
+    """
+    if type(result) is not tuple:
+        if isinstance(result, _TD_RETURN_TYPES):
+            return type(result)(items)
+        if _is_namedtuple(result):
+            return result._make(items)
+    return tuple(items)
+
+
 def _wrap_td_method(
     funcname, *, copy_non_tensor=False, no_wrap=False, is_property=False
 ):
@@ -2744,7 +2768,9 @@ def _wrap_td_method(
                 return self
 
             if isinstance(result, tuple):
-                return tuple(deliver_result(self, r, kwargs) for r in result)
+                return _tuple_like(
+                    result, [deliver_result(self, r, kwargs) for r in result]
+                )
             return deliver_result(self, result, kwargs)
 
         return wrapped_func
@@ -2763,7 +2789,7 @@ def _wrap_td_method(
             return self
 
         if isinstance(result, tuple):
-            return tuple(deliver_result(self, r, {}) for r in result)
+            return _tuple_like(result, [deliver_result(self, r, {}) for r in result])
         return deliver_result(self, result, {})
 
     def wrapped_func_setter(self, value):

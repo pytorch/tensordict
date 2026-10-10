@@ -3086,6 +3086,49 @@ class TestTensorClass:
         assert "y" in ctd.keys()
         assert ("y", "x") in ctd.keys(True)
 
+    # max(dim=...), min(dim=...), cummax and cummin return the torch.return_types
+    # that TensorDict returns, and to_namedtuple returns a namedtuple. Other
+    # tuples, such as the output of split, stay plain tuples.
+    @pytest.mark.parametrize("subclass", [False, True])
+    def test_tuple_results(self, subclass):
+        if subclass:
+
+            class MyClass(TensorClass):
+                x: torch.Tensor
+                y: torch.Tensor
+
+        else:
+
+            @tensorclass
+            class MyClass:  # noqa: F811
+                x: torch.Tensor
+                y: torch.Tensor
+
+        data = MyClass(x=torch.randn(3, 4), y=torch.randn(3, 4), batch_size=[3, 4])
+        td = data.to_tensordict()
+        for method, kwargs in [
+            ("max", {"dim": 0}),
+            ("min", {"dim": 1, "keepdim": True}),
+            ("cummax", {"dim": 0}),
+            ("cummin", {"dim": 1}),
+        ]:
+            result = getattr(data, method)(**kwargs)
+            expected = getattr(td, method)(**kwargs)
+            assert type(result) is type(expected)
+            assert type(result.values) is MyClass
+            assert type(result.indices) is MyClass
+            assert (result.values.to_tensordict() == expected.values).all()
+            assert (result.indices.to_tensordict() == expected.indices).all()
+        assert type(data.cummax(0, reduce=True)) is torch.return_types.cummax
+
+        namedtuple = data.to_namedtuple()
+        assert namedtuple._fields == ("x", "y")
+        assert torch.equal(namedtuple.x, data.x)
+
+        splits = data.split(2, dim=1)
+        assert type(splits) is tuple
+        assert all(type(split) is MyClass for split in splits)
+
     def test_type(self):
         data = MyData(
             X=torch.ones(3, 4, 5),
