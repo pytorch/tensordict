@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import math
 import operator
-from typing import List, overload, Sequence, TYPE_CHECKING
+from typing import Any, List, overload, Sequence, TYPE_CHECKING
 
 import torch
 from tensordict._nestedkey import NestedKey
@@ -176,8 +176,8 @@ class _ShapeOps:
     def tensor_split(
         self,
         indices_or_sections: int | list[int] | tuple[int, ...] | torch.Tensor,
-        dim=0,
-    ) -> tuple[TensorDictBase, ...]:
+        dim: int = 0,
+    ) -> tuple[Self, ...]:
         """Splits a TensorDict into multiple sub-tensordicts, all of which are views of input, along dimension dim according to the indices or number of sections specified by indices_or_sections.
 
         Args:
@@ -427,10 +427,10 @@ class _ShapeOps:
         )
 
     @overload
-    def reshape(self, *shape: int): ...
+    def reshape(self, *shape: int) -> Self: ...
 
     @overload
-    def reshape(self, shape: list | tuple): ...
+    def reshape(self, shape: list | tuple) -> Self: ...
 
     def reshape(
         self,
@@ -617,7 +617,10 @@ class _ShapeOps:
         )
 
     @overload
-    def repeat(self, repeats: torch.Size, *, inplace: bool = False): ...
+    def repeat(self, repeats: torch.Size, *, inplace: bool = False) -> Self: ...
+
+    @overload
+    def repeat(self, *repeats: int, inplace: bool = False) -> Self: ...
 
     def repeat(self, *repeats: int, inplace: bool = False) -> Self:
         """Repeats this tensor along the specified dimensions.
@@ -905,7 +908,7 @@ class _ShapeOps:
         return torch.stack(tensors, dim, out=out)
 
     @classmethod
-    def stack(cls, input, dim: int = 0, *, out=None):
+    def stack(cls, input, dim: int = 0, *, out: Any | None = None):
         """Stacks tensordicts into a single tensordict along the given dimension.
 
         This call is equivalent to calling :func:`torch.stack` but is compatible with torch.compile.
@@ -918,7 +921,7 @@ class _ShapeOps:
         return _stack(input, dim, out=out)
 
     @classmethod
-    def cat(cls, input, dim: int = 0, *, out=None):
+    def cat(cls, input, dim: int = 0, *, out: Any | None = None):
         """Concatenates tensordicts into a single tensordict along the given dimension.
 
         This call is equivalent to calling :func:`torch.cat` but is compatible with torch.compile.
@@ -1143,7 +1146,7 @@ class _ShapeOps:
     def view(self, *shape: int): ...
 
     @overload
-    def view(self, dtype): ...
+    def view(self, dtype) -> Self: ...
 
     @overload
     def view(self, shape: torch.Size): ...
@@ -2239,7 +2242,9 @@ class _ShapeOps:
                 metadata, recv_buf[:total_bytes]
             )
 
-    def to_padded_tensor(self, padding=0.0, mask_key: NestedKey | None = None) -> Self:
+    def to_padded_tensor(
+        self, padding: float = 0.0, mask_key: NestedKey | None = None
+    ) -> Self:
         """Converts all nested tensors to a padded version and adapts the batch-size accordingly.
 
         Args:

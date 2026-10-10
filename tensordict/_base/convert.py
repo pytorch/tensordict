@@ -149,10 +149,10 @@ class _Conversion:
         input_dict,
         *,
         auto_batch_size: bool | None = None,
-        batch_size=None,
-        device=None,
-        batch_dims=None,
-        names=None,
+        batch_size: Any | None = None,
+        device: Any | None = None,
+        batch_dims: Any | None = None,
+        names: list[str] | None = None,
     ):
         """Instance method version of :meth:`~tensordict.TensorDict.from_dict`.
 
@@ -494,8 +494,8 @@ class _Conversion:
         *,
         batch_size: Sequence[int] | torch.Size | None = None,
         storage: str | None = None,
-        device=None,
-        **kwargs,
+        device: torch.device | str | int | None = None,
+        **kwargs: Any,
     ) -> TensorDictBase:
         """Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -864,11 +864,11 @@ class _Conversion:
         *,
         inplace: bool | None = None,
         return_swap: bool = True,
-        swap_dest=None,
+        swap_dest: Any | None = None,
         use_state_dict: bool = False,
         non_blocking: bool = False,
         preserve_module_state: bool | None = True,
-        memo=None,  # deprecated
+        memo: Any | None = None,  # deprecated
     ):
         """Writes the content of a TensorDictBase instance onto a given nn.Module attributes, recursively.
 
@@ -1176,7 +1176,7 @@ class _Conversion:
             names=self._maybe_names(),
         )
 
-    def to_lazystack(self, dim: int = 0):
+    def to_lazystack(self, dim: int = 0) -> TensorDictBase:
         """Converts a TensorDict to a LazyStackedTensorDict or equivalent.
 
         .. note::
@@ -2515,7 +2515,7 @@ class _Conversion:
         db: int = 0,
         unix_socket_path: str | None = None,
         prefix: str = "tensordict",
-        device=None,
+        device: Any | None = None,
         **kwargs,
     ) -> Any:
         """Upload this TensorDict to a key-value store (Redis, Dragonfly, etc.).

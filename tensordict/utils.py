@@ -192,6 +192,7 @@ if not _has_funcdim:
     ftdim = _ftdim_mock  # noqa: F811
 
 T = TypeVar("T", bound="TensorDictBase")
+_F = TypeVar("_F", bound=Callable[..., Any])
 
 _PIN_MEM_TIMEOUT = 10
 _TORCH_DTYPES = (
@@ -641,7 +642,7 @@ def _make_cache_key(args, kwargs):
         )
 
 
-def _cache_while_locked(fun):
+def _cache_while_locked(fun: _F) -> _F:
     """A cache for TensorDictBase subclasses.
 
     This decorator will cache the values returned by a method as long as the
@@ -684,7 +685,7 @@ def _cache_while_locked(fun):
             out = cache[key]
         return out
 
-    return newfun
+    return newfun  # type: ignore[return-value]
 
 
 def _erase_cache_first(fun):
@@ -2583,7 +2584,7 @@ def _is_namedtuple_class(cls):
     return all(hasattr(cls, attr) for attr in base_attrs)
 
 
-def _make_dtype_promotion(func):
+def _make_dtype_promotion(func: _F) -> _F:
     dtype = getattr(torch, func.__name__)
 
     @wraps(func)
@@ -2594,7 +2595,7 @@ def _make_dtype_promotion(func):
         return self._fast_apply(todtype, propagate_lock=True)
 
     new_func.__doc__ = rf"""Casts all tensors to ``{str(dtype)}``."""
-    return new_func
+    return new_func  # type: ignore[return-value]
 
 
 def _unravel_key_to_tuple(key):

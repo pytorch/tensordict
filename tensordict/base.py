@@ -157,6 +157,7 @@ NO_DEFAULT = _NoDefault.ZERO
 _UNSET = object()
 
 T = TypeVar("T", bound="TensorCollection")
+_F = TypeVar("_F", bound=Callable[..., Any])
 
 
 if TYPE_CHECKING:
@@ -347,7 +348,7 @@ def _holds_leaves_of(td: TensorDictBase, other: TensorDictBase) -> bool:
     return True
 
 
-def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Callable]:
+def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[_F], _F]:
     """Ensures that elementwise ops are broadcast when an nd tensor is passed."""
     # add_, mul_, ... are in-place; __eq__, __lt__, ... also end with "_".
     inplace = op.endswith("_") and not op.endswith("__")

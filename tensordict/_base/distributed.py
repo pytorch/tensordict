@@ -13,7 +13,7 @@ mixin imports in ``tensordict/base.py`` gives the other rules.
 
 from __future__ import annotations
 
-from typing import List, TYPE_CHECKING
+from typing import Any, List, TYPE_CHECKING
 
 import torch
 from tensordict.base import (
@@ -23,12 +23,12 @@ from tensordict.base import (
     _resolve_tensorclass_type,
     NO_DEFAULT,
     Self,
-    T,
 )
 from tensordict.utils import _int_generator
 from torch import Tensor
 
 if TYPE_CHECKING:
+    from tensordict._ucxx import TensorDictPipe
     from tensordict.base import TensorDictBase
 
 
@@ -113,7 +113,7 @@ class _Distributed:
 
     def send(
         self,
-        dst: int | "TensorDictPipe" | None = None,  # noqa: F821
+        dst: int | TensorDictPipe | None = None,
         *,
         group: "torch.distributed.ProcessGroup" | None = None,
         group_dst: int | None = None,
@@ -285,7 +285,7 @@ class _Distributed:
 
     def recv(
         self,
-        src: int | "TensorDictPipe" | None = None,  # noqa: F821
+        src: int | TensorDictPipe | None = None,
         *,
         group: "torch.distributed.ProcessGroup" | None = None,
         group_src: int | None = None,
@@ -361,7 +361,7 @@ class _Distributed:
             group_src=group_src,
         )
 
-    async def asend(self, dst: "TensorDictPipe") -> None:  # noqa: F821
+    async def asend(self, dst: TensorDictPipe) -> None:
         """Sends the content of a tensordict through a UCXX pipe (async).
 
         Args:
@@ -374,7 +374,7 @@ class _Distributed:
 
     async def arecv(
         self,
-        src: "TensorDictPipe",  # noqa: F821
+        src: TensorDictPipe,
         *,
         device: torch.device | str | None = None,
     ) -> "TensorDictBase":
@@ -564,9 +564,9 @@ class _Distributed:
 
     @classmethod
     def from_remote_init(
-        cls: T,
+        cls,
         src: int,
-        group: "ProcessGroup" | None = None,  # noqa: F821
+        group: "torch.distributed.ProcessGroup" | None = None,
         device: torch.device | None = None,
         use_broadcast: bool = False,
     ) -> Self:
@@ -900,11 +900,11 @@ class _Distributed:
     def reduce(
         self,
         dst,
-        op=None,
-        async_op=False,
-        return_premature=False,
-        group=None,
-    ) -> None:
+        op: Any | None = None,
+        async_op: bool = False,
+        return_premature: bool = False,
+        group: Any | None = None,
+    ) -> Any:
         """Reduces the tensordict across all machines.
 
         Only the process with ``rank`` dst is going to receive the final result.
@@ -1025,7 +1025,7 @@ class _Distributed:
 
     def all_reduce(
         self,
-        op=None,
+        op: Any | None = None,
         *,
         group: "torch.distributed.ProcessGroup" | None = None,
         async_op: bool = False,
