@@ -22,6 +22,7 @@ from tensordict import (
     from_dataclass,
     LazyStackedTensorDict,
     NonTensorData,
+    NonTensorStack,
     tensorclass,
     TensorDict,
     TensorDictParams,
@@ -53,7 +54,7 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch._dynamo.testing import CompileCounterWithBackend
-from torch.utils._pytree import SUPPORTED_NODES, tree_map
+from torch.utils._pytree import SUPPORTED_NODES, tree_leaves, tree_map
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
@@ -2482,6 +2483,20 @@ class TestCompileNontensor:
 
     def test_nontensor_with_device_without_batch_size(self, data):
         torch.compile(self.fn_with_device_without_batch_size)(data)
+
+    @pytest.mark.parametrize("values", ["aaaa", "abcd"])
+    def test_tree_leaves_nontensor_stack(self, values):
+        # Flattening a tensordict does not read the data of its NonTensorStack
+        # entries, which Dynamo cannot trace.
+        def fn(td):
+            return [
+                leaf + 1 for leaf in tree_leaves(td) if isinstance(leaf, torch.Tensor)
+            ]
+
+        td = TensorDict(a=torch.zeros(4, 3), batch_size=[4])
+        td.set("s", NonTensorStack(*values))
+        (out,) = torch.compile(fn, fullgraph=True, backend="eager")(td)
+        assert (out == 1).all()
 
 
 class TestTCNonTensorInit:

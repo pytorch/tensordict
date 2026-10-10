@@ -66,50 +66,43 @@ class _PytreeBatchSize:
         return f"{type(self).__name__}({list(self.batch_size)})"
 
 
-class _NonUniqueNonTensorStack:
-    """A NonTensorStack entry without a unique value, in a pytree context.
+class _PytreeNonTensorStack:
+    """A NonTensorStack entry in a pytree context, compared by its values."""
 
-    _tensordict_constructor raises ``error`` for it, as set_non_tensor does
-    with the stack. Two of them compare equal when the stacks have the same
-    values.
-    """
+    __slots__ = ("stack",)
 
-    __slots__ = ("values", "error")
-
-    def __init__(self, values: list, error: str) -> None:
-        self.values = values
-        self.error = error
+    def __init__(self, stack: LazyStackedTensorDict) -> None:
+        self.stack = stack
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, _NonUniqueNonTensorStack):
+        if not isinstance(other, _PytreeNonTensorStack):
             return NotImplemented
-        return self.values == other.values
+        return self.stack.tolist() == other.stack.tolist()
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}({self.values})"
+        return f"{type(self).__name__}({self.stack.tolist()})"
 
 
 def _pytree_non_tensor_data(d: TensorDictBase) -> dict | tuple:
-    # The non-tensor fields of a tensorclass, or the data of the non-tensor
-    # entries of a tensordict: _tensordict_constructor rebuilds each entry
-    # from its data with set_non_tensor. Storing the entries would make
-    # comparing two contexts call NonTensorData.__eq__, which returns a tensor
-    # when the entry has a batch size.
+    # The non-tensor fields of a tensorclass, or the non-tensor entries of a
+    # tensordict, which _tensordict_constructor rebuilds with set_non_tensor.
+    # Storing the entries as they are would make comparing two contexts call
+    # NonTensorData.__eq__, which returns a tensor when the entry has a batch
+    # size.
     if _is_tensorclass(type(d)):
         # A dict: the fields of a NonTensorData rebuilt by set_non_tensor are
         # in another order than those of the original entry.
         return dict(d.non_tensor_items())
     items = []
     for key, value in d.non_tensor_items():
-        entry = value
-        try:
+        if isinstance(value, LazyStackedTensorDict):
+            # Reading the data of a NonTensorStack compares all its values,
+            # and Dynamo cannot trace that: leave it to set_non_tensor.
+            value = _PytreeNonTensorStack(value)
+        else:
             # set_non_tensor unwraps its value in the same way.
             while is_non_tensor(value):
                 value = value.data
-        except AttributeError as err:
-            if not isinstance(entry, LazyStackedTensorDict):
-                raise
-            value = _NonUniqueNonTensorStack(entry.tolist(), str(err))
         items.append((key, value))
     return tuple(items)
 
@@ -305,8 +298,8 @@ def _tensordict_constructor(
         device=device,
     )
     for key, item in non_tensor_items:
-        if isinstance(item, _NonUniqueNonTensorStack):
-            raise AttributeError(item.error)
+        if isinstance(item, _PytreeNonTensorStack):
+            item = item.stack
         result.set_non_tensor(key, item)
     return result
 
