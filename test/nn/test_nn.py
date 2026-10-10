@@ -2950,12 +2950,72 @@ class TestProbabilisticTensorDictModule:
         assert prob.dist_params_keys == ["loc"]
 
     @pytest.mark.parametrize("return_log_prob", [True, False])
+    @set_composite_lp_aggregate(False)
+    @pytest.mark.parametrize("interaction", [None, "mode", "mean", "deterministic"])
+    def test_probabilistic_n_samples_non_random(self, return_log_prob, interaction):
+        # The deterministic value is repeated num_samples times
+        prob = ProbabilisticTensorDictModule(
+            in_keys=["loc"],
+            out_keys=["sample"],
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1},
+            return_log_prob=return_log_prob,
+            num_samples=3,
+        )
+        loc = torch.randn(2, 4)
+        td = TensorDict(loc=loc, batch_size=[2])
+        if interaction is None:
+            td = prob(td)
+        else:
+            with set_interaction_type(interaction):
+                td = prob(td)
+        assert td.shape == (3, 2)
+        assert td["sample"].shape == (3, 2, 4)
+        assert (td["sample"] == loc).all()
+        if return_log_prob:
+            assert td["sample_log_prob"].shape == (3, 2, 4)
+
+    @pytest.mark.parametrize("return_log_prob", [True, False])
+    @set_composite_lp_aggregate(False)
+    @pytest.mark.parametrize("interaction", [None, "mode", "mean", "deterministic"])
+    def test_probabilistic_n_samples_non_random_composite(
+        self, return_log_prob, interaction
+    ):
+        prob = ProbabilisticTensorDictModule(
+            in_keys=["params"],
+            out_keys=["a", "b"],
+            distribution_class=CompositeDistribution,
+            distribution_kwargs={"distribution_map": {"a": Normal, "b": Normal}},
+            return_log_prob=return_log_prob,
+            num_samples=3,
+        )
+        loc = torch.randn(2, 4)
+        params = TensorDict(loc=loc, scale=torch.ones(2, 4), batch_size=[2])
+        td = TensorDict(
+            params=TensorDict(a=params, b=params.clone(), batch_size=[2]),
+            batch_size=[2],
+        )
+        if interaction is None:
+            td = prob(td)
+        else:
+            with set_interaction_type(interaction):
+                td = prob(td)
+        assert td.shape == (3, 2)
+        for key in ("a", "b"):
+            assert td[key].shape == (3, 2, 4)
+            assert (td[key] == loc).all()
+            if return_log_prob:
+                assert td[f"{key}_log_prob"].shape == (3, 2, 4)
+
+    @pytest.mark.parametrize("return_log_prob", [True, False])
     @pytest.mark.parametrize("return_composite", [True, False])
+    @pytest.mark.parametrize("default_interaction_type", ["random", "deterministic"])
     @set_composite_lp_aggregate(False)
     def test_probabilistic_seq_n_samples(
         self,
         return_log_prob,
         return_composite,
+        default_interaction_type,
     ):
         aggregate_probabilities = composite_lp_aggregate()
         prob = ProbabilisticTensorDictModule(
@@ -2965,7 +3025,7 @@ class TestProbabilisticTensorDictModule:
             distribution_kwargs={"scale": 1},
             return_log_prob=return_log_prob,
             num_samples=2,
-            default_interaction_type="random",
+            default_interaction_type=default_interaction_type,
         )
         # in a sequence
         seq = ProbabilisticTensorDictSequential(
@@ -2996,11 +3056,13 @@ class TestProbabilisticTensorDictModule:
 
     @pytest.mark.parametrize("return_log_prob", [True, False])
     @pytest.mark.parametrize("return_composite", [True])
+    @pytest.mark.parametrize("default_interaction_type", ["random", "deterministic"])
     @set_composite_lp_aggregate(False)
     def test_intermediate_probabilistic_seq_n_samples(
         self,
         return_log_prob,
         return_composite,
+        default_interaction_type,
     ):
         prob = ProbabilisticTensorDictModule(
             in_keys=["loc"],
@@ -3009,7 +3071,7 @@ class TestProbabilisticTensorDictModule:
             distribution_kwargs={"scale": 1},
             return_log_prob=return_log_prob,
             num_samples=2,
-            default_interaction_type="random",
+            default_interaction_type=default_interaction_type,
         )
         aggregate_probabilities = composite_lp_aggregate()
         # intermediate in a sequence
