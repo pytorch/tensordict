@@ -1182,7 +1182,9 @@ class TensorDictModule(TensorDictModuleBase):
                 kwargs.update(
                     {
                         kwarg: tensordict._get_tuple_maybe_non_tensor(
-                            _unravel_key_to_tuple(in_key), default=default
+                            _unravel_key_to_tuple(in_key),
+                            default,
+                            **self._get_kwargs,
                         )
                         for kwarg, in_key in _zip_strict(self._kwargs, self.in_keys)
                     }
@@ -1515,14 +1517,15 @@ class as_tensordict_module:
             def wrapped(_self, *args, **kwargs):
                 nonlocal tdmodule
                 if tdmodule is None:
-
-                    def newfunc(*args, **kwargs):
-                        return func(_self, *args, **kwargs)
+                    # The module is shared by all instances, so the instance
+                    # is passed with each call rather than kept in a closure.
+                    def newfunc(*args, _as_tensordict_module_self, **kwargs):
+                        return func(_as_tensordict_module_self, *args, **kwargs)
 
                     tdmodule = TensorDictModule(
                         newfunc, in_keys=self.in_keys, out_keys=self.out_keys
                     )
-                return tdmodule(*args, **kwargs)
+                return tdmodule(*args, _as_tensordict_module_self=_self, **kwargs)
 
         else:
 

@@ -770,6 +770,18 @@ class TestNonTensorData:
         assert [x.tolist() for x in td.get("a").tolist()] == [[6, 7], [6, 7], [4, 5]]
         assert td["b"].tolist() == [1.0, 1.0, 1.0]
 
+    @pytest.mark.parametrize("batch_size", [(), (3,), (3, 2)])
+    def test_set_at_empty_index(self, batch_size):
+        # The index () selects the whole entry, as for a tensor entry. A
+        # NonTensorData cannot be indexed with it, which used to raise.
+        expected = TensorDict(a="s1", batch_size=batch_size).get("a").tolist()
+        td = TensorDict(a="s0", batch_size=batch_size)
+        assert td.set_at_("a", "s1", ()) is td
+        assert td.get("a").tolist() == expected
+        td = TensorDict(a="s0", batch_size=batch_size)
+        td[()] = TensorDict(a="s1", batch_size=batch_size)
+        assert td.get("a").tolist() == expected
+
     def test_setitem_edge_case(self):
         s = NonTensorStack("a string")
         t = NonTensorStack("another string")
@@ -1395,6 +1407,25 @@ class TestNonTensorData:
         assert tdv.view(60).shape == (60,)
         assert tdv.view(60).tolist() == [str(i) for i in range(60)]
         assert tdv.flatten().tolist() == [str(i) for i in range(60)]
+
+    def test_where_copies_entries(self):
+        # The result has its own entries, which hold the input data as they are
+        class NoDeepCopy:
+            def __deepcopy__(self, memo):
+                raise TypeError("cannot deep-copy")
+
+        condition = torch.tensor([True, False])
+        tensor = NonTensorStack("a", "b")
+        other = NonTensorStack("x", "y")
+        result = tensor.where(condition, other)
+        assert result.tolist() == ["a", "y"]
+        result[0] = "z"
+        result[1] = "z"
+        assert tensor.tolist() == ["a", "b"]
+        assert other.tolist() == ["x", "y"]
+        data = [NoDeepCopy() for _ in range(4)]
+        result = NonTensorStack(*data[:2]).where(condition, NonTensorStack(*data[2:]))
+        assert result.tolist() == [data[0], data[3]]
 
     def test_where(self):
         condition = torch.tensor([True, False])

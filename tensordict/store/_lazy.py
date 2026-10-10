@@ -126,9 +126,9 @@ class _StoreStackElementView(TensorDictBase):
         all_keys = self._get_all_keys()
         key_path = key
 
-        # Nested prefix
+        # Nested prefix, in the order of the keys view
         prefix_check = key_path + _KEY_SEP
-        nested_keys = [k for k in all_keys if k.startswith(prefix_check)]
+        nested_keys = sorted(k for k in all_keys if k.startswith(prefix_check))
         if nested_keys:
             result = self._run_sync(
                 self._parent._abatch_get_element_keys(self._element_idx, nested_keys)
@@ -591,7 +591,9 @@ class _LazyStackedStoreKeysView(_TensorDictKeysView):
         td = self.tensordict
         all_keys = td._get_all_keys()
         seen = set()
-        for full_key in all_keys:
+        # Sorted as in _StoreTDKeysView. _get_str sorts the paths of a nested
+        # tensordict too, so that values() and items() follow this order.
+        for full_key in sorted(all_keys):
             parts = full_key.split(_KEY_SEP)
             if self.include_nested:
                 key = tuple(parts) if len(parts) > 1 else parts[0]
@@ -1535,9 +1537,9 @@ class LazyStackedTensorDictStore(TensorDictBase):
         key_path = key
         all_keys = self._get_all_keys()
 
-        # Check nested
+        # Check nested, in the order of the keys view
         prefix_check = key_path + _KEY_SEP
-        nested_keys = [k for k in all_keys if k.startswith(prefix_check)]
+        nested_keys = sorted(k for k in all_keys if k.startswith(prefix_check))
         if nested_keys:
             # Return full stacked tensor for each nested leaf, build TD
             result = self._run_sync(self._abatch_get_at(nested_keys, slice(None)))
