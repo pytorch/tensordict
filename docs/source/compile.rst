@@ -66,8 +66,8 @@ Writing into an input tensordict
   ``td["y"] = ...``, ``td.set``, ``td.update`` and a
   :class:`~tensordict.nn.TensorDictModule` (which writes its ``out_keys`` into
   its input, see :ref:`modules-guide`) recompile whenever the key set of the
-  input changes, even when the key written already exists. Dynamo guards on all the keys of a dict that
-  the function writes into
+  input changes, even when the key written already exists. Dynamo guards on
+  all the keys of a dict that the function writes into
   (`#1606 <https://github.com/pytorch/tensordict/issues/1606>`_,
   `pytorch/pytorch#175858 <https://github.com/pytorch/pytorch/issues/175858>`_).
   A write into a nested tensordict only depends on the keys of that nested
@@ -99,8 +99,8 @@ Lazy stacks of another length
 Strings in the output
   Each distinct ``str`` value of a tensorclass field or of a
   :class:`~tensordict.NonTensorData` entry (see :ref:`non-tensor-data`)
-  recompiles the function when the function returns it, for instance through ``apply``, ``clone`` or the
-  constructor of a tensorclass. Dynamo specializes the graph on the value.
+  recompiles the function when the function returns it, for instance
+  through ``apply``, ``clone`` or the constructor of a tensorclass. Dynamo specializes the graph on the value.
   Reading only the tensors does not recompile. Return tensors from the
   compiled function and rebuild the tensorclass outside, or keep the strings
   out of the compiled function.
