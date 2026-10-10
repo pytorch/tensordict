@@ -1257,10 +1257,12 @@ class _Conversion:
         result = {}
         for key, value in self.items():
             if _is_tensor_collection(type(value)):
+                # NonTensorStack.data raises AttributeError when the stacked
+                # values differ: such a stack is not None, so it is kept.
                 if (
                     not retain_none
                     and _is_non_tensor(type(value))
-                    and value.data is None
+                    and getattr(value, "data", NO_DEFAULT) is None
                 ):
                     continue
                 if tolist_first:
