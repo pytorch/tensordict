@@ -1365,6 +1365,32 @@ class TestTC:
         assert (clear_c(data) == 1).all()
         assert data.y is None
 
+    @pytest.mark.parametrize("form", ["bracket", "decorator"])
+    def test_tc_tensor_only_init(self, mode, form):
+        # The generated __init__ of the bracket form sets _tensordict
+        # through the __setattr__ of its tensor_only parent class.
+        if form == "bracket":
+
+            class TensorOnly(TensorClass["tensor_only"]):
+                x: torch.Tensor
+
+        else:
+
+            @tensorclass(tensor_only=True)
+            class TensorOnly:
+                x: torch.Tensor
+
+        def build(x):
+            data = TensorOnly(x=x, batch_size=[3])
+            return data, data.x + 1
+
+        build_c = torch.compile(build, fullgraph=True, mode=mode)
+        data, out = build_c(torch.zeros(3))
+        assert isinstance(data, TensorOnly)
+        assert data.batch_size == torch.Size([3])
+        assert (data.x == 0).all()
+        assert (out == 1).all()
+
     def test_tc_arithmetic(self, mode):
         def add_one(td):
             return td + 1

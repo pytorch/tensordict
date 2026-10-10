@@ -2716,8 +2716,13 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
         ):
             return object.__setattr__(self, key, value)
     else:
-        # Pass?
-        if key in SET_ATTRIBUTES:
+        # The generated __init__ of a subclass sets _tensordict through
+        # super().__setattr__, which is this method if the parent class is a
+        # tensor_only tensorclass. The key is a constant while Dynamo traces,
+        # so other writes skip the __dict__ lookup and add no guard.
+        if key in SET_ATTRIBUTES or (
+            key == "_tensordict" and "_tensordict" not in self.__dict__
+        ):
             return object.__setattr__(self, key, value)
     if key not in self.__expected_keys__:
         raise AttributeError(
