@@ -625,6 +625,21 @@ class TestGeneric:
         assert td_meta["b", "c"].device.type == "meta"
         assert td_meta["b", "c"].shape == (3, 2)
 
+    def test_consolidate_to_no_device(self):
+        # Without a device or dtype, to() returns the consolidated tensordict
+        # itself, as for other tensordicts, and changes its batch size in place
+        td = TensorDict(
+            {"a": torch.zeros(3, 2), "b": {"c": torch.ones(3, 2, 4)}}, batch_size=[3]
+        ).consolidate()
+        assert td.to() is td
+        assert td.to(non_blocking=True) is td
+        with pytest.raises(RuntimeError, match="incompatible with the batch-size"):
+            td.to(batch_size=[5])
+        assert td.to(batch_size=[3, 2]) is td
+        assert td.batch_size == (3, 2)
+        assert td["b"].batch_size == (3, 2)
+        assert td.is_consolidated()
+
     def test_consolidated_locking_behavior(self):
         """Test that consolidated TensorDicts are automatically locked and unlock properly."""
         td = TensorDict(

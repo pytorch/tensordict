@@ -577,7 +577,7 @@ class _DeviceOps:
         if device is not None and dtype is None and device == self.device:
             return result
 
-        if self.is_consolidated() and dtype is None:
+        if self.is_consolidated() and dtype is None and device is not None:
             return self._to_consolidated(
                 device=device,
                 pin_memory=non_blocking_pin,
