@@ -3,12 +3,11 @@
 Modules: TensorDictModule and tensordict.nn
 ===========================================
 
-The :mod:`tensordict.nn` package contains modules that read their inputs from
-a tensordict and write their outputs into it. This page explains how these
-modules use the tensordict, how to chain them, how to get values from
-probability distributions, and how to keep model parameters in a tensordict.
-It is for people who build models with tensordict, for example as TorchRL
-users. For what a tensordict is, see :ref:`overview`.
+A module of :mod:`tensordict.nn` reads its inputs from a tensordict by key and
+writes its outputs back into it. You can then chain modules that take several
+inputs, and generic code, such as a training loop, can call any model with one
+tensordict, without knowing its inputs. For what a tensordict is, see
+:ref:`overview`.
 
 Wrap a module: TensorDictModule
 -------------------------------
@@ -17,14 +16,15 @@ Wrap a module: TensorDictModule
 any other callable, and gives it a list of input keys (``in_keys``) and output
 keys (``out_keys``). When you call it with a tensordict, it reads the entries
 at ``in_keys``, calls the wrapped module with them, and writes the results at
-``out_keys``:
+``out_keys``. In this example, the tensordict holds the positions of 5
+particles:
 
   >>> import torch
   >>> from torch import nn
   >>> from tensordict import TensorDict
   >>> from tensordict.nn import TensorDictModule
-  >>> module = TensorDictModule(nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"])
-  >>> td = TensorDict(obs=torch.randn(5, 3), batch_size=[5])
+  >>> module = TensorDictModule(nn.Linear(3, 4), in_keys=["pos"], out_keys=["hidden"])
+  >>> td = TensorDict(pos=torch.randn(5, 3), batch_size=[5])
   >>> out = module(td)
   >>> out is td
   True
@@ -32,17 +32,15 @@ at ``in_keys``, calls the wrapped module with them, and writes the results at
   TensorDict(
       fields={
           hidden: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-          obs: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+          pos: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
       batch_size=torch.Size([5]),
       device=None,
       is_shared=False)
 
 By default, the module writes into the input tensordict and returns it.
-``td = module(td)`` and ``module(td)`` have the same effect, and ``out`` and
-``td`` are two names for one object. A module can read any entry of the
-tensordict, so modules that share keys make a graph. Generic code, such as a
-training loop, can then call any module on a tensordict without knowing its
-inputs.
+``out`` and ``td`` are two names for one object, so ``module(td)`` without an
+assignment has the same effect as ``td = module(td)``. A module can read any
+entry of the tensordict, so modules that share keys make a graph.
 
 A :class:`~tensordict.nn.TensorDictModule` is a :class:`torch.nn.Module`.
 Save it with ``state_dict()`` and move it with ``to()``, as any other module.
@@ -60,16 +58,16 @@ tuple of strings that names an entry inside a nested tensordict (see
 
   >>> shift = TensorDictModule(
   ...     lambda x: (x + 1, x - 1),
-  ...     in_keys=[("agent", "obs")],
-  ...     out_keys=[("agent", "up"), ("agent", "down")],
+  ...     in_keys=[("robot", "joints")],
+  ...     out_keys=[("robot", "up"), ("robot", "down")],
   ... )
-  >>> td = shift(TensorDict({("agent", "obs"): torch.zeros(2, 3)}, batch_size=[2]))
-  >>> list(td["agent"].keys())
-  ['obs', 'up', 'down']
+  >>> td = shift(TensorDict({("robot", "joints"): torch.zeros(2, 3)}, batch_size=[2]))
+  >>> list(td["robot"].keys())
+  ['joints', 'up', 'down']
 
 If ``in_keys`` is a dict, the module passes the values as keyword arguments.
 By default, the dict maps each argument name to a key of the tensordict:
-``in_keys={"x": "obs"}`` calls ``module(x=td["obs"])``. One key can feed
+``in_keys={"x": "pos"}`` calls ``module(x=td["pos"])``. One key can feed
 several arguments. With ``out_to_in_map=False``, the dict maps each key of the
 tensordict to an argument name instead:
 
@@ -103,7 +101,7 @@ error names the missing keys:
   >>> module(TensorDict(other=torch.zeros(5, 3), batch_size=[5]))
   Traceback (most recent call last):
     ...
-  KeyError: "Some tensors ... the following inputs are None: {'obs'}."
+  KeyError: "Some tensors ... the following inputs are None: {'pos'}."
 
 With ``strict=True``, the module raises ``KeyError`` for the first missing key
 before it calls the wrapped module.
@@ -127,11 +125,11 @@ The ``inplace`` argument sets where the module writes its outputs:
 
 In this example, the module writes into a new tensordict:
 
-  >>> module = TensorDictModule(nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"], inplace=False)
-  >>> td = TensorDict(obs=torch.randn(5, 3), batch_size=[5])
+  >>> module = TensorDictModule(nn.Linear(3, 4), in_keys=["pos"], out_keys=["hidden"], inplace=False)
+  >>> td = TensorDict(pos=torch.randn(5, 3), batch_size=[5])
   >>> out = module(td)
   >>> list(out.keys()), out.batch_size, list(td.keys())
-  (['hidden'], torch.Size([]), ['obs'])
+  (['hidden'], torch.Size([]), ['pos'])
 
 If you pass a tensordict as ``tensordict_out``, the module writes its outputs
 into it, whatever the value of ``inplace``, and returns it:
@@ -171,7 +169,7 @@ returns the output tensors instead of a tensordict: one tensor if
 These rules apply to keyword calls:
 
 - The keyword of a nested key joins its parts with ``"_"``: the in-key
-  ``("agent", "obs")`` becomes ``agent_obs=``.
+  ``("robot", "joints")`` becomes ``robot_joints=``.
 - You can also pass the tensors as positional arguments, in the order of
   ``in_keys``. If you pass the same input both ways, the module raises
   ``RuntimeError: Duplicated argument in args and kwargs.``
@@ -180,10 +178,10 @@ These rules apply to keyword calls:
 - The tensordict that :class:`~tensordict.nn.TensorDictModule` builds from
   the arguments has an empty batch size.
 
-For example, with the nested in-key ``("agent", "obs")`` of the ``shift``
+For example, with the nested in-key ``("robot", "joints")`` of the ``shift``
 module above:
 
-  >>> shift(agent_obs=torch.zeros(2, 3))[0].shape
+  >>> shift(robot_joints=torch.zeros(2, 3))[0].shape
   torch.Size([2, 3])
 
 The :doc:`export tutorial </tutorials/export>` uses keyword calls to export a
@@ -207,24 +205,51 @@ To write a module that works on the tensordict itself, subclass
 
   >>> from tensordict.nn import TensorDictModuleBase, dispatch
   >>> class Normalize(TensorDictModuleBase):
-  ...     in_keys = ["obs"]
-  ...     out_keys = ["obs_norm"]
+  ...     in_keys = ["signal"]
+  ...     out_keys = ["signal_norm"]
   ...
   ...     @dispatch
   ...     def forward(self, tensordict):
-  ...         obs = tensordict["obs"]
-  ...         tensordict["obs_norm"] = (obs - obs.mean()) / obs.std()
+  ...         signal = tensordict["signal"]
+  ...         tensordict["signal_norm"] = (signal - signal.mean()) / signal.std()
   ...         return tensordict
   >>> normalize = Normalize()
-  >>> normalize(TensorDict(obs=torch.arange(4.0), batch_size=[4]))["obs_norm"]
+  >>> normalize(TensorDict(signal=torch.arange(4.0), batch_size=[4]))["signal_norm"]
   tensor([-1.1619, -0.3873,  0.3873,  1.1619])
-  >>> normalize(obs=torch.arange(4.0))
+  >>> normalize(signal=torch.arange(4.0))
   tensor([-1.1619, -0.3873,  0.3873,  1.1619])
 
 A plain :class:`torch.nn.Module` with ``in_keys`` and ``out_keys``
-attributes also works in a sequence, if its ``forward`` takes a tensordict,
-writes its outputs into it and returns it. To wrap a module that takes
-tensors, use :class:`~tensordict.nn.TensorDictModule`.
+attributes also works in a sequence (see `Chain modules:
+TensorDictSequential`_), if its ``forward`` takes a tensordict, writes its
+outputs into it and returns it.
+
+Run a module on a tensorclass
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A module also runs on a :class:`~tensordict.TensorClass` instance, the class
+form of a tensordict with typed fields (see :ref:`tensorclass-guide`). It
+reads and writes the fields named in ``in_keys`` and ``out_keys``, and
+returns the same instance:
+
+  >>> from tensordict import TensorClass
+  >>> class Particles(TensorClass):
+  ...     pos: torch.Tensor
+  ...     hidden: torch.Tensor | None = None
+  >>> encoder = TensorDictModule(nn.Linear(3, 4), in_keys=["pos"], out_keys=["hidden"])
+  >>> particles = Particles(pos=torch.randn(5, 3), batch_size=[5])
+  >>> encoder(particles) is particles
+  True
+  >>> particles.hidden.shape
+  torch.Size([5, 4])
+
+Each out-key must be a field of the class. A module that writes another key
+raises ``AttributeError: Cannot set the attribute ...: Particles has no such
+field``.
+
+To give ``forward`` typed inputs and outputs instead of keys, subclass
+:class:`~tensordict.nn.TensorClassModuleBase` (see `Typed modules:
+TensorClassModuleBase`_).
 
 Chain modules: TensorDictSequential
 -----------------------------------
@@ -347,8 +372,14 @@ copy of the input, and the sequence writes its ``out_keys`` into
    input tensordict. To keep the input unchanged, pass a shallow copy:
    ``seq(td.copy())``, or pass ``tensordict_out``.
 
+Control the outputs
+-------------------
+
+To save memory, keep only some of the outputs of a model. To save work, skip
+the modules whose outputs are already in the input.
+
 Keep fewer outputs
-------------------
+~~~~~~~~~~~~~~~~~~
 
 Each module adds its outputs to the tensordict, so the tensordict grows with
 every layer. When autograd records the graph, it keeps these tensors anyway.
@@ -395,7 +426,7 @@ In this example, the module deletes the entry ``"other"``:
   ['b', 'x']
 
 Skip outputs that are already there
------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 By default, a module computes its outputs and overwrites the entries that are
 already in the input. Inside :class:`~tensordict.nn.set_skip_existing`, a
@@ -429,6 +460,46 @@ computes ``"y"`` from it. These rules apply:
 
 ``set_skip_existing`` also works as a decorator on the ``forward`` of a
 :class:`~tensordict.nn.TensorDictModuleBase` subclass (see its reference).
+
+Typed modules: TensorClassModuleBase
+------------------------------------
+
+:class:`~tensordict.nn.TensorClassModuleBase` defines a module whose input
+and output are :class:`~tensordict.TensorClass` instances instead of
+tensordicts with string keys (see :ref:`tensorclass-guide`). The class gives
+its input and output types as generic parameters. A type checker or an IDE
+then knows the fields that ``forward`` reads and writes. If you rename a
+field, the type checker finds the code that still uses the old name.
+
+  >>> from tensordict import TensorClass
+  >>> from tensordict.nn import TensorClassModuleBase
+  >>> class InputTC(TensorClass):
+  ...     a: torch.Tensor
+  ...     b: torch.Tensor
+  >>> class OutputTC(TensorClass):
+  ...     total: torch.Tensor
+  ...     difference: torch.Tensor
+  >>> class SumDiff(TensorClassModuleBase[InputTC, OutputTC]):
+  ...     def forward(self, x: InputTC) -> OutputTC:
+  ...         return OutputTC(total=x.a + x.b, difference=x.a - x.b, batch_size=x.batch_size)
+  >>> sum_diff = SumDiff()
+  >>> sum_diff(InputTC(a=torch.tensor([1.0, 2.0]), b=torch.tensor([3.0, 4.0]), batch_size=[2])).total
+  tensor([4., 6.])
+
+:meth:`~tensordict.nn.TensorClassModuleBase.as_td_module` returns a
+:class:`~tensordict.nn.TensorClassModuleWrapper`, which reads and writes
+tensordicts and can go into a :class:`~tensordict.nn.TensorDictSequential`.
+The wrapper returns a new tensordict that holds only the output fields:
+
+  >>> td_sum_diff = sum_diff.as_td_module()
+  >>> td = TensorDict(a=torch.tensor([1.0, 2.0]), b=torch.tensor([3.0, 4.0]), batch_size=[2])
+  >>> sorted(td_sum_diff(td).keys())
+  ['difference', 'total']
+
+In a :class:`~tensordict.nn.TensorDictSequential`, the modules after the
+wrapper therefore see only these outputs, not its input keys. By default, the
+result of the sequence also holds only these outputs. Nested
+:class:`~tensordict.TensorClass` fields map to nested keys.
 
 .. _modules-probabilistic:
 
@@ -857,46 +928,6 @@ In this example, only the ``float32`` entry becomes a parameter:
   ['f32']
   >>> sorted(name for name, _ in p.named_buffers())
   ['bf16', 'flags']
-
-Typed modules: TensorClassModuleBase
-------------------------------------
-
-:class:`~tensordict.nn.TensorClassModuleBase` defines a module whose input
-and output are :class:`~tensordict.TensorClass` instances instead of
-tensordicts with string keys (see :ref:`tensorclass-guide`). The class gives
-its input and output types as generic parameters. A type checker or an IDE
-then knows the fields that ``forward`` reads and writes. If you rename a
-field, the type checker finds the code that still uses the old name.
-
-  >>> from tensordict import TensorClass
-  >>> from tensordict.nn import TensorClassModuleBase
-  >>> class InputTC(TensorClass):
-  ...     a: torch.Tensor
-  ...     b: torch.Tensor
-  >>> class OutputTC(TensorClass):
-  ...     total: torch.Tensor
-  ...     difference: torch.Tensor
-  >>> class SumDiff(TensorClassModuleBase[InputTC, OutputTC]):
-  ...     def forward(self, x: InputTC) -> OutputTC:
-  ...         return OutputTC(total=x.a + x.b, difference=x.a - x.b, batch_size=x.batch_size)
-  >>> sum_diff = SumDiff()
-  >>> sum_diff(InputTC(a=torch.tensor([1.0, 2.0]), b=torch.tensor([3.0, 4.0]), batch_size=[2])).total
-  tensor([4., 6.])
-
-:meth:`~tensordict.nn.TensorClassModuleBase.as_td_module` returns a
-:class:`~tensordict.nn.TensorClassModuleWrapper`, which reads and writes
-tensordicts and can go into a :class:`~tensordict.nn.TensorDictSequential`.
-The wrapper returns a new tensordict that holds only the output fields:
-
-  >>> td_sum_diff = sum_diff.as_td_module()
-  >>> td = TensorDict(a=torch.tensor([1.0, 2.0]), b=torch.tensor([3.0, 4.0]), batch_size=[2])
-  >>> sorted(td_sum_diff(td).keys())
-  ['difference', 'total']
-
-In a :class:`~tensordict.nn.TensorDictSequential`, the modules after the
-wrapper therefore see only these outputs, not its input keys. By default, the
-result of the sequence also holds only these outputs. Nested
-:class:`~tensordict.TensorClass` fields map to nested keys.
 
 Compile and capture modules
 ---------------------------
