@@ -4550,6 +4550,55 @@ class TestGeneric:
         torch.testing.assert_close(cummax.values, -cummin.values)
         torch.testing.assert_close(cummax.indices, cummin.indices)
 
+    @pytest.mark.parametrize("reduce", [False, True])
+    @pytest.mark.parametrize(
+        "reduction",
+        [
+            "sum",
+            "nansum",
+            "mean",
+            "nanmean",
+            "std",
+            "var",
+            "prod",
+            "quantile",
+            "amax",
+            "amin",
+            "max",
+            "min",
+        ],
+    )
+    def test_reduction_dim_none(self, reduction, reduce):
+        # dim=None reduces over all the elements, as a call without dim does
+        td = TensorDict(
+            a=torch.randn(3, 4, 5),
+            b=TensorDict(c=torch.randn(3, 4, 5, 6), batch_size=(3, 4, 5)),
+            batch_size=(3, 4),
+        )
+        args = (0.5,) if reduction == "quantile" else ()
+        result = getattr(td, reduction)(*args, dim=None, reduce=reduce)
+        expected = getattr(td, reduction)(*args, reduce=reduce)
+        if reduce:
+            torch.testing.assert_close(result, expected)
+        else:
+            assert result.batch_size == torch.Size([])
+            assert result["b"].batch_size == torch.Size([])
+            assert_allclose_td(result, expected)
+
+    @pytest.mark.parametrize(
+        "reduction",
+        ["sum", "nansum", "mean", "nanmean", "std", "var", "quantile", "amax", "amin"],
+    )
+    def test_reduction_dim_none_keepdim(self, reduction):
+        # With keepdim=True, each leaf is reduced as torch reduces it with dim=None
+        td = TensorDict(a=torch.randn(3, 4, 5), batch_size=(3, 4))
+        args = (0.5,) if reduction == "quantile" else ()
+        result = getattr(td, reduction)(*args, dim=None, keepdim=True)
+        assert result.batch_size == torch.Size([1, 1])
+        torch.testing.assert_close(
+            result["a"], getattr(td["a"], reduction)(*args, dim=None, keepdim=True)
+        )
+
     @pytest.mark.parametrize(
         "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "quantile"]
     )
