@@ -959,10 +959,6 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
 _DIRECT_DELEGATES = [
     "_get_str",
     "_get_tuple",
-    "_set_str",
-    "_set_tuple",
-    "_set_at_str",
-    "_set_at_tuple",
     "_stack_onto_",
     "keys",
     "entry_class",
@@ -1007,6 +1003,10 @@ _WRAP_DELEGATES = [
 
 # In-place: delegate to _source, return self
 _INPLACE_DELEGATES = [
+    "_set_str",
+    "_set_tuple",
+    "_set_at_str",
+    "_set_at_tuple",
     "share_memory_",
     "detach_",
     "masked_fill_",

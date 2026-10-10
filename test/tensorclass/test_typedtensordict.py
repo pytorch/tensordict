@@ -564,6 +564,16 @@ class TestTensorDictOps:
         state.update({"eta": torch.ones(5, 3)})
         assert (state["eta"] == 1).all()
 
+    def test_set_returns_self(self, state):
+        assert state.set("new", torch.ones(5)) is state
+        assert state.set(("nested", "a"), torch.ones(5)) is state
+        assert state.set_("eta", torch.ones(5, 3)) is state
+        assert state.set_(("nested", "a"), torch.zeros(5)) is state
+        assert state.set_at_("eta", torch.full((3,), 2.0), 0) is state
+        assert state.set_at_(("nested", "a"), torch.tensor(2.0), 0) is state
+        assert (state["eta"][0] == 2).all()
+        assert state["nested", "a"][0] == 2
+
     def test_to_dict(self, state):
         d = state.to_dict()
         assert set(d.keys()) == {"eta", "X", "beta"}
