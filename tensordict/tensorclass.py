@@ -4421,6 +4421,20 @@ def _check_equal(a, b):
     return iseq
 
 
+def _compares_by_element(non_tensor, other) -> bool:
+    # Whether a NonTensorDataBase is compared with `other` element by element,
+    # as two non-tensor stacks are
+    return (
+        isinstance(other, NonTensorStack)
+        and other.batch_size == non_tensor.batch_size
+        # the stack comparison needs at least one element
+        and non_tensor.batch_size.numel() > 0
+        # arrays and tensors are left out: they may hold one value per element
+        # (from_struct_array makes such data), which maybe_to_stack ignores
+        and not isinstance(non_tensor.data, (np.ndarray, torch.Tensor))
+    )
+
+
 class NonTensorDataBase(TensorClass):
     """A base class to carry non-tensor data.
 
@@ -4491,6 +4505,13 @@ class NonTensorDataBase(TensorClass):
                         bool(eqval),
                         device=self.device,
                     )
+                if _compares_by_element(self, other):
+                    try:
+                        return self.maybe_to_stack() == other
+                    except Exception:
+                        # values that cannot be compared (dicts holding
+                        # arrays, data frames) keep the empty result
+                        pass
                 # # Handle comparison with scalar values (like 0, 1, etc.)
                 # # For non-tensor data, we should return a boolean tensor
                 # if isinstance(other, (int, float, bool)) or (isinstance(other, torch.Tensor) and other.numel() == 1):
@@ -4523,6 +4544,13 @@ class NonTensorDataBase(TensorClass):
                         bool(neqval),
                         device=self.device,
                     )
+                if _compares_by_element(self, other):
+                    try:
+                        return self.maybe_to_stack() != other
+                    except Exception:
+                        # values that cannot be compared (dicts holding
+                        # arrays, data frames) keep the empty result
+                        pass
                 # # Handle comparison with scalar values (like 0, 1, etc.)
                 # # For non-tensor data, we should return a boolean tensor
                 # if isinstance(other, (int, float, bool)) or (isinstance(other, torch.Tensor) and other.numel() == 1):
@@ -5060,8 +5088,11 @@ class NonTensorData(NonTensorDataBase):
         Unlike other tensorclass classes, :class:`NonTensorData` supports
         comparisons of two non-tensor data through :meth:`~.__eq__`, :meth:`~.__ne__`,
         :meth:`~.__xor__` or :meth:`~.__or__`. These operations return a tensor
-        of shape `batch_size`. For compatibility with `<a tensordict> == <float_number>`,
-        comparison with non-:class:`NonTensorData` will always return an empty
+        of shape `batch_size`. :meth:`~.__eq__` and :meth:`~.__ne__` also compare
+        with a :class:`~tensordict.NonTensorStack` of the same batch size, element
+        by element when their values can be compared, unless the data is an array
+        or a tensor. For compatibility with `<a tensordict> == <float_number>`,
+        comparison with other objects will always return an empty
         :class:`NonTensorData`.
 
         >>> a = NonTensorData(True)
