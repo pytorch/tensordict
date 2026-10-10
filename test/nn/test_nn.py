@@ -4469,6 +4469,33 @@ class TestCompositeDist:
         assert sample.get(("nested", "disc_entropy")).requires_grad
         assert "entropy" not in sample.keys()
 
+    @pytest.mark.parametrize("lp_aggregate", [True, False])
+    @pytest.mark.parametrize("aggregate_probabilities", [True, False])
+    def test_entropy_aggregate_probabilities_deprecated(
+        self, lp_aggregate, aggregate_probabilities
+    ):
+        params = TensorDict(
+            cont={"loc": torch.zeros(3), "scale": torch.ones(3)},
+            disc={"logits": torch.zeros(3, 4)},
+            batch_size=[3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={"cont": distributions.Normal, "disc": Categorical},
+        )
+        with set_composite_lp_aggregate(lp_aggregate):
+            expected = dist.entropy()
+            with pytest.warns(
+                DeprecationWarning,
+                match=r"^CompositeDistribution\.entropy\(aggregate_probabilities=\.\.\.\), "
+                r"which has no effect, is deprecated and will be removed in "
+                r"TensorDict 0\.17\. Use set_composite_lp_aggregate instead\.$",
+            ) as record:
+                ent = dist.entropy(aggregate_probabilities=aggregate_probabilities)
+        assert record[0].filename == __file__
+        assert type(ent) is type(expected)
+        assert (ent == expected).all()
+
     def test_cdf(self):
         params = TensorDict(
             {
