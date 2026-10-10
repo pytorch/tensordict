@@ -1991,10 +1991,14 @@ class TestLazyStackedTensorDict:
             assert lstd["a"].shape == torch.Size([*batch_size, 4])
         with pytest.raises(RuntimeError, match="too big for batch size"):
             LazyStackedTensorDict(stack_dim=2)
-        # with a batch size, the batch dims of the members are known
-        assert LazyStackedTensorDict(stack_dim=1, batch_size=[3]).batch_size == (3, 0)
+        # append takes the batch size of the new members, even if the empty stack
+        # was built with a batch size: with [3], it accepts stack dims 0 to 2
+        lstd = LazyStackedTensorDict(stack_dim=1, batch_size=[])
+        lstd.append(td)
+        assert lstd.batch_size == torch.Size([3, 1])
+        assert LazyStackedTensorDict(stack_dim=2, batch_size=[3]).batch_size == (3, 0)
         with pytest.raises(RuntimeError, match="too big for batch size"):
-            LazyStackedTensorDict(stack_dim=2, batch_size=[3])
+            LazyStackedTensorDict(stack_dim=3, batch_size=[3])
 
     def test_new_methods(self):
         td = TensorDict(
