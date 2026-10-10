@@ -174,6 +174,15 @@ jobs:
           name: GPU-benchmark-results
           path: gpu-results
 
+      # GitHub push protection reads a 15-digit number that starts with 1000,
+      # such as the fractional part of a mean of 32.100025873592784 usec, as a
+      # secret of type "BII - UID" and rejects the push to gh-pages. Round the
+      # results so that the steps below write at most 12 significant digits.
+      - name: Round benchmark results
+        run: |
+          python3 .github/scripts/round_benchmark_results.py \
+            cpu-results/output.json gpu-results/output.json
+
       - name: Store CPU benchmark results
         uses: benchmark-action/github-action-benchmark@v1
         with:
