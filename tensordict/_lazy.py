@@ -126,6 +126,8 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
     tensordict: LazyStackedTensorDict
 
     def __len__(self) -> int:
+        if self.include_nested or self.leaves_only:
+            return super().__len__()
         return len(self._keys())
 
     def _keys(self) -> list[str]:
@@ -5171,7 +5173,9 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 def _iter_items_lazystack(
     tensordict: LazyStackedTensorDict, return_none_for_het_values: bool = False
 ) -> Iterator[tuple[str, CompatibleType]]:
-    for key in tensordict.tensordicts[0].keys():
+    # The keys of every member, as keys() lists them: a sub-tensordict that
+    # only some members have cannot be stacked.
+    for key in tensordict._key_list():
         values = tensordict._maybe_get_list(key)
         if values is not None:
             yield key, values
