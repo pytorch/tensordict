@@ -397,6 +397,14 @@ class TestTD:
         data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
         assert (unbind(data)[-1] == unbind_c(data)[-1]).all()
 
+    def test_iter(self, mode):
+        def iterate(td):
+            return torch.stack([t["a", "b"] + 1 for t in td])
+
+        iterate_c = torch.compile(iterate, fullgraph=True, mode=mode)
+        data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
+        assert (iterate(data) == iterate_c(data)).all()
+
     def test_items(self, mode):
         def items(td):
             keys, vals = zip(*td.items(True, True))
@@ -1300,6 +1308,16 @@ class TestTC:
             a=MyClass(a=None, b=torch.arange(4), batch_size=[4]), batch_size=[4]
         )
         assert (unbind(data)[-1] == unbind_c(data)[-1]).all()
+
+    def test_tc_iter(self, mode):
+        def iterate(tc):
+            return torch.stack([t.a.b + 1 for t in tc])
+
+        iterate_c = torch.compile(iterate, fullgraph=True, mode=mode)
+        data = MyClass(
+            a=MyClass(a=None, b=torch.arange(4), batch_size=[4]), batch_size=[4]
+        )
+        assert (iterate(data) == iterate_c(data)).all()
 
     @pytest.mark.parametrize("recurse", [True, False])
     def test_tc_clone(self, recurse, mode):
