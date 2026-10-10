@@ -185,6 +185,9 @@ _SELF_NESTING_ERROR = (
 
 _HEURISTIC_EXCLUDED = (Tensor, tuple, list, set, dict, np.ndarray)
 
+# Context-manager ops whose inverse __exit__ runs also when the body raises
+_UNDO_ON_ERROR_OPS = frozenset({"to_module", "lock_", "unlock_"})
+
 _GET_DEFAULTS_TO_NONE_REPLACEMENT = "td[key] to raise a KeyError for a missing key"
 
 if "TD_GET_DEFAULTS_TO_NONE" in os.environ:
@@ -6065,14 +6068,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         # storage location can be identical, resulting in a RuntimeError
         if is_compiling():
             self.clear_refs_for_compile_()
-        if exc_type is not None and issubclass(exc_type, Exception):
-            return False
         is_tc = _is_tensorclass(type(self))
         _last_op = (
             self._last_op_queue.pop()
             if not is_tc
             else self._tensordict._last_op_queue.pop()
         )
+        if exc_type is not None and issubclass(exc_type, Exception):
+            # to_module, lock_ and unlock_ change the original object on entry:
+            # undo the change. The other ops do not write back after an error.
+            if _last_op is not None and _last_op[0] in _UNDO_ON_ERROR_OPS:
+                last_op, (args, kwargs, out_wr) = _last_op
+                LAST_OP_MAPS[last_op](self, args, kwargs, out_wr())
+            return False
         if _last_op is not None:
             last_op, (args, kwargs, out_wr) = _last_op
             # TODO: transpose, flatten etc. as decorator should lock the content to make sure that no key is

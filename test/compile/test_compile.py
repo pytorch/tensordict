@@ -2014,6 +2014,28 @@ class TestFunctional:
         else:
             assert (td_zero == 0).all()
 
+    def test_to_module_restores_on_error(self, mode):
+        # The module gets its original parameters back also when the body raises
+        module = torch.nn.Linear(3, 4)
+        orig_params = list(module.parameters())
+        td_zero = TensorDict.from_module(module).data.clone().zero_()
+
+        def call(x, td):
+            try:
+                with td.to_module(module, preserve_module_state=False):
+                    module(x)
+                    raise ValueError("error in the body")
+            except ValueError:
+                pass
+            return module(x)
+
+        call_compile = torch.compile(call, fullgraph=True, mode=mode)
+        x = torch.randn(2, 3)
+        torch.testing.assert_close(call_compile(x, td_zero), module(x))
+        assert all(
+            p_new is p_orig for p_new, p_orig in zip(module.parameters(), orig_params)
+        )
+
     # in-place modif raises an error even if fullgraph=False
     @pytest.mark.parametrize("preserve_module_state", [False, True])
     def test_vmap_functional(self, mode, preserve_module_state):

@@ -5254,6 +5254,20 @@ class TestToModule:
         for target in grad_targets:
             assert target.grad is not None
 
+    def test_to_module_context_manager_restores_on_error(self, as_module):
+        # The module gets its original parameters back also when the body raises
+        module = nn.Linear(4, 2)
+        weight, bias = module.weight, module.bias
+        params = TensorDict.from_module(module, as_module=as_module)
+        zeros = params.detach().clone().zero_()
+        with pytest.raises(ValueError, match="error in the body"):
+            with zeros.to_module(module) as swap:
+                assert (module.weight == 0).all()
+                raise ValueError("error in the body")
+        assert module.weight is weight
+        assert module.bias is bias
+        assert not swap._last_op_queue
+
     def test_plain_tensor_to_module_can_keep_current_behavior(self, as_module):
         module = nn.Linear(4, 2)
         params = TensorDict.from_module(module, as_module=as_module).data.detach()
