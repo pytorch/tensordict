@@ -2861,7 +2861,12 @@ class _SubTensorDict(TensorDictBase):
             raise TypeError(
                 "Cannot send a _SubTensorDict instance to device/dtype inplace."
             )
-        if device is not None and dtype is None and device == self.device:
+        if (
+            device is not None
+            and dtype is None
+            and convert_to_format is None
+            and device == self.device
+        ):
             return result
         return self.to_tensordict().to(*args, **kwargs)
 
