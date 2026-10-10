@@ -279,6 +279,8 @@ class _Conversion:
             recover the original types.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> # Create a pytree with tensor leaves, and one "weird"-looking dict key
             >>> class WeirdLookingClass:
             ...     pass
@@ -412,6 +414,7 @@ class _Conversion:
             A PersistentTensorDict representation of the input h5 file.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> td = TensorDict.from_h5("path/to/file.h5")
             >>> print(td)
             PersistentTensorDict(
@@ -466,6 +469,7 @@ class _Conversion:
             A PersistentTensorDict representation of the input zarr store.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> td = TensorDict.from_zarr("path/to/store.zarr")
             >>> print(td)
             PersistentTensorDict(
@@ -537,6 +541,8 @@ class _Conversion:
             pre-allocated (zero-filled) keys.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict.from_schema(
             ...     {"obs": ([84, 84, 3], torch.uint8),
             ...      "reward": ([], torch.float32)},
@@ -662,6 +668,7 @@ class _Conversion:
                     This is particularly useful when state-dict hooks have to be used.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> from torch import nn
             >>> module = nn.TransformerDecoder(
             ...     decoder_layer=nn.TransformerDecoderLayer(nhead=4, d_model=4),
@@ -742,6 +749,7 @@ class _Conversion:
                 will be returned instead. This argument is ignored when ``lazy_stack=True``.
 
         Examples:
+            >>> import torch
             >>> from torch import nn
             >>> from tensordict import TensorDict
             >>> torch.manual_seed(0)
@@ -1219,6 +1227,8 @@ class _Conversion:
             This method can be used to swap the stack dimension of a LazyStackedTensorDict.
             For example, if you have a LazyStackedTensorDict with stack_dim=1, you can use this method to swap it to stack_dim=0:
 
+            >>> import torch
+            >>> from tensordict import LazyStackedTensorDict
             >>> td = TensorDict({"a": torch.zeros(2, 3), "b": torch.ones(2, 3)}, batch_size=(2, 3))
             >>> td2 = td.to_lazystack()
             >>> td2.batch_size
@@ -1671,6 +1681,7 @@ class _Conversion:
             A TensorDict representation of the input tuple.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> my_tuple = (1, 2, 3)
             >>> td = TensorDict.from_tuple(my_tuple)
             >>> print(td)
@@ -1897,6 +1908,8 @@ class _Conversion:
             A TensorDict representation of the input structured numpy array.
 
         Examples:
+            >>> import numpy as np
+            >>> from tensordict import TensorDict
             >>> x = np.array(
             ...     [("Rex", 9, 81.0), ("Fido", 3, 27.0)],
             ...     dtype=[("name", "U10"), ("age", "i4"), ("weight", "f4")],
@@ -2097,6 +2110,7 @@ class _Conversion:
             A TensorDict representation of the DataFrame.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> import pandas as pd
             >>> df = pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
             >>> td = TensorDict.from_pandas(df)
@@ -2148,6 +2162,8 @@ class _Conversion:
             A pandas DataFrame.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({"a": torch.arange(3), "b": torch.zeros(3)}, [3])
             >>> df = td.to_pandas()
             >>> print(df)
@@ -2199,6 +2215,8 @@ class _Conversion:
             A TensorDict representation of the CSV data.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict.from_csv("data.csv")
             >>> td = TensorDict.from_csv("data.csv", separator=".", dtype=torch.float32)
         """
@@ -2286,6 +2304,7 @@ class _Conversion:
             A TensorDict representation of the Parquet data.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> td = TensorDict.from_parquet("data.parquet")
             >>> td = TensorDict.from_parquet("data.parquet", columns=["obs", "reward"])
         """
@@ -2376,6 +2395,7 @@ class _Conversion:
             A TensorDict representation of the JSON data.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> td = TensorDict.from_json("data.json")
             >>> td = TensorDict.from_json("data.jsonl", lines=True)
         """
@@ -2440,6 +2460,7 @@ class _Conversion:
             A :class:`~.tensordict.PersitentTensorDict` instance linked to the newly created file.
 
         Examples:
+            >>> import torch
             >>> import tempfile
             >>> import timeit
             >>>
@@ -2579,6 +2600,7 @@ class _Conversion:
             A store-backed TensorDict instance.
 
         Examples:
+            >>> import torch
             >>> from tensordict import TensorDict
             >>> td = TensorDict({"obs": torch.randn(10, 84)}, [10])
             >>> store_td = td.to_store(host="localhost")

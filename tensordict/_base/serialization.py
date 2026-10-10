@@ -1246,6 +1246,8 @@ class _Serialization:
             be slow for large content.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({
             ...     "a": torch.zeros((3, 64, 64), dtype=torch.uint8),
             ...     "b": torch.zeros(1, dtype=torch.int64),
@@ -1435,6 +1437,7 @@ class _Serialization:
                 a pickle sidecar do not require this option.
 
         Examples:
+            >>> import torch
             >>> from tensordict import TensorDict
             >>> td = TensorDict.fromkeys(["a", "b", "c", ("nested", "e")], 0)
             >>> td.memmap("./saved_td")

@@ -77,6 +77,7 @@ class _DeviceOps:
                 instead. Defaults to ``False``.
 
         Examples:
+            >>> import torch
             >>> from tensordict import TensorDict
             >>> td = TensorDict(a=torch.randn(2), b=torch.randn(2), batch_size=[2])
             >>> td0 = td.unsqueeze(0)  # the leaves of td0 are views on the leaves of td
@@ -523,6 +524,7 @@ class _DeviceOps:
         on a specific device.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> data = TensorDict({"a": 1.0}, [], device=None)
             >>> data_cuda = data.to("cuda:0")  # casts to cuda
             >>> data_int = data.to(torch.int)  # casts to int
