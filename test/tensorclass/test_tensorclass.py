@@ -674,6 +674,43 @@ class MyDataTensorOnly:
     X: torch.Tensor
 
 
+@pytest.mark.parametrize("form", ["subclass", "decorator"])
+def test_tensorclass_keeps_its_docstring(form):
+    # A tensorclass keeps its own docstring (help(), IDEs and the API docs
+    # read it); a class without one documents its constructor signature.
+    if form == "subclass":
+
+        class WithDoc(TensorClass):
+            """Observations of one step."""
+
+            obs: torch.Tensor
+
+        class WithoutDoc(TensorClass):
+            obs: torch.Tensor
+
+    else:
+
+        @tensorclass
+        class WithDoc:
+            """Observations of one step."""
+
+            obs: torch.Tensor
+
+        @tensorclass
+        class WithoutDoc:
+            obs: torch.Tensor
+
+    assert WithDoc.__doc__ == "Observations of one step."
+    assert WithoutDoc.__doc__.startswith("WithoutDoc(")
+    assert "obs" in WithoutDoc.__doc__
+
+
+@pytest.mark.parametrize("cls", [NonTensorData, MetaData])
+def test_non_tensor_classes_keep_their_docstrings(cls):
+    # Their docstrings used to be replaced by the generated signature.
+    assert not cls.__doc__.startswith(cls.__name__ + "(")
+
+
 class TestTensorClass:
     @pytest.mark.parametrize("tensor_only", [False, True])
     @pytest.mark.parametrize("frozen", [False, True])
