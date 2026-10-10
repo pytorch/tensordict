@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4929+gf9248dc9e.d20261010)
+                  main (0.14.0.dev4930+g19bca25ad.d20261010)
                 </div>
               
             
@@ -372,7 +372,11 @@
 <li><p><strong>list_of_tensordicts</strong> (<em>List</em><em>[</em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>]</em>) – the list of instances to pad and stack.</p></li>
 <li><p><strong>pad_dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the <code class="docutils literal notranslate"><span class="pre">pad_dim</span></code> indicates the dimension to pad all the keys in the tensordict.
 Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
-<li><p><strong>padding_value</strong> (<em>number</em><em>, </em><em>optional</em>) – the padding value. Defaults to <code class="docutils literal notranslate"><span class="pre">0.0</span></code>.</p></li>
+<li><p><strong>padding_value</strong> (<em>number</em><em>, </em><em>optional</em>) – the padding value. Defaults to <code class="docutils literal notranslate"><span class="pre">0.0</span></code>.
+Non-tensor entries are not filled with <code class="docutils literal notranslate"><span class="pre">padding_value</span></code>: when the padded
+dim is a batch dimension of the output, they keep their values at the
+valid positions and hold <code class="docutils literal notranslate"><span class="pre">None</span></code> in the pad slots, as with
+<a class="reference internal" href="tensordict.pad.html#tensordict.pad" title="tensordict.pad"><code class="xref py py-func docutils literal notranslate"><span class="pre">pad()</span></code></a>.</p></li>
 <li><p><strong>out</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – if provided, the destination where the data will be
 written.</p></li>
 <li><p><strong>return_mask</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em> or </em><em>NestedKey</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a “masks” entry will be returned. If <code class="docutils literal notranslate"><span class="pre">return_mask</span></code> is a nested key (string or tuple of strings), it will be return the masks and be used as the key for the masks entry.
