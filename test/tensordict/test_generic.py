@@ -6036,7 +6036,14 @@ class TestGeneric:
     def test_update_batch_size_errors(self):
         td0 = TensorDict(batch_size=(3,))
         td1 = TensorDict(batch_size=(4,))
-        with pytest.raises(RuntimeError, match="update_batch_size"):
+        with pytest.raises(
+            RuntimeError,
+            match=re.escape(
+                "update() got a source with batch size torch.Size([4]) for a "
+                "destination with batch size torch.Size([3]). "
+                "Pass update_batch_size=True"
+            ),
+        ):
             td0.update(td1)
         td0.update(td1, update_batch_size=True)
         assert td0.batch_size == td1.batch_size

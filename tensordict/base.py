@@ -3196,8 +3196,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         ):
             if not update_batch_size:
                 raise RuntimeError(
-                    "update_batch_size must be set to True to be able to update "
-                    "tensordicts of different batch size. Got sizes {}"
+                    f"update() got a source with batch size {input_dict_or_td.batch_size} "
+                    f"for a destination with batch size {self.batch_size}. "
+                    "Pass update_batch_size=True to replace the batch size."
                 )
             if inplace:
                 raise RuntimeError(
