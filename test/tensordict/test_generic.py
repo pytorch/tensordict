@@ -4226,6 +4226,15 @@ class TestGeneric:
             td0 = td0.squeeze(0)
             assert_shared(td0)
 
+            # Indexing propagates the shared status if it gives a view
+            td0 = td[0]
+            assert_shared(td0)
+
+            # torch reads a bool as a 0-d mask, which copies
+            for index in (True, False, (0, True), torch.tensor(True)):
+                td0 = td[index]
+                assert_not_shared(td0)
+
     def test_sorted_keys(self):
         td = TensorDict(
             {
@@ -4609,7 +4618,7 @@ class TestGeneric:
         # Test multiple quantiles
         quantiles = torch.tensor([0.25, 0.5, 0.75])
         multi_quantile = td.quantile(quantiles, dim=0)
-        assert multi_quantile.batch_size == torch.Size([4])
+        assert multi_quantile.batch_size == torch.Size([3, 4])
         assert multi_quantile["a"].shape == torch.Size([3, 4, 5])
 
         # Test feature dimension
@@ -4621,6 +4630,42 @@ class TestGeneric:
         quantile_keepdim = td.quantile(0.5, dim=0, keepdim=True)
         assert quantile_keepdim.batch_size == torch.Size([1, 4])
         assert quantile_keepdim["a"].shape == torch.Size([1, 4, 5])
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"dim": 0},
+            {"dim": -1},
+            {"dim": 0, "keepdim": True},
+            {"keepdim": True},
+            {"dim": "feature"},
+        ],
+        ids=["dim", "neg_dim", "dim_keepdim", "keepdim", "feature"],
+    )
+    def test_quantile_tensor_q(self, kwargs):
+        # With a 1-d tensor q, the result stacks the results of each quantile
+        # along a new first dim, as torch.quantile does
+        td = TensorDict(
+            a=torch.randn(3, 4, 5),
+            b=TensorDict(c=torch.randn(3, 4, 5, 6), batch_size=(3, 4, 5)),
+            batch_size=(3, 4),
+        )
+        q = torch.tensor([0.25, 0.5])
+        result = td.quantile(q, **kwargs)
+        expected = torch.stack([td.quantile(q_i.item(), **kwargs) for q_i in q])
+        assert result.batch_size == expected.batch_size
+        assert result["b"].batch_size == expected["b"].batch_size
+        assert_allclose_td(result, expected)
+        assert_allclose_td(result.unbind(0)[1], expected[1])
+        # A 0-d tensor q adds no dim
+        assert td.quantile(q[0], **kwargs).batch_size == expected.batch_size[1:]
+
+        if "dim" in kwargs:
+            td.names = ["x", "y"]
+            result = td.quantile(q, **kwargs)
+            expected = td.quantile(0.5, **kwargs)
+            assert result.names == [None, *expected.names]
+            assert result["b"].names == [None, *expected["b"].names]
 
     def test_subclassing(self):
         class SubTD(TensorDict): ...
