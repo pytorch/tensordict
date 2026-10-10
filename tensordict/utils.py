@@ -2674,25 +2674,27 @@ def _pin_mem(q_in, q_out):
 
 
 def _infer_size_impl(shape: List[int], numel: int) -> List[int]:
-    # A local copy of  torch.jit._shape_functions.infer_size_impl which is skipped by torch.compile
+    # A local copy of torch.jit._shape_functions.infer_size_impl, which is skipped
+    # by torch.compile. It raises RuntimeError, as torch.Tensor.view does, where
+    # the original raises AssertionError.
     newsize = 1
     infer_dim: int | None = None
     for dim in range(len(shape)):
         if shape[dim] == -1:
             if infer_dim is not None:
-                raise AssertionError("only one dimension can be inferred")
+                raise RuntimeError("only one dimension can be inferred")
             infer_dim = dim
         elif shape[dim] >= 0:
             newsize *= shape[dim]
         else:
-            raise AssertionError(
+            raise RuntimeError(
                 f"invalid shape dimensions in {list(shape)}: sizes must be non-negative or -1"
             )
     if not (
         numel == newsize
         or (infer_dim is not None and newsize > 0 and numel % newsize == 0)
     ):
-        raise AssertionError(
+        raise RuntimeError(
             f"invalid shape {list(shape)} for a batch of {numel} elements"
         )
     out = _copy(shape)
