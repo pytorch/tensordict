@@ -2055,6 +2055,22 @@ class TestTensorClass:
         assert isinstance(stacked_tc._tensordict, TensorDict)
         assert stacked_tc.z == stacked_tc.y.z == z
 
+    def test_shape_ops_minus_one(self):
+        # A -1 keeps the size of its dim in expand and broadcast_to, and is
+        # inferred in unflatten, as for tensors
+        @tensorclass
+        class MyDataMinusOne:
+            X: torch.Tensor
+            z: str
+
+        data = MyDataMinusOne(X=torch.zeros(1, 6, 4), z="z", batch_size=[1, 6])
+        for out in (data.expand(2, -1, 6), data.broadcast_to((2, -1, -1))):
+            assert out.shape == (2, 1, 6)
+            assert out.X.shape == (2, 1, 6, 4)
+        out = data.unflatten(1, (3, -1))
+        assert out.shape == (1, 3, 2)
+        assert out.X.shape == (1, 3, 2, 4)
+
     def test_set(self):
         @tensorclass
         class MyDataNest:

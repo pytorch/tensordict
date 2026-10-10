@@ -1915,6 +1915,33 @@ def _get_shape_from_args(*args, kwarg_name="size", **kwargs):
     return size
 
 
+def _resolve_expand_shape(shape: Sequence[int], batch_size: torch.Size) -> torch.Size:
+    """Replaces the ``-1`` sizes of an ``expand`` shape and checks the shape, as :meth:`torch.Tensor.expand` does.
+
+    The shapes are aligned on the right. A ``-1`` keeps the size of the matching dim of
+    ``batch_size``. The other sizes must match the existing size, or expand a dim of size
+    1. The sizes of new leading dims are left as they are.
+    """
+    num_new_dims = len(shape) - len(batch_size)
+    if num_new_dims < 0:
+        # too few sizes: left to the caller, which raises
+        return shape
+    resolved = list(shape)
+    for i, size in enumerate(shape):
+        if i < num_new_dims:
+            continue
+        existing = batch_size[i - num_new_dims]
+        if size == -1:
+            resolved[i] = existing
+        elif size != existing and existing != 1:
+            raise RuntimeError(
+                f"The expanded size of the tensor ({size}) must match the existing size "
+                f"({existing}) at non-singleton dimension {i}.  Target sizes: "
+                f"{list(shape)}.  Tensor sizes: {list(batch_size)}"
+            )
+    return torch.Size(resolved)
+
+
 # Imports of ``tensordict.utils.Buffer`` resolve to this empty placeholder,
 # as they have since torch.nn.Buffer was added (torch 2.5).
 class Buffer:  # noqa: D101
