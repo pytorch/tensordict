@@ -1504,7 +1504,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     @property
     def data(self) -> Self:
-        """Returns a tensordict containing the .data attributes of the leaf tensors."""
+        """Returns a tensordict containing the .data attributes of the leaf tensors.
+
+        The leaves of the result share storage with the leaves of ``self``,
+        and do not require gradients. An in-place change to the result
+        changes ``self``.
+        """
         return self._data()
 
     @data.setter
@@ -2197,12 +2202,26 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Dim names functionality
     @property
     def names(self):
-        """The dimension names of the tensordict.
+        """The dimension names of the tensordict, one per batch dimension.
 
-        The names can be set at construction time using the ``names`` argument.
+        A dimension without a name is ``None``. The names can be set at
+        construction time using the ``names`` argument, or by assignment
+        (``td.names = [...]``). The names must be unique. Shape operations and
+        indexing keep the names of the dimensions that remain. See
+        :ref:`batch-size`.
 
         See also :meth:`~.refine_names` for details on how to set the names after
         construction.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3, 4), batch_size=[3, 4], names=["time", None])
+            >>> td.names
+            ['time', None]
+            >>> td.names = ["time", "batch"]
+            >>> td[0].names
+            ['batch']
         """
         names = self._td_dim_names
         if names is None:

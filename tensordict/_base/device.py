@@ -132,9 +132,22 @@ class _DeviceOps:
         )
 
     def clear_device_(self) -> Self:
-        """Clears the device of the tensordict.
+        """Sets the device of the tensordict and its sub-tensordicts to ``None``, and returns it.
+
+        The leaves are not moved. After this call, you can set leaves on any
+        device. See :ref:`devices`.
 
         Returns: self
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3), batch_size=[3], device="cpu")
+            >>> td = td.clear_device_()
+            >>> print(td.device)
+            None
+            >>> td["a"].device
+            device(type='cpu')
 
         """
         self._device = None

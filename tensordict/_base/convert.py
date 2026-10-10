@@ -665,7 +665,14 @@ class _Conversion:
         lock: bool = True,
         use_state_dict: bool = False,
     ):
-        """Copies the params and buffers of a module in a tensordict.
+        """Returns a tensordict of the parameters and buffers of a module.
+
+        The leaves are the parameters and buffers of the module, not copies:
+        an in-place change to a leaf changes the module. Use
+        ``TensorDict.from_module(module).data.clone()`` to get independent
+        tensors. Submodules become sub-tensordicts: ``module.layers[0].weight``
+        is the entry ``("layers", "0", "weight")``. Write the parameters back
+        with :meth:`~.to_module`.
 
         Args:
             module (nn.Module): the module to get the parameters from.

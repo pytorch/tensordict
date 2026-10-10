@@ -1008,9 +1008,36 @@ class _Serialization:
         archive: bool | None = None,
         compression: str | int | None = None,
     ) -> Self:
-        """Saves the tensordict to disk.
+        """Saves the tensordict to disk, and returns a memory-mapped copy of it.
 
-        This function is a proxy to :meth:`~.memmap`.
+        ``save`` (and its alias ``dumps``) is :meth:`~.memmap`: it takes the
+        same arguments. ``self`` is not changed. Read the result back with
+        :meth:`~.load`. See :ref:`saving`.
+
+        Args:
+            prefix (str or Path): the directory where the tensordict is
+                written, one file per leaf. If ``prefix`` ends with ``".tdz"``
+                or ``archive=True``, a single archive file is written instead.
+
+        Keyword Args:
+            archive (bool, optional): if ``True``, write a single archive file.
+                Defaults to ``None``, which writes an archive if ``prefix``
+                ends with ``".tdz"``.
+            compression (str or int, optional): the compression of the
+                archive. See :meth:`~.memmap`.
+
+        All the other arguments are those of :meth:`~.memmap`.
+
+        Examples:
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3), nested=TensorDict(b=torch.ones(3), batch_size=[3]), batch_size=[3])
+            >>> with tempfile.TemporaryDirectory() as path:
+            ...     _ = td.save(path)
+            ...     loaded = TensorDict.load(path)
+            ...     print((loaded == td).all())
+            True
         """
         return self.memmap(
             prefix=prefix,
@@ -1333,9 +1360,16 @@ class _Serialization:
 
     @classmethod
     def load(cls, prefix: str | Path, *args, **kwargs) -> Self:
-        """Loads a tensordict from disk.
+        """Loads a tensordict that :meth:`~.save` or :meth:`~.memmap` wrote to disk.
 
-        This class method is a proxy to :meth:`~.load_memmap`.
+        ``load`` is :meth:`~.load_memmap`: it takes the same arguments,
+        including ``allow_pickle``, ``device`` and ``mode``. The leaves of the
+        result are memory-mapped tensors that read the files. See
+        :ref:`saving` and the example of :meth:`~.save`.
+
+        Args:
+            prefix (str or Path): the directory, or the ``".tdz"`` archive
+                file, to read.
         """
         return cls.load_memmap(prefix, *args, **kwargs)
 
@@ -1343,7 +1377,7 @@ class _Serialization:
     def load_(self, prefix: str | Path, *args, **kwargs):
         """Loads a tensordict from disk within the current tensordict.
 
-        This class method is a proxy to :meth:`~.load_memmap_`.
+        This method is a proxy to :meth:`~.load_memmap_`.
 
         .. deprecated:: 0.15
             Use :meth:`~.load_memmap_` instead.
@@ -1622,6 +1656,22 @@ class _Serialization:
         data into the existing storage, use
         ``td.update_(TensorDict.load_memmap(prefix, device=td.device))``
         instead.
+
+        Args:
+            prefix (str or Path): the directory, or the ``".tdz"`` archive
+                file, to read.
+            robust_key (bool, optional): the key encoding used when the data
+                was saved. See :meth:`~.memmap`. Defaults to ``True``.
+
+        Keyword Args:
+            allow_pickle (bool, optional): whether pickled non-tensor fields
+                may be loaded. Pickle can execute arbitrary code, so pass
+                ``True`` only for data from a trusted source and ``False``
+                for untrusted data. As in :meth:`~.load_memmap`, omitting
+                this option loads pickle with a ``FutureWarning`` in 0.14,
+                and the default changes to ``False`` in 0.15.
+            mode (str, optional): the mode of the memory maps. See
+                :meth:`~.load_memmap`.
 
         See :meth:`~tensordict.TensorDictBase.load_memmap` for more info.
         """
