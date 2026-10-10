@@ -421,7 +421,8 @@ class _StoreStackElementView(TensorDictBase):
                 existing.fill_(subkey, value)
         else:
             existing = existing.fill_(value)
-            self.set_(key, existing)
+        # a nested entry is read as a new TensorDict, so it is written back too
+        self.set_(key, existing)
         return self
 
     def empty(
@@ -821,6 +822,15 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     def _is_key_homogeneous(self, meta: dict) -> bool:
         return meta.get("homogeneous", "1") == "1"
+
+    async def _ais_homogeneous(self, key_paths: list[str]) -> list[bool]:
+        """Reads from the metadata which keys hold elements of one shape and dtype."""
+        pipe = self._client.pipeline()
+        for kp in key_paths:
+            pipe.hget(self._meta_key(kp), "homogeneous")
+        flags = await pipe.execute()
+        # as in _is_key_homogeneous, a key without the flag is homogeneous
+        return [flag in (None, b"1", "1") for flag in flags]
 
     def _row_bytes(self, shape: list[int], dtype: torch.dtype) -> int:
         """Byte size of one stack element for a homogeneous key."""
@@ -2039,8 +2049,20 @@ class LazyStackedTensorDictStore(TensorDictBase):
     def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
         existing = self.get(key)
         if is_tensor_collection(existing):
-            for subkey in existing.keys():
-                existing.fill_(subkey, value)
+            # existing is a new TensorDict: write its leaves back under their
+            # full keys, except those whose elements differ in shape, which
+            # set_ would write with the shape of the first element
+            key = _unravel_key_to_tuple(key)
+            subkeys = [
+                _unravel_key_to_tuple(k)
+                for k in existing.keys(include_nested=True, leaves_only=True)
+            ]
+            homogeneous = self._run_sync(
+                self._ais_homogeneous([_KEY_SEP.join(key + k) for k in subkeys])
+            )
+            for subkey, is_homogeneous in zip(subkeys, homogeneous):
+                if is_homogeneous:
+                    self.set_(key + subkey, existing.get(subkey).fill_(value))
         else:
             existing = existing.fill_(value)
             self.set_(key, existing)
