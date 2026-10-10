@@ -461,10 +461,14 @@ class TensorDictPipe:
         storage in-place (zero allocation).
 
         Args:
-            td: if provided and consolidated, receives into its storage.
-                If ``None``, uses the internally cached TensorDict from
-                the previous receive (if any). The returned TensorDict is
-                then the same object as the previous one, with new values.
+            td: if provided and consolidated, receives into its storage
+                from the second message on. The first message returns a new
+                TensorDict and leaves ``td`` unchanged
+                (`#2244 <https://github.com/pytorch/tensordict/issues/2244>`_),
+                so use the return value. If ``None``, uses the internally
+                cached TensorDict from the previous receive (if any). The
+                returned TensorDict is then the same object as the previous
+                one, with new values.
 
         Keyword Args:
             device: device for storage allocation on first receive.
@@ -589,7 +593,11 @@ class TensorDictPipe:
         Blocking wrapper around :meth:`arecv`.
 
         Args:
-            td: if provided, receives into this TensorDict in-place.
+            td: if provided, receives into this TensorDict in place from the
+                second message on. The first message returns a new TensorDict
+                and leaves ``td`` unchanged
+                (`#2244 <https://github.com/pytorch/tensordict/issues/2244>`_),
+                so use the return value.
 
         Keyword Args:
             device: device for storage allocation on first receive.
