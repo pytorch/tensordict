@@ -4664,6 +4664,25 @@ class TestGeneric:
         td2 = torch.stack([td, td_copy], dim=0)
         assert td2.names == [None, None, None]
 
+    @pytest.mark.parametrize("dim", [0, 1, -1])
+    def test_stack_lazy_views(self, dim):
+        # Sub-tensordicts and legacy lazy views are lazy but are not lazy
+        # stacks: they are stacked densely
+        td = TensorDict(
+            {"a": torch.randn(2, 3, 4), "b": {"c": torch.randn(2, 3)}},
+            batch_size=[2, 3],
+        )
+        sub_tds = [td._get_sub_tensordict(0), td._get_sub_tensordict(1)]
+        expected = torch.stack([td[0], td[1]], dim)
+        for stack in (torch.stack, TensorDict.maybe_dense_stack):
+            result = stack(sub_tds, dim)
+            assert type(result) is TensorDict
+            assert (result == expected).all()
+        with legacy_lazy_mode():
+            unsqueezed = [td[0].unsqueeze(0), td[1].unsqueeze(0)]
+        expected = torch.stack([td[0].unsqueeze(0), td[1].unsqueeze(0)], dim)
+        assert (torch.stack(unsqueezed, dim) == expected).all()
+
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_record_stream(self):
         s0 = torch.cuda.Stream(0)

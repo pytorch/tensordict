@@ -810,7 +810,7 @@ def _stack(
                         )
                 raise
 
-            if all(_tensordict._lazy for _tensordict in list_of_tensordicts):
+            if all(isinstance(td, LazyStackedTensorDict) for td in list_of_tensordicts):
                 # Let's try to see if all tensors have the same shape
                 # If so, we can assume that we can densly stack the sub-tds
                 leaves = [tree_leaves(td) for td in list_of_tensordicts]
