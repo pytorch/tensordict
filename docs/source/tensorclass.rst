@@ -46,15 +46,16 @@ operations of a :class:`~tensordict.TensorDict`: indexing, reshaping,
 ``step`` has no loop over the systems and no shape argument. The *batch size*
 (``[64, 1000]`` here) is the leading dimensions that all the fields share (see
 :ref:`batch-size`). An index or a ``reshape`` applies to these dimensions and
-returns a ``Particles``, so the same method runs on one system or on a grid of
-them. The compiled ``step`` gives the result of the eager one. Because the
-fields are class attributes, your editor completes ``self.pos``, and a type
-checker reads the fields as the signature of the constructor (see
-:ref:`tensorclass-static-typing`).
+returns a ``Particles``. So the same method runs on one system or on a grid
+of systems. The compiled ``step`` gives the same result as the eager
+``step``. The class declares its fields, so your editor completes
+``self.pos``, and a type checker reads the fields as the signature of the
+constructor (see :ref:`tensorclass-static-typing`).
 
 Read the quick start and :ref:`tensorclass-methods` first. Each later section
-describes one feature, for when you need it. To compare a tensorclass with a
-``TensorDict`` and the other containers, see :ref:`choosing-a-container`.
+describes one feature: read it when you need that feature. To compare a
+tensorclass with a ``TensorDict`` and the other containers, see
+:ref:`choosing-a-container`.
 
 Quick start
 -----------
@@ -112,9 +113,9 @@ tensorclass. Fields that are not tensors keep their value:
   >>> sub.backup.sensor
   'radar'
 
-The shape and device operations of :class:`~tensordict.TensorDict` (``stack``,
-``cat``, ``reshape``, ``to``, ``clone``, ``apply`` and the others) work on a
-tensorclass and return an instance of the same class:
+The shape and device operations of :class:`~tensordict.TensorDict` work on a
+tensorclass: ``stack``, ``cat``, ``reshape``, ``to``, ``clone``, ``apply`` and
+the others. They return an instance of the same class:
 
   >>> data2 = data.clone()
   >>> cat_tc = torch.cat([data, data2], 0)
@@ -484,9 +485,9 @@ auto-cast:
 Auto-casting reads the annotations with :func:`typing.get_type_hints`. If one
 annotation of the class does not resolve, tensordict warns
 ``type_hints are none, cannot perform auto-casting`` and casts no field of the
-class. An annotation does not resolve when it is a string (or when the module
-uses ``from __future__ import annotations``) and names a class that is not
-visible from the module. The usual case is a tensorclass that is defined
+class. An annotation does not resolve when it names a class that is not
+visible from the module, and the annotation is a string (or the module uses
+``from __future__ import annotations``). The usual case is a tensorclass that is defined
 inside a function, and that another class refers to. Define such classes at
 module level.
 
@@ -591,9 +592,11 @@ Tensorclasses work with :func:`torch.compile`, :mod:`torch.func` and
 :func:`torch.export.export`. The ``Particles`` example at the top of this page
 compiles a method with ``fullgraph=True``. :ref:`compile` lists what makes a
 function recompile or break its graph, and the workarounds. Two of them
-concern tensorclasses: a function that returns a string field recompiles for
-each new string, and a compiled function that flattens a pytree recompiles
-after a new tensorclass is defined.
+concern tensorclasses:
+
+- A function that returns a string field recompiles for each new string.
+- A compiled function that flattens a pytree recompiles after a new
+  tensorclass is defined.
 
 .. _tensorclass-static-typing:
 
@@ -613,8 +616,8 @@ the wrong type is an error:
   >>> obs = Obs(a=[0.0, 1.0, 2.0], batch_size=[3])  # error: a list is not a Tensor
 
 The constructor converts a list, a NumPy array or a Python number that you
-pass to a ``torch.Tensor`` field, but a type checker expects a tensor there.
-Pass ``torch.as_tensor(value)``. Tensordict methods such as ``reshape`` and
+pass to a ``torch.Tensor`` field. A type checker expects a tensor there, so
+pass ``torch.as_tensor(value)``. Tensordict methods such as ``reshape`` and
 an index return the type of the class.
 
 The three forms of the class options differ for type checkers:
