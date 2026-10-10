@@ -3,4 +3,7 @@
 
 {{ name | underline}}
 
-.. autofunction:: {{ name }}
+.. auto{{ objtype }}:: {{ name }}
+
+.. minigallery:: {{ fullname }}
+    :add-heading: Tutorials that use {{ name }}

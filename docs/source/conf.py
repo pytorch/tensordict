@@ -21,11 +21,16 @@
 
 
 # -- Project information -----------------------------------------------------
+import ast
+import importlib
+import inspect
 import os
+import re
 import sys
 
 import pytorch_sphinx_theme
 import tensordict
+from sphinx.util.inspect import stringify_signature
 
 project = "tensordict"
 copyright = "2022, Meta"
@@ -66,7 +71,13 @@ extensions = [
     "sphinx_gallery.gen_gallery",
     "sphinxcontrib.aafig",
     "myst_parser",
+    "sphinx_copybutton",
 ]
+
+# The copy button copies the code of a ">>>" example without the prompts and
+# without the output lines, so the copied text runs as it is.
+copybutton_prompt_text = r">>> |\.\.\. "
+copybutton_prompt_is_regexp = True
 
 sphinx_gallery_conf = {
     "examples_dirs": "reference/generated/tutorials/",  # path to your example scripts
@@ -93,6 +104,10 @@ napoleon_use_ivar = True
 napoleon_numpy_docstring = False
 napoleon_google_docstring = True
 autosectionlabel_prefix_document = True
+
+# Signatures: "NestedKey" instead of "tensordict._nestedkey.NestedKey".
+autodoc_typehints_format = "short"
+python_use_unqualified_type_names = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -193,3 +208,147 @@ from content_generation import generate_tutorial_references
 generate_tutorial_references("../../tutorials/sphinx_tuto", "tutorial")
 generate_tutorial_references("../../tutorials/src/", "src")
 generate_tutorial_references("../../tutorials/media/", "media")
+
+
+# -- Reference layout hooks ---------------------------------------------------
+#
+# The methods shared by all tensordicts are documented once, on one page per
+# method of ``TensorDictBase`` (see reference/td.rst). The hooks below keep
+# that layout consistent: subclass pages do not repeat the shared methods, and
+# links to ``TensorDict.<method>`` (or any other tensordict class) still reach
+# the page of the shared method.
+
+_SELF_RE = re.compile(r"\bSelf\b")
+_PRIVATE_PATH_RE = re.compile(r"\btensordict\.(?:\w+\.)*_\w+\.")
+_documented_class = [None]
+
+
+def _shares_tensordict_api(cls) -> bool:
+    return inspect.isclass(cls) and (
+        issubclass(cls, tensordict.TensorDictBase) or tensordict.is_tensorclass(cls)
+    )
+
+
+def _own_doc(obj) -> str:
+    doc = getattr(obj, "__doc__", None)
+    return inspect.cleandoc(doc) if isinstance(doc, str) else ""
+
+
+def _without_slice_annotations(sig: inspect.Signature) -> inspect.Signature:
+    # Sphinx cannot render an annotation with a slice, such as
+    # ``Dict[NestedKey:str]``: drop such annotations.
+    params = []
+    for param in sig.parameters.values():
+        annotation = param.annotation
+        if isinstance(annotation, str):
+            try:
+                tree = ast.parse(annotation, mode="eval")
+            except SyntaxError:
+                tree = None
+            if tree is None or any(isinstance(n, ast.Slice) for n in ast.walk(tree)):
+                param = param.replace(annotation=inspect.Parameter.empty)
+        params.append(param)
+    return sig.replace(parameters=params)
+
+
+def _clean_signature_text(text):
+    # "tensordict._tensorcollection.TensorCollection" -> "TensorCollection",
+    # and the NO_DEFAULT sentinel as users write it.
+    if not text:
+        return text
+    text = _PRIVATE_PATH_RE.sub("", text)
+    return text.replace("_NoDefault.ZERO", "NO_DEFAULT")
+
+
+def _process_signature(app, what, name, obj, options, signature, return_annotation):
+    new_signature, new_return = signature, return_annotation
+    if what == "class":
+        _documented_class[0] = obj
+        # Classes that forward ``__new__(cls, *args, **kwargs)`` (the nn
+        # modules) hide the real constructor signature: read ``__init__``.
+        if signature == "(*args, **kwargs)":
+            try:
+                init_sig = inspect.signature(obj.__init__)
+            except (TypeError, ValueError):
+                init_sig = None
+            if init_sig is not None:
+                params = list(init_sig.parameters.values())[1:]
+                init_sig = init_sig.replace(
+                    parameters=params, return_annotation=inspect.Signature.empty
+                )
+                init_sig = _without_slice_annotations(init_sig)
+                new_signature = stringify_signature(
+                    init_sig, unqualified_typehints=True
+                )
+    elif return_annotation:
+        # ``Self`` is an alias of ``Any`` at run time (it is imported only
+        # under TYPE_CHECKING), so autodoc renders "-> Any". Show the
+        # annotation that the source writes instead.
+        func = obj.fget if isinstance(obj, property) else obj
+        func = getattr(func, "__func__", func)
+        returned = getattr(func, "__annotations__", {}).get("return")
+        if isinstance(returned, str) and _SELF_RE.search(returned):
+            new_return = returned
+    new_signature = _clean_signature_text(new_signature)
+    new_return = _clean_signature_text(new_return)
+    if (new_signature, new_return) != (signature, return_annotation):
+        return new_signature, new_return
+    return None
+
+
+def _skip_shared_member(app, what, name, obj, skip, options):
+    # On the page of a TensorDictBase subclass or a tensorclass, skip the
+    # members that only repeat a TensorDictBase method: overrides with no
+    # docstring, or with the same docstring.
+    cls = _documented_class[0]
+    if skip or what != "class" or not options or not _shares_tensordict_api(cls):
+        return None
+    if cls is tensordict.TensorDictBase or not hasattr(tensordict.TensorDictBase, name):
+        return None
+    doc = _own_doc(obj)
+    if not doc or doc == _own_doc(getattr(tensordict.TensorDictBase, name)):
+        return True
+    return None
+
+
+def _find_class(path: str):
+    for candidate in (path, "tensordict." + path):
+        module_name, _, attr = candidate.rpartition(".")
+        if not module_name:
+            continue
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError:
+            continue
+        obj = getattr(module, attr, None)
+        if inspect.isclass(obj):
+            return obj
+    return None
+
+
+def _resolve_shared_method(app, env, node, contnode):
+    # ``:meth:`TensorDict.select``` has no page of its own: send it to the
+    # page of ``TensorDictBase.select``.
+    if node.get("refdomain") != "py":
+        return None
+    owner, _, member = node["reftarget"].lstrip(".").rpartition(".")
+    if not owner or not hasattr(tensordict.TensorDictBase, member):
+        return None
+    cls = _find_class(owner)
+    if cls is None or not _shares_tensordict_api(cls):
+        return None
+    return env.get_domain("py").resolve_xref(
+        env,
+        node["refdoc"],
+        app.builder,
+        node["reftype"],
+        f"tensordict.TensorDictBase.{member}",
+        node,
+        contnode,
+    )
+
+
+def setup(app):
+    app.connect("autodoc-process-signature", _process_signature)
+    app.connect("autodoc-skip-member", _skip_shared_member)
+    app.connect("missing-reference", _resolve_shared_method)
