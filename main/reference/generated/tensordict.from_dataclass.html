@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4744+ge62b4290d.d20261010)
+                  main (0.14.0.dev4745+g57f6f3ac8.d20261010)
                 </div>
               
             
@@ -389,8 +389,9 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <li><p><strong>inplace</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the dataclass type passed will be modified in-place. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.
 Without effect if an instance is provided.</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The device on which the TensorDict will be created. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
-<li><p><strong>shadow</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – Disables the validation of field names against TensorDict’s reserved attributes.
-Use with caution, as this may cause unintended consequences. Defaults to False.</p></li>
+<li><p><strong>shadow</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – Disables the validation of field names against the names of the tensorclass
+members (e.g. <code class="docutils literal notranslate"><span class="pre">batch_size</span></code> or <code class="docutils literal notranslate"><span class="pre">sum</span></code>). Use with caution, as this may cause unintended consequences.
+Defaults to False.</p></li>
 </ul>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>

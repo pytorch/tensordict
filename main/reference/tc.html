@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4744+ge62b4290d.d20261010)
+                  main (0.14.0.dev4745+g57f6f3ac8.d20261010)
                 </div>
               
             
@@ -487,7 +487,9 @@ trajectories, model I/O batches).</p></li>
 <code class="docutils literal notranslate"><span class="pre">&#64;dataclass(frozen=True)</span></code>. Plays well with <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> and functional
 code paths.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">shadow</span></code> — opt out of the check that forbids field names colliding with
-reserved TensorDict attributes (<code class="docutils literal notranslate"><span class="pre">batch_size</span></code>, <code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">data</span></code>, …).</p></li>
+the members of a tensorclass (<code class="docutils literal notranslate"><span class="pre">batch_size</span></code>, <code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">sum</span></code>,
+<code class="docutils literal notranslate"><span class="pre">from_tensordict</span></code>, …). A field named <code class="docutils literal notranslate"><span class="pre">data</span></code> or <code class="docutils literal notranslate"><span class="pre">fields</span></code> is allowed
+without it and replaces the member of that name.</p></li>
 </ul>
 <p><code class="docutils literal notranslate"><span class="pre">autocast</span></code>, <code class="docutils literal notranslate"><span class="pre">nocast</span></code> and <code class="docutils literal notranslate"><span class="pre">tensor_only</span></code> are mutually exclusive. See the
 <a class="reference internal" href="generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> docstring for per-flag runnable examples.</p>

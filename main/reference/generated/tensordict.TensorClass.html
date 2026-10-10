@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4744+ge62b4290d.d20261010)
+                  main (0.14.0.dev4745+g57f6f3ac8.d20261010)
                 </div>
               
             
@@ -406,9 +406,9 @@ with <code class="docutils literal notranslate"><span class="pre">autocast</span
 tensor-compatible value, which will be cast). Lookups skip the non-tensor data path,
 which can yield significant speed-ups at the cost of losing non-tensor support.
 Mutually exclusive with <code class="docutils literal notranslate"><span class="pre">autocast</span></code> and <code class="docutils literal notranslate"><span class="pre">nocast</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>shadow</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – Disables the validation of field names against TensorDict’s reserved
-attributes (e.g. allowing a field named <code class="docutils literal notranslate"><span class="pre">device</span></code> or <code class="docutils literal notranslate"><span class="pre">batch_size</span></code>). Use with caution,
-as this can lead to surprising behaviour. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>shadow</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – Disables the validation of field names against the names of the
+tensorclass members (e.g. allowing a field named <code class="docutils literal notranslate"><span class="pre">device</span></code> or <code class="docutils literal notranslate"><span class="pre">batch_size</span></code>). Use with
+caution, as this can lead to surprising behaviour. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
