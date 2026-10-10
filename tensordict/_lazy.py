@@ -3311,6 +3311,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if self._td_dim_name is not None:
             # maybe_dense_stack leaves the stack dim unnamed
             if isinstance(result, LazyStackedTensorDict):
+                # a stack of lazy stacks can come back stacked along another dim
                 if result.stack_dim == stack_dim:
                     result._td_dim_name = self._td_dim_name
             elif isinstance(result, TensorDict):
