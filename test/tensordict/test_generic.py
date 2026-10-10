@@ -4968,6 +4968,87 @@ class TestGeneric:
         assert td_new["a"].device.type == "cpu"
         assert td_new["b"].device.type == "cpu"
 
+    @pytest.mark.parametrize(
+        "args,kwargs",
+        [
+            ((torch.float64,), {}),
+            ((), {"dtype": torch.float64}),
+            # The tensordict is on cpu already: to() returns a new one all the same
+            (("cpu", torch.float64), {}),
+            ((torch.zeros((), dtype=torch.float64),), {}),
+            ((), {"other": TensorDict(a=torch.zeros((), dtype=torch.float64))}),
+            (
+                (
+                    TensorDict(
+                        x=torch.zeros(3, dtype=torch.float64),
+                        i=torch.zeros(3, dtype=torch.float64),
+                        batch_size=[3],
+                    ).attrs(),
+                ),
+                {},
+            ),
+            ((torch.float64,), {"non_blocking": None}),
+        ],
+        ids=[
+            "dtype",
+            "dtype_kwarg",
+            "device_dtype",
+            "tensor",
+            "other",
+            "attrs",
+            "non_blocking_none",
+        ],
+    )
+    def test_to_context_manager_restores_dtype(self, args, kwargs):
+        td = TensorDict(
+            x=torch.zeros(3),
+            i=torch.arange(3),
+            nested=TensorDict(b=torch.ones(3, dtype=torch.bool), batch_size=[3]),
+            batch_size=[3],
+            device="cpu",
+        )
+        with td.to(*args, **kwargs) as td64:
+            assert td64 is not td
+            assert td64["i"].dtype == torch.float64
+            td64["x"] += 0.5
+            td64["y"] = td64["x"] * 2
+        # On exit, each entry gets its original dtype back
+        assert td["x"].dtype == torch.float32
+        assert (td["x"] == 0.5).all()
+        assert td["i"].dtype == torch.int64
+        assert (td["i"] == torch.arange(3)).all()
+        assert td["nested", "b"].dtype == torch.bool
+        # An entry added in the block keeps its dtype
+        assert td["y"].dtype == torch.float64
+        assert (td["y"] == 1).all()
+
+    @pytest.mark.parametrize(
+        "args,kwargs",
+        [
+            (("cpu",), {}),
+            (
+                (
+                    TensorDict(i=torch.zeros(3), batch_size=[3]).attrs(
+                        fields=("device",)
+                    ),
+                ),
+                {},
+            ),
+            (("cpu",), {"non_blocking": None}),
+        ],
+        ids=["device", "attrs", "device_non_blocking_none"],
+    )
+    def test_to_context_manager_device_only_keeps_dtype(self, args, kwargs):
+        # A device-only to() restores the devices only: an entry given another
+        # dtype in the block keeps it
+        td = TensorDict(x=torch.zeros(3), i=torch.arange(3), batch_size=[3])
+        with td.to(*args, **kwargs) as td_cpu:
+            assert td_cpu is not td
+            td_cpu["i"] = td_cpu["i"] / 2
+        assert td["x"].dtype == torch.float32
+        assert td["i"].dtype == torch.float32
+        assert (td["i"] == torch.arange(3) / 2).all()
+
     @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
     def test_to_mds(self, tmpdir):
         td = TensorDict(
