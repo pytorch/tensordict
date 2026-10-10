@@ -99,6 +99,13 @@ builds installed torch 2.15.0, which has no Python 3.10 wheels, and they
 failed. For a minor release that comes out together with a new PyTorch
 release, use that release's branch.
 
+For a 0.14.x release, use `release/2.14`, even once a later torch is stable.
+The 0.14 line builds wheels for Python 3.10, and torch 2.15.0 has none:
+
+```bash
+PYTORCH_RELEASE=release/2.14   # 0.14.x only
+```
+
 ## 2. Prepare the release branch
 
 ### Patch release (X.Y.Z with Z > 0)
@@ -142,9 +149,14 @@ Choose the commits with these rules:
 ### Minor release (X.Y.0)
 
 Create `release/X.Y.0` from the `main` commit that the maintainer names, or
-else from the head of `main` once its CI passes. After the release, open a PR
-that sets the three version files on `main` to X.Y.0. They set the base version
-of the nightly builds.
+else from the head of `main` once its CI passes. Once you have pushed the
+branch (step 4), open a PR that sets the three version files on `main` (see
+below) to X.(Y+1).0, for example 0.16.0 after `release/0.15.0`. They set the
+version of the dev builds and source installs of `main`, which would otherwise
+sort below the release. `test_deprecation_deadlines`
+(`test/utils/test_utils.py`) then fails on `main` until the removals announced
+for X.(Y+1) are done, so merge the bump together with those removals or after
+them.
 
 ### Bump the version
 
@@ -367,6 +379,7 @@ Then send one message with:
   `$PREV`;
 - the link to the dry run, and its number of wheels;
 - the release notes, in full;
+- if the conda-forge recipe must change (see step 7), the change;
 - "Reply ok to publish."
 
 Don't push the tag or start the real run before the reply. If the maintainer
@@ -391,6 +404,9 @@ gh workflow run release.yml -R pytorch/tensordict --ref "release/$VERSION" \
   -f python_versions="$PYTHON_VERSIONS" -f pytorch_release="$PYTORCH_RELEASE"
 ```
 
+If the conda-forge recipe must change, open the feedstock PR now, while the
+run builds (see "conda-forge" below).
+
 The URL of the draft release contains `untagged-...` until the release is
 published. The run attaches the wheels to the draft release, publishes them
 to PyPI, and then points the stable docs at `X.Y` in the "Update Stable Docs"
@@ -414,8 +430,102 @@ the repository; leave it out for a release of an older line.
 gh release edit "v$VERSION" -R pytorch/tensordict --draft=false --latest
 ```
 
-Report the PyPI and GitHub links, and whether "Update Stable Docs" succeeded.
-conda-forge needs nothing: its bot opens the feedstock update and merges it.
+Report the PyPI and GitHub links, whether "Update Stable Docs" succeeded, and
+the state of the conda-forge update.
+
+### conda-forge
+
+Within hours of the tag push, the conda-forge bot opens a PR on
+`conda-forge/tensordict-feedstock`, and the feedstock merges it on its own
+once its CI passes (`bot: automerge: true` in its `conda-forge.yml`). The bot
+changes only the version and the `sha256` of `recipe/recipe.yaml`. Its PR is
+enough unless the release changes another entry of the recipe, such as a
+dependency or its bounds in `pyproject.toml`.
+
+0.15.0 needs a recipe change. The feedstock still has the C++ recipe of the
+0.14 line, with `pytorch` in its host requirements, so every build requires
+the pytorch minor version it was built with: all 0.14.x builds need
+`pytorch >=2.13,<2.14`. The bot's PR would build 0.15.0 the same way. Right
+after the tag push, open a PR on the feedstock that:
+
+- builds one `noarch: python` package: it drops `skip: win`, the `build`
+  requirements (the compilers, `stdlib`, cmake, make and ninja) and `pytorch`
+  from `host`;
+- requires `pytorch >=2.13` at run time instead, with the other run
+  requirements taken from the `dependencies` of `pyproject.toml` (no
+  `importlib-metadata` since 0.15). A `noarch: python` recipe cannot express
+  the marker `python_version < "3.11"`, so it lists `typing_extensions`
+  without one, mirroring #2219. That is harmless on newer Pythons, and
+  conda-forge's pytorch already pulls it in;
+- keeps the version exact: keep the `sed` line of the build script, or set
+  `SETUPTOOLS_SCM_PRETEND_VERSION`. conda-forge builds inside the feedstock's
+  git checkout, and without either, `setup.py` appends that checkout's commit
+  to the version (`0.15.0+g<sha>`);
+- points the URLs at `pytorch/tensordict` and https://docs.pytorch.org/tensordict/.
+
+The feedstock maintainers are `sugatoray` and `jan-janssen`. Ask them to merge
+this PR instead of the bot's. If the bot's PR has already merged, keep the
+version and set `number: 1`, so that the noarch build replaces the C++ one.
+Except for the `sed` line, `typing_extensions` and the source, which was a
+local copy of the archive, this recipe was tested: rattler-build built 0.15.0
+on linux-64, and its tests passed with conda-forge's pytorch 2.14.1.
+
+```bash
+curl -fsSL "https://github.com/pytorch/tensordict/archive/v$VERSION.tar.gz" | sha256sum   # the sha256
+```
+
+```yaml
+schema_version: 1
+
+context:
+  name: tensordict
+  version: "0.15.0"
+
+package:
+  name: ${{ name|lower }}
+  version: ${{ version }}
+
+source:
+  url: https://github.com/pytorch/tensordict/archive/v${{ version }}.tar.gz
+  sha256: <the sha256 of the archive>
+
+build:
+  number: 0
+  noarch: python
+  script: sed -i -e 's/dynamic = \["version"\]/version="${{ version }}"/g' pyproject.toml; ${{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+
+requirements:
+  host:
+    - python ${{ python_min }}.*
+    - pip
+    - setuptools >=77
+    - wheel
+  run:
+    - python >=${{ python_min }}
+    - pytorch >=2.13
+    - numpy
+    - cloudpickle
+    - packaging
+    - orjson
+    - pyvers >=0.2.0,<0.3.0
+    - typing_extensions
+
+tests:
+  - python:
+      imports:
+        - tensordict
+        - tensordict.nn
+      pip_check: true
+      python_version: ${{ python_min }}.*
+
+about:
+  summary: TensorDict is a pytorch dedicated tensor container.
+  license: MIT
+  license_file: LICENSE
+  homepage: https://github.com/pytorch/tensordict
+  repository: https://github.com/pytorch/tensordict
+  documentation: https://docs.pytorch.org/tensordict/
+```
 
 ## If something fails
 
@@ -424,15 +534,20 @@ conda-forge needs nothing: its bot opens the feedstock update and merges it.
 - **After the tag is pushed:** if other inputs fix the problem, for example
   another `pytorch_release`, start the real run again. If the code must
   change, stop and ask the maintainer: the tag is already public, so the fix
-  may need a new version.
+  may need a new version. Never move the tag, even if the real run has not
+  started yet: the push has already started the docs build and the conda-forge
+  update.
 - **PyPI has some of the files:** re-run the failed "Publish to PyPI" job from
   the page of the run. It skips the files that PyPI already has. A new run for
   a version that PyPI has stops in the sanity checks.
 - **PyPI has the release:** never upload it again. If it is broken, the
   maintainer can yank it on PyPI, and the fix goes into the next patch
   release.
-- **Stopping a run:** `gh run cancel <run id> -R pytorch/tensordict`. A second
-  run on the same branch waits for the first one instead of cancelling it.
+- **Stopping a run:** `gh run cancel <run id> -R pytorch/tensordict` does not
+  stop the build jobs of a Release run. Use
+  `gh api -X POST repos/pytorch/tensordict/actions/runs/<run id>/force-cancel`.
+  A second run on the same branch waits for the first one instead of
+  cancelling it.
 - **The docs build of the tag fails:** re-run it from its run page. For a new
   minor version, the "Update Stable Docs" job of the real run needs the `X.Y`
   folder that this build creates on `gh-pages`. If that job gave up waiting,
