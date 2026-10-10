@@ -34,6 +34,8 @@ from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 from tensordict.base import (
     _default_is_leaf,
     _is_tensor_collection,
+    _NESTED_TENSORS_AS_LISTS,
+    _NESTED_TENSORS_AS_LISTS_NONTENSOR,
     _register_tensor_class,
     CompatibleType,
     NO_DEFAULT,
@@ -209,6 +211,17 @@ class _unlock_and_set:
             return out
 
         return new_func
+
+
+# items() and values() iterate over the wrapped tensordict with its default rule
+# for these is_leaf values. The internal calls pass the two markers to read lazy
+# stacks per member; TensorDictParams reads them stacked.
+_DEFAULT_TRAVERSAL = (
+    None,
+    _default_is_leaf,
+    _NESTED_TENSORS_AS_LISTS,
+    _NESTED_TENSORS_AS_LISTS_NONTENSOR,
+)
 
 
 def _get_post_hook(func):
@@ -1192,15 +1205,30 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         *,
         sort: bool = False,
     ) -> Iterator[CompatibleType]:
+        if leaves_only and is_leaf not in _DEFAULT_TRAVERSAL:
+            for _, v in self._leaves_from_keys(include_nested, is_leaf, sort):
+                yield v
+            return
         if is_leaf is None:
             is_leaf = _default_is_leaf
-        for v in self._param_td.values(
-            include_nested, leaves_only, is_leaf=is_leaf, sort=sort
-        ):
+        for v in self._param_td.values(include_nested, leaves_only, sort=sort):
             if not is_leaf(type(v)):
                 yield v
                 continue
             yield self._apply_get_post_hook(v)
+
+    def _leaves_from_keys(self, include_nested, is_leaf, sort):
+        # The leaves that keys() lists for is_leaf, with their values. The keys
+        # view only recurses into tensor collections, while the fast path of
+        # TensorDict.items calls items() on any value that is_leaf rejects, and
+        # raises for a tensor.
+        param_td = self._param_td
+        for key in param_td.keys(include_nested, True, is_leaf=is_leaf, sort=sort):
+            if isinstance(key, str):
+                val = param_td._get_str(key, NO_DEFAULT)
+            else:
+                val = param_td._get_tuple(key, NO_DEFAULT)
+            yield key, self._apply_get_post_hook(val)
 
     def state_dict(self, destination=None, prefix="", keep_vars=False, flatten=True):
         # flatten must be True by default to comply with module's state-dict API
@@ -1281,11 +1309,12 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         *,
         sort: bool = False,
     ) -> Iterator[CompatibleType]:
+        if leaves_only and is_leaf not in _DEFAULT_TRAVERSAL:
+            yield from self._leaves_from_keys(include_nested, is_leaf, sort)
+            return
         if is_leaf is None:
             is_leaf = _default_is_leaf
-        for k, v in self._param_td.items(
-            include_nested, leaves_only, is_leaf=is_leaf, sort=sort
-        ):
+        for k, v in self._param_td.items(include_nested, leaves_only, sort=sort):
             if not is_leaf(type(v)):
                 yield k, v
                 continue
