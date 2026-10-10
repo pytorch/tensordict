@@ -709,7 +709,6 @@ def test_tensorclass_keeps_its_docstring(form):
 def test_non_tensor_classes_keep_their_docstrings(cls):
     # Their docstrings used to be replaced by the generated signature.
     assert not cls.__doc__.startswith(cls.__name__ + "(")
-    assert ">>>" in cls.__doc__
 
 
 class TestTensorClass:

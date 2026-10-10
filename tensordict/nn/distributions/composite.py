@@ -481,7 +481,7 @@ class CompositeDistribution(d.Distribution, Mapping):
         Keyword Args:
             aggregate_probabilities (bool, optional): has no effect. The
                 result depends on :func:`~tensordict.nn.composite_lp_aggregate`
-                only.
+                only (`#2248 <https://github.com/pytorch/tensordict/issues/2248>`_).
             include_sum (bool, optional): Whether to include the summed entropy in the output TensorDict.
                 Defaults to `composite_lp_aggregate()`, which defaults to `False`.
 

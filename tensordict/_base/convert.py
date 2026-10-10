@@ -913,8 +913,9 @@ class _Conversion:
         .. warning::
             If the ``with`` block raises an exception, the original parameters
             are not written back: the module keeps the parameters of the
-            tensordict. To restore them in all cases, keep the returned swap and
-            write it back in a ``finally`` clause (see the third example).
+            tensordict (`#2241 <https://github.com/pytorch/tensordict/issues/2241>`_).
+            To restore them in all cases, keep the returned swap and write it
+            back in a ``finally`` clause (see the third example).
 
         Args:
             module (nn.Module): a module to write the parameters into.

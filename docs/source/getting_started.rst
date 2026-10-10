@@ -458,8 +458,9 @@ load memory-mapped parameters into a model, pass ``inplace=True``.
    ``load_memmap``. On tensordict 0.14 it raises ``RuntimeError: Creating a
    Parameter from an instance of type MemoryMappedTensor requires that
    detach() returns an instance of the same type``, and it deletes a parameter
-   of the model. ``inplace=True`` and ``.clone()`` before
-   ``to_module`` do not have this problem.
+   of the model (`#2240 <https://github.com/pytorch/tensordict/issues/2240>`_).
+   ``inplace=True`` and ``.clone()`` before ``to_module`` do not have this
+   problem.
 
 :class:`~tensordict.nn.TensorDictModule` wraps a module so that it reads its
 inputs from a TensorDict and writes its outputs into the same TensorDict.

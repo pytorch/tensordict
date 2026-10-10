@@ -225,8 +225,10 @@ class TensorDictStore(TensorDictBase):
       on the server, or split the entry.
     - Non-tensor values are stored as JSON. A value that JSON cannot encode
       is stored with :mod:`pickle`, and on the current version, reading it
-      back raises ``UnicodeDecodeError``. Store JSON-compatible values only
-      (``str``, numbers, ``bool``, lists and dicts of these).
+      back raises ``UnicodeDecodeError``
+      (`#2245 <https://github.com/pytorch/tensordict/issues/2245>`_). Store
+      JSON-compatible values only (``str``, numbers, ``bool``, lists and
+      dicts of these).
 
     Keyword Args:
         backend (str): Name of the server backend.  Accepted values include
@@ -2003,7 +2005,8 @@ class TensorDictStore(TensorDictBase):
                 ``host`` and ``port`` are ignored.
             prefix (str): Key namespace. Defaults to ``"tensordict"``.
             auto_batch_size (bool): has no effect on the current version:
-                the batch size is not inferred from the data. Pass
+                the batch size is not inferred from the data
+                (`#2247 <https://github.com/pytorch/tensordict/issues/2247>`_). Pass
                 ``batch_size`` instead.
             batch_size: Explicit batch_size. Defaults to the batch size of
                 ``input_dict`` if it is a TensorDict, else to ``[]``.
@@ -2666,7 +2669,8 @@ class TensorDictStore(TensorDictBase):
 
         .. note::
             For a store created from a tensorclass, one key,
-            ``<prefix>:{<td_id>}:__tensorclass__``, stays on the server.
+            ``<prefix>:{<td_id>}:__tensorclass__``, stays on the server
+            (`#2246 <https://github.com/pytorch/tensordict/issues/2246>`_).
         """
 
         async def _aclear():

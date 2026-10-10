@@ -1733,8 +1733,9 @@ class _PointwiseOps:
             ``other - alpha * self``. The two results are the same only if
             ``alpha`` is 1. ``other`` must be a tensordict, or a number
             without ``alpha``. A :class:`torch.Tensor` raises
-            ``AttributeError``, and a number with ``alpha`` raises
-            ``TypeError``.
+            ``AttributeError``
+            (`#2253 <https://github.com/pytorch/tensordict/issues/2253>`_), and a number
+            with ``alpha`` raises ``TypeError``.
 
         Supports broadcasting,
         type promotion, and integer, float, and complex inputs.

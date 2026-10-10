@@ -174,7 +174,8 @@ These rules apply to keyword calls:
   ``in_keys``. If you pass the same input both ways, the module raises
   ``RuntimeError: Duplicated argument in args and kwargs.``
 - A module with the out-key ``"_"`` does not support keyword calls. The call
-  raises ``KeyError: 'key "_" not found in TensorDict ...'``.
+  raises ``KeyError: 'key "_" not found in TensorDict ...'``
+  (`#2258 <https://github.com/pytorch/tensordict/issues/2258>`_).
 - The tensordict that :class:`~tensordict.nn.TensorDictModule` builds from
   the arguments has an empty batch size.
 
@@ -369,8 +370,9 @@ copy of the input, and the sequence writes its ``out_keys`` into
 
    With ``inplace=False`` or ``inplace="empty"``, the sequence returns a new
    tensordict with its ``out_keys``, but the modules still write into the
-   input tensordict. To keep the input unchanged, pass a shallow copy:
-   ``seq(td.copy())``, or pass ``tensordict_out``.
+   input tensordict (`#2257 <https://github.com/pytorch/tensordict/issues/2257>`_). To
+   keep the input unchanged, pass a shallow copy: ``seq(td.copy())``, or pass
+   ``tensordict_out``.
 
 Control the outputs
 -------------------
@@ -415,9 +417,10 @@ above), the sequence writes the new value into it.
    On a :class:`~tensordict.nn.TensorDictModule`, ``select_out_keys`` keeps
    only the ``in_keys`` and the selected ``out_keys`` in the result. The
    result is the input tensordict, so the module also deletes the other
-   entries of the input. To keep them, wrap the module in a
-   :class:`~tensordict.nn.TensorDictSequential` and call ``select_out_keys``
-   on the sequence.
+   entries of the input
+   (`#2256 <https://github.com/pytorch/tensordict/issues/2256>`_). To keep them, wrap
+   the module in a :class:`~tensordict.nn.TensorDictSequential` and call
+   ``select_out_keys`` on the sequence.
 
 In this example, the module deletes the entry ``"other"``:
 
@@ -645,7 +648,7 @@ To draw several samples in one call, pass ``num_samples``. In ``RANDOM``
 mode, the module then returns a new tensordict with ``num_samples`` as
 leading batch dimensions, and the input does not change. With the other
 interaction types, the call raises ``RuntimeError: batch dimension
-mismatch``.
+mismatch`` (`#2259 <https://github.com/pytorch/tensordict/issues/2259>`_).
 
   >>> multi = ProbabilisticTensorDictModule(
   ...     in_keys=["loc", "scale"],

@@ -125,7 +125,8 @@ td.to_zarr(root / "compressed.zarr", chunks=(16, 3, 32, 32), compressors=ZstdCod
 #
 #    ``to_zarr`` writes the metadata file (``zarr.json``) of some groups and
 #    arrays, then writes it again to add attributes. A zip file cannot replace
-#    an entry, so the zip gets a second entry with the same name. For each of
+#    an entry, so the zip gets a second entry with the same name
+#    (`#2252 <https://github.com/pytorch/tensordict/issues/2252>`_). For each of
 #    these files, the ``zipfile`` module of Python warns
 #    ``UserWarning: Duplicate name: 'zarr.json'``. Reading the store works:
 #    ``zipfile`` returns the last entry, which has all the attributes. The
