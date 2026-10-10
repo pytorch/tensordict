@@ -66,7 +66,7 @@ from tensordict.base import (
     _get_defaults_to_none,
     _set_get_defaults_to_none,
 )
-from tensordict.tensorclass import from_dataclass
+from tensordict.tensorclass import _TensorClassMeta, from_dataclass
 from tensordict.utils import _check_recursive_properties
 from torch import Tensor
 
@@ -441,6 +441,114 @@ Obs(a=torch.Tensor(), non_blocking=True)
     assert 'incompatible type "str"' in errors
     assert 'Unexpected keyword argument "extra"' in errors
     assert 'Unexpected keyword argument "non_blocking"' in errors
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+def test_tensorclass_stub_init_subclass():
+    # The class keywords (class X(TensorClass, autocast=True)) go to the
+    # metaclass at runtime; the stub declares them on __init_subclass__.
+    with open(_TENSORDICT_DIR / "tensorclass.pyi", "r") as f:
+        tree = ast.parse(f.read())
+    (stub_class,) = (
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "TensorClass"
+    )
+    (init_subclass,) = (
+        node
+        for node in stub_class.body
+        if isinstance(node, ast.FunctionDef) and node.name == "__init_subclass__"
+    )
+    class_kwargs = {arg.arg for arg in init_subclass.args.kwonlyargs}
+
+    meta_params = inspect.signature(_TensorClassMeta.__new__).parameters.values()
+    assert class_kwargs == {
+        param.name for param in meta_params if param.default is not param.empty
+    }
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_tensorclass_stub_static_types(tmp_path, monkeypatch):
+    from mypy import api
+
+    # Check tensorclass.pyi alone: the modules it imports are reduced to the
+    # names these checks need, or to Any. Mypy also searches the working
+    # directory, which must not hold the tensordict sources.
+    monkeypatch.chdir(tmp_path)
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    package.mkdir(parents=True)
+    torch_package = stubs / "torch"
+    torch_package.mkdir()
+    torch_package.joinpath("__init__.pyi").write_text(
+        """from typing import Any
+
+class Tensor: ...
+class device: ...
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    package.joinpath("__init__.pyi").write_text(
+        "from .tensorclass import TensorClass as TensorClass\n"
+    )
+    package.joinpath("utils.pyi").write_text(
+        """from typing import Any, TypeAlias
+
+import torch
+
+DeviceType: TypeAlias = torch.device | str | int
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    package.joinpath("tensorclass.pyi").write_text(
+        (_TENSORDICT_DIR / "tensorclass.pyi").read_text()
+    )
+
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.11
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+
+    valid = tmp_path / "valid.py"
+    valid.write_text(
+        """from typing import assert_type
+import torch
+from tensordict import TensorClass
+
+class Obs(TensorClass):
+    a: torch.Tensor
+    label: str = "x"
+
+class Flagged(TensorClass, autocast=True, tensor_only=False):
+    a: torch.Tensor
+
+t = torch.Tensor()
+obs = Obs(t, "s", batch_size=[3], device="cpu", names=["n"], lock=False)
+Flagged(a=t, batch_size=3)
+assert_type(obs.a, torch.Tensor)
+assert_type(obs[0], Obs)
+assert_type(obs.unbind(0), tuple[Obs, ...])
+assert_type(obs.to("cpu"), Obs)
+assert_type(obs + 1, Obs)
+assert_type(1 + obs, Obs)
+assert_type(obs * 2.0, Obs)
+assert_type(-obs, Obs)
+assert_type(obs == obs, Obs)
+for item in obs:
+    assert_type(item, Obs)
+"""
+    )
+    stdout, stderr, status = api.run(["--config-file", str(config), str(valid)])
+    assert status == 0, stdout + stderr
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")

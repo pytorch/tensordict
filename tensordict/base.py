@@ -963,7 +963,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             string = "..."
         return f"{type(self).__name__}(\n{string})"
 
-    def __iter__(self) -> Iterator:
+    def __iter__(self) -> Iterator[TensorDictBase]:
         """Iterates over the first batch dimension of the tensordict.
 
         Raises:
@@ -1002,6 +1002,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         raise RuntimeError(
             "key must be a NestedKey (a str or a possibly tuple of str)."
         )
+
+    @overload
+    def __getitem__(self, index: str | tuple[str, ...]) -> Any: ...
+
+    @overload
+    def __getitem__(self, index: IndexType) -> Self: ...
 
     def __getitem__(self, index: IndexType) -> Self | Tensor | TensorCollection | Any:
         """Indexes all tensors according to the provided index.
