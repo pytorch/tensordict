@@ -259,7 +259,8 @@ disk, fills it from two processes, and reads it back:
            for p in writers:
                p.join()
            data = TensorDict.load_memmap(path, mode="r")
-           print(data["image"][[0, 49, 50, 99], 0, 0, 0])  # tensor([ 0, 49, 50, 99], dtype=torch.uint8)
+           # tensor([ 0, 49, 50, 99], dtype=torch.uint8)
+           print(data["image"][[0, 49, 50, 99], 0, 0, 0])
 
 Process a dataset in parallel with map
 --------------------------------------
