@@ -1639,6 +1639,25 @@ class TestGeneric:
                 assert p.grad is None
             assert all(param.grad is not None for param in params.values(True, True))
 
+    @pytest.mark.parametrize(
+        "method,args,fields",
+        [
+            ("max", (), {"values", "indices"}),
+            ("sort", (), {"values", "indices"}),
+            ("topk", (2,), {"values", "indices"}),
+            ("aminmax", (), {"min", "max"}),
+        ],
+        ids=["max", "sort", "topk", "aminmax"],
+    )
+    def test_from_namedtuple_return_types(self, method, args, fields):
+        # torch.return_types are structseqs: named fields, but no _fields
+        t = torch.randn(3, 4)
+        result = getattr(t, method)(*args, dim=1)
+        td = TensorDict.from_namedtuple(result, batch_size=[3])
+        assert set(td.keys()) == fields
+        for name in fields:
+            assert (td[name] == getattr(result, name)).all()
+
     def test_from_pytree(self):
         class WeirdLookingClass:
             pass
