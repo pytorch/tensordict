@@ -263,9 +263,12 @@ def _getitem_result_shape(
 
 
 def _prepare_indexed_value(
-    value: torch.Tensor, shape: list[int], dtype: torch.dtype, idx
+    value: torch.Tensor | float, shape: list[int], dtype: torch.dtype, idx
 ) -> torch.Tensor:
     """Match the selected shape and data type before converting values to bytes."""
+    if not isinstance(value, torch.Tensor):
+        # torch writes a Python scalar in the dtype of the entry
+        value = torch.as_tensor(value, dtype=dtype)
     read = _read_dim0(idx)
     kind = None if read is None else read[0]
     # A boolean mask accepts one CPU value with a different data type.
