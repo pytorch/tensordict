@@ -102,9 +102,9 @@ If you need X, use Y
   :class:`~tensordict.TensorDict`. See :ref:`overview`.
 - If you know the fields and want methods of your own and completion in your
   editor, use a :class:`~tensordict.TensorClass`. See :ref:`tensorclass-guide`.
-- If you want declared fields, and the object must also be a
-  ``TensorDictBase`` (for ``state["key"]``, ``**state`` or a function that
-  takes a tensordict), use a :class:`~tensordict.TypedTensorDict`. See
+- If you want declared fields on an object that is a ``TensorDictBase``, use
+  a :class:`~tensordict.TypedTensorDict`. It accepts ``state["key"]`` and
+  ``**state``, and a function that takes a tensordict accepts it. See
   :ref:`typed-tensordict-guide`.
 - If you stack items of different shapes, use
   :func:`~tensordict.lazy_stack`, which returns a

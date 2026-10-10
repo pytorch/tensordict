@@ -5,27 +5,19 @@
 TypedTensorDict
 ===============
 
-:class:`~tensordict.TypedTensorDict` is a :class:`~tensordict.TensorDictBase`
-subclass whose fields you declare as class annotations, as in a
-:class:`typing.TypedDict`. This page is for users who want typed fields and
-also the full tensordict API, ``**state`` unpacking, and typed access to data
-on any storage backend.
-
-A ``TypedTensorDict`` gives you:
-
-- A constructor that takes the declared fields, and typed attribute access
-  (``state.eta``).
-- Inheritance: a subclass adds fields to the fields of its parent.
-- Optional fields.
-- ``**state`` unpacking into keyword arguments.
-- ``from_tensordict``, which wraps a tensordict of any backend (HDF5, Redis,
-  a lazy stack) without a copy.
-
-To compare it with :class:`~tensordict.TensorClass` and the other containers,
-see :ref:`choosing-a-container`.
+A :class:`~tensordict.TypedTensorDict` is a tensordict with declared fields.
+It subclasses :class:`~tensordict.TensorDictBase`, and you declare its fields
+as class annotations, as in a :class:`typing.TypedDict`. Choose it over a
+:class:`~tensordict.TensorClass` when the object must be a
+``TensorDictBase``: for ``state["key"]``, ``**state``, or a function that takes
+a tensordict. Choose it also for a pipeline that adds fields in stages, with
+one subclass for each stage.
 
 Quick start
 -----------
+
+Subclass :class:`~tensordict.TypedTensorDict` and annotate each field. Then
+pass the values and the batch size to the constructor:
 
   >>> import torch
   >>> from torch import Tensor
@@ -49,10 +41,10 @@ A ``TypedTensorDict`` is a tensordict: ``isinstance(state, TensorDictBase)``
 is ``True``, and a string index reads an entry, as on a
 :class:`~tensordict.TensorDict`.
 
-Why TypedTensorDict?
---------------------
+Build state in stages
+---------------------
 
-Typed pipelines often build up state one step at a time. Each stage is a
+A pipeline often builds its state one step at a time. Each stage is a
 subclass that adds fields to the previous one, and a function moves the state
 from one stage to the next:
 
@@ -67,14 +59,13 @@ from one stage to the next:
   >>> sorted(obs.keys())
   ['X', 'beta', 'eta', 'mu', 'y']
 
-``**state`` passes all the fields of ``state`` as keyword arguments, so the
-function does not change when you add a field to ``PredictorState``. Because
-``TypedTensorDict`` is a ``TensorDictBase``, every tensordict operation
-(``.to(device)``, ``.clone()``, indexing, ``torch.stack``, ``memmap``) works at
-each stage.
+A ``TypedTensorDict`` is a :class:`~collections.abc.MutableMapping`, so
+``**state`` passes all its fields as keyword arguments. To add a field to a
+stage, add one line to the class definition: the functions that unpack the
+state do not change.
 
-Inheritance and field accumulation
-----------------------------------
+Inheritance
+-----------
 
 A subclass has the fields of its parents and the fields that it declares:
 
@@ -112,31 +103,9 @@ To make a field optional, give it a ``None`` default:
 
 If you do not pass the field, it is not an entry of the tensordict, and
 attribute access returns the default. ``NotRequired[Tensor]`` also marks a
-field as optional, but mypy accepts ``NotRequired`` only in a ``TypedDict``,
-and attribute access on a ``NotRequired`` field that is not set raises
-``AttributeError``. Use a default for code that a type checker reads.
-
-Unpacking (``**state``)
------------------------
-
-A ``TypedTensorDict`` is a :class:`~collections.abc.MutableMapping`, so the
-``**`` operator unpacks it into keyword arguments:
-
-  >>> state = PredictorState(
-  ...     eta=torch.randn(5, 3), X=torch.randn(5, 4), beta=torch.randn(5, 1),
-  ...     batch_size=[5],
-  ... )
-  >>> obs = ObservedState(
-  ...     **state,
-  ...     y=torch.randn(5, 3),
-  ...     mu=torch.randn(5, 3),
-  ...     batch_size=state.batch_size,
-  ... )
-  >>> set(obs.keys()) == {"eta", "X", "beta", "y", "mu"}
-  True
-
-To add a field to a pipeline stage, add one line to the class definition. The
-functions that unpack the state do not change.
+field as optional, with two differences. mypy accepts ``NotRequired`` only in
+a ``TypedDict``. Attribute access on a ``NotRequired`` field that is not set
+raises ``AttributeError``. In code that a type checker reads, use a default.
 
 Values that are not tensors
 ---------------------------
@@ -219,12 +188,11 @@ Class options
   ``dataclasses.FrozenInstanceError``.
 
 ``"autocast"``, ``"nocast"``, ``"tensor_only"``
-  Deprecated in 0.15, to be removed in 0.17. They are accepted with the same
-  syntax as for ``TensorClass``, and subclasses inherit them, but they have
-  no effect on ``TypedTensorDict``: values are stored as a ``TensorDict``
-  stores them. For example, ``x=1`` is stored as a tensor even with
-  ``"nocast"``. Each of them emits a ``DeprecationWarning``. If you need
-  them, use ``TensorClass``.
+  Deprecated in 0.15, to be removed in 0.17. The class accepts them with the
+  syntax of ``TensorClass``, and subclasses inherit them. They have no effect:
+  a ``TypedTensorDict`` stores values as a ``TensorDict`` does. For example,
+  ``x=1`` is stored as a tensor even with ``"nocast"``. Each of them emits a
+  ``DeprecationWarning``. If you need them, use ``TensorClass``.
 
 A subclass of a ``"frozen"`` class is also frozen.
 
@@ -246,7 +214,7 @@ without a copy. Writes through the typed wrapper go to the storage of ``td``:
   >>> (td["eta"] == 1).all()
   tensor(True)
 
-This works with a :class:`~tensordict.PersistentTensorDict` (HDF5 or zarr), a
+This works with a :class:`~tensordict.PersistentTensorDict` (HDF5 or Zarr), a
 :class:`~tensordict.store.TensorDictStore` (Redis), a
 :class:`~tensordict.LazyStackedTensorDict` and a memory-mapped
 ``TensorDict``. Some operations behave differently on these backends. See
