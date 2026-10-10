@@ -1908,6 +1908,14 @@ class _Reductions:
                     agglomerate, dim=dim, **kwargs_copy
                 )
 
+        # With a 1-d tensor q, torch.quantile adds a first dim of size len(q)
+        # to each leaf, so the batch size of the result starts with it too.
+        q_dims = []
+        if reduction_name == "quantile":
+            q = kwargs["q"]
+            if isinstance(q, torch.Tensor) and q.ndim == 1:
+                q_dims = [q.shape[0]]
+
         # IMPORTANT: do not directly access batch_dims (or any other property)
         # via self.batch_dims otherwise a reference cycle is introduced
         def proc_dim(dim, batch_dims, tuple_ok=True):
@@ -1958,7 +1966,7 @@ class _Reductions:
                 return result
 
             if self._has_names():
-                names = list(self.names)
+                names = [None] * len(q_dims) + list(self.names)
             else:
                 names = None
             if not call_on_nested:
@@ -1968,6 +1976,7 @@ class _Reductions:
             return self._fast_apply(
                 reduction,
                 call_on_nested=call_on_nested,
+                batch_size=torch.Size([*q_dims, *self.batch_size]) if q_dims else None,
                 device=self.device,
                 names=names,
             )
@@ -1979,6 +1988,7 @@ class _Reductions:
                     names = [name for i, name in enumerate(self.names) if i not in dim]
                 else:
                     names = [name for i, name in enumerate(self.names) if i != dim]
+                names = [None] * len(q_dims) + names
             if dim is not NO_DEFAULT:
                 kwargs["dim"] = dim
             if keepdim is not NO_DEFAULT:
@@ -2038,7 +2048,7 @@ class _Reductions:
             return self._fast_apply(
                 reduction,
                 call_on_nested=call_on_nested,
-                batch_size=torch.Size(batch_size),
+                batch_size=torch.Size([*q_dims, *batch_size]),
                 device=self.device,
                 names=names,
             )
