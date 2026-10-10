@@ -3,23 +3,21 @@
 Devices, dtypes and memory
 ==========================
 
-This page explains where the leaves of a tensordict are and how to move
-them. A *leaf* is a tensor at the end of a key path. The page covers the
-``device`` of a tensordict and what it means for new entries,
-:meth:`~tensordict.TensorDict.to` for devices and dtypes, and casting each
-leaf to its own device and dtype. It ends with pinned memory, shared memory
-and consolidation.
+One call moves or casts every tensor of a tensordict, nested ones too:
+``td.to("cuda")``, ``td.to(torch.float16)``, or a device and a dtype for each
+tensor, copied from another tensordict. The ``device`` attribute of the
+tensordict also decides where new entries go.
 
 Most examples use the ``meta`` device in place of a GPU. Every PyTorch build
 has it: a tensor on the ``meta`` device has a shape and a dtype, but no data.
-The examples that need a CUDA device are marked ``+SKIP`` and do not run when
-the documentation is tested.
+The examples that need a CUDA device are marked ``+SKIP``.
 
 The device of a tensordict
 --------------------------
 
 A tensordict has a :attr:`~tensordict.TensorDict.device` attribute. By
-default, it is ``None``, also if all the leaves are on the same device:
+default, it is ``None``, also if all the leaves (the tensors at the end of
+each key path) are on the same device:
 
     >>> import torch
     >>> from tensordict import TensorDict
@@ -106,6 +104,8 @@ The ``non_blocking`` argument controls how the leaves are copied:
 With ``non_blocking_pin=True``, ``to()`` pins each leaf (see `Pinned
 memory`_) before the copy, in ``num_threads`` threads. This needs an
 accelerator.
+
+.. _devices-temporary-moves:
 
 Temporary moves
 ~~~~~~~~~~~~~~~
@@ -221,7 +221,7 @@ returns a tensordict whose leaves are in pinned memory. With
 Pinning needs an accelerator, so this example does not run on a CPU-only
 machine:
 
-    >>> td = TensorDict(obs=torch.zeros(64, 3), batch_size=[64])
+    >>> td = TensorDict(pos=torch.zeros(64, 3), batch_size=[64])
     >>> pinned = td.pin_memory()  # doctest: +SKIP
     >>> td_gpu = pinned.to("cuda", non_blocking=True)  # doctest: +SKIP
 
@@ -238,9 +238,9 @@ Shared memory
 :meth:`~tensordict.TensorDict.share_memory_` moves each CPU leaf to shared
 memory. Other processes on the same machine can then read and write the
 leaves without a copy, for example the workers of
-:mod:`torch.multiprocessing`. After this call, the tensordict is locked: you
-cannot add, remove or replace an entry. You can still write into the
-existing leaves:
+:mod:`torch.multiprocessing`. After this call, the tensordict is locked (see
+:ref:`keys-locking`). You can write into the existing leaves, but you cannot
+add, remove or replace an entry:
 
     >>> td = TensorDict(a=torch.zeros(3), batch_size=[3]).share_memory_()
     >>> td.is_shared(), td.is_locked
@@ -258,8 +258,7 @@ existing leaves:
 become 0, booleans become integers, and bytes and strings longer than 100
 bytes raise an error
 (`#2163 <https://github.com/pytorch/tensordict/issues/2163>`_).
-:ref:`data-loading` shows how to share tensordicts between processes, and
-:ref:`keys` explains locking.
+:ref:`data-loading` shows how to share tensordicts between processes.
 
 Consolidation
 -------------
@@ -267,10 +266,10 @@ Consolidation
 :meth:`~tensordict.TensorDict.consolidate` copies all the leaves into one
 contiguous storage, and makes each leaf a view of it. ``to(device)`` on a
 consolidated tensordict then copies one buffer instead of one tensor for
-each leaf, and the result is consolidated too. A consolidated tensordict is
-also faster to send to another process. The result of ``consolidate()`` is
-locked. If you call :meth:`~tensordict.TensorDict.unlock_` on it, it is no
-longer consolidated:
+each leaf, and the result is consolidated too. For the same reason, a
+consolidated tensordict is faster to send to another process. The result of
+``consolidate()`` is locked. If you call
+:meth:`~tensordict.TensorDict.unlock_` on it, it is no longer consolidated:
 
     >>> c = TensorDict(a=torch.zeros(3), b=torch.ones(3, 2), batch_size=[3]).consolidate()
     >>> c.is_consolidated(), c.is_locked
@@ -278,8 +277,7 @@ longer consolidated:
     >>> c.to("meta").is_consolidated()
     True
 
-:ref:`saving` describes consolidation and its use for serialization in
-detail.
+:ref:`saving` describes consolidation for serialization.
 
 See also
 --------
