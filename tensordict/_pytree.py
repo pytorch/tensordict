@@ -314,7 +314,19 @@ def _tensordict_constructor(
     )
     for key, item in non_tensor_items:
         if isinstance(item, _PytreeNonTensorStack):
-            item = item.stack
+            try:
+                result.set_non_tensor(key, item.stack)
+            except AttributeError:
+                # The values of the stack are not all equal, so it has no
+                # single value to set: keep the leaf that the stack was
+                # flattened to, already in result.
+                leaf = result._get_str(key, None)
+                if not (
+                    is_non_tensor(leaf)
+                    and leaf.batch_size[: result.batch_dims] == result.batch_size
+                ):
+                    raise
+            continue
         result.set_non_tensor(key, item)
     return result
 
