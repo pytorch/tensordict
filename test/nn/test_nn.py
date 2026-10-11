@@ -57,6 +57,7 @@ from tensordict.nn.distributions import (
     TruncatedNormal,
 )
 from tensordict.nn.distributions.composite import CompositeDistribution
+from tensordict.nn.distributions.truncated_normal import TruncatedStandardNormal
 from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.probabilistic import (
     interaction_type,
@@ -2938,13 +2939,53 @@ class TestProbabilisticTensorDictModule:
             torch.tensor(0.0), torch.tensor(2.0), torch.tensor(-1.0), torch.tensor(1.0)
         )
         assert dist.batch_shape == ref.batch_shape == torch.Size([])
-        for attr in ("scale", "mean", "variance", "entropy"):
+        for attr in ("scale", "mean", "variance"):
             torch.testing.assert_close(getattr(dist, attr), getattr(ref, attr))
+        torch.testing.assert_close(dist.entropy(), ref.entropy())
         value = torch.tensor(0.5)
         torch.testing.assert_close(dist.log_prob(value), ref.log_prob(value))
         assert TruncatedNormal(torch.zeros(3), 2.0, -1.0, 1.0).batch_shape == (3,)
         # a Number scale is clamped as a tensor scale is
         assert TruncatedNormal(0.0, 0.0, -1.0, 1.0).scale == TruncatedNormal.eps
+
+    def test_truncated_normal_entropy(self):
+        # entropy is a method, as in torch.distributions.Distribution
+        loc = torch.tensor([0.0, 1.0, -0.5])
+        scale = torch.tensor([1.0, 2.0, 0.5])
+        a, b = loc - 2 * scale, loc + 1.5 * scale
+        dist = TruncatedNormal(loc, scale, a, b)
+        entropy = dist.entropy()
+        assert entropy.shape == dist.batch_shape == (3,)
+        # the closed form matches a Monte Carlo estimate of -E[log p(x)]
+        torch.manual_seed(0)
+        sample = dist.rsample((200_000,))
+        torch.testing.assert_close(
+            entropy, -dist.log_prob(sample).mean(0), atol=2e-2, rtol=0
+        )
+        # the standard distribution exposes entropy() too
+        std = TruncatedStandardNormal(a, b)
+        assert std.entropy().shape == std.batch_shape == (3,)
+
+    @set_composite_lp_aggregate(False)
+    def test_truncated_normal_composite_entropy(self):
+        params = TensorDict(
+            x=TensorDict(
+                loc=torch.zeros(3),
+                scale=torch.ones(3),
+                a=-torch.ones(3),
+                b=torch.ones(3),
+                batch_size=[3],
+            ),
+            batch_size=[3],
+        )
+        dist = CompositeDistribution(params, distribution_map={"x": TruncatedNormal})
+        entropy = dist.entropy()
+        torch.testing.assert_close(
+            entropy["x_entropy"],
+            TruncatedNormal(
+                torch.zeros(3), torch.ones(3), -torch.ones(3), torch.ones(3)
+            ).entropy(),
+        )
 
     @set_composite_lp_aggregate(False)
     @pytest.mark.parametrize("inplace", [True, False, None])
