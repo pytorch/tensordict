@@ -52,6 +52,8 @@ from tensordict import (
     MemoryMappedTensor,
     MetaData,
     NonTensorData,
+    NonTensorDataBase,
+    NonTensorStack,
     set_capture_non_tensor_stack,
     set_get_defaults_to_none,
     set_list_to_stack,
@@ -313,6 +315,18 @@ def test_tensorclass_instance_methods(form):
         str(_TENSORDICT_DIR / "tensorclass.pyi"), "TensorClass"
     )
     _check_stub_class(stub_attrs, X, exclusions)
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.parametrize("cls", [NonTensorDataBase, NonTensorStack])
+def test_non_tensor_stub_maybe_to_stack(cls):
+    # The deprecation warning of NonTensorStack.from_nontensordata points to
+    # NonTensorData.maybe_to_stack.
+    assert hasattr(cls, "maybe_to_stack")
+    stub_attrs = _get_class_attrs_from_pyi(
+        str(_TENSORDICT_DIR / "tensorclass.pyi"), cls.__name__
+    )
+    assert "maybe_to_stack" in stub_attrs
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
@@ -673,6 +687,43 @@ class MyDataFrozen:
 @tensorclass(tensor_only=True)
 class MyDataTensorOnly:
     X: torch.Tensor
+
+
+@pytest.mark.parametrize("form", ["subclass", "decorator"])
+def test_tensorclass_keeps_its_docstring(form):
+    # A tensorclass keeps its own docstring (help(), IDEs and the API docs
+    # read it); a class without one documents its constructor signature.
+    if form == "subclass":
+
+        class WithDoc(TensorClass):
+            """Observations of one step."""
+
+            obs: torch.Tensor
+
+        class WithoutDoc(TensorClass):
+            obs: torch.Tensor
+
+    else:
+
+        @tensorclass
+        class WithDoc:
+            """Observations of one step."""
+
+            obs: torch.Tensor
+
+        @tensorclass
+        class WithoutDoc:
+            obs: torch.Tensor
+
+    assert WithDoc.__doc__ == "Observations of one step."
+    assert WithoutDoc.__doc__.startswith("WithoutDoc(")
+    assert "obs" in WithoutDoc.__doc__
+
+
+@pytest.mark.parametrize("cls", [NonTensorData, MetaData])
+def test_non_tensor_classes_keep_their_docstrings(cls):
+    # Their docstrings used to be replaced by the generated signature.
+    assert not cls.__doc__.startswith(cls.__name__ + "(")
 
 
 class TestTensorClass:
@@ -1799,6 +1850,31 @@ class TestTensorClass:
         assert not a.data.requires_grad
         assert a.grad.x is not None
         assert a.grad.z is None
+
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_grad_keeps_self(self, tensor_only):
+        # .grad holds None for a field without a grad. Neither that None nor
+        # later writes into the grad may reach the instance.
+        @tensorclass(tensor_only=tensor_only)
+        class MyClass:
+            x: torch.Tensor
+            y: torch.Tensor | None = None
+
+        a = MyClass(
+            x=torch.zeros(3, requires_grad=True), y=torch.ones(3), batch_size=[3]
+        )
+        (a.x * 2).sum().backward()
+        grad = a.grad
+        assert (grad.x == 2).all()
+        assert grad.y is None
+        torch.testing.assert_close(a.to_dict()["y"], torch.ones(3))
+        torch.testing.assert_close(
+            a.to_tensordict(retain_none=True)["y"], torch.ones(3)
+        )
+        assert repr(a).count("y=") == 1
+        grad.x = None
+        assert grad.x is None
+        assert isinstance(a.to_dict()["x"], torch.Tensor)
 
     def test_len(self):
         myc = MyData(
@@ -3506,6 +3582,51 @@ class TestTensorClass:
             viewed_td.X = torch.zeros(12, 5)
         assert data.X is not None
         assert (data.X == 0).all()
+
+    @pytest.mark.parametrize(
+        "op,args",
+        [
+            ("view", (-1,)),
+            ("permute", (1, 0)),
+            ("unsqueeze", (0,)),
+            ("flatten", (0, 1)),
+        ],
+    )
+    def test_shape_cm_unset_field(self, op, args):
+        # Setting an unset field inside the context must drop its None
+        # placeholder in the original object, as setting it there does.
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+            z: torch.Tensor = None
+            s: str = None
+
+        tc = TC(x=torch.zeros(2, 3), batch_size=[2, 3])
+        with getattr(tc, op)(*args) as tc_op:
+            tc_op.z = torch.ones(tc_op.batch_size)
+            tc_op.s = "value"
+        z = torch.ones(2, 3)
+        torch.testing.assert_close(tc.z, z)
+        torch.testing.assert_close(tc.to_dict()["z"], z)
+        torch.testing.assert_close(tc.to_tensordict(retain_none=True)["z"], z)
+        assert tc.s == tc.to_dict()["s"] == "value"
+        assert "z=None" not in repr(tc)
+        assert "s=None" not in repr(tc)
+
+    def test_shape_cm_locked_cached_result(self):
+        # flatten_keys and unflatten_keys of a locked tensorclass return their
+        # cached result again. Calling them more times than the recursion limit
+        # must not raise.
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+            z: torch.Tensor = None
+
+        tc = TC(x=torch.zeros(2, 3), batch_size=[2, 3]).lock_()
+        for _ in range(1100):
+            with tc.flatten_keys():
+                pass
+            tc.unflatten_keys()
 
     def test_weakref_attr(self):
         @tensorclass

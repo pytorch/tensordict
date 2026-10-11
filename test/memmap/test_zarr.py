@@ -441,6 +441,25 @@ class TestZarrStores:
         assert (td_recon["b", "c"] == td["b", "c"]).all()
         td_recon.close()
 
+    def test_zip_store_nontensor_written_once(self, tmp_path):
+        # a zip entry cannot be replaced: the non-tensor marker must be
+        # written with the array, not in a second zarr.json entry
+        import zipfile
+
+        from zarr.storage import ZipStore
+
+        path = tmp_path / "s.zarr.zip"
+        td = TensorDict({"a": torch.randn(3), "s": "a string"}, batch_size=[3])
+        store = ZipStore(str(path), mode="w")
+        td.to_zarr(store).close()
+
+        with zipfile.ZipFile(path) as zf:
+            names = zf.namelist()
+        assert names.count("s/zarr.json") == 1
+        td_recon = TensorDict.from_zarr(ZipStore(str(path), mode="r"))
+        assert td_recon["s"] == "a string"
+        td_recon.close()
+
     def test_group_kwarg(self, tmp_path):
         td = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [3])
         td.to_zarr(tmp_path / "s.zarr")

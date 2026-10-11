@@ -131,7 +131,7 @@ changes how module state and pickled memmap data are handled:
   default (pass `fast=False` for the previous one).
 - **Deprecation**: calling `load_memmap()` without `allow_pickle` still loads
   pickled non-tensor data, with a `FutureWarning`; the default becomes
-  `allow_pickle=False` in 0.15.
+  `allow_pickle=False` in 0.16.
 
 ## Patterns
 

@@ -867,7 +867,7 @@ class _Conversion:
         swap_dest=None,
         use_state_dict: bool = False,
         non_blocking: bool = False,
-        preserve_module_state: bool | None = True,
+        preserve_module_state: bool = True,
         memo=None,  # deprecated
     ):
         """Writes the content of a TensorDictBase instance onto a given nn.Module attributes, recursively.
@@ -906,6 +906,10 @@ class _Conversion:
                 is not an :class:`~torch.nn.Parameter`. Defaults to ``True``.
                 Pass ``False`` to retain the historical replacement behavior.
 
+                .. versionchanged:: 0.15
+                    ``preserve_module_state=None``, deprecated in 0.14, is no
+                    longer accepted.
+
         Examples:
             >>> from torch import nn
             >>> module = nn.TransformerDecoder(
@@ -936,6 +940,13 @@ class _Conversion:
         """
         if memo is not None:
             raise RuntimeError("memo cannot be passed to the public to_module anymore.")
+        if preserve_module_state is None:
+            raise TypeError(
+                "to_module(..., preserve_module_state=None) is no longer "
+                "supported. Pass True to preserve the parameter and buffer "
+                "registrations of the module, or False for the historical "
+                "replacement behavior."
+            )
         hooks = torch.nn.modules.module._global_parameter_registration_hooks
         memo = {"hooks": tuple(hooks.values())}
         return self._to_module(
@@ -959,7 +970,7 @@ class _Conversion:
         memo=None,
         use_state_dict: bool = False,
         non_blocking: bool = False,
-        preserve_module_state: bool | None = True,
+        preserve_module_state: bool = True,
         is_dynamo: bool | None = None,
     ):
         from tensordict.base import TensorDictBase
@@ -1047,7 +1058,6 @@ class _Conversion:
                         inplace,
                         return_swap=return_swap,
                         preserve_module_state=preserve_module_state,
-                        memo=memo,
                     )
                 else:
                     if not inplace:
@@ -1056,7 +1066,6 @@ class _Conversion:
                             key,
                             value,
                             preserve_module_state=preserve_module_state,
-                            memo=memo,
                         )
                         local_out = swap_tensor(module, key, value)
                     else:

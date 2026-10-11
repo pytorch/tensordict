@@ -1221,6 +1221,23 @@ class TestNonTensorData:
         loaded = TensorDict.load_memmap(tmp_path, allow_pickle=False)
         assert loaded.tolist() == ["a", "b"]
 
+    @pytest.mark.parametrize("value", [{1, 2}, {"a": {1, 2}}, [{1, 2}]])
+    def test_memmap_set_is_pickled(self, tmp_path, value):
+        td = TensorDict(x=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("v", value)
+        td.memmap(tmp_path)
+        with pytest.raises(RuntimeError, match="allow_pickle=True"):
+            TensorDict.load_memmap(tmp_path, allow_pickle=False)
+        loaded = TensorDict.load_memmap(tmp_path, allow_pickle=True)
+        assert loaded["v"] == value
+
+    def test_memmap_stack_of_sets_is_pickled(self, tmp_path):
+        data = NonTensorStack({1, 2}, {3})
+        data.memmap(tmp_path)
+        assert (tmp_path / "pickle.pkl").exists()
+        loaded = TensorDict.load_memmap(tmp_path, allow_pickle=True)
+        assert loaded.tolist() == [{1, 2}, {3}]
+
     def test_load_memmap_refreshes_non_tensor(self, tmp_path):
         def make(version):
             return TensorDict(
@@ -1241,6 +1258,20 @@ class TestNonTensorData:
         assert list(dest["stack"]) == ["s2", "t2"]
         assert dest["nested", "data"] == "w2"
         assert dest.is_memmap()
+
+    def test_memmap_update_writes_json_only(self, tmp_path):
+        td = TensorDict(
+            x=torch.zeros(3), s=NonTensorData("hello"), batch_size=[3]
+        ).memmap(tmp_path / "src")
+        td.update_(TensorDict(s=NonTensorData("world"), batch_size=[3]))
+        assert sorted(os.listdir(tmp_path / "src" / "s")) == ["meta.json"]
+        loaded = TensorDict.load_memmap(tmp_path / "src", allow_pickle=False)
+        assert loaded["s"] == "world"
+
+        td.memmap(tmp_path / "dest", copy_existing=True)
+        assert sorted(os.listdir(tmp_path / "dest" / "s")) == ["meta.json"]
+        loaded = TensorDict.load_memmap(tmp_path / "dest", allow_pickle=False)
+        assert loaded["s"] == "world"
 
     @pytest.mark.parametrize("allow_pickle", [0, 1, np.bool_(False), np.bool_(True)])
     def test_memmap_pickle_policy_requires_bool(self, tmp_path, allow_pickle):

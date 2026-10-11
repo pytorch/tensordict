@@ -545,6 +545,23 @@ class TestTD:
         assert keys == keys_c
         torch.utils._pytree.tree_map(assert_eq, vals, vals_c)
 
+    def test_items_nested(self, mode):
+        # Without leaves_only, TensorDict.items goes through TensorDictBase.items.
+        def items(td):
+            keys, vals = zip(*td.items(True))
+            return keys, [val + 1 for val in vals]
+
+        items_c = torch.compile(items, fullgraph=True, mode=mode)
+        data = TensorDict(
+            {"a": {"b": {"c": torch.arange(4)}, "d": torch.arange(4)}}, [4]
+        )
+        keys, vals = items(data)
+        keys_c, vals_c = items_c(data)
+        assert keys == keys_c
+        assert keys == ("a", ("a", "b"), ("a", "b", "c"), ("a", "d"))
+        for val, val_c in zip(vals, vals_c):
+            assert (val == val_c).all()
+
     @pytest.mark.parametrize("recurse", [True, False])
     @pytest.mark.parametrize("lock", [True, False])
     def test_clone(self, recurse, lock, mode):
@@ -1385,6 +1402,32 @@ class TestTC:
         assert (clear_c(data) == 1).all()
         assert data.y is None
 
+    @pytest.mark.parametrize("form", ["bracket", "decorator"])
+    def test_tc_tensor_only_init(self, mode, form):
+        # The generated __init__ of the bracket form sets _tensordict
+        # through the __setattr__ of its tensor_only parent class.
+        if form == "bracket":
+
+            class TensorOnly(TensorClass["tensor_only"]):
+                x: torch.Tensor
+
+        else:
+
+            @tensorclass(tensor_only=True)
+            class TensorOnly:
+                x: torch.Tensor
+
+        def build(x):
+            data = TensorOnly(x=x, batch_size=[3])
+            return data, data.x + 1
+
+        build_c = torch.compile(build, fullgraph=True, mode=mode)
+        data, out = build_c(torch.zeros(3))
+        assert isinstance(data, TensorOnly)
+        assert data.batch_size == torch.Size([3])
+        assert (data.x == 0).all()
+        assert (out == 1).all()
+
     def test_tc_arithmetic(self, mode):
         def add_one(td):
             return td + 1
@@ -1553,6 +1596,18 @@ class TestTC:
             a=MyClass(a=None, b=torch.arange(4), batch_size=[4]), batch_size=[4]
         )
         assert (reshape(data) == reshape_c(data)).all()
+
+    def test_tc_view_cm_unset_field(self, mode):
+        # Setting the unset field c inside the context drops its None placeholder.
+        def set_in_view(tc):
+            with tc.view(-1) as flat:
+                flat.c = flat.b + 1
+            return tc.c
+
+        set_in_view_c = torch.compile(set_in_view, fullgraph=True, mode=mode)
+        data = MyClass(a=None, b=torch.zeros(2, 2), batch_size=[2, 2])
+        torch.testing.assert_close(set_in_view_c(data), torch.ones(2, 2))
+        torch.testing.assert_close(data.to_dict()["c"], torch.ones(2, 2))
 
     def test_tc_torch_where(self, mode):
         def where(mask, td0, td1):

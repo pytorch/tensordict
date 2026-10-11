@@ -235,6 +235,28 @@ class TestTensorDictStore:
             td.clear_redis()
             td.close()
 
+    @pytest.mark.parametrize("auto_batch_size", [False, True])
+    def test_from_dict_auto_batch_size(self, store_kwargs, auto_batch_size):
+        """from_dict infers the batch size of a dict input when auto_batch_size=True,
+        as TensorDict.from_dict does."""
+
+        source = {"obs": torch.randn(5, 3), "nested": {"x": torch.randn(5, 3, 2)}}
+        td = TensorDictStore.from_dict(
+            source, auto_batch_size=auto_batch_size, **store_kwargs
+        )
+        try:
+            expected = TensorDict.from_dict(source, auto_batch_size=auto_batch_size)
+            assert expected.batch_size == (
+                torch.Size([5, 3]) if auto_batch_size else torch.Size([])
+            )
+            assert td.batch_size == expected.batch_size
+            assert td["nested"].batch_size == expected["nested"].batch_size
+            assert torch.allclose(td["obs"], source["obs"])
+            assert torch.allclose(td["nested", "x"], source["nested"]["x"])
+        finally:
+            td.clear_redis()
+            td.close()
+
     def test_from_dict_tensordict_input(self, store_kwargs):
         """Construct via from_dict with a TensorDict as input."""
 
@@ -669,6 +691,23 @@ class TestTensorDictStore:
             try:
                 assert reader.batch_size == torch.Size([5])
                 assert torch.allclose(reader["obs"], obs)
+            finally:
+                reader.close()
+        finally:
+            writer.clear_redis()
+            writer.close()
+
+    def test_from_store_cache_metadata(self, store_kwargs):
+        """from_store passes cache_metadata to the store, not to the Redis client."""
+        writer = TensorDictStore(batch_size=[3], **store_kwargs)
+        try:
+            writer["x"] = torch.arange(3.0)
+            reader = TensorDictStore.from_store(
+                td_id=writer._td_id, cache_metadata=False, **store_kwargs
+            )
+            try:
+                assert reader._meta_cache is None
+                assert torch.equal(reader["x"], torch.arange(3.0))
             finally:
                 reader.close()
         finally:
@@ -1648,6 +1687,18 @@ class TestLazyStackedTensorDictStore:
         finally:
             restored.close()
 
+    def test_from_store_cache_metadata(self, store_stack, store_kwargs):
+        """from_store passes cache_metadata to the store, not to the Redis client."""
+        store_td, tds, lazy_td = store_stack
+        restored = LazyStackedTensorDictStore.from_store(
+            td_id=store_td._td_id, cache_metadata=False, **store_kwargs
+        )
+        try:
+            assert restored._meta_cache is None
+            assert torch.allclose(restored[0]["a"], tds[0]["a"])
+        finally:
+            restored.close()
+
     # ---- Nested keys ----
 
     def test_nested_keys(self, store_kwargs):
@@ -1758,6 +1809,64 @@ class TestLazyStackedTensorDictStore:
         for key in ("a", "b"):
             torch.testing.assert_close(store_td[1][key], expected[key])
             torch.testing.assert_close(store_td[0][key], tds[0][key])
+
+    @pytest.mark.parametrize(
+        "shapes",
+        [
+            {"a": (3,), "f": (3, 2), ("n", "g"): (3, 2, 2)},
+            # the entry ends with the batch shape [4, 3]: torch's broadcasting
+            # from the right would apply the mask to the last two dims
+            {"s": (3, 4, 3)},
+        ],
+    )
+    def test_masked_fill_(self, store_kwargs, shapes):
+        """masked_fill_ with a batch-shaped mask fills the masked batch elements (#2224)."""
+        lazy_td = lazy_stack(
+            [
+                TensorDict(
+                    {key: torch.zeros(shape) for key, shape in shapes.items()},
+                    batch_size=[3],
+                )
+                for _ in range(4)
+            ]
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            mask = torch.zeros(4, 3, dtype=torch.bool)
+            mask[1, 2] = True
+            mask[3, 0] = True
+            assert store_td.masked_fill_(mask, 1.0) is store_td
+            expected = lazy_td.clone().masked_fill_(mask, 1.0)
+            assert_allclose_td(store_td.to_tensordict(), expected.to_tensordict())
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize("batch_size,mask_shape", [[(5, 4), (4,)], [(5, 5), (5,)]])
+    def test_masked_fill_trailing_mask(self, store_kwargs, batch_size, mask_shape):
+        """A mask that is not batch-shaped still broadcasts from the right.
+
+        TensorDict.masked_fill_ rejects these masks, but the store has always
+        accepted them for entries without feature dims. The behaviour is kept
+        for compatibility.
+        """
+        lazy_td = lazy_stack(
+            [
+                TensorDict(b=torch.zeros(batch_size[1:]), batch_size=batch_size[1:])
+                for _ in range(batch_size[0])
+            ]
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            mask = torch.zeros(mask_shape, dtype=torch.bool)
+            mask[1] = True
+            store_td.masked_fill_(mask, 1.0)
+            torch.testing.assert_close(
+                store_td["b"], torch.zeros(batch_size).masked_fill(mask, 1.0)
+            )
+        finally:
+            store_td.clear_redis()
+            store_td.close()
 
     def test_fill_zero_nested(self, store_kwargs):
         """fill_ on a nested key and zero_ write nested entries, as on a lazy stack."""
@@ -1888,6 +1997,130 @@ class TestLazyStackedTensorDictStore:
                 assert empty.batch_size == td.batch_size
                 assert empty["b", "d"].batch_size == td.batch_size
                 assert len(td.empty().keys()) == 0
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    # ---- del_, entry_class, contiguous, popitem, chunk, (un)flatten_keys ----
+
+    @staticmethod
+    def _nested_lazy_td():
+        return lazy_stack(
+            [
+                TensorDict(
+                    a=torch.arange(3.0) + i,
+                    n=TensorDict(
+                        b=torch.full((3, 2), float(i)),
+                        m=TensorDict(c=torch.full((3,), -float(i)), batch_size=[3]),
+                        batch_size=[3],
+                    ),
+                    batch_size=[3],
+                )
+                for i in range(5)
+            ]
+        )
+
+    def test_del_(self, store_kwargs):
+        """del_ removes a leaf, or every leaf under a sub-tensordict, as on a lazy stack."""
+        lazy_td = self._nested_lazy_td()
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            for key in (("n", "b"), "n"):
+                for td in (store_td, lazy_td):
+                    assert td.del_(key) is td
+                assert set(store_td.keys(True, True)) == set(lazy_td.keys(True, True))
+                assert_allclose_td(store_td.to_tensordict(), lazy_td.to_tensordict())
+            assert list(store_td.keys()) == ["a"]
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_entry_class(self, store_kwargs):
+        lazy_td = self._nested_lazy_td()
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            for key in ("a", ("n", "b"), ("n", "m", "c")):
+                assert store_td.entry_class(key) is torch.Tensor
+                assert store_td.entry_class(key) is lazy_td.entry_class(key)
+            with pytest.raises(KeyError, match="not found"):
+                store_td.entry_class("missing")
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.xfail(
+        strict=True,
+        raises=AssertionError,
+        reason="entry_class returns LazyStackedTensorDictStore for a "
+        "sub-tensordict, but get returns a TensorDict (#2221)",
+    )
+    def test_entry_class_sub_tensordict(self, store_kwargs):
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            self._nested_lazy_td(), **store_kwargs
+        )
+        try:
+            for key in ("n", ("n", "m")):
+                assert store_td.entry_class(key) is type(store_td.get(key))
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize("canonical", [False, True])
+    def test_contiguous(self, store_stack, canonical):
+        store_td, _, lazy_td = store_stack
+        out = store_td.contiguous(canonical=canonical)
+        assert type(out) is TensorDict
+        assert_allclose_td(out, lazy_td.contiguous(canonical=canonical))
+
+    def test_popitem(self, store_stack):
+        """popitem removes and returns the last key, as on a lazy stack."""
+        store_td, _, lazy_td = store_stack
+        for expected_key in ("b", "a"):
+            key, value = store_td.popitem()
+            assert key == expected_key
+            torch.testing.assert_close(value, lazy_td[key])
+            assert key not in store_td.keys()
+        assert len(store_td.keys()) == 0
+        with pytest.raises(KeyError, match="is empty"):
+            store_td.popitem()
+
+    @pytest.mark.parametrize("dim", [0, 1])
+    def test_chunk(self, store_stack, dim):
+        store_td, _, lazy_td = store_stack
+        chunks = store_td.chunk(2, dim)
+        expected = lazy_td.chunk(2, dim)
+        assert len(chunks) == len(expected) == 2
+        for chunk, expected_chunk in zip(chunks, expected):
+            assert type(chunk) is TensorDict
+            assert_allclose_td(chunk, expected_chunk.to_tensordict())
+
+    @pytest.mark.parametrize("separator", [".", "/"])
+    def test_flatten_keys(self, store_kwargs, separator):
+        lazy_td = self._nested_lazy_td()
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            out = store_td.flatten_keys(separator)
+            assert type(out) is TensorDict
+            assert_allclose_td(out, lazy_td.flatten_keys(separator).to_tensordict())
+            with pytest.raises(ValueError, match="Cannot call flatten_keys in_place"):
+                store_td.flatten_keys(separator, inplace=True)
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_unflatten_keys(self, store_kwargs):
+        # The store joins nested keys with ".", so the flat keys use "/"
+        lazy_td = self._nested_lazy_td()
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_td.flatten_keys("/"), **store_kwargs
+        )
+        try:
+            assert set(store_td.keys()) == {"a", "n/b", "n/m/c"}
+            out = store_td.unflatten_keys("/")
+            assert type(out) is TensorDict
+            assert_allclose_td(out, lazy_td.to_tensordict())
+            with pytest.raises(ValueError, match="Cannot call unflatten_keys in_place"):
+                store_td.unflatten_keys("/", inplace=True)
         finally:
             store_td.clear_redis()
             store_td.close()
@@ -2088,6 +2321,20 @@ class TestTensorClassStore:
         finally:
             store.clear_redis()
             store.close()
+
+    def test_clear_redis_deletes_tensorclass_key(self, store_kwargs):
+        import redis
+
+        tc = _MyData(obs=torch.randn(5, 3), reward=torch.randn(5), batch_size=[5])
+        store = TensorDictStore.from_tensordict(tc, **store_kwargs)
+        td_id = store._td_id
+        store.clear_redis()
+        store.close()
+        client = redis.Redis(port=store_kwargs["port"], db=store_kwargs["db"])
+        try:
+            assert client.keys(f"*{td_id}*") == []
+        finally:
+            client.close()
 
 
 class TestNonTensorIndexing:
@@ -2485,6 +2732,20 @@ class TestNonTensorIndexing:
                 assert type(store.get(key)) is list
                 assert store[key] == store[1][key] == ["x", "y", "z"]
                 assert store.get_at(key, 1) == ["x", "y", "z"]
+        finally:
+            store.clear_redis()
+            store.close()
+
+    def test_non_tensor_pickle_read(self, store_kwargs):
+        """A value that JSON cannot encode is stored with pickle and reads
+        back as it was written."""
+        store = TensorDictStore(batch_size=[3], **store_kwargs)
+        try:
+            store["label"] = NonTensorData({1, 2})
+            assert store["label"] == {1, 2}
+            assert store[1]["label"] == {1, 2}
+            assert store.get_at("label", 1) == {1, 2}
+            assert store.to_tensordict()["label"] == {1, 2}
         finally:
             store.clear_redis()
             store.close()
