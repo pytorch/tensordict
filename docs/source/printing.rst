@@ -233,15 +233,15 @@ the default print format, with ``shape=``, ``device=``, ``dtype=`` and
 with any character, such as ``my-key``, and devices with an index, such as
 ``cuda:0``. It has these limits:
 
-- It reads only tensor fields and nested tensordicts. For a non-tensor field
-  (`#1956 <https://github.com/pytorch/tensordict/issues/1956>`_), it raises
-  ``ValueError: Cannot parse the field ...``.
+- It reads only tensor fields and nested tensordicts. For a non-tensor field,
+  it raises ``ValueError: Cannot parse the field ...``.
 - If :class:`~tensordict.set_printoptions` hid a field attribute or added one
   (for example ``plain=True``), it raises the same ``ValueError``.
 - It makes each tensor on the printed device. To parse the repr of a CUDA
   tensordict, run it on a machine with CUDA.
 - It does not keep ``is_shared``, and it returns a
-  :class:`~tensordict.TensorDict` for the repr of a lazy stack.
+  :class:`~tensordict.TensorDict` for the repr of a lazy stack. For a lazy
+  stack with exclusive keys, it raises a ``RuntimeError``.
 
 See also
 --------

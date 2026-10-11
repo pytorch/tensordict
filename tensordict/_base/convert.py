@@ -908,14 +908,7 @@ class _Conversion:
         ``to_module`` can also be used as a context manager, to populate a
         module with other parameters for the duration of a ``with`` block (see
         the second example). When the block exits, the original parameters are
-        written back.
-
-        .. warning::
-            If the ``with`` block raises an exception, the original parameters
-            are not written back: the module keeps the parameters of the
-            tensordict (`#2241 <https://github.com/pytorch/tensordict/issues/2241>`_).
-            To restore them in all cases, keep the returned swap and write it
-            back in a ``finally`` clause (see the third example).
+        written back, also if the block raises an exception.
 
         Args:
             module (nn.Module): a module to write the parameters into.
@@ -977,13 +970,14 @@ class _Conversion:
         >>> # When the block exits, the original parameters are written back.
         >>> assert (module.weight != 0).any()
 
-            Restore the parameters even if the call raises an exception:
+            The original parameters are written back if the block raises an
+            exception too:
 
-        >>> old_params = zeros.to_module(module)
         >>> try:
-        ...     y = module(torch.ones(2, 3))
-        ... finally:
-        ...     _ = old_params.to_module(module)
+        ...     with zeros.to_module(module):
+        ...         raise ValueError("stop")
+        ... except ValueError:
+        ...     pass
         >>> assert (module.weight != 0).any()
 
         """

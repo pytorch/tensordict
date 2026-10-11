@@ -365,9 +365,8 @@ gets its original parameters back:
   >>> bool((module.weight == 0).all())
   False
 
-If the ``with`` block raises an exception, the module keeps the parameters of
-``params`` (`#2241 <https://github.com/pytorch/tensordict/issues/2241>`_).
-Catch the exception inside the block if you must restore the module.
+``unlock_``, ``lock_`` and ``to_module`` also undo their change when the
+``with`` block raises an exception.
 
 These shape operations also work as context managers:
 :meth:`~tensordict.TensorDict.view`, :meth:`~tensordict.TensorDict.permute`,
@@ -379,7 +378,8 @@ that you wrote into the result go back into the original, with the reverse
 operation. :meth:`~tensordict.TensorDict.reshape` does not write back.
 :meth:`~tensordict.TensorDict.to` also writes back, and casts the existing
 entries back to their original device and dtype (see
-:ref:`devices-temporary-moves`).
+:ref:`devices-temporary-moves`). If the block raises an exception, these
+operations write nothing back.
 
   >>> td = TensorDict(x=torch.zeros(3, 4), batch_size=[3, 4])
   >>> with td.unsqueeze(-1) as tdu:

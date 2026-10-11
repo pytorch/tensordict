@@ -7417,8 +7417,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Check the state with :attr:`~.is_locked`. See :ref:`keys`.
 
         Can be used as a context manager: the tensordict is unlocked when the
-        ``with`` block exits. If the block raises an exception, the tensordict
-        stays locked (`#2241 <https://github.com/pytorch/tensordict/issues/2241>`_).
+        ``with`` block exits, also if the block raises an exception.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -7517,7 +7516,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         :meth:`~.lock_` for what a lock blocks.
 
         Can be used as a context manager: the tensordict is locked again when
-        the ``with`` block exits.
+        the ``with`` block exits, also if the block raises an exception.
 
         Raises:
             RuntimeError: if this tensordict, or one of its sub-tensordicts,

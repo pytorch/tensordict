@@ -86,8 +86,7 @@ Another batch size
   ``torch.compile(fn, dynamic=True)`` avoids the second compilation.
   ``torch._dynamo.mark_dynamic`` on an entry does not: the batch size holds
   Python ints, and a function that builds a tensordict with
-  ``batch_size=td.batch_size`` then raises ``ConstraintViolationError``
-  (pytorch/tensordict#2077).
+  ``batch_size=td.batch_size`` then raises ``ConstraintViolationError``.
   ``split``, ``chunk``, ``unbind`` and ``tolist`` recompile for each batch
   size, also after that.
 

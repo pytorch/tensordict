@@ -540,9 +540,10 @@ a ``while`` loop instead.
 ``pipe.send(td)``, ``pipe.recv()`` and ``pipe.close()`` are synchronous
 wrappers. If no event loop runs in the thread, each call runs the coroutine
 with :func:`asyncio.run`. In a coroutine, or in a callback of a running event
-loop, use the async methods (``asend``, ``arecv``, ``aclose``): the
-synchronous wrappers cannot run there
-(`#2316 <https://github.com/pytorch/tensordict/issues/2316>`_).
+loop, use the async methods (``asend``, ``arecv``, ``aclose``). There, a
+synchronous wrapper raises a ``RuntimeError`` that names the async method to
+await, for example "TensorDictPipe.arecv() cannot run synchronously inside a
+running event loop".
 ``TensorDictPipe.listen`` and ``TensorDictPipe.connect`` are coroutines only.
 
 GPU tensors
