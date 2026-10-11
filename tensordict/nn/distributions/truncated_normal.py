@@ -92,7 +92,6 @@ class TruncatedStandardNormal(Distribution):
     def variance(self) -> torch.Tensor:
         return self._variance
 
-    @property
     def entropy(self) -> torch.Tensor:
         return self._entropy
 
