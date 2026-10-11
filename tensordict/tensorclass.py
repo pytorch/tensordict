@@ -2612,7 +2612,11 @@ def _getattr(self, item: str, **kwargs) -> Any:
                 ):
                     return _from_shared_nontensor(out)
                 return out
-        out = self._tensordict._get_str(item, NO_DEFAULT, **kwargs)
+        out = self._tensordict._get_str(item, _UNSET, **kwargs)
+        if out is _UNSET:
+            # The field was deleted, or never held a value: a declared field
+            # that no store holds reads as None, as a None placeholder does.
+            return None
         if is_non_tensor(out):
             return (
                 out.data
@@ -2661,7 +2665,11 @@ class _FieldGetter:
             if self._check_shared and (td._is_shared or td._is_memmap):
                 return _from_shared_nontensor(out)
             return out
-        out = td._get_str(name, NO_DEFAULT)
+        out = td._get_str(name, _UNSET)
+        if out is _UNSET:
+            # Same rule as _getattr: a declared field that neither store holds
+            # reads as None instead of raising KeyError out of a descriptor.
+            return None
         if is_non_tensor(out):
             return (
                 out.data
@@ -3648,7 +3656,17 @@ def _set_at_str(
 
 
 def _delattr(self, key):
-    del self._tensordict[key]
+    # A field lives in one store only: a set field in _tensordict, a None one
+    # in _non_tensordict, so both have to be tried. A key in neither store
+    # falls through to the TensorDict, which raises KeyError, as on main and
+    # as a second del_ does.
+    td = self._tensordict
+    if key in (td._tensordict if type(td) is TensorDict else td.keys()):
+        del td[key]
+    elif key in self._non_tensordict:
+        del self._non_tensordict[key]
+    else:
+        del td[key]
 
 
 def _del_(self, key):

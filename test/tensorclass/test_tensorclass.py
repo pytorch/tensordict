@@ -1355,6 +1355,71 @@ class TestTensorClass:
         assert data.del_(("td", "a")) is data
         assert list(data.td.keys()) == ["b"]
 
+    def test_deleted_field_reads_as_none(self):
+        # gh-2147: a declared field that no store holds reads as None, so
+        # hasattr() and getattr(obj, name, default) work after a delete
+        # instead of raising KeyError.
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            y: torch.Tensor = None
+
+        data = MyClass(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+        del data.y
+        assert data.y is None
+        assert getattr(data, "y", "default") is None
+        assert hasattr(data, "y")
+        assert "y" not in data.keys()
+        assert data.get("y") is None
+
+        # Deleting a field that is None is not an error
+        unset = MyClass(x=torch.zeros(3), batch_size=[3])
+        del unset.y
+        assert unset.y is None
+        assert "y" not in unset.keys()
+
+        # del_ and pop remove the field, which reads as None too
+        cleared = MyClass(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+        assert cleared.del_("y") is cleared
+        assert cleared.y is None
+        popped = MyClass(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+        torch.testing.assert_close(popped.pop("y"), torch.ones(3))
+        assert popped.y is None
+
+        # A key that no field declares keeps the attribute protocol
+        with pytest.raises(AttributeError):
+            data.not_a_field
+        # A second delete of a field that no store holds raises, as on main
+        with pytest.raises(KeyError):
+            del unset.y
+
+    def test_deleted_field_reads_as_none_other_class_kinds(self):
+        # gh-2147, the other getters: the field branch of _getattr for a
+        # shadow class, and _delattr of a tensor_only class, whose getter
+        # already raised AttributeError for a missing key.
+        @tensorclass(shadow=True)
+        class Shadow:
+            x: torch.Tensor
+            y: torch.Tensor = None
+
+        shadow = Shadow(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+        del shadow.y
+        assert shadow.y is None
+        assert getattr(shadow, "y", "default") is None
+
+        class Only(TensorClass["tensor_only"]):
+            x: torch.Tensor
+            y: torch.Tensor | None = None
+
+        unset = Only(x=torch.zeros(3), batch_size=[3])
+        del unset.y
+        # A deleted field of a tensor_only class reads as absent, as it
+        # already did for a field that held a tensor
+        assert not hasattr(unset, "y")
+        set_ = Only(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+        del set_.y
+        assert not hasattr(set_, "y")
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_device(self, device):
         data = MyData(
