@@ -235,6 +235,28 @@ class TestTensorDictStore:
             td.clear_redis()
             td.close()
 
+    @pytest.mark.parametrize("auto_batch_size", [False, True])
+    def test_from_dict_auto_batch_size(self, store_kwargs, auto_batch_size):
+        """from_dict infers the batch size of a dict input when auto_batch_size=True,
+        as TensorDict.from_dict does."""
+
+        source = {"obs": torch.randn(5, 3), "nested": {"x": torch.randn(5, 3, 2)}}
+        td = TensorDictStore.from_dict(
+            source, auto_batch_size=auto_batch_size, **store_kwargs
+        )
+        try:
+            expected = TensorDict.from_dict(source, auto_batch_size=auto_batch_size)
+            assert expected.batch_size == (
+                torch.Size([5, 3]) if auto_batch_size else torch.Size([])
+            )
+            assert td.batch_size == expected.batch_size
+            assert td["nested"].batch_size == expected["nested"].batch_size
+            assert torch.allclose(td["obs"], source["obs"])
+            assert torch.allclose(td["nested", "x"], source["nested"]["x"])
+        finally:
+            td.clear_redis()
+            td.close()
+
     def test_from_dict_tensordict_input(self, store_kwargs):
         """Construct via from_dict with a TensorDict as input."""
 
