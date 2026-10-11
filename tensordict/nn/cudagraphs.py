@@ -23,9 +23,9 @@ from tensordict.nn.functional_modules import (
 from tensordict.utils import _zip_strict, logger as tensordict_logger
 from torch import Tensor
 from torch.utils._pytree import (
-    tree_flatten as _tree_flatten,
-    tree_leaves as _tree_leaves,
-    tree_map as _tree_map,
+    tree_flatten as _pytree_flatten,
+    tree_leaves as _pytree_leaves,
+    tree_map as _pytree_map,
     tree_unflatten,
 )
 
@@ -41,16 +41,16 @@ def _is_td_leaf(x: Any) -> bool:
     return type(x) in _TD_LEAF_TYPES
 
 
-def tree_flatten(tree):
-    return _tree_flatten(tree, is_leaf=_is_td_leaf)
+def _tree_flatten(tree):
+    return _pytree_flatten(tree, is_leaf=_is_td_leaf)
 
 
-def tree_leaves(tree):
-    return _tree_leaves(tree, is_leaf=_is_td_leaf)
+def _tree_leaves(tree):
+    return _pytree_leaves(tree, is_leaf=_is_td_leaf)
 
 
-def tree_map(func, tree):
-    return _tree_map(func, tree, is_leaf=_is_td_leaf)
+def _tree_map(func, tree):
+    return _pytree_map(func, tree, is_leaf=_is_td_leaf)
 
 
 __all__ = ["CudaGraphModule"]
@@ -341,7 +341,7 @@ class CudaGraphModule:
                             "The input tensordict device must be of the 'cuda' type."
                         )
 
-                    tree_map(self._check_non_tensor, (args, kwargs))
+                    _tree_map(self._check_non_tensor, (args, kwargs))
 
                     torch.cuda.synchronize(self.device)
                     kwargs = kwargs.copy()
@@ -414,7 +414,7 @@ class CudaGraphModule:
                 if self.counter >= self._warmup:
                     srcs, dests = [], []
                     for arg_src, arg_dest in _zip_strict(
-                        tree_leaves((args, kwargs)), self._flat_tree
+                        _tree_leaves((args, kwargs)), self._flat_tree
                     ):
                         self._maybe_copy_onto_(arg_src, arg_dest, srcs, dests)
                     if dests:
@@ -433,7 +433,7 @@ class CudaGraphModule:
                     return result
 
                 if not self._has_cuda or self.counter < self._warmup - 1:
-                    args, kwargs = tree_map(self._clone, (args, kwargs))
+                    args, kwargs = _tree_map(self._clone, (args, kwargs))
                     if self._has_cuda:
                         self._warmup_stream.wait_stream(
                             torch.cuda.current_stream(self.device)
@@ -448,7 +448,7 @@ class CudaGraphModule:
                     return out
                 else:
                     tensordict_logger.info("Registering CUDA graph...")
-                    self._flat_tree, self._tree_spec = tree_flatten((args, kwargs))
+                    self._flat_tree, self._tree_spec = _tree_flatten((args, kwargs))
 
                     self._flat_tree = tuple(
                         self._check_device_and_clone(arg) for arg in self._flat_tree
@@ -463,7 +463,7 @@ class CudaGraphModule:
                     with self._warmup_stream_cm():
                         # Run on fresh copies: a module that writes into a tensordict
                         # input must see the same structure during the capture.
-                        args, kwargs = tree_map(self._clone, (args, kwargs))
+                        args, kwargs = _tree_map(self._clone, (args, kwargs))
                         this_out = self.module(*args, **kwargs)
                     self._capture_stream.wait_stream(self._warmup_stream)
 
@@ -471,12 +471,12 @@ class CudaGraphModule:
                     with torch.cuda.graph(self.graph, stream=self._capture_stream):
                         out = self.module(*self._args, **self._kwargs)
                     tensordict_logger.info("CUDA graph successfully registered.")
-                    self._out, self._out_struct = tree_flatten(out)
+                    self._out, self._out_struct = _tree_flatten(out)
                     self.counter += 1
                     # Check that there is not intersection between the indentity of inputs and outputs, otherwise warn
                     # user.
-                    tree_leaves_input = tree_leaves((self._args, self._kwargs))
-                    tree_leaves_output = tree_leaves(out)
+                    tree_leaves_input = _tree_leaves((self._args, self._kwargs))
+                    tree_leaves_output = _tree_leaves(out)
                     if not isinstance(tree_leaves_output, tuple):
                         tree_leaves_output = (tree_leaves_output,)
                     for inp in tree_leaves_input:
