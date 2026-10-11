@@ -56,7 +56,8 @@ on:
 
 # One release run per branch at a time. A new run waits for the current one
 # instead of cancelling it, so that a second dispatch cannot interrupt a
-# publish. Use `gh run cancel` to stop a run.
+# publish. `gh run cancel` does not stop the build jobs; to stop a run, use
+# `gh api -X POST repos/pytorch/tensordict/actions/runs/<run id>/force-cancel`.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
