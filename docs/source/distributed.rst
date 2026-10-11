@@ -541,7 +541,8 @@ a ``while`` loop instead.
 wrappers. If no event loop runs in the thread, each call runs the coroutine
 with :func:`asyncio.run`. Do not call them from a coroutine, or from a
 callback of a running event loop. They wait for a coroutine that the same
-loop must run, so the call never returns. ``TensorDictPipe.listen`` and
+loop must run, so the call never returns
+(`#2316 <https://github.com/pytorch/tensordict/issues/2316>`_). ``TensorDictPipe.listen`` and
 ``TensorDictPipe.connect`` are coroutines only.
 
 GPU tensors
@@ -567,7 +568,7 @@ send and recv with a pipe
 of a rank, and :meth:`~tensordict.TensorDictBase.asend` and
 :meth:`~tensordict.TensorDictBase.arecv` are their async versions. With a
 pipe, ``recv`` does not always write into ``td``. On the first message, it
-returns a new consolidated tensordict, and ``td`` does not change
+can return a new consolidated tensordict and leave ``td`` unchanged
 (`#2244 <https://github.com/pytorch/tensordict/issues/2244>`_). Keep the
 return value, and receive into it:
 

@@ -302,10 +302,10 @@ class _Distributed:
                 source worker, or a
                 :class:`~tensordict._ucxx.TensorDictPipe` for UCXX-based
                 transport. When a pipe is passed, use the returned
-                tensordict: on the first message, the pipe returns a new
-                tensordict and this one does not change, and on later
-                messages it receives into this tensordict's consolidated
-                storage (`#2244 <https://github.com/pytorch/tensordict/issues/2244>`_).
+                tensordict: the first message can return a new tensordict
+                and leave this one unchanged, and later messages are
+                received into this tensordict's consolidated storage
+                (`#2244 <https://github.com/pytorch/tensordict/issues/2244>`_).
                 Mutually exclusive with ``group_src``; exactly one of the two
                 must be provided.
 
