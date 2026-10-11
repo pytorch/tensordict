@@ -1776,6 +1776,39 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    def test_rename_key_sub_tensordict(self, store_kwargs):
+        tds = [
+            TensorDict(
+                {
+                    "nested": {
+                        "het": torch.randn(3, i + 1),
+                        "d": {"y": torch.randn(3)},
+                    },
+                    "x": torch.randn(3, 2),
+                },
+                batch_size=[3],
+            )
+            for i in range(4)
+        ]
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            store_td.rename_key_("nested", ("n", "m"))
+            keys = {("n", "m", "het"), ("n", "m", "d", "y"), "x"}
+            assert set(store_td.keys(True, True)) == keys
+            for i, td in enumerate(tds):
+                torch.testing.assert_close(
+                    store_td[i]["n", "m", "het"], td["nested", "het"]
+                )
+                torch.testing.assert_close(
+                    store_td[i]["n", "m", "d", "y"], td["nested", "d", "y"]
+                )
+                torch.testing.assert_close(store_td[i]["x"], td["x"])
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     # ---- Write-through view tests ----
 
     def test_view_set_propagates(self, store_stack):
