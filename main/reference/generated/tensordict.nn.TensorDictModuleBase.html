@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev5056+g6b99dd6d9.d20261011)
+                  main (0.14.0.dev5057+g6adc5c72b.d20261011)
                 </div>
               
             
@@ -491,7 +491,8 @@ useful for functional modules where the parameters are not stored in the module 
 <dd><p>Selects the keys that will be found in the output tensordict.</p>
 <p>This is useful whenever one wants to get rid of intermediate keys in a
 complicated graph, or when the presence of these keys may trigger unexpected
-behaviours.</p>
+behaviours. The module removes only the out-keys that are not selected:
+the other entries of the input tensordict stay in place.</p>
 <p>The original <code class="docutils literal notranslate"><span class="pre">out_keys</span></code> can still be accessed via <code class="docutils literal notranslate"><span class="pre">module.out_keys_source</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
