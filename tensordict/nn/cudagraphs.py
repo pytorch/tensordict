@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import contextlib
 import functools
-import os
 import warnings
 import weakref
 from functools import partial
@@ -18,19 +17,41 @@ from tensordict._nestedkey import NestedKey
 from tensordict.base import is_tensor_collection, TensorDictBase
 from tensordict.nn.common import dispatch
 from tensordict.nn.functional_modules import (
-    _exclude_td_from_pytree,
     PYTREE_REGISTERED_LAZY_TDS,
     PYTREE_REGISTERED_TDS,
 )
-from tensordict.utils import _strtobool, _zip_strict, logger as tensordict_logger
+from tensordict.utils import _zip_strict, logger as tensordict_logger
 from torch import Tensor
 from torch.utils._pytree import (
-    SUPPORTED_NODES,
-    tree_flatten,
-    tree_leaves,
-    tree_map,
+    tree_flatten as _tree_flatten,
+    tree_leaves as _tree_leaves,
+    tree_map as _tree_map,
     tree_unflatten,
 )
+
+# CudaGraphModule copies tensordict inputs with ``copy_``, which matches the
+# entries by key, and returns tensordict outputs with ``clone``: tensordicts are
+# leaves of the trees it builds. They are kept as leaves with ``is_leaf``, so
+# the global pytree registry is left as it is (pytorch/tensordict#2076).
+# ``SUPPORTED_NODES`` is keyed by exact type, hence ``type(x)``.
+_TD_LEAF_TYPES = frozenset(PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS)
+
+
+def _is_td_leaf(x: Any) -> bool:
+    return type(x) in _TD_LEAF_TYPES
+
+
+def tree_flatten(tree):
+    return _tree_flatten(tree, is_leaf=_is_td_leaf)
+
+
+def tree_leaves(tree):
+    return _tree_leaves(tree, is_leaf=_is_td_leaf)
+
+
+def tree_map(func, tree):
+    return _tree_map(func, tree, is_leaf=_is_td_leaf)
+
 
 __all__ = ["CudaGraphModule"]
 
@@ -216,17 +237,6 @@ class CudaGraphModule:
         self._is_tensordict_module = self.in_keys is not None
         self._out_matches_in = None
         self_ref = weakref.proxy(self)
-        for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
-            if tdtype in SUPPORTED_NODES:
-                if not _strtobool(os.environ.get("EXCLUDE_TD_FROM_PYTREE", "0")):
-                    warnings.warn(
-                        f"Tensordict is registered in PyTree. This is incompatible with {self.__class__.__name__}. "
-                        f"Removing TDs from PyTree. To silence this warning, call tensordict.nn.functional_modules._exclude_td_from_pytree().set() "
-                        f"or set the environment variable `EXCLUDE_TD_FROM_PYTREE=1`. "
-                        f"This operation is irreversible."
-                    )
-                _exclude_td_from_pytree().set()
-
         if self._is_tensordict_module:
 
             @dispatch(source=self.in_keys, dest=self.out_keys, auto_batch_size=False)

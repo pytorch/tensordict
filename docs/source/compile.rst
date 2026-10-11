@@ -221,9 +221,7 @@ gradients:
 
 :func:`torch.func.functional_call` only accepts a ``dict``: pass
 ``params.flatten_keys(".").to_dict()`` instead of the tensordict. See the
-:doc:`tutorials/functional` tutorial for more. If the process also creates a
-:class:`~tensordict.nn.CudaGraphModule`, see the warning in
-:ref:`compile-cudagraphs`.
+:doc:`tutorials/functional` tutorial for more.
 
 torch.export
 ------------
@@ -257,9 +255,7 @@ the export of a function that returns a tensordict whose first entry is
 non-tensor data raises ``batch dimension mismatch`` (pytorch/tensordict#2207):
 put a tensor entry first, or use ``strict=False``.
 To export a :class:`~tensordict.nn.TensorDictModule` so that it takes and
-returns plain tensors, see the :doc:`tutorials/export` tutorial. If the process
-also creates a :class:`~tensordict.nn.CudaGraphModule`, see the warning in
-:ref:`compile-cudagraphs`.
+returns plain tensors, see the :doc:`tutorials/export` tutorial.
 
 .. _compile-cudagraphs:
 
@@ -320,17 +316,6 @@ The replay follows these rules:
   (pytorch/tensordict#2075), and every tensor must be an entry of the
   tensordict, not a separate argument. If the function takes tensors, a
   changed value raises a ``ValueError``.
-
-.. warning::
-
-  Creating a :class:`~tensordict.nn.CudaGraphModule` removes
-  :class:`~tensordict.TensorDict`, :class:`~tensordict.LazyStackedTensorDict`
-  and :class:`~tensordict.PersistentTensorDict` from PyTorch's pytree registry
-  for the rest of the process, and warns about it (set
-  ``EXCLUDE_TD_FROM_PYTREE=1`` to silence the warning). After that,
-  :func:`torch.export.export` and :func:`torch.func.grad` no longer accept
-  these tensordicts. :func:`torch.vmap` still does, and tensorclasses stay
-  registered (pytorch/tensordict#2076).
 
 ``mode="reduce-overhead"``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
