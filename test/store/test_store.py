@@ -316,14 +316,34 @@ class TestTensorDictStore:
         assert "nested" in keys
 
     def test_keys_include_nested(self, store_td):
-        """Test keys with include_nested=True."""
+        """keys(include_nested=True) yields the sub-tensordict keys, as TensorDict does."""
         store_td["a"] = torch.randn(10, 2)
-        store_td["nested", "b"] = torch.randn(10, 3)
+        store_td["n", "b"] = torch.randn(10, 3)
+        store_td["n", "m", "c"] = torch.randn(10)
 
-        nested_keys = set(store_td.keys(include_nested=True))
-        assert "a" in nested_keys
-        # The nested key should appear as a tuple
-        assert ("nested", "b") in nested_keys or "nested" in nested_keys
+        keys = ["a", ("n", "b"), ("n", "m", "c"), ("n", "m"), "n"]
+        assert list(store_td.keys(include_nested=True)) == keys
+        assert len(store_td.keys(include_nested=True)) == 5
+        assert list(store_td.to_tensordict().keys(include_nested=True)) == keys
+        # the view of a sub-tensordict
+        assert list(store_td["n"].keys(include_nested=True)) == [
+            "b",
+            ("m", "c"),
+            "m",
+        ]
+        # leaves_only is unchanged
+        assert list(store_td.keys(True, True)) == ["a", ("n", "b"), ("n", "m", "c")]
+        # update() checks that the keys of the source cover the destination
+        dest = TensorDict(
+            {
+                "a": torch.zeros(3, 2),
+                "n": {"b": torch.zeros(3, 3), "m": {"c": torch.zeros(3)}},
+            },
+            batch_size=[3],
+        )
+        dest.update(store_td, update_batch_size=True)
+        assert dest.batch_size == (10,)
+        assert (dest["n", "m", "c"] == store_td["n", "m", "c"]).all()
 
     def test_keys_leaves_only(self, store_td):
         """Test keys with leaves_only=True."""
@@ -1328,6 +1348,35 @@ class TestLazyStackedTensorDictStore:
                 assert list(store.keys()) == ["R", "n-x", "n", "x"]
                 assert list(store["n"].keys()) == ["a", "b"]
                 assert list(store.to_tensordict().keys(True, True)) == keys
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_keys_include_nested(self, store_kwargs):
+        """keys(include_nested=True) yields the sub-tensordict keys, as TensorDict does."""
+        td = TensorDict(
+            {
+                "a": torch.zeros(3, 2),
+                "n": {"b": torch.ones(3, 2), "m": {"c": torch.ones(3, 2)}},
+            },
+            batch_size=[3, 2],
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(list(td.unbind(0))), **store_kwargs
+        )
+        try:
+            keys = ["a", ("n", "b"), ("n", "m", "c"), ("n", "m"), "n"]
+            # the store and the view of one of its elements
+            for store in (store_td, store_td[0]):
+                assert list(store.keys(include_nested=True)) == keys
+                assert len(store.keys(include_nested=True)) == 5
+                assert list(store.to_tensordict().keys(include_nested=True)) == keys
+                # leaves_only is unchanged
+                assert list(store.keys(True, True)) == [
+                    "a",
+                    ("n", "b"),
+                    ("n", "m", "c"),
+                ]
         finally:
             store_td.clear_redis()
             store_td.close()

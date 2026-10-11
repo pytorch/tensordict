@@ -36,7 +36,13 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
-from tensordict.store._store import _has_redis, _KEY_SEP, Self, STORE_BACKENDS
+from tensordict.store._store import (
+    _has_redis,
+    _iter_registry_keys,
+    _KEY_SEP,
+    Self,
+    STORE_BACKENDS,
+)
 from tensordict.store._utils import (
     _bytes_to_tensor,
     _check_indexed_value,
@@ -610,30 +616,11 @@ class _LazyStackedStoreKeysView(_TensorDictKeysView):
     def __iter__(self):
         td = self.tensordict
         all_keys = td._get_all_keys()
-        seen = set()
         # Sorted as in _StoreTDKeysView. _get_str sorts the paths of a nested
         # tensordict too, so that values() and items() follow this order.
-        for full_key in sorted(all_keys):
-            parts = full_key.split(_KEY_SEP)
-            if self.include_nested:
-                key = tuple(parts) if len(parts) > 1 else parts[0]
-                if self.leaves_only and len(parts) > 1:
-                    if key not in seen:
-                        seen.add(key)
-                        yield key
-                elif not self.leaves_only or len(parts) == 1:
-                    if key not in seen:
-                        seen.add(key)
-                        yield key
-            else:
-                top_key = parts[0]
-                if top_key in seen:
-                    continue
-                seen.add(top_key)
-                is_leaf_key = len(parts) == 1
-                if self.leaves_only and not is_leaf_key:
-                    continue
-                yield top_key
+        return _iter_registry_keys(
+            sorted(all_keys), self.include_nested, self.leaves_only
+        )
 
     def __contains__(self, key):
         key = unravel_key(key)
