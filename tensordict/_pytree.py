@@ -188,12 +188,15 @@ def _tensordict_unflatten(values: List[Any], context: Context) -> Dict[Any, Any]
         # ints, hence the is_dynamo_compiling() check). Reconstruct from the
         # leading batch_dims dimensions of the actual tensor shapes.
         # A nested tensordict without leaves has the batch size [0] * batch_dims,
-        # or its stored one, which is static: read the batch size from another
-        # value when there is one.
+        # or its stored one, which is static. A non-tensor entry is rebuilt with
+        # the batch size [0] * batch_dims too (set_non_tensor replaces it
+        # afterwards). Read the batch size from another value when there is one.
         shapes = [
             _shape(v)
             for v in values
-            if hasattr(v, "shape") and not (is_tensor_collection(v) and v.is_empty())
+            if hasattr(v, "shape")
+            and not is_non_tensor(v)
+            and not (is_tensor_collection(v) and v.is_empty())
         ] or shapes
         batch_size = shapes[0][:batch_dims]
     else:
