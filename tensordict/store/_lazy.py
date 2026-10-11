@@ -1849,7 +1849,8 @@ class LazyStackedTensorDictStore(TensorDictBase):
             return torch.Tensor
         prefix_check = key_path + _KEY_SEP
         if any(k.startswith(prefix_check) for k in all_keys):
-            return LazyStackedTensorDictStore
+            # get() builds a sub-tensordict as a TensorDict
+            return TensorDict
         raise KeyError(f"key {key} not found in {type(self).__name__}")
 
     # ---- Locking ----
