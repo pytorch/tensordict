@@ -817,6 +817,18 @@ class TestTD:
         assert td_cpu_c.device == torch.device("cpu")
         torch.testing.assert_close(td_cpu_c["a"], td["a"])
 
+    @pytest.mark.parametrize("batch_size", [[2], [2, 3]])
+    def test_to_batch_size_same_device(self, mode, batch_size):
+        def to_cpu(td):
+            return td.to("cpu", batch_size=batch_size)
+
+        td = TensorDict(a=torch.zeros(2, 3), batch_size=[2], device="cpu")
+        to_cpu_c = torch.compile(to_cpu, fullgraph=True, backend="eager")
+        result = to_cpu_c(td)
+        assert result is td
+        assert result.batch_size == torch.Size(batch_size)
+        torch.testing.assert_close(result["a"], torch.zeros(2, 3))
+
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="cuda required")
     def test_to_cpu_from_cuda(self, mode):
         def to_cpu(td):

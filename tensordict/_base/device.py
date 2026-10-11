@@ -583,6 +583,8 @@ class _DeviceOps:
             and convert_to_format is None
             and device == self.device
         ):
+            if batch_size is not None:
+                result.batch_size = torch.Size(batch_size)
             return result
 
         if (
@@ -591,13 +593,16 @@ class _DeviceOps:
             and device is not None
             and convert_to_format is None
         ):
-            return self._to_consolidated(
+            result = self._to_consolidated(
                 device=device,
                 pin_memory=non_blocking_pin,
                 num_threads=num_threads,
                 non_blocking=non_blocking,
                 inplace=inplace,
             )
+            if batch_size is not None:
+                result.batch_size = torch.Size(batch_size)
+            return result
 
         if non_blocking is None:
             # Under torch.compile, copies to a non-cuda device are blocking: the

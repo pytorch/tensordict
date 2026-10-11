@@ -1954,6 +1954,8 @@ class PersistentTensorDict(TensorDictBase):
             )
         result = self
         if device is not None and dtype is None and device == self.device:
+            if batch_size is not None and torch.Size(batch_size) != result.batch_size:
+                result.batch_size = batch_size
             return result
         if dtype is not None:
             return self.to_tensordict().to(*args, **kwargs)
