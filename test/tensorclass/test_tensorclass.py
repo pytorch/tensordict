@@ -32,6 +32,7 @@ from typing import (
     Generic,
     get_args,
     get_origin,
+    get_type_hints,
     Optional,
     Tuple,
     TypeVar,
@@ -51,6 +52,8 @@ from tensordict import (
     MemoryMappedTensor,
     MetaData,
     NonTensorData,
+    NonTensorDataBase,
+    NonTensorStack,
     set_capture_non_tensor_stack,
     set_get_defaults_to_none,
     set_list_to_stack,
@@ -58,6 +61,7 @@ from tensordict import (
     tensorclass,
     TensorDict,
     TensorDictBase,
+    UnbatchedTensor,
 )
 from tensordict._lazy import _PermutedTensorDict, _ViewedTensorDict
 from tensordict._td import lazy_stack
@@ -312,6 +316,18 @@ def test_tensorclass_instance_methods(form):
         str(_TENSORDICT_DIR / "tensorclass.pyi"), "TensorClass"
     )
     _check_stub_class(stub_attrs, X, exclusions)
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.parametrize("cls", [NonTensorDataBase, NonTensorStack])
+def test_non_tensor_stub_maybe_to_stack(cls):
+    # The deprecation warning of NonTensorStack.from_nontensordata points to
+    # NonTensorData.maybe_to_stack.
+    assert hasattr(cls, "maybe_to_stack")
+    stub_attrs = _get_class_attrs_from_pyi(
+        str(_TENSORDICT_DIR / "tensorclass.pyi"), cls.__name__
+    )
+    assert "maybe_to_stack" in stub_attrs
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
@@ -674,6 +690,43 @@ class MyDataTensorOnly:
     X: torch.Tensor
 
 
+@pytest.mark.parametrize("form", ["subclass", "decorator"])
+def test_tensorclass_keeps_its_docstring(form):
+    # A tensorclass keeps its own docstring (help(), IDEs and the API docs
+    # read it); a class without one documents its constructor signature.
+    if form == "subclass":
+
+        class WithDoc(TensorClass):
+            """Observations of one step."""
+
+            obs: torch.Tensor
+
+        class WithoutDoc(TensorClass):
+            obs: torch.Tensor
+
+    else:
+
+        @tensorclass
+        class WithDoc:
+            """Observations of one step."""
+
+            obs: torch.Tensor
+
+        @tensorclass
+        class WithoutDoc:
+            obs: torch.Tensor
+
+    assert WithDoc.__doc__ == "Observations of one step."
+    assert WithoutDoc.__doc__.startswith("WithoutDoc(")
+    assert "obs" in WithoutDoc.__doc__
+
+
+@pytest.mark.parametrize("cls", [NonTensorData, MetaData])
+def test_non_tensor_classes_keep_their_docstrings(cls):
+    # Their docstrings used to be replaced by the generated signature.
+    assert not cls.__doc__.startswith(cls.__name__ + "(")
+
+
 class TestTensorClass:
     @pytest.mark.parametrize("tensor_only", [False, True])
     @pytest.mark.parametrize("frozen", [False, True])
@@ -720,6 +773,18 @@ class TestTensorClass:
                 ),
             ):
                 Data(x=x, y=y, extra=x)
+        else:
+            # Until TensorDict 0.17, a tensor_only class stores the argument
+            # and warns.
+            with pytest.warns(
+                DeprecationWarning,
+                match=re.escape(
+                    "Passing arguments that are not fields (['extra']) to the "
+                    "tensor_only tensorclass Data"
+                ),
+            ) as record:
+                Data(x=x, y=y, extra=x)
+            assert record[0].filename == __file__
         # None values must still enter non-tensor storage.
         assert Data(x=x, y=None, batch_size=[3]).y is None
 
@@ -828,6 +893,24 @@ class TestTensorClass:
                 assert not obj.is_locked
             assert obj.is_locked
         assert not obj.is_locked
+
+    def test_lock_context_manager_restores_on_error(self):
+        # lock_() and unlock_() undo their change also when the body raises
+        @tensorclass
+        class MyClass:
+            X: torch.Tensor
+
+        obj = MyClass(X=torch.zeros(2), batch_size=[])
+        with pytest.raises(ValueError, match="error in the body"):
+            with obj.lock_():
+                raise ValueError("error in the body")
+        assert not obj.is_locked
+        obj.lock_()
+        with pytest.raises(ValueError, match="error in the body"):
+            with obj.unlock_():
+                raise ValueError("error in the body")
+        assert obj.is_locked
+        assert not obj._tensordict._last_op_queue
 
     def test_to_dict(self):
         @tensorclass
@@ -1798,6 +1881,31 @@ class TestTensorClass:
         assert not a.data.requires_grad
         assert a.grad.x is not None
         assert a.grad.z is None
+
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_grad_keeps_self(self, tensor_only):
+        # .grad holds None for a field without a grad. Neither that None nor
+        # later writes into the grad may reach the instance.
+        @tensorclass(tensor_only=tensor_only)
+        class MyClass:
+            x: torch.Tensor
+            y: torch.Tensor | None = None
+
+        a = MyClass(
+            x=torch.zeros(3, requires_grad=True), y=torch.ones(3), batch_size=[3]
+        )
+        (a.x * 2).sum().backward()
+        grad = a.grad
+        assert (grad.x == 2).all()
+        assert grad.y is None
+        torch.testing.assert_close(a.to_dict()["y"], torch.ones(3))
+        torch.testing.assert_close(
+            a.to_tensordict(retain_none=True)["y"], torch.ones(3)
+        )
+        assert repr(a).count("y=") == 1
+        grad.x = None
+        assert grad.x is None
+        assert isinstance(a.to_dict()["x"], torch.Tensor)
 
     def test_len(self):
         myc = MyData(
@@ -3396,6 +3504,53 @@ class TestTensorClass:
         assert (tc.a[:, 0] == torch.tensor([0.0, 1.0, 1.0, 1.0])).all()
         assert (tc.b == torch.tensor([0.0, 1.0, 1.0, 0.0])).all()
 
+        # a source without batch dims is written at an int index
+        tc = TC(a=torch.zeros(4, 3), b=torch.zeros(4), batch_size=[4])
+        a, b = tc.a, tc.b
+        source = TC(a=torch.ones(3), b=torch.ones(()), batch_size=[])
+        if source_type == "tensordict":
+            source = source.to_tensordict()
+        elif source_type == "dict":
+            source = source.to_dict()
+        assert tc.update_at_(source, 1) is tc
+        assert tc.a is a and tc.b is b
+        assert (tc.b == torch.tensor([0.0, 1.0, 0.0, 0.0])).all()
+        assert (tc.a == tc.b.unsqueeze(-1)).all()
+
+        # a source with a prefix of the batch dims, at an index on the last dim
+        tc = TC(a=torch.zeros(4, 3), b=torch.zeros(4, 3), batch_size=[4, 3])
+        a, b = tc.a, tc.b
+        source = TC(a=torch.ones(4), b=torch.ones(4), batch_size=[4])
+        if source_type == "tensordict":
+            source = source.to_tensordict()
+        elif source_type == "dict":
+            source = source.to_dict()
+        tc.update_at_(source, (slice(None), 1))
+        assert tc.a is a and tc.b is b
+        assert (tc.a == torch.tensor([0.0, 1.0, 0.0])).all()
+        assert (tc.b == tc.a).all()
+
+        if source_type == "tensorclass":
+            # a source whose values have the batch size of tc still replaces them
+            tc = TC(a=torch.zeros(4, 3), b=torch.zeros(4), batch_size=[4])
+            source = TC(a=torch.ones(4, 3), b=torch.ones(4), batch_size=[])
+            tc.update_at_(source, 1)
+            assert tc.a is source.a and tc.b is source.b
+
+            # an UnbatchedTensor does not have the batch size, but update()
+            # accepts it: the entries are still replaced
+            tc = TC(
+                a=torch.zeros(4, 3),
+                b=UnbatchedTensor(torch.zeros(5)),
+                batch_size=[4],
+            )
+            source = TC(
+                a=torch.ones(4, 3), b=UnbatchedTensor(torch.ones(5)), batch_size=[]
+            )
+            tc.update_at_(source, 1)
+            assert tc.a is source.a
+            assert (tc.b == 1).all()
+
     @pytest.mark.parametrize("source_type", ["tensordict", "dict"])
     def test_update_at_lazy_stack(self, source_type):
         @tensorclass
@@ -3505,6 +3660,51 @@ class TestTensorClass:
             viewed_td.X = torch.zeros(12, 5)
         assert data.X is not None
         assert (data.X == 0).all()
+
+    @pytest.mark.parametrize(
+        "op,args",
+        [
+            ("view", (-1,)),
+            ("permute", (1, 0)),
+            ("unsqueeze", (0,)),
+            ("flatten", (0, 1)),
+        ],
+    )
+    def test_shape_cm_unset_field(self, op, args):
+        # Setting an unset field inside the context must drop its None
+        # placeholder in the original object, as setting it there does.
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+            z: torch.Tensor = None
+            s: str = None
+
+        tc = TC(x=torch.zeros(2, 3), batch_size=[2, 3])
+        with getattr(tc, op)(*args) as tc_op:
+            tc_op.z = torch.ones(tc_op.batch_size)
+            tc_op.s = "value"
+        z = torch.ones(2, 3)
+        torch.testing.assert_close(tc.z, z)
+        torch.testing.assert_close(tc.to_dict()["z"], z)
+        torch.testing.assert_close(tc.to_tensordict(retain_none=True)["z"], z)
+        assert tc.s == tc.to_dict()["s"] == "value"
+        assert "z=None" not in repr(tc)
+        assert "s=None" not in repr(tc)
+
+    def test_shape_cm_locked_cached_result(self):
+        # flatten_keys and unflatten_keys of a locked tensorclass return their
+        # cached result again. Calling them more times than the recursion limit
+        # must not raise.
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+            z: torch.Tensor = None
+
+        tc = TC(x=torch.zeros(2, 3), batch_size=[2, 3]).lock_()
+        for _ in range(1100):
+            with tc.flatten_keys():
+                pass
+            tc.unflatten_keys()
 
     def test_weakref_attr(self):
         @tensorclass
@@ -4723,6 +4923,93 @@ class TestShadow:
                 setattr(c, name, torch.full((3,), 2.0))
                 assert (getattr(c, name) == 2).all()
                 assert (c.get(name) == 2).all()
+
+
+class TestRuntimeTypeCheckers:
+    # A runtime type-checker that decorates a tensorclass (beartype, typeguard)
+    # checks the methods in its namespace, and skips the functions marked with
+    # __no_type_check__ (typing.no_type_check). Tensorclass marks the methods
+    # that it adds: their annotations name builtins that the class shadows
+    # (bool, int, type...).
+
+    @staticmethod
+    def _functions(value):
+        if isinstance(value, property):
+            return [f for f in (value.fget, value.fset, value.fdel) if f is not None]
+        if isinstance(value, (classmethod, staticmethod)):
+            value = value.__func__
+        return [value] if inspect.isfunction(value) else []
+
+    @pytest.mark.parametrize(
+        "flags", [{}, {"tensor_only": True}, {"shadow": True, "frozen": True}]
+    )
+    @pytest.mark.parametrize("subclass", [False, True])
+    def test_added_methods_are_not_type_checked(self, subclass, flags):
+        if subclass:
+
+            class Data(TensorClass, **flags):
+                x: torch.Tensor
+
+                def scaled(self, k: torch.Tensor) -> torch.Tensor:
+                    return self.x * k
+
+        else:
+
+            @tensorclass(**flags)
+            class Data:
+                x: torch.Tensor
+
+                def scaled(self, k: torch.Tensor) -> torch.Tensor:
+                    return self.x * k
+
+        unmarked = [
+            name
+            for name, value in vars(Data).items()
+            if name not in ("scaled", "__init__")
+            for func in self._functions(value)
+            if func.__annotations__ and not getattr(func, "__no_type_check__", False)
+        ]
+        assert not unmarked
+        # The methods of the class body are checked, and so is __init__, which has
+        # the annotations of the fields.
+        assert not hasattr(Data.scaled, "__no_type_check__")
+        assert not hasattr(Data.__init__, "__no_type_check__")
+        assert get_type_hints(Data.__init__)["x"] is torch.Tensor
+        # Tensorclasses get copies of the TensorDict methods that they reuse, which
+        # pickle by reference as these methods do
+        for name in ("save", "memmap", "load_memmap"):
+            assert not hasattr(getattr(TensorDict, name), "__no_type_check__")
+        assert get_type_hints(TensorDict.save)["copy_existing"] is bool
+        for name in ("save", "__iter__"):
+            method = getattr(Data, name)
+            assert pickle.loads(pickle.dumps(method)) is method
+
+    def test_method_annotations_name_shadowed_builtins(self):
+        # On Python 3.14+, without `from __future__ import annotations` (which this
+        # module has), a method's annotations are evaluated when first read, in the
+        # namespace of the class, where a tensorclass has methods named int and set.
+        namespace = {"__name__": __name__}
+        code = """
+            import torch
+            from tensordict import tensorclass
+
+            @tensorclass
+            class Data:
+                x: torch.Tensor
+
+                def count(self, k: int) -> int:
+                    return k
+
+                def tags(self) -> set[str]:
+                    return {"x"}
+        """
+        exec(
+            compile(textwrap.dedent(code), "<test>", "exec", dont_inherit=True),
+            namespace,
+        )
+        Data = namespace["Data"]
+        assert get_type_hints(Data.count) == {"k": int, "return": int}
+        assert inspect.signature(Data.tags).return_annotation == set[str]
 
 
 class TestDeprecations:

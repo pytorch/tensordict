@@ -11,6 +11,7 @@ import itertools
 import logging
 import math
 import os
+import queue
 import re
 import threading
 import time
@@ -487,13 +488,16 @@ def _set_item(
     from tensordict.tensorclass import NonTensorData, NonTensorStack
 
     if is_non_tensor(tensor):
-        if (
-            isinstance(value, NonTensorData)
-            and isinstance(tensor, NonTensorData)
-            and tensor.data == value.data
-        ):
-            return tensor
-        elif isinstance(tensor, NonTensorData):
+        if isinstance(value, NonTensorData) and isinstance(tensor, NonTensorData):
+            try:
+                is_same = bool(tensor.data == value.data)
+            except Exception:
+                # Arrays, tensors and data frames compare elementwise, and the
+                # result has no single truth value: write the value anyway.
+                is_same = False
+            if is_same:
+                return tensor
+        if isinstance(tensor, NonTensorData):
             tensor = NonTensorStack._from_nontensordata(tensor)
         if tensor.stack_dim != 0:
             tensor = NonTensorStack(*tensor.unbind(0), stack_dim=0)
@@ -2107,7 +2111,8 @@ def _is_json_serializable(item):
                 return False
         else:
             return True
-    if isinstance(item, (list, tuple, set)):
+    # a set is not a JSON type: leave it to pickle
+    if isinstance(item, (list, tuple)):
         for val in item:
             if not _is_json_serializable(val):
                 return False
@@ -2610,9 +2615,17 @@ def _unravel_key_to_tuple(key):
     else:
         # A flat tuple of str, the most common nested key.
         return key if type(key) is tuple else tuple(key)
+    # _append_key_parts(key, result), inline to save a call.
     result = []
-    if not _append_key_parts(key, result):
-        return ()
+    for subkey in key:
+        if isinstance(subkey, str):
+            result.append(subkey)
+        elif (
+            not isinstance(subkey, tuple)
+            or not subkey
+            or not _append_key_parts(subkey, result)
+        ):
+            return ()
     return tuple(result)
 
 
@@ -2654,10 +2667,25 @@ def unravel_key(key):
         return key
     if not isinstance(key, tuple):
         raise RuntimeError("key should be a Sequence<NestedKey>")
-    key = _unravel_key_to_tuple(key)
-    if len(key) == 1:
-        return key[0]
-    return key
+    # The code of _unravel_key_to_tuple, inline to save a call.
+    for subkey in key:
+        if not isinstance(subkey, str):
+            break
+    else:
+        if type(key) is not tuple:
+            key = tuple(key)
+        return key[0] if len(key) == 1 else key
+    result = []
+    for subkey in key:
+        if isinstance(subkey, str):
+            result.append(subkey)
+        elif (
+            not isinstance(subkey, tuple)
+            or not subkey
+            or not _append_key_parts(subkey, result)
+        ):
+            return ()
+    return result[0] if len(result) == 1 else tuple(result)
 
 
 def _unravel_keys(*keys):
@@ -2678,10 +2706,26 @@ def unravel_key_list(keys):
         )
     result = []
     for key in keys:
-        if not isinstance(key, str):
-            key = unravel_key(key)
-            if key == ():
-                raise RuntimeError("key should be a Sequence<NestedKey>")
+        if isinstance(key, str):
+            result.append(key)
+            continue
+        if type(key) is tuple:
+            # A flat tuple of str unravels to itself, or to its only part. A
+            # single str subclass part takes the path below, whose comparison
+            # with () calls the subclass's __eq__.
+            for subkey in key:
+                if not isinstance(subkey, str):
+                    break
+            else:
+                if len(key) > 1:
+                    result.append(key)
+                    continue
+                if key and type(key[0]) is str:
+                    result.append(key[0])
+                    continue
+        key = unravel_key(key)
+        if key == ():
+            raise RuntimeError("key should be a Sequence<NestedKey>")
         result.append(key)
     return result
 
@@ -2732,8 +2776,15 @@ _zip_strict = functools.partial(zip, strict=True)
 
 
 def _pin_mem(q_in, q_out):
-    while not q_in.empty():
-        input = q_in.get(timeout=_PIN_MEM_TIMEOUT)
+    # All the inputs are queued before the threads start, so an empty queue means
+    # that the other threads took the rest. Checking q_in.empty() before a
+    # blocking get() would race with them: two threads could see the last input,
+    # and the one that lost would raise queue.Empty after _PIN_MEM_TIMEOUT.
+    while True:
+        try:
+            input = q_in.get_nowait()
+        except queue.Empty:
+            return
         try:
             key, val = input[0], input[1].pin_memory()
         except Exception as err:
@@ -2780,21 +2831,33 @@ def parse_tensor_dict_string(s: str):
         This functions is intended to be used for debugging, to reproduce a tensordict
         given its printed version, and should not be used in real applications.
 
+    Raises:
+        ValueError: if a field is not a ``Tensor`` or a ``TensorDict`` printed
+            with the default print options.
+
     """
     from tensordict import TensorDict
 
-    # Regular expression patterns
-    field_pattern = r"(\w+): Tensor\(shape=torch.Size\((\[(.*?)\])\), device=(\w+), dtype=torch.(\w+), is_shared=(\w+)\)"
-    nested_field_pattern = r"(\w+): TensorDict\("
+    # Regular expression patterns. A field line is "<indent><key>: <value>", and a
+    # key can contain any character.
+    field_line_pattern = re.compile(r"^[ \t]*(.*?): \w+\(", re.MULTILINE)
+    field_pattern = re.compile(
+        r"^[ \t]*(.*?): Tensor\(shape=torch.Size\((\[(.*?)\])\), device=(\w+(?::\d+)?), dtype=torch.(\w+), is_shared=(\w+)\)",
+        re.MULTILINE,
+    )
+    nested_field_pattern = re.compile(r"^[ \t]*(.*?): TensorDict\(", re.MULTILINE)
     batch_size_pattern = r"batch_size=torch.Size\((\[(.*?)\])\)"
-    device_pattern = r"device=(\w+)(?=,|$)"
+    device_pattern = r"device=(\w+(?::\d+)?)(?=,|$)"
 
-    # Find all nested TensorDicts first
-    nested_dict_ranges = []
-    for match in re.finditer(nested_field_pattern, s):
-        start_idx = match.start()
+    # Find the nested TensorDicts of this level first. A match inside a nested
+    # TensorDict already found is a field of that TensorDict.
+    nested_dicts = []
+    for match in nested_field_pattern.finditer(s):
+        start_idx = match.start(1)
+        if any(start <= start_idx <= end for _, start, _, end in nested_dicts):
+            continue
         depth = 1
-        for i in range(start_idx + len(match.group(0)), len(s)):
+        for i in range(match.end(), len(s)):
             if s[i] == "(":
                 depth += 1
             elif s[i] == ")":
@@ -2802,38 +2865,43 @@ def parse_tensor_dict_string(s: str):
             if depth == 0:
                 end_idx = i
                 break
-        nested_dict_ranges.append((start_idx, end_idx))
+        nested_dicts.append((match.group(1), start_idx, match.end(), end_idx))
+    nested_dict_ranges = [(start, end) for _, start, _, end in nested_dicts]
 
     # Find all fields in the string that are not part of a nested TensorDict
     fields = {}
-    for match in re.finditer(field_pattern, s):
+    tensor_field_starts = set()
+    for match in field_pattern.finditer(s):
         name, _, shape, device, dtype, is_shared = match.groups()
-        field_start = match.start()
+        field_start = match.start(1)
         field_end = match.end()
         if any(
             field_start >= start and field_end <= end
             for start, end in nested_dict_ranges
         ):
             continue  # skip if this field is inside a nested TensorDict
+        tensor_field_starts.add(field_start)
         shape = [int(x) for x in shape.split(", ")] if shape else []
         fields[name] = torch.zeros(
             tuple(shape), device=torch.device(device), dtype=getattr(torch, dtype)
         )
 
-    # Now find nested TensorDicts and add them to the fields
-    for match in re.finditer(nested_field_pattern, s):
-        name = match.group(1)
-        start_idx = match.end()
-        depth = 1
-        for i in range(start_idx, len(s)):
-            if s[i] == "(":
-                depth += 1
-            elif s[i] == ")":
-                depth -= 1
-            if depth == 0:
-                end_idx = i
-                break
-        content = s[start_idx:end_idx]
+    # Every other field line of this level is a field that cannot be parsed
+    for match in field_line_pattern.finditer(s):
+        line_start = match.start(1)
+        if line_start in tensor_field_starts or any(
+            start <= line_start <= end for start, end in nested_dict_ranges
+        ):
+            continue
+        line = s[line_start:].split("\n", 1)[0].rstrip(",}")
+        raise ValueError(
+            f"Cannot parse the field {line!r}: parse_tensor_dict_string reads "
+            "Tensor and TensorDict fields printed with the default print options."
+        )
+
+    # Now add the nested TensorDicts to the fields
+    for name, _, content_start, end_idx in nested_dicts:
+        content = s[content_start:end_idx]
         nested_fields = parse_tensor_dict_string(f"TensorDict({content})")
         fields[name] = nested_fields
 

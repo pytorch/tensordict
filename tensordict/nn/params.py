@@ -1182,7 +1182,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         memo=None,
         use_state_dict: bool = False,
         non_blocking: bool = False,
-        preserve_module_state: bool | None = True,
+        preserve_module_state: bool = True,
     ): ...
 
     @_fallback

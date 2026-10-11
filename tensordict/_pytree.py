@@ -21,6 +21,7 @@ from tensordict.utils import (  # noqa: F401
     _shape,
     implement_for,
     is_compiling,
+    is_non_tensor,
 )
 from torch.compiler import is_dynamo_compiling
 from torch.utils._pytree import Context, MappingKey, register_pytree_node
@@ -68,6 +69,47 @@ class _PytreeBatchSize:
         return f"{type(self).__name__}({list(self.batch_size)})"
 
 
+class _PytreeNonTensorStack:
+    """A NonTensorStack entry in a pytree context, compared by its values."""
+
+    __slots__ = ("stack",)
+
+    def __init__(self, stack: LazyStackedTensorDict) -> None:
+        self.stack = stack
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, _PytreeNonTensorStack):
+            return NotImplemented
+        return self.stack.tolist() == other.stack.tolist()
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self.stack.tolist()})"
+
+
+def _pytree_non_tensor_data(d: TensorDictBase) -> dict | tuple:
+    # The non-tensor fields of a tensorclass, or the non-tensor entries of a
+    # tensordict, which _tensordict_constructor rebuilds with set_non_tensor.
+    # Storing the entries as they are would make comparing two contexts call
+    # NonTensorData.__eq__, which returns a tensor when the entry has a batch
+    # size.
+    if _is_tensorclass(type(d)):
+        # A dict: the fields of a NonTensorData rebuilt by set_non_tensor are
+        # in another order than those of the original entry.
+        return dict(d.non_tensor_items())
+    items = []
+    for key, value in d.non_tensor_items():
+        if isinstance(value, LazyStackedTensorDict):
+            # Reading the data of a NonTensorStack compares all its values,
+            # and Dynamo cannot trace that: leave it to set_non_tensor.
+            value = _PytreeNonTensorStack(value)
+        else:
+            # set_non_tensor unwraps its value in the same way.
+            while is_non_tensor(value):
+                value = value.data
+        items.append((key, value))
+    return tuple(items)
+
+
 def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
     items = tuple(d.items())
     if items:
@@ -82,7 +124,7 @@ def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
         "names": d.names if d._has_names() else None,
         "device": d.device,
         "constructor": _constructor(type(d)),
-        "non_tensor_data": d.non_tensor_items(),
+        "non_tensor_data": _pytree_non_tensor_data(d),
         "cls": type(d),
     }
     if is_dynamo_compiling():
@@ -146,12 +188,15 @@ def _tensordict_unflatten(values: List[Any], context: Context) -> Dict[Any, Any]
         # ints, hence the is_dynamo_compiling() check). Reconstruct from the
         # leading batch_dims dimensions of the actual tensor shapes.
         # A nested tensordict without leaves has the batch size [0] * batch_dims,
-        # or its stored one, which is static: read the batch size from another
-        # value when there is one.
+        # or its stored one, which is static. A non-tensor entry is rebuilt with
+        # the batch size [0] * batch_dims too (set_non_tensor replaces it
+        # afterwards). Read the batch size from another value when there is one.
         shapes = [
             _shape(v)
             for v in values
-            if hasattr(v, "shape") and not (is_tensor_collection(v) and v.is_empty())
+            if hasattr(v, "shape")
+            and not is_non_tensor(v)
+            and not (is_tensor_collection(v) and v.is_empty())
         ] or shapes
         batch_size = shapes[0][:batch_dims]
     else:
@@ -271,6 +316,20 @@ def _tensordict_constructor(
         device=device,
     )
     for key, item in non_tensor_items:
+        if isinstance(item, _PytreeNonTensorStack):
+            try:
+                result.set_non_tensor(key, item.stack)
+            except AttributeError:
+                # The values of the stack are not all equal, so it has no
+                # single value to set: keep the leaf that the stack was
+                # flattened to, already in result.
+                leaf = result._get_str(key, None)
+                if not (
+                    is_non_tensor(leaf)
+                    and leaf.batch_size[: result.batch_dims] == result.batch_size
+                ):
+                    raise
+            continue
         result.set_non_tensor(key, item)
     return result
 

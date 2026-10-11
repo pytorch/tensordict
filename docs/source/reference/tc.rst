@@ -340,8 +340,8 @@ Load such data with the tensorclass itself, e.g.
 class it is called on when its name matches the saved one.
 
 Loading pickled non-tensor data without passing ``allow_pickle`` emits a
-``FutureWarning`` in TensorDict 0.14; the default becomes
-``allow_pickle=False`` (which refuses to load it) in 0.15. Pass
+``FutureWarning`` in TensorDict 0.14 and 0.15; the default becomes
+``allow_pickle=False`` (which refuses to load it) in 0.16. Pass
 ``allow_pickle=True`` only for trusted data. See :ref:`saving` for details.
 
 Edge cases
@@ -450,6 +450,26 @@ The constructor casts lists, NumPy arrays and Python numbers passed to a
 Mypy reports any ``frozen=True`` tensorclass as "Frozen dataclass cannot
 inherit from a non-frozen dataclass".
 
+.. _tensorclass-runtime-typing:
+
+Runtime type checking
+---------------------
+
+A runtime type checker that decorates a class checks the methods in its
+namespace. Tensorclass marks the methods that it adds with
+``__no_type_check__``, the attribute that :func:`typing.no_type_check` sets, so
+the checkers that honour it, such as beartype and typeguard, check only the
+methods written in the class body. ``__init__`` is not marked: it keeps the
+annotations of the fields, or those of a user-defined ``__init__``.
+
+Some methods of a tensorclass have the names of builtins, such as ``bool``,
+``int``, ``float``, ``set`` and ``type``. With
+``from __future__ import annotations``, annotations are strings. A checker that
+evaluates them in the namespace of the class finds these methods there when
+the class uses the ``@tensorclass`` decorator, so an ``int`` annotation names
+the method. A subclass of :class:`~tensordict.TensorClass` inherits these
+methods instead; with the decorator, write ``builtins.int``.
+
 .. _tensorclass-legacy-decorator:
 
 Legacy: the ``@tensorclass`` decorator
@@ -489,8 +509,11 @@ API reference
     TensorClass
     tensorclass
     NonTensorData
+    NonTensorDataBase
     MetaData
     NonTensorStack
     TensorAttrs
     UnbatchedTensor
     from_dataclass
+    is_tensorclass
+    is_non_tensor

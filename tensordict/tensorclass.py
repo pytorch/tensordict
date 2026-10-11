@@ -20,12 +20,13 @@ import pickle
 import shutil
 import sys
 import warnings
+import weakref
 from collections.abc import Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
-from types import NoneType, UnionType
+from types import FunctionType, NoneType, UnionType
 from typing import (
     AbstractSet,
     Any,
@@ -69,9 +70,11 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _is_dataclass as is_dataclass,
     _is_json_serializable,
     _is_tensorclass,
+    _is_unbatched,
     _LOCK_ERROR,
     _REPR_OPTIONS,
     _resolve_expand_shape,
+    _strong_ref,
     _td_fields,
     _TENSORCLASS_MEMO,
     _unravel_key_to_tuple,
@@ -196,7 +199,6 @@ _TD_PASS_THROUGH = {
 # Methods to be executed from tensordict, any ref to self means 'tensorclass'
 _METHOD_FROM_TD = [
     "__enter__",
-    "__exit__",
     "__iter__",
     "dumps",
     "load_",
@@ -1052,6 +1054,44 @@ def _raise_reserved_field_name(name: str) -> None:
     )
 
 
+def _attribute_functions(value: Any) -> tuple[FunctionType, ...]:
+    """Return the functions behind a method, classmethod, staticmethod or property."""
+    if isinstance(value, FunctionType):
+        return (value,)
+    if isinstance(value, property):
+        functions = (value.fget, value.fset, value.fdel)
+    elif isinstance(value, (classmethod, staticmethod)):
+        functions = (value.__func__,)
+    else:
+        return ()
+    return tuple(func for func in functions if isinstance(func, FunctionType))
+
+
+@functools.cache
+def _unchecked_copy(func: FunctionType) -> FunctionType:
+    """Return a copy of a TensorDict method that runtime type-checkers skip.
+
+    Tensorclasses get the copy, so that marking it leaves the TensorDict method as
+    is. The copy is named after the attribute of TensorClass that holds it, where
+    pickle finds it.
+    """
+    copied = FunctionType(
+        func.__code__,
+        func.__globals__,
+        func.__name__,
+        func.__defaults__,
+        func.__closure__,
+    )
+    copied.__kwdefaults__ = func.__kwdefaults__
+    copied.__dict__.update(func.__dict__)
+    copied.__doc__ = func.__doc__
+    copied.__annotations__ = dict(func.__annotations__)
+    copied.__module__ = __name__
+    copied.__qualname__ = f"TensorClass.{func.__name__}"
+    copied.__no_type_check__ = True
+    return copied
+
+
 @dataclass_transform()
 def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     def __torch_function__(
@@ -1096,6 +1136,19 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
                 for tensordict_result in result
             )
         return _from_tensordict_with_copy(tensorclass_instance, result)
+
+    # Python 3.14+ evaluates the annotations of a method when they are first
+    # read, and looks their names up in the namespace of the class (PEP 649).
+    # Read those of the methods in the class body now, before the methods
+    # added below (bool, int, set...) shadow the builtins that they name.
+    attrs_before = dict(cls.__dict__)
+    for value in attrs_before.values():
+        for func in _attribute_functions(value):
+            try:
+                func.__annotations__  # noqa: B018
+            except Exception:
+                # e.g. a name defined later in the module: read on first use
+                pass
 
     _is_non_tensor = getattr(cls, "_is_non_tensor", False)
 
@@ -1144,6 +1197,20 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         user_init = None
     else:
         user_init = init
+
+    # Keep the docstring of the class. A class that was a dataclass already
+    # may carry the docstring that dataclass() generated from its signature:
+    # treat it as absent, so that it is regenerated below.
+    own_doc = cls.__dict__.get("__doc__")
+    if own_doc and "__dataclass_fields__" in cls.__dict__:
+        try:
+            generated_doc = cls.__name__ + str(inspect.signature(cls)).replace(
+                " -> None", ""
+            )
+        except (TypeError, ValueError):
+            generated_doc = None
+        if own_doc == generated_doc:
+            own_doc = None
 
     # Breaks some tests, don't do that:
     # if not dataclasses.is_dataclass(cls):
@@ -1298,9 +1365,11 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         cls.update_at_ = _update_at_
     if not hasattr(cls, "extend"):
         cls.extend = _extend
+    if not hasattr(cls, "__exit__"):
+        cls.__exit__ = _exit
     for method_name in _METHOD_FROM_TD:
         if not hasattr(cls, method_name):
-            setattr(cls, method_name, getattr(TensorDict, method_name))
+            setattr(cls, method_name, _unchecked_copy(getattr(TensorDict, method_name)))
     for method_name in _FALLBACK_METHOD_FROM_TD:
         if not hasattr(cls, method_name):
             setattr(cls, method_name, _wrap_td_method(method_name))
@@ -1343,9 +1412,11 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     # below): load_memmap falls back on the class it is called on when the
     # saved class cannot be found by name.
     if not hasattr(cls, "load_memmap") and "load_memmap" not in expected_keys:
-        cls.load_memmap = classmethod(TensorDictBase.load_memmap.__func__)
+        cls.load_memmap = classmethod(
+            _unchecked_copy(TensorDictBase.load_memmap.__func__)
+        )
     if not hasattr(cls, "load") and "load" not in expected_keys:
-        cls.load = classmethod(TensorDictBase.load.__func__)
+        cls.load = classmethod(_unchecked_copy(TensorDictBase.load.__func__))
     if not hasattr(cls, "load_memmap_") and "load_memmap_" not in expected_keys:
         cls.load_memmap_ = _load_memmap_
     if not hasattr(cls, "_load_memmap"):
@@ -1417,7 +1488,26 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             if (shadow or name == "fields") and hasattr(cls, name):
                 setattr(cls, name, property(functools.partial(_getattr, item=name)))
 
-    cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
+    # Without a docstring, the class documents its constructor signature.
+    cls.__doc__ = own_doc or f"{cls.__name__}{inspect.signature(cls)}"
+
+    # A runtime type-checker that decorates the class (e.g. beartype) checks
+    # every method in its namespace. Mark the methods added above with PEP
+    # 484's __no_type_check__ so that it skips them: their annotations name
+    # builtins that the class shadows (bool, int, type...), and some do not
+    # hold for tensorclasses (e.g. the device can be None). __init__ keeps the
+    # annotations of the fields (or of a user-defined __init__), which
+    # checkers such as jaxtyping check.
+    module_globals = globals()
+    for name, value in cls.__dict__.items():
+        if name == "__init__" or attrs_before.get(name) is value:
+            continue
+        for func in _attribute_functions(value):
+            # A function of this module, or a wrapper of one (e.g. deprecated)
+            if func.__annotations__ and (
+                func.__globals__ is module_globals or func.__module__ == __name__
+            ):
+                func.__no_type_check__ = True
 
     _register_tensor_class(cls)
     try:
@@ -1515,6 +1605,21 @@ def _from_tensordict_with_none(tc, tensordict):
     return type(tc)._from_tensordict(
         tensordict=tensordict,
         non_tensordict={key: None for key in tc._non_tensordict},
+    )
+
+
+def _warn_unknown_tensor_only_fields(cls, kwargs: dict) -> None:
+    # The tensor_only path of __init__ stores the arguments that are not
+    # fields. The other paths raise AttributeError for them, and this path
+    # will too once the deprecation ends.
+    unknown = sorted(key for key in kwargs if key not in cls.__expected_keys__)
+    warn_deprecated(
+        f"Passing arguments that are not fields ({unknown}) to the tensor_only "
+        f"tensorclass {cls.__name__}, which other tensorclasses reject with "
+        "AttributeError,",
+        removal="0.17",
+        replacement=f"only its fields ({sorted(cls.__expected_keys__)})",
+        stacklevel=3,
     )
 
 
@@ -1834,6 +1939,12 @@ def _init_wrapper(
             for key in self.__expected_keys__:
                 kwargs.setdefault(key, None)
             if tensor_only:
+                if (
+                    len(kwargs) != len(self.__expected_keys__)
+                    and not is_dynamo_compiling()
+                ):
+                    # Dynamo cannot trace warnings.warn, so only eager calls warn.
+                    _warn_unknown_tensor_only_fields(type(self), kwargs)
                 # Fast path: validate and assign directly to the
                 # underlying dict, skipping the set → _set_str →
                 # _tensordict._set_str chain entirely.
@@ -2318,8 +2429,11 @@ def _memmap_(
     share_non_tensor: bool = False,
     existsok: bool = True,
     robust_key,
+    non_tensordict: dict | None = None,
 ):
-    _non_tensordict = dict(self._non_tensordict)
+    if non_tensordict is None:
+        non_tensordict = self._non_tensordict
+    _non_tensordict = dict(non_tensordict)
     cls = type(self)
 
     if not memmaped and prefix is not None:
@@ -2410,7 +2524,7 @@ def _load_pickle_file(path, *, allow_pickle: bool | None):
         warnings.warn(
             "TensorDict.load_memmap is loading a pickled non-tensor field. "
             "This is only safe for trusted data. Starting with TensorDict "
-            "0.15, the default will change to allow_pickle=False. Pass "
+            "0.16, the default will change to allow_pickle=False. Pass "
             "allow_pickle=True to acknowledge trusted data or "
             "allow_pickle=False to reject pickle now.",
             FutureWarning,
@@ -2716,8 +2830,13 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
         ):
             return object.__setattr__(self, key, value)
     else:
-        # Pass?
-        if key in SET_ATTRIBUTES:
+        # The generated __init__ of a subclass sets _tensordict through
+        # super().__setattr__, which is this method if the parent class is a
+        # tensor_only tensorclass. The key is a constant while Dynamo traces,
+        # so other writes skip the __dict__ lookup and add no guard.
+        if key in SET_ATTRIBUTES or (
+            key == "_tensordict" and "_tensordict" not in self.__dict__
+        ):
             return object.__setattr__(self, key, value)
     if key not in self.__expected_keys__:
         raise AttributeError(
@@ -2742,6 +2861,51 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
         )
 
 
+def _write_back_dest(td_ref, tc_ref):
+    # Returns tc._tensordict, which the context manager writes back into on exit,
+    # as td_ref() did. tc_ref is for _exit, which updates tc._non_tensordict.
+    return td_ref()
+
+
+def _record_tensorclass(tc, result, last_op):
+    # ``with tc.view(-1) as f:`` writes f back into tc._tensordict on exit, the
+    # object that the last op of f refers to. Also refer to tc.
+    name, (args, kwargs, td_ref) = last_op
+    if type(td_ref) is functools.partial and td_ref.func is _write_back_dest:
+        # flatten_keys/unflatten_keys of a locked TensorDict return their cached
+        # result again: record the tensorclass again, do not wrap twice
+        td_ref = td_ref.args[0]
+    if td_ref() is tc._tensordict:
+        tc_ref = _strong_ref(tc) if is_compiling() else weakref.ref(tc)
+        dest = functools.partial(_write_back_dest, td_ref, tc_ref)
+        result._last_op = (name, (args, kwargs, dest))
+
+
+def _exit(self, exc_type, exc_val, exc_tb):
+    queue = getattr(self._tensordict, "_last_op_queue", None)
+    last_op = queue[-1] if queue else None
+    result = TensorDict.__exit__(self, exc_type, exc_val, exc_tb)
+    if exc_type is None and last_op is not None:
+        dest = last_op[1][2]
+        if type(dest) is functools.partial and dest.func is _write_back_dest:
+            tc = dest.args[1]()
+            if tc is not None and tc.__dict__["_non_tensordict"]:
+                # The write-back keeps the None placeholders of tc for the
+                # fields it writes. Drop them, as update() does. The fields
+                # unset in self are not written, so only the others need a check.
+                non_tensordict = tc.__dict__["_non_tensordict"]
+                source_non_tensordict = self.__dict__["_non_tensordict"]
+                maybe_written = [
+                    key for key in non_tensordict if key not in source_non_tensordict
+                ]
+                if maybe_written:
+                    keys = tc.__dict__["_tensordict"].keys()
+                    for key in maybe_written:
+                        if key in keys:
+                            del non_tensordict[key]
+    return result
+
+
 def _wrap_td_method(
     funcname, *, copy_non_tensor=False, no_wrap=False, is_property=False
 ):
@@ -2759,6 +2923,11 @@ def _wrap_td_method(
             if copy_non_tensor and non_tensordict:
                 # use tree_map to copy
                 non_tensordict = tree_map(_identity, non_tensordict)
+            if non_tensordict:
+                # self has unset fields, whose placeholders _exit may drop
+                last_op = result._last_op
+                if last_op is not None:
+                    _record_tensorclass(self, result, last_op)
             return self._from_tensordict(result, non_tensordict, safe=False)
         return result
 
@@ -3014,22 +3183,39 @@ def _update_at_(
             k: v for k, v in input_dict_or_td._non_tensordict.items() if v is not None
         }
         source = input_dict_or_td._tensordict
-        try:
-            self._tensordict.update(source)
-        except RuntimeError:
-            # TensorDict.update checks the batch size before it changes anything
-            batch_size = self.batch_size
-            if (
-                not isinstance(self._tensordict, TensorDict)
-                or is_non_tensor(input_dict_or_td)
-                or batch_size[: source.batch_dims]
-                == source.batch_size[: len(batch_size)]
-            ):
-                raise
+        dest = self._tensordict
+        if (
+            source.batch_dims < dest.batch_dims
+            and isinstance(dest, TensorDict)
+            and not is_non_tensor(input_dict_or_td)
+            and any(
+                isinstance(value, torch.Tensor)
+                and not value.is_nested
+                and not _is_unbatched(value)
+                and value.shape[: dest.batch_dims] != dest.batch_size
+                for value in source.values()
+            )
+        ):
+            # update() would raise for this source, possibly after replacing
+            # some entries: write it at the index instead
             input_dict_or_td = source
         else:
-            self._non_tensordict.update(non_tensordict)
-            return self
+            try:
+                self._tensordict.update(source)
+            except RuntimeError:
+                # TensorDict.update checks the batch size before it changes anything
+                batch_size = self.batch_size
+                if (
+                    not isinstance(self._tensordict, TensorDict)
+                    or is_non_tensor(input_dict_or_td)
+                    or batch_size[: source.batch_dims]
+                    == source.batch_size[: len(batch_size)]
+                ):
+                    raise
+                input_dict_or_td = source
+            else:
+                self._non_tensordict.update(non_tensordict)
+                return self
 
     # LazyStackedTensorDict.update_at_ takes no keys_to_update
     kwargs = {} if keys_to_update is None else {"keys_to_update": keys_to_update}
@@ -3707,7 +3893,9 @@ def _grad(self):
     grad = self._tensordict._grad
     if grad is None:
         return None
-    return self._from_tensordict(self._tensordict.grad, self._non_tensordict)
+    # Pass a copy: _from_tensordict writes None into it for each field
+    # without a grad, and that None must not reach self.
+    return self._from_tensordict(self._tensordict.grad, dict(self._non_tensordict))
 
 
 def _state_dict(
@@ -4184,9 +4372,11 @@ def _patch_tc(cls):
     cls.load_memmap_ = _load_memmap_
     cls.from_dict_instance = _from_dict_instance
 
+    cls.__exit__ = _exit
+
     # # Methods from lists
     for method_name in _METHOD_FROM_TD:
-        setattr(cls, method_name, getattr(TensorDict, method_name))
+        setattr(cls, method_name, _unchecked_copy(getattr(TensorDict, method_name)))
     for method_name in _FALLBACK_METHOD_FROM_TD:
         setattr(cls, method_name, _wrap_td_method(method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD_FORCE:
@@ -5069,6 +5259,17 @@ class NonTensorDataBase(TensorClass):
             _metadata["memmap_prefix"] = prefix
             _metadata["memmaped"] = memmaped
 
+        # memmap_prefix, memmaped and _share_non_tensor describe the current
+        # memmap, not the data: leave them out of meta.json (memmap_prefix is
+        # a Path, which would be pickled into other.pickle).
+        non_tensordict = dict(self._non_tensordict)
+        if self._metadata is not None:
+            non_tensordict["_metadata"] = {
+                key: value
+                for key, value in self._metadata.items()
+                if key not in ("memmap_prefix", "memmaped", "_share_non_tensor")
+            } or None
+
         out = _memmap_(
             self,
             prefix=prefix,
@@ -5081,6 +5282,7 @@ class NonTensorDataBase(TensorClass):
             share_non_tensor=share_non_tensor,
             existsok=existsok,
             robust_key=robust_key,
+            non_tensordict=non_tensordict,
         )
         _metadata["_share_non_tensor"] = share_non_tensor
         out._non_tensordict["_metadata"] = _metadata
@@ -6335,6 +6537,10 @@ def _update_shared_nontensor(nontensor, val):
         nontensor.value = val
     elif isinstance(nontensor, multiprocessing.sharedctypes.SynchronizedArray):
         val = val.encode("utf-8")
+        if len(val) > len(nontensor):
+            # The array has a fixed size. Cut on a character boundary so that
+            # the stored bytes stay valid UTF-8 and can be read back.
+            val = val[: len(nontensor)].decode("utf-8", "ignore").encode("utf-8")
         for i, byte in enumerate(nontensor):
             if i < len(val):
                 v = val[i]

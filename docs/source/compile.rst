@@ -251,10 +251,8 @@ list for a nested tensordict:
   torch.Size([6])
 
 Without ``dynamic_shapes``, a call with another batch size fails a guard of
-the exported program (``AssertionError: Guard failed``). Non-strict export
-does not support tensordicts with dimension names or non-tensor entries
-(pytorch/tensordict#2073, pytorch/tensordict#2074): use ``strict=True`` for
-them, and keep the non-tensor entries out of the output.
+the exported program (``AssertionError: Guard failed``). Both modes accept
+tensordicts with dimension names or non-tensor entries.
 To export a :class:`~tensordict.nn.TensorDictModule` so that it takes and
 returns plain tensors, see the :doc:`tutorials/export` tutorial. If the process
 also creates a :class:`~tensordict.nn.CudaGraphModule`, see the warning in

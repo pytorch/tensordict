@@ -113,6 +113,52 @@ def _resolve_tensorclass(
     return getattr(mod, class_name)
 
 
+def _iter_registry_keys(paths, include_nested, leaves_only):
+    """Yields the keys of a store from its sorted leaf paths.
+
+    The registry holds the leaf paths only. With ``include_nested=True`` and
+    ``leaves_only=False`` the keys of the nested tensordicts are rebuilt from
+    the path prefixes and yielded after their content, as
+    ``TensorDict.keys(True)`` does. The paths of a nested tensordict are
+    contiguous once sorted, so each prefix is yielded once.
+    """
+    if not include_nested:
+        seen = set()
+        for path in paths:
+            parts = path.split(_KEY_SEP)
+            top_key = parts[0]
+            if top_key in seen:
+                continue
+            seen.add(top_key)
+            if leaves_only and len(parts) > 1:
+                continue
+            yield top_key
+        return
+    if leaves_only:
+        for path in paths:
+            parts = path.split(_KEY_SEP)
+            yield tuple(parts) if len(parts) > 1 else parts[0]
+        return
+    # The parent of the previous path: its prefixes are not yielded yet.
+    open_prefix: tuple[str, ...] = ()
+    for path in paths:
+        parts = tuple(path.split(_KEY_SEP))
+        prefix = parts[:-1]
+        if prefix != open_prefix:
+            # yield the prefixes this path leaves, deepest first
+            common = 0
+            for a, b in zip(open_prefix, prefix):
+                if a != b:
+                    break
+                common += 1
+            for depth in range(len(open_prefix), common, -1):
+                yield open_prefix[:depth] if depth > 1 else open_prefix[0]
+            open_prefix = prefix
+        yield parts if len(parts) > 1 else parts[0]
+    for depth in range(len(open_prefix), 0, -1):
+        yield open_prefix[:depth] if depth > 1 else open_prefix[0]
+
+
 class _StoreTDKeysView(_TensorDictKeysView):
     """Keys view for TensorDictStore backed by a Redis key registry."""
 
@@ -123,7 +169,6 @@ class _StoreTDKeysView(_TensorDictKeysView):
         prefix = td._prefix
         prefix_dot = prefix + _KEY_SEP if prefix else ""
 
-        seen = set()
         # The registry is a set: sort the paths of this level, as
         # to_tensordict() does, so that the keys come in one order. The paths
         # of a nested tensordict are contiguous once sorted, so values() and
@@ -134,33 +179,7 @@ class _StoreTDKeysView(_TensorDictKeysView):
             paths = sorted(k[start:] for k in all_keys if k.startswith(prefix_dot))
         else:
             paths = sorted(all_keys)
-        for relative in paths:
-            parts = relative.split(_KEY_SEP)
-
-            if self.include_nested:
-                # Yield full nested tuple
-                key = tuple(parts) if len(parts) > 1 else parts[0]
-                if self.leaves_only and len(parts) > 1:
-                    # Only yield if this is a leaf (no further nesting)
-                    if key not in seen:
-                        seen.add(key)
-                        yield key
-                elif not self.leaves_only or len(parts) == 1:
-                    if key not in seen:
-                        seen.add(key)
-                        yield key
-            else:
-                # Only yield top-level keys
-                top_key = parts[0]
-                if top_key in seen:
-                    continue
-                seen.add(top_key)
-
-                # Check if this is a leaf or a nested td
-                is_leaf_key = len(parts) == 1
-                if self.leaves_only and not is_leaf_key:
-                    continue
-                yield top_key
+        return _iter_registry_keys(paths, self.include_nested, self.leaves_only)
 
     def __contains__(self, key):
         key = unravel_key(key)
@@ -1261,6 +1280,9 @@ class TensorDictStore(TensorDictBase):
         stored value is returned as-is (broadcast semantics).
         """
         encoding = meta.get("encoding", "json")
+        if encoding not in ("json", "json_array"):
+            # pickle bytes are not UTF-8: only JSON is decoded
+            return pickle.loads(data)
         text = data.decode() if isinstance(data, bytes) else data
 
         if encoding == "json_array":
@@ -1282,9 +1304,7 @@ class TensorDictStore(TensorDictBase):
             return stack
 
         # Scalar encoding — return the single stored value (broadcast).
-        if encoding == "json":
-            return json.loads(text)
-        return pickle.loads(data)
+        return json.loads(text)
 
     # ---- TensorDictBase interface: batch_size / device / names ----
 
@@ -1973,6 +1993,11 @@ class TensorDictStore(TensorDictBase):
                 batch_size = input_dict.batch_size
             else:
                 batch_size = torch.Size([])
+                if auto_batch_size:
+                    input_dict = TensorDict(
+                        input_dict, batch_size=batch_size
+                    ).auto_batch_size_()
+                    batch_size = input_dict.batch_size
 
         connect_kwargs = {}
         if unix_socket_path is not None:
@@ -2241,7 +2266,8 @@ class TensorDictStore(TensorDictBase):
                 fully-qualified class path (``"module.ClassName"``) and
                 imported.  If ``None`` (default), the class path stored in
                 the server (if any) is used automatically.
-            **kwargs: Extra connection kwargs.
+            **kwargs: Extra keyword arguments for the constructor, such as
+                ``cache_metadata``, and connection kwargs for the Redis client.
 
         Returns:
             A TensorDictStore (or TensorClass wrapping one) connected to the
@@ -2264,7 +2290,10 @@ class TensorDictStore(TensorDictBase):
         """
         import redis.asyncio as aioredis
 
-        connect_kwargs = dict(kwargs)
+        # ``client`` and ``cache_metadata`` go to the constructor only.
+        connect_kwargs = {
+            k: v for k, v in kwargs.items() if k not in ("client", "cache_metadata")
+        }
         if unix_socket_path is not None:
             connect_kwargs["unix_socket_path"] = unix_socket_path
         else:
@@ -2273,7 +2302,6 @@ class TensorDictStore(TensorDictBase):
         connect_kwargs["db"] = db
 
         # Temporarily create an async client to read stored metadata
-        loop = asyncio.new_event_loop()
         client = aioredis.Redis(**connect_kwargs)
 
         async def _read_meta():
@@ -2288,8 +2316,11 @@ class TensorDictStore(TensorDictBase):
             await client.aclose()
             return raw_bs, raw_dev, raw_tc
 
-        raw_bs, raw_dev, raw_tc = loop.run_until_complete(_read_meta())
-        loop.close()
+        loop = asyncio.new_event_loop()
+        try:
+            raw_bs, raw_dev, raw_tc = loop.run_until_complete(_read_meta())
+        finally:
+            loop.close()
 
         if raw_bs is None:
             raise KeyError(
@@ -2564,7 +2595,8 @@ class TensorDictStore(TensorDictBase):
     def clear_redis(self):
         """Delete all keys associated with this TensorDict from Redis.
 
-        This removes all tensor data, metadata, and the key registry.
+        This removes all tensor data, metadata, the key registry and the
+        stored TensorClass path.
         """
 
         async def _aclear():
@@ -2574,6 +2606,7 @@ class TensorDictStore(TensorDictBase):
                 pipe.delete(self._keys_registry_key)
                 pipe.delete(self._batch_size_key)
                 pipe.delete(self._device_key)
+                pipe.delete(self._tensorclass_key)
                 await pipe.execute()
                 return
             pipe = self._client.pipeline()
@@ -2583,6 +2616,7 @@ class TensorDictStore(TensorDictBase):
             pipe.delete(self._keys_registry_key)
             pipe.delete(self._batch_size_key)
             pipe.delete(self._device_key)
+            pipe.delete(self._tensorclass_key)
             await pipe.execute()
 
         self._run_sync(_aclear())

@@ -25,6 +25,7 @@ from tensordict import (
     LazyStackedTensorDict,
     MetaData,
     NonTensorData,
+    NonTensorStack,
     tensorclass,
     TensorDict,
     TensorDictParams,
@@ -59,7 +60,13 @@ from torch._dynamo.testing import CompileCounterWithBackend, EagerAndRecordGraph
 from torch._dynamo.utils import counters
 from torch._inductor.utils import fresh_cache
 from torch.testing._internal.two_tensor import TwoTensor
-from torch.utils._pytree import SUPPORTED_NODES, tree_flatten, tree_map, tree_unflatten
+from torch.utils._pytree import (
+    SUPPORTED_NODES,
+    tree_flatten,
+    tree_leaves,
+    tree_map,
+    tree_unflatten,
+)
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
@@ -261,6 +268,19 @@ def test_unravel_key_invalid_fullgraph(fn, key):
 
     _, compiled_msg = torch.compile(f, fullgraph=True, backend="eager")(torch.zeros(()))
     assert compiled_msg == msg
+
+
+@pytest.mark.parametrize("values", ["aaaa", "abcd"])
+def test_tree_leaves_nontensor_stack(values):
+    # Flattening a tensordict does not read the data of its NonTensorStack
+    # entries, which Dynamo cannot trace.
+    def fn(td):
+        return [leaf + 1 for leaf in tree_leaves(td) if isinstance(leaf, torch.Tensor)]
+
+    td = TensorDict(a=torch.zeros(4, 3), batch_size=[4])
+    td.set("s", NonTensorStack(*values))
+    (out,) = torch.compile(fn, fullgraph=True, backend="eager")(td)
+    assert (out == 1).all()
 
 
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
@@ -524,6 +544,23 @@ class TestTD:
 
         assert keys == keys_c
         torch.utils._pytree.tree_map(assert_eq, vals, vals_c)
+
+    def test_items_nested(self, mode):
+        # Without leaves_only, TensorDict.items goes through TensorDictBase.items.
+        def items(td):
+            keys, vals = zip(*td.items(True))
+            return keys, [val + 1 for val in vals]
+
+        items_c = torch.compile(items, fullgraph=True, mode=mode)
+        data = TensorDict(
+            {"a": {"b": {"c": torch.arange(4)}, "d": torch.arange(4)}}, [4]
+        )
+        keys, vals = items(data)
+        keys_c, vals_c = items_c(data)
+        assert keys == keys_c
+        assert keys == ("a", ("a", "b"), ("a", "b", "c"), ("a", "d"))
+        for val, val_c in zip(vals, vals_c):
+            assert (val == val_c).all()
 
     @pytest.mark.parametrize("recurse", [True, False])
     @pytest.mark.parametrize("lock", [True, False])
@@ -891,6 +928,21 @@ class TestTD:
         assert out["empty"].batch_size == torch.Size([4])
         assert out["other"].shape == other.shape
         assert (out == add_one(td)).all()
+
+    def test_tree_map_non_tensor_first(self, mode):
+        # The batch size of the result is not read from the non-tensor entry,
+        # https://github.com/pytorch/tensordict/issues/2207
+        def add_one(td):
+            return tree_map(lambda x: x + 1, td)
+
+        td = TensorDict(s="a string", a=torch.zeros(4, 3), batch_size=[4])
+        add_one_c = torch.compile(add_one, fullgraph=True, mode=mode)
+        out = add_one_c(td)
+        assert out.batch_size == torch.Size([4])
+        assert list(out.keys()) == ["s", "a"]
+        assert out.get("s").batch_size == torch.Size([4])
+        assert out.get_non_tensor("s") == "a string"
+        assert (out["a"] == 1).all()
 
     # Memmap is currently not supported
     # def test_memmap(self, mode, tmpdir):
@@ -1365,6 +1417,32 @@ class TestTC:
         assert (clear_c(data) == 1).all()
         assert data.y is None
 
+    @pytest.mark.parametrize("form", ["bracket", "decorator"])
+    def test_tc_tensor_only_init(self, mode, form):
+        # The generated __init__ of the bracket form sets _tensordict
+        # through the __setattr__ of its tensor_only parent class.
+        if form == "bracket":
+
+            class TensorOnly(TensorClass["tensor_only"]):
+                x: torch.Tensor
+
+        else:
+
+            @tensorclass(tensor_only=True)
+            class TensorOnly:
+                x: torch.Tensor
+
+        def build(x):
+            data = TensorOnly(x=x, batch_size=[3])
+            return data, data.x + 1
+
+        build_c = torch.compile(build, fullgraph=True, mode=mode)
+        data, out = build_c(torch.zeros(3))
+        assert isinstance(data, TensorOnly)
+        assert data.batch_size == torch.Size([3])
+        assert (data.x == 0).all()
+        assert (out == 1).all()
+
     def test_tc_arithmetic(self, mode):
         def add_one(td):
             return td + 1
@@ -1533,6 +1611,18 @@ class TestTC:
             a=MyClass(a=None, b=torch.arange(4), batch_size=[4]), batch_size=[4]
         )
         assert (reshape(data) == reshape_c(data)).all()
+
+    def test_tc_view_cm_unset_field(self, mode):
+        # Setting the unset field c inside the context drops its None placeholder.
+        def set_in_view(tc):
+            with tc.view(-1) as flat:
+                flat.c = flat.b + 1
+            return tc.c
+
+        set_in_view_c = torch.compile(set_in_view, fullgraph=True, mode=mode)
+        data = MyClass(a=None, b=torch.zeros(2, 2), batch_size=[2, 2])
+        torch.testing.assert_close(set_in_view_c(data), torch.ones(2, 2))
+        torch.testing.assert_close(data.to_dict()["c"], torch.ones(2, 2))
 
     def test_tc_torch_where(self, mode):
         def where(mask, td0, td1):
@@ -1994,6 +2084,28 @@ class TestFunctional:
         else:
             assert (td_zero == 0).all()
 
+    def test_to_module_restores_on_error(self, mode):
+        # The module gets its original parameters back also when the body raises
+        module = torch.nn.Linear(3, 4)
+        orig_params = list(module.parameters())
+        td_zero = TensorDict.from_module(module).data.clone().zero_()
+
+        def call(x, td):
+            try:
+                with td.to_module(module, preserve_module_state=False):
+                    module(x)
+                    raise ValueError("error in the body")
+            except ValueError:
+                pass
+            return module(x)
+
+        call_compile = torch.compile(call, fullgraph=True, mode=mode)
+        x = torch.randn(2, 3)
+        torch.testing.assert_close(call_compile(x, td_zero), module(x))
+        assert all(
+            p_new is p_orig for p_new, p_orig in zip(module.parameters(), orig_params)
+        )
+
     # in-place modif raises an error even if fullgraph=False
     @pytest.mark.parametrize("preserve_module_state", [False, True])
     def test_vmap_functional(self, mode, preserve_module_state):
@@ -2215,6 +2327,40 @@ class TestExport:
             strict=strict,
         )
         torch.testing.assert_close(exported_module.module()(x=x), m(x))
+
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_export_td_input_non_tensor(self, strict):
+        # The exported module compares the spec of its input with the spec of
+        # the example input, which holds a batched non-tensor entry.
+        class Mod(torch.nn.Module):
+            def forward(self, td):
+                return td["a"] * 2
+
+        def make():
+            return TensorDict(a=torch.randn(4, 3), s="a string", batch_size=[4])
+
+        ep = torch.export.export(Mod(), (make(),), strict=strict)
+        td = make()
+        torch.testing.assert_close(ep.module()(td), td["a"] * 2)
+
+    def test_export_td_output_non_tensor(self):
+        # The non-tensor entry of the output is rebuilt with the batch size of
+        # the output. Not with strict=True: there _tensordict_unflatten first
+        # builds the entry with batch size [0], which TD_CHECK_INVARIANTS
+        # rejects before the entry is set again with the right batch size.
+        class Mod(torch.nn.Module):
+            def forward(self, td):
+                return td.apply(lambda x: x * 2)
+
+        def make():
+            return TensorDict(a=torch.randn(4, 3), s="a string", batch_size=[4])
+
+        ep = torch.export.export(Mod(), (make(),), strict=False)
+        td = make()
+        out = ep.module()(td)
+        torch.testing.assert_close(out["a"], td["a"] * 2)
+        assert out.get("s").batch_size == torch.Size([4])
+        assert out.get_non_tensor("s") == "a string"
 
 
 @pytest.mark.skipif(not _has_onnx, reason="ONNX is not available")

@@ -35,6 +35,7 @@ from tensordict.base import (
     _default_is_leaf,
     _is_leaf_nontensor,
     _register_tensor_class,
+    _UNSET,
     is_tensor_collection,
     T,
     TensorDictBase,
@@ -45,6 +46,7 @@ from tensordict.utils import (
     _cache_while_locked,
     _CloudpickleWrapper,
     _erase_cache_first,
+    _GENERIC_NESTED_ERR,
     _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
@@ -632,12 +634,14 @@ class _ZarrBackend(_PersistentBackend):
     def try_create_dataset(self, file, key, value, kwargs) -> bool:
         from zarr.errors import ContainsArrayError, ContainsGroupError
 
-        marker = None
         if isinstance(value, _ZarrNonTensorPayload):
-            marker = {"encoding": value.encoding}
+            # payloads are small metadata blobs: always use the default layout.
+            # The marker is set with the array so that its zarr.json is written
+            # once: an append-only store (e.g. ZipStore) cannot replace an entry
+            kwargs = {
+                "attributes": {_ZARR_NON_TENSOR_ATTR: {"encoding": value.encoding}}
+            }
             value = np.frombuffer(value.payload, dtype=np.uint8)
-            # payloads are small metadata blobs: always use the default layout
-            kwargs = {}
         else:
             value = np.asarray(value)
         parent, name = self._parent_and_name(file, key)
@@ -652,24 +656,21 @@ class _ZarrBackend(_PersistentBackend):
             return False
         if value.size:
             array[...] = value
-        if marker is not None:
-            array.attrs[_ZARR_NON_TENSOR_ATTR] = marker
         self._after_structural_change(file)
         return True
 
     def copy_dataset(self, dest_file, key, src_node, kwargs) -> None:
         parent, name = self._parent_and_name(dest_file, key)
+        # the source attributes take precedence over user-passed ones
+        attributes = {**(kwargs.get("attributes") or {}), **src_node.attrs}
         array = parent.create_array(
             name,
             shape=src_node.shape,
             dtype=src_node.dtype,
-            **self._create_kwargs(src_node.shape, kwargs),
+            **self._create_kwargs(src_node.shape, {**kwargs, "attributes": attributes}),
         )
         if src_node.size:
             array[...] = src_node[...]
-        attrs = dict(src_node.attrs)
-        if attrs:
-            array.attrs.update(attrs)
 
     def create_group(self, file, key) -> None:
         file.create_group(key)
@@ -719,12 +720,10 @@ class _ZarrBackend(_PersistentBackend):
                 shape=node.shape,
                 dtype=node.dtype,
                 chunks=node.chunks,
+                attributes=dict(node.attrs),
             )
             if node.size:
                 array[...] = node[...]
-            attrs = dict(node.attrs)
-            if attrs:
-                array.attrs.update(attrs)
         else:
             group = file.require_group(new_key)
             attrs = dict(node.attrs)
@@ -1696,6 +1695,31 @@ class PersistentTensorDict(TensorDictBase):
             f"Cannot pin memory of a {type(self).__name__}. Call to_tensordict() before making this call."
         )
 
+    def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
+        key_tuple = _unravel_key_to_tuple(key)
+        if not key_tuple:
+            raise KeyError(_GENERIC_NESTED_ERR.format(key))
+        out = self.get(key_tuple, _UNSET)
+        if out is _UNSET:
+            if default is NO_DEFAULT:
+                raise KeyError(
+                    _KEY_ERROR.format(
+                        key_tuple[0] if len(key_tuple) == 1 else key_tuple,
+                        type(self).__name__,
+                        sorted(self.keys(include_nested=len(key_tuple) > 1), key=str),
+                    )
+                )
+            return default
+        if (
+            self.backend == "zarr"
+            and not self.is_locked
+            and isinstance(out, PersistentTensorDict)
+        ):
+            # A zarr group reads from the store: copy it before deleting it
+            out = out.to_tensordict()
+        self.del_(key_tuple)
+        return out
+
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         raise NotImplementedError(
@@ -2251,6 +2275,9 @@ class PersistentTensorDict(TensorDictBase):
 
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
         splits = -(self.batch_size[dim] // -chunks)
+        if splits == 0 and type(chunks) is int and chunks > 0:
+            # torch.chunk returns `chunks` empty pieces along a zero-size dim
+            return self.split([0] * chunks, dim)
         return self.split(splits, dim)
 
 

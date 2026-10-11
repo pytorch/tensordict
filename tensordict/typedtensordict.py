@@ -590,6 +590,10 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     def _has_names(self) -> bool:
         return self._source._has_names()
 
+    @property
+    def _has_non_tensor(self) -> bool:
+        return self._source._has_non_tensor
+
     def _set_names(self, names: Sequence[str] | None) -> None:
         self._source._set_names(names)
 
@@ -861,7 +865,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
         *,
         inplace=None,
         return_swap=True,
-        preserve_module_state: bool | None = True,
+        preserve_module_state: bool = True,
         **kwargs,
     ):
         return self._source._to_module(
@@ -959,10 +963,6 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
 _DIRECT_DELEGATES = [
     "_get_str",
     "_get_tuple",
-    "_set_str",
-    "_set_tuple",
-    "_set_at_str",
-    "_set_at_tuple",
     "_stack_onto_",
     "keys",
     "entry_class",
@@ -1007,6 +1007,10 @@ _WRAP_DELEGATES = [
 
 # In-place: delegate to _source, return self
 _INPLACE_DELEGATES = [
+    "_set_str",
+    "_set_tuple",
+    "_set_at_str",
+    "_set_at_tuple",
     "share_memory_",
     "detach_",
     "masked_fill_",

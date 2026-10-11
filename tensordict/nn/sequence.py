@@ -608,9 +608,13 @@ class TensorDictSequential(TensorDictModule):
         tensordict_out: TensorDictBase | None = None,
         **kwargs: Any,
     ) -> TensorDictBase:
-        if (tensordict_out is None and self._select_before_return) or (
+        if (
             tensordict_out is not None
+            or self._select_before_return
+            or self.inplace is False
+            or self.inplace == "empty"
         ):
+            # With inplace=False or "empty", the modules must not write into the input.
             tensordict_exec = tensordict.copy()
         else:
             tensordict_exec = tensordict

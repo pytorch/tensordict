@@ -71,6 +71,7 @@ from tensordict.utils import (
     _get_shape_from_args,
     _import_and_wrap_functorch,
     _infer_size_impl,
+    _is_non_tensor,
     _is_safe_legacy_key,
     _is_unbatched,
     _KEY_ERROR,
@@ -82,6 +83,7 @@ from tensordict.utils import (
     _NON_STR_KEY_TUPLE_ERR,
     _parse_to,
     _pass_through,
+    _pass_through_cls,
     _prune_selected_keys,
     _resolve_expand_shape,
     _set_item,
@@ -535,6 +537,34 @@ class TensorDict(TensorDictBase):
             return TensorDictParams(destination, no_convert=True)
         return destination
 
+    @property
+    def _has_non_tensor(self):
+        # Faster than TensorDictBase._has_non_tensor: it checks the set of value
+        # types and asks the nested collections, so that a nested lazy stack
+        # never stacks its leaves (which raises for heterogeneous shapes).
+        # update_ calls it once per member of a lazy stack: the first loop is
+        # the fast path for a tensordict of plain tensors.
+        values = self._tensordict.values()
+        for value in values:
+            if type(value) is not Tensor:
+                break
+        else:
+            return False
+        for cls in set(map(type, values)):
+            if issubclass(cls, Tensor):
+                continue
+            if cls is not TensorDict:
+                if _is_non_tensor(cls):
+                    return True
+                if _pass_through_cls(cls):
+                    continue
+                if not _is_tensor_collection(cls):
+                    return super()._has_non_tensor
+            for value in values:
+                if type(value) is cls and value._has_non_tensor:
+                    return True
+        return False
+
     def is_empty(self):
 
         for item in self._tensordict.values():
@@ -869,7 +899,7 @@ class TensorDict(TensorDictBase):
         batch_size = torch.Size(batch_size)
 
         names = list(self.names) if self._has_names() else None
-        if names:
+        if names is not None:
             names.insert(newdim, None)
 
         def _unsqueeze(tensor):
@@ -1320,7 +1350,24 @@ class TensorDict(TensorDictBase):
                 is_diff = True
             if is_diff:
                 dest_val = dest.maybe_to_stack()
-                dest_val[idx] = value
+                if (
+                    idx is Ellipsis
+                    and dest_val is dest
+                    and is_tensorclass(dest)
+                    and is_tensorclass(value)
+                    and is_non_tensor(value)
+                ):
+                    # A NonTensorData without batch dims: the Ellipsis selects
+                    # the whole entry, and setitem on it does not write the
+                    # data, so build the new entry instead
+                    dest_val = type(dest)(
+                        data=value.data,
+                        batch_size=dest.batch_size,
+                        names=dest._maybe_names(),
+                        device=dest.device,
+                    )
+                else:
+                    dest_val[idx] = value
                 if dest_val is not dest:
                     self._set_str(
                         key,
@@ -2381,6 +2428,8 @@ class TensorDict(TensorDictBase):
         for key in keys:
             key = unravel_key(key)
             if isinstance(key, str):
+                if inplace and self.is_locked and key in _tensordict:
+                    raise RuntimeError(_LOCK_ERROR)
                 _tensordict.pop(key, None)
             else:
                 if keys_to_exclude is None:
@@ -3498,6 +3547,9 @@ class _SubTensorDict(TensorDictBase):
 
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
         splits = -(self.batch_size[dim] // -chunks)
+        if splits == 0 and type(chunks) is int and chunks > 0:
+            # torch.chunk returns `chunks` empty pieces along a zero-size dim
+            return self.split([0] * chunks, dim)
         return self.split(splits, dim)
 
     def _view(self, *args, **kwargs):
