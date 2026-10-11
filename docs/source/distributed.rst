@@ -539,11 +539,11 @@ a ``while`` loop instead.
 
 ``pipe.send(td)``, ``pipe.recv()`` and ``pipe.close()`` are synchronous
 wrappers. If no event loop runs in the thread, each call runs the coroutine
-with :func:`asyncio.run`. Do not call them from a coroutine, or from a
-callback of a running event loop. They wait for a coroutine that the same
-loop must run, so the call never returns
-(`#2316 <https://github.com/pytorch/tensordict/issues/2316>`_). ``TensorDictPipe.listen`` and
-``TensorDictPipe.connect`` are coroutines only.
+with :func:`asyncio.run`. In a coroutine, or in a callback of a running event
+loop, use the async methods (``asend``, ``arecv``, ``aclose``): the
+synchronous wrappers cannot run there
+(`#2316 <https://github.com/pytorch/tensordict/issues/2316>`_).
+``TensorDictPipe.listen`` and ``TensorDictPipe.connect`` are coroutines only.
 
 GPU tensors
 ~~~~~~~~~~~
