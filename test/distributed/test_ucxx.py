@@ -416,6 +416,52 @@ class TestTensorDictSendRecvOverload:
 
         torch.testing.assert_close(result["a"], td_src["a"])
 
+    def test_recv_first_message_into_consolidated_td(self):
+        # https://github.com/pytorch/tensordict/issues/2244
+        ep = _FakeEndpoint()
+        pipe_send = TensorDictPipe(ep, consolidated=True)
+        pipe_send.send(TensorDict({"a": torch.ones(4)}, batch_size=[4]))
+        pipe_send.send(TensorDict({"a": torch.full((4,), 2.0)}, batch_size=[4]))
+
+        pipe_recv = TensorDictPipe(ep, consolidated=True)
+        td_dest = TensorDict({"a": torch.zeros(4)}, batch_size=[4]).consolidate(
+            metadata=True
+        )
+        result = td_dest.recv(pipe_recv)
+        assert result is td_dest
+        torch.testing.assert_close(td_dest["a"], torch.ones(4))
+
+        result = td_dest.recv(pipe_recv)
+        assert result is td_dest
+        torch.testing.assert_close(td_dest["a"], torch.full((4,), 2.0))
+
+    @pytest.mark.parametrize(
+        "td_dest",
+        [
+            TensorDict({"a": torch.zeros(4)}, batch_size=[4]),
+            TensorDict({"a": torch.zeros(5)}, batch_size=[5]).consolidate(
+                metadata=True
+            ),
+            TensorDict({"b": torch.zeros(4)}, batch_size=[4]).consolidate(
+                metadata=True
+            ),
+            TensorDict({"a": torch.zeros(4)}, batch_size=[]).consolidate(metadata=True),
+        ],
+        ids=["not-consolidated", "shape", "key", "batch-size"],
+    )
+    def test_recv_first_message_layout_mismatch(self, td_dest):
+        ep = _FakeEndpoint()
+        pipe_send = TensorDictPipe(ep, consolidated=True)
+        td_src = TensorDict({"a": torch.ones(4)}, batch_size=[4])
+        pipe_send.send(td_src)
+
+        pipe_recv = TensorDictPipe(ep, consolidated=True)
+        expected = td_dest.to_dict()
+        result = td_dest.recv(pipe_recv)
+        assert result is not td_dest
+        torch.testing.assert_close(result["a"], td_src["a"])
+        torch.testing.assert_close(td_dest.to_dict(), expected)
+
 
 # ---------------------------------------------------------------------------
 # Integration tests — require ucxx

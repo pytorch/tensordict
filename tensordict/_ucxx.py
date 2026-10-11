@@ -438,14 +438,17 @@ class TensorDictPipe:
     ) -> TensorDictBase:
         """Receive a TensorDict from this pipe (async).
 
-        On the first call, builds a new TensorDict from received metadata.
+        On the first call, receives into ``td`` if its consolidated layout
+        matches, otherwise builds a new TensorDict from the received metadata.
         On subsequent calls with the same schema, overwrites the existing
         storage in-place (zero allocation).
 
         Args:
-            td: if provided and consolidated, receives into its storage.
-                If ``None``, uses the internally cached TensorDict from
-                the previous receive (if any).
+            td: if provided and consolidated, receives into its storage
+                when its layout matches the received data. Otherwise a new
+                TensorDict is returned, so use the return value. If
+                ``None``, uses the internally cached TensorDict from the
+                previous receive (if any).
 
         Keyword Args:
             device: device for storage allocation on first receive.
@@ -489,6 +492,18 @@ class TensorDictPipe:
                 effective_device = torch.device(device)
             else:
                 effective_device = torch.device(sender_device)
+
+            if td is not None and self._can_recv_into(
+                td, total_bytes, effective_device
+            ):
+                storage = td._consolidated["storage"]
+                if storage.is_cuda:
+                    await self._endpoint.recv(storage)
+                else:
+                    await self._endpoint.recv(_tensor_to_numpy(storage))
+                self._recv_td = td
+                return td
+
             storage = torch.empty(
                 total_bytes, dtype=torch.uint8, device=effective_device
             )
@@ -520,6 +535,26 @@ class TensorDictPipe:
             await self._endpoint.recv(storage_np)
 
         return recv_target
+
+    def _can_recv_into(
+        self,
+        td: TensorDictBase,
+        total_bytes: int,
+        device: torch.device,
+    ) -> bool:
+        """Whether the consolidated storage of ``td`` matches the incoming schema."""
+        if not td.is_consolidated():
+            return False
+        storage = td._consolidated["storage"]
+        if storage.numel() != total_bytes or storage.device != device:
+            return False
+        try:
+            schema_hash = _metadata_hash(td._consolidated["metadata"])
+        except (TypeError, ValueError):
+            # The metadata of td cannot be serialized, so it cannot match
+            # the metadata that the sender serialized.
+            return False
+        return schema_hash == self._recv_schema_hash
 
     async def _arecv_uncollated(
         self,
@@ -570,7 +605,10 @@ class TensorDictPipe:
         Blocking wrapper around :meth:`arecv`.
 
         Args:
-            td: if provided, receives into this TensorDict in-place.
+            td: if provided, receives into this TensorDict in-place when
+                it is consolidated and its layout matches the received data.
+                Otherwise a new TensorDict is returned, so use the return
+                value.
 
         Keyword Args:
             device: device for storage allocation on first receive.
