@@ -269,13 +269,14 @@ dimensions. The shape operations take dimension numbers, not names.
 
 .. _batch-size-not-a-dict:
 
-A TensorDict is not a dict
---------------------------
+A TensorDict is not *exactly* a dict
+------------------------------------
 
-A TensorDict has the mapping methods of a :class:`dict`: ``keys()``,
-``values()``, ``items()``, ``get()``, ``pop()``, ``update()`` and
-``setdefault()``, and it unpacks with ``**td``. The operations below follow
-the rules of a tensor instead:
+A :class:`dict` is a good model of a TensorDict. A TensorDict has the
+mapping methods of a dict: ``keys()``, ``values()``, ``items()``, ``get()``,
+``pop()``, ``update()`` and ``setdefault()``, and it unpacks with ``**td``.
+The operations below are the exceptions. Most of them follow the rules of a
+tensor:
 
 Iteration
   ``for x in td`` iterates over the first batch dimension, like a tensor. Each

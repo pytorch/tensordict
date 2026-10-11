@@ -452,15 +452,9 @@ load memory-mapped parameters into a model, pass ``inplace=True``.
   >>> _ = TensorDict.load_memmap(f"{tmpdir.name}/0").to_module(model[0], inplace=True)
   >>> tmpdir.cleanup()
 
-.. warning::
-
-   Do not call ``to_module(model)`` without ``inplace=True`` on the result of
-   ``load_memmap``. On tensordict 0.14 it raises ``RuntimeError: Creating a
-   Parameter from an instance of type MemoryMappedTensor requires that
-   detach() returns an instance of the same type``, and it deletes a parameter
-   of the model (`#2240 <https://github.com/pytorch/tensordict/issues/2240>`_).
-   ``inplace=True`` and ``.clone()`` before ``to_module`` do not have this
-   problem.
+Without ``inplace=True``, the parameters of the model use the memory-mapped
+files as their storage. A change to a parameter, for example an optimizer
+step, can then change the files (:ref:`saving` explains when).
 
 :class:`~tensordict.nn.TensorDictModule` wraps a module so that it reads its
 inputs from a TensorDict and writes its outputs into the same TensorDict.

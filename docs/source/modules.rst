@@ -173,9 +173,7 @@ These rules apply to keyword calls:
 - You can also pass the tensors as positional arguments, in the order of
   ``in_keys``. If you pass the same input both ways, the module raises
   ``RuntimeError: Duplicated argument in args and kwargs.``
-- A module with the out-key ``"_"`` does not support keyword calls. The call
-  raises ``KeyError: 'key "_" not found in TensorDict ...'``
-  (`#2258 <https://github.com/pytorch/tensordict/issues/2258>`_).
+- A keyword call does not return the outputs with the out-key ``"_"``.
 - The tensordict that :class:`~tensordict.nn.TensorDictModule` builds from
   the arguments has an empty batch size.
 
@@ -366,13 +364,20 @@ A :class:`~tensordict.nn.TensorDictSequential` also takes ``inplace`` and
 copy of the input, and the sequence writes its ``out_keys`` into
 ``tensordict_out``. The input does not change.
 
-.. warning::
+With ``inplace=False`` or ``inplace="empty"``, the modules also run on a
+shallow copy of the input. The sequence returns a new tensordict with its
+``out_keys``, and the input does not change:
 
-   With ``inplace=False`` or ``inplace="empty"``, the sequence returns a new
-   tensordict with its ``out_keys``, but the modules still write into the
-   input tensordict (`#2257 <https://github.com/pytorch/tensordict/issues/2257>`_). To
-   keep the input unchanged, pass a shallow copy: ``seq(td.copy())``, or pass
-   ``tensordict_out``.
+  >>> seq = TensorDictSequential(
+  ...     Mod(lambda x: x + 1, in_keys=["x"], out_keys=["h"]),
+  ...     Mod(lambda h: h * 2, in_keys=["h"], out_keys=["y"]),
+  ...     inplace=False,
+  ... )
+  >>> td = TensorDict(x=torch.zeros(3), batch_size=[3])
+  >>> sorted(seq(td).keys())
+  ['h', 'y']
+  >>> sorted(td.keys())
+  ['x']
 
 Control the outputs
 -------------------
@@ -412,21 +417,13 @@ For a sequence, the result holds the entries of the input and the selected
 keys. If an entry of the input has the name of an intermediate key (``"h"``
 above), the sequence writes the new value into it.
 
-.. warning::
-
-   On a :class:`~tensordict.nn.TensorDictModule`, ``select_out_keys`` keeps
-   only the ``in_keys`` and the selected ``out_keys`` in the result. The
-   result is the input tensordict, so the module also deletes the other
-   entries of the input
-   (`#2256 <https://github.com/pytorch/tensordict/issues/2256>`_). To keep them, wrap
-   the module in a :class:`~tensordict.nn.TensorDictSequential` and call
-   ``select_out_keys`` on the sequence.
-
-In this example, the module deletes the entry ``"other"``:
+A :class:`~tensordict.nn.TensorDictModule` follows the same rule. It removes
+only the output keys that you did not select, and the other entries of the
+input stay:
 
   >>> two = Mod(lambda x: (x + 1, x + 2), in_keys=["x"], out_keys=["a", "b"]).select_out_keys("b")
   >>> sorted(two(TensorDict(x=torch.zeros(3), other=torch.ones(3), batch_size=[3])).keys())
-  ['b', 'x']
+  ['b', 'other', 'x']
 
 Skip outputs that are already there
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -644,11 +641,11 @@ returns the type of the current block, or ``None`` outside a block. TorchRL
 collectors sample with ``RANDOM`` by default (their ``exploration_type``
 argument).
 
-To draw several samples in one call, pass ``num_samples``. In ``RANDOM``
-mode, the module then returns a new tensordict with ``num_samples`` as
-leading batch dimensions, and the input does not change. With the other
-interaction types, the call raises ``RuntimeError: batch dimension
-mismatch`` (`#2259 <https://github.com/pytorch/tensordict/issues/2259>`_).
+To draw several samples in one call, pass ``num_samples``. The module then
+returns a new tensordict with ``num_samples`` as leading batch dimensions,
+and the input does not change. In ``RANDOM`` mode, each sample is a new
+draw. With the other interaction types, the module repeats its one
+deterministic value ``num_samples`` times.
 
   >>> multi = ProbabilisticTensorDictModule(
   ...     in_keys=["loc", "scale"],

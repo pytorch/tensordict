@@ -224,11 +224,9 @@ class TensorDictStore(TensorDictBase):
       ``redis.exceptions.ResponseError``. For larger entries, raise the limit
       on the server, or split the entry.
     - Non-tensor values are stored as JSON. A value that JSON cannot encode
-      is stored with :mod:`pickle`, and on the current version, reading it
-      back raises ``UnicodeDecodeError``
-      (`#2245 <https://github.com/pytorch/tensordict/issues/2245>`_). Store
-      JSON-compatible values only (``str``, numbers, ``bool``, lists and
-      dicts of these).
+      is stored with :mod:`pickle`, and each read unpickles it. Any client
+      that can write to the server can then run code in the readers, so
+      connect only to a server that you trust.
 
     Keyword Args:
         backend (str): Name of the server backend.  Accepted values include
@@ -2016,12 +2014,15 @@ class TensorDictStore(TensorDictBase):
             unix_socket_path (str, optional): Unix socket path. If set,
                 ``host`` and ``port`` are ignored.
             prefix (str): Key namespace. Defaults to ``"tensordict"``.
-            auto_batch_size (bool): has no effect on the current version:
-                the batch size is not inferred from the data
-                (`#2247 <https://github.com/pytorch/tensordict/issues/2247>`_). Pass
-                ``batch_size`` instead.
+            auto_batch_size (bool): if ``True``, ``input_dict`` is a dict and
+                ``batch_size`` is not given, the store gets the largest
+                leading shape that all the entries share, as
+                :meth:`~tensordict.TensorDict.auto_batch_size_` gives.
+                Defaults to ``False``.
             batch_size: Explicit batch_size. Defaults to the batch size of
-                ``input_dict`` if it is a TensorDict, else to ``[]``.
+                ``input_dict`` if it is a TensorDict. For a dict, defaults to
+                ``[]``, or to the inferred batch size with
+                ``auto_batch_size=True``.
             device: Target device for tensor retrieval.
             **kwargs: Additional connection kwargs.
 

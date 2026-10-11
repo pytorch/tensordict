@@ -210,9 +210,8 @@ When you debug, you sometimes have only the printed form of a tensordict, for
 example from a log file or from the terminal of a colleague.
 :func:`~tensordict.parse_tensor_dict_string` builds a
 :class:`~tensordict.TensorDict` from that string. The result has the keys,
-shapes, dtypes and batch size of the printed tensordict, and its device if
-the device has no index. All the values are zeros, because the repr does not
-contain the data:
+shapes, dtypes, batch size and device of the printed tensordict. All the
+values are zeros, because the repr does not contain the data:
 
     >>> from tensordict import parse_tensor_dict_string
     >>> s = """TensorDict(
@@ -228,26 +227,19 @@ contain the data:
     >>> td["image"].shape
     torch.Size([32, 3, 64, 64])
 
-:func:`~tensordict.parse_tensor_dict_string` is a debugging aid. It reads only
+:func:`~tensordict.parse_tensor_dict_string` is a debugging aid. It reads
 the default print format, with ``shape=``, ``device=``, ``dtype=`` and
-``is_shared=`` for each field, and it has these limits:
+``is_shared=`` for each field. It reads nested tensordicts at any depth, keys
+with any character, such as ``my-key``, and devices with an index, such as
+``cuda:0``. It has these limits:
 
+- It reads only tensor fields and nested tensordicts. For a non-tensor field
+  (`#1956 <https://github.com/pytorch/tensordict/issues/1956>`_), it raises
+  ``ValueError: Cannot parse the field ...``.
 - If :class:`~tensordict.set_printoptions` hid a field attribute or added one
-  (for example ``plain=True``), the parser finds no fields. It returns a
-  tensordict with the batch size and no tensor entries, and it does not
-  raise an error.
-- It drops non-tensor fields
-  (`#1956 <https://github.com/pytorch/tensordict/issues/1956>`_), and fields
-  on a device with an index, such as ``cuda:0``, without an error. The repr
-  of a tensordict with ``device=cuda:0`` raises
-  ``ValueError: Device not found in the string``
-  (`#2243 <https://github.com/pytorch/tensordict/issues/2243>`_).
-- It reads one level of nesting. With two levels or more, the result also
-  has a wrong copy of each deeper tensordict at the top level
-  (`#2243 <https://github.com/pytorch/tensordict/issues/2243>`_).
-- It reads keys that contain only letters, digits and ``_``. A key such as
-  ``my-key`` comes back as ``key``
-  (`#2243 <https://github.com/pytorch/tensordict/issues/2243>`_).
+  (for example ``plain=True``), it raises the same ``ValueError``.
+- It makes each tensor on the printed device. To parse the repr of a CUDA
+  tensordict, run it on a machine with CUDA.
 - It does not keep ``is_shared``, and it returns a
   :class:`~tensordict.TensorDict` for the repr of a lazy stack.
 

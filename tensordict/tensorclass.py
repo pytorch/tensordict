@@ -5359,15 +5359,13 @@ class NonTensorData(NonTensorDataBase):
     :meth:`~tensordict.TensorDictBase.memmap` and the related methods save
     a :class:`NonTensorData`, and :meth:`~tensordict.TensorDictBase.load_memmap`
     loads it. If JSON can encode the value, it goes to the ``meta.json``
-    file of the entry (a tuple is loaded back as a list). Instances of other
-    classes are pickled to an ``other.pickle`` file. Some values fail: a
-    ``set`` raises a ``TypeError``
-    (`#2264 <https://github.com/pytorch/tensordict/issues/2264>`_). Pickle can
-    execute arbitrary code when it
-    loads, so :meth:`~tensordict.TensorDictBase.load_memmap` warns when it
-    loads a pickled value. Pass ``allow_pickle=True`` for data that you
-    trust. From TensorDict 0.15, the default is ``allow_pickle=False``, which
-    raises a ``RuntimeError`` for pickled values.
+    file of the entry (a tuple is loaded back as a list). Other values, such
+    as a ``set`` or an instance of another class, are pickled to an
+    ``other.pickle`` file. Pickle can execute arbitrary code when it loads,
+    so :meth:`~tensordict.TensorDictBase.load_memmap` warns when it loads a
+    pickled value. Pass ``allow_pickle=True`` for data that you trust. From
+    TensorDict 0.16, the default is ``allow_pickle=False``, which raises a
+    ``RuntimeError`` for pickled values.
 
         >>> import tempfile
         >>> from fractions import Fraction
@@ -5476,15 +5474,15 @@ class NonTensorData(NonTensorDataBase):
 
     A memory-mapped :class:`NonTensorData` writes the new value to its JSON
     file on disk at each update, which takes time. If the data does not need
-    to stay on disk, use ``share_memory_`` instead. The update also writes an
-    ``other.pickle`` file, so loading the directory needs
-    ``allow_pickle=True``:
+    to stay on disk, use ``share_memory_`` instead. A value that JSON can
+    encode stays in the JSON file, so the directory loads with
+    ``allow_pickle=False``:
 
         >>> with tempfile.TemporaryDirectory() as tmpdir:
         ...     td = TensorDict({"val": NonTensorData(data=0, batch_size=[])}, [])
         ...     _ = td.memmap_(tmpdir)
         ...     _ = td.update_(TensorDict({"val": NonTensorData(data=1, batch_size=[])}, []))
-        ...     td_load = TensorDict.load_memmap(tmpdir, allow_pickle=True)
+        ...     td_load = TensorDict.load_memmap(tmpdir, allow_pickle=False)
         ...     print(td_load["val"])
         1
 

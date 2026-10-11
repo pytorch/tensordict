@@ -1668,8 +1668,8 @@ class _Serialization:
                 may be loaded. Pickle can execute arbitrary code, so pass
                 ``True`` only for data from a trusted source and ``False``
                 for untrusted data. As in :meth:`~.load_memmap`, omitting
-                this option loads pickle with a ``FutureWarning`` in 0.14,
-                and the default changes to ``False`` in 0.15.
+                this option loads pickle with a ``FutureWarning`` in 0.14
+                and 0.15, and the default changes to ``False`` in 0.16.
             mode (str, optional): the mode of the memory maps. See
                 :meth:`~.load_memmap`.
 

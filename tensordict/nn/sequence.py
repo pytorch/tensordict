@@ -76,7 +76,8 @@ class TensorDictSequential(TensorDictModule):
             - ``None`` (default): the sequence returns what the last module
               returns, so the ``inplace`` value of each module decides.
 
-            See the last example.
+            With ``False`` or ``"empty"``, the modules run on a shallow copy
+            of the input, so the input does not change. See the last example.
 
     .. note::
         A :class:`TensorDictSequential` instance may have a long list of output keys, and one may wish to remove

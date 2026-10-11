@@ -570,9 +570,9 @@ name. To load such data, call ``load_memmap`` on the class itself, for example
 on if its name matches the saved name.
 
 If the saved data has pickled non-tensor values and you do not pass
-``allow_pickle``, loading emits a ``FutureWarning`` in tensordict 0.14. In
-0.15, the default becomes ``allow_pickle=False``, which raises an error
-instead of loading them. Pass ``allow_pickle=True`` only for data that you
+``allow_pickle``, loading emits a ``FutureWarning`` in tensordict 0.14 and
+0.15. In 0.16, the default becomes ``allow_pickle=False``, which raises an
+error instead of loading them. Pass ``allow_pickle=True`` only for data that you
 trust. For the other formats, see :ref:`saving`.
 
 Tensorclasses as module inputs and outputs

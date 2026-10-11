@@ -404,11 +404,11 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             Number of samples to compute the empirical
             mean when it is not available. Defaults to 1000.
         num_samples (int or torch.Size, optional): keyword-only argument.
-            The number of values to draw per call with the ``RANDOM``
-            interaction type. The output tensordict is expanded to
-            ``num_samples + batch_size``, and each sampled value gets these
-            leading dimensions. With another interaction type, the call
-            raises a ``RuntimeError`` (batch dimension mismatch).
+            The number of values per call. The output tensordict is expanded
+            to ``num_samples + batch_size``, and each sampled value gets these
+            leading dimensions. With the ``RANDOM`` interaction type, each
+            value is a new draw. With another interaction type, the module
+            repeats its one deterministic value ``num_samples`` times.
             Defaults to ``None``: one value, no extra dimension.
         generator (torch.Generator, int, NestedKey, or None, optional): keyword-only argument.
             Controls the random number generator used when sampling from the distribution

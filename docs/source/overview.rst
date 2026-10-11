@@ -144,10 +144,11 @@ also work on a TensorDict. The result is a TensorDict:
 What it is not
 --------------
 
-A TensorDict is not a :class:`dict`. It has the methods of a mapping:
-``keys``, ``values``, ``items``, ``get``, ``pop``, ``update``, ``in`` and
-``**data``. But ``for x in data``, ``len(data)``, ``bool(data)`` and
-``data == other`` follow the rules of a tensor:
+A TensorDict is not *exactly* a :class:`dict`. A dict is a good model: a
+TensorDict has the methods of a mapping, ``keys``, ``values``, ``items``,
+``get``, ``pop``, ``update``, ``in`` and ``**data``. But ``for x in data``,
+``len(data)``, ``bool(data)`` and ``data == other`` follow the rules of a
+tensor:
 
   >>> isinstance(robots, dict)
   False

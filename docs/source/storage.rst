@@ -298,10 +298,8 @@ and the keys from the server:
 A store caches its list of keys. Writes to existing keys are visible to all
 the processes. A key that another process adds after you open the store is
 not visible: reading it raises a ``KeyError``. To see new keys, open the store
-again, or open it with
-``TensorDictStore(td_id=..., batch_size=..., cache_metadata=False)``.
-``from_store`` does not accept ``cache_metadata``
-(`#2266 <https://github.com/pytorch/tensordict/issues/2266>`_).
+again, or pass ``cache_metadata=False`` to ``from_store``. The store then
+reads the list of keys from the server each time.
 
 See :class:`~tensordict.store.TensorDictStore` for the other arguments, and
 :class:`~tensordict.store.LazyStackedTensorDictStore` for a stack of
@@ -404,11 +402,10 @@ HDF5 returns the string as ``bytes``:
   >>> td_h5["label"]
   b'cat'
 
-On Redis, a value that JSON can represent works as on the other backends. A
+On Redis, a value that JSON can represent goes to the server as JSON. A
 value that needs pickle, such as a ``set`` or a ``datetime.date``, goes to the
-server, but reading it back raises a ``UnicodeDecodeError``
-(`#2245 <https://github.com/pytorch/tensordict/issues/2245>`_). Store only
-strings, numbers, lists and dicts on Redis.
+server as pickle bytes, and reads back as the same value. Each read
+unpickles these bytes: see the warning in :ref:`storage-redis`.
 
 Backend details
 ---------------

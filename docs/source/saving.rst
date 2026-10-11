@@ -92,10 +92,11 @@ each value into the existing parameter of the model, so the parameters stay
   True
 
 The loaded leaves are :class:`~tensordict.MemoryMappedTensor` instances.
-Without ``inplace=True``, ``to_module`` tries to make a parameter from each
-of them, and raises ``RuntimeError: Creating a Parameter from an instance of
-type MemoryMappedTensor requires that detach() returns an instance of the
-same type`` (`#2240 <https://github.com/pytorch/tensordict/issues/2240>`_).
+Without ``inplace=True``, ``to_module`` makes a new parameter from each of
+them, and the new parameter uses the file as its storage. If the files are
+mapped as shared (``mode="r+"``, the default for a directory that you can
+write), a change to the parameter, for example an optimizer step, changes
+the checkpoint on disk.
 
 To load one sub-module, pass its key as ``subpath``. tensordict then reads
 only that part of the tree. ``subpath`` takes a nested key, such as
@@ -462,8 +463,8 @@ the ``other.pickle`` files:
   trust.
 - ``allow_pickle=True``: ``load_memmap`` loads the pickle files. Use this only
   for data from a source that you trust.
-- No value: tensordict 0.14 loads the pickle files and emits a
-  ``FutureWarning``. The default changes to ``False`` in tensordict 0.15.
+- No value: tensordict 0.14 and 0.15 load the pickle files and emit a
+  ``FutureWarning``. The default changes to ``False`` in tensordict 0.16.
 
 The ``date`` value of the example above is in a pickle file:
 
@@ -537,10 +538,10 @@ inside a :class:`~tensordict.TensorDict` or a stack of tensordicts:
 :func:`~tensordict.utils.print_directory_tree` logs the tree and its size
 through the ``tensordict`` logger, and returns it as a string.
 
-A ``set`` value cannot be saved: ``save`` raises a ``TypeError`` because
-JSON cannot represent it
-(`#2264 <https://github.com/pytorch/tensordict/issues/2264>`_). Convert it to a list
-first.
+JSON cannot represent a ``set``, so ``save`` writes a ``set`` value to an
+``other.pickle`` file. To load it, pass ``allow_pickle=True`` (see
+`Load data that you did not write`_). To keep the value in ``meta.json``,
+convert it to a list first.
 
 Memory-mapped tensors
 ---------------------
