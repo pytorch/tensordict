@@ -2576,7 +2576,8 @@ class TensorDictStore(TensorDictBase):
     def clear_redis(self):
         """Delete all keys associated with this TensorDict from Redis.
 
-        This removes all tensor data, metadata, and the key registry.
+        This removes all tensor data, metadata, the key registry and the
+        stored TensorClass path.
         """
 
         async def _aclear():
@@ -2586,6 +2587,7 @@ class TensorDictStore(TensorDictBase):
                 pipe.delete(self._keys_registry_key)
                 pipe.delete(self._batch_size_key)
                 pipe.delete(self._device_key)
+                pipe.delete(self._tensorclass_key)
                 await pipe.execute()
                 return
             pipe = self._client.pipeline()
@@ -2595,6 +2597,7 @@ class TensorDictStore(TensorDictBase):
             pipe.delete(self._keys_registry_key)
             pipe.delete(self._batch_size_key)
             pipe.delete(self._device_key)
+            pipe.delete(self._tensorclass_key)
             await pipe.execute()
 
         self._run_sync(_aclear())
