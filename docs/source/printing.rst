@@ -241,7 +241,8 @@ with any character, such as ``my-key``, and devices with an index, such as
   tensordict, run it on a machine with CUDA.
 - It does not keep ``is_shared``, and it returns a
   :class:`~tensordict.TensorDict` for the repr of a lazy stack. For a lazy
-  stack with exclusive keys, it raises a ``RuntimeError``.
+  stack with exclusive keys, it raises a ``RuntimeError``
+  (`#1956 <https://github.com/pytorch/tensordict/issues/1956>`_).
 
 See also
 --------
