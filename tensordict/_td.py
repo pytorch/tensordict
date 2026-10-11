@@ -71,6 +71,7 @@ from tensordict.utils import (
     _get_shape_from_args,
     _import_and_wrap_functorch,
     _infer_size_impl,
+    _is_non_tensor,
     _is_safe_legacy_key,
     _is_unbatched,
     _KEY_ERROR,
@@ -82,6 +83,7 @@ from tensordict.utils import (
     _NON_STR_KEY_TUPLE_ERR,
     _parse_to,
     _pass_through,
+    _pass_through_cls,
     _prune_selected_keys,
     _resolve_expand_shape,
     _set_item,
@@ -585,6 +587,34 @@ class TensorDict(TensorDictBase):
             return TensorDictParams(destination, no_convert=True)
         return destination
 
+    @property
+    def _has_non_tensor(self):
+        # Faster than TensorDictBase._has_non_tensor: it checks the set of value
+        # types and asks the nested collections, so that a nested lazy stack
+        # never stacks its leaves (which raises for heterogeneous shapes).
+        # update_ calls it once per member of a lazy stack: the first loop is
+        # the fast path for a tensordict of plain tensors.
+        values = self._tensordict.values()
+        for value in values:
+            if type(value) is not Tensor:
+                break
+        else:
+            return False
+        for cls in set(map(type, values)):
+            if issubclass(cls, Tensor):
+                continue
+            if cls is not TensorDict:
+                if _is_non_tensor(cls):
+                    return True
+                if _pass_through_cls(cls):
+                    continue
+                if not _is_tensor_collection(cls):
+                    return super()._has_non_tensor
+            for value in values:
+                if type(value) is cls and value._has_non_tensor:
+                    return True
+        return False
+
     def is_empty(self):
 
         for item in self._tensordict.values():
@@ -919,7 +949,7 @@ class TensorDict(TensorDictBase):
         batch_size = torch.Size(batch_size)
 
         names = list(self.names) if self._has_names() else None
-        if names:
+        if names is not None:
             names.insert(newdim, None)
 
         def _unsqueeze(tensor):
@@ -2431,6 +2461,8 @@ class TensorDict(TensorDictBase):
         for key in keys:
             key = unravel_key(key)
             if isinstance(key, str):
+                if inplace and self.is_locked and key in _tensordict:
+                    raise RuntimeError(_LOCK_ERROR)
                 _tensordict.pop(key, None)
             else:
                 if keys_to_exclude is None:
@@ -2911,7 +2943,12 @@ class _SubTensorDict(TensorDictBase):
             raise TypeError(
                 "Cannot send a _SubTensorDict instance to device/dtype inplace."
             )
-        if device is not None and dtype is None and device == self.device:
+        if (
+            device is not None
+            and dtype is None
+            and convert_to_format is None
+            and device == self.device
+        ):
             return result
         return self.to_tensordict().to(*args, **kwargs)
 

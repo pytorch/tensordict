@@ -509,7 +509,7 @@ class TensorClass(_TensorClassInitArgs):
         swap_dest: Incomplete | None = None,
         use_state_dict: bool = False,
         non_blocking: bool = False,
-        preserve_module_state: bool | None = True,
+        preserve_module_state: bool = True,
         memo: Incomplete | None = None,
     ) -> Self: ...
     @property
@@ -967,7 +967,7 @@ class TensorClass(_TensorClassInitArgs):
         idx: IndexType,
         non_blocking: bool = False,
         *,
-        fast: bool | None = True,
+        fast: bool = True,
     ) -> Self: ...
     def is_empty(self) -> bool: ...
     def setdefault(
@@ -1644,6 +1644,7 @@ class TensorClass(_TensorClassInitArgs):
 
 class NonTensorDataBase(TensorClass):
     data: Any
+    def maybe_to_stack(self) -> Self | NonTensorStack: ...
 
 class NonTensorData(NonTensorDataBase): ...
 class MetaData(NonTensorDataBase): ...
@@ -1657,7 +1658,8 @@ class TensorAttrs(TensorClass):
         cls, tensor: Tensor, *, fields: Sequence[str] = ("device", "dtype", "shape")
     ) -> Self: ...
 
-class NonTensorStack(LazyStackedTensorDict): ...
+class NonTensorStack(LazyStackedTensorDict):
+    def maybe_to_stack(self) -> Self: ...
 
 _ClassT = TypeVar("_ClassT")
 

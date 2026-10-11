@@ -100,6 +100,7 @@ tensor.
     :template: function.rst
 
     composite_lp_aggregate
+    probabilistic.interaction_type
 
 Ensembles
 ---------
@@ -146,6 +147,7 @@ entry of a tensordict.
     NormalParamExtractor
     OneHotCategorical
     TruncatedNormal
+    truncated_normal.TruncatedStandardNormal
 
 Utilities
 ---------
@@ -159,7 +161,8 @@ Utilities
 - :func:`mappings`, :func:`add_custom_mapping` and :class:`biased_softplus`
   map the output of a network to positive values, for example the scale
   of a distribution. :func:`inv_softplus` is the inverse of the softplus
-  function.
+  function, and :func:`~tensordict.nn.utils.expln` is the positive mapping
+  of the ``"expln"`` key of :func:`mappings`.
 - :func:`rand_one_hot` samples a one-hot vector from logits.
 
 ``tensordict.nn.make_tensordict`` is :func:`tensordict.make_tensordict`.
@@ -180,6 +183,7 @@ Utilities
     mappings
     add_custom_mapping
     inv_softplus
+    utils.expln
     rand_one_hot
 
 FX tracing (prototype)

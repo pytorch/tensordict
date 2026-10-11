@@ -984,7 +984,26 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         interaction_type: InteractionType | None = None,
         *,
         generator: torch.Generator | None = None,
-    ) -> tuple[Tensor, ...] | Tensor:
+    ) -> tuple[Tensor, ...] | Tensor | TensorDictBase:
+        if interaction_type is None:
+            interaction_type = self.default_interaction_type
+        sample = self._draw_dist_sample(dist, interaction_type, generator=generator)
+        num_samples = self.num_samples
+        if num_samples and interaction_type is not InteractionType.RANDOM:
+            # Only RANDOM draws num_samples values: repeat the single
+            # deterministic value so that it fits the expanded output.
+            if isinstance(sample, tuple):
+                return tuple(s.expand(num_samples + s.shape) for s in sample)
+            return sample.expand(num_samples + sample.shape)
+        return sample
+
+    def _draw_dist_sample(
+        self,
+        dist: D.Distribution,
+        interaction_type: InteractionType | None = None,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> tuple[Tensor, ...] | Tensor | TensorDictBase:
         if not isinstance(dist, D.Distribution):
             raise TypeError("Expected Distribution, but got {}".format(type(dist)))
         if interaction_type is None:
@@ -1420,6 +1439,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 return TensorDictSequential(*mods)
 
     _dist_sample = ProbabilisticTensorDictModule._dist_sample
+    _draw_dist_sample = ProbabilisticTensorDictModule._draw_dist_sample
 
     @property
     @deprecated(
@@ -1721,9 +1741,13 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         tensordict_out: TensorDictBase | None = None,
         **kwargs,
     ) -> TensorDictBase:
-        if (tensordict_out is None and self._select_before_return) or (
+        if (
             tensordict_out is not None
+            or self._select_before_return
+            or self.inplace is False
+            or self.inplace == "empty"
         ):
+            # With inplace=False or "empty", the modules must not write into the input.
             tensordict_exec = tensordict.copy()
         else:
             tensordict_exec = tensordict

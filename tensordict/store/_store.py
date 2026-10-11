@@ -506,12 +506,17 @@ class TensorDictStore(TensorDictBase):
         if self._keys_cache[0] is not None:
             self._keys_cache[0].add(key_path)
 
-    async def _aset_non_tensor(self, key_path: str, value: Any):
-        """Store a non-tensor value in Redis."""
+    async def _aset_non_tensor(self, key_path: str, value: Any, array: bool = False):
+        """Store a non-tensor value in Redis.
+
+        With ``array=True``, *value* is the list of the elements along dim 0,
+        stored as a ``json_array`` as indexed writes store it. A value that
+        JSON cannot encode is pickled either way.
+        """
         # Try JSON first, fall back to pickle
         try:
             serialized = json.dumps(value)
-            encoding = "json"
+            encoding = "json_array" if array else "json"
         except (TypeError, ValueError):
             serialized = pickle.dumps(value)
             encoding = "pickle"
@@ -1296,6 +1301,9 @@ class TensorDictStore(TensorDictBase):
         stored value is returned as-is (broadcast semantics).
         """
         encoding = meta.get("encoding", "json")
+        if encoding not in ("json", "json_array"):
+            # pickle bytes are not UTF-8: only JSON is decoded
+            return pickle.loads(data)
         text = data.decode() if isinstance(data, bytes) else data
 
         if encoding == "json_array":
@@ -1317,9 +1325,7 @@ class TensorDictStore(TensorDictBase):
             return stack
 
         # Scalar encoding — return the single stored value (broadcast).
-        if encoding == "json":
-            return json.loads(text)
-        return pickle.loads(data)
+        return json.loads(text)
 
     # ---- TensorDictBase interface: batch_size / device / names ----
 
@@ -1587,6 +1593,23 @@ class TensorDictStore(TensorDictBase):
             inplace = has_key
         return inplace
 
+    def _write_non_tensor(self, key_path: str, value: Any) -> None:
+        """Write a ``NonTensorData`` or ``NonTensorStack`` value."""
+        from tensordict.tensorclass import NonTensorData, NonTensorStack
+
+        if isinstance(value, NonTensorData):
+            self._run_sync(self._aset_non_tensor(key_path, value.data))
+            return
+        # A stack along a 1-D batch holds one value per element: store them as
+        # indexed writes do, so that indexed reads follow the index. Other
+        # stacks stay one blob, as json_array entries are read as 1-D stacks.
+        array = (
+            isinstance(value, NonTensorStack)
+            and self.batch_dims == 1
+            and value.batch_size == self.batch_size
+        )
+        self._run_sync(self._aset_non_tensor(key_path, value.tolist(), array=array))
+
     def _set_str(
         self,
         key: str,
@@ -1607,13 +1630,7 @@ class TensorDictStore(TensorDictBase):
         key_path = self._full_key_path(key)
 
         if is_non_tensor(value):
-            from tensordict.tensorclass import NonTensorData
-
-            if isinstance(value, NonTensorData):
-                raw_value = value.data
-            else:
-                raw_value = value.tolist()
-            self._run_sync(self._aset_non_tensor(key_path, raw_value))
+            self._write_non_tensor(key_path, value)
             return self
 
         if is_tensor_collection(value):
@@ -1669,12 +1686,7 @@ class TensorDictStore(TensorDictBase):
         if isinstance(value, torch.Tensor):
             self._run_sync(self._aset_tensor(key_path, value))
         elif is_non_tensor(value):
-            from tensordict.tensorclass import NonTensorData
-
-            raw_value = (
-                value.data if isinstance(value, NonTensorData) else value.tolist()
-            )
-            self._run_sync(self._aset_non_tensor(key_path, raw_value))
+            self._write_non_tensor(key_path, value)
         elif is_tensor_collection(value):
             nested_prefix = self._full_key_path(_KEY_SEP.join(key))
             nested = TensorDictStore._new_nested(
@@ -2032,6 +2044,11 @@ class TensorDictStore(TensorDictBase):
                 batch_size = input_dict.batch_size
             else:
                 batch_size = torch.Size([])
+                if auto_batch_size:
+                    input_dict = TensorDict(
+                        input_dict, batch_size=batch_size
+                    ).auto_batch_size_()
+                    batch_size = input_dict.batch_size
 
         connect_kwargs = {}
         if unix_socket_path is not None:
@@ -2334,7 +2351,8 @@ class TensorDictStore(TensorDictBase):
                 fully-qualified class path (``"module.ClassName"``) and
                 imported.  If ``None`` (default), the class path stored in
                 the server (if any) is used automatically.
-            **kwargs: Extra connection kwargs.
+            **kwargs: Extra keyword arguments for the constructor, such as
+                ``cache_metadata``, and connection kwargs for the Redis client.
 
         Returns:
             A TensorDictStore (or TensorClass wrapping one) connected to the
@@ -2357,7 +2375,10 @@ class TensorDictStore(TensorDictBase):
         """
         import redis.asyncio as aioredis
 
-        connect_kwargs = dict(kwargs)
+        # ``client`` and ``cache_metadata`` go to the constructor only.
+        connect_kwargs = {
+            k: v for k, v in kwargs.items() if k not in ("client", "cache_metadata")
+        }
         if unix_socket_path is not None:
             connect_kwargs["unix_socket_path"] = unix_socket_path
         else:
@@ -2366,7 +2387,6 @@ class TensorDictStore(TensorDictBase):
         connect_kwargs["db"] = db
 
         # Temporarily create an async client to read stored metadata
-        loop = asyncio.new_event_loop()
         client = aioredis.Redis(**connect_kwargs)
 
         async def _read_meta():
@@ -2381,8 +2401,11 @@ class TensorDictStore(TensorDictBase):
             await client.aclose()
             return raw_bs, raw_dev, raw_tc
 
-        raw_bs, raw_dev, raw_tc = loop.run_until_complete(_read_meta())
-        loop.close()
+        loop = asyncio.new_event_loop()
+        try:
+            raw_bs, raw_dev, raw_tc = loop.run_until_complete(_read_meta())
+        finally:
+            loop.close()
 
         if raw_bs is None:
             raise KeyError(
@@ -2663,14 +2686,9 @@ class TensorDictStore(TensorDictBase):
     def clear_redis(self):
         """Delete all keys associated with this TensorDict from Redis.
 
-        This removes all tensor data, metadata, and the key registry. The
-        connection stays open, so you can write new entries. Call
-        :meth:`close` to close it.
-
-        .. note::
-            For a store created from a tensorclass, one key,
-            ``<prefix>:{<td_id>}:__tensorclass__``, stays on the server
-            (`#2246 <https://github.com/pytorch/tensordict/issues/2246>`_).
+        This removes all tensor data, metadata, the key registry and the
+        stored TensorClass path. The connection stays open, so you can write
+        new entries. Call :meth:`close` to close it.
         """
 
         async def _aclear():
@@ -2680,6 +2698,7 @@ class TensorDictStore(TensorDictBase):
                 pipe.delete(self._keys_registry_key)
                 pipe.delete(self._batch_size_key)
                 pipe.delete(self._device_key)
+                pipe.delete(self._tensorclass_key)
                 await pipe.execute()
                 return
             pipe = self._client.pipeline()
@@ -2689,6 +2708,7 @@ class TensorDictStore(TensorDictBase):
             pipe.delete(self._keys_registry_key)
             pipe.delete(self._batch_size_key)
             pipe.delete(self._device_key)
+            pipe.delete(self._tensorclass_key)
             await pipe.execute()
 
         self._run_sync(_aclear())

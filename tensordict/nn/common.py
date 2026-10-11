@@ -321,7 +321,8 @@ class dispatch:
                     out = func(tensordict, *args, **kwargs)
 
                 # This makes dispatch responsible of handling partial outputs (such as selected through select_out_keys)
-                out = tuple(out[key] for key in dest)
+                # The out-key "_" marks an output that is not written.
+                out = tuple(out[key] for key in dest if key != "_")
                 return out[0] if len(out) == 1 else out
 
             if is_method:
@@ -463,11 +464,25 @@ class _OutKeysSelect:
                 raise RuntimeError(
                     f"Selecting out-keys failed. Original out_keys: {module._out_keys}, selected: {module.out_keys}."
                 )
-        # the input may lack some in_keys (e.g. with strict=False)
-        strict = tensordict_out is tensordict_in and all(
-            key in tensordict_in.keys(include_nested=True) for key in in_keys
-        )
-        return tensordict_out.select(*in_keys, *out_keys, inplace=True, strict=strict)
+        # Remove only the out-keys that are not selected: tensordict_out may be
+        # the input, whose other entries must survive the call.
+        excluded_keys = [
+            key for key in self.source if key not in out_keys and key not in in_keys
+        ]
+        tensordict_out.exclude(*excluded_keys, inplace=True)
+        # Drop the sub-tensordicts that only held excluded keys.
+        for key in excluded_keys:
+            if isinstance(key, str):
+                continue
+            for depth in range(len(key) - 1, 0, -1):
+                parent = key[:depth] if depth > 1 else key[0]
+                if parent in out_keys or parent in in_keys:
+                    break
+                value = tensordict_out.get(parent, None)
+                if not is_tensor_collection(value) or not value.is_empty():
+                    break
+                del tensordict_out[parent]
+        return tensordict_out
 
     def _detect_dispatch(self, tensordict_in, kwargs, in_keys):  # noqa: F811
         if isinstance(tensordict_in, TensorDictBase):
@@ -610,7 +625,8 @@ class TensorDictModuleBase(nn.Module):
 
         This is useful whenever one wants to get rid of intermediate keys in a
         complicated graph, or when the presence of these keys may trigger unexpected
-        behaviours.
+        behaviours. The module removes only the out-keys that are not selected:
+        the other entries of the input tensordict stay in place.
 
         The original ``out_keys`` can still be accessed via ``module.out_keys_source``.
 

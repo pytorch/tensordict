@@ -808,6 +808,24 @@ Their pages name the replacement and the release that removes them.
     lazy_legacy
     set_lazy_legacy
 
+Package constants
+-----------------
+
+.. py:data:: NO_DEFAULT
+    :module: tensordict.base
+
+    The sentinel that marks an argument as not given where ``None`` is a valid
+    value, such as ``default`` in :meth:`~tensordict.TensorDictBase.get_non_tensor`
+    or ``device`` in :meth:`~tensordict.TensorDictBase.new_zeros`. It can also
+    be imported from ``tensordict.tensordict``.
+
+.. py:data:: __version__
+    :module: tensordict
+
+    The version string of the installed tensordict package, or ``None`` if it
+    cannot be determined, for example when tensordict is imported from a source
+    tree that is not installed.
+
 See also
 --------
 

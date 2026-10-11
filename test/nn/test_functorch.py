@@ -15,10 +15,16 @@ from _utils_internal import expand_list, get_available_devices, TestTensorDictsB
 from functorch import (
     make_functional_with_buffers as functorch_make_functional_with_buffers,
 )
-from tensordict import assert_close, LazyStackedTensorDict, TensorDict
+from tensordict import assert_close, LazyStackedTensorDict, NonTensorStack, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn, vmap
-from torch.utils._pytree import tree_flatten_with_path, tree_map, tree_structure
+from torch.utils._pytree import (
+    tree_flatten,
+    tree_flatten_with_path,
+    tree_map,
+    tree_structure,
+    tree_unflatten,
+)
 
 # TensorDict methods that call torch._foreach_*, applied to one sample of a
 # tensordict with batch_size [4].
@@ -457,6 +463,46 @@ class TestPyTree(TestTensorDictsBase):
         # With exclusive keys
         del td0["a"]
         assert (tree_map(lambda x: x + 1, td) == td + 1).all()
+
+    def test_pytree_non_tensor_spec(self):
+        # The specs of tensordicts with batched non-tensor entries compare
+        # without raising.
+        def make(s="a string"):
+            return TensorDict(a=torch.zeros(4, 3), s=s, batch_size=[4], device="cpu")
+
+        assert tree_structure(make()) == tree_structure(make())
+        assert tree_structure(make()) != tree_structure(make("another string"))
+        assert tree_flatten_with_path(make())[1] == tree_structure(make())
+        out = tree_map(lambda a, b: a + b, make(), make())
+        assert out.get_non_tensor("s") == "a string"
+        assert (out["a"] == 0).all()
+
+        def make_stack(*values):
+            td = make()
+            td.set("stack", NonTensorStack(*values))
+            return td
+
+        assert tree_structure(make_stack(*"aaaa")) == tree_structure(
+            make_stack(*"aaaa")
+        )
+        assert tree_structure(make_stack(*"abcd")) == tree_structure(
+            make_stack(*"abcd")
+        )
+        assert tree_structure(make_stack(*"abcd")) != tree_structure(
+            make_stack(*"abce")
+        )
+
+    def test_pytree_non_tensor_batch_size(self):
+        # A non-tensor entry is rebuilt with the batch size and device of its
+        # tensordict, also when the function changes the batch size.
+        td = TensorDict(a=torch.zeros(4, 3), s="a string", batch_size=[4], device="cpu")
+        out = tree_unflatten(*tree_flatten(td))
+        assert out.get("s").batch_size == torch.Size([4])
+        assert out.get("s").device == torch.device("cpu")
+        for fn in (lambda x: x[0], lambda x: x[:2], lambda x: x.unsqueeze(0)):
+            out = tree_map(fn, td)
+            assert out.get("s").batch_size == out.batch_size
+            assert out.get_non_tensor("s") == "a string"
 
 
 # The names that ``from tensordict._pytree import *`` used to copy into the
