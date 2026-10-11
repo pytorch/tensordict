@@ -1139,7 +1139,10 @@ class TestTensorDicts(TestTensorDictsBase):
                 with pytest.raises(RuntimeError, match="Cannot call exclude"):
                     td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
                 return
+            expected_keys = set(td.flatten_keys(separator=separator).keys())
             td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
+        # the inplace version keeps the leaves at the root too
+        assert set(td_flatten.keys()) == expected_keys
         for value in td_flatten.values():
             assert not isinstance(value, TensorDictBase)
         assert (

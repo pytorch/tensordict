@@ -6597,12 +6597,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             raise KeyError(
                 f"Flattening keys in tensordict causes keys {conflicts} to collide."
             )
-        # we will need to remove the empty tensordicts later on
+        # we will need to remove the empty tensordicts later on, but not the
+        # leaves that sit at the root
         root_keys = set(self.keys())
         for leaf, leaf_flat in zip(all_leaves, all_leaves_flat):
             self.rename_key_(leaf, leaf_flat)
-            if isinstance(leaf, str):
-                root_keys.discard(leaf)
+            if len(leaf) == 1:
+                root_keys.discard(leaf[0])
+        # with a custom is_leaf, a sub-tensordict can be a leaf and still have
+        # leaves of its own; those were moved out, so remove it as well
+        root_keys.update(leaf[0] for leaf in all_leaves if len(leaf) > 1)
         self.exclude(*root_keys, inplace=True)
         return self
 
