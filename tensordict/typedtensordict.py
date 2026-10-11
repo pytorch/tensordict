@@ -590,6 +590,10 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     def _has_names(self) -> bool:
         return self._source._has_names()
 
+    @property
+    def _has_non_tensor(self) -> bool:
+        return self._source._has_non_tensor
+
     def _set_names(self, names: Sequence[str] | None) -> None:
         self._source._set_names(names)
 
