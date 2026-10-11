@@ -1971,6 +1971,88 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    def test_view_set_at_nested(self, store_kwargs):
+        """set_at_ and update_at_ on an element view write nested entries (#2154)."""
+        lazy_td = self._nested_lazy_td()
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            for td in (store_td, lazy_td):
+                td[1].set_at_(("n", "b"), torch.tensor([7.0, 8.0]), 0)
+                td[2].set_at_(("n", "m", "c"), 4.0, slice(1, None))
+                td[0].set_at_(
+                    "n",
+                    TensorDict(b=torch.full((2,), 5.0), m=TensorDict(c=6.0)),
+                    2,
+                )
+                td[3].set_at_(("n", "m"), TensorDict(c=torch.tensor(9.0)), -1)
+                td[4].update_at_(
+                    TensorDict(a=torch.tensor(1.0), n=TensorDict(b=torch.ones(2))), 1
+                )
+            assert_allclose_td(store_td.to_tensordict(), lazy_td.to_tensordict())
+
+            # a key path under a leaf does not exist
+            keys = set(store_td.keys(True, True))
+            with pytest.raises(KeyError):
+                store_td[0].set_at_(("a", "b"), torch.tensor(1.0), 0)
+            assert set(store_td.keys(True, True)) == keys
+
+            # a leaf the store lacks is created, zero-filled for the other
+            # elements
+            store_td[-1].set_at_(
+                "n", TensorDict(b=torch.zeros(2), d=torch.tensor(3.0)), 0
+            )
+            expected = torch.zeros(5, 3)
+            expected[-1, 0] = 3.0
+            torch.testing.assert_close(store_td["n", "d"], expected)
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_view_set_at_nested_heterogeneous(self, store_kwargs):
+        """Element-view set_at_ writes nested entries whose elements differ in shape."""
+        tds = [
+            TensorDict(
+                n=TensorDict(
+                    b=torch.zeros(2), h=torch.zeros(k, dtype=torch.long), batch_size=[]
+                ),
+                batch_size=[],
+            )
+            for k in (2, 3, 4)
+        ]
+        lazy_td = lazy_stack([td.clone() for td in tds])
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            for td in (store_td, lazy_td):
+                td[1].set_at_(("n", "h"), torch.tensor(7), 2)
+                td[2].set_at_("n", TensorDict(h=torch.full((4,), 3)), ())
+                td[0].set_at_(("n", "b"), torch.tensor(1.5), 0)
+            for i in range(3):
+                assert store_td[i]["n", "h"].dtype == torch.long
+                assert_allclose_td(store_td[i].to_tensordict(), lazy_td[i])
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_view_set_new_key_last_element(self, store_kwargs):
+        """A new key set on any element view, the last one too, reads back exactly."""
+        lazy_td = self._nested_lazy_td()
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            value = torch.tensor([1.0, 2.0, 3.0])
+            for i in range(5):
+                store_td[i].set(f"z{i}", value)
+                store_td[i].set(("n", f"z{i}"), value)
+            for i in range(5):
+                for key in (f"z{i}", ("n", f"z{i}")):
+                    expected = torch.zeros(5, 3)
+                    expected[i] = value
+                    torch.testing.assert_close(store_td[key], expected)
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     # ---- empty ----
 
     def test_empty_recurse(self, store_kwargs):
