@@ -322,6 +322,23 @@ class TestZarrWriteOps:
         ztd.rename_key_("b", "b2")
         assert ("b2", "c") in ztd.keys(True, True)
 
+    def test_pop_nested(self, ztd):
+        # https://github.com/pytorch/tensordict/issues/2089
+        c = ztd["b", "c"].clone()
+        out = ztd.pop("b")
+        assert isinstance(out, TensorDict)
+        assert set(out.keys()) == {"c"}
+        assert (out["c"] == c).all()
+        assert "b" not in ztd.keys()
+        ztd["b"] = TensorDict(z=torch.zeros(3, 4), batch_size=[3, 4])
+        assert set(out.keys()) == {"c"}
+
+        ztd["d", "e", "f"] = torch.ones(3, 4)
+        out = ztd.pop(("d", "e"))
+        assert isinstance(out, TensorDict)
+        assert (out["f"] == 1).all()
+        assert ("d", "e") not in ztd.keys(True)
+
     def test_create_nested(self, ztd):
         ztd.create_nested("nested")
         assert "nested" in ztd.keys()

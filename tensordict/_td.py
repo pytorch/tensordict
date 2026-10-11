@@ -1400,7 +1400,24 @@ class TensorDict(TensorDictBase):
                 is_diff = True
             if is_diff:
                 dest_val = dest.maybe_to_stack()
-                dest_val[idx] = value
+                if (
+                    idx is Ellipsis
+                    and dest_val is dest
+                    and is_tensorclass(dest)
+                    and is_tensorclass(value)
+                    and is_non_tensor(value)
+                ):
+                    # A NonTensorData without batch dims: the Ellipsis selects
+                    # the whole entry, and setitem on it does not write the
+                    # data, so build the new entry instead
+                    dest_val = type(dest)(
+                        data=value.data,
+                        batch_size=dest.batch_size,
+                        names=dest._maybe_names(),
+                        device=dest.device,
+                    )
+                else:
+                    dest_val[idx] = value
                 if dest_val is not dest:
                     self._set_str(
                         key,
@@ -3580,6 +3597,9 @@ class _SubTensorDict(TensorDictBase):
 
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
         splits = -(self.batch_size[dim] // -chunks)
+        if splits == 0 and type(chunks) is int and chunks > 0:
+            # torch.chunk returns `chunks` empty pieces along a zero-size dim
+            return self.split([0] * chunks, dim)
         return self.split(splits, dim)
 
     def _view(self, *args, **kwargs):

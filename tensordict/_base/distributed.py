@@ -301,13 +301,12 @@ class _Distributed:
             src (int or TensorDictPipe, optional): the global rank of the
                 source worker, or a
                 :class:`~tensordict._ucxx.TensorDictPipe` for UCXX-based
-                transport. When a pipe is passed, use the returned
-                tensordict: the first message can return a new tensordict
-                and leave this one unchanged, and later messages are
-                received into this tensordict's consolidated storage
-                (`#2244 <https://github.com/pytorch/tensordict/issues/2244>`_).
-                Mutually exclusive with ``group_src``; exactly one of the two
-                must be provided.
+                transport.  When a pipe is passed, the data is received
+                in-place into this tensordict's consolidated storage (if
+                available and its layout matches the received data);
+                otherwise the pipe returns a new tensordict, so use the
+                returned value. Mutually exclusive with ``group_src``;
+                exactly one of the two must be provided.
 
         Keyword Args:
             group (torch.distributed.ProcessGroup, optional): if set, the specified process group

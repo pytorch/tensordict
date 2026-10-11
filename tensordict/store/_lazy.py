@@ -36,7 +36,13 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
-from tensordict.store._store import _has_redis, _KEY_SEP, Self, STORE_BACKENDS
+from tensordict.store._store import (
+    _has_redis,
+    _iter_registry_keys,
+    _KEY_SEP,
+    Self,
+    STORE_BACKENDS,
+)
 from tensordict.store._utils import (
     _bytes_to_tensor,
     _check_indexed_value,
@@ -610,30 +616,11 @@ class _LazyStackedStoreKeysView(_TensorDictKeysView):
     def __iter__(self):
         td = self.tensordict
         all_keys = td._get_all_keys()
-        seen = set()
         # Sorted as in _StoreTDKeysView. _get_str sorts the paths of a nested
         # tensordict too, so that values() and items() follow this order.
-        for full_key in sorted(all_keys):
-            parts = full_key.split(_KEY_SEP)
-            if self.include_nested:
-                key = tuple(parts) if len(parts) > 1 else parts[0]
-                if self.leaves_only and len(parts) > 1:
-                    if key not in seen:
-                        seen.add(key)
-                        yield key
-                elif not self.leaves_only or len(parts) == 1:
-                    if key not in seen:
-                        seen.add(key)
-                        yield key
-            else:
-                top_key = parts[0]
-                if top_key in seen:
-                    continue
-                seen.add(top_key)
-                is_leaf_key = len(parts) == 1
-                if self.leaves_only and not is_leaf_key:
-                    continue
-                yield top_key
+        return _iter_registry_keys(
+            sorted(all_keys), self.include_nested, self.leaves_only
+        )
 
     def __contains__(self, key):
         key = unravel_key(key)
@@ -1843,35 +1830,69 @@ class LazyStackedTensorDictStore(TensorDictBase):
         async def _arename():
             all_keys = await self._aget_all_keys()
             if old_path in all_keys:
-                moves = [
-                    (self._data_key(old_path), self._data_key(new_path)),
-                    (self._meta_key(old_path), self._meta_key(new_path)),
-                    (self._idx_key(old_path), self._idx_key(new_path)),
+                renames = [(old_path, new_path)]
+            else:
+                renames = self._sub_td_renames(all_keys, old_path, new_path)
+            if not renames:
+                return renames
+            moves = []
+            for src_kp, dst_kp in renames:
+                moves += [
+                    (self._data_key(src_kp), self._data_key(dst_kp)),
+                    (self._meta_key(src_kp), self._meta_key(dst_kp)),
+                    (self._idx_key(src_kp), self._idx_key(dst_kp)),
                 ]
-                # Only leaves whose elements differ in shape or dtype have an
-                # offset table, and empty leaves may have no data. RENAME fails
-                # on a missing key, so a key that the leaf lacks is deleted at
-                # the destination instead.
-                pipe = self._client.pipeline()
-                for src, _ in moves:
-                    pipe.exists(src)
-                found = await pipe.execute()
-                pipe = self._client.pipeline()
-                for (src, dst), src_found in zip(moves, found):
-                    if src_found:
-                        pipe.rename(src, dst)
-                    else:
-                        pipe.delete(dst)
-                pipe.srem(self._keys_registry_key, old_path)
-                pipe.sadd(self._keys_registry_key, new_path)
-                await pipe.execute()
+            # Only leaves whose elements differ in shape or dtype have an
+            # offset table, and empty leaves may have no data. RENAME fails
+            # on a missing key, so a key that the leaf lacks is deleted at
+            # the destination instead.
+            pipe = self._client.pipeline()
+            for src, _ in moves:
+                pipe.exists(src)
+            found = await pipe.execute()
+            pipe = self._client.pipeline()
+            for (src, dst), src_found in zip(moves, found):
+                if src_found:
+                    pipe.rename(src, dst)
+                else:
+                    pipe.delete(dst)
+            for src_kp, dst_kp in renames:
+                pipe.srem(self._keys_registry_key, src_kp)
+                pipe.sadd(self._keys_registry_key, dst_kp)
+            await pipe.execute()
+            return renames
 
-        self._run_sync(_arename())
+        renamed = self._run_sync(_arename())
         if self._meta_cache is not None:
-            # old_path is gone, and a leaf at new_path may have been replaced
-            self._meta_cache.pop(old_path, None)
-            self._meta_cache.pop(new_path, None)
+            # the old paths are gone, and a leaf at new_path may have been
+            # replaced
+            for src_kp, dst_kp in renamed:
+                self._meta_cache.pop(src_kp, None)
+                self._meta_cache.pop(dst_kp, None)
         return self
+
+    @staticmethod
+    def _sub_td_renames(
+        all_keys: set[str], old_path: str, new_path: str
+    ) -> list[tuple[str, str]]:
+        """Leaf renames for moving the sub-tensordict at old_path to new_path.
+
+        Only a move to a free destination is done: nothing may be stored at
+        or below new_path, no leaf may be stored above it, and new_path may
+        not be inside old_path. Otherwise the list is empty and the store is
+        left unchanged.
+        """
+        old_prefix = old_path + _KEY_SEP
+        new_prefix = new_path + _KEY_SEP
+        nested = [k for k in all_keys if k.startswith(old_prefix)]
+        if not nested or new_path == old_path or new_path.startswith(old_prefix):
+            return []
+        if new_path in all_keys or any(k.startswith(new_prefix) for k in all_keys):
+            return []
+        parts = new_path.split(_KEY_SEP)
+        if any(_KEY_SEP.join(parts[:i]) in all_keys for i in range(1, len(parts))):
+            return []
+        return [(k, new_prefix + k[len(old_prefix) :]) for k in nested]
 
     def entry_class(self, key: NestedKey) -> type:
         if isinstance(key, str):
@@ -1883,7 +1904,8 @@ class LazyStackedTensorDictStore(TensorDictBase):
             return torch.Tensor
         prefix_check = key_path + _KEY_SEP
         if any(k.startswith(prefix_check) for k in all_keys):
-            return LazyStackedTensorDictStore
+            # get() builds a sub-tensordict as a TensorDict
+            return TensorDict
         raise KeyError(f"key {key} not found in {type(self).__name__}")
 
     # ---- Locking ----
@@ -2395,6 +2417,9 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
         splits = -(self.batch_size[dim] // -chunks)
+        if splits == 0 and type(chunks) is int and chunks > 0:
+            # torch.chunk returns `chunks` empty pieces along a zero-size dim
+            return self.split([0] * chunks, dim)
         return self.split(splits, dim)
 
     # ---- Memory ops: not supported ----

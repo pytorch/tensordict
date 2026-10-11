@@ -491,13 +491,16 @@ def _set_item(
     from tensordict.tensorclass import NonTensorData, NonTensorStack
 
     if is_non_tensor(tensor):
-        if (
-            isinstance(value, NonTensorData)
-            and isinstance(tensor, NonTensorData)
-            and tensor.data == value.data
-        ):
-            return tensor
-        elif isinstance(tensor, NonTensorData):
+        if isinstance(value, NonTensorData) and isinstance(tensor, NonTensorData):
+            try:
+                is_same = bool(tensor.data == value.data)
+            except Exception:
+                # Arrays, tensors and data frames compare elementwise, and the
+                # result has no single truth value: write the value anyway.
+                is_same = False
+            if is_same:
+                return tensor
+        if isinstance(tensor, NonTensorData):
             tensor = NonTensorStack._from_nontensordata(tensor)
         if tensor.stack_dim != 0:
             tensor = NonTensorStack(*tensor.unbind(0), stack_dim=0)

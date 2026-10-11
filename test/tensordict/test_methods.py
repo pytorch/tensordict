@@ -1139,7 +1139,10 @@ class TestTensorDicts(TestTensorDictsBase):
                 with pytest.raises(RuntimeError, match="Cannot call exclude"):
                     td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
                 return
+            expected_keys = set(td.flatten_keys(separator=separator).keys())
             td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
+        # the inplace version keeps the leaves at the root too
+        assert set(td_flatten.keys()) == expected_keys
         for value in td_flatten.values():
             assert not isinstance(value, TensorDictBase)
         assert (
@@ -1641,6 +1644,29 @@ class TestTensorDicts(TestTensorDictsBase):
             else:
                 td_set = td
             td_set.set_(key, item)
+
+    def test_lock_context_manager_restores_on_error(self, td_name, device):
+        # lock_() and unlock_() undo their change also when the body raises
+        td = getattr(self, td_name)(device)
+        if isinstance(td, _SubTensorDict):
+            pytest.skip("a _SubTensorDict cannot be locked or unlocked")
+        is_locked = td.is_locked
+        with pytest.raises(ValueError, match="error in the body"):
+            with td.unlock_():
+                raise ValueError("error in the body")
+        assert td.is_locked is is_locked
+        td.unlock_()
+        with pytest.raises(ValueError, match="error in the body"):
+            with td.lock_():
+                raise ValueError("error in the body")
+        assert not td.is_locked
+        assert not td._last_op_queue
+        td.lock_()
+        with pytest.raises(ValueError, match="error in the body"):
+            with td.unlock_():
+                raise ValueError("error in the body")
+        assert td.is_locked
+        assert not td._last_op_queue
 
     @pytest.mark.parametrize("has_out", [False, "complete", "empty"])
     @pytest.mark.parametrize("keepdim", [True, False])

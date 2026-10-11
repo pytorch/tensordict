@@ -184,6 +184,9 @@ _SELF_NESTING_ERROR = (
 
 _HEURISTIC_EXCLUDED = (Tensor, tuple, list, set, dict, np.ndarray)
 
+# Context-manager ops whose inverse __exit__ runs also when the body raises
+_UNDO_ON_ERROR_OPS = frozenset({"to_module", "lock_", "unlock_"})
+
 _GET_DEFAULTS_TO_NONE_REPLACEMENT = "td[key] to raise a KeyError for a missing key"
 
 if "TD_GET_DEFAULTS_TO_NONE" in os.environ:
@@ -6412,14 +6415,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         # storage location can be identical, resulting in a RuntimeError
         if is_compiling():
             self.clear_refs_for_compile_()
-        if exc_type is not None and issubclass(exc_type, Exception):
-            return False
         is_tc = _is_tensorclass(type(self))
         _last_op = (
             self._last_op_queue.pop()
             if not is_tc
             else self._tensordict._last_op_queue.pop()
         )
+        if exc_type is not None and issubclass(exc_type, Exception):
+            # to_module, lock_ and unlock_ change the original object on entry:
+            # undo the change. The other ops do not write back after an error.
+            if _last_op is not None and _last_op[0] in _UNDO_ON_ERROR_OPS:
+                last_op, (args, kwargs, out_wr) = _last_op
+                LAST_OP_MAPS[last_op](self, args, kwargs, out_wr())
+            return False
         if _last_op is not None:
             last_op, (args, kwargs, out_wr) = _last_op
             # TODO: transpose, flatten etc. as decorator should lock the content to make sure that no key is
@@ -6954,12 +6962,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             raise KeyError(
                 f"Flattening keys in tensordict causes keys {conflicts} to collide."
             )
-        # we will need to remove the empty tensordicts later on
+        # we will need to remove the empty tensordicts later on, but not the
+        # leaves that sit at the root
         root_keys = set(self.keys())
         for leaf, leaf_flat in zip(all_leaves, all_leaves_flat):
             self.rename_key_(leaf, leaf_flat)
-            if isinstance(leaf, str):
-                root_keys.discard(leaf)
+            if len(leaf) == 1:
+                root_keys.discard(leaf[0])
+        # with a custom is_leaf, a sub-tensordict can be a leaf and still have
+        # leaves of its own; those were moved out, so remove it as well
+        root_keys.update(leaf[0] for leaf in all_leaves if len(leaf) > 1)
         self.exclude(*root_keys, inplace=True)
         return self
 

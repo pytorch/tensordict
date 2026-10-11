@@ -854,6 +854,50 @@ class TestNonTensorData:
         assert td.get("a").tolist() == expected
 
     @pytest.mark.parametrize("cls", [NonTensorData, MetaData])
+    @pytest.mark.parametrize("locked", [False, True])
+    @pytest.mark.parametrize("index", [..., (...,)], ids=["ellipsis", "tuple"])
+    @pytest.mark.parametrize("key", ["a", ("nested", "a")], ids=["flat", "nested"])
+    def test_set_at_ellipsis_no_batch_dims(self, cls, locked, index, key):
+        # The Ellipsis selects the whole entry of a tensordict without batch
+        # dims. set_at_ used to leave a non-tensor entry unchanged.
+        td = TensorDict()
+        td.set(key, cls("s0"))
+        if locked:
+            td.lock_()
+        td.set_at_(key, "s1", index)
+        assert type(td.get(key)) is cls
+        assert td.get(key).data == "s1"
+        if locked and isinstance(key, tuple):
+            # update_at_ writes a nested tensordict with td[()] = other, which
+            # raises on a locked tensordict, as set_ does
+            return
+        td = TensorDict()
+        td.set(key, cls("s0"))
+        if locked:
+            td.lock_()
+        other = TensorDict()
+        other.set(key, "s1")
+        td.update_at_(other, index)
+        assert type(td.get(key)) is cls
+        assert td.get(key).data == "s1"
+
+    @pytest.mark.parametrize("array", [np.array, torch.tensor], ids=["numpy", "torch"])
+    def test_subtd_set_at_array_data(self, array):
+        # Arrays and tensors compare elementwise, so comparing the old and new
+        # contents does not give a bool. Writing them through a
+        # _SubTensorDict used to raise.
+        td = TensorDict(a=NonTensorData(array([0, 0]), batch_size=[4]), batch_size=[4])
+        sub = td._get_sub_tensordict(slice(0, 2))
+        sub.set_at_("a", NonTensorData(array([1, 2])), 0)
+        sub.set_at_("a", NonTensorData(array([3, 4, 5])), 1)
+        assert [x.tolist() for x in td.get("a").tolist()] == [
+            [1, 2],
+            [3, 4, 5],
+            [0, 0],
+            [0, 0],
+        ]
+
+    @pytest.mark.parametrize("cls", [NonTensorData, MetaData])
     def test_set_at_failed_keeps_data(self, cls):
         # The data is not an entry of the wrapped TensorDict, so set_at_ raises.
         # It used to delete the data first, after which reading it raised.
@@ -1481,6 +1525,27 @@ class TestNonTensorData:
             td.update_(TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []))
             assert type(td["val"]) is type(val1)
             assert td["val"] == val1
+
+    @pytest.mark.parametrize("strategy", ["shared", "memmap"])
+    @pytest.mark.parametrize(
+        "val1,expected",
+        [
+            ("y" * 99 + "\u00e9", "y" * 99),
+            ("y" * 98 + "\u20ac", "y" * 98),
+            ("y" * 97 + "\U0001f600", "y" * 97),
+        ],
+        ids=["2-byte", "3-byte", "4-byte"],
+    )
+    def test_shared_str_cut_on_char(self, val1, expected, strategy, tmpdir):
+        # A shared str has a fixed size: a longer new value is cut on a
+        # character boundary, so it can still be read back
+        td = TensorDict({"val": NonTensorData(data="abc", batch_size=[])}, [])
+        if strategy == "shared":
+            td.share_memory_()
+        else:
+            td.memmap_(tmpdir, share_non_tensor=True)
+        td.update_(TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []))
+        assert td["val"] == expected
 
     def _update_stack(self, td):
         td[1::2] = TensorDict({"val": NonTensorData(data=3, batch_size=[5])}, [5])
