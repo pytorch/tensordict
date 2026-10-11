@@ -1482,6 +1482,27 @@ class TestNonTensorData:
             assert type(td["val"]) is type(val1)
             assert td["val"] == val1
 
+    @pytest.mark.parametrize("strategy", ["shared", "memmap"])
+    @pytest.mark.parametrize(
+        "val1,expected",
+        [
+            ("y" * 99 + "\u00e9", "y" * 99),
+            ("y" * 98 + "\u20ac", "y" * 98),
+            ("y" * 97 + "\U0001f600", "y" * 97),
+        ],
+        ids=["2-byte", "3-byte", "4-byte"],
+    )
+    def test_shared_str_cut_on_char(self, val1, expected, strategy, tmpdir):
+        # A shared str has a fixed size: a longer new value is cut on a
+        # character boundary, so it can still be read back
+        td = TensorDict({"val": NonTensorData(data="abc", batch_size=[])}, [])
+        if strategy == "shared":
+            td.share_memory_()
+        else:
+            td.memmap_(tmpdir, share_non_tensor=True)
+        td.update_(TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []))
+        assert td["val"] == expected
+
     def _update_stack(self, td):
         td[1::2] = TensorDict({"val": NonTensorData(data=3, batch_size=[5])}, [5])
 
