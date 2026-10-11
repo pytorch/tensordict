@@ -2014,9 +2014,9 @@ class TensorDictStore(TensorDictBase):
             unix_socket_path (str, optional): Unix socket path. If set,
                 ``host`` and ``port`` are ignored.
             prefix (str): Key namespace. Defaults to ``"tensordict"``.
-            auto_batch_size (bool): if ``True``, ``input_dict`` is a dict and
-                ``batch_size`` is not given, the store gets the largest
-                leading shape that all the entries share, as
+            auto_batch_size (bool): if ``True``, a dict ``input_dict`` without
+                ``batch_size`` gives the store the largest leading shape that
+                all its entries share, as
                 :meth:`~tensordict.TensorDict.auto_batch_size_` gives.
                 Defaults to ``False``.
             batch_size: Explicit batch_size. Defaults to the batch size of

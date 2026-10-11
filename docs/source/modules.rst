@@ -173,7 +173,8 @@ These rules apply to keyword calls:
 - You can also pass the tensors as positional arguments, in the order of
   ``in_keys``. If you pass the same input both ways, the module raises
   ``RuntimeError: Duplicated argument in args and kwargs.``
-- A keyword call does not return the outputs with the out-key ``"_"``.
+- A keyword call skips the outputs with the out-key ``"_"``, and returns
+  the other outputs.
 - The tensordict that :class:`~tensordict.nn.TensorDictModule` builds from
   the arguments has an empty batch size.
 

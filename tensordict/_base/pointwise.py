@@ -1730,20 +1730,21 @@ class _PointwiseOps:
 
         .. warning::
             This formula differs from :func:`torch.rsub`, which computes
-            ``other - alpha * self``. The two results are the same only if
-            ``alpha`` is 1. If ``other`` is a :class:`torch.Tensor`, each
-            leaf calls :func:`torch.rsub`, so the result is
             ``other - alpha * self``
-            (`#1950 <https://github.com/pytorch/tensordict/issues/1950>`_). A
-            number with ``alpha`` raises ``TypeError``.
+            (`#1950 <https://github.com/pytorch/tensordict/issues/1950>`_).
+            The two results are the same only if ``alpha`` is 1. If
+            ``other`` is a :class:`torch.Tensor`, each leaf calls
+            :func:`torch.rsub`, so the result is ``other - alpha * self``.
+            A number with ``alpha`` raises ``TypeError``.
 
         Supports broadcasting,
         type promotion, and integer, float, and complex inputs.
 
         Args:
             other (TensorDict, torch.Tensor or Number): the value from which
-                ``self`` is subtracted. A tensor is broadcast to each leaf from
-                the left: its dimensions match the batch dimensions.
+                ``self`` is subtracted. The dimensions of a tensor match the
+                leading dimensions of each leaf, and the tensor is expanded
+                over the other dimensions.
 
         Keyword Args:
             alpha (Number): the multiplier for ``other``.
