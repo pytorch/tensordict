@@ -351,6 +351,13 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
     """Ensures that elementwise ops are broadcast when an nd tensor is passed."""
     # add_, mul_, ... are in-place; __eq__, __lt__, ... also end with "_".
     inplace = op.endswith("_") and not op.endswith("__")
+    # torch.Tensor has no rsub method: call torch.rsub on the leaves instead.
+    torch_op = None if hasattr(torch.Tensor, op) else getattr(torch, op)
+
+    def leaf_op(x, *args, **kwargs):
+        if torch_op is None:
+            return getattr(x, op)(*args, **kwargs)
+        return torch_op(x, *args, **kwargs)
 
     def wrap_func(func):
         @wraps(func)
@@ -386,7 +393,8 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                 others_map.append(other)
             if any(isinstance(other, torch.Tensor) for other in others_map):
                 result = self_expand._fast_apply(
-                    lambda x: getattr(x, op)(
+                    lambda x: leaf_op(
+                        x,
                         *[
                             expand_as_right(other, x) if other is not None else None
                             for other in others_map
