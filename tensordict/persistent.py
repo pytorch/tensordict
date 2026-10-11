@@ -35,6 +35,7 @@ from tensordict.base import (
     _default_is_leaf,
     _is_leaf_nontensor,
     _register_tensor_class,
+    _UNSET,
     is_tensor_collection,
     T,
     TensorDictBase,
@@ -45,6 +46,7 @@ from tensordict.utils import (
     _cache_while_locked,
     _CloudpickleWrapper,
     _erase_cache_first,
+    _GENERIC_NESTED_ERR,
     _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
@@ -1692,6 +1694,31 @@ class PersistentTensorDict(TensorDictBase):
         raise RuntimeError(
             f"Cannot pin memory of a {type(self).__name__}. Call to_tensordict() before making this call."
         )
+
+    def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
+        key_tuple = _unravel_key_to_tuple(key)
+        if not key_tuple:
+            raise KeyError(_GENERIC_NESTED_ERR.format(key))
+        out = self.get(key_tuple, _UNSET)
+        if out is _UNSET:
+            if default is NO_DEFAULT:
+                raise KeyError(
+                    _KEY_ERROR.format(
+                        key_tuple[0] if len(key_tuple) == 1 else key_tuple,
+                        type(self).__name__,
+                        sorted(self.keys(include_nested=len(key_tuple) > 1), key=str),
+                    )
+                )
+            return default
+        if (
+            self.backend == "zarr"
+            and not self.is_locked
+            and isinstance(out, PersistentTensorDict)
+        ):
+            # A zarr group reads from the store: copy it before deleting it
+            out = out.to_tensordict()
+        self.del_(key_tuple)
+        return out
 
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
