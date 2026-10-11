@@ -316,14 +316,34 @@ class TestTensorDictStore:
         assert "nested" in keys
 
     def test_keys_include_nested(self, store_td):
-        """Test keys with include_nested=True."""
+        """keys(include_nested=True) yields the sub-tensordict keys, as TensorDict does."""
         store_td["a"] = torch.randn(10, 2)
-        store_td["nested", "b"] = torch.randn(10, 3)
+        store_td["n", "b"] = torch.randn(10, 3)
+        store_td["n", "m", "c"] = torch.randn(10)
 
-        nested_keys = set(store_td.keys(include_nested=True))
-        assert "a" in nested_keys
-        # The nested key should appear as a tuple
-        assert ("nested", "b") in nested_keys or "nested" in nested_keys
+        keys = ["a", ("n", "b"), ("n", "m", "c"), ("n", "m"), "n"]
+        assert list(store_td.keys(include_nested=True)) == keys
+        assert len(store_td.keys(include_nested=True)) == 5
+        assert list(store_td.to_tensordict().keys(include_nested=True)) == keys
+        # the view of a sub-tensordict
+        assert list(store_td["n"].keys(include_nested=True)) == [
+            "b",
+            ("m", "c"),
+            "m",
+        ]
+        # leaves_only is unchanged
+        assert list(store_td.keys(True, True)) == ["a", ("n", "b"), ("n", "m", "c")]
+        # update() checks that the keys of the source cover the destination
+        dest = TensorDict(
+            {
+                "a": torch.zeros(3, 2),
+                "n": {"b": torch.zeros(3, 3), "m": {"c": torch.zeros(3)}},
+            },
+            batch_size=[3],
+        )
+        dest.update(store_td, update_batch_size=True)
+        assert dest.batch_size == (10,)
+        assert (dest["n", "m", "c"] == store_td["n", "m", "c"]).all()
 
     def test_keys_leaves_only(self, store_td):
         """Test keys with leaves_only=True."""
@@ -1332,6 +1352,35 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    def test_keys_include_nested(self, store_kwargs):
+        """keys(include_nested=True) yields the sub-tensordict keys, as TensorDict does."""
+        td = TensorDict(
+            {
+                "a": torch.zeros(3, 2),
+                "n": {"b": torch.ones(3, 2), "m": {"c": torch.ones(3, 2)}},
+            },
+            batch_size=[3, 2],
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(list(td.unbind(0))), **store_kwargs
+        )
+        try:
+            keys = ["a", ("n", "b"), ("n", "m", "c"), ("n", "m"), "n"]
+            # the store and the view of one of its elements
+            for store in (store_td, store_td[0]):
+                assert list(store.keys(include_nested=True)) == keys
+                assert len(store.keys(include_nested=True)) == 5
+                assert list(store.to_tensordict().keys(include_nested=True)) == keys
+                # leaves_only is unchanged
+                assert list(store.keys(True, True)) == [
+                    "a",
+                    ("n", "b"),
+                    ("n", "m", "c"),
+                ]
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     def test_repr(self, store_stack):
         store_td, _, _ = store_stack
         r = repr(store_td)
@@ -1776,6 +1825,39 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    def test_rename_key_sub_tensordict(self, store_kwargs):
+        tds = [
+            TensorDict(
+                {
+                    "nested": {
+                        "het": torch.randn(3, i + 1),
+                        "d": {"y": torch.randn(3)},
+                    },
+                    "x": torch.randn(3, 2),
+                },
+                batch_size=[3],
+            )
+            for i in range(4)
+        ]
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            store_td.rename_key_("nested", ("n", "m"))
+            keys = {("n", "m", "het"), ("n", "m", "d", "y"), "x"}
+            assert set(store_td.keys(True, True)) == keys
+            for i, td in enumerate(tds):
+                torch.testing.assert_close(
+                    store_td[i]["n", "m", "het"], td["nested", "het"]
+                )
+                torch.testing.assert_close(
+                    store_td[i]["n", "m", "d", "y"], td["nested", "d", "y"]
+                )
+                torch.testing.assert_close(store_td[i]["x"], td["x"])
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     # ---- Write-through view tests ----
 
     def test_view_set_propagates(self, store_stack):
@@ -2048,12 +2130,6 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AssertionError,
-        reason="entry_class returns LazyStackedTensorDictStore for a "
-        "sub-tensordict, but get returns a TensorDict (#2221)",
-    )
     def test_entry_class_sub_tensordict(self, store_kwargs):
         store_td = LazyStackedTensorDictStore.from_lazy_stack(
             self._nested_lazy_td(), **store_kwargs
@@ -2061,6 +2137,7 @@ class TestLazyStackedTensorDictStore:
         try:
             for key in ("n", ("n", "m")):
                 assert store_td.entry_class(key) is type(store_td.get(key))
+                assert store_td[0].entry_class(key) is type(store_td[0].get(key))
         finally:
             store_td.clear_redis()
             store_td.close()
@@ -2093,6 +2170,24 @@ class TestLazyStackedTensorDictStore:
         for chunk, expected_chunk in zip(chunks, expected):
             assert type(chunk) is TensorDict
             assert_allclose_td(chunk, expected_chunk.to_tensordict())
+
+    @pytest.mark.parametrize("dim", [1, -1])
+    def test_chunk_zero_size_dim(self, store_kwargs, dim):
+        # torch.chunk gives `chunks` empty pieces along a zero-size dim
+        lazy_td = lazy_stack(
+            [TensorDict({"a": torch.zeros(0, 4)}, [0]) for _ in range(3)]
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            for chunks in (2, 3):
+                pieces = store_td.chunk(chunks, dim)
+                assert len(pieces) == chunks
+                for piece in pieces:
+                    assert piece.batch_size == torch.Size([3, 0])
+                    assert piece["a"].shape == torch.Size([3, 0, 4])
+        finally:
+            store_td.clear_redis()
+            store_td.close()
 
     @pytest.mark.parametrize("separator", [".", "/"])
     def test_flatten_keys(self, store_kwargs, separator):

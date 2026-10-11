@@ -113,6 +113,52 @@ def _resolve_tensorclass(
     return getattr(mod, class_name)
 
 
+def _iter_registry_keys(paths, include_nested, leaves_only):
+    """Yields the keys of a store from its sorted leaf paths.
+
+    The registry holds the leaf paths only. With ``include_nested=True`` and
+    ``leaves_only=False`` the keys of the nested tensordicts are rebuilt from
+    the path prefixes and yielded after their content, as
+    ``TensorDict.keys(True)`` does. The paths of a nested tensordict are
+    contiguous once sorted, so each prefix is yielded once.
+    """
+    if not include_nested:
+        seen = set()
+        for path in paths:
+            parts = path.split(_KEY_SEP)
+            top_key = parts[0]
+            if top_key in seen:
+                continue
+            seen.add(top_key)
+            if leaves_only and len(parts) > 1:
+                continue
+            yield top_key
+        return
+    if leaves_only:
+        for path in paths:
+            parts = path.split(_KEY_SEP)
+            yield tuple(parts) if len(parts) > 1 else parts[0]
+        return
+    # The parent of the previous path: its prefixes are not yielded yet.
+    open_prefix: tuple[str, ...] = ()
+    for path in paths:
+        parts = tuple(path.split(_KEY_SEP))
+        prefix = parts[:-1]
+        if prefix != open_prefix:
+            # yield the prefixes this path leaves, deepest first
+            common = 0
+            for a, b in zip(open_prefix, prefix):
+                if a != b:
+                    break
+                common += 1
+            for depth in range(len(open_prefix), common, -1):
+                yield open_prefix[:depth] if depth > 1 else open_prefix[0]
+            open_prefix = prefix
+        yield parts if len(parts) > 1 else parts[0]
+    for depth in range(len(open_prefix), 0, -1):
+        yield open_prefix[:depth] if depth > 1 else open_prefix[0]
+
+
 class _StoreTDKeysView(_TensorDictKeysView):
     """Keys view for TensorDictStore backed by a Redis key registry."""
 
@@ -123,7 +169,6 @@ class _StoreTDKeysView(_TensorDictKeysView):
         prefix = td._prefix
         prefix_dot = prefix + _KEY_SEP if prefix else ""
 
-        seen = set()
         # The registry is a set: sort the paths of this level, as
         # to_tensordict() does, so that the keys come in one order. The paths
         # of a nested tensordict are contiguous once sorted, so values() and
@@ -134,33 +179,7 @@ class _StoreTDKeysView(_TensorDictKeysView):
             paths = sorted(k[start:] for k in all_keys if k.startswith(prefix_dot))
         else:
             paths = sorted(all_keys)
-        for relative in paths:
-            parts = relative.split(_KEY_SEP)
-
-            if self.include_nested:
-                # Yield full nested tuple
-                key = tuple(parts) if len(parts) > 1 else parts[0]
-                if self.leaves_only and len(parts) > 1:
-                    # Only yield if this is a leaf (no further nesting)
-                    if key not in seen:
-                        seen.add(key)
-                        yield key
-                elif not self.leaves_only or len(parts) == 1:
-                    if key not in seen:
-                        seen.add(key)
-                        yield key
-            else:
-                # Only yield top-level keys
-                top_key = parts[0]
-                if top_key in seen:
-                    continue
-                seen.add(top_key)
-
-                # Check if this is a leaf or a nested td
-                is_leaf_key = len(parts) == 1
-                if self.leaves_only and not is_leaf_key:
-                    continue
-                yield top_key
+        return _iter_registry_keys(paths, self.include_nested, self.leaves_only)
 
     def __contains__(self, key):
         key = unravel_key(key)
