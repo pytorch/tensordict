@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 import torch
 from tensordict import (
+    is_leaf_nontensor,
     lazy_stack,
     LazyStackedTensorDict,
     NonTensorStack,
@@ -25,9 +26,15 @@ from tensordict import (
     UnbatchedTensor,
 )
 from tensordict._indexing import _getitem_batch_size
+from tensordict._lazy import _LazyStackedTensorDictKeysView
 from tensordict._reductions import _reduce_td
+from tensordict._td import _TensorDictKeysView
 from tensordict._torch_func import _stack as stack_td
-from tensordict.base import _NESTED_TENSORS_AS_LISTS, TensorDictBase
+from tensordict.base import (
+    _default_is_leaf,
+    _NESTED_TENSORS_AS_LISTS,
+    TensorDictBase,
+)
 from tensordict.utils import (
     assert_allclose_td,
     logger as tdlogger,
@@ -418,6 +425,147 @@ class TestLazyStackedTensorDict:
         assert len(keys) == 1
         assert len(list(stack.values(include_nested, leaves_only))) == 1
         assert [key for key, _ in stack.items(include_nested, leaves_only)] == ["a"]
+
+    @staticmethod
+    def _keys_nested_members(case):
+        def member(i):
+            return TensorDict(
+                a=torch.zeros(3, 1 + i),
+                nested=TensorDict(
+                    b=torch.zeros(3),
+                    sub=TensorDict(c=torch.zeros(3, 2 + i), batch_size=[3]),
+                    batch_size=[3],
+                ),
+                batch_size=[3],
+            )
+
+        class MC(TensorClass):
+            x: torch.Tensor
+
+        tds = [member(0), member(1), member(2)]
+        if case == "exclusive":
+            tds[0]["nested", "sub", "d"] = torch.zeros(3)
+            tds[1]["nested", "other"] = TensorDict(e=torch.zeros(3), batch_size=[3])
+        elif case == "non_tensor":
+            for i, td in enumerate(tds):
+                td["nested", "s"] = "a string" if i else "another string"
+        elif case == "tensorclass":
+            for td in tds:
+                td["nested", "tc"] = MC(x=torch.zeros(3), batch_size=[3])
+        elif case == "tensor_and_tensordict":
+            tds[1]["nested", "sub"] = torch.zeros(3)
+        elif case == "batch_dims_differ":
+            tds[1]["nested", "sub"] = TensorDict(c=torch.zeros(3, 2), batch_size=[3, 2])
+        elif case == "devices_differ":
+            tds[1]["nested", "sub"] = TensorDict(
+                c=torch.zeros(3), batch_size=[3], device="cpu"
+            )
+        elif case == "lazy_stack_entry":
+            for td in tds:
+                td["nested", "ls"] = lazy_stack([member(0), member(1)], 1)
+        elif case == "locked_entries":
+            for td in tds:
+                td["nested"].lock_()
+        elif case == "locked":
+            for td in tds:
+                td.lock_()
+        elif case == "list_entries":
+            # Not stored by the public API
+            for td in tds:
+                td["nested"]._tensordict["lst"] = [torch.zeros(3)]
+        return tds
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "tensordicts",
+            "exclusive",
+            "non_tensor",
+            "tensorclass",
+            "tensor_and_tensordict",
+            "batch_dims_differ",
+            "devices_differ",
+            "lazy_stack_entry",
+            "locked_entries",
+            "locked",
+            "list_entries",
+        ],
+    )
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("leaves_only", [False, True])
+    @pytest.mark.parametrize(
+        "is_leaf",
+        [None, is_leaf_nontensor, lambda cls: True],
+        ids=["default", "nontensor", "all"],
+    )
+    def test_keys_nested_members(self, case, stack_dim, leaves_only, is_leaf):
+        # The nested keys view of a lazy stack of TensorDict instances reads the
+        # entries of the members. It must list what _TensorDictKeysView lists
+        # by building the lazy stack of every sub-tensordict, raise the same
+        # errors and call is_leaf with the same classes.
+        stack = lazy_stack(self._keys_nested_members(case), stack_dim)
+
+        def listed(view_type):
+            calls = []
+
+            def recorded_is_leaf(cls):
+                calls.append(cls)
+                return (is_leaf or _default_is_leaf)(cls)
+
+            view = view_type(stack, True, leaves_only, recorded_is_leaf)
+            try:
+                return list(view), len(view), calls
+            except Exception as err:
+                return type(err), str(err), calls
+
+        assert listed(_LazyStackedTensorDictKeysView) == listed(_TensorDictKeysView)
+
+    @pytest.mark.parametrize(
+        "change", ["delete_first", "delete_second", "replace", "add"]
+    )
+    def test_keys_nested_members_changed_while_listed(self, change):
+        # The keys view lists the entries that the members have when it gets
+        # to them, as _TensorDictKeysView does.
+        def listed(view_type):
+            tds = self._keys_nested_members("non_tensor")
+            stack = lazy_stack(tds)
+            keys = []
+            try:
+                for key in view_type(stack, True, False):
+                    keys.append(key)
+                    if key != ("nested", "b"):
+                        continue
+                    if change == "delete_first":
+                        del tds[0]["nested", "s"]
+                    elif change == "delete_second":
+                        del tds[1]["nested", "sub"]
+                    for td in tds:
+                        if change == "replace":
+                            td["nested", "sub"] = TensorDict(
+                                z=torch.zeros(3), batch_size=[3]
+                            )
+                        elif change == "add":
+                            td["nested", "new"] = torch.zeros(3)
+            except Exception as err:
+                return keys, type(err), str(err)
+            return keys
+
+        assert listed(_LazyStackedTensorDictKeysView) == listed(_TensorDictKeysView)
+
+    def test_keys_nested_members_relocked(self):
+        # A lazy stack whose members are locked caches its sub-tensordicts
+        # when _TensorDictKeysView lists them. After the members are changed
+        # while unlocked, the keys view lists the cached ones, as
+        # _TensorDictKeysView does.
+        tds = self._keys_nested_members("tensordicts")
+        stack = lazy_stack([td.lock_() for td in tds])
+        list(_TensorDictKeysView(stack, True, False))
+        for td in tds:
+            td.unlock_()
+            td["nested", "new"] = torch.zeros(3)
+            td.lock_()
+        expected = list(_TensorDictKeysView(stack, True, False))
+        assert list(stack.keys(True)) == expected
 
     @pytest.mark.parametrize("ragged", [False, True])
     def test_arithmetic_ops(self, ragged):
