@@ -32,6 +32,7 @@ from typing import (
     Generic,
     get_args,
     get_origin,
+    get_type_hints,
     Optional,
     Tuple,
     TypeVar,
@@ -4904,6 +4905,93 @@ class TestShadow:
                 setattr(c, name, torch.full((3,), 2.0))
                 assert (getattr(c, name) == 2).all()
                 assert (c.get(name) == 2).all()
+
+
+class TestRuntimeTypeCheckers:
+    # A runtime type-checker that decorates a tensorclass (beartype, typeguard)
+    # checks the methods in its namespace, and skips the functions marked with
+    # __no_type_check__ (typing.no_type_check). Tensorclass marks the methods
+    # that it adds: their annotations name builtins that the class shadows
+    # (bool, int, type...).
+
+    @staticmethod
+    def _functions(value):
+        if isinstance(value, property):
+            return [f for f in (value.fget, value.fset, value.fdel) if f is not None]
+        if isinstance(value, (classmethod, staticmethod)):
+            value = value.__func__
+        return [value] if inspect.isfunction(value) else []
+
+    @pytest.mark.parametrize(
+        "flags", [{}, {"tensor_only": True}, {"shadow": True, "frozen": True}]
+    )
+    @pytest.mark.parametrize("subclass", [False, True])
+    def test_added_methods_are_not_type_checked(self, subclass, flags):
+        if subclass:
+
+            class Data(TensorClass, **flags):
+                x: torch.Tensor
+
+                def scaled(self, k: torch.Tensor) -> torch.Tensor:
+                    return self.x * k
+
+        else:
+
+            @tensorclass(**flags)
+            class Data:
+                x: torch.Tensor
+
+                def scaled(self, k: torch.Tensor) -> torch.Tensor:
+                    return self.x * k
+
+        unmarked = [
+            name
+            for name, value in vars(Data).items()
+            if name not in ("scaled", "__init__")
+            for func in self._functions(value)
+            if func.__annotations__ and not getattr(func, "__no_type_check__", False)
+        ]
+        assert not unmarked
+        # The methods of the class body are checked, and so is __init__, which has
+        # the annotations of the fields.
+        assert not hasattr(Data.scaled, "__no_type_check__")
+        assert not hasattr(Data.__init__, "__no_type_check__")
+        assert get_type_hints(Data.__init__)["x"] is torch.Tensor
+        # Tensorclasses get copies of the TensorDict methods that they reuse, which
+        # pickle by reference as these methods do
+        for name in ("save", "memmap", "load_memmap"):
+            assert not hasattr(getattr(TensorDict, name), "__no_type_check__")
+        assert get_type_hints(TensorDict.save)["copy_existing"] is bool
+        for name in ("save", "__iter__"):
+            method = getattr(Data, name)
+            assert pickle.loads(pickle.dumps(method)) is method
+
+    def test_method_annotations_name_shadowed_builtins(self):
+        # On Python 3.14+, without `from __future__ import annotations` (which this
+        # module has), a method's annotations are evaluated when first read, in the
+        # namespace of the class, where a tensorclass has methods named int and set.
+        namespace = {"__name__": __name__}
+        code = """
+            import torch
+            from tensordict import tensorclass
+
+            @tensorclass
+            class Data:
+                x: torch.Tensor
+
+                def count(self, k: int) -> int:
+                    return k
+
+                def tags(self) -> set[str]:
+                    return {"x"}
+        """
+        exec(
+            compile(textwrap.dedent(code), "<test>", "exec", dont_inherit=True),
+            namespace,
+        )
+        Data = namespace["Data"]
+        assert get_type_hints(Data.count) == {"k": int, "return": int}
+        assert inspect.signature(Data.tags).return_annotation == set[str]
 
 
 class TestDeprecations:
