@@ -423,6 +423,23 @@ def _fails_exclusive_keys(func):
     return newfunc
 
 
+def _fits_stack(
+    stack_batch_size: torch.Size, stack_dim: int, batch_size: torch.Size
+) -> bool:
+    """Whether a member with batch size ``batch_size`` fits in a lazy stack.
+
+    -1 in ``stack_batch_size`` marks a dim where the members of the stack
+    differ: any size fits there.
+    """
+    if len(batch_size) != len(stack_batch_size) - 1:
+        return False
+    for i, size in enumerate(batch_size):
+        stack_size = stack_batch_size[i + (i >= stack_dim)]
+        if size != stack_size and stack_size != -1:
+            return False
+    return True
+
+
 class LazyStackedTensorDict(TensorDictBase):
     """A Lazy stack of TensorDicts.
 
@@ -4009,7 +4026,9 @@ class LazyStackedTensorDict(TensorDictBase):
                     f"Devices differ: stack has device={device}, new value has "
                     f"device={_device}."
                 )
-            if _batch_size != batch_size:
+            if _batch_size != batch_size and not _fits_stack(
+                self._batch_size, self.stack_dim, _batch_size
+            ):
                 raise ValueError(
                     f"Batch sizes in tensordicts differs: stack has "
                     f"batch_size={batch_size}, new_value has batch_size={_batch_size}."
@@ -4068,7 +4087,10 @@ class LazyStackedTensorDict(TensorDictBase):
                     f"Devices differ: stack has device={device}, new value has "
                     f"device={_device}."
                 )
-            if _batch_size != batch_size:
+            if _batch_size != batch_size and not (
+                self.tensordicts
+                and _fits_stack(self._batch_size, self.stack_dim, _batch_size)
+            ):
                 raise ValueError(
                     f"Batch sizes in tensordicts differs: stack has "
                     f"batch_size={batch_size}, new_value has batch_size={_batch_size}."
