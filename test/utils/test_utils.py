@@ -28,6 +28,7 @@ from _utils_internal import get_available_devices
 from tensordict import (
     _deprecation,
     lazy_stack,
+    set_printoptions,
     tensorclass,
     TensorDict,
     UnbatchedTensor,
@@ -997,6 +998,71 @@ def test_parse_tensor_dict_string():
         batch_size=[1],
     )
     assert str(td) == str(parse_tensor_dict_string(str(td)))
+
+
+def test_parse_tensor_dict_string_nested_twice():
+    td = TensorDict(
+        a=torch.zeros(2),
+        b=TensorDict(
+            c=TensorDict(e=torch.zeros(2, 3), batch_size=[2]),
+            d=torch.zeros(2),
+            batch_size=[2],
+        ),
+        batch_size=[2],
+    )
+    out = parse_tensor_dict_string(repr(td))
+    assert set(out.keys(True, True)) == {"a", ("b", "c", "e"), ("b", "d")}
+    assert str(out) == str(td)
+
+
+@pytest.mark.parametrize("key", ["my-key", "a.b", "a b", "x:y"])
+def test_parse_tensor_dict_string_key_characters(key):
+    td = TensorDict(
+        {key: torch.zeros(2), f"{key}-td": TensorDict({key: torch.zeros(3)})}
+    )
+    out = parse_tensor_dict_string(repr(td))
+    assert set(out.keys(True, True)) == {key, (f"{key}-td", key)}
+    assert str(out) == str(td)
+
+
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu:0",
+        pytest.param(
+            "cuda:0",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="CUDA not available"
+            ),
+        ),
+    ],
+)
+def test_parse_tensor_dict_string_device_index(device):
+    text = repr(TensorDict(a=torch.zeros(2), device="cpu"))
+    out = parse_tensor_dict_string(text.replace("device=cpu", f"device={device}"))
+    assert out.device == torch.device(device)
+    assert set(out.keys()) == {"a"}
+
+
+@pytest.mark.parametrize("kind", ["plain", "non_tensor", "nested_non_tensor", "lazy"])
+def test_parse_tensor_dict_string_unparsable_field(kind):
+    if kind == "plain":
+        with set_printoptions(plain=True):
+            text = repr(TensorDict(a=torch.zeros(2, 3), batch_size=[2]))
+    elif kind == "non_tensor":
+        text = repr(TensorDict(a=torch.zeros(2), s="hello", batch_size=[2]))
+    elif kind == "nested_non_tensor":
+        text = repr(TensorDict(a=torch.zeros(2), b=TensorDict(s="hello")))
+    else:
+        lazy = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(2), b=torch.zeros(())),
+                TensorDict(a=torch.zeros(2)),
+            ]
+        )
+        text = repr(TensorDict(x=lazy, batch_size=[2]))
+    with pytest.raises(ValueError, match="Cannot parse the field"):
+        parse_tensor_dict_string(text)
 
 
 def test_get_shared_executor():
