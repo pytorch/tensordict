@@ -2381,6 +2381,8 @@ class TensorDict(TensorDictBase):
         for key in keys:
             key = unravel_key(key)
             if isinstance(key, str):
+                if inplace and self.is_locked and key in _tensordict:
+                    raise RuntimeError(_LOCK_ERROR)
                 _tensordict.pop(key, None)
             else:
                 if keys_to_exclude is None:

@@ -995,6 +995,28 @@ class TestTensorDicts(TestTensorDictsBase):
             td2 = td.exclude("a", inplace=True)
         assert td2 is td
 
+    def test_exclude_inplace_locked(self, td_name, device):
+        if td_name in (
+            "td_h5",
+            "sub_td",
+            "sub_td2",
+            "permute_td",
+            "squeezed_td",
+            "unsqueezed_td",
+        ):
+            pytest.skip(f"{td_name} does not support exclude(inplace=True)")
+        td = getattr(self, td_name)(device)
+        td.lock_()
+        with pytest.raises(RuntimeError, match=re.escape(_LOCK_ERROR)):
+            td.exclude("a", inplace=True)
+        assert "a" in td.keys()
+        assert td.is_locked
+        if td_name != "td_params":
+            # Excluding a missing key changes nothing, so it does not raise.
+            # TensorDictParams raises on any in-place exclude while locked.
+            assert td.exclude("this key is missing", inplace=True) is td
+        td.unlock_()
+
     @pytest.mark.parametrize("nested", [True, False])
     def test_exclude_missing(self, td_name, device, nested):
         if td_name == "td_h5":
