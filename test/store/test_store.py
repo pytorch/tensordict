@@ -2130,12 +2130,6 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AssertionError,
-        reason="entry_class returns LazyStackedTensorDictStore for a "
-        "sub-tensordict, but get returns a TensorDict (#2221)",
-    )
     def test_entry_class_sub_tensordict(self, store_kwargs):
         store_td = LazyStackedTensorDictStore.from_lazy_stack(
             self._nested_lazy_td(), **store_kwargs
@@ -2143,6 +2137,7 @@ class TestLazyStackedTensorDictStore:
         try:
             for key in ("n", ("n", "m")):
                 assert store_td.entry_class(key) is type(store_td.get(key))
+                assert store_td[0].entry_class(key) is type(store_td[0].get(key))
         finally:
             store_td.clear_redis()
             store_td.close()
