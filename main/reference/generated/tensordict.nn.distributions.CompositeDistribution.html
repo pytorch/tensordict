@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev5040+gdb864f026.d20261011)
+                  main (0.14.0.dev5041+g8f98f3f6b.d20261011)
                 </div>
               
             
@@ -474,12 +474,17 @@ to learn how to use this class as part of a model.</p>
 Defaults to <cite>1</cite>.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>include_sum</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – Whether to include the summed entropy in the output TensorDict.
-Defaults to <cite>composite_lp_aggregate()</cite>, which defaults to <cite>False</cite>.</p>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>aggregate_probabilities</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – Deprecated and ignored. A value other than <code class="docutils literal notranslate"><span class="pre">None</span></code>
+emits a <a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#DeprecationWarning" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DeprecationWarning</span></code></a>. Use <a class="reference internal" href="tensordict.nn.set_composite_lp_aggregate.html#tensordict.nn.set_composite_lp_aggregate" title="tensordict.nn.set_composite_lp_aggregate"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_composite_lp_aggregate()</span></code></a>
+instead.</p></li>
+<li><p><strong>include_sum</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – Whether to include the summed entropy in the output TensorDict.
+Defaults to <cite>composite_lp_aggregate()</cite>, which defaults to <cite>False</cite>.</p></li>
+</ul>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>If <cite>aggregate_probabilities</cite> is <cite>True</cite>, returns a single tensor with
-the summed entropies. If <cite>aggregate_probabilities</cite> is <cite>False</cite>, returns a TensorDict with the entropies
+<dd class="field-odd"><p>If <cite>composite_lp_aggregate()</cite> is <cite>True</cite>, returns a single tensor with
+the summed entropies. If <cite>composite_lp_aggregate()</cite> is <cite>False</cite>, returns a TensorDict with the entropies
 of each component distribution.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
