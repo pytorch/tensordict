@@ -539,21 +539,30 @@ class TensorDict(TensorDictBase):
 
     @property
     def _has_non_tensor(self):
-        # Same result as TensorDictBase._has_non_tensor, faster: it checks the
-        # set of value types and only iterates over the values to find the
-        # nested TensorDicts.
+        # Faster than TensorDictBase._has_non_tensor: it checks the set of value
+        # types and asks the nested collections, so that a nested lazy stack
+        # never stacks its leaves (which raises for heterogeneous shapes).
+        # update_ calls it once per member of a lazy stack: the first loop is
+        # the fast path for a tensordict of plain tensors.
         values = self._tensordict.values()
+        for value in values:
+            if type(value) is not Tensor:
+                break
+        else:
+            return False
         for cls in set(map(type, values)):
-            if cls is TensorDict:
-                for value in values:
-                    if type(value) is TensorDict and value._has_non_tensor:
-                        return True
-            elif issubclass(cls, Tensor):
+            if issubclass(cls, Tensor):
                 continue
-            elif _is_non_tensor(cls):
-                return True
-            elif not _pass_through_cls(cls):
-                return super()._has_non_tensor
+            if cls is not TensorDict:
+                if _is_non_tensor(cls):
+                    return True
+                if _pass_through_cls(cls):
+                    continue
+                if not _is_tensor_collection(cls):
+                    return super()._has_non_tensor
+            for value in values:
+                if type(value) is cls and value._has_non_tensor:
+                    return True
         return False
 
     def is_empty(self):

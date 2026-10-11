@@ -781,6 +781,14 @@ class LazyStackedTensorDict(TensorDictBase):
     def _has_names(self):
         return all(td._has_names() for td in self.tensordicts)
 
+    @property
+    def _has_non_tensor(self):
+        # TensorDictBase._has_non_tensor would stack every leaf, which is slow
+        # and raises for heterogeneous shapes. A key of the stack is a key of
+        # every member, so the first member is enough to know that the stack
+        # has no non-tensor entry.
+        return bool(self.tensordicts) and self.tensordicts[0]._has_non_tensor
+
     def _erase_names(self):
         self._td_dim_name = None
         for td in self.tensordicts:
