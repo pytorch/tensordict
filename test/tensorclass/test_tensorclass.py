@@ -60,6 +60,7 @@ from tensordict import (
     tensorclass,
     TensorDict,
     TensorDictBase,
+    UnbatchedTensor,
 )
 from tensordict._lazy import _PermutedTensorDict, _ViewedTensorDict
 from tensordict._td import lazy_stack
@@ -3471,6 +3472,53 @@ class TestTensorClass:
         tc.update_at_(source, slice(2, 4), keys_to_update=["a"])
         assert (tc.a[:, 0] == torch.tensor([0.0, 1.0, 1.0, 1.0])).all()
         assert (tc.b == torch.tensor([0.0, 1.0, 1.0, 0.0])).all()
+
+        # a source without batch dims is written at an int index
+        tc = TC(a=torch.zeros(4, 3), b=torch.zeros(4), batch_size=[4])
+        a, b = tc.a, tc.b
+        source = TC(a=torch.ones(3), b=torch.ones(()), batch_size=[])
+        if source_type == "tensordict":
+            source = source.to_tensordict()
+        elif source_type == "dict":
+            source = source.to_dict()
+        assert tc.update_at_(source, 1) is tc
+        assert tc.a is a and tc.b is b
+        assert (tc.b == torch.tensor([0.0, 1.0, 0.0, 0.0])).all()
+        assert (tc.a == tc.b.unsqueeze(-1)).all()
+
+        # a source with a prefix of the batch dims, at an index on the last dim
+        tc = TC(a=torch.zeros(4, 3), b=torch.zeros(4, 3), batch_size=[4, 3])
+        a, b = tc.a, tc.b
+        source = TC(a=torch.ones(4), b=torch.ones(4), batch_size=[4])
+        if source_type == "tensordict":
+            source = source.to_tensordict()
+        elif source_type == "dict":
+            source = source.to_dict()
+        tc.update_at_(source, (slice(None), 1))
+        assert tc.a is a and tc.b is b
+        assert (tc.a == torch.tensor([0.0, 1.0, 0.0])).all()
+        assert (tc.b == tc.a).all()
+
+        if source_type == "tensorclass":
+            # a source whose values have the batch size of tc still replaces them
+            tc = TC(a=torch.zeros(4, 3), b=torch.zeros(4), batch_size=[4])
+            source = TC(a=torch.ones(4, 3), b=torch.ones(4), batch_size=[])
+            tc.update_at_(source, 1)
+            assert tc.a is source.a and tc.b is source.b
+
+            # an UnbatchedTensor does not have the batch size, but update()
+            # accepts it: the entries are still replaced
+            tc = TC(
+                a=torch.zeros(4, 3),
+                b=UnbatchedTensor(torch.zeros(5)),
+                batch_size=[4],
+            )
+            source = TC(
+                a=torch.ones(4, 3), b=UnbatchedTensor(torch.ones(5)), batch_size=[]
+            )
+            tc.update_at_(source, 1)
+            assert tc.a is source.a
+            assert (tc.b == 1).all()
 
     @pytest.mark.parametrize("source_type", ["tensordict", "dict"])
     def test_update_at_lazy_stack(self, source_type):
