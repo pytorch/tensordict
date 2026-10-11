@@ -273,7 +273,8 @@ operations:
 - Add a key, at any level.
 - Replace an entry: ``td[key] = value``, ``set`` and ``update`` without
   ``inplace=True``.
-- Remove or rename an entry: ``del``, ``pop`` and ``rename_key_``.
+- Remove or rename an entry: ``del``, ``pop``, ``rename_key_``, and
+  ``select`` or ``exclude`` with ``inplace=True``.
 
 For example, a new key in a nested tensordict raises:
 

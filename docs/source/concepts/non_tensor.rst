@@ -294,7 +294,7 @@ Non-tensor data in other operations
   :ref:`compile`.
 - :meth:`~tensordict.TensorDict.share_memory_` can change non-tensor values
   (see :ref:`devices`), and :func:`~tensordict.parse_tensor_dict_string`
-  drops them (see :ref:`printing`).
+  raises a ``ValueError`` for them (see :ref:`printing`).
 
 .. _unbatched-tensor:
 

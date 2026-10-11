@@ -263,8 +263,8 @@ This includes ``.memmap()``, ``.apply()``, ``torch.cat``, ``.unbind()``,
 ``.select()``, ``.exclude()`` and ``.update()``.
 
 The declared fields describe a valid instance. They do not change what the
-``TensorDictBase`` methods do. ``pop``, ``select`` with ``inplace=True`` or
-``rename_key_`` can remove a declared field, and reading it then raises
+``TensorDictBase`` methods do. ``pop``, ``rename_key_``, and ``select`` or
+``exclude`` with ``inplace=True`` can remove a declared field, and reading it then raises
 ``AttributeError``. If the key set must not change, use
 ``TypedTensorDict["frozen"]``.
 
