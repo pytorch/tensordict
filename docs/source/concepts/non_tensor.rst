@@ -11,21 +11,22 @@ that all the elements share. Shape operations leave that tensor as it is.
 Non-tensor data
 ---------------
 
-In this example, each DNA read has a sequence and a quality score. A mask on
-the scores selects the matching sequences too:
+In this example, each DNA read has a sequence and its GC content, the
+fraction of G and C bases. A mask on the GC content selects the matching
+sequences too:
 
     >>> import torch
     >>> from tensordict import TensorDict
     >>> reads = TensorDict(
-    ...     seq=["ACGT", "GATTACA", "TTAGG"],
-    ...     quality=torch.tensor([0.2, 0.9, 0.7]),
+    ...     seq=["ACGT", "GGCC", "TTAG"],
+    ...     gc=torch.tensor([0.50, 1.00, 0.25]),
     ...     batch_size=[3],
     ... )
-    >>> good = reads[reads["quality"] > 0.5]
-    >>> good.batch_size
+    >>> gc_rich = reads[reads["gc"] > 0.4]
+    >>> gc_rich.batch_size
     torch.Size([2])
-    >>> good.get("seq").tolist()
-    ['GATTACA', 'TTAGG']
+    >>> gc_rich.get("seq").tolist()
+    ['ACGT', 'GGCC']
 
 Three classes hold values that are not tensors:
 
@@ -158,7 +159,7 @@ To give each element of the batch its own value, use a
 :class:`~tensordict.NonTensorStack`:
 
     >>> td = TensorDict(
-    ...     seq=NonTensorStack("ACGT", "GATTACA", "TTAGG"),
+    ...     seq=NonTensorStack("ACGT", "GGCC", "TTAG"),
     ...     score=torch.zeros(3),
     ...     batch_size=[3]
     ... )
@@ -167,7 +168,7 @@ To give each element of the batch its own value, use a
         fields={
             score: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
             seq: NonTensorStack(
-                ['ACGT', 'GATTACA', 'TTAGG'],
+                ['ACGT', 'GGCC', 'TTAG'],
                 batch_size=torch.Size([3]),
                 device=None)},
         batch_size=torch.Size([3]),
@@ -194,18 +195,18 @@ the tensordict. :meth:`~tensordict.NonTensorStack.tolist` returns a plain
     >>> values = td["seq"]
     >>> isinstance(values, list)
     True
-    >>> values[1] = "GGCATT"
+    >>> values[1] = "CCGG"
     >>> td[1]["seq"]
-    'GGCATT'
+    'CCGG'
     >>> td.get("seq").tolist()
-    ['ACGT', 'GGCATT', 'TTAGG']
+    ['ACGT', 'CCGG', 'TTAG']
 
 A :class:`~tensordict.NonTensorData` that holds a list does not give one
 value for each element. A non-tensor value can be any Python object, so the
 list is one value for the whole batch:
 
     >>> td = TensorDict(
-    ...     seq=NonTensorData(["ACGT", "GATTACA", "TTAGG"]),
+    ...     seq=NonTensorData(["ACGT", "GGCC", "TTAG"]),
     ...     score=torch.zeros(3),
     ...     batch_size=[3]
     ... )
@@ -213,7 +214,7 @@ list is one value for the whole batch:
     TensorDict(
         fields={
             score: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-            seq: NonTensorData(data=['ACGT', 'GATTACA', 'TTAGG'], batch_size=torch.Size([]), device=None)},
+            seq: NonTensorData(data=['ACGT', 'GGCC', 'TTAG'], batch_size=torch.Size([]), device=None)},
         batch_size=torch.Size([]),
         device=None,
         is_shared=False)
