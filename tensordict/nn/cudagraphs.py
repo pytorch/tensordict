@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import contextlib
 import functools
-import os
 import warnings
 import weakref
 from functools import partial
@@ -18,19 +17,41 @@ from tensordict._nestedkey import NestedKey
 from tensordict.base import is_tensor_collection, TensorDictBase
 from tensordict.nn.common import dispatch
 from tensordict.nn.functional_modules import (
-    _exclude_td_from_pytree,
     PYTREE_REGISTERED_LAZY_TDS,
     PYTREE_REGISTERED_TDS,
 )
-from tensordict.utils import _strtobool, _zip_strict, logger as tensordict_logger
+from tensordict.utils import _zip_strict, logger as tensordict_logger
 from torch import Tensor
 from torch.utils._pytree import (
-    SUPPORTED_NODES,
-    tree_flatten,
-    tree_leaves,
-    tree_map,
+    tree_flatten as _pytree_flatten,
+    tree_leaves as _pytree_leaves,
+    tree_map as _pytree_map,
     tree_unflatten,
 )
+
+# CudaGraphModule copies tensordict inputs with ``copy_``, which matches the
+# entries by key, and returns tensordict outputs with ``clone``: tensordicts are
+# leaves of the trees it builds. They are kept as leaves with ``is_leaf``, so
+# the global pytree registry is left as it is (pytorch/tensordict#2076).
+# ``SUPPORTED_NODES`` is keyed by exact type, hence ``type(x)``.
+_TD_LEAF_TYPES = frozenset(PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS)
+
+
+def _is_td_leaf(x: Any) -> bool:
+    return type(x) in _TD_LEAF_TYPES
+
+
+def _tree_flatten(tree):
+    return _pytree_flatten(tree, is_leaf=_is_td_leaf)
+
+
+def _tree_leaves(tree):
+    return _pytree_leaves(tree, is_leaf=_is_td_leaf)
+
+
+def _tree_map(func, tree):
+    return _pytree_map(func, tree, is_leaf=_is_td_leaf)
+
 
 __all__ = ["CudaGraphModule"]
 
@@ -247,17 +268,6 @@ class CudaGraphModule:
         self._is_tensordict_module = self.in_keys is not None
         self._out_matches_in = None
         self_ref = weakref.proxy(self)
-        for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
-            if tdtype in SUPPORTED_NODES:
-                if not _strtobool(os.environ.get("EXCLUDE_TD_FROM_PYTREE", "0")):
-                    warnings.warn(
-                        f"Tensordict is registered in PyTree. This is incompatible with {self.__class__.__name__}. "
-                        f"Removing TDs from PyTree. To silence this warning, call tensordict.nn.functional_modules._exclude_td_from_pytree().set() "
-                        f"or set the environment variable `EXCLUDE_TD_FROM_PYTREE=1`. "
-                        f"This operation is irreversible."
-                    )
-                _exclude_td_from_pytree().set()
-
         if self._is_tensordict_module:
 
             @dispatch(source=self.in_keys, dest=self.out_keys, auto_batch_size=False)
@@ -362,7 +372,7 @@ class CudaGraphModule:
                             "The input tensordict device must be of the 'cuda' type."
                         )
 
-                    tree_map(self._check_non_tensor, (args, kwargs))
+                    _tree_map(self._check_non_tensor, (args, kwargs))
 
                     torch.cuda.synchronize(self.device)
                     kwargs = kwargs.copy()
@@ -435,7 +445,7 @@ class CudaGraphModule:
                 if self.counter >= self._warmup:
                     srcs, dests = [], []
                     for arg_src, arg_dest in _zip_strict(
-                        tree_leaves((args, kwargs)), self._flat_tree
+                        _tree_leaves((args, kwargs)), self._flat_tree
                     ):
                         self._maybe_copy_onto_(arg_src, arg_dest, srcs, dests)
                     if dests:
@@ -454,7 +464,7 @@ class CudaGraphModule:
                     return result
 
                 if not self._has_cuda or self.counter < self._warmup - 1:
-                    args, kwargs = tree_map(self._clone, (args, kwargs))
+                    args, kwargs = _tree_map(self._clone, (args, kwargs))
                     if self._has_cuda:
                         self._warmup_stream.wait_stream(
                             torch.cuda.current_stream(self.device)
@@ -469,7 +479,7 @@ class CudaGraphModule:
                     return out
                 else:
                     tensordict_logger.info("Registering CUDA graph...")
-                    self._flat_tree, self._tree_spec = tree_flatten((args, kwargs))
+                    self._flat_tree, self._tree_spec = _tree_flatten((args, kwargs))
 
                     self._flat_tree = tuple(
                         self._check_device_and_clone(arg) for arg in self._flat_tree
@@ -484,7 +494,7 @@ class CudaGraphModule:
                     with self._warmup_stream_cm():
                         # Run on fresh copies: a module that writes into a tensordict
                         # input must see the same structure during the capture.
-                        args, kwargs = tree_map(self._clone, (args, kwargs))
+                        args, kwargs = _tree_map(self._clone, (args, kwargs))
                         this_out = self.module(*args, **kwargs)
                     self._capture_stream.wait_stream(self._warmup_stream)
 
@@ -492,12 +502,12 @@ class CudaGraphModule:
                     with torch.cuda.graph(self.graph, stream=self._capture_stream):
                         out = self.module(*self._args, **self._kwargs)
                     tensordict_logger.info("CUDA graph successfully registered.")
-                    self._out, self._out_struct = tree_flatten(out)
+                    self._out, self._out_struct = _tree_flatten(out)
                     self.counter += 1
                     # Check that there is not intersection between the indentity of inputs and outputs, otherwise warn
                     # user.
-                    tree_leaves_input = tree_leaves((self._args, self._kwargs))
-                    tree_leaves_output = tree_leaves(out)
+                    tree_leaves_input = _tree_leaves((self._args, self._kwargs))
+                    tree_leaves_output = _tree_leaves(out)
                     if not isinstance(tree_leaves_output, tuple):
                         tree_leaves_output = (tree_leaves_output,)
                     for inp in tree_leaves_input:
