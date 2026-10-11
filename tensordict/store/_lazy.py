@@ -1977,7 +1977,10 @@ class LazyStackedTensorDictStore(TensorDictBase):
         """Reconnect to an existing LazyStackedTensorDictStore on a server."""
         import redis.asyncio as aioredis
 
-        connect_kwargs = dict(kwargs)
+        # ``client`` and ``cache_metadata`` go to the constructor only.
+        connect_kwargs = {
+            k: v for k, v in kwargs.items() if k not in ("client", "cache_metadata")
+        }
         if unix_socket_path is not None:
             connect_kwargs["unix_socket_path"] = unix_socket_path
         else:
@@ -1985,7 +1988,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
             connect_kwargs["port"] = port
         connect_kwargs["db"] = db
 
-        loop = asyncio.new_event_loop()
         client = aioredis.Redis(**connect_kwargs)
 
         async def _read_meta():
@@ -1999,10 +2001,13 @@ class LazyStackedTensorDictStore(TensorDictBase):
             await client.aclose()
             return results
 
-        raw_type, raw_count, raw_sd, raw_ibs, raw_dev = loop.run_until_complete(
-            _read_meta()
-        )
-        loop.close()
+        loop = asyncio.new_event_loop()
+        try:
+            raw_type, raw_count, raw_sd, raw_ibs, raw_dev = loop.run_until_complete(
+                _read_meta()
+            )
+        finally:
+            loop.close()
 
         if raw_type is None:
             raise KeyError(f"No LazyStackedTensorDictStore with td_id={td_id!r} found.")
