@@ -398,7 +398,8 @@ Locking
 does not accept new keys, and you cannot delete or replace an entry. You can
 still write new values into the existing tensors with
 :meth:`~tensordict.TensorDict.set_` and :meth:`~tensordict.TensorDict.update_`.
-These methods copy the values into the same storage:
+These methods copy the values into the same storage. They raise for a
+non-tensor entry (`#2288 <https://github.com/pytorch/tensordict/issues/2288>`_):
 
   >>> data = TensorDict(pos=torch.zeros(3), batch_size=[3]).lock_()
   >>> data["vel"] = torch.ones(3)

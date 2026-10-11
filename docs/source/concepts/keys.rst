@@ -286,7 +286,9 @@ For example, a new key in a nested tensordict raises:
   RuntimeError: Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method and make sure the key is present.
 
 These operations write into the existing tensors, so they work on a locked
-tensordict:
+tensordict. For a non-tensor entry, ``set_`` and ``update_`` raise on a
+locked tensordict
+(`#2288 <https://github.com/pytorch/tensordict/issues/2288>`_):
 
 - ``set_`` and ``update_``.
 - ``set(..., inplace=True)`` and ``update(..., inplace=True)``, if the key

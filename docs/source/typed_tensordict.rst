@@ -182,8 +182,9 @@ Class options
 
 ``"frozen"``
   Locks the tensordict after construction. Attribute assignment and new keys
-  raise ``RuntimeError``. In-place writes such as ``set_()`` or
-  ``state.x.add_(1)`` still work, so the instance is not read-only. This is
+  raise ``RuntimeError``. In-place writes to tensor fields, such as
+  ``set_()`` or ``state.x.add_(1)``, still work, so the instance is not
+  read-only. This is
   different from ``TensorClass["frozen"]``, where attribute assignment raises
   ``dataclasses.FrozenInstanceError``.
 
