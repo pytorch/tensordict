@@ -37,7 +37,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="TensorClass" href="generated/tensordict.TensorClass.html" />
-    <link rel="prev" title="rand_one_hot" href="generated/tensordict.nn.rand_one_hot.html" />
+    <link rel="prev" title="TDGraphModule" href="generated/tensordict.prototype.fx.TDGraphModule.html" />
   <!-- Google Analytics -->
   
     <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev5047+ga231983c4.d20261011)
+                  main (0.14.0.dev5048+gecbc65c65.d20261011)
                 </div>
               
             
@@ -811,20 +811,29 @@ etc.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>(data[, _metadata, ...])</p></td>
 <td><p>A carrier for non-tensordict data.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.MetaData.html#tensordict.MetaData" title="tensordict.MetaData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MetaData</span></code></a>(data[, _metadata, _is_non_tensor, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.NonTensorDataBase.html#tensordict.NonTensorDataBase" title="tensordict.NonTensorDataBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NonTensorDataBase</span></code></a>(data[, _metadata, ...])</p></td>
+<td><p>A base class to carry non-tensor data.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.MetaData.html#tensordict.MetaData" title="tensordict.MetaData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MetaData</span></code></a>(data[, _metadata, _is_non_tensor, ...])</p></td>
 <td><p>A non-tensor, metadata carrier class for <cite>TensorDict</cite>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A thin wrapper around LazyStackedTensorDict to make stack on non-tensor data easily recognizable.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.TensorAttrs.html#tensordict.TensorAttrs" title="tensordict.TensorAttrs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorAttrs</span></code></a>([tgt_device, tgt_dtype, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.TensorAttrs.html#tensordict.TensorAttrs" title="tensordict.TensorAttrs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorAttrs</span></code></a>([tgt_device, tgt_dtype, ...])</p></td>
 <td><p>Per-leaf carrier describing a tensor's attributes — device, dtype, and shape.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor" title="tensordict.UnbatchedTensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code></a>(data[, batch_size])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor" title="tensordict.UnbatchedTensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code></a>(data[, batch_size])</p></td>
 <td><p>A torch.Tensor subclass whose shape is ignored during batch operations on a TensorDict.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.from_dataclass.html#tensordict.from_dataclass" title="tensordict.from_dataclass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_dataclass</span></code></a>(obj, *[, dest_cls, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.from_dataclass.html#tensordict.from_dataclass" title="tensordict.from_dataclass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_dataclass</span></code></a>(obj, *[, dest_cls, ...])</p></td>
 <td><p>Converts a dataclass instance or a type into a tensorclass instance or type, respectively.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.is_tensorclass.html#tensordict.is_tensorclass" title="tensordict.is_tensorclass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_tensorclass</span></code></a>(obj)</p></td>
+<td><p>Returns True if obj is either a tensorclass or an instance of a tensorclass.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.is_non_tensor.html#tensordict.is_non_tensor" title="tensordict.is_non_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_non_tensor</span></code></a>(data)</p></td>
+<td><p>Checks if an item is a non-tensor.</p></td>
 </tr>
 </tbody>
 </table>
@@ -842,7 +851,7 @@ etc.</p>
         <a href="generated/tensordict.TensorClass.html" class="btn btn-neutral float-right" title="TensorClass" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="generated/tensordict.nn.rand_one_hot.html" class="btn btn-neutral" title="rand_one_hot" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="generated/tensordict.prototype.fx.TDGraphModule.html" class="btn btn-neutral" title="TDGraphModule" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

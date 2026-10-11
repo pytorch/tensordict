@@ -1,0 +1,9 @@
+﻿.. currentmodule:: tensordict.utils
+
+
+timeit
+======
+
+.. autoclass:: timeit
+    :members:
+    :inherited-members:

@@ -1,0 +1,7 @@
+﻿.. currentmodule:: tensordict
+
+
+is_tensorclass
+==============
+
+.. autofunction:: is_tensorclass

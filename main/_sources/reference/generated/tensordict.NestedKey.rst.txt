@@ -1,0 +1,9 @@
+﻿.. currentmodule:: tensordict
+
+
+NestedKey
+=========
+
+.. autoclass:: NestedKey
+    :members:
+    :inherited-members:

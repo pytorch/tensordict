@@ -1,0 +1,7 @@
+﻿.. currentmodule:: tensordict
+
+
+unravel_key
+===========
+
+.. autofunction:: unravel_key

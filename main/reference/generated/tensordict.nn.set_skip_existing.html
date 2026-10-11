@@ -37,7 +37,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="skip_existing" href="tensordict.nn.skip_existing.html" />
-    <link rel="prev" title="biased_softplus" href="tensordict.nn.biased_softplus.html" />
+    <link rel="prev" title="expln" href="tensordict.nn.utils.expln.html" />
   <!-- Google Analytics -->
   
     <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev5047+ga231983c4.d20261011)
+                  main (0.14.0.dev5048+gecbc65c65.d20261011)
                 </div>
               
             
@@ -365,7 +365,7 @@
 <h1>set_skip_existing<a class="headerlink" href="#set-skip-existing" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.nn.set_skip_existing">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">set_skip_existing</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><span class="pre">tensordict._nestedkey.NestedKey</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">in_key_attr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'in_keys'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_key_attr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'out_keys'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.set_skip_existing" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">set_skip_existing</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict._nestedkey.NestedKey"><span class="pre">tensordict._nestedkey.NestedKey</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">in_key_attr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'in_keys'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_key_attr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'out_keys'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.set_skip_existing" title="Permalink to this definition">¶</a></dt>
 <dd><p>A context manager for skipping existing nodes in a TensorDict graph.</p>
 <p>When used as a context manager, it will set the <cite>skip_existing()</cite> value
 to the <code class="docutils literal notranslate"><span class="pre">mode</span></code> indicated, leaving the user able to code up methods that
@@ -500,7 +500,7 @@ deactivated whenever the output keys are also the input keys:</p>
         <a href="tensordict.nn.skip_existing.html" class="btn btn-neutral float-right" title="skip_existing" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="tensordict.nn.biased_softplus.html" class="btn btn-neutral" title="biased_softplus" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="tensordict.nn.utils.expln.html" class="btn btn-neutral" title="expln" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

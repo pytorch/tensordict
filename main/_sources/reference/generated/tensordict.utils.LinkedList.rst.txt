@@ -1,0 +1,9 @@
+﻿.. currentmodule:: tensordict.utils
+
+
+LinkedList
+==========
+
+.. autoclass:: LinkedList
+    :members:
+    :inherited-members:

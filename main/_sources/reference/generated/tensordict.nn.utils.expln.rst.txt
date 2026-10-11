@@ -1,0 +1,7 @@
+﻿.. currentmodule:: tensordict.nn.utils
+
+
+expln
+=====
+
+.. autofunction:: expln

@@ -1,0 +1,9 @@
+﻿.. currentmodule:: tensordict.utils
+
+
+Buffer
+======
+
+.. autoclass:: Buffer
+    :members:
+    :inherited-members:

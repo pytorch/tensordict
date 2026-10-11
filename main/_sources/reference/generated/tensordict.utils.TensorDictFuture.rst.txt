@@ -1,0 +1,9 @@
+﻿.. currentmodule:: tensordict.utils
+
+
+TensorDictFuture
+================
+
+.. autoclass:: TensorDictFuture
+    :members:
+    :inherited-members:

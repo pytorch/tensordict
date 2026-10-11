@@ -1,0 +1,7 @@
+﻿.. currentmodule:: tensordict.store
+
+
+STORE_BACKENDS
+==============
+
+.. autodata:: STORE_BACKENDS

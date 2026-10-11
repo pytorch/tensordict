@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev5047+ga231983c4.d20261011)
+                  main (0.14.0.dev5048+gecbc65c65.d20261011)
                 </div>
               
             
@@ -393,14 +393,14 @@ a deterministic mapping function.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>in_keys</strong> (<em>NestedKey</em><em> | </em><em>List</em><em>[</em><em>NestedKey</em><em>] </em><em>| </em><em>Dict</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>NestedKey</em><em>]</em>) – key(s) that will be read from the input TensorDict
+<li><p><strong>in_keys</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em> | </em><em>List</em><em>[</em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em>] </em><em>| </em><em>Dict</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em>]</em>) – key(s) that will be read from the input TensorDict
 and used to build the distribution.
 Importantly, if it’s a list of NestedKey or a NestedKey, the leaf (last element) of those keys must match the keywords used by
 the distribution class of interest, e.g. <code class="docutils literal notranslate"><span class="pre">&quot;loc&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;scale&quot;</span></code> for
 the <code class="xref py py-class docutils literal notranslate"><span class="pre">Normal</span></code> distribution and similar.
 If in_keys is a dictionary, the keys are the keys of the distribution and the values are the keys in the
 tensordict that will get match to the corresponding distribution keys.</p></li>
-<li><p><strong>out_keys</strong> (<em>NestedKey</em><em> | </em><em>List</em><em>[</em><em>NestedKey</em><em>] </em><em>| </em><em>None</em>) – key(s) where the sampled values will be written.
+<li><p><strong>out_keys</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em> | </em><em>List</em><em>[</em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em>] </em><em>| </em><em>None</em>) – key(s) where the sampled values will be written.
 Importantly, if these keys are found in the input TensorDict, the sampling step will be skipped.</p></li>
 </ul>
 </dd>
@@ -459,14 +459,14 @@ in a <a class="reference internal" href="tensordict.TensorDictParams.html#tensor
 If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the log-probability of the
 distribution sample will be written in the tensordict with the key
 <cite>log_prob_key</cite>. Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>log_prob_keys</strong> (<em>List</em><em>[</em><em>NestedKey</em><em>]</em><em>, </em><em>optional</em>) – <p>keys where to write the log_prob if <code class="docutils literal notranslate"><span class="pre">return_log_prob=True</span></code>.
+<li><p><strong>log_prob_keys</strong> (<em>List</em><em>[</em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em>]</em><em>, </em><em>optional</em>) – <p>keys where to write the log_prob if <code class="docutils literal notranslate"><span class="pre">return_log_prob=True</span></code>.
 Defaults to <cite>‘&lt;sample_key_name&gt;_log_prob’</cite>, where <cite>&lt;sample_key_name&gt;</cite> is each of the <code class="xref py py-attr docutils literal notranslate"><span class="pre">out_keys</span></code>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>This is only available when <a class="reference internal" href="tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate" title="tensordict.nn.composite_lp_aggregate"><code class="xref py py-func docutils literal notranslate"><span class="pre">composite_lp_aggregate()</span></code></a> is set to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </div>
 </p></li>
-<li><p><strong>log_prob_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – <p>key where to write the log_prob if <code class="docutils literal notranslate"><span class="pre">return_log_prob=True</span></code>.
+<li><p><strong>log_prob_key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em>, </em><em>optional</em>) – <p>key where to write the log_prob if <code class="docutils literal notranslate"><span class="pre">return_log_prob=True</span></code>.
 Defaults to <cite>‘sample_log_prob’</cite> when <a class="reference internal" href="tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate" title="tensordict.nn.composite_lp_aggregate"><code class="xref py py-func docutils literal notranslate"><span class="pre">composite_lp_aggregate()</span></code></a> is set to <cite>True</cite>
 or <cite>‘&lt;sample_key_name&gt;_log_prob’</cite> otherwise.</p>
 <div class="admonition note">
@@ -484,7 +484,7 @@ removed in TensorDict 0.17. Do not pass it.</p>
 <li><p><strong>n_empirical_estimate</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.int" title="tensordict.LazyStackedTensorDict.int"><em>int</em></a><em>, </em><em>optional</em>) – keyword-only argument.
 Number of samples to compute the empirical
 mean when it is not available. Defaults to 1000.</p></li>
-<li><p><strong>generator</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.14)"><em>torch.Generator</em></a><em>, </em><a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.int" title="tensordict.LazyStackedTensorDict.int"><em>int</em></a><em>, </em><em>NestedKey</em><em>, or </em><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><em>None</em></a><em>, </em><em>optional</em>) – <p>keyword-only argument.
+<li><p><strong>generator</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.14)"><em>torch.Generator</em></a><em>, </em><a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.int" title="tensordict.LazyStackedTensorDict.int"><em>int</em></a><em>, </em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em>, or </em><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><em>None</em></a><em>, </em><em>optional</em>) – <p>keyword-only argument.
 Controls the random number generator used when sampling from the distribution
 (relevant only for <code class="docutils literal notranslate"><span class="pre">RANDOM</span></code> and <code class="docutils literal notranslate"><span class="pre">MEAN</span></code> interaction types).</p>
 <ul>
@@ -607,13 +607,13 @@ approach portable across all distributions (including reparameterized
 
 <dl class="py property">
 <dt class="sig sig-object py" id="tensordict.nn.ProbabilisticTensorDictModule.dist_params_keys">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">dist_params_keys</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.15)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.dist_params_keys" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">dist_params_keys</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.15)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict._nestedkey.NestedKey"><span class="pre">NestedKey</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.dist_params_keys" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns all the keys pointing at the distribution params.</p>
 </dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="tensordict.nn.ProbabilisticTensorDictModule.dist_sample_keys">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">dist_sample_keys</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.15)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.dist_sample_keys" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">dist_sample_keys</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.15)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict._nestedkey.NestedKey"><span class="pre">NestedKey</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.dist_sample_keys" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns all the keys pointing at the distribution samples.</p>
 </dd></dl>
 

@@ -1,0 +1,7 @@
+﻿.. currentmodule:: tensordict.utils
+
+
+IndexType
+=========
+
+.. autodata:: IndexType

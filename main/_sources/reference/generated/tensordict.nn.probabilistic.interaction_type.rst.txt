@@ -1,0 +1,7 @@
+﻿.. currentmodule:: tensordict.nn.probabilistic
+
+
+interaction_type
+================
+
+.. autofunction:: interaction_type

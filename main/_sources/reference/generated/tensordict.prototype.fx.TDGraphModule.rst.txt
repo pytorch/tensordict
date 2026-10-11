@@ -1,0 +1,8 @@
+﻿.. currentmodule:: tensordict.prototype.fx
+
+
+TDGraphModule
+=============
+
+.. autoclass:: TDGraphModule
+    :members:

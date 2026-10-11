@@ -1,0 +1,7 @@
+﻿.. currentmodule:: tensordict
+
+
+is_non_tensor
+=============
+
+.. autofunction:: is_non_tensor

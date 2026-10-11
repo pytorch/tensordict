@@ -1,0 +1,7 @@
+﻿.. currentmodule:: tensordict.utils
+
+
+DeviceType
+==========
+
+.. autodata:: DeviceType

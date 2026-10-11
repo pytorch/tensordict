@@ -37,7 +37,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="TensorDictModuleBase" href="generated/tensordict.nn.TensorDictModuleBase.html" />
-    <link rel="prev" title="list_to_stack" href="generated/tensordict.list_to_stack.html" />
+    <link rel="prev" title="unravel_key_list" href="generated/tensordict.unravel_key_list.html" />
   <!-- Google Analytics -->
   
     <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev5047+ga231983c4.d20261011)
+                  main (0.14.0.dev5048+gecbc65c65.d20261011)
                 </div>
               
             
@@ -639,13 +639,16 @@ by default, the result of the sequence) only see those outputs, not the converte
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type" title="tensordict.nn.set_interaction_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_interaction_type</span></code></a>([type])</p></td>
 <td><p>Sets all ProbabilisticTDModules sampling to the desired type.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.set_composite_lp_aggregate.html#tensordict.nn.set_composite_lp_aggregate" title="tensordict.nn.set_composite_lp_aggregate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_composite_lp_aggregate</span></code></a>([mode])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.probabilistic.interaction_type.html#tensordict.nn.probabilistic.interaction_type" title="tensordict.nn.probabilistic.interaction_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">probabilistic.interaction_type</span></code></a>()</p></td>
+<td><p>Returns the current sampling type.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.set_composite_lp_aggregate.html#tensordict.nn.set_composite_lp_aggregate" title="tensordict.nn.set_composite_lp_aggregate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_composite_lp_aggregate</span></code></a>([mode])</p></td>
 <td><p>Controls whether <a class="reference internal" href="generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution" title="tensordict.nn.distributions.CompositeDistribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code></a> log-probabilities and entropies will be aggregated in a single tensor.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate" title="tensordict.nn.composite_lp_aggregate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">composite_lp_aggregate</span></code></a>([nowarn])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate" title="tensordict.nn.composite_lp_aggregate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">composite_lp_aggregate</span></code></a>([nowarn])</p></td>
 <td><p>Returns whether a <a class="reference internal" href="generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution" title="tensordict.nn.distributions.CompositeDistribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code></a> log-probabilities and entropies will be aggregated in a single tensor.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.as_tensordict_module.html#tensordict.nn.as_tensordict_module" title="tensordict.nn.as_tensordict_module"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_tensordict_module</span></code></a>(*, in_keys, out_keys)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.as_tensordict_module.html#tensordict.nn.as_tensordict_module" title="tensordict.nn.as_tensordict_module"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_tensordict_module</span></code></a>(*, in_keys, out_keys)</p></td>
 <td><p>A decorator that converts a function into a TensorDictModule.</p></td>
 </tr>
 </tbody>
@@ -712,6 +715,9 @@ See <a class="reference internal" href="../compile.html#compile"><span class="st
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.distributions.TruncatedNormal.html#tensordict.nn.distributions.TruncatedNormal" title="tensordict.nn.distributions.TruncatedNormal"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TruncatedNormal</span></code></a>(loc, scale, a, b[, ...])</p></td>
 <td><p>Truncated Normal distribution.</p></td>
 </tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal.html#tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal" title="tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal"><code class="xref py py-obj docutils literal notranslate"><span class="pre">truncated_normal.TruncatedStandardNormal</span></code></a>(a, b)</p></td>
+<td><p>Truncated Standard Normal distribution.</p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -731,20 +737,39 @@ See <a class="reference internal" href="../compile.html#compile"><span class="st
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.biased_softplus.html#tensordict.nn.biased_softplus" title="tensordict.nn.biased_softplus"><code class="xref py py-obj docutils literal notranslate"><span class="pre">biased_softplus</span></code></a>(bias[, min_val])</p></td>
 <td><p>A biased softplus module.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.set_skip_existing.html#tensordict.nn.set_skip_existing" title="tensordict.nn.set_skip_existing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_skip_existing</span></code></a>([mode, in_key_attr, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.utils.expln.html#tensordict.nn.utils.expln" title="tensordict.nn.utils.expln"><code class="xref py py-obj docutils literal notranslate"><span class="pre">utils.expln</span></code></a>(x)</p></td>
+<td><p>A smooth, continuous positive mapping presented in &quot;State-Dependent Exploration for Policy Gradient Methods&quot;.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.set_skip_existing.html#tensordict.nn.set_skip_existing" title="tensordict.nn.set_skip_existing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_skip_existing</span></code></a>([mode, in_key_attr, ...])</p></td>
 <td><p>A context manager for skipping existing nodes in a TensorDict graph.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.skip_existing.html#tensordict.nn.skip_existing" title="tensordict.nn.skip_existing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">skip_existing</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.skip_existing.html#tensordict.nn.skip_existing" title="tensordict.nn.skip_existing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">skip_existing</span></code></a>()</p></td>
 <td><p>Returns which existing entries should not be re-computed by a module.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.add_custom_mapping.html#tensordict.nn.add_custom_mapping" title="tensordict.nn.add_custom_mapping"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_custom_mapping</span></code></a>(name, mapping)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.add_custom_mapping.html#tensordict.nn.add_custom_mapping" title="tensordict.nn.add_custom_mapping"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_custom_mapping</span></code></a>(name, mapping)</p></td>
 <td><p>Adds a custom mapping to be used in mapping classes.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.mappings.html#tensordict.nn.mappings" title="tensordict.nn.mappings"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mappings</span></code></a>(key)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.mappings.html#tensordict.nn.mappings" title="tensordict.nn.mappings"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mappings</span></code></a>(key)</p></td>
 <td><p>Given an input string, returns a surjective function f(x): R -&gt; R^+.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.rand_one_hot.html#tensordict.nn.rand_one_hot" title="tensordict.nn.rand_one_hot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rand_one_hot</span></code></a>(values[, do_softmax])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.rand_one_hot.html#tensordict.nn.rand_one_hot" title="tensordict.nn.rand_one_hot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rand_one_hot</span></code></a>(values[, do_softmax])</p></td>
 <td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="fx-tracing">
+<h2>FX tracing<a class="headerlink" href="#fx-tracing" title="Permalink to this heading">¶</a></h2>
+<p><a class="reference internal" href="generated/tensordict.prototype.fx.symbolic_trace.html#tensordict.prototype.fx.symbolic_trace" title="tensordict.prototype.fx.symbolic_trace"><code class="xref py py-func docutils literal notranslate"><span class="pre">symbolic_trace()</span></code></a> traces a <a class="reference internal" href="generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> into
+a <a class="reference internal" href="generated/tensordict.prototype.fx.TDGraphModule.html#tensordict.prototype.fx.TDGraphModule" title="tensordict.prototype.fx.TDGraphModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TDGraphModule</span></code></a>. This API is a prototype; see <a class="reference internal" href="../fx.html"><span class="doc">Tracing TensorDictModule</span></a> for an
+example.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.prototype.fx.symbolic_trace.html#tensordict.prototype.fx.symbolic_trace" title="tensordict.prototype.fx.symbolic_trace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">symbolic_trace</span></code></a>(td_module)</p></td>
+<td><p>A symbolic tracer for TensorDictModule.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.prototype.fx.TDGraphModule.html#tensordict.prototype.fx.TDGraphModule" title="tensordict.prototype.fx.TDGraphModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TDGraphModule</span></code></a>(graph_module, out_keys)</p></td>
+<td><p>A graph module for TensorDict.</p></td>
 </tr>
 </tbody>
 </table>
@@ -762,7 +787,7 @@ See <a class="reference internal" href="../compile.html#compile"><span class="st
         <a href="generated/tensordict.nn.TensorDictModuleBase.html" class="btn btn-neutral float-right" title="TensorDictModuleBase" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="generated/tensordict.list_to_stack.html" class="btn btn-neutral" title="list_to_stack" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="generated/tensordict.unravel_key_list.html" class="btn btn-neutral" title="unravel_key_list" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -800,6 +825,7 @@ See <a class="reference internal" href="../compile.html#compile"><span class="st
 <li><a class="reference internal" href="#compiling-tensordictmodules">Compiling TensorDictModules</a></li>
 <li><a class="reference internal" href="#distributions">Distributions</a></li>
 <li><a class="reference internal" href="#utils">Utils</a></li>
+<li><a class="reference internal" href="#fx-tracing">FX tracing</a></li>
 </ul>
 </li>
 </ul>

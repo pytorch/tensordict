@@ -1,0 +1,7 @@
+﻿.. currentmodule:: tensordict.utils
+
+
+print_directory_tree
+====================
+
+.. autofunction:: print_directory_tree

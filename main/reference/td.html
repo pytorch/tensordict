@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev5047+ga231983c4.d20261011)
+                  main (0.14.0.dev5048+gecbc65c65.d20261011)
                 </div>
               
             
@@ -383,6 +383,9 @@ regular pytorch tensors.</p>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.get_defaults_to_none.html#tensordict.get_defaults_to_none" title="tensordict.get_defaults_to_none"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_defaults_to_none</span></code></a>([set_to_none])</p></td>
 <td><p>Returns the status of <cite>get</cite> default value.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.set_get_defaults_to_none.html#tensordict.set_get_defaults_to_none" title="tensordict.set_get_defaults_to_none"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_get_defaults_to_none</span></code></a>([set_to_none])</p></td>
+<td><p>Sets the default of <cite>get</cite> to <cite>None</cite> and silences deprecation warnings during calls to <cite>get</cite> that result in a <cite>KeyError</cite>.</p></td>
 </tr>
 </tbody>
 </table>
@@ -559,6 +562,9 @@ See <a class="reference internal" href="../storage.html#storage"><span class="st
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.store.LazyStackedTensorDictStore.html#tensordict.store.LazyStackedTensorDictStore" title="tensordict.store.LazyStackedTensorDictStore"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LazyStackedTensorDictStore</span></code></a>(*[, backend, ...])</p></td>
 <td><p>A LazyStackedTensorDict backed by a key-value store.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.store.STORE_BACKENDS.html#tensordict.store.STORE_BACKENDS" title="tensordict.store.STORE_BACKENDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">STORE_BACKENDS</span></code></a></p></td>
+<td><p>alias of <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.15)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Literal</span></code></a>['redis', 'dragonfly']</p></td>
 </tr>
 </tbody>
 </table>
@@ -759,6 +765,36 @@ See <a class="reference internal" href="../distributed.html#distributed"><span c
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.utils.remove_duplicates.html#tensordict.utils.remove_duplicates" title="tensordict.utils.remove_duplicates"><code class="xref py py-obj docutils literal notranslate"><span class="pre">utils.remove_duplicates</span></code></a>(input, key[, dim, ...])</p></td>
 <td><p>Removes indices duplicated in <cite>key</cite> along the specified dimension.</p></td>
 </tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.utils.Buffer.html#tensordict.utils.Buffer" title="tensordict.utils.Buffer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">utils.Buffer</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.utils.DeviceType.html#tensordict.utils.DeviceType" title="tensordict.utils.DeviceType"><code class="xref py py-obj docutils literal notranslate"><span class="pre">utils.DeviceType</span></code></a></p></td>
+<td><p>alias of <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.15)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Union</span></code></a>[<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">device</span></code></a>, <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>, <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a>]</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.utils.IndexType.html#tensordict.utils.IndexType" title="tensordict.utils.IndexType"><code class="xref py py-obj docutils literal notranslate"><span class="pre">utils.IndexType</span></code></a></p></td>
+<td><p>alias of <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.15)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Union</span></code></a>[<a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a>, <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a>, <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#slice" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">slice</span></code></a>, <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>, <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Any</span></code></a>], <code class="xref py py-class docutils literal notranslate"><span class="pre">Tuple</span></code>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Any</span></code></a>, ...]]</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.utils.LinkedList.html#tensordict.utils.LinkedList" title="tensordict.utils.LinkedList"><code class="xref py py-obj docutils literal notranslate"><span class="pre">utils.LinkedList</span></code></a>(*args, td, **kwargs)</p></td>
+<td><p>A thin wrapper around a list that automatically updates a tensordict when the list is modified.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.utils.TensorDictFuture.html#tensordict.utils.TensorDictFuture" title="tensordict.utils.TensorDictFuture"><code class="xref py py-obj docutils literal notranslate"><span class="pre">utils.TensorDictFuture</span></code></a>(futures, resulting_td)</p></td>
+<td><p>A custom future class for TensorDict multithreaded operations.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.utils.print_directory_tree.html#tensordict.utils.print_directory_tree" title="tensordict.utils.print_directory_tree"><code class="xref py py-obj docutils literal notranslate"><span class="pre">utils.print_directory_tree</span></code></a>(path[, indent, ...])</p></td>
+<td><p>Prints the directory tree starting from the specified path.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.utils.timeit.html#tensordict.utils.timeit" title="tensordict.utils.timeit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">utils.timeit</span></code></a>(name)</p></td>
+<td><p>A dirty but easy to use decorator for profiling code.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NestedKey</span></code></a>()</p></td>
+<td><p>An abstract class for nested keys.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.assert_allclose_td.html#tensordict.assert_allclose_td" title="tensordict.assert_allclose_td"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assert_allclose_td</span></code></a>(actual, expected[, rtol, ...])</p></td>
+<td><p>Asserts that two tensordicts, <cite>actual</cite> and <cite>expected</cite>, are element-wise equal within a tolerance for all entries.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.assert_close.html#tensordict.assert_close" title="tensordict.assert_close"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assert_close</span></code></a>(actual, expected[, rtol, atol, ...])</p></td>
+<td><p>Asserts that two tensordicts, <cite>actual</cite> and <cite>expected</cite>, are element-wise equal within a tolerance for all entries.</p></td>
+</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.capture_non_tensor_stack.html#tensordict.capture_non_tensor_stack" title="tensordict.capture_non_tensor_stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">capture_non_tensor_stack</span></code></a>([allow_none])</p></td>
 <td><p>Get the current setting for capturing non-tensor stacks.</p></td>
 </tr>
@@ -804,8 +840,40 @@ See <a class="reference internal" href="../distributed.html#distributed"><span c
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.list_to_stack.html#tensordict.list_to_stack" title="tensordict.list_to_stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">list_to_stack</span></code></a>([allow_none])</p></td>
 <td><p>Retrieves the current setting for list-to-stack conversion in TensorDict.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.unravel_key.html#tensordict.unravel_key" title="tensordict.unravel_key"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unravel_key</span></code></a>(key)</p></td>
+<td><p>Unravel a nested key.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.unravel_key_list.html#tensordict.unravel_key_list" title="tensordict.unravel_key_list"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unravel_key_list</span></code></a>(keys)</p></td>
+<td><p>Unravels a list of keys.</p></td>
+</tr>
 </tbody>
 </table>
+<dl class="py data">
+<dt class="sig sig-object py" id="tensordict.base.NO_DEFAULT">
+<span class="sig-prename descclassname"><span class="pre">tensordict.base.</span></span><span class="sig-name descname"><span class="pre">NO_DEFAULT</span></span><a class="headerlink" href="#tensordict.base.NO_DEFAULT" title="Permalink to this definition">¶</a></dt>
+<dd><p>The sentinel that marks an argument as not given where <code class="docutils literal notranslate"><span class="pre">None</span></code> is a valid
+value, such as <code class="docutils literal notranslate"><span class="pre">default</span></code> in <a class="reference internal" href="generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.get_non_tensor" title="tensordict.TensorDictBase.get_non_tensor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_non_tensor()</span></code></a>
+or <code class="docutils literal notranslate"><span class="pre">device</span></code> in <a class="reference internal" href="generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.new_zeros" title="tensordict.TensorDictBase.new_zeros"><code class="xref py py-meth docutils literal notranslate"><span class="pre">new_zeros()</span></code></a>. It can also
+be imported from <code class="docutils literal notranslate"><span class="pre">tensordict.tensordict</span></code>.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="tensordict.utils.logger">
+<span class="sig-prename descclassname"><span class="pre">tensordict.utils.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#tensordict.utils.logger" title="Permalink to this definition">¶</a></dt>
+<dd><p>The <a class="reference external" href="https://docs.python.org/3/library/logging.html#logging.Logger" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">logging.Logger</span></code></a> named <code class="docutils literal notranslate"><span class="pre">&quot;tensordict&quot;</span></code>, which tensordict uses
+for its own messages. It does not propagate to the root logger. Its level
+is read from the <code class="docutils literal notranslate"><span class="pre">TD_LOGGING_LEVEL</span></code> environment variable at import time
+(<code class="docutils literal notranslate"><span class="pre">&quot;DEBUG&quot;</span></code> if unset).</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="tensordict.__version__">
+<span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">__version__</span></span><a class="headerlink" href="#tensordict.__version__" title="Permalink to this definition">¶</a></dt>
+<dd><p>The version string of the installed tensordict package, or <code class="docutils literal notranslate"><span class="pre">None</span></code> if it
+cannot be determined, for example when tensordict is imported from a source
+tree that is not installed.</p>
+</dd></dl>
+
 </section>
 </section>
 

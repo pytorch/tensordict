@@ -1,0 +1,7 @@
+﻿.. currentmodule:: tensordict
+
+
+assert_close
+============
+
+.. autofunction:: assert_close
