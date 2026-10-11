@@ -2757,6 +2757,30 @@ class TestLazyStackedTensorDict:
         assert (td_void.get(("parent", "a", "b"))[1].get("d") == 0).all()  # unaffected
         assert (td_void.get(("parent", "a", "b")).get("e") == 0).all()  # unaffected
 
+    @pytest.mark.parametrize("non_tensor", [False, True])
+    def test_update__heterogeneous_nested_lazy(self, non_tensor):
+        # update_ must not stack the leaves of a nested lazy stack: here they
+        # have different shapes and cannot be stacked.
+        members = [
+            TensorDict(obs=torch.zeros(2, 8), batch_size=[2]),
+            TensorDict(obs=torch.zeros(2, 0), batch_size=[2]),
+        ]
+        if non_tensor:
+            for i, member in enumerate(members):
+                member.set_non_tensor("s", f"old{i}")
+        td = TensorDict(nested=lazy_stack(members), a=torch.zeros(2), batch_size=[2])
+        source = td.clone()
+        source.apply_(lambda x: x.fill_(1))
+        if non_tensor:
+            for member in source.get("nested").tensordicts:
+                member.set_non_tensor("s", "new")
+        td.update_(source)
+        assert (td.get("a") == 1).all()
+        for member in td.get("nested").tensordicts:
+            assert (member.get("obs") == 1).all()
+            if non_tensor:
+                assert member.get_non_tensor("s") == "new"
+
     @pytest.mark.parametrize("source_is_lazy", [True, False])
     def test_update_batch_size(self, source_is_lazy):
         td = TensorDict(
