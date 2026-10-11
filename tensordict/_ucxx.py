@@ -98,14 +98,33 @@ def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
 def _run_coroutine_sync(coro):
     """Run an async coroutine synchronously.
 
-    If there is already a running event loop, schedules on it via
-    run_coroutine_threadsafe. Otherwise creates a new loop.
+    Runs ``coro`` on a new event loop. If an event loop is already running
+    in this thread, raises a ``RuntimeError`` instead: blocking that thread
+    until ``coro`` finishes would stop the loop from ever running it.
     """
     loop = _get_or_create_event_loop()
     if loop is not None and loop.is_running():
-        future = asyncio.run_coroutine_threadsafe(coro, loop)
-        return future.result()
+        qualname, name = coro.__qualname__, coro.__name__
+        coro.close()
+        raise RuntimeError(
+            f"{qualname}() cannot run synchronously inside a running event "
+            f"loop: waiting for it would block the loop forever. Await it "
+            f"instead, e.g. `await pipe.{name}()`."
+        )
     return asyncio.run(coro)
+
+
+# Close tasks scheduled by TensorDictPipe.__del__, kept here so that they
+# are not garbage collected before they finish.
+_PENDING_CLOSE_TASKS: set[asyncio.Task] = set()
+
+
+def _on_close_task_done(task: asyncio.Task) -> None:
+    _PENDING_CLOSE_TASKS.discard(task)
+    if not task.cancelled():
+        # Retrieve the exception so that asyncio does not log it:
+        # __del__ ignores errors raised while closing.
+        task.exception()
 
 
 @_check_ucxx
@@ -419,14 +438,17 @@ class TensorDictPipe:
     ) -> TensorDictBase:
         """Receive a TensorDict from this pipe (async).
 
-        On the first call, builds a new TensorDict from received metadata.
+        On the first call, receives into ``td`` if its consolidated layout
+        matches, otherwise builds a new TensorDict from the received metadata.
         On subsequent calls with the same schema, overwrites the existing
         storage in-place (zero allocation).
 
         Args:
-            td: if provided and consolidated, receives into its storage.
-                If ``None``, uses the internally cached TensorDict from
-                the previous receive (if any).
+            td: if provided and consolidated, receives into its storage
+                when its layout matches the received data. Otherwise a new
+                TensorDict is returned, so use the return value. If
+                ``None``, uses the internally cached TensorDict from the
+                previous receive (if any).
 
         Keyword Args:
             device: device for storage allocation on first receive.
@@ -470,6 +492,18 @@ class TensorDictPipe:
                 effective_device = torch.device(device)
             else:
                 effective_device = torch.device(sender_device)
+
+            if td is not None and self._can_recv_into(
+                td, total_bytes, effective_device
+            ):
+                storage = td._consolidated["storage"]
+                if storage.is_cuda:
+                    await self._endpoint.recv(storage)
+                else:
+                    await self._endpoint.recv(_tensor_to_numpy(storage))
+                self._recv_td = td
+                return td
+
             storage = torch.empty(
                 total_bytes, dtype=torch.uint8, device=effective_device
             )
@@ -501,6 +535,26 @@ class TensorDictPipe:
             await self._endpoint.recv(storage_np)
 
         return recv_target
+
+    def _can_recv_into(
+        self,
+        td: TensorDictBase,
+        total_bytes: int,
+        device: torch.device,
+    ) -> bool:
+        """Whether the consolidated storage of ``td`` matches the incoming schema."""
+        if not td.is_consolidated():
+            return False
+        storage = td._consolidated["storage"]
+        if storage.numel() != total_bytes or storage.device != device:
+            return False
+        try:
+            schema_hash = _metadata_hash(td._consolidated["metadata"])
+        except (TypeError, ValueError):
+            # The metadata of td cannot be serialized, so it cannot match
+            # the metadata that the sender serialized.
+            return False
+        return schema_hash == self._recv_schema_hash
 
     async def _arecv_uncollated(
         self,
@@ -551,7 +605,10 @@ class TensorDictPipe:
         Blocking wrapper around :meth:`arecv`.
 
         Args:
-            td: if provided, receives into this TensorDict in-place.
+            td: if provided, receives into this TensorDict in-place when
+                it is consolidated and its layout matches the received data.
+                Otherwise a new TensorDict is returned, so use the return
+                value.
 
         Keyword Args:
             device: device for storage allocation on first receive.
@@ -603,7 +660,15 @@ class TensorDictPipe:
     def __del__(self):
         if not self._closed:
             try:
-                self.close()
+                loop = _get_or_create_event_loop()
+                if loop is not None and loop.is_running():
+                    # close() cannot block the thread of a running loop:
+                    # schedule the close on the loop instead.
+                    task = loop.create_task(self.aclose())
+                    _PENDING_CLOSE_TASKS.add(task)
+                    task.add_done_callback(_on_close_task_done)
+                else:
+                    self.close()
             except Exception:
                 pass
 

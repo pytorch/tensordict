@@ -34,6 +34,7 @@ from tensordict import (
     is_leaf_nontensor,
     lazy_stack,
     LazyStackedTensorDict,
+    PersistentTensorDict,
     set_capture_non_tensor_stack,
     TensorClass,
     tensorclass,
@@ -5072,6 +5073,26 @@ class TestGeneric:
                 for piece in pieces:
                     assert piece["a"].shape == (*piece.batch_size, 4)
                     assert piece["b", "c"].shape == piece.batch_size
+
+    def test_chunk_zero_size_dim_views(self, tmp_path):
+        # sub-tensordicts, legacy lazy views and h5 tensordicts have their own
+        # chunk, which must give `chunks` empty pieces like torch.chunk
+        big = TensorDict({"a": torch.zeros(2, 0, 4)}, [2, 0])
+        cases = [(big._get_sub_tensordict(0), 0)]
+        with legacy_lazy_mode():
+            cases += [(big.unsqueeze(0), 2), (big.permute(1, 0), 0)]
+            if _has_h5py:
+                h5 = PersistentTensorDict.from_dict(big, filename=tmp_path / "file.h5")
+                cases.append((h5, 1))
+            for td, dim in cases:
+                for chunks in (2, 3):
+                    pieces = td.chunk(chunks, dim)
+                    ref_pieces = torch.zeros(td.batch_size).chunk(chunks, dim)
+                    assert [p.batch_size for p in pieces] == [
+                        r.shape for r in ref_pieces
+                    ]
+                    for piece in pieces:
+                        assert piece["a"].shape == (*piece.batch_size, 4)
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_squeeze(self, device):
