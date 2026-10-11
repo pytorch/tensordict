@@ -292,6 +292,8 @@ def expand_as_right(
          a tensor with shape matching the dest input tensor shape.
 
     Examples:
+        >>> import torch
+        >>> from tensordict.utils import expand_as_right
         >>> tensor = torch.zeros(3,4)
         >>> dest = torch.zeros(3,4,5)
         >>> print(expand_as_right(tensor, dest).shape)
@@ -329,6 +331,8 @@ def expand_right(tensor: Tensor, shape: Sequence[int]) -> Tensor:
          a tensor with shape matching the target shape.
 
     Examples:
+        >>> import torch
+        >>> from tensordict.utils import expand_right
         >>> tensor = torch.zeros(3,4)
         >>> shape = (3,4,5)
         >>> print(expand_right(tensor, shape).shape)
@@ -508,7 +512,28 @@ def _set_item(
 
 
 class timeit:
-    """A dirty but easy to use decorator for profiling code."""
+    """Measures the time spent in a function or a block of code, by name.
+
+    Use it as a decorator or as a context manager. Each name accumulates
+    its call count, its total time and its mean time.
+    :meth:`timeit.print` logs them with the tensordict logger, and
+    :meth:`timeit.erase` resets them.
+
+    Args:
+        name (str): the name under which the time is recorded.
+
+    Examples:
+        >>> from tensordict.utils import timeit
+        >>> @timeit("step")
+        ... def step():
+        ...     return 1
+        >>> _ = step()
+        >>> with timeit("block"):
+        ...     _ = step()
+        >>> timeit.print()  # logs "block took ... msec" and "step took ... msec"
+        >>> timeit.erase()
+
+    """
 
     _REG = {}
 
@@ -2197,6 +2222,9 @@ def isin(
             the ``input`` ``key`` tensor that are also present in the ``reference``.
 
     Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.utils import isin
         >>> td = TensorDict(
         ...     {
         ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
@@ -2296,7 +2324,10 @@ def remove_duplicates(
         unique_indices (torch.Tensor, optional): The indices of the first occurrences of the unique elements in the
             input tensordict for the specified `key` along the specified `dim`. Only provided if `return_indices` is True.
 
-    Example:
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.utils import remove_duplicates
         >>> td = TensorDict(
         ...     {
         ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
@@ -2652,6 +2683,7 @@ def unravel_key(key):
     ``()``. A key that is neither a str nor a tuple raises a ``RuntimeError``.
 
     Examples:
+        >>> from tensordict import unravel_key
         >>> unravel_key("a")
         'a'
         >>> unravel_key(("a",))
@@ -2695,7 +2727,24 @@ def _unravel_keys(*keys):
 
 
 def unravel_key_list(keys):
-    """Unravels a list of keys."""
+    """Unravels every key of a list, as :func:`~tensordict.unravel_key` does.
+
+    Args:
+        keys (list or tuple of NestedKey): the keys to unravel.
+
+    Returns:
+        a list of keys: strings, or flat tuples of strings.
+
+    Raises:
+        TypeError: if ``keys`` is not a list or a tuple.
+        RuntimeError: if a key is not a valid nested key.
+
+    Examples:
+        >>> from tensordict import unravel_key_list
+        >>> unravel_key_list(["a", ("b",), ("c", ("d",))])
+        ['a', 'b', ('c', 'd')]
+
+    """
     if not isinstance(keys, (list, tuple)):
         # pybind11's wording when this was a C++ function, which TorchRL's
         # tests match.
@@ -3139,7 +3188,23 @@ from tensordict._utils_key_json import _json_dumps  # noqa: F401
 
 
 class LinkedList(list):
-    """A thin wrapper around a list that automatically updates a tensordict when the list is modified."""
+    """A list of the values of a non-tensor entry that writes item assignments back to the tensordict.
+
+    ``td[key]`` returns a :class:`LinkedList` when the entry is a
+    :class:`~tensordict.NonTensorStack`. Setting an item
+    (``values[0] = "z"``) writes the value to the tensordict. ``append`` and
+    ``extend`` change the list only, and unlink it from the tensordict.
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> td = TensorDict(batch_size=[3])
+        >>> td["names"] = ["a", "b", "c"]
+        >>> values = td["names"]
+        >>> values[0] = "z"
+        >>> td.get("names").tolist()
+        ['z', 'b', 'c']
+
+    """
 
     def __init__(self, *args, td: TensorDictBase, **kwargs):
         super().__init__(*args, **kwargs)

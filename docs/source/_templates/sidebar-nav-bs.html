@@ -1,0 +1,20 @@
+{#
+  The left sidebar lists every page of the site, under the toctree captions
+  of index.rst. The pydata theme starts the sidebar one level down, at the
+  children of the current top-level page, and every page of index.rst is a
+  top-level page: its sidebar would be empty.
+#}
+<nav class="bd-docs-nav bd-links" aria-label="{{ _('Site navigation') }}">
+  <div class="bd-toc-item navbar-nav">
+    {{- generate_toctree_html(
+      "sidebar",
+      startdepth=0,
+      show_nav_level=theme_show_nav_level | int,
+      maxdepth=theme_navigation_depth | int,
+      collapse=theme_collapse_navigation | tobool,
+      includehidden=theme_sidebar_includehidden | tobool,
+      titles_only=True
+      )
+    -}}
+  </div>
+</nav>
