@@ -2367,6 +2367,9 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
         splits = -(self.batch_size[dim] // -chunks)
+        if splits == 0 and type(chunks) is int and chunks > 0:
+            # torch.chunk returns `chunks` empty pieces along a zero-size dim
+            return self.split([0] * chunks, dim)
         return self.split(splits, dim)
 
     # ---- Memory ops: not supported ----
