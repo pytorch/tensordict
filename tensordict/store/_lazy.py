@@ -308,30 +308,32 @@ class _StoreStackElementView(TensorDictBase):
         return self.to_tensordict()[index]
 
     def _set_at_str(self, key, value, idx, *, validated, non_blocking):
-        # Read full element tensor, patch locally, write back
-        tensor = self._get_str(key)
-        tensor[idx] = value
-        self._run_sync(self._parent._aset_element_key(self._element_idx, key, tensor))
+        # Read the element entry, patch it locally, write it back. ``key`` is a
+        # key path: a nested entry is read as a new TensorDict, so its leaves
+        # are written back under their full keys.
+        existing = self._get_str(key)
+        if not validated and _KEY_SEP in key and isinstance(value, dict):
+            # nested keys keep the TensorDict.set_at_ handling of a dict
+            # value, which reads it at the batch size of the element
+            value = self._validate_value(value, check_shape=False)
+        existing[idx] = value
+        if is_tensor_collection(existing):
+            self._set_str(key, existing, inplace=True, validated=True, ignore_lock=True)
+        else:
+            self._run_sync(
+                self._parent._aset_element_key(self._element_idx, key, existing)
+            )
         return self
 
     def _set_at_tuple(self, key, value, idx, *, validated, non_blocking):
         key = _unravel_key_to_tuple(key)
-        if len(key) == 1:
-            return self._set_at_str(
-                key[0], value, idx, validated=validated, non_blocking=non_blocking
-            )
-        key_path = _KEY_SEP.join(key)
-        tensor = self._get_str(key[0])
-        if is_tensor_collection(tensor):
-            tensor._set_at_tuple(
-                key[1:], value, idx, validated=validated, non_blocking=non_blocking
-            )
-            return self
-        tensor[idx] = value
-        self._run_sync(
-            self._parent._aset_element_key(self._element_idx, key_path, tensor)
+        return self._set_at_str(
+            _KEY_SEP.join(key),
+            value,
+            idx,
+            validated=validated,
+            non_blocking=non_blocking,
         )
-        return self
 
     def _convert_inplace(self, inplace, key):
         if inplace is not False:
@@ -1159,14 +1161,15 @@ class LazyStackedTensorDictStore(TensorDictBase):
             row_bytes = len(raw_bytes)
 
             pipe = self._client.pipeline()
-            # Write the element at the right offset (zero-fill for other elements)
-            pipe.setrange(self._data_key(key_path), pos * row_bytes, raw_bytes)
-            # Ensure the full blob is allocated
+            # Ensure the full blob is allocated. This comes first: the byte it
+            # writes is the last byte of the last element.
             pipe.setrange(
                 self._data_key(key_path),
                 self._count * row_bytes - 1,
                 b"\x00",
             )
+            # Write the element at the right offset (zero-fill for other elements)
+            pipe.setrange(self._data_key(key_path), pos * row_bytes, raw_bytes)
             pipe.hset(
                 self._meta_key(key_path),
                 mapping={
