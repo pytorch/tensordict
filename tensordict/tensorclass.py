@@ -1536,6 +1536,21 @@ def _from_tensordict_with_none(tc, tensordict):
     )
 
 
+def _warn_unknown_tensor_only_fields(cls, kwargs: dict) -> None:
+    # The tensor_only path of __init__ stores the arguments that are not
+    # fields. The other paths raise AttributeError for them, and this path
+    # will too once the deprecation ends.
+    unknown = sorted(key for key in kwargs if key not in cls.__expected_keys__)
+    warn_deprecated(
+        f"Passing arguments that are not fields ({unknown}) to the tensor_only "
+        f"tensorclass {cls.__name__}, which other tensorclasses reject with "
+        "AttributeError,",
+        removal="0.17",
+        replacement=f"only its fields ({sorted(cls.__expected_keys__)})",
+        stacklevel=3,
+    )
+
+
 def _init_wrapper(
     __init__: Callable,
     cls,
@@ -1852,6 +1867,12 @@ def _init_wrapper(
             for key in self.__expected_keys__:
                 kwargs.setdefault(key, None)
             if tensor_only:
+                if (
+                    len(kwargs) != len(self.__expected_keys__)
+                    and not is_dynamo_compiling()
+                ):
+                    # Dynamo cannot trace warnings.warn, so only eager calls warn.
+                    _warn_unknown_tensor_only_fields(type(self), kwargs)
                 # Fast path: validate and assign directly to the
                 # underlying dict, skipping the set → _set_str →
                 # _tensordict._set_str chain entirely.

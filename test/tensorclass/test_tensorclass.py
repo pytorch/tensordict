@@ -771,6 +771,18 @@ class TestTensorClass:
                 ),
             ):
                 Data(x=x, y=y, extra=x)
+        else:
+            # Until TensorDict 0.17, a tensor_only class stores the argument
+            # and warns.
+            with pytest.warns(
+                DeprecationWarning,
+                match=re.escape(
+                    "Passing arguments that are not fields (['extra']) to the "
+                    "tensor_only tensorclass Data"
+                ),
+            ) as record:
+                Data(x=x, y=y, extra=x)
+            assert record[0].filename == __file__
         # None values must still enter non-tensor storage.
         assert Data(x=x, y=None, batch_size=[3]).y is None
 
