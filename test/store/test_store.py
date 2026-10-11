@@ -2094,6 +2094,24 @@ class TestLazyStackedTensorDictStore:
             assert type(chunk) is TensorDict
             assert_allclose_td(chunk, expected_chunk.to_tensordict())
 
+    @pytest.mark.parametrize("dim", [1, -1])
+    def test_chunk_zero_size_dim(self, store_kwargs, dim):
+        # torch.chunk gives `chunks` empty pieces along a zero-size dim
+        lazy_td = lazy_stack(
+            [TensorDict({"a": torch.zeros(0, 4)}, [0]) for _ in range(3)]
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            for chunks in (2, 3):
+                pieces = store_td.chunk(chunks, dim)
+                assert len(pieces) == chunks
+                for piece in pieces:
+                    assert piece.batch_size == torch.Size([3, 0])
+                    assert piece["a"].shape == torch.Size([3, 0, 4])
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     @pytest.mark.parametrize("separator", [".", "/"])
     def test_flatten_keys(self, store_kwargs, separator):
         lazy_td = self._nested_lazy_td()

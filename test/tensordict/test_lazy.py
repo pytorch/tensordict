@@ -2539,6 +2539,25 @@ class TestLazyStackedTensorDict:
         assert piece.batch_size == torch.Size([3, 0])
         assert piece["a"].shape == torch.Size([3, 0, 4])
 
+    def test_chunk_lazy_zero_size_dim(self):
+        # torch.chunk gives `chunks` empty pieces along a zero-size dim
+        for stack_dim, dim in ((0, 1), (0, -1), (1, 0)):
+            td = LazyStackedTensorDict(
+                *[TensorDict({"a": torch.zeros(0, 4)}, [0]) for _ in range(3)],
+                stack_dim=stack_dim,
+            )
+            for chunks in (2, 3):
+                pieces = td.chunk(chunks, dim)
+                ref_pieces = torch.zeros(td.batch_size).chunk(chunks, dim)
+                assert [p.batch_size for p in pieces] == [r.shape for r in ref_pieces]
+                for piece in pieces:
+                    assert isinstance(piece, LazyStackedTensorDict)
+                    assert piece["a"].shape == (*piece.batch_size, 4)
+        # unflattening the zero-size stack dim goes through chunk
+        out = td.reshape(2, 0, 3)
+        assert out.batch_size == torch.Size([2, 0, 3])
+        assert out["a"].shape == torch.Size([2, 0, 3, 4])
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_stack(self, device):
         torch.manual_seed(1)
