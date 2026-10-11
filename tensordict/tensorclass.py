@@ -1200,12 +1200,23 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
 
             def _make_prop(key):
                 def _getter(self):
-                    out = self._tensordict._get_str(key, _UNSET)
+                    td = self._tensordict
+                    if type(td) is TensorDict:
+                        # Cheaper than _get_str. Dynamo also guards on a key
+                        # that dict.get misses, but not on the KeyError in
+                        # _get_str: a compiled function that read None would
+                        # keep reading None once the field holds a tensor.
+                        out = td._tensordict.get(key, _UNSET)
+                    else:
+                        out = td._get_str(key, _UNSET)
+                        if out is _UNSET and is_compiling() and key in td.keys():
+                            # see above: only for the guard, as keys() can be
+                            # costly (e.g. on a lazy stack)
+                            out = td._get_str(key, None)
                     if out is _UNSET:
-                        out = self._non_tensordict.get(key, _UNSET)
-                        if out is _UNSET:
-                            raise AttributeError(key)
-                        return out
+                        # A field missing from the TensorDict is None
+                        non_tensordict = self._non_tensordict
+                        return non_tensordict.get(key) if non_tensordict else None
                     return out
 
                 def _setter(self, value):
@@ -1634,6 +1645,12 @@ def _init_wrapper(
                 object.__setattr__(self, "_tensordict", td)
                 object.__setattr__(self, "_non_tensordict", {})
                 object.__setattr__(self, "_is_initialized", True)
+                if type(self)._tensor_only:
+                    # A None field of a tensor_only class is a missing key.
+                    # Record (as keys) the fields that __init__ sets to None,
+                    # so that the loop below can tell them from the fields
+                    # that it does not set.
+                    self.__dict__["_init_none_fields"] = {}
             elif batch_size is not None or device is not None or names is not None:
                 # Metadata passed to super().__init__() replaces the outer
                 # call's. Keep the entries set before that call.
@@ -1657,12 +1674,16 @@ def _init_wrapper(
                 self_dict = self.__dict__
                 td_dict = self._tensordict._tensordict
                 non_td = self._non_tensordict
+                init_none_fields = self_dict.pop("_init_none_fields", ())
                 for key, field in type(self).__dataclass_fields__.items():
                     if key not in required_fields:
                         continue
                     if key in self_dict:
                         value = self_dict.pop(key)
-                    elif key in td_dict or key in non_td:
+                    elif key in td_dict or key in init_none_fields or key in non_td:
+                        continue
+                    elif field.default is None and type(self)._tensor_only:
+                        # A None field of a tensor_only class is a missing key
                         continue
                     elif field.default_factory is not dataclasses.MISSING:
                         value = field.default_factory()
@@ -1857,12 +1878,11 @@ def _init_wrapper(
                 # _tensordict._set_str chain entirely.
                 _td = self._tensordict
                 _td_dict = _td._tensordict
-                _non_td = self._non_tensordict
                 _validate = _td._validate_value
                 _tensordict_fields = type(self)._tensordict_fields
                 for key, value in kwargs.items():
                     if value is None:
-                        _non_td[key] = None
+                        continue
                     else:
                         if _tensordict_fields:
                             value, _ = _convert_mapping_for_field(
@@ -2176,6 +2196,15 @@ def _from_tensordict(
         raise RuntimeError(
             f"Expected a TensorDictBase instance but got {type(tensordict)}"
         )
+    tensor_only = cls._tensor_only
+    if tensor_only:
+        # A None field of a tensor_only class is a key missing from the
+        # tensordict. Copy the dict: callers may pass the one of an instance.
+        non_tensordict = (
+            {k: v for k, v in non_tensordict.items() if v is not None}
+            if non_tensordict
+            else {}
+        )
     # Validating keys of tensordict
     # tensordict = tensordict.copy()
     tensor_keys = tensordict.keys()
@@ -2215,7 +2244,7 @@ def _from_tensordict(
             f"correspond to the class attributes ({cls.__expected_keys__}). Got the set of "
             f"keys {{{total_keys - exp_keys}}} which do not belong to the class."
         )
-    else:
+    elif not tensor_only:
         to_add = exp_keys - total_keys
         for key in to_add:
             non_tensordict[key] = None
@@ -2535,7 +2564,11 @@ def _getstate(self) -> dict[str, Any]:
         dictionary of state of tensor class
 
     """
-    return {"tensordict": self._tensordict, "non_tensordict": self._non_tensordict}
+    non_tensordict = self._non_tensordict
+    if type(self)._tensor_only:
+        # Pickle the None fields as earlier versions did, so that they can load it
+        non_tensordict = {**non_tensordict, **dict.fromkeys(_none_fields(self))}
+    return {"tensordict": self._tensordict, "non_tensordict": non_tensordict}
 
 
 def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
@@ -2544,14 +2577,47 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
     Args:
         state (dict): State parameter to set the object
     """
+    non_tensordict = state.get("non_tensordict")
+    if type(self)._tensor_only and non_tensordict:
+        # Pickled by a version that kept None fields in _non_tensordict
+        non_tensordict = {k: v for k, v in non_tensordict.items() if v is not None}
     if type(self)._frozen:
         # Bypass the dataclass guard while preserving custom __setattr__ behavior
         # for non-frozen tensorclasses.
         object.__setattr__(self, "_tensordict", state.get("tensordict"))
-        object.__setattr__(self, "_non_tensordict", state.get("non_tensordict"))
+        object.__setattr__(self, "_non_tensordict", non_tensordict)
     else:
         self._tensordict = state.get("tensordict")
-        self._non_tensordict = state.get("non_tensordict")
+        self._non_tensordict = non_tensordict
+
+
+def _none_fields(self) -> list[str]:
+    # The None fields of a tensor_only instance, in field order: the fields
+    # missing from its TensorDict (and from _non_tensordict, which is empty
+    # unless the instance was built with non-tensor values there).
+    td = self._tensordict
+    expected_keys = self.__expected_keys__
+    if type(td) is TensorDict:
+        # A TensorDict is checked with a dict lookup, much cheaper than keys().
+        keys = td._tensordict
+        if keys.keys() >= expected_keys:
+            # no field is None
+            return []
+    else:
+        keys = td.keys()
+    non_tensordict = self._non_tensordict
+    return [
+        key
+        for key in type(self).__dataclass_fields__
+        if key not in keys and key not in non_tensordict and key in expected_keys
+    ]
+
+
+def _non_tensor_keys(self):
+    # The fields that the TensorDict of self does not hold
+    if type(self)._tensor_only:
+        return [*self._non_tensordict, *_none_fields(self)]
+    return self._non_tensordict.keys()
 
 
 def _copy(self) -> Any:
@@ -2716,6 +2782,20 @@ def _setattr(self, key: str, value: Any) -> None:  # noqa: D417
         )
 
 
+def _set_none_tensor_only(self, key: str) -> None:
+    # A field of a tensor_only instance was set to None, and is no longer in its
+    # TensorDict. _setattr_tensor_only inlines this.
+    __dict__ = self.__dict__
+    if "_init_none_fields" in __dict__:
+        # A custom __init__ runs: see _init_wrapper
+        __dict__["_init_none_fields"][key] = None
+    else:
+        non_tensordict = __dict__["_non_tensordict"]
+        if non_tensordict and key in non_tensordict:
+            # e.g. a value passed to from_tensordict(non_tensordict=...)
+            del non_tensordict[key]
+
+
 def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
     # ``is_compiling()`` stays true in every thread while any thread compiles,
     # so code that runs eagerly (such as unpickling in a DataLoader's
@@ -2745,19 +2825,29 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
             key == "_tensordict" and "_tensordict" not in self.__dict__
         ):
             return object.__setattr__(self, key, value)
+        # read below for a None value only
+        __dict__ = None
     if key not in self.__expected_keys__:
         raise AttributeError(
             f"Cannot set the attribute {key!r}: {type(self).__name__} has no such "
             f"field. Its fields are {sorted(self.__expected_keys__)}."
         )
     if value is None:
-        # The getter reads the TensorDict first: drop the old value, as set()
-        # does. A TensorDict is checked with a dict lookup, which is much
-        # cheaper than keys().
+        # A None field is a key missing from the TensorDict, as in set(). A
+        # TensorDict is checked with a dict lookup, which is much cheaper than
+        # keys().
         td = self._tensordict
         if key in (td._tensordict if type(td) is TensorDict else td.keys()):
             td.del_(key)
-        self._non_tensordict[key] = None
+        # _set_none_tensor_only, inlined
+        if __dict__ is None:
+            __dict__ = self.__dict__
+        if "_init_none_fields" in __dict__:
+            __dict__["_init_none_fields"][key] = None
+        else:
+            non_tensordict = __dict__["_non_tensordict"]
+            if non_tensordict and key in non_tensordict:
+                del non_tensordict[key]
         return
     value, _ = _convert_mapping_for_field(key, value, type(self)._tensordict_fields)
     out = self._set_str(key, value, inplace=False, validated=False, ignore_lock=False)
@@ -2918,6 +3008,42 @@ def _wrap_method(self, attr, func, nowarn=False):
     return wrapped_func
 
 
+def _dict_none_keys(self, input_dict: dict) -> list[str]:
+    # The fields of a tensor_only instance that a dict passed to update() sets
+    # to None. from_dict() leaves them out of its result: a None field is a
+    # missing key.
+    if not type(self)._tensor_only:
+        return []
+    return [
+        key
+        for key, value in input_dict.items()
+        if value is None and key in type(self).__expected_keys__
+    ]
+
+
+def _add_none_entries(tc, keys: list[str]) -> None:
+    # Write the None values left out by from_dict() as NonTensorData(None)
+    # entries, which the update methods of the TensorDict check and write as
+    # they did before None fields became missing keys.
+    for key in keys:
+        tc._tensordict.set_non_tensor(key, None)
+
+
+def _clear_none_entries(self, keys: list[str], keys_to_update=None) -> None:
+    # Remove the NonTensorData(None) entries that _add_none_entries() made
+    # update() write: a None field of a tensor_only instance is a missing key.
+    if keys_to_update is not None:
+        first_keys = {
+            key if isinstance(key, str) else _unravel_key_to_tuple(key)[0]
+            for key in keys_to_update
+        }
+        keys = [key for key in keys if key in first_keys]
+    for key in keys:
+        self.del_(key)
+        # in a custom __init__, record that the field was set
+        _set_none_tensor_only(self, key)
+
+
 def _update(
     self,
     input_dict_or_td: dict[str, CompatibleType] | T | None = None,
@@ -2954,7 +3080,23 @@ def _update(
     if is_leaf is None:
         is_leaf = _is_leaf_nontensor
     if isinstance(input_dict_or_td, dict):
+        none_keys = _dict_none_keys(self, input_dict_or_td)
         input_dict_or_td = type(self).from_dict(input_dict_or_td, auto_batch_size=False)
+        if none_keys:
+            _add_none_entries(input_dict_or_td, none_keys)
+            _update(
+                self,
+                input_dict_or_td,
+                clone=clone,
+                inplace=inplace,
+                keys_to_update=keys_to_update,
+                non_blocking=non_blocking,
+                update_batch_size=update_batch_size,
+                ignore_lock=ignore_lock,
+                is_leaf=is_leaf,
+            )
+            _clear_none_entries(self, none_keys, keys_to_update)
+            return self
 
     if is_tensorclass(input_dict_or_td):
         non_tensordict = {
@@ -3036,9 +3178,12 @@ def _update_(
     elif input_dict_or_td is None:
         return self
     if isinstance(input_dict_or_td, dict):
+        none_keys = _dict_none_keys(self, input_dict_or_td)
         input_dict_or_td = type(self).from_dict(
             input_dict_or_td, batch_size=self.batch_size
         )
+        # update_() raises for them, as it did before
+        _add_none_entries(input_dict_or_td, none_keys)
 
     if is_tensorclass(input_dict_or_td):
         non_tensordict = {
@@ -3069,11 +3214,14 @@ def _update_at_(
     # A source that update() accepts still goes to update(), which replaces the
     # entries whatever the index, as writing it at the index could raise.
     # Sources that update() rejects for their batch size are written at the index.
+    none_keys = ()
     if isinstance(input_dict_or_td, dict):
         try:
+            none_keys = _dict_none_keys(self, input_dict_or_td)
             input_dict_or_td = type(self).from_dict(
                 input_dict_or_td, batch_size=self.batch_size
             )
+            _add_none_entries(input_dict_or_td, none_keys)
         except RuntimeError:
             # write the dict at the index only if its values do not have the
             # batch size of self
@@ -3105,6 +3253,7 @@ def _update_at_(
             input_dict_or_td = source
         else:
             self._non_tensordict.update(non_tensordict)
+            _clear_none_entries(self, none_keys)
             return self
 
     # LazyStackedTensorDict.update_at_ takes no keys_to_update
@@ -3194,8 +3343,8 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
 
     if is_tensorclass(value):
         if not isinstance(value, type(self)):
-            self_keys = set().union(self._non_tensordict, self._tensordict.keys())
-            value_keys = set().union(value._non_tensordict, value._tensordict.keys())
+            self_keys = set().union(_non_tensor_keys(self), self._tensordict.keys())
+            value_keys = set().union(_non_tensor_keys(value), value._tensordict.keys())
             if self_keys != value_keys:
                 # if tensorclass but different class ensure that all keys are equal
                 raise ValueError(
@@ -3235,6 +3384,8 @@ def _repr(self) -> str:
     fields = _td_fields(self._tensordict, sep="=")
     field_str = [fields] if fields else []
     non_tensor_fields = _all_non_td_fields_as_str(self._non_tensordict)
+    if type(self)._tensor_only:
+        non_tensor_fields += [f"{key}=None" for key in _none_fields(self)]
 
     metadata_fields = []
 
@@ -3275,6 +3426,8 @@ def _to_dict(self, *, retain_none: bool = True, convert_tensors: bool = False) -
     td_dict = self._tensordict.to_dict(
         retain_none=retain_none, convert_tensors=convert_tensors
     )
+    if retain_none and type(self)._tensor_only:
+        td_dict.update(dict.fromkeys(_none_fields(self)))
     if self._non_tensordict:
         if retain_none:
             td_dict.update(self._non_tensordict)
@@ -3308,6 +3461,13 @@ def _from_dict(
             ),
             non_tensordict=input_dict,
         )
+    if cls._tensor_only:
+        # A None field is a missing key, not a NonTensorData(None) entry.
+        input_dict = {
+            key: value
+            for key, value in input_dict.items()
+            if value is not None or key not in cls.__expected_keys__
+        }
     td = TensorDict.from_dict(
         input_dict,
         batch_size=batch_size,
@@ -3389,6 +3549,9 @@ def _to_tensordict(self, *, retain_none: bool | None = None) -> TensorDict:
 
     """
     td = self._tensordict.to_tensordict(retain_none=retain_none)
+    if retain_none and type(self)._tensor_only:
+        for key in _none_fields(self):
+            td.set_non_tensor(key, None)
     for key, val in self._non_tensordict.items():
         if val is None:
             if retain_none is None:
@@ -3570,7 +3733,10 @@ def _set(
                         f"Cannot update an existing entry of type {type(self._tensordict.get(key))} with a value of type {value_type}."
                     )
                 self._tensordict.del_(key)
-            self._non_tensordict[key] = value
+            if cls._tensor_only:
+                _set_none_tensor_only(self, key)
+            else:
+                self._non_tensordict[key] = value
         else:
             if inplace:
                 if key in self._tensordict.keys():
@@ -3660,6 +3826,9 @@ def _del_(self, key):
     if key[0] in self._tensordict.keys():
         self._tensordict.del_(key[0])
         # self.set(key[0], None)
+    elif type(self)._tensor_only and key[0] in self.__expected_keys__:
+        # A None field of a tensor_only class is a missing key
+        _set_none_tensor_only(self, key[0])
     elif key[0] in self._non_tensordict.keys():
         self._non_tensordict[key[0]] = None
     else:
@@ -3809,6 +3978,8 @@ def _state_dict(
     _non_tensordict = super(type(self), self).__getattribute__("_non_tensordict")
 
     non_tensor = dict(_non_tensordict)
+    if type(self)._tensor_only:
+        non_tensor.update(dict.fromkeys(_none_fields(self)))
     for key, item in td.items():
         if is_non_tensor(item):
             non_tensor[key] = item.data
@@ -3885,6 +4056,10 @@ def _load_state_dict(
                 raise KeyError(f"Key '{key}' wasn't expected in the state-dict.")
             if key in _non_tensordict:
                 _non_tensordict[key] = value
+            elif value is None and type(self)._tensor_only and key not in td.keys():
+                # A None field of a tensor_only class is a missing key
+                _set_none_tensor_only(self, key)
+                continue
             else:
                 td.set(
                     key,
@@ -3946,6 +4121,9 @@ def _load_state_dict_legacy(
                         raise KeyError(
                             f"Key '{sub_key}' wasn't expected in the state-dict."
                         )
+                    if sub_item is None and type(self)._tensor_only:
+                        # A None field of a tensor_only class is a missing key
+                        continue
                     super(type(self), self).__getattribute__("_non_tensordict")[
                         sub_key
                     ] = sub_item
@@ -4024,7 +4202,7 @@ def _eq(self, other: object) -> bool:
         tensor = self._tensordict == other._tensordict
     else:
         tensor = self._tensordict == (
-            other.exclude(*self._non_tensordict.keys())
+            other.exclude(*_non_tensor_keys(self))
             if _is_tensor_collection(type(other))
             else other
         )
@@ -4088,7 +4266,7 @@ def _ne(self, other: object) -> bool:
         tensor = self._tensordict != other._tensordict
     else:
         tensor = self._tensordict != (
-            other.exclude(*self._non_tensordict.keys())
+            other.exclude(*_non_tensor_keys(self))
             if _is_tensor_collection(type(other))
             else other
         )
@@ -4119,7 +4297,7 @@ def _or(self, other: object) -> bool:
         tensor = self._tensordict | other._tensordict
     else:
         tensor = self._tensordict | (
-            other.exclude(*self._non_tensordict.keys())
+            other.exclude(*_non_tensor_keys(self))
             if _is_tensor_collection(type(other))
             else other
         )
@@ -4150,7 +4328,7 @@ def _xor(self, other: object) -> bool:
         tensor = self._tensordict ^ other._tensordict
     else:
         tensor = self._tensordict ^ (
-            other.exclude(*self._non_tensordict.keys())
+            other.exclude(*_non_tensor_keys(self))
             if _is_tensor_collection(type(other))
             else other
         )
@@ -4166,7 +4344,11 @@ def _non_tensor_items(self, include_nested=False):
             include_nested=True
         )
     elif is_tensorclass(self):
-        return list(self._non_tensordict.items())
+        items = list(self._non_tensordict.items())
+        if type(self)._tensor_only:
+            # A None field of a tensor_only class is a missing key
+            items.extend((key, None) for key in _none_fields(self))
+        return items
     else:
         return self._tensordict.non_tensor_items()
 

@@ -140,6 +140,8 @@ The available flags are:
   scalars and numpy arrays are cast to tensors. A value that cannot be cast
   (e.g. a ``str``) is stored as :class:`~tensordict.NonTensorData` without
   error, and attribute access returns the ``NonTensorData`` wrapper.
+  A ``None`` field is a key missing from the tensor storage: setting a field
+  to ``None`` or deleting it removes its entry, and reading it gives ``None``.
   Skips the non-tensor storage path and yields measurable speed-ups on
   attribute access — recommended for performance-critical containers (RL
   trajectories, model I/O batches).
