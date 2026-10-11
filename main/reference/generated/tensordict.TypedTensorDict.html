@@ -226,7 +226,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev5117+g2551ea859.d20261011)
+                  main (0.14.0.dev5120+g20163dbfe.d20261011)
                 </div>
               
             
@@ -6848,8 +6848,10 @@ source worker, or a
 <a class="reference internal" href="tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe" title="tensordict._ucxx.TensorDictPipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPipe</span></code></a> for UCXX-based
 transport.  When a pipe is passed, the data is received
 in-place into this tensordict’s consolidated storage (if
-available). Mutually exclusive with <code class="docutils literal notranslate"><span class="pre">group_src</span></code>; exactly one
-of the two must be provided.</p>
+available and its layout matches the received data);
+otherwise the pipe returns a new tensordict, so use the
+returned value. Mutually exclusive with <code class="docutils literal notranslate"><span class="pre">group_src</span></code>;
+exactly one of the two must be provided.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">

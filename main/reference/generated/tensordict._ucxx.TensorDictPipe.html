@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev5117+g2551ea859.d20261011)
+                  main (0.14.0.dev5120+g20163dbfe.d20261011)
                 </div>
               
             
@@ -398,14 +398,17 @@ buffer in-place — zero allocation, zero metadata parsing.</p></li>
 <dt class="sig sig-object py" id="tensordict._ucxx.TensorDictPipe.arecv">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">arecv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">td</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><span class="pre">TensorDictBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></span><a class="headerlink" href="#tensordict._ucxx.TensorDictPipe.arecv" title="Permalink to this definition">¶</a></dt>
 <dd><p>Receive a TensorDict from this pipe (async).</p>
-<p>On the first call, builds a new TensorDict from received metadata.
+<p>On the first call, receives into <code class="docutils literal notranslate"><span class="pre">td</span></code> if its consolidated layout
+matches, otherwise builds a new TensorDict from the received metadata.
 On subsequent calls with the same schema, overwrites the existing
 storage in-place (zero allocation).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>td</strong> – if provided and consolidated, receives into its storage.
-If <code class="docutils literal notranslate"><span class="pre">None</span></code>, uses the internally cached TensorDict from
-the previous receive (if any).</p>
+<dd class="field-odd"><p><strong>td</strong> – if provided and consolidated, receives into its storage
+when its layout matches the received data. Otherwise a new
+TensorDict is returned, so use the return value. If
+<code class="docutils literal notranslate"><span class="pre">None</span></code>, uses the internally cached TensorDict from the
+previous receive (if any).</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><p><strong>device</strong> – device for storage allocation on first receive.</p>
@@ -481,7 +484,10 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">True</s
 <p>Blocking wrapper around <a class="reference internal" href="#tensordict._ucxx.TensorDictPipe.arecv" title="tensordict._ucxx.TensorDictPipe.arecv"><code class="xref py py-meth docutils literal notranslate"><span class="pre">arecv()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>td</strong> – if provided, receives into this TensorDict in-place.</p>
+<dd class="field-odd"><p><strong>td</strong> – if provided, receives into this TensorDict in-place when
+it is consolidated and its layout matches the received data.
+Otherwise a new TensorDict is returned, so use the return
+value.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><p><strong>device</strong> – device for storage allocation on first receive.</p>
