@@ -98,14 +98,33 @@ def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
 def _run_coroutine_sync(coro):
     """Run an async coroutine synchronously.
 
-    If there is already a running event loop, schedules on it via
-    run_coroutine_threadsafe. Otherwise creates a new loop.
+    Runs ``coro`` on a new event loop. If an event loop is already running
+    in this thread, raises a ``RuntimeError`` instead: blocking that thread
+    until ``coro`` finishes would stop the loop from ever running it.
     """
     loop = _get_or_create_event_loop()
     if loop is not None and loop.is_running():
-        future = asyncio.run_coroutine_threadsafe(coro, loop)
-        return future.result()
+        qualname, name = coro.__qualname__, coro.__name__
+        coro.close()
+        raise RuntimeError(
+            f"{qualname}() cannot run synchronously inside a running event "
+            f"loop: waiting for it would block the loop forever. Await it "
+            f"instead, e.g. `await pipe.{name}()`."
+        )
     return asyncio.run(coro)
+
+
+# Close tasks scheduled by TensorDictPipe.__del__, kept here so that they
+# are not garbage collected before they finish.
+_PENDING_CLOSE_TASKS: set[asyncio.Task] = set()
+
+
+def _on_close_task_done(task: asyncio.Task) -> None:
+    _PENDING_CLOSE_TASKS.discard(task)
+    if not task.cancelled():
+        # Retrieve the exception so that asyncio does not log it:
+        # __del__ ignores errors raised while closing.
+        task.exception()
 
 
 @_check_ucxx
@@ -603,7 +622,15 @@ class TensorDictPipe:
     def __del__(self):
         if not self._closed:
             try:
-                self.close()
+                loop = _get_or_create_event_loop()
+                if loop is not None and loop.is_running():
+                    # close() cannot block the thread of a running loop:
+                    # schedule the close on the loop instead.
+                    task = loop.create_task(self.aclose())
+                    _PENDING_CLOSE_TASKS.add(task)
+                    task.add_done_callback(_on_close_task_done)
+                else:
+                    self.close()
             except Exception:
                 pass
 

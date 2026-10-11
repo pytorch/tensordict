@@ -18,6 +18,10 @@ from __future__ import annotations
 import asyncio
 import json
 import struct
+import subprocess
+import sys
+import textwrap
+import threading
 
 import pytest
 import torch
@@ -287,6 +291,103 @@ class TestRoundtrip:
 
         torch.testing.assert_close(td_recv["obs"], td["obs"])
         torch.testing.assert_close(td_recv["info", "reward"], td["info", "reward"])
+
+
+class TestSyncWrappersInRunningLoop:
+    """The sync methods must not deadlock on the thread of a running loop (#2316)."""
+
+    # Each scenario runs in a subprocess under a timeout, because before the
+    # fix it hangs forever.
+    _PRELUDE = textwrap.dedent(
+        """
+        import asyncio, gc, warnings
+        import torch
+        from tensordict import TensorDict
+        from tensordict._ucxx import TensorDictPipe
+        warnings.simplefilter("always")
+
+        class Endpoint:
+            closed = 0
+            async def send(self, buf):
+                pass
+            async def recv(self, buf):
+                pass
+            async def close(self):
+                self.closed += 1
+        """
+    )
+
+    def _run(self, code):
+        result = subprocess.run(
+            [sys.executable, "-c", self._PRELUDE + textwrap.dedent(code)],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 0, result.stderr
+        # No "coroutine ... was never awaited" or errors ignored in __del__.
+        assert "never awaited" not in result.stderr, result.stderr
+        assert "Exception ignored" not in result.stderr, result.stderr
+        return result.stdout
+
+    def test_del_inside_running_loop(self):
+        out = self._run(
+            """
+            async def main():
+                ep = Endpoint()
+                pipe = TensorDictPipe(ep)
+                del pipe
+                gc.collect()
+                await asyncio.sleep(0)
+                print("closed", ep.closed)
+
+            asyncio.run(main())
+            """
+        )
+        assert out == "closed 1\n"
+
+    def test_sync_methods_inside_running_loop_raise(self):
+        out = self._run(
+            """
+            async def main():
+                ep = Endpoint()
+                pipe = TensorDictPipe(ep)
+                td = TensorDict(a=torch.ones(3), batch_size=[3])
+                calls = {
+                    "aclose": pipe.close,
+                    "asend": lambda: pipe.send(td),
+                    "arecv": pipe.recv,
+                }
+                for name, call in calls.items():
+                    try:
+                        call()
+                    except RuntimeError as err:
+                        assert f"await pipe.{name}()" in str(err), str(err)
+                        print(name, "raised")
+                print("closed", ep.closed, pipe.closed)
+                await pipe.aclose()
+
+            asyncio.run(main())
+            """
+        )
+        assert out == "aclose raised\nasend raised\narecv raised\nclosed 0 False\n"
+
+    def test_close_without_running_loop(self):
+        ep = _FakeEndpoint()
+        pipe = TensorDictPipe(ep)
+        pipe.close()
+        assert pipe.closed
+
+        # From another thread while a loop runs in this one.
+        async def main():
+            pipe = TensorDictPipe(_FakeEndpoint())
+            thread = threading.Thread(target=pipe.close)
+            thread.start()
+            thread.join(timeout=60)
+            assert not thread.is_alive()
+            return pipe.closed
+
+        assert asyncio.run(main())
 
 
 class TestTensorDictSendRecvOverload:
