@@ -1826,6 +1826,16 @@ class TestGeneric:
             torch.zeros(10, 7, 11, 5, dtype=torch.bool).bernoulli_(),
             torch.zeros(10, 7, 11, dtype=torch.bool).bernoulli_(),
             (0, torch.zeros(7, dtype=torch.bool).bernoulli_()),
+            (),
+            (-1, 0),
+            (9, 6, 10, 4),
+            (-10, -7, -11, -5),
+            (True, 3),
+            (3, True),
+            (np.int64(3), 4),
+            (3, None, 4),
+            (3, slice(1, 3)),
+            (3, slice(None), 4),
         ],
     )
     def test_getitem_batch_size(self, idx):
@@ -1835,6 +1845,16 @@ class TestGeneric:
         expected_shape = mocking_tensor[idx].shape
         resulting_shape = _getitem_batch_size(shape, idx)
         assert expected_shape == resulting_shape, (idx, expected_shape, resulting_shape)
+        assert type(resulting_shape) is torch.Size
+
+    @pytest.mark.parametrize("idx", [(10, 0), (0, -8), (0, 7), (0, 0, 0, 0, 0)])
+    def test_getitem_batch_size_int_tuple_error(self, idx):
+        # an int out of range, or too many ints, raise the IndexError of torch
+        shape = torch.Size([10, 7, 11, 5])
+        with pytest.raises(IndexError) as expected:
+            torch.zeros(shape)[idx]
+        with pytest.raises(IndexError, match=re.escape(str(expected.value))):
+            _getitem_batch_size(shape, idx)
 
     def test_getitem_bool_list(self):
         # A list of bools is a boolean mask, as in torch
