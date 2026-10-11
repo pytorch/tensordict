@@ -621,6 +621,28 @@ class TestPointwiseOps:
         )
 
     @pytest.mark.parametrize("shape", [(4,), (3, 4), (2, 3, 4)])
+    @pytest.mark.parametrize("alpha", [None, 2])
+    def test_rsub_broadcast_tensor(self, shape, alpha):
+        # torch.Tensor has no rsub method, so the leaves go through torch.rsub
+        torch.manual_seed(0)
+        td = TensorDict(
+            a=torch.randn(3, 4), b={"c": torch.randn(3, 4, 5)}, batch_size=(3, 4)
+        )
+        other = torch.randn(shape)
+        kwargs = {} if alpha is None else {"alpha": alpha}
+        results = [td.rsub(other, **kwargs)]
+        if alpha is None:
+            results.append(other - td)
+        for result in results:
+            assert result.shape == torch.broadcast_shapes(shape, td.shape)
+            for key in ("a", ("b", "c")):
+                leaf = td[key]
+                other_leaf = other[(..., *[None] * (leaf.ndim - td.ndim))]
+                torch.testing.assert_close(
+                    result[key], torch.rsub(leaf, other_leaf, **kwargs)
+                )
+
+    @pytest.mark.parametrize("shape", [(4,), (3, 4), (2, 3, 4)])
     def test_broadcast_tensordict(self, shape):
         torch.manual_seed(0)
         td = TensorDict(

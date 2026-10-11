@@ -37,12 +37,11 @@ from typing import (
     TYPE_CHECKING,
     TypeVar,
 )
-from warnings import warn
 
 import numpy as np
 import torch
 from tensordict._contextlib import LAST_OP_MAPS
-from tensordict._deprecation import deprecated, warn_deprecated
+from tensordict._deprecation import deprecated, warn_deprecated_env_var
 from tensordict._indexing import (
     _entry_index,
     _getitem_batch_size,
@@ -196,11 +195,11 @@ else:
     _GET_DEFAULTS_TO_NONE = True
 
 if not _GET_DEFAULTS_TO_NONE:
-    warn_deprecated(
-        f"TD_GET_DEFAULTS_TO_NONE={os.environ['TD_GET_DEFAULTS_TO_NONE']}",
+    warn_deprecated_env_var(
+        "TD_GET_DEFAULTS_TO_NONE",
+        os.environ["TD_GET_DEFAULTS_TO_NONE"],
         removal="0.17",
         replacement=_GET_DEFAULTS_TO_NONE_REPLACEMENT,
-        stacklevel=1,
     )
 
 
@@ -354,6 +353,13 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
     """Ensures that elementwise ops are broadcast when an nd tensor is passed."""
     # add_, mul_, ... are in-place; __eq__, __lt__, ... also end with "_".
     inplace = op.endswith("_") and not op.endswith("__")
+    # torch.Tensor has no rsub method: call torch.rsub on the leaves instead.
+    torch_op = None if hasattr(torch.Tensor, op) else getattr(torch, op)
+
+    def leaf_op(x, *args, **kwargs):
+        if torch_op is None:
+            return getattr(x, op)(*args, **kwargs)
+        return torch_op(x, *args, **kwargs)
 
     def wrap_func(func):
         @wraps(func)
@@ -389,7 +395,8 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                 others_map.append(other)
             if any(isinstance(other, torch.Tensor) for other in others_map):
                 result = self_expand._fast_apply(
-                    lambda x: getattr(x, op)(
+                    lambda x: leaf_op(
+                        x,
                         *[
                             expand_as_right(other, x) if other is not None else None
                             for other in others_map
@@ -414,47 +421,14 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
 __base__setattr__ = torch.nn.Module.__setattr__
 
 
-_TO_MODULE_PRESERVE_MODULE_STATE_WARNING = (
-    "TensorDict.to_module() is replacing an existing nn.Parameter in the "
-    "destination module with a tensor leaf that is not an nn.Parameter. This "
-    "historical behavior can remove the key from module.state_dict(). Starting "
-    "with TensorDict 0.14, to_module() preserves existing module parameter and "
-    "buffer registrations by default. Passing preserve_module_state=None is "
-    "deprecated; pass False to request the historical replacement behavior or "
-    "True to preserve registrations explicitly. Support for None will be "
-    "removed in TensorDict 0.15."
-)
-
-
-def _warn_to_module_preserve_module_state(memo) -> None:
-    if memo is None:
-        warn(
-            _TO_MODULE_PRESERVE_MODULE_STATE_WARNING,
-            FutureWarning,
-            stacklevel=3,
-        )
-        return
-    if memo.get("preserve_module_state_warned", False):
-        return
-    memo["preserve_module_state_warned"] = True
-    warn(
-        _TO_MODULE_PRESERVE_MODULE_STATE_WARNING,
-        FutureWarning,
-        stacklevel=3,
-    )
-
-
 def _maybe_preserve_module_state(
     module: torch.nn.Module,
     name: str,
     tensor: torch.Tensor,
     *,
-    preserve_module_state: bool | None,
-    memo,
+    preserve_module_state: bool,
 ) -> torch.Tensor:
-    if preserve_module_state is False or (
-        preserve_module_state is None and isinstance(tensor, torch.nn.Parameter)
-    ):
+    if not preserve_module_state:
         return tensor
     try:
         param = module._parameters.get(name, NO_DEFAULT)
@@ -465,16 +439,14 @@ def _maybe_preserve_module_state(
         and param is not None
         and isinstance(tensor, torch.Tensor)
     ):
-        if preserve_module_state is None and not isinstance(tensor, torch.nn.Parameter):
-            _warn_to_module_preserve_module_state(memo)
-        elif preserve_module_state and (
+        if (
             not isinstance(tensor, torch.nn.Parameter)
             or tensor.requires_grad != param.requires_grad
         ):
             if _tracks_gradients(tensor):
                 # swap_tensor writes it to module._parameters as it is
                 return tensor
-            return torch.nn.Parameter(tensor, requires_grad=param.requires_grad)
+            return _new_parameter(tensor, requires_grad=param.requires_grad)
     elif (
         preserve_module_state
         and isinstance(tensor, torch.nn.Parameter)
@@ -496,8 +468,7 @@ def _set_tensor_dict(
     inplace: bool,
     *,
     return_swap: bool,
-    preserve_module_state: bool | None,
-    memo,
+    preserve_module_state: bool,
 ) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
     if (
@@ -529,14 +500,15 @@ def _set_tensor_dict(
             return out
     was_buffer = False
     keep_parameter_slot = False
-    out = _parameters.pop(name, NO_DEFAULT)  # type: ignore[assignment]
+    # Build the new value before removing the old one, so that the module
+    # keeps its entry if building the new value raises.
+    out = _parameters.get(name, NO_DEFAULT)  # type: ignore[assignment]
     was_parameter = out is not NO_DEFAULT
     if out is NO_DEFAULT:
-        out = _buffers.pop(name, NO_DEFAULT)
+        out = _buffers.get(name, NO_DEFAULT)
         was_buffer = out is not NO_DEFAULT
     if out is NO_DEFAULT:
-        # dynamo doesn't like pop...
-        out = __dict__.pop(name)
+        out = __dict__[name]
     if inplace:
         # swap tensor and out after updating out
         out_tmp = out.clone() if return_swap else out
@@ -544,21 +516,19 @@ def _set_tensor_dict(
         tensor = out
         out = out_tmp
     elif (
-        preserve_module_state is not False
+        preserve_module_state
         and was_parameter
         and out is not None
         and isinstance(tensor, torch.Tensor)
     ):
-        if preserve_module_state is None and not isinstance(tensor, torch.nn.Parameter):
-            _warn_to_module_preserve_module_state(memo)
-        elif preserve_module_state and (
+        if (
             not isinstance(tensor, torch.nn.Parameter)
             or tensor.requires_grad != out.requires_grad
         ):
             if _tracks_gradients(tensor):
                 keep_parameter_slot = True
             else:
-                tensor = torch.nn.Parameter(tensor, requires_grad=out.requires_grad)
+                tensor = _new_parameter(tensor, requires_grad=out.requires_grad)
     elif (
         preserve_module_state is True
         and was_buffer
@@ -567,6 +537,12 @@ def _set_tensor_dict(
         persistent = name not in module._non_persistent_buffers_set
         tensor = Buffer(tensor, persistent=persistent)
 
+    if was_parameter:
+        del _parameters[name]
+    elif was_buffer:
+        del _buffers[name]
+    else:
+        del __dict__[name]
     if isinstance(tensor, torch.nn.Parameter):
         for hook in hooks:
             output = hook(module, name, tensor)
@@ -588,6 +564,17 @@ def _set_tensor_dict(
     else:
         __dict__[name] = tensor
     return out
+
+
+def _new_parameter(tensor: torch.Tensor, *, requires_grad: bool) -> torch.nn.Parameter:
+    """Wraps ``tensor`` in an ``nn.Parameter`` that shares its storage.
+
+    ``nn.Parameter`` rejects a ``MemoryMappedTensor``, whose ``detach()``
+    returns a plain ``Tensor``, so it wraps a plain view of the same storage.
+    """
+    if isinstance(tensor, MemoryMappedTensor):
+        tensor = tensor.as_subclass(torch.Tensor)
+    return torch.nn.Parameter(tensor, requires_grad=requires_grad)
 
 
 def _tracks_gradients(tensor: torch.Tensor) -> bool:
@@ -1154,13 +1141,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         index: IndexType,
         value: Any,
     ) -> None:
-        from tensordict._td import _SubTensorDict
-
         istuple = isinstance(index, tuple)
         if istuple or isinstance(index, str):
             # try:
             index_unravel = _unravel_key_to_tuple(index)
             if index_unravel:
+                from tensordict._td import _SubTensorDict
+
                 if value is self:
                     raise ValueError(_SELF_NESTING_ERROR.format(index))
                 self._set_tuple(
@@ -1176,7 +1163,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 )
                 return
 
-        if is_tensorclass(value) and not is_non_tensor(value):
+        if (
+            # is_tensorclass reads this class attribute: skip the call for the
+            # values whose class does not have it, such as tensordicts
+            (isinstance(value, type) or getattr(type(value), "_is_tensorclass", False))
+            and is_tensorclass(value)
+            and not is_non_tensor(value)
+        ):
             # write the fields key by key, as a tensorclass __setitem__ does;
             # NonTensorData keeps the leaf path (its _tensordict is empty)
             value = value._tensordict
@@ -1188,7 +1181,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         if isinstance(index, tuple) and len(index) == 1:
             index = index[0]
-        if _is_new_dim_index(index):
+        if (
+            # skip the call for the indices that _is_new_dim_index rejects first
+            index is None or index is True or isinstance(index, torch.Tensor)
+        ) and _is_new_dim_index(index):
             # None and True add a dim of size 1, and the value is written to it
             # (False selects nothing, as a 0-d False mask does)
             if not self.batch_dims:
@@ -3199,8 +3195,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         ):
             if not update_batch_size:
                 raise RuntimeError(
-                    "update_batch_size must be set to True to be able to update "
-                    "tensordicts of different batch size. Got sizes {}"
+                    f"update() got a source with batch size {input_dict_or_td.batch_size} "
+                    f"for a destination with batch size {self.batch_size}. "
+                    "Pass update_batch_size=True to replace the batch size."
                 )
             if inplace:
                 raise RuntimeError(
@@ -3467,17 +3464,36 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     _foreach_copy_compiled(vals, other_val, non_blocking=non_blocking)
                 else:
                     _foreach("copy_", vals, other_val, non_blocking=non_blocking)
-                return self
-            named = True
+                if not input_dict_or_td._has_non_tensor:
+                    return self
+                from tensordict import NonTensorStack
 
-            def inplace_update(name, source, dest):
-                if source is None:
-                    return None
-                if dest is None:
-                    raise KeyError(
-                        f"The key {name} was not found in the dest tensordict."
-                    )
-                dest.copy_(source, non_blocking=non_blocking)
+                # _items_list leaves out the non-tensor leaves: copy them below.
+                # Like the tensor leaves above, keys missing in self are skipped.
+                # copy_ raises for a locked dest (#2288) and between a
+                # NonTensorData and a NonTensorStack: these leaves are skipped too.
+                def inplace_update(name, source, dest):
+                    if (
+                        _is_non_tensor(type(source))
+                        and _is_non_tensor(type(dest))
+                        and not dest.is_locked
+                        and isinstance(source, NonTensorStack)
+                        == isinstance(dest, NonTensorStack)
+                    ):
+                        dest.copy_(source, non_blocking=non_blocking)
+
+            else:
+
+                def inplace_update(name, source, dest):
+                    if source is None:
+                        return None
+                    if dest is None:
+                        raise KeyError(
+                            f"The key {name} was not found in the dest tensordict."
+                        )
+                    dest.copy_(source, non_blocking=non_blocking)
+
+            named = True
 
         input_dict_or_td._apply_nest(
             inplace_update,
@@ -3700,7 +3716,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         idx: IndexType,
         non_blocking: bool = False,
         *,
-        fast: bool | None = True,
+        fast: bool = True,
     ) -> Self:
         """Copies values from ``tensordict`` into ``self`` at the specified index.
 
@@ -3718,28 +3734,24 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 to the host.
 
         Keyword Args:
-            fast (bool or None, optional): controls whether ``copy_at_`` may
+            fast (bool, optional): controls whether ``copy_at_`` may
                 fall back to :meth:`~tensordict.TensorDictBase.update_at_`.
                 If ``True``, only the optimized tensor-only path is used and a
                 ``RuntimeError`` is raised when the fast path is not available.
                 If ``False``, this method delegates directly to ``update_at_``.
-                If ``None``, the deprecated compatibility behavior warns and
-                falls back to ``update_at_`` when the fast path is unavailable.
                 Defaults to ``True``.
+
+                .. versionchanged:: 0.15
+                    ``fast=None``, deprecated in 0.14, is no longer accepted.
 
         Returns:
             self
         """
         if fast is None:
-            warnings.warn(
-                "copy_at_(..., fast=None) is deprecated and falls back to "
-                "update_at_ when the optimized tensor-only copy path is "
-                "unavailable. Starting with TensorDict 0.14, copy_at_ defaults "
-                "to fast=True. Pass fast=False to request the general update "
-                "semantics explicitly; support for fast=None will be removed "
-                "in TensorDict 0.15.",
-                FutureWarning,
-                stacklevel=2,
+            raise TypeError(
+                "copy_at_(..., fast=None) is no longer supported. Pass "
+                "fast=True to require the optimized tensor-only copy path, or "
+                "fast=False for the general update_at_ semantics."
             )
         elif fast is False:
             return self.update_at_(tensordict, idx, non_blocking=non_blocking)
@@ -3864,8 +3876,24 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     if _is_tensor_collection(cls):
                         # Don't recurse into pass-through values (e.g., UnbatchedTensor)
                         if not is_non_tensor(cls) and not _pass_through(val):
+                            # _unravel_key_to_tuple((k, _key)), with less work:
+                            # no call for a str _key, and a tuple _key is spliced
+                            # in, so that a flat key takes the fast path instead
+                            # of being rebuilt part by part on every level.
+                            k_is_str = isinstance(k, str)
                             yield from (
-                                (_unravel_key_to_tuple((k, _key)), _val)
+                                (
+                                    (
+                                        (k, _key)
+                                        if k_is_str and isinstance(_key, str)
+                                        else _unravel_key_to_tuple(
+                                            (k, *_key)
+                                            if isinstance(_key, tuple) and _key
+                                            else (k, _key)
+                                        )
+                                    ),
+                                    _val,
+                                )
                                 for _key, _val in val.items(
                                     include_nested=include_nested,
                                     leaves_only=leaves_only,
