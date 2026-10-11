@@ -2664,10 +2664,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Key functionality: set, get, set_, set_at_, update, update_
     @abc.abstractmethod
     def entry_class(self, key: NestedKey) -> type:
-        """Returns the class of an entry, possibly avoiding a call to `isinstance(td.get(key), type)`.
+        """Returns the class of an entry, possibly without reading the entry.
 
-        This method should be preferred to ``tensordict.get(key).shape`` whenever
-        :meth:`.get` can be expensive to execute.
+        It returns ``type(tensordict.get(key))``. Prefer it to that expression
+        when :meth:`.get` is expensive, for example on a lazy stack or a
+        tensordict stored on disk.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3), b=TensorDict(c=torch.zeros(3)))
+            >>> td.entry_class("a")
+            <class 'torch.Tensor'>
+            >>> td.entry_class("b")
+            <class 'tensordict._td.TensorDict'>
 
         """
         raise NotImplementedError
