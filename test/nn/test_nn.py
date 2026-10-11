@@ -4625,6 +4625,32 @@ class TestCompositeDist:
         assert "entropy" not in sample.keys()
 
     @pytest.mark.parametrize("lp_aggregate", [True, False])
+    def test_entropy_truncated_normal(self, lp_aggregate):
+        # TruncatedNormal.entropy is a property, not a method (#2103)
+        params = TensorDict(
+            x=TensorDict(
+                loc=torch.zeros(3),
+                scale=torch.ones(3),
+                a=-torch.ones(3),
+                b=torch.ones(3),
+                batch_size=[3],
+            ),
+            batch_size=[3],
+        )
+        dist = CompositeDistribution(params, distribution_map={"x": TruncatedNormal})
+        expected = TruncatedNormal(
+            torch.zeros(3), torch.ones(3), -torch.ones(3), torch.ones(3)
+        ).entropy
+        with set_composite_lp_aggregate(lp_aggregate):
+            ent = dist.entropy()
+        if lp_aggregate:
+            assert isinstance(ent, torch.Tensor)
+            torch.testing.assert_close(ent, expected)
+        else:
+            assert isinstance(ent, TensorDict)
+            torch.testing.assert_close(ent["x_entropy"], expected)
+
+    @pytest.mark.parametrize("lp_aggregate", [True, False])
     @pytest.mark.parametrize("aggregate_probabilities", [True, False])
     def test_entropy_aggregate_probabilities_deprecated(
         self, lp_aggregate, aggregate_probabilities
