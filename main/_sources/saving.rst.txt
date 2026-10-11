@@ -51,9 +51,9 @@ However, this approach also has some disadvantages:
 Pickled non-tensor data
 -----------------------
 
-In TensorDict 0.14, omitting ``allow_pickle`` preserves compatibility by
-loading pickled non-tensor fields with a :class:`FutureWarning`. The default
-will become ``False`` in 0.15. Applications handling less-trusted artifacts
+In TensorDict 0.14 and 0.15, omitting ``allow_pickle`` preserves compatibility
+by loading pickled non-tensor fields with a :class:`FutureWarning`. The default
+will become ``False`` in 0.16. Applications handling less-trusted artifacts
 can enforce that boundary now:
 
   >>> untrusted = TensorDict.load_memmap(path, allow_pickle=False)  # doctest: +SKIP

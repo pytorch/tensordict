@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev5067+g989918e06.d20261011)
+                  main (0.14.0.dev5070+ga06fbfad8.d20261011)
                 </div>
               
             
@@ -671,9 +671,9 @@ argument has no effect. Defaults to <code class="docutils literal notranslate"><
 <li><p><strong>allow_pickle</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – whether pickled non-tensor fields
 may be loaded. Pickle can execute arbitrary code, so pass
 <code class="docutils literal notranslate"><span class="pre">True</span></code> only for data from a trusted source and <code class="docutils literal notranslate"><span class="pre">False</span></code>
-for untrusted data. During the 0.14 compatibility window,
-omitting this option loads pickle with a <code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code>;
-the default will change to <code class="docutils literal notranslate"><span class="pre">False</span></code> in 0.15. Saves without
+for untrusted data. In TensorDict 0.14 and 0.15, omitting
+this option loads pickle with a <code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code>; the
+default will change to <code class="docutils literal notranslate"><span class="pre">False</span></code> in 0.16. Saves without
 a pickle sidecar do not require this option.</p></li>
 </ul>
 </dd>
