@@ -929,6 +929,21 @@ class TestTD:
         assert out["other"].shape == other.shape
         assert (out == add_one(td)).all()
 
+    def test_tree_map_non_tensor_first(self, mode):
+        # The batch size of the result is not read from the non-tensor entry,
+        # https://github.com/pytorch/tensordict/issues/2207
+        def add_one(td):
+            return tree_map(lambda x: x + 1, td)
+
+        td = TensorDict(s="a string", a=torch.zeros(4, 3), batch_size=[4])
+        add_one_c = torch.compile(add_one, fullgraph=True, mode=mode)
+        out = add_one_c(td)
+        assert out.batch_size == torch.Size([4])
+        assert list(out.keys()) == ["s", "a"]
+        assert out.get("s").batch_size == torch.Size([4])
+        assert out.get_non_tensor("s") == "a string"
+        assert (out["a"] == 1).all()
+
     # Memmap is currently not supported
     # def test_memmap(self, mode, tmpdir):
     #     def locked_op(td):
