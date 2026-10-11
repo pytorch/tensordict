@@ -6427,6 +6427,10 @@ def _update_shared_nontensor(nontensor, val):
         nontensor.value = val
     elif isinstance(nontensor, multiprocessing.sharedctypes.SynchronizedArray):
         val = val.encode("utf-8")
+        if len(val) > len(nontensor):
+            # The array has a fixed size. Cut on a character boundary so that
+            # the stored bytes stay valid UTF-8 and can be read back.
+            val = val[: len(nontensor)].decode("utf-8", "ignore").encode("utf-8")
         for i, byte in enumerate(nontensor):
             if i < len(val):
                 v = val[i]
