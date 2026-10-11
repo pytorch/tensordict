@@ -455,33 +455,20 @@ inherit from a non-frozen dataclass".
 Runtime type checking
 ---------------------
 
-Runtime type checkers such as `beartype <https://github.com/beartype/beartype>`_
-can decorate a tensorclass. They check the methods written in the class body
-and skip the methods that tensorclass adds, which are marked with
-:func:`typing.no_type_check`. ``__init__`` keeps the annotations of the fields,
-so ``jaxtyping.jaxtyped`` still checks the values passed to it.
-
-.. code-block::
-
-  >>> from beartype import beartype
-  >>> @beartype
-  ... class Obs(TensorClass):
-  ...     a: torch.Tensor
-  ...
-  ...     def scaled(self, k: float) -> torch.Tensor:
-  ...         return self.a * k
-  >>> obs = Obs(a=torch.zeros(3), batch_size=[3])
-  >>> obs.scaled(2.0)  # accepted
-  >>> obs.scaled("2")  # raises BeartypeCallHintParamViolation
+A runtime type checker that decorates a class checks the methods in its
+namespace. Tensorclass marks the methods that it adds with
+``__no_type_check__``, the attribute that :func:`typing.no_type_check` sets, so
+the checkers that honour it, such as beartype and typeguard, check only the
+methods written in the class body. ``__init__`` is not marked: it keeps the
+annotations of the fields, or those of a user-defined ``__init__``.
 
 Some methods of a tensorclass have the names of builtins, such as ``bool``,
 ``int``, ``float``, ``set`` and ``type``. With
-``from __future__ import annotations``, beartype looks up the names in the
-annotations of a method in the namespace of the class. The ``@tensorclass``
-decorator puts these methods in that namespace, so an ``int`` annotation names
-the method there and decorating the class fails. A subclass of
-:class:`~tensordict.TensorClass` inherits these methods instead; with the
-decorator, write ``builtins.int``.
+``from __future__ import annotations``, annotations are strings. A checker that
+evaluates them in the namespace of the class finds these methods there when
+the class uses the ``@tensorclass`` decorator, so an ``int`` annotation names
+the method. A subclass of :class:`~tensordict.TensorClass` inherits these
+methods instead; with the decorator, write ``builtins.int``.
 
 .. _tensorclass-legacy-decorator:
 

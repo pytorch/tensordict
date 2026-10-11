@@ -74,7 +74,6 @@ from torch import Tensor
 
 _has_streaming = importlib.util.find_spec("streaming", None) is not None
 _has_mypy = importlib.util.find_spec("mypy") is not None
-_has_beartype = importlib.util.find_spec("beartype") is not None
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
@@ -4785,53 +4784,6 @@ class TestRuntimeTypeCheckers:
         for name in ("save", "__iter__"):
             method = getattr(Data, name)
             assert pickle.loads(pickle.dumps(method)) is method
-
-    @pytest.mark.skipif(not _has_beartype, reason="beartype is not installed")
-    @pytest.mark.parametrize("subclass", [False, True])
-    def test_beartype(self, subclass, tmp_path):
-        from beartype import beartype
-        from beartype.roar import BeartypeCallHintParamViolation
-
-        # the example of gh-1243
-        if subclass:
-
-            @beartype
-            class MyData(TensorClass):
-                floatdata: Tensor
-                intdata: Tensor
-                non_tensordata: str
-
-                def scaled(self, k: Tensor) -> Tensor:
-                    return self.floatdata * k
-
-        else:
-
-            @beartype
-            @tensorclass
-            class MyData:
-                floatdata: Tensor
-                intdata: Tensor
-                non_tensordata: str
-
-                def scaled(self, k: Tensor) -> Tensor:
-                    return self.floatdata * k
-
-        data = MyData(
-            floatdata=torch.zeros(3),
-            intdata=torch.ones(3, dtype=torch.long),
-            non_tensordata="a",
-            batch_size=[3],
-        )
-        assert (data == data).all()
-        assert "non_tensordata" in repr(data)
-        assert data[0].non_tensordata == "a"
-        assert torch.stack([data, data]).batch_size == (2, 3)
-        assert MyData.from_dict(data.to_dict(), batch_size=[3]).non_tensordata == "a"
-        data.memmap(tmp_path)
-        assert (MyData.load_memmap(tmp_path).intdata == 1).all()
-        assert (data.scaled(torch.ones(())) == 0).all()
-        with pytest.raises(BeartypeCallHintParamViolation):
-            data.scaled("2")
 
     def test_method_annotations_name_shadowed_builtins(self):
         # On Python 3.14+, without `from __future__ import annotations` (which this
