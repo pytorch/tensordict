@@ -450,6 +450,26 @@ The constructor casts lists, NumPy arrays and Python numbers passed to a
 Mypy reports any ``frozen=True`` tensorclass as "Frozen dataclass cannot
 inherit from a non-frozen dataclass".
 
+.. _tensorclass-runtime-typing:
+
+Runtime type checking
+---------------------
+
+A runtime type checker that decorates a class checks the methods in its
+namespace. Tensorclass marks the methods that it adds with
+``__no_type_check__``, the attribute that :func:`typing.no_type_check` sets, so
+the checkers that honour it, such as beartype and typeguard, check only the
+methods written in the class body. ``__init__`` is not marked: it keeps the
+annotations of the fields, or those of a user-defined ``__init__``.
+
+Some methods of a tensorclass have the names of builtins, such as ``bool``,
+``int``, ``float``, ``set`` and ``type``. With
+``from __future__ import annotations``, annotations are strings. A checker that
+evaluates them in the namespace of the class finds these methods there when
+the class uses the ``@tensorclass`` decorator, so an ``int`` annotation names
+the method. A subclass of :class:`~tensordict.TensorClass` inherits these
+methods instead; with the decorator, write ``builtins.int``.
+
 .. _tensorclass-legacy-decorator:
 
 Legacy: the ``@tensorclass`` decorator

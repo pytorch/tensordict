@@ -927,6 +927,21 @@ class TestTD:
         assert out["other"].shape == other.shape
         assert (out == add_one(td)).all()
 
+    def test_tree_map_non_tensor_first(self, mode):
+        # The batch size of the result is not read from the non-tensor entry,
+        # https://github.com/pytorch/tensordict/issues/2207
+        def add_one(td):
+            return tree_map(lambda x: x + 1, td)
+
+        td = TensorDict(s="a string", a=torch.zeros(4, 3), batch_size=[4])
+        add_one_c = torch.compile(add_one, fullgraph=True, mode=mode)
+        out = add_one_c(td)
+        assert out.batch_size == torch.Size([4])
+        assert list(out.keys()) == ["s", "a"]
+        assert out.get("s").batch_size == torch.Size([4])
+        assert out.get_non_tensor("s") == "a string"
+        assert (out["a"] == 1).all()
+
     # Memmap is currently not supported
     # def test_memmap(self, mode, tmpdir):
     #     def locked_op(td):
@@ -2066,6 +2081,28 @@ class TestFunctional:
             assert td_zero["3", "param"] == 4
         else:
             assert (td_zero == 0).all()
+
+    def test_to_module_restores_on_error(self, mode):
+        # The module gets its original parameters back also when the body raises
+        module = torch.nn.Linear(3, 4)
+        orig_params = list(module.parameters())
+        td_zero = TensorDict.from_module(module).data.clone().zero_()
+
+        def call(x, td):
+            try:
+                with td.to_module(module, preserve_module_state=False):
+                    module(x)
+                    raise ValueError("error in the body")
+            except ValueError:
+                pass
+            return module(x)
+
+        call_compile = torch.compile(call, fullgraph=True, mode=mode)
+        x = torch.randn(2, 3)
+        torch.testing.assert_close(call_compile(x, td_zero), module(x))
+        assert all(
+            p_new is p_orig for p_new, p_orig in zip(module.parameters(), orig_params)
+        )
 
     # in-place modif raises an error even if fullgraph=False
     @pytest.mark.parametrize("preserve_module_state", [False, True])

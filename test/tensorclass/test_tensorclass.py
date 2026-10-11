@@ -32,6 +32,7 @@ from typing import (
     Generic,
     get_args,
     get_origin,
+    get_type_hints,
     Optional,
     Tuple,
     TypeVar,
@@ -60,6 +61,7 @@ from tensordict import (
     tensorclass,
     TensorDict,
     TensorDictBase,
+    UnbatchedTensor,
 )
 from tensordict._lazy import _PermutedTensorDict, _ViewedTensorDict
 from tensordict._td import lazy_stack
@@ -771,6 +773,18 @@ class TestTensorClass:
                 ),
             ):
                 Data(x=x, y=y, extra=x)
+        else:
+            # Until TensorDict 0.17, a tensor_only class stores the argument
+            # and warns.
+            with pytest.warns(
+                DeprecationWarning,
+                match=re.escape(
+                    "Passing arguments that are not fields (['extra']) to the "
+                    "tensor_only tensorclass Data"
+                ),
+            ) as record:
+                Data(x=x, y=y, extra=x)
+            assert record[0].filename == __file__
         # None values must still enter non-tensor storage.
         assert Data(x=x, y=None, batch_size=[3]).y is None
 
@@ -879,6 +893,24 @@ class TestTensorClass:
                 assert not obj.is_locked
             assert obj.is_locked
         assert not obj.is_locked
+
+    def test_lock_context_manager_restores_on_error(self):
+        # lock_() and unlock_() undo their change also when the body raises
+        @tensorclass
+        class MyClass:
+            X: torch.Tensor
+
+        obj = MyClass(X=torch.zeros(2), batch_size=[])
+        with pytest.raises(ValueError, match="error in the body"):
+            with obj.lock_():
+                raise ValueError("error in the body")
+        assert not obj.is_locked
+        obj.lock_()
+        with pytest.raises(ValueError, match="error in the body"):
+            with obj.unlock_():
+                raise ValueError("error in the body")
+        assert obj.is_locked
+        assert not obj._tensordict._last_op_queue
 
     def test_to_dict(self):
         @tensorclass
@@ -3472,6 +3504,53 @@ class TestTensorClass:
         assert (tc.a[:, 0] == torch.tensor([0.0, 1.0, 1.0, 1.0])).all()
         assert (tc.b == torch.tensor([0.0, 1.0, 1.0, 0.0])).all()
 
+        # a source without batch dims is written at an int index
+        tc = TC(a=torch.zeros(4, 3), b=torch.zeros(4), batch_size=[4])
+        a, b = tc.a, tc.b
+        source = TC(a=torch.ones(3), b=torch.ones(()), batch_size=[])
+        if source_type == "tensordict":
+            source = source.to_tensordict()
+        elif source_type == "dict":
+            source = source.to_dict()
+        assert tc.update_at_(source, 1) is tc
+        assert tc.a is a and tc.b is b
+        assert (tc.b == torch.tensor([0.0, 1.0, 0.0, 0.0])).all()
+        assert (tc.a == tc.b.unsqueeze(-1)).all()
+
+        # a source with a prefix of the batch dims, at an index on the last dim
+        tc = TC(a=torch.zeros(4, 3), b=torch.zeros(4, 3), batch_size=[4, 3])
+        a, b = tc.a, tc.b
+        source = TC(a=torch.ones(4), b=torch.ones(4), batch_size=[4])
+        if source_type == "tensordict":
+            source = source.to_tensordict()
+        elif source_type == "dict":
+            source = source.to_dict()
+        tc.update_at_(source, (slice(None), 1))
+        assert tc.a is a and tc.b is b
+        assert (tc.a == torch.tensor([0.0, 1.0, 0.0])).all()
+        assert (tc.b == tc.a).all()
+
+        if source_type == "tensorclass":
+            # a source whose values have the batch size of tc still replaces them
+            tc = TC(a=torch.zeros(4, 3), b=torch.zeros(4), batch_size=[4])
+            source = TC(a=torch.ones(4, 3), b=torch.ones(4), batch_size=[])
+            tc.update_at_(source, 1)
+            assert tc.a is source.a and tc.b is source.b
+
+            # an UnbatchedTensor does not have the batch size, but update()
+            # accepts it: the entries are still replaced
+            tc = TC(
+                a=torch.zeros(4, 3),
+                b=UnbatchedTensor(torch.zeros(5)),
+                batch_size=[4],
+            )
+            source = TC(
+                a=torch.ones(4, 3), b=UnbatchedTensor(torch.ones(5)), batch_size=[]
+            )
+            tc.update_at_(source, 1)
+            assert tc.a is source.a
+            assert (tc.b == 1).all()
+
     @pytest.mark.parametrize("source_type", ["tensordict", "dict"])
     def test_update_at_lazy_stack(self, source_type):
         @tensorclass
@@ -4844,6 +4923,93 @@ class TestShadow:
                 setattr(c, name, torch.full((3,), 2.0))
                 assert (getattr(c, name) == 2).all()
                 assert (c.get(name) == 2).all()
+
+
+class TestRuntimeTypeCheckers:
+    # A runtime type-checker that decorates a tensorclass (beartype, typeguard)
+    # checks the methods in its namespace, and skips the functions marked with
+    # __no_type_check__ (typing.no_type_check). Tensorclass marks the methods
+    # that it adds: their annotations name builtins that the class shadows
+    # (bool, int, type...).
+
+    @staticmethod
+    def _functions(value):
+        if isinstance(value, property):
+            return [f for f in (value.fget, value.fset, value.fdel) if f is not None]
+        if isinstance(value, (classmethod, staticmethod)):
+            value = value.__func__
+        return [value] if inspect.isfunction(value) else []
+
+    @pytest.mark.parametrize(
+        "flags", [{}, {"tensor_only": True}, {"shadow": True, "frozen": True}]
+    )
+    @pytest.mark.parametrize("subclass", [False, True])
+    def test_added_methods_are_not_type_checked(self, subclass, flags):
+        if subclass:
+
+            class Data(TensorClass, **flags):
+                x: torch.Tensor
+
+                def scaled(self, k: torch.Tensor) -> torch.Tensor:
+                    return self.x * k
+
+        else:
+
+            @tensorclass(**flags)
+            class Data:
+                x: torch.Tensor
+
+                def scaled(self, k: torch.Tensor) -> torch.Tensor:
+                    return self.x * k
+
+        unmarked = [
+            name
+            for name, value in vars(Data).items()
+            if name not in ("scaled", "__init__")
+            for func in self._functions(value)
+            if func.__annotations__ and not getattr(func, "__no_type_check__", False)
+        ]
+        assert not unmarked
+        # The methods of the class body are checked, and so is __init__, which has
+        # the annotations of the fields.
+        assert not hasattr(Data.scaled, "__no_type_check__")
+        assert not hasattr(Data.__init__, "__no_type_check__")
+        assert get_type_hints(Data.__init__)["x"] is torch.Tensor
+        # Tensorclasses get copies of the TensorDict methods that they reuse, which
+        # pickle by reference as these methods do
+        for name in ("save", "memmap", "load_memmap"):
+            assert not hasattr(getattr(TensorDict, name), "__no_type_check__")
+        assert get_type_hints(TensorDict.save)["copy_existing"] is bool
+        for name in ("save", "__iter__"):
+            method = getattr(Data, name)
+            assert pickle.loads(pickle.dumps(method)) is method
+
+    def test_method_annotations_name_shadowed_builtins(self):
+        # On Python 3.14+, without `from __future__ import annotations` (which this
+        # module has), a method's annotations are evaluated when first read, in the
+        # namespace of the class, where a tensorclass has methods named int and set.
+        namespace = {"__name__": __name__}
+        code = """
+            import torch
+            from tensordict import tensorclass
+
+            @tensorclass
+            class Data:
+                x: torch.Tensor
+
+                def count(self, k: int) -> int:
+                    return k
+
+                def tags(self) -> set[str]:
+                    return {"x"}
+        """
+        exec(
+            compile(textwrap.dedent(code), "<test>", "exec", dont_inherit=True),
+            namespace,
+        )
+        Data = namespace["Data"]
+        assert get_type_hints(Data.count) == {"k": int, "return": int}
+        assert inspect.signature(Data.tags).return_annotation == set[str]
 
 
 class TestDeprecations:
