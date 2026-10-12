@@ -57,6 +57,7 @@ from tensordict.utils import (
     _add_batch_dim_pre_hook,
     _as_context_manager,
     _cache_while_locked,
+    _canonicalize_tensor,
     _CloudpickleWrapper,
     _convert_list_to_stack,
     _erase_cache_first,
@@ -978,6 +979,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     _inplace_set: bool = False
     is_meta: bool = False
     _is_locked: bool = False
+    _is_shared: bool = False
+    _is_memmap: bool = False
     _cache: bool | None = None
     _is_non_tensor: bool = False
     _memmap_prefix = None
@@ -2479,7 +2482,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def is_cpu(self):
         return self.device is not None and self.device.type == "cpu"
 
-    @abc.abstractmethod
     def share_memory_(self) -> Self:
         """Places all the tensors in shared memory.
 
@@ -2494,7 +2496,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self
 
         """
-        raise NotImplementedError
+        raise NotImplementedError(
+            f"Cannot call share_memory_ on a {type(self).__name__}. "
+            "Call `to_tensordict()` first."
+        )
 
     @abc.abstractmethod
     def _memmap_(
@@ -6814,12 +6819,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._batch_size = new_size
 
-    @abc.abstractmethod
     def is_contiguous(self) -> bool:
         """Returns a boolean indicating if all the tensors are contiguous."""
-        raise NotImplementedError
+        return all([value.is_contiguous() for value in self.values()])
 
-    @abc.abstractmethod
     def contiguous(self, *, canonical: bool = False, inplace: bool = False) -> Self:
         """Returns a new tensordict of the same type with contiguous values (or self if values are already contiguous).
 
@@ -6841,7 +6844,31 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 Defaults to ``False``.
 
         """
-        raise NotImplementedError
+        if inplace:
+            return self._contiguous_inplace(canonical)
+        if canonical:
+            source = {
+                key: (
+                    value.contiguous(canonical=True)
+                    if is_tensor_collection(value)
+                    else _canonicalize_tensor(value.contiguous())
+                )
+                for key, value in self.items()
+            }
+        else:
+            source = {key: value.contiguous() for key, value in self.items()}
+        return self._new_unsafe(
+            source=source,
+            batch_size=self.batch_size,
+            device=self.device,
+            names=self.names if self._has_names() else None,
+        )
+
+    def _contiguous_inplace(self, canonical: bool) -> Self:
+        raise NotImplementedError(
+            f"contiguous(inplace=True) is not supported on {type(self).__name__}. "
+            "Call .to_tensordict() first or use inplace=False."
+        )
 
     @_cache_while_locked  # noqa: B019
     @_as_context_manager()
@@ -7389,11 +7416,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Registers the parent tensordict that handles the lock."""
         self._is_locked = True
         if lock_parents_weakrefs is not None:
-            lock_parents_weakrefs = [
-                ref
-                for ref in lock_parents_weakrefs
-                if not any(refref is ref for refref in self._lock_parents_weakrefs)
-            ]
+            existing = self._lock_parents_weakrefs
+            # Most tensordicts have no lock parent yet: skip the filter then.
+            if existing:
+                lock_parents_weakrefs = [
+                    ref
+                    for ref in lock_parents_weakrefs
+                    if not any(refref is ref for refref in existing)
+                ]
         if not is_compiling:
             is_root = lock_parents_weakrefs is None
             if is_root:
@@ -7413,9 +7443,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # mode before entering the compiled region.
             self._build_lock_schema()
 
-        for value in self.values():
-            if _is_tensor_collection(type(value)):
-                value._propagate_lock(lock_parents_weakrefs, is_compiling=is_compiling)
+        for value in self._lock_sub_tensordicts():
+            value._propagate_lock(lock_parents_weakrefs, is_compiling=is_compiling)
+
+    def _lock_sub_tensordicts(self):
+        """The sub-tensordicts that lock_() and unlock_() reach from this one."""
+        return [value for value in self.values() if _is_tensor_collection(type(value))]
 
     def _build_lock_schema(self) -> None:
         """Build the immutable locked schema for this TD.
@@ -7504,10 +7537,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             delattr(self, "_consolidated")
 
         sub_tds = []
-        for value in self.values():
-            if _is_tensor_collection(type(value)):
-                sub_tds.extend(value._propagate_unlock())
-                sub_tds.append(value)
+        for value in self._lock_sub_tensordicts():
+            sub_tds.extend(value._propagate_unlock())
+            sub_tds.append(value)
         return sub_tds
 
     def _check_unlock(self, first_attempt=True):
@@ -7879,7 +7911,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             inputs=inputs,
         )
 
-    @abc.abstractmethod
     def detach_(self) -> Self:
         """Detach the tensors in the tensordict in-place.
 
@@ -7887,7 +7918,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self.
 
         """
-        raise NotImplementedError
+        for value in self.values():
+            value.detach_()
+        return self
 
     @_cache_while_locked  # noqa: B019
     def detach(self) -> Self:

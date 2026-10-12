@@ -473,6 +473,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
 
     _source: TensorDictBase
 
+    # Override: the flag lives on the source.
     @property
     def _is_shared(self):
         return self._source._is_shared
@@ -481,6 +482,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     def _is_shared(self, value):
         self._source._is_shared = value
 
+    # Override: the flag lives on the source.
     @property
     def _is_memmap(self):
         return self._source._is_memmap
@@ -618,13 +620,10 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._source._change_batch_size(new_size)
 
-    @property
+    # Override: the lock state lives on the source.
+    @TensorDictBase.is_locked.getter
     def is_locked(self) -> bool:
         return self._source.is_locked
-
-    @is_locked.setter
-    def is_locked(self, value: bool) -> None:
-        self._source.is_locked = value
 
     @_as_context_manager("is_locked")
     def lock_(self, *args, **kwargs):
