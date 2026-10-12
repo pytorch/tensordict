@@ -143,7 +143,36 @@ class TruncatedStandardNormal(Distribution):
 class TruncatedNormal(TruncatedStandardNormal):
     """Truncated Normal distribution.
 
-    https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
+    A normal distribution of mean ``loc`` and standard deviation ``scale``,
+    restricted to the interval ``[a, b]``. Its samples are reparameterized
+    (``rsample``).
+
+    Source: https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
+
+    Args:
+        loc (Number or torch.Tensor): the mean of the normal distribution
+            before truncation.
+        scale (Number or torch.Tensor): the standard deviation of the normal
+            distribution before truncation. Values under ``1e-6`` are set to
+            ``1e-6``.
+        a (Number or torch.Tensor): the lower bound of the support, in the
+            same units as ``loc``.
+        b (Number or torch.Tensor): the upper bound of the support, in the
+            same units as ``loc``.
+        validate_args (bool, optional): passed to
+            :class:`~torch.distributions.Distribution`.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict.nn.distributions import TruncatedNormal
+        >>> _ = torch.manual_seed(0)
+        >>> dist = TruncatedNormal(loc=torch.zeros(3), scale=torch.ones(3), a=-1.0, b=1.0)
+        >>> dist.sample()
+        tensor([-0.0064,  0.4764, -0.7754])
+        >>> dist.mean
+        tensor([0., 0., 0.])
+        >>> TruncatedNormal(loc=5.0, scale=1.0, a=4.0, b=6.0).mean
+        tensor(5.)
     """
 
     has_rsample = True

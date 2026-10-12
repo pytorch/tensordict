@@ -60,6 +60,7 @@ from tensordict.utils import (
     unravel_key_list as unravel_key_list,
 )
 from torch import nn, Tensor
+from typing_extensions import deprecated
 
 if TYPE_CHECKING:
     from typing import Self
@@ -508,7 +509,7 @@ class TensorClass(_TensorClassInitArgs):
         swap_dest: Incomplete | None = None,
         use_state_dict: bool = False,
         non_blocking: bool = False,
-        preserve_module_state: bool | None = True,
+        preserve_module_state: bool = True,
         memo: Incomplete | None = None,
     ) -> Self: ...
     @property
@@ -966,7 +967,7 @@ class TensorClass(_TensorClassInitArgs):
         idx: IndexType,
         non_blocking: bool = False,
         *,
-        fast: bool | None = True,
+        fast: bool = True,
     ) -> Self: ...
     def is_empty(self) -> bool: ...
     def setdefault(
@@ -1440,14 +1441,43 @@ class TensorClass(_TensorClassInitArgs):
         non_tensordict: dict | None = None,
         safe: bool = True,
     ) -> Self: ...
+    @overload
     @classmethod
     def from_tensordict(
         cls,
         tensordict: TensorCollection,
         non_tensordict: dict | None = None,
-        safe: bool = True,
+    ) -> Self: ...
+    @overload
+    @classmethod
+    @deprecated(
+        "TensorClass.from_tensordict(safe=...) is deprecated and will be removed "
+        "in TensorDict 0.17."
+    )
+    def from_tensordict(
+        cls,
+        tensordict: TensorCollection,
+        non_tensordict: dict | None = None,
+        *,
+        safe: bool,
+    ) -> Self: ...
+    @overload
+    @classmethod
+    @deprecated(
+        "TensorClass.from_tensordict(safe=...) is deprecated and will be removed "
+        "in TensorDict 0.17."
+    )
+    def from_tensordict(
+        cls,
+        tensordict: TensorCollection,
+        non_tensordict: dict | None,
+        safe: bool,
     ) -> Self: ...
     @classmethod
+    @deprecated(
+        "TensorClass.fields() is deprecated and will be removed in TensorDict 0.17. "
+        "Use dataclasses.fields(cls) instead."
+    )
     def fields(cls) -> tuple[dataclasses.Field[Any], ...]: ...
     @classmethod
     def from_namedtuple(cls, named_tuple, *, auto_batch_size: bool = False) -> Self: ...
@@ -1614,6 +1644,7 @@ class TensorClass(_TensorClassInitArgs):
 
 class NonTensorDataBase(TensorClass):
     data: Any
+    def maybe_to_stack(self) -> Self | NonTensorStack: ...
 
 class NonTensorData(NonTensorDataBase): ...
 class MetaData(NonTensorDataBase): ...
@@ -1627,7 +1658,8 @@ class TensorAttrs(TensorClass):
         cls, tensor: Tensor, *, fields: Sequence[str] = ("device", "dtype", "shape")
     ) -> Self: ...
 
-class NonTensorStack(LazyStackedTensorDict): ...
+class NonTensorStack(LazyStackedTensorDict):
+    def maybe_to_stack(self) -> Self: ...
 
 _ClassT = TypeVar("_ClassT")
 

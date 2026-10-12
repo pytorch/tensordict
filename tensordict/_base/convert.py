@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import collections
 import importlib.util
+import numbers
 import uuid
 import weakref
 from collections import UserDict
@@ -66,6 +67,7 @@ from tensordict.utils import (
 from torch import nn, Tensor
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.nn.utils._named_member_accessor import swap_tensor
+from torch.utils._pytree import is_structseq_instance
 
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
@@ -74,6 +76,14 @@ try:
     from functorch import dim as ftdim
 except ImportError:
     from tensordict.utils import _ftdim_mock as ftdim
+
+
+def _int_batch_dims(batch_dims):
+    # for backward compatibility, from_any ignores a batch_dims that is not an
+    # int for dataclasses and h5py files
+    if isinstance(batch_dims, numbers.Integral) and not isinstance(batch_dims, bool):
+        return batch_dims
+    return None
 
 
 def _pytree_dict_key(key):
@@ -280,6 +290,8 @@ class _Conversion:
             recover the original types.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> # Create a pytree with tensor leaves, and one "weird"-looking dict key
             >>> class WeirdLookingClass:
             ...     pass
@@ -306,7 +318,7 @@ class _Conversion:
             >>> def check(v1, v2):
             ...     assert (v1 == v2).all()
             ...
-            >>> torch.utils._pytree.tree_map(check, pytree, pytree_recon)
+            >>> _ = torch.utils._pytree.tree_map(check, pytree, pytree_recon)
             >>> assert weird_key in pytree_recon[1]
 
         """
@@ -321,7 +333,9 @@ class _Conversion:
         result = None
         if _is_namedtuple(pytree):
             result = TensorDict.from_namedtuple(named_tuple=pytree)
-            if batch_dims is not None:
+            # Without batch_dims, batch_size is ignored here, unlike for lists
+            # and dicts: applying it would raise when it does not fit the leaves.
+            if batch_dims is not None and batch_size is not None:
                 result.batch_size = batch_size
             result["_pytree_type"] = type(pytree)
         elif isinstance(pytree, (list, tuple)):
@@ -415,13 +429,21 @@ class _Conversion:
             A PersistentTensorDict representation of the input h5 file.
 
         Examples:
-            >>> td = TensorDict.from_h5("path/to/file.h5")
-            >>> print(td)
+            >>> import os
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> data = TensorDict(key1=torch.zeros(3), key2=torch.ones(3), batch_size=[3])
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     path = os.path.join(tmpdir, "file.h5")
+            ...     _ = data.to_h5(path)
+            ...     td = TensorDict.from_h5(path)
+            ...     print(td)
             PersistentTensorDict(
                 fields={
                     key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
                     key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([]),
+                batch_size=torch.Size([3]),
                 device=None,
                 is_shared=False)
         """
@@ -469,13 +491,21 @@ class _Conversion:
             A PersistentTensorDict representation of the input zarr store.
 
         Examples:
-            >>> td = TensorDict.from_zarr("path/to/store.zarr")
-            >>> print(td)
+            >>> import os
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> data = TensorDict(key1=torch.zeros(3), key2=torch.ones(3), batch_size=[3])
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     path = os.path.join(tmpdir, "store.zarr")
+            ...     _ = data.to_zarr(path)
+            ...     td = TensorDict.from_zarr(path)
+            ...     print(td)
             PersistentTensorDict(
                 fields={
                     key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
                     key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([]),
+                batch_size=torch.Size([3]),
                 device=None,
                 is_shared=False)
         """
@@ -540,6 +570,8 @@ class _Conversion:
             pre-allocated (zero-filled) keys.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict.from_schema(
             ...     {"obs": ([84, 84, 3], torch.uint8),
             ...      "reward": ([], torch.float32)},
@@ -648,7 +680,14 @@ class _Conversion:
         lock: bool = True,
         use_state_dict: bool = False,
     ):
-        """Copies the params and buffers of a module in a tensordict.
+        """Returns a tensordict of the parameters and buffers of a module.
+
+        The leaves are the parameters and buffers of the module, not copies:
+        an in-place change to a leaf changes the module. Use
+        ``TensorDict.from_module(module).data.clone()`` to get independent
+        tensors. Submodules become sub-tensordicts: ``module.layers[0].weight``
+        is the entry ``("layers", "0", "weight")``. Write the parameters back
+        with :meth:`~.to_module`.
 
         Args:
             module (nn.Module): the module to get the parameters from.
@@ -665,6 +704,7 @@ class _Conversion:
                     This is particularly useful when state-dict hooks have to be used.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> from torch import nn
             >>> module = nn.TransformerDecoder(
             ...     decoder_layer=nn.TransformerDecoderLayer(nhead=4, d_model=4),
@@ -745,9 +785,10 @@ class _Conversion:
                 will be returned instead. This argument is ignored when ``lazy_stack=True``.
 
         Examples:
+            >>> import torch
             >>> from torch import nn
             >>> from tensordict import TensorDict
-            >>> torch.manual_seed(0)
+            >>> _ = torch.manual_seed(0)
             >>> empty_module = nn.Linear(3, 4, device="meta")
             >>> n_models = 2
             >>> modules = [nn.Linear(3, 4) for _ in range(n_models)]
@@ -870,13 +911,19 @@ class _Conversion:
         swap_dest=None,
         use_state_dict: bool = False,
         non_blocking: bool = False,
-        preserve_module_state: bool | None = True,
+        preserve_module_state: bool = True,
         memo=None,  # deprecated
     ):
-        """Writes the content of a TensorDictBase instance onto a given nn.Module attributes, recursively.
+        """Writes the content of the tensordict into the parameters and buffers of a module, recursively.
 
-        ``to_module`` can also be used a context manager to temporarily populate a module with a collection of
-        parameters/buffers (see example below).
+        The keys of the tensordict must match the names of the module
+        attributes, as :meth:`~.from_module` gives them. A nested key is a
+        submodule: ``("layers", "0", "weight")`` is ``module.layers[0].weight``.
+
+        ``to_module`` can also be used as a context manager, to populate a
+        module with other parameters for the duration of a ``with`` block (see
+        the second example). When the block exits, the original parameters are
+        written back, also if the block raises an exception.
 
         Args:
             module (nn.Module): a module to write the parameters into.
@@ -890,6 +937,7 @@ class _Conversion:
                 will be returned. Defaults to ``True``.
             swap_dest (TensorDictBase, optional): if ``return_swap`` is ``True``,
                 the tensordict where the swap should be written.
+            memo: deprecated. Passing it raises ``RuntimeError``.
             use_state_dict (bool, optional): if ``True``, state-dict API will be
                 used to load the parameters (including the state-dict hooks).
                 Defaults to ``False``.
@@ -909,36 +957,54 @@ class _Conversion:
                 is not an :class:`~torch.nn.Parameter`. Defaults to ``True``.
                 Pass ``False`` to retain the historical replacement behavior.
 
-        Examples:
-            >>> from torch import nn
-            >>> module = nn.TransformerDecoder(
-            ...     decoder_layer=nn.TransformerDecoderLayer(nhead=4, d_model=4),
-            ...     num_layers=1)
-            >>> params = TensorDict.from_module(module)
-            >>> params.data.zero_()
-            >>> params.to_module(module, preserve_module_state=True)
-            >>> assert (module.layers[0].linear1.weight == 0).all()
-
-        Using a tensordict as a context manager can be useful to make functional calls:
-        Examples:
-            >>> from tensordict import from_module
-            >>> module = nn.TransformerDecoder(
-            ...     decoder_layer=nn.TransformerDecoderLayer(nhead=4, d_model=4),
-            ...     num_layers=1)
-            >>> params = TensorDict.from_module(module)
-            >>> params = params.data * 0 # Use TensorDictParams to remake these tensors regular nn.Parameter instances
-            >>> with params.to_module(module, preserve_module_state=True):
-            ...     # Call the module with zeroed params
-            ...     y = module(*inputs)
-            >>> # The module is repopulated with its original params
-            >>> assert (TensorDict.from_module(module) != 0).any()
+                .. versionchanged:: 0.15
+                    ``preserve_module_state=None``, deprecated in 0.14, is no
+                    longer accepted.
 
         Returns:
             A tensordict containing the values from the module if ``return_swap`` is ``True``, ``None`` otherwise.
 
+        Examples:
+            >>> import torch
+            >>> from torch import nn
+            >>> from tensordict import TensorDict
+            >>> module = nn.Linear(3, 4)
+            >>> params = TensorDict.from_module(module)
+            >>> zeros = params.data.clone().zero_()
+            >>> old_params = zeros.to_module(module)
+            >>> assert (module.weight == 0).all()
+            >>> _ = old_params.to_module(module)  # restores the original values
+            >>> assert (module.weight != 0).any()
+
+            Use the tensordict as a context manager to make a functional call:
+
+        >>> zeros = params.data * 0
+        >>> with zeros.to_module(module):
+        ...     y = module(torch.ones(2, 3))  # runs with zeroed parameters
+        >>> assert (y == 0).all()
+        >>> # When the block exits, the original parameters are written back.
+        >>> assert (module.weight != 0).any()
+
+            The original parameters are written back if the block raises an
+            exception too:
+
+        >>> try:
+        ...     with zeros.to_module(module):
+        ...         raise ValueError("stop")
+        ... except ValueError:
+        ...     pass
+        >>> assert (module.weight != 0).any()
+
         """
         if memo is not None:
             raise RuntimeError("memo cannot be passed to the public to_module anymore.")
+        if preserve_module_state is None:
+            raise TypeError(
+                "to_module(..., preserve_module_state=None) is no longer "
+                "supported. Pass True to preserve the parameter and buffer "
+                "registrations of the module, or False for the historical "
+                "replacement behavior."
+            )
         hooks = torch.nn.modules.module._global_parameter_registration_hooks
         memo = {"hooks": tuple(hooks.values())}
         return self._to_module(
@@ -962,7 +1028,7 @@ class _Conversion:
         memo=None,
         use_state_dict: bool = False,
         non_blocking: bool = False,
-        preserve_module_state: bool | None = True,
+        preserve_module_state: bool = True,
         is_dynamo: bool | None = None,
     ):
         from tensordict.base import TensorDictBase
@@ -1050,7 +1116,6 @@ class _Conversion:
                         inplace,
                         return_swap=return_swap,
                         preserve_module_state=preserve_module_state,
-                        memo=memo,
                     )
                 else:
                     if not inplace:
@@ -1059,7 +1124,6 @@ class _Conversion:
                             key,
                             value,
                             preserve_module_state=preserve_module_state,
-                            memo=memo,
                         )
                         local_out = swap_tensor(module, key, value)
                     else:
@@ -1144,15 +1208,32 @@ class _Conversion:
         )
 
     def to_tensordict(self, *, retain_none: bool | None = None) -> Self:
-        """Returns a regular TensorDict instance from the TensorDictBase.
+        """Returns a :class:`~tensordict.TensorDict` copy of this tensordict.
 
-        Args:
-            retain_none (bool): if ``True``, the ``None`` values from tensorclass instances
-                will be written in the tensordict.
-                Otherwise they will be discarded. Default: ``True``.
+        Every tensor is cloned, and every sub-tensordict and tensorclass is
+        converted to a :class:`~tensordict.TensorDict`, recursively. Use it to
+        get a regular, unlocked tensordict in memory from a lazy stack, a
+        memory-mapped or locked tensordict, a
+        :class:`~tensordict.PersistentTensorDict` or a tensorclass. The batch
+        size, device and dimension names are kept.
+
+        Keyword Args:
+            retain_none (bool, optional): if ``True``, the ``None`` fields of
+                tensorclass instances are written as entries of the result.
+                Defaults to ``None``, which behaves like ``False``: the
+                ``None`` fields are dropped.
 
         Returns:
             a new TensorDict object containing the same values.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import LazyStackedTensorDict, TensorDict
+            >>> stack = LazyStackedTensorDict(
+            ...     TensorDict(a=torch.zeros(3)), TensorDict(a=torch.ones(3)), stack_dim=0)
+            >>> td = stack.to_tensordict()
+            >>> type(td).__name__, td.batch_size
+            ('TensorDict', torch.Size([2]))
 
         """
         from tensordict import TensorDict
@@ -1186,6 +1267,8 @@ class _Conversion:
             This method can be used to swap the stack dimension of a LazyStackedTensorDict.
             For example, if you have a LazyStackedTensorDict with stack_dim=1, you can use this method to swap it to stack_dim=0:
 
+            >>> import torch
+            >>> from tensordict import LazyStackedTensorDict, TensorDict
             >>> td = TensorDict({"a": torch.zeros(2, 3), "b": torch.ones(2, 3)}, batch_size=(2, 3))
             >>> td2 = td.to_lazystack()
             >>> td2.batch_size
@@ -1205,7 +1288,8 @@ class _Conversion:
             A LazyStackedTensorDict instance.
 
         Examples:
-            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> from tensordict import LazyStackedTensorDict, TensorDict
             >>> td = TensorDict({"a": torch.zeros(2, 3), "b": torch.ones(2, 3)}, batch_size=(2, 3))
             >>> td2 = td.to_lazystack()
             >>> td2.batch_size
@@ -1269,10 +1353,12 @@ class _Conversion:
         result = {}
         for key, value in self.items():
             if _is_tensor_collection(type(value)):
+                # NonTensorStack.data raises AttributeError when the stacked
+                # values differ: such a stack is not None, so it is kept.
                 if (
                     not retain_none
                     and _is_non_tensor(type(value))
-                    and value.data is None
+                    and getattr(value, "data", NO_DEFAULT) is None
                 ):
                     continue
                 if tolist_first:
@@ -1556,6 +1642,20 @@ class _Conversion:
 
                 return NonTensorStack.from_list(obj)
         if is_dataclass(obj):
+            dataclass_batch_dims = _int_batch_dims(batch_dims)
+            if auto_batch_size and dataclass_batch_dims is not None:
+                try:
+                    return cls.from_dataclass(
+                        obj,
+                        auto_batch_size=auto_batch_size,
+                        batch_dims=dataclass_batch_dims,
+                        device=device,
+                        batch_size=batch_size,
+                    )
+                except Exception:
+                    # for backward compatibility, a batch_dims that cannot be
+                    # applied, for example to a nested NonTensorStack, is ignored
+                    pass
             return cls.from_dataclass(
                 obj,
                 auto_batch_size=auto_batch_size,
@@ -1577,11 +1677,22 @@ class _Conversion:
             import h5py
 
             if isinstance(obj, h5py.File):
+                from tensordict import TensorDict
                 from tensordict.persistent import PersistentTensorDict
 
+                if not auto_batch_size and batch_size is not None:
+                    try:
+                        return PersistentTensorDict(
+                            group=obj,
+                            batch_size=TensorDict._parse_batch_size(None, batch_size),
+                        )
+                    except Exception:
+                        # for backward compatibility, a batch size that is not a
+                        # size or that the file does not take is ignored
+                        pass
                 obj = PersistentTensorDict(group=obj)
                 if auto_batch_size:
-                    obj.auto_batch_size_()
+                    obj.auto_batch_size_(batch_dims=_int_batch_dims(batch_dims))
                 return obj
         return obj
 
@@ -1611,6 +1722,7 @@ class _Conversion:
             A TensorDict representation of the input tuple.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> my_tuple = (1, 2, 3)
             >>> td = TensorDict.from_tuple(my_tuple)
             >>> print(td)
@@ -1777,15 +1889,13 @@ class _Conversion:
         def namedtuple_to_dict(namedtuple_obj):
             if _is_namedtuple(namedtuple_obj):
                 namedtuple_obj = namedtuple_obj._asdict()
-
-            else:
-                from torch.return_types import cummax, cummin, max, min
-
-                if isinstance(namedtuple_obj, (min, cummin, max, cummax)):
-                    namedtuple_obj = {
-                        "values": namedtuple_obj.values,
-                        "indices": namedtuple_obj.indices,
-                    }
+            elif is_structseq_instance(namedtuple_obj):
+                # torch.return_types (the results of max, sort, topk, ...)
+                # are structseqs: named fields, but no _fields or _asdict.
+                namedtuple_obj = {
+                    name: getattr(namedtuple_obj, name)
+                    for name in type(namedtuple_obj).__match_args__
+                }
             for key, value in namedtuple_obj.items():
                 namedtuple_obj[key] = cls.from_any(
                     value, device=device, batch_size=batch_size
@@ -1839,6 +1949,8 @@ class _Conversion:
             A TensorDict representation of the input structured numpy array.
 
         Examples:
+            >>> import numpy as np
+            >>> from tensordict import TensorDict
             >>> x = np.array(
             ...     [("Rex", 9, 81.0), ("Fido", 3, 27.0)],
             ...     dtype=[("name", "U10"), ("age", "i4"), ("weight", "f4")],
@@ -2039,6 +2151,7 @@ class _Conversion:
             A TensorDict representation of the DataFrame.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> import pandas as pd
             >>> df = pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
             >>> td = TensorDict.from_pandas(df)
@@ -2090,6 +2203,8 @@ class _Conversion:
             A pandas DataFrame.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({"a": torch.arange(3), "b": torch.zeros(3)}, [3])
             >>> df = td.to_pandas()
             >>> print(df)
@@ -2141,8 +2256,18 @@ class _Conversion:
             A TensorDict representation of the CSV data.
 
         Examples:
-            >>> td = TensorDict.from_csv("data.csv")
-            >>> td = TensorDict.from_csv("data.csv", separator=".", dtype=torch.float32)
+            >>> import os
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> data = TensorDict(obs=torch.arange(3.0), reward=torch.ones(3), batch_size=[3])
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     path = os.path.join(tmpdir, "data.csv")
+            ...     data.to_csv(path)
+            ...     td = TensorDict.from_csv(path)
+            ...     td32 = TensorDict.from_csv(path, dtype=torch.float32)
+            >>> td.batch_size, td["obs"].dtype, td32["obs"].dtype
+            (torch.Size([3]), torch.float64, torch.float32)
         """
         from tensordict.base import TensorDictBase
 
@@ -2228,8 +2353,18 @@ class _Conversion:
             A TensorDict representation of the Parquet data.
 
         Examples:
-            >>> td = TensorDict.from_parquet("data.parquet")
-            >>> td = TensorDict.from_parquet("data.parquet", columns=["obs", "reward"])
+            >>> import os
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> data = TensorDict(obs=torch.arange(3.0), reward=torch.ones(3), batch_size=[3])
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     path = os.path.join(tmpdir, "data.parquet")
+            ...     data.to_parquet(path)
+            ...     td = TensorDict.from_parquet(path)
+            ...     td_obs = TensorDict.from_parquet(path, columns=["obs"])
+            >>> sorted(td.keys()), sorted(td_obs.keys())
+            (['obs', 'reward'], ['obs'])
         """
         from tensordict.base import TensorDictBase
 
@@ -2318,8 +2453,20 @@ class _Conversion:
             A TensorDict representation of the JSON data.
 
         Examples:
-            >>> td = TensorDict.from_json("data.json")
-            >>> td = TensorDict.from_json("data.jsonl", lines=True)
+            >>> import os
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> data = TensorDict(obs=torch.arange(3.0), reward=torch.ones(3), batch_size=[3])
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     path = os.path.join(tmpdir, "data.json")
+            ...     data.to_json(path)
+            ...     td = TensorDict.from_json(path)
+            ...     path_lines = os.path.join(tmpdir, "data.jsonl")
+            ...     data.to_json(path_lines, lines=True)
+            ...     td_lines = TensorDict.from_json(path_lines, lines=True)
+            >>> td.batch_size, td_lines.batch_size
+            (torch.Size([3]), torch.Size([3]))
         """
         from tensordict.base import TensorDictBase
 
@@ -2379,9 +2526,10 @@ class _Conversion:
             **kwargs: kwargs to be passed to :meth:`h5py.File.create_dataset`.
 
         Returns:
-            A :class:`~.tensordict.PersitentTensorDict` instance linked to the newly created file.
+            A :class:`~tensordict.PersistentTensorDict` instance linked to the newly created file.
 
         Examples:
+            >>> import torch
             >>> import tempfile
             >>> import timeit
             >>>
@@ -2521,14 +2669,19 @@ class _Conversion:
             A store-backed TensorDict instance.
 
         Examples:
+            The example needs a Redis server on ``localhost:6379``, and the
+            last line a Dragonfly server on the host ``dragonfly-host``, so it
+            is not run when the documentation is tested.
+
+            >>> import torch
             >>> from tensordict import TensorDict
             >>> td = TensorDict({"obs": torch.randn(10, 84)}, [10])
-            >>> store_td = td.to_store(host="localhost")
-            >>> store_td["obs"].shape
+            >>> store_td = td.to_store(host="localhost")  # doctest: +SKIP
+            >>> store_td["obs"].shape  # doctest: +SKIP
             torch.Size([10, 84])
             >>>
             >>> # Using Dragonfly instead of Redis
-            >>> store_td = td.to_store(backend="dragonfly", host="dragonfly-host")
+            >>> store_td = td.to_store(backend="dragonfly", host="dragonfly-host")  # doctest: +SKIP
         """
         from tensordict.store._store import TensorDictStore
 

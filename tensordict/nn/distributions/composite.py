@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from typing import Any, Dict, TYPE_CHECKING
 
 import torch
+from tensordict._deprecation import warn_deprecated
 from tensordict._td import TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.nn.utils import composite_lp_aggregate, set_composite_lp_aggregate
@@ -23,11 +24,26 @@ else:
 __all__ = ["CompositeDistribution"]
 
 
+def _entropy(dist):
+    # TruncatedStandardNormal and TruncatedNormal expose entropy as a property,
+    # not as a method like torch.distributions do.
+    e = dist.entropy
+    return e() if callable(e) else e
+
+
 class CompositeDistribution(d.Distribution, Mapping):
     """A composite distribution that groups multiple distributions together using the TensorDict interface.
 
     This class allows for operations such as `log_prob_composite`, `entropy_composite`, `cdf`, `icdf`, `rsample`, and `sample`
-    to be performed on a collection of distributions, returning a TensorDict. The input TensorDict may be modified in-place.
+    to be performed on a collection of distributions, returning a TensorDict. :meth:`cdf` and :meth:`icdf`
+    write their results into the input TensorDict.
+
+    :meth:`log_prob` and :meth:`entropy` return a TensorDict with one entry
+    per distribution while :func:`~tensordict.nn.composite_lp_aggregate` is
+    ``False`` (the default), and one summed tensor while it is ``True``. See
+    the :ref:`log-probability key table <log-prob-keys>` of
+    :class:`~tensordict.nn.ProbabilisticTensorDictModule` for the keys that
+    probabilistic modules write.
 
     Args:
         params (TensorDictBase): A nested key-tensor map where the root entries correspond to sample names, and the leaves
@@ -42,14 +58,14 @@ class CompositeDistribution(d.Distribution, Mapping):
         log_prob_key (NestedKey, optional): The key where the aggregated log probability will be stored.
             Defaults to `'sample_log_prob'`.
 
-            .. note:: if :func:`tensordict.nn.composite_lp_aggregate` returns ``False``, tbe log-probabilities will
+            .. note:: if :func:`tensordict.nn.composite_lp_aggregate` returns ``False``, the log-probabilities will
                 be written under `("path", "to", "leaf", "<sample_name>_log_prob")`
                 where `("path", "to", "leaf", "<sample_name>")` is the ``NestedKey`` corresponding to
                 the leaf tensor being sampled. In that case, the ``log_prob_key`` argument will be ignored.
 
         entropy_key (NestedKey, optional): The key where the entropy will be stored. Defaults to `'entropy'`
 
-            .. note:: if :func:`tensordict.nn.composite_lp_aggregate` returns ``False``, tbe entropies will
+            .. note:: if :func:`tensordict.nn.composite_lp_aggregate` returns ``False``, the entropies will
                 be written under `("path", "to", "leaf", "<sample_name>_entropy")`
                 where `("path", "to", "leaf", "<sample_name>")` is the ``NestedKey`` corresponding to
                 the leaf tensor being sampled. In that case, the ``entropy_key`` argument will be ignored.
@@ -64,6 +80,11 @@ class CompositeDistribution(d.Distribution, Mapping):
     .. seealso:: :class:`~tensordict.nn.set_composite_lp_aggregate` to control the aggregation of the log-probabilities.
 
     Examples:
+        >>> import torch
+        >>> from torch import distributions as d
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import CompositeDistribution, set_composite_lp_aggregate
+        >>> _ = torch.manual_seed(0)
         >>> params = TensorDict({
         ...     "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
         ...     ("nested", "disc"): {"logits": torch.randn(3, 10)}
@@ -180,14 +201,13 @@ class CompositeDistribution(d.Distribution, Mapping):
 
         Args:
             params (TensorDictBase): A TensorDict that defines the batch shape for the composite distribution.
-                The params will not be used by this method, but the tensordict will be used to gather the key names of
-                the distributions.
+                Only its batch size is used.
             distributions (Dict[NestedKey, d.Distribution]): A dictionary mapping nested keys to distribution instances.
                 These distributions will be used directly in the composite distribution.
 
         Keyword Args:
             name_map (Dict[NestedKey, NestedKey], optional): A mapping of where each sample should be written. If not provided,
-                the key names from `distribution_map` will be used.
+                the keys of ``distributions`` are used.
             log_prob_key (NestedKey, optional): The key where the log probability will be stored.
                 Defaults to `'sample_log_prob'`.
             entropy_key (NestedKey, optional): The key where the entropy will be stored. Defaults to `'entropy'`.
@@ -253,7 +273,7 @@ class CompositeDistribution(d.Distribution, Mapping):
         samples = {name: dist.sample(shape) for name, dist in self.dists.items()}
         return TensorDict(
             samples,
-            shape + self.batch_shape,
+            torch.Size(shape) + self.batch_shape,
         )
 
     @property
@@ -351,20 +371,45 @@ class CompositeDistribution(d.Distribution, Mapping):
             shape = torch.Size([])
         return TensorDict(
             {name: dist.rsample(shape) for name, dist in self.dists.items()},
-            shape + self.batch_shape,
+            torch.Size(shape) + self.batch_shape,
         )
 
     def log_prob(self, sample: TensorDictBase) -> torch.Tensor | TensorDictBase:  # noqa: D417
-        """Compute the summed log-probability of a given sample.
+        """Computes the log-probability of a sample.
 
         Args:
             sample (TensorDictBase): The input sample to compute the log probability for.
 
-        If ``self.aggregate_probabilities`` is ``True``, this method will return a single tensor with
-        the summed log-probabilities. If ``self.aggregate_probabilities`` is ``False``, this method will
-        call the `:meth:`~.log_prob_composite` method and return a tensordict with the log-probabilities
-        of each sample in the input tensordict along with a ``sample_log_prob`` entry with the summed
-        log-prob. In both cases, the output shape will be the shape of the input tensordict.
+        Returns:
+            The result depends on :func:`~tensordict.nn.composite_lp_aggregate`:
+
+            - ``False`` (default): a new TensorDict with one ``<name>_log_prob``
+              entry per distribution, for example ``cont_log_prob`` and
+              ``("nested", "disc_log_prob")`` (see :meth:`log_prob_composite`).
+              ``sample`` is not modified.
+            - ``True``: one tensor, the sum of the log-probabilities over all
+              distributions and their event dimensions.
+
+            In both cases the batch shape is the batch shape of ``sample``.
+
+        Examples:
+            >>> import torch
+            >>> from torch import distributions as d
+            >>> from tensordict import TensorDict
+            >>> from tensordict.nn import CompositeDistribution, set_composite_lp_aggregate
+            >>> params = TensorDict({
+            ...     "cont": {"loc": torch.zeros(3, 4), "scale": torch.ones(3, 4)},
+            ...     ("nested", "disc"): {"logits": torch.zeros(3, 10)}
+            ... }, [3])
+            >>> dist = CompositeDistribution(params,
+            ...     distribution_map={"cont": d.Normal, ("nested", "disc"): d.Categorical})
+            >>> sample = TensorDict({"cont": torch.zeros(3, 4), ("nested", "disc"): torch.zeros(3, dtype=torch.long)}, [3])
+            >>> lp = dist.log_prob(sample)
+            >>> sorted(lp.keys(True, True), key=str)
+            [('nested', 'disc_log_prob'), 'cont_log_prob']
+            >>> with set_composite_lp_aggregate(True):
+            ...     dist.log_prob(sample)
+            tensor([-5.9783, -5.9783, -5.9783])
         """
         aggregate_probabilities = composite_lp_aggregate()
         if not aggregate_probabilities:
@@ -397,6 +442,9 @@ class CompositeDistribution(d.Distribution, Mapping):
         Returns:
             TensorDictBase: A TensorDict containing the individual log-probabilities for each component in the input sample,
                 along with a "sample_log_prob" entry containing the summed log-probability if `include_sum` is True.
+                While :func:`~tensordict.nn.composite_lp_aggregate` is
+                ``True``, the entries are written into ``sample``, which is
+                returned. Otherwise the result is a new TensorDict.
         """
         if include_sum is None:
             include_sum = composite_lp_aggregate()
@@ -439,17 +487,44 @@ class CompositeDistribution(d.Distribution, Mapping):
                 Defaults to `1`.
 
         Keyword Args:
+            aggregate_probabilities (bool, optional): Deprecated and ignored. A value other than ``None``
+                emits a :class:`DeprecationWarning`. Use :func:`~tensordict.nn.set_composite_lp_aggregate`
+                instead.
             include_sum (bool, optional): Whether to include the summed entropy in the output TensorDict.
                 Defaults to `composite_lp_aggregate()`, which defaults to `False`.
 
         Returns:
-            torch.Tensor or TensorDictBase: If `aggregate_probabilities` is `True`, returns a single tensor with
-            the summed entropies. If `aggregate_probabilities` is `False`, returns a TensorDict with the entropies
-            of each component distribution.
+            torch.Tensor or TensorDictBase: If :func:`~tensordict.nn.composite_lp_aggregate`
+            is ``True``, a single tensor with the summed entropies. If it is
+            ``False`` (the default), a TensorDict with one ``<name>_entropy``
+            entry per distribution (see :meth:`entropy_composite`).
 
         .. note:: If a distribution does not implement a closed-form solution for entropy, Monte Carlo sampling is used
             to estimate it.
+
+        Examples:
+            >>> import torch
+            >>> from torch import distributions as d
+            >>> from tensordict import TensorDict
+            >>> from tensordict.nn import CompositeDistribution, set_composite_lp_aggregate
+            >>> params = TensorDict({
+            ...     "cont": {"loc": torch.zeros(3, 4), "scale": torch.ones(3, 4)},
+            ...     ("nested", "disc"): {"logits": torch.zeros(3, 10)}
+            ... }, [3])
+            >>> dist = CompositeDistribution(params,
+            ...     distribution_map={"cont": d.Normal, ("nested", "disc"): d.Categorical})
+            >>> sorted(dist.entropy().keys(True, True), key=str)
+            [('nested', 'disc_entropy'), 'cont_entropy']
+            >>> with set_composite_lp_aggregate(True):
+            ...     dist.entropy()
+            tensor([7.9783, 7.9783, 7.9783])
         """
+        if aggregate_probabilities is not None:
+            warn_deprecated(
+                "CompositeDistribution.entropy(aggregate_probabilities=...), which has no effect,",
+                removal="0.17",
+                replacement="set_composite_lp_aggregate",
+            )
         aggregate_probabilities = composite_lp_aggregate()
         if include_sum is None:
             include_sum = composite_lp_aggregate()
@@ -459,7 +534,7 @@ class CompositeDistribution(d.Distribution, Mapping):
         se = 0.0
         for dist in self.dists.values():
             try:
-                e = dist.entropy()
+                e = _entropy(dist)
             except NotImplementedError:
                 x = dist.rsample((samples_mc,))
                 e = -dist.log_prob(x).mean(0)
@@ -476,7 +551,7 @@ class CompositeDistribution(d.Distribution, Mapping):
     ) -> TensorDictBase:
         """Computes the entropy for each component distribution and returns a TensorDict with individual entropies.
 
-        This method is used by the `entropy` method when `self.aggregate_probabilities` is `False`.
+        This method is used by the `entropy` method when :func:`~tensordict.nn.composite_lp_aggregate` is ``False``.
 
         Args:
             samples_mc (int): The number of samples to draw if the entropy does not have a closed-form solution.
@@ -484,7 +559,7 @@ class CompositeDistribution(d.Distribution, Mapping):
 
         Keyword Args:
             include_sum (bool, optional): Whether to include the summed entropy in the output TensorDict.
-                Defaults to `composite_lp_aggregate()`, which is defaults to `False`.
+                Defaults to `composite_lp_aggregate()`, which defaults to `False`.
 
         Returns:
             TensorDictBase: A TensorDict containing the individual entropies for each component distribution,
@@ -500,7 +575,7 @@ class CompositeDistribution(d.Distribution, Mapping):
         d = {}
         for name, dist in self.dists.items():
             try:
-                e = dist.entropy()
+                e = _entropy(dist)
             except NotImplementedError:
                 x = dist.rsample((samples_mc,))
                 e = -dist.log_prob(x).mean(0)
@@ -526,6 +601,26 @@ class CompositeDistribution(d.Distribution, Mapping):
 
         Returns:
             TensorDictBase: The input TensorDict updated with `<sample_name>_cdf` entries for each component distribution.
+
+        Examples:
+            >>> import torch
+            >>> from torch import distributions as d
+            >>> from tensordict import TensorDict
+            >>> from tensordict.nn import CompositeDistribution
+            >>> params = TensorDict({
+            ...     "a": {"loc": torch.zeros(2), "scale": torch.ones(2)},
+            ...     "b": {"loc": torch.ones(2), "scale": torch.ones(2)},
+            ... }, [2])
+            >>> dist = CompositeDistribution(params, distribution_map={"a": d.Normal, "b": d.Normal})
+            >>> sample = TensorDict(a=torch.zeros(2), b=torch.zeros(2), batch_size=[2])
+            >>> out = dist.cdf(sample)
+            >>> out is sample
+            True
+            >>> sample["a_cdf"], sample["b_cdf"]
+            (tensor([0.5000, 0.5000]), tensor([0.1587, 0.1587]))
+            >>> _ = dist.icdf(sample)  # reads the "_cdf" entries
+            >>> sample["a_icdf"]
+            tensor([0., 0.])
         """
         cdfs = {
             _add_suffix(name, "_cdf"): dist.cdf(sample.get(name))
@@ -553,12 +648,12 @@ class CompositeDistribution(d.Distribution, Mapping):
         for name, dist in self.dists.items():
             prob = sample.get(_add_suffix(name, "_cdf"))
             if prob is None:
-                try:
-                    prob = self.cdf(sample.get(name))
-                except KeyError:
+                value = sample.get(name)
+                if value is None:
                     raise KeyError(
-                        f"Neither {name} nor {name + '_cdf'} could be found in the sampled tensordict. Make sure one of these is available to icdf."
+                        f"Neither {name} nor {_add_suffix(name, '_cdf')} could be found in the sampled tensordict. Make sure one of these is available to icdf."
                     )
+                prob = dist.cdf(value)
             icdf = dist.icdf(prob)
             sample.set(_add_suffix(name, "_icdf"), icdf)
         return sample

@@ -77,6 +77,7 @@ class _DeviceOps:
                 instead. Defaults to ``False``.
 
         Examples:
+            >>> import torch
             >>> from tensordict import TensorDict
             >>> td = TensorDict(a=torch.randn(2), b=torch.randn(2), batch_size=[2])
             >>> td0 = td.unsqueeze(0)  # the leaves of td0 are views on the leaves of td
@@ -131,9 +132,22 @@ class _DeviceOps:
         )
 
     def clear_device_(self) -> Self:
-        """Clears the device of the tensordict.
+        """Sets the device of the tensordict and its sub-tensordicts to ``None``, and returns it.
+
+        The leaves are not moved. After this call, you can set leaves on any
+        device. See :ref:`devices`.
 
         Returns: self
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3), batch_size=[3], device="cpu")
+            >>> td = td.clear_device_()
+            >>> print(td.device)
+            None
+            >>> td["a"].device
+            device(type='cpu')
 
         """
         self._device = None
@@ -471,7 +485,8 @@ class _DeviceOps:
                 is performed: the caller is responsible for synchronizing before reading
                 the results. If ``False``, the copies are blocking.
             memory_format (torch.memory_format, optional): the desired memory
-                format for 4D parameters and buffers in this tensordict.
+                format for the 4D and 5D tensors in this tensordict, as in
+                :meth:`torch.nn.Module.to`.
             batch_size (torch.Size, optional): resulting batch-size of the
                 output tensordict.
             other (TensorDictBase, optional): TensorDict instance whose dtype
@@ -482,7 +497,7 @@ class _DeviceOps:
                     Since :class:`~tensordict.TensorDictBase` instances do not have
                     a dtype, the dtype is gathered from the example leaves.
                     If there are more than one dtype, then no dtype
-                    casting is undertook.
+                    casting is done.
 
             non_blocking_pin (bool, optional): if ``True``, the tensors are pinned before
                 being sent to device. This will be done asynchronously but can be
@@ -509,42 +524,63 @@ class _DeviceOps:
 
         Returns:
             a new tensordict instance if the device differs from the tensordict
-            device and/or if the dtype is passed. The same tensordict otherwise.
+            device and/or if the dtype or memory format is passed. The same
+            tensordict otherwise.
             ``batch_size`` only modifications are done in-place.
 
         .. note::
             If the TensorDict is consolidated, the resulting TensorDict will be consolidated too.
             Each new tensor will be a view on the consolidated storage cast to the desired device.
 
-        This operation can be used as a context manager too. When used as a context manager,
-        the tensordict is temporarily moved to the target device/dtype, and upon exiting
-        the context, it is automatically restored to its original device/dtype. This is
-        particularly useful when working with neural network modules that expect data
-        on a specific device.
+        This operation can be used as a context manager too. Inside the
+        ``with`` block, you work on the cast tensordict. When the block exits,
+        its entries are written back to the original tensordict, on the
+        original device. Use it to run a module that expects its input on a
+        specific device. See :ref:`devices`.
+
+        .. note::
+            On exit, every entry is moved back to the original device. The
+            entries that already existed get their original dtype back, but
+            the new entries keep the dtype of the ``with`` block: after
+            ``with td.to(torch.float64) as td64``, a new entry of ``td64`` is
+            ``float64`` in ``td``. The original tensordict must not be
+            locked. If the block raises an exception, nothing is written back.
 
         Examples:
-            >>> data = TensorDict({"a": 1.0}, [], device=None)
-            >>> data_cuda = data.to("cuda:0")  # casts to cuda
-            >>> data_int = data.to(torch.int)  # casts to int
-            >>> data_cuda_int = data.to("cuda:0", torch.int)  # multiple casting
-            >>> data_cuda = data.to(torch.randn(3, device="cuda:0"))  # using an example tensor
-            >>> data_cuda = data.to(other=TensorDict({}, [], device="cuda:0"))  # using a tensordict example
-
-            Using as a context manager for temporary device changes:
-            >>> from tensordict.nn import TensorDictModule
             >>> import torch
-            >>>
-            >>> # Create a module and data
+            >>> from tensordict import TensorDict
+            >>> data = TensorDict({"a": 1.0}, [], device=None)
+            >>> data_int = data.to(torch.int)  # casts to int
+            >>> data_int["a"]
+            tensor(1, dtype=torch.int32)
+
+            The next lines need a CUDA device, so they are not run when the
+            documentation is tested.
+
+            >>> data_cuda = data.to("cuda:0")  # doctest: +SKIP
+            >>> data_cuda_int = data.to("cuda:0", torch.int)  # doctest: +SKIP
+            >>> data_cuda = data.to(torch.randn(3, device="cuda:0"))  # doctest: +SKIP
+            >>> data_cuda = data.to(other=TensorDict({}, [], device="cuda:0"))  # doctest: +SKIP
+
+            Use it as a context manager for a temporary device change (CUDA
+            needed):
+
+            >>> from tensordict.nn import TensorDictModule
             >>> mod = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
             >>> td = TensorDict(x=torch.zeros(3), batch_size=[3], device="cpu")
-            >>>
-            >>> # Use context manager to temporarily move to GPU
-            >>> with td.to("cuda") as td_gpu:
-            ...     td_gpu.update(mod(td_gpu))  # Process on GPU and update in-place
-            >>>
-            >>> # Data is automatically restored to original device
-            >>> assert td["x"].device.type == "cpu"
-            >>> assert td["y"].device.type == "cpu"  # Output also restored to original device
+            >>> with td.to("cuda") as td_gpu:  # doctest: +SKIP
+            ...     _ = td_gpu.update(mod(td_gpu))  # runs on the GPU
+            >>> # The entries are written back on the original device
+            >>> assert td["y"].device.type == "cpu"  # doctest: +SKIP
+
+            A temporary dtype change runs on CPU. The new entry keeps the dtype
+            of the ``with`` block:
+
+            >>> td = TensorDict(x=torch.zeros(3), batch_size=[3])
+            >>> with td.to(torch.float64) as td64:
+            ...     td64["y"] = td64["x"] + 1
+            >>> td["x"].dtype, td["y"].dtype
+            (torch.float32, torch.float64)
         """
         # Per-leaf spec: a positional tensordict argument is interpreted as an
         # attrs tensordict whose leaves are `TensorAttrs` — each source leaf
@@ -575,17 +611,32 @@ class _DeviceOps:
         ) = _parse_to(*args, **kwargs)
         result = self
 
-        if device is not None and dtype is None and device == self.device:
+        if (
+            device is not None
+            and dtype is None
+            and convert_to_format is None
+            and device == self.device
+        ):
+            if batch_size is not None and tuple(batch_size) != result.batch_size:
+                result.batch_size = torch.Size(batch_size)
             return result
 
-        if self.is_consolidated() and dtype is None:
-            return self._to_consolidated(
+        if (
+            self.is_consolidated()
+            and dtype is None
+            and device is not None
+            and convert_to_format is None
+        ):
+            result = self._to_consolidated(
                 device=device,
                 pin_memory=non_blocking_pin,
                 num_threads=num_threads,
                 non_blocking=non_blocking,
                 inplace=inplace,
             )
+            if batch_size is not None and tuple(batch_size) != result.batch_size:
+                result.batch_size = torch.Size(batch_size)
+            return result
 
         if non_blocking is None:
             # Under torch.compile, copies to a non-cuda device are blocking: the
@@ -601,11 +652,16 @@ class _DeviceOps:
         if convert_to_format is not None:
 
             def to(tensor):
+                # As in nn.Module.to, the memory format applies to 4D and 5D tensors
+                if tensor.dim() in (4, 5):
+                    return tensor.to(
+                        device,
+                        dtype,
+                        non_blocking=sub_non_blocking,
+                        memory_format=convert_to_format,
+                    )
                 return tensor.to(
-                    device,
-                    dtype,
-                    non_blocking=sub_non_blocking,
-                    convert_to_format=convert_to_format,
+                    device=device, dtype=dtype, non_blocking=sub_non_blocking
                 )
 
         else:
@@ -616,7 +672,7 @@ class _DeviceOps:
                 )
 
         apply_kwargs = {}
-        if device is not None or dtype is not None:
+        if device is not None or dtype is not None or convert_to_format is not None:
             if non_blocking_pin and num_threads != 0:
                 if num_threads is None:
                     num_threads = max(1, torch.get_num_threads() // 2)
@@ -679,7 +735,7 @@ class _DeviceOps:
             device_module.synchronize()
 
     def double(self) -> Self:
-        r"""Casts all tensors to ``torch.bool``."""
+        r"""Casts all tensors to ``torch.double`` (``torch.float64``)."""
 
         def dble(x):
             return x.double()

@@ -227,13 +227,23 @@ def _read_index(index, ndim, sizes=None):
     if not isinstance(index, tuple):
         index = (index,)
     given = index
-    if sizes is not None and any(element is Ellipsis for element in index):
-        used = sum(_num_indexed_dims(e) for e in index if e is not Ellipsis)
-        if used > ndim:
+    try:
+        index = _expand_ellipsis(index, ndim)
+    except RuntimeError:
+        # too many indices for the dims, as torch says
+        if (
+            sizes is not None
+            and sum(
+                _num_indexed_dims(element)
+                for element in given
+                if element is not Ellipsis
+            )
+            > ndim
+        ):
             _raise_index_error(
                 sizes, given, f"too many indices for tensor of dimension {ndim}"
             )
-    index = _expand_ellipsis(index, ndim)
+        raise
     dims = []
     advanced = []
     position = None
@@ -343,6 +353,20 @@ def _getitem_batch_size(batch_size, index):
             return batch_size[1:]
         if isinstance(index, slice) and index == slice(None):
             return batch_size
+    elif (
+        index
+        and type(index[0]) is int
+        and type(index[-1]) is int
+        and len(index) <= len(batch_size)
+    ):
+        # A tuple of ints in range removes the dims that it indexes. Its first
+        # and last elements are read first, so that the other tuples, such as
+        # (int, slice) or the (tensor,) of td[tensor], skip the loop.
+        for size, element in zip(batch_size, index):
+            if type(element) is not int or not -size <= element < size:
+                break
+        else:
+            return torch.Size(batch_size[len(index) :])
     dims, advanced, position, rest = _read_index(index, len(batch_size), batch_size)
     out = [
         1 if dim is None else _slice_length(element, batch_size[dim])
