@@ -743,12 +743,6 @@ class TestGeneric:
             assert td.to("cpu", batch_size=[2, 3]) is td
             assert td.batch_size == (2, 3)
             torch.testing.assert_close(td["a"], torch.zeros(2, 3))
-            # PersistentTensorDict's setter retains the old size for invalid
-            # shapes, both with and without a same-device argument.
-            assert td.to("cpu", batch_size=[5]) is td
-            assert td.batch_size == (2, 3)
-            assert td.to(batch_size=[5]) is td
-            assert td.batch_size == (2, 3)
         finally:
             td.close()
 

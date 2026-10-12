@@ -823,7 +823,7 @@ class TestTD:
             return td.to("cpu", batch_size=batch_size)
 
         td = TensorDict(a=torch.zeros(2, 3), batch_size=[2], device="cpu")
-        to_cpu_c = torch.compile(to_cpu, fullgraph=True, backend="eager")
+        to_cpu_c = torch.compile(to_cpu, fullgraph=True, mode=mode)
         result = to_cpu_c(td)
         assert result is td
         assert result.batch_size == torch.Size(batch_size)

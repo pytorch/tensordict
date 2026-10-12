@@ -583,7 +583,7 @@ class _DeviceOps:
             and convert_to_format is None
             and device == self.device
         ):
-            if batch_size is not None:
+            if batch_size is not None and tuple(batch_size) != result.batch_size:
                 result.batch_size = torch.Size(batch_size)
             return result
 
@@ -600,7 +600,7 @@ class _DeviceOps:
                 non_blocking=non_blocking,
                 inplace=inplace,
             )
-            if batch_size is not None:
+            if batch_size is not None and tuple(batch_size) != result.batch_size:
                 result.batch_size = torch.Size(batch_size)
             return result
 
