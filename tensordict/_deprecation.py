@@ -7,6 +7,10 @@
 Every deprecation names the TensorDict release that removes it.
 ``test_deprecation_deadlines`` in ``test/utils/test_utils.py`` fails once
 ``version.txt`` reaches that release, so that the removal is not forgotten.
+It reads the ``removal=`` argument of these helpers, and the phrases
+"removed in TensorDict X.Y", "Starting with TensorDict X.Y, the default will
+change" and "the default will change (or will become, or becomes) ... in X.Y"
+in messages, docstrings and docs.
 """
 
 from __future__ import annotations
@@ -50,6 +54,38 @@ def warn_deprecated(
         deprecation_message(what, removal=removal, replacement=replacement),
         DeprecationWarning,
         stacklevel=stacklevel + 1,
+    )
+
+
+def warn_deprecated_env_var(
+    name: str, value: str, *, removal: str, replacement: str | None = None
+) -> None:
+    """Emits a :class:`FutureWarning` that says when a value of an environment variable goes away.
+
+    tensordict reads its environment variables when it is imported, so a
+    :class:`DeprecationWarning` would be attributed to tensordict itself, and
+    Python's default warning filters would hide it. Users set these variables
+    in their shell or job scripts, so the warning is a :class:`FutureWarning`,
+    which Python shows by default.
+
+    Call it from the module-level code that reads the variable: the warning
+    points to that code.
+
+    Args:
+        name (str): the name of the environment variable, for instance
+            ``"LIST_TO_STACK"``.
+        value (str): the deprecated value, as read from :data:`os.environ`.
+
+    Keyword Args:
+        removal (str): the release that removes support for ``name=value``.
+        replacement (str, optional): what to use instead.
+    """
+    warnings.warn(
+        deprecation_message(
+            f"{name}={value}", removal=removal, replacement=replacement
+        ),
+        FutureWarning,
+        stacklevel=2,
     )
 
 

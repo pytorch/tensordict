@@ -1,424 +1,437 @@
 """
 Batched data loading with tensorclasses
 =======================================
+
+A ``torchvision`` image pipeline opens, decodes, and transforms each image
+file again at every epoch, one image at a time. This tutorial stores the
+images once in the memory-mapped fields of a :class:`~tensordict.TensorClass`,
+then reads and transforms whole batches. A memory-mapped tensor is a tensor
+whose values are stored in a file and read through the page cache of the
+operating system. This tutorial is for readers who train from a folder of
+image files.
+
+What you will learn:
+
+- How to write a :class:`~tensordict.TensorClass` that loads a dataset into
+  :class:`~tensordict.MemoryMappedTensor` fields.
+- How to store images as ``uint8`` and normalize them only when a batch is loaded.
+- How to apply random crops and flips to a whole batch with a custom ``collate_fn``.
+- How to compare the loading rate with a regular ``torchvision`` pipeline.
+
+Before you start, read :ref:`sphx_glr_tutorials_tensordict_memory.py` for
+memory-mapped tensors and :ref:`tensorclass-guide` for tensorclasses.
 """
 
 ##############################################################################
-# In this tutorial we demonstrate how tensorclasses and memory-mapped
-# tensors can be used together to efficiently and transparently load data
-# from disk inside a model training pipeline.
+# The tutorial loads the dataset once into memory-mapped tensors and applies
+# the deterministic transforms (resize and center crop) at that time. During
+# training, the data loader reads whole batches from the memory-mapped tensors
+# instead of single image files. It applies the random transforms (crop and
+# flip) and the normalization to each batch, on the device.
 #
-# The basic idea is that we pre-load the entire dataset into a
-# memory-mapped tensors, applying any non-random transformations before
-# saving to disk. This means that not only do we avoid performing repeated
-# computation each time we iterate through the data, we also are able to
-# efficiently load data from the memory-mapped tensor in batches, rather
-# than sequentially from the raw image files.
-#
-# Using the combination of pre-processing, loading on a contiguous physical-memory
-# storage and on-device batched transformation, we obtain a 10x speedup in data-loading
-# over regular torch + torchvision pipelines.
-#
-# We'll use the same subset of imagenet used in `this transfer learning
-# tutorial <https://pytorch.org/tutorials/beginner/transfer_learning_tutorial.html>`__,
-# though we also give results of our experiments running the same code on ImageNet.
+# The dataset is the subset of ImageNet used in the `PyTorch transfer learning
+# tutorial <https://pytorch.org/tutorials/beginner/transfer_learning_tutorial.html>`__.
+# At the end of the page, two charts show the results of the same approach on
+# the full ImageNet dataset.
 #
 # .. note::
 #
-#   Download the data from `here <https://download.pytorch.org/tutorial/hymenoptera_data.zip>`__
-#   and extract it. We assume in this tutorial that the extracted data is
-#   saved in the subdirectory ``data/``.
+#   Download `hymenoptera_data.zip <https://download.pytorch.org/tutorial/hymenoptera_data.zip>`__
+#   and extract it into ``data/``, so that the images are in
+#   ``data/hymenoptera_data``.
 #
+# .. note::
+#
+#   The regular data loaders below use ``NUM_WORKERS`` worker processes. On
+#   macOS and Windows, worker processes start with the ``spawn`` method, which
+#   imports the script again in each worker. If you run this file as a script
+#   on these systems, put the code under ``if __name__ == "__main__":``, or set
+#   the environment variable ``NUM_WORKERS=0``.
+
 import os
 import time
 from pathlib import Path
 
 import torch
 import torch.nn as nn
-import tqdm
 
-from tensordict import MemoryMappedTensor, tensorclass
+from tensordict import MemoryMappedTensor, TensorClass
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
-if __name__ == "__main__":
-    NUM_WORKERS = int(os.environ.get("NUM_WORKERS", "4"))
-    # sphinx_gallery_start_ignore
-    # this example can be run locally or in the tensordict CI on the small hymenoptera
-    # subset of imagenet, but we also want to be able to compare to runs on larger subsets
-    # of imagenet which would be impractical to run in CI. If this script is run with the
-    # environment variable RUN_ON_CLUSTER set, then we set everything to run on a larger
-    # subset of imagenet. the fraction of images can be set with the FRACTION environment
-    # variable, we use the first `len(dataset) // FRACTION` images. Default is 10.
-    RUN_ON_CLUSTER = os.environ.get("RUN_ON_CLUSTER", "False").lower() in (
-        "y",
-        "yes",
-        "t",
-        "true",
-        "on",
-        "1",
-    )
-    FRACTION = int(os.environ.get("FRACTION", 10))
-    # sphinx_gallery_end_ignore
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    print(f"Using device: {device}")
+NUM_WORKERS = int(os.environ.get("NUM_WORKERS", "4"))
+# sphinx_gallery_start_ignore
+# This script runs locally and in the tensordict CI on the small hymenoptera
+# subset of ImageNet. Larger subsets of ImageNet are too slow for the CI. To
+# run on a larger subset, set the environment variable RUN_ON_CLUSTER. The
+# script then uses the first `len(dataset) // FRACTION` images, where the
+# FRACTION environment variable defaults to 10.
+RUN_ON_CLUSTER = os.environ.get("RUN_ON_CLUSTER", "False").lower() in (
+    "y",
+    "yes",
+    "t",
+    "true",
+    "on",
+    "1",
+)
+FRACTION = int(os.environ.get("FRACTION", 10))
+# sphinx_gallery_end_ignore
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
+print(f"Using device: {device}")
 
-    ##############################################################################
-    # Transforms
-    # ----------
-    # First we define train and val transforms that will be applied to train and
-    # val examples respectively. Note that there are random components in the
-    # train transform to prevent overfitting to training data over multiple
-    # epochs.
+##############################################################################
+# Transforms
+# ----------
+# First, define the transforms of the regular ``torchvision`` pipeline. The
+# train transform has random components, so that the model sees a different
+# crop and flip of each image at each epoch.
 
-    train_transform = transforms.Compose(
-        [
-            transforms.RandomResizedCrop(224),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-        ]
-    )
+train_transform = transforms.Compose(
+    [
+        transforms.RandomResizedCrop(224),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+    ]
+)
 
-    val_transform = transforms.Compose(
+val_transform = transforms.Compose(
+    [
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+    ]
+)
+
+##############################################################################
+# ``torchvision.datasets.ImageFolder`` reads the images from disk and applies
+# these transforms to one image at a time.
+
+data_dir = Path("data") / "hymenoptera_data/"
+# sphinx_gallery_start_ignore
+if RUN_ON_CLUSTER:
+    data_dir = Path("/datasets01_ontap/imagenet_full_size/061417/")
+# sphinx_gallery_end_ignore
+
+train_data = datasets.ImageFolder(root=data_dir / "train", transform=train_transform)
+val_data = datasets.ImageFolder(root=data_dir / "val", transform=val_transform)
+# sphinx_gallery_start_ignore
+if RUN_ON_CLUSTER:
+    if FRACTION > 1:
+        train_data.samples = train_data.samples[: len(train_data) // FRACTION]
+        val_data.samples = val_data.samples[: len(val_data) // FRACTION]
+# sphinx_gallery_end_ignore
+
+##############################################################################
+# The memory-mapped tensors get their data from two other datasets, which
+# apply only the deterministic transforms. ``PILToTensor`` keeps the pixel
+# values as ``uint8`` integers between 0 and 255. A ``uint8`` image takes a
+# quarter of the space of a ``float32`` image.
+#
+# - The raw train dataset resizes each image to 256 x 256 pixels. The random
+#   crop to 224 x 224 pixels comes later, at load time.
+# - The raw val dataset applies the full val transform except the
+#   normalization: resize, then center crop to 224 x 224 pixels.
+
+train_data_raw = datasets.ImageFolder(
+    root=data_dir / "train",
+    transform=transforms.Compose(
+        [transforms.Resize((256, 256)), transforms.PILToTensor()]
+    ),
+)
+val_data_raw = datasets.ImageFolder(
+    root=data_dir / "val",
+    transform=transforms.Compose(
         [
             transforms.Resize(256),
             transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+            transforms.PILToTensor(),
         ]
-    )
+    ),
+)
+# sphinx_gallery_start_ignore
+if RUN_ON_CLUSTER:
+    train_data_raw.samples = train_data_raw.samples[: len(train_data_raw) // FRACTION]
+    val_data_raw.samples = val_data_raw.samples[: len(val_data_raw) // FRACTION]
+# sphinx_gallery_end_ignore
 
-    ##############################################################################
-    # We use ``torchvision.datasets.ImageFolder`` to conveniently load and
-    # transform the data from disk.
+##############################################################################
+# Batched transforms
+# ------------------
+# The tensorclass data loader reads a batch of images at a time, so the
+# transforms below work on a batch. First, a normalization that converts the
+# ``uint8`` values to normalized ``float32`` values.
 
-    data_dir = Path("data") / "hymenoptera_data/"
-    # sphinx_gallery_start_ignore
-    if RUN_ON_CLUSTER:
-        data_dir = Path("/datasets01_ontap/imagenet_full_size/061417/")
-    # sphinx_gallery_end_ignore
 
-    train_data = datasets.ImageFolder(
-        root=data_dir / "train", transform=train_transform
-    )
-    val_data = datasets.ImageFolder(root=data_dir / "val", transform=val_transform)
-    # sphinx_gallery_start_ignore
-    if RUN_ON_CLUSTER:
-        if FRACTION > 1:
-            train_data.samples = train_data.samples[: len(train_data) // FRACTION]
-            val_data.samples = val_data.samples[: len(val_data) // FRACTION]
-    # sphinx_gallery_end_ignore
+class InvAffine(nn.Module):
+    """A custom normalization layer."""
 
-    ##############################################################################
-    # We'll also create a dataset of the raw training data that simply resizes
-    # the image to a common size and converts to tensor. We'll use this to
-    # load the data into memory-mapped tensors. The random transformations
-    # need to be different each time we iterate through the data, so they
-    # cannot be pre-computed. We also do not scale the data yet so that we can set the
-    # ``dtype`` of the memory-mapped array to ``uint8`` and save space.
+    def __init__(self, loc, scale):
+        super().__init__()
+        self.loc = loc
+        self.scale = scale
 
-    train_data_raw = datasets.ImageFolder(
-        root=data_dir / "train",
-        transform=transforms.Compose(
-            [transforms.Resize((256, 256)), transforms.PILToTensor()]
-        ),
-    )
-    # sphinx_gallery_start_ignore
-    if RUN_ON_CLUSTER:
-        train_data_raw.samples = train_data_raw.samples[
-            : len(train_data_raw) // FRACTION
-        ]
-    # sphinx_gallery_end_ignore
+    def forward(self, x):
+        return (x - self.loc) / self.scale
 
-    ##############################################################################
-    # Since we'll be loading our data in batches, we write a few custom transformations
-    # that take advantage of this, and apply the transformations in a vectorized way.
-    #
-    # First a transformation that can be used for normalization.
-    class InvAffine(nn.Module):
-        """A custom normalization layer."""
 
-        def __init__(self, loc, scale):
-            super().__init__()
-            self.loc = loc
-            self.scale = scale
+##############################################################################
+# Next, two transforms that flip and crop each image of the batch at random.
 
-        def forward(self, x):
-            return (x - self.loc) / self.scale
 
-    ##############################################################################
-    # Next two transformations that can be used to randomly crop and flip the images.
-
-    class RandomHFlip(nn.Module):
-        def forward(self, x: torch.Tensor):
-            idx = (
-                torch.zeros(*x.shape[:-3], 1, 1, 1, device=x.device, dtype=torch.bool)
-                .bernoulli_()
-                .expand_as(x)
-            )
-            return x.masked_fill(idx, 0.0) + x.masked_fill(~idx, 0.0).flip(-1)
-
-    class RandomCrop(nn.Module):
-        def __init__(self, w, h):
-            super(RandomCrop, self).__init__()
-            self.w = w
-            self.h = h
-
-        def forward(self, x):
-            batch = x.shape[:-3]
-            index0 = torch.randint(x.shape[-2] - self.h, (*batch, 1), device=x.device)
-            index0 = index0 + torch.arange(self.h, device=x.device)
-            index0 = (
-                index0.unsqueeze(1)
-                .unsqueeze(-1)
-                .expand((*batch, 3, self.h, x.shape[-1]))
-            )
-            index1 = torch.randint(x.shape[-1] - self.w, (*batch, 1), device=x.device)
-            index1 = index1 + torch.arange(self.w, device=x.device)
-            index1 = (
-                index1.unsqueeze(1).unsqueeze(-2).expand((*batch, 3, self.h, self.w))
-            )
-            return x.gather(-2, index0).gather(-1, index1)
-
-    ##############################################################################
-    # When each batch is loaded, we will scale it, then randomly crop and flip. The random
-    # transformations cannot be pre-applied as they must differ each time we iterate over
-    # the data. The scaling could be pre-applied in principle, but by waiting until we load
-    # the data into RAM, we are able to set the dtype of the memory-mapped array to
-    # ``uint8``, a significant space saving over ``float32``.
-
-    collate_transform = nn.Sequential(
-        InvAffine(
-            loc=torch.tensor([0.485, 0.456, 0.406], device=device).view(3, 1, 1) * 255,
-            scale=torch.tensor([0.229, 0.224, 0.225], device=device).view(3, 1, 1)
-            * 255,
-        ),
-        RandomCrop(224, 224),
-        RandomHFlip(),
-    )
-
-    ##############################################################################
-    # Representing data with a TensorClass
-    # ------------------------------------
-    # Tensorclasses are a good choice when the structure of your data is known
-    # apriori. They are dataclasses that expose dedicated tensor methods over
-    # their contents much like a ``TensorDict``.
-    #
-    # As well as specifying the contents (in this case ``images`` and
-    # ``targets``) we can also encapsulate related logic as custom methods
-    # when defining the class. Here we add a classmethod that takes a dataset
-    # and creates a tensorclass containing the data by iterating over the
-    # dataset. We create memory-mapped tensors to hold the data so that they
-    # can be efficiently loaded in batches later.
-
-    @tensorclass
-    class ImageNetData:
-        images: torch.Tensor
-        targets: torch.Tensor
-
-        @classmethod
-        def from_dataset(cls, dataset):
-            data = cls(
-                images=MemoryMappedTensor.empty(
-                    (
-                        len(dataset),
-                        *dataset[0][0].squeeze().shape,
-                    ),
-                    dtype=torch.uint8,
-                ),
-                targets=MemoryMappedTensor.empty((len(dataset),), dtype=torch.int64),
-                batch_size=[len(dataset)],
-            )
-            # locks the tensorclass and ensures that is_memmap will return True.
-            data.memmap_()
-
-            batch = 64
-            dl = DataLoader(dataset, batch_size=batch, num_workers=NUM_WORKERS)
-            i = 0
-            pbar = tqdm.tqdm(total=len(dataset))
-            for image, target in dl:
-                _batch = image.shape[0]
-                pbar.update(_batch)
-                print(data)
-                print(cls(images=image, targets=target, batch_size=[_batch]))
-                data[i : i + _batch] = cls(
-                    images=image, targets=target, batch_size=[_batch]
-                )
-                i += _batch
-
-            return data
-
-    ##############################################################################
-    # We create two tensorclasses, one for the training and on for the
-    # validation data. Note that while this step can be slightly expensive, it
-    # allows us to save repeated computation later during training.
-
-    train_data_tc = ImageNetData.from_dataset(train_data_raw)
-    val_data_tc = ImageNetData.from_dataset(val_data)
-
-    ##############################################################################
-    # DataLoaders
-    # -----------
-    #
-    # We can create dataloaders both from the ``torchvision``-provided
-    # Datasets, as well as from our memory-mapped tensorclasses.
-    #
-    # Since tensorclasses implement ``__len__`` and ``__getitem__`` (and also
-    # ``__getitems__``) we can use them like a map-style Dataset and create a
-    # ``DataLoader`` directly from them.
-    #
-    # Since the TensorClass data will be loaded in batches, we need to specify how these
-    # batches should be collated. For this we write the following helper class
-
-    class Collate(nn.Module):
-        def __init__(self, transform=None, device=None):
-            super().__init__()
-            self.transform = transform
-            self.device = torch.device(device)
-
-        def __call__(self, x: ImageNetData):
-            # move data to RAM
-            if self.device.type == "cuda":
-                out = x.pin_memory()
-            else:
-                out = x
-            if self.device:
-                # move data to gpu
-                out = out.to(self.device)
-            if self.transform:
-                # apply transforms on gpu
-                out.images = self.transform(out.images)
-            return out
-
-    ##############################################################################
-    # ``DataLoader`` has support for multiple workers loading data in parallel. The
-    # tensorclass dataloader will use just one worker, but load data in batches.
-    #
-    # Note that under this approach our ``collate_fn`` is essentially just an ``nn.Module``,
-    # making it transparent and easy to implement. But this approach also offers
-    # flexibility, for example, if needed we could move the collation step into the training
-    # loop by considering the ``Collate`` module as part of the model.
-
-    batch_size = 8
-    # sphinx_gallery_start_ignore
-    if RUN_ON_CLUSTER:
-        batch_size = 128
-    # sphinx_gallery_end_ignore
-    train_dataloader = DataLoader(
-        train_data,
-        batch_size=batch_size,
-        num_workers=NUM_WORKERS,
-    )
-    val_dataloader = DataLoader(
-        val_data,
-        batch_size=batch_size,
-        num_workers=NUM_WORKERS,
-    )
-
-    train_dataloader_tc = DataLoader(  # noqa: TOR401
-        train_data_tc,
-        batch_size=batch_size,
-        collate_fn=Collate(collate_transform, device),
-    )
-    val_dataloader_tc = DataLoader(  # noqa: TOR401
-        val_data_tc,
-        batch_size=batch_size,
-        collate_fn=Collate(device=device),
-    )
-
-    ##############################################################################
-    # We can now compare how long it takes to iterate once over the data in
-    # each case. The regular dataloader loads images one by one from disk,
-    # applies the transform sequentially and then stacks the results
-    # (note: we start measuring time a little after the first iteration, as
-    # starting the dataloader can take some time).
-
-    total = 0
-    for i, (image, target) in enumerate(train_dataloader):
-        if i == 3:
-            t0 = time.time()
-        if i >= 3:
-            total += image.shape[0]
-        image, target = image.to(device), target.to(device)
-    t = time.time() - t0
-    print(
-        f"One iteration over dataloader done! Rate: {total / t:4.4f} fps, time: {t: 4.4f}s"
-    )
-
-    ##############################################################################
-    # Our tensorclass-based dataloader instead loads data from the
-    # memory-mapped tensor in batches. We then apply the batched random
-    # transformations to the batched images.
-
-    total = 0
-    for i, batch in enumerate(train_dataloader_tc):
-        if i == 3:
-            t0 = time.time()
-        if i >= 3:
-            total += batch.numel()
-        image, target = batch.images, batch.targets
-    t = time.time() - t0
-    print(
-        f"One iteration over tensorclass dataloader done! Rate: {total / t:4.4f} fps, time: {t: 4.4f}s"
-    )
-
-    ##############################################################################
-    # In the case of the validation set, we see an even bigger performance
-    # improvement, because there are no random transformations, so we can save
-    # the fully transformed data in the memory-mapped tensor, eliminating the
-    # need for additional transformations as we load from disk.
-
-    total = 0
-    for i, (image, target) in enumerate(val_dataloader):
-        if i == 3:
-            t0 = time.time()
-        if i >= 3:
-            total += image.shape[0]
-        image, target = image.to(device), target.to(device)
-    t = time.time() - t0
-    print(
-        f"One iteration over val data done! Rate: {total / t:4.4f} fps, time: {t: 4.4f}s"
-    )
-
-    total = 0
-    for i, batch in enumerate(val_dataloader_tc):
-        if i == 3:
-            t0 = time.time()
-        if i >= 3:
-            total += batch.shape[0]
-        image, target = (
-            batch.images.contiguous().to(device),
-            batch.targets.contiguous().to(device),
+class RandomHFlip(nn.Module):
+    def forward(self, x: torch.Tensor):
+        idx = (
+            torch.zeros(*x.shape[:-3], 1, 1, 1, device=x.device, dtype=torch.bool)
+            .bernoulli_()
+            .expand_as(x)
         )
-    t = time.time() - t0
-    print(
-        f"One iteration over tensorclass val data done! Rate: {total / t:4.4f} fps, time: {t: 4.4f}s"
-    )
+        return x.masked_fill(idx, 0.0) + x.masked_fill(~idx, 0.0).flip(-1)
 
-    ##############################################################################
-    # Results from ImageNet
-    # ---------------------
-    #
-    # We repeated the above on full-size ImageNet data, running on an AWS EC2 instance with
-    # 32 cores and 1 A100 GPU. We compare against the regular ``DataLoader`` with different
-    # numbers of workers. We found that our single-threaded TensorClass approach
-    # out-performed the ``DataLoader`` even when we used a large number of workers.
-    #
-    # .. image:: /reference/generated/tutorials/media/imagenet-benchmark-time.png
-    #    :alt: Bar chart showing runtimes of dataloaders compared with TensorClass
-    #
-    # .. image:: /reference/generated/tutorials/media/imagenet-benchmark-speed.png
-    #    :alt: Bar chart showing collection rate of dataloaders compared with TensorClass
 
-    ##############################################################################
-    # This shows that much of the overhead is coming from i/o operations rather than the
-    # transforms, and hence explains how the memory-mapped array helps us load data more
-    # efficiently. Check out the `distributed example <https://github.com/pytorch/tensordict/tree/main/benchmarks/distributed/dataloading.py>`__
-    # for more context about the other results from these charts.
-    #
-    # We can get even better performance with the TensorClass approach by using multiple
-    # workers to load batches from the memory-mapped array, though this comes with some
-    # added complexity. See `this example in our benchmarks
-    # <https://github.com/pytorch/tensordict/blob/main/benchmarks/distributed/dataloading.py>`__
-    # for an example of how this could work.
+class RandomCrop(nn.Module):
+    def __init__(self, w, h):
+        super().__init__()
+        self.w = w
+        self.h = h
+
+    def forward(self, x):
+        batch = x.shape[:-3]
+        index0 = torch.randint(x.shape[-2] - self.h, (*batch, 1), device=x.device)
+        index0 = index0 + torch.arange(self.h, device=x.device)
+        index0 = (
+            index0.unsqueeze(1).unsqueeze(-1).expand((*batch, 3, self.h, x.shape[-1]))
+        )
+        index1 = torch.randint(x.shape[-1] - self.w, (*batch, 1), device=x.device)
+        index1 = index1 + torch.arange(self.w, device=x.device)
+        index1 = index1.unsqueeze(1).unsqueeze(-2).expand((*batch, 3, self.h, self.w))
+        return x.gather(-2, index0).gather(-1, index1)
+
+
+##############################################################################
+# The normalization uses the mean and standard deviation of the ``Normalize``
+# transforms above, multiplied by 255 because the stored values are between 0
+# and 255. The train batches are normalized, then cropped and flipped. The val
+# batches are only normalized.
+
+normalize = InvAffine(
+    loc=torch.tensor([0.485, 0.456, 0.406], device=device).view(3, 1, 1) * 255,
+    scale=torch.tensor([0.229, 0.224, 0.225], device=device).view(3, 1, 1) * 255,
+)
+train_collate_transform = nn.Sequential(
+    normalize,
+    RandomCrop(224, 224),
+    RandomHFlip(),
+)
+
+##############################################################################
+# Representing data with a TensorClass
+# ------------------------------------
+# A tensorclass is the class form of a tensordict: a dataclass whose fields
+# are tensors. Like a :class:`~tensordict.TensorDict`, it has a batch size,
+# and you can index it, move it to a device, or memory-map it. Use a
+# tensorclass when you know the fields of your data in advance. To define one, subclass
+# :class:`~tensordict.TensorClass`.
+#
+# A tensorclass can also have methods. The ``from_dataset`` class method below
+# allocates a ``uint8`` memory-mapped tensor for the images, then fills it
+# with batches read from the dataset. Its argument is one of the raw datasets
+# above, so every image has the same shape and dtype.
+
+
+class ImageNetData(TensorClass):
+    images: torch.Tensor
+    targets: torch.Tensor
+
+    @classmethod
+    def from_dataset(cls, dataset):
+        data = cls(
+            images=MemoryMappedTensor.empty(
+                (len(dataset), *dataset[0][0].squeeze().shape),
+                dtype=torch.uint8,
+            ),
+            targets=MemoryMappedTensor.empty((len(dataset),), dtype=torch.int64),
+            batch_size=[len(dataset)],
+        )
+        # memmap_() locks the tensorclass: you cannot add fields any more,
+        # but you can write into the existing tensors. After this call,
+        # data.is_memmap() returns True.
+        data.memmap_()
+
+        dl = DataLoader(dataset, batch_size=64, num_workers=NUM_WORKERS)
+        i = 0
+        for image, target in dl:
+            n = image.shape[0]
+            data[i : i + n] = cls(images=image, targets=target, batch_size=[n])
+            i += n
+        return data
+
+
+##############################################################################
+# Create one tensorclass for the training data and one for the validation
+# data. This step reads every image once. It costs time now, and it saves
+# the decoding and resizing of each image at every epoch.
+
+train_data_tc = ImageNetData.from_dataset(train_data_raw)
+val_data_tc = ImageNetData.from_dataset(val_data_raw)
+print(train_data_tc)
+
+##############################################################################
+# DataLoaders
+# -----------
+#
+# A tensorclass implements ``__len__``, ``__getitem__``, and ``__getitems__``,
+# so you can pass it to a ``DataLoader`` as a map-style dataset. The
+# ``DataLoader`` then reads each batch with one batched index, and the result
+# is already an ``ImageNetData`` batch. The ``collate_fn`` receives this
+# batch. The ``Collate`` module below moves the batch to the device and
+# applies a transform to the images.
+
+
+class Collate(nn.Module):
+    def __init__(self, transform=None, device=None):
+        super().__init__()
+        self.transform = transform
+        self.device = torch.device(device) if device is not None else None
+
+    def __call__(self, x: ImageNetData):
+        out = x
+        if self.device is not None:
+            if self.device.type == "cuda":
+                # pinned memory makes the copy to the GPU asynchronous
+                out = out.pin_memory()
+            out = out.to(self.device)
+        if self.transform is not None:
+            out.images = self.transform(out.images)
+        return out
+
+
+##############################################################################
+# The ``collate_fn`` is an ``nn.Module``, so you can also move this step into
+# the training loop and treat ``Collate`` as the first layer of the model.
+#
+# The regular data loaders use ``NUM_WORKERS`` worker processes. The
+# tensorclass data loaders run in the main process (no workers) and read one
+# batch at a time.
+
+batch_size = 8
+# sphinx_gallery_start_ignore
+if RUN_ON_CLUSTER:
+    batch_size = 128
+# sphinx_gallery_end_ignore
+train_dataloader = DataLoader(
+    train_data,
+    batch_size=batch_size,
+    num_workers=NUM_WORKERS,
+)
+val_dataloader = DataLoader(
+    val_data,
+    batch_size=batch_size,
+    num_workers=NUM_WORKERS,
+)
+
+train_dataloader_tc = DataLoader(  # noqa: TOR401
+    train_data_tc,
+    batch_size=batch_size,
+    collate_fn=Collate(train_collate_transform, device),
+)
+val_dataloader_tc = DataLoader(  # noqa: TOR401
+    val_data_tc,
+    batch_size=batch_size,
+    collate_fn=Collate(normalize, device),
+)
+
+##############################################################################
+# Loading rate
+# ------------
+# The loops below measure how many images per second each data loader
+# delivers in one pass over the data. The regular data loader reads the
+# images one by one from disk, applies the transform to each image, and then
+# stacks the results. The timer starts at the fourth batch, because the
+# first batches include the start of the worker processes.
+
+
+def measure(dataloader, name):
+    total = 0
+    for i, batch in enumerate(dataloader):
+        if i == 3:
+            t0 = time.perf_counter()
+        if isinstance(batch, ImageNetData):
+            images, targets = batch.images, batch.targets
+        else:
+            images, targets = batch
+            images, targets = images.to(device), targets.to(device)
+        if i >= 3:
+            total += images.shape[0]
+    t = time.perf_counter() - t0
+    print(f"{name}: {total / t:.0f} images per second, {t:.2f} s")
+
+
+measure(train_dataloader, "train, regular DataLoader")
+measure(train_dataloader_tc, "train, tensorclass DataLoader")
+
+##############################################################################
+# The tensorclass data loader reads ``uint8`` batches from the memory-mapped
+# tensor. Then it normalizes, crops, and flips each batch with one call per
+# transform.
+#
+# For the validation data, the memory-mapped tensor already holds the
+# resized and center-cropped images. At load time, the tensorclass data
+# loader only normalizes each batch.
+
+measure(val_dataloader, "val, regular DataLoader")
+measure(val_dataloader_tc, "val, tensorclass DataLoader")
+
+##############################################################################
+# The rates above come from the machine that built this page. They depend on
+# the number of CPU cores, the disk, and the device. This dataset is small (244
+# training images and 153 validation images), so run the script on your own
+# data before you choose a pipeline.
+#
+# Results from ImageNet
+# ---------------------
+#
+# The charts below come from a run of an earlier version of this tutorial on
+# the full ImageNet dataset, in February 2023 (tensordict 0.0.3). The machine
+# was an AWS EC2 instance with 32 CPU cores and one A100 GPU. The charts
+# compare the regular ``DataLoader`` with 8, 16, and 32 workers, the
+# single-process tensorclass loader of this tutorial, and distributed
+# versions of the tensorclass loader.
+#
+# .. image:: /reference/generated/tutorials/media/imagenet-benchmark-time.png
+#    :alt: Bar chart showing runtimes of dataloaders compared with TensorClass
+#
+# .. image:: /reference/generated/tutorials/media/imagenet-benchmark-speed.png
+#    :alt: Bar chart showing collection rate of dataloaders compared with TensorClass
+
+##############################################################################
+# In this run, one pass over the data took 120 s with the single-process
+# tensorclass loader on one GPU. It took 500 s with a ``DataLoader`` with 32
+# workers, and 1169 s with 8 workers. The distributed rows use several
+# processes to read batches from the memory-mapped tensor, on one or five
+# GPUs. The code of the distributed benchmark is in
+# `benchmarks/distributed/test_dataloading.py
+# <https://github.com/pytorch/tensordict/blob/main/benchmarks/distributed/test_dataloading.py>`__.
+# It needs ImageNet, several GPUs, and ``torch.distributed.rpc``.
+#
+# Conclusion
+# ----------
+#
+# You can now write a :class:`~tensordict.TensorClass` with a
+# ``from_dataset`` method that stores a dataset in ``uint8`` memory-mapped
+# tensors. Apply the deterministic transforms once, when you fill the memory
+# map. Apply the random transforms and the normalization to whole batches, in
+# a ``collate_fn``. The data loader then reads a batch with one index into the
+# memory-mapped tensor, instead of opening one file per image.
+#
+# Further reading
+# ---------------
+#
+# - :ref:`tensorclass-guide` explains how to define and use tensorclasses.
+# - :ref:`data-loading` shows other ways to load data with tensordict and to
+#   share it between processes.
+# - :ref:`saving` explains how to save memory-mapped tensordicts and load them
+#   again.
+# - :ref:`sphx_glr_tutorials_tensorclass_fashion.py` applies the same idea to
+#   a smaller dataset and trains a model on it.

@@ -198,12 +198,35 @@ class TestErrorMessage:
             td.pop("zz")
 
     @staticmethod
-    def test_view_invalid_shape():
+    @pytest.mark.parametrize("lazy", [False, True])
+    def test_pop_invalid_key(lazy):
+        td = TensorDict(a=torch.zeros(2), batch_size=[2])
+        if lazy:
+            td = LazyStackedTensorDict(td, td.clone())
+        with pytest.raises(KeyError, match=re.escape(_GENERIC_NESTED_ERR.format(()))):
+            td.pop(())
+        with pytest.raises(ValueError, match="'a' is a Tensor, not a tensordict"):
+            td.pop(("a", "b"), None)
+
+    @staticmethod
+    @pytest.mark.parametrize(
+        "shape,match",
+        [
+            ((4, -1), "invalid shape [4, -1] for a batch of 6 elements"),
+            ((-1, -1), "only one dimension can be inferred"),
+            ((-2, 3), "invalid shape dimensions in [-2, 3]"),
+        ],
+        ids=["indivisible", "two_minus_one", "minus_two"],
+    )
+    @pytest.mark.parametrize("method", ["view", "reshape"])
+    @pytest.mark.parametrize("lazy", [False, True])
+    def test_view_invalid_shape(shape, match, method, lazy):
+        # A tensor raises RuntimeError for these shapes too
         td = TensorDict(a=torch.zeros(6), batch_size=[6])
-        with pytest.raises(
-            AssertionError, match=re.escape("invalid shape [4, -1] for a batch of 6")
-        ):
-            td.view(4, -1)
+        if lazy:
+            td = LazyStackedTensorDict(*td.unbind(0))
+        with pytest.raises(RuntimeError, match=re.escape(match)):
+            getattr(td, method)(*shape)
 
     @staticmethod
     @pytest.mark.parametrize("td_type", ["td", "sub_td", "params"])
@@ -454,7 +477,7 @@ class TestErrors:
         assert result.returncode == 0, result.stderr
         if value == "0":
             assert result.stdout.splitlines() == [
-                "DeprecationWarning TD_GET_DEFAULTS_TO_NONE=0 is deprecated and will "
+                "FutureWarning TD_GET_DEFAULTS_TO_NONE=0 is deprecated and will "
                 "be removed in TensorDict 0.17. Use td[key] to raise a KeyError for "
                 "a missing key instead.",
                 "get: KeyError",
