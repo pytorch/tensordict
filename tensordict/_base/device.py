@@ -761,7 +761,9 @@ class _DeviceOps:
                     # _fast_apply gives every nested tensordict the new batch
                     # size without checking its leaves
                     _check_nested_batch_size(result)
-                    if _to_batch_size_will_change(self, torch.Size(batch_size)):
+                    if not is_compiling() and _to_batch_size_will_change(
+                        self, torch.Size(batch_size)
+                    ):
                         warnings.warn(
                             "to() with a batch_size and a new device or dtype "
                             "gives every nested tensordict exactly that batch "

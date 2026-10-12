@@ -845,6 +845,26 @@ class TestTD:
         assert result["nested"].batch_size == torch.Size(batch_size)
         assert result["nested", "a"].device == torch.device("meta")
 
+    def test_to_batch_size_new_device_future_warning(self, mode):
+        # eager mode warns on this call; compiled code skips the warning
+        def to_meta(td):
+            return td.to("meta", batch_size=[2, 3])
+
+        td = TensorDict(
+            a=torch.zeros(2, 3, 4),
+            nested=TensorDict(b=torch.zeros(2, 3, 4), batch_size=[2, 3, 4]),
+            batch_size=[2],
+            names=["r"],
+        )
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            expected = to_meta(td)
+        to_meta_c = torch.compile(to_meta, fullgraph=True, mode=mode)
+        result = to_meta_c(td)
+        assert result.batch_size == expected.batch_size
+        assert result["nested"].batch_size == expected["nested"].batch_size
+        assert result.names == expected.names
+        assert result["nested", "b"].device == torch.device("meta")
+
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="cuda required")
     def test_to_cpu_from_cuda(self, mode):
         def to_cpu(td):
