@@ -2377,6 +2377,7 @@ class TestGeneric:
             td = td.to(device)
         assert td.is_meta is (device == "meta")
         assert td["b"].is_meta is (device == "meta")
+        assert lazy_stack([td, td]).is_meta is (device == "meta")
 
     def test_is_in(self):
         td = TensorDict.fromkeys({"a", "b", "c", ("d", "e")}, 0)
