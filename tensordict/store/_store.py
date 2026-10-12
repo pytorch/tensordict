@@ -81,6 +81,7 @@ from tensordict.store._utils import (  # noqa: F401
     _prepare_indexed_value,
     _str_to_dtype,
     _tensor_to_bytes,
+    _warn_missing_key,
 )
 
 
@@ -1785,7 +1786,8 @@ class TensorDictStore(TensorDictBase):
 
         all_keys = self._get_all_keys()
         # Delete exact key
-        if key_path in all_keys:
+        found = key_path in all_keys
+        if found:
             self._run_sync(self._adel_key(key_path))
 
         # Delete nested keys (prefix match)
@@ -1798,6 +1800,9 @@ class TensorDictStore(TensorDictBase):
         cache_key = key if isinstance(key, str) else key[0]
         self._nested_tensordicts.pop(cache_key, None)
 
+        if not found and not nested_to_delete:
+            # stacklevel 3: skip the _lock_blocked wrapper
+            _warn_missing_key(self, "del_", key, stacklevel=3)
         return self
 
     def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
@@ -1843,7 +1848,8 @@ class TensorDictStore(TensorDictBase):
         async def _arename(old_path, new_path):
             all_keys = await self._aget_all_keys()
             # Rename exact match
-            if old_path in all_keys:
+            found = old_path in all_keys
+            if found:
                 pipe = self._client.pipeline()
                 pipe.rename(self._data_key(old_path), self._data_key(new_path))
                 pipe.rename(self._meta_key(old_path), self._meta_key(new_path))
@@ -1862,8 +1868,9 @@ class TensorDictStore(TensorDictBase):
                 pipe.srem(self._keys_registry_key, k)
                 pipe.sadd(self._keys_registry_key, new_k)
                 await pipe.execute()
+            return found or bool(nested)
 
-        self._run_sync(_arename(old_path, new_path))
+        found = self._run_sync(_arename(old_path, new_path))
         # Invalidate keys cache — rename changes the set of keys
         self._keys_cache[0] = None
         if self._meta_cache is not None:
@@ -1871,6 +1878,8 @@ class TensorDictStore(TensorDictBase):
             old_meta = self._meta_cache.pop(old_path, None)
             if old_meta is not None:
                 self._meta_cache[new_path] = old_meta
+        if not found:
+            _warn_missing_key(self, "rename_key_", old_key, stacklevel=2)
         return self
 
     def entry_class(self, key: NestedKey) -> type:
