@@ -3019,6 +3019,39 @@ def _exit(self, exc_type, exc_val, exc_tb):
     return result
 
 
+# The fallback methods that write a key, with the position and the name of
+# its argument. See _warn_non_field_keys.
+_FIELD_KEY_ARGUMENT = {
+    "create_nested": (0, "key"),
+    "rename_key_": (1, "new_key"),
+    "set_non_tensor": (0, "key"),
+    "setdefault": (0, "key"),
+}
+
+
+def _non_field_keys(self, keys) -> set[str]:
+    # The first keys of the nested keys in keys that are not fields of
+    # type(self). Dynamo cannot trace warnings.warn, so only eager
+    # calls look for them and warn.
+    expected_keys = type(self).__expected_keys__
+    if is_dynamo_compiling() or expected_keys.issuperset(keys):
+        return set()
+    return {_unravel_key_to_tuple(key)[0] for key in keys} - expected_keys
+
+
+def _warn_non_field_keys(self, keys: set[str], method: str) -> None:
+    # set() and attribute assignment reject keys that are not fields with
+    # AttributeError, and so will these methods once the deprecation ends.
+    cls = type(self)
+    warn_deprecated(
+        f"Writing keys that are not fields ({sorted(keys)}) with "
+        f"{cls.__name__}.{method}(), which set() rejects with AttributeError,",
+        removal="0.17",
+        replacement=f"only its fields ({sorted(cls.__expected_keys__)})",
+        stacklevel=3,
+    )
+
+
 def _wrap_td_method(
     funcname, *, copy_non_tensor=False, no_wrap=False, is_property=False
 ):
@@ -3061,6 +3094,19 @@ def _wrap_td_method(
             if isinstance(result, tuple):
                 return tuple(deliver_result(self, r, kwargs) for r in result)
             return deliver_result(self, result, kwargs)
+
+        if funcname not in _FIELD_KEY_ARGUMENT:
+            return wrapped_func
+        position, name = _FIELD_KEY_ARGUMENT[funcname]
+        unchecked_func = wrapped_func
+
+        def wrapped_func(self, *args, **kwargs):
+            key = args[position] if len(args) > position else kwargs.get(name)
+            unknown = () if key is None else _non_field_keys(self, (key,))
+            result = unchecked_func(self, *args, **kwargs)
+            if unknown:
+                _warn_non_field_keys(self, unknown, funcname)
+            return result
 
         return wrapped_func
 
@@ -3160,6 +3206,16 @@ def _clear_none_entries(self, keys: list[str], keys_to_update=None) -> None:
         _set_none_tensor_only(self, key)
 
 
+def _update_non_field_keys(self, source, keys_to_update) -> set[str]:
+    # The keys that are not fields and that update() writes from source.
+    # The keys of the dict of a TensorDict are faster to read than its keys().
+    keys = source._tensordict if type(source) is TensorDict else source.keys()
+    unknown = _non_field_keys(self, keys)
+    if unknown and keys_to_update is not None:
+        unknown &= {_unravel_key_to_tuple(key)[0] for key in keys_to_update}
+    return unknown
+
+
 def _update(
     self,
     input_dict_or_td: dict[str, CompatibleType] | T | None = None,
@@ -3222,6 +3278,9 @@ def _update(
             for k, v in input_dict_or_td.__dict__["_non_tensordict"].items()
             if v is not None
         }
+        unknown = _update_non_field_keys(
+            self, input_dict_or_td.__dict__["_tensordict"], keys_to_update
+        ) | _non_field_keys(self, non_tensordict)
         self._tensordict.update(
             input_dict_or_td.__dict__["_tensordict"],
             clone=clone,
@@ -3247,8 +3306,11 @@ def _update(
                     if key in keys:
                         del self_non_tensordict[key]
         self._non_tensordict.update(non_tensordict)
+        if unknown:
+            _warn_non_field_keys(self, unknown, "update")
         return self
 
+    unknown = _update_non_field_keys(self, input_dict_or_td, keys_to_update)
     self._tensordict.update(
         input_dict_or_td,
         clone=clone,
@@ -3265,6 +3327,8 @@ def _update(
         ntd = {k: val for k, val in self._non_tensordict.items() if k not in keys}
         self._non_tensordict.clear()
         self._non_tensordict.update(ntd)
+    if unknown:
+        _warn_non_field_keys(self, unknown, "update")
     return self
 
 
