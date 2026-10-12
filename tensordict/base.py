@@ -1091,7 +1091,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return TensorDict._new_unsafe(*args, **kwargs)
 
     def __bool__(self) -> bool:
-        raise RuntimeError("Converting a tensordict to boolean value is not permitted")
+        raise RuntimeError(
+            "Converting a tensordict to boolean value is not permitted. "
+            "Use len(td.keys()) to test for keys, td.is_empty() to test for "
+            "leaves, or (a == b).all() / .any() to reduce a comparison."
+        )
 
     def __repr__(self) -> str:
         try:
