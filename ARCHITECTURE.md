@@ -170,18 +170,13 @@ are `torch.Tensor` subclasses that a tensordict can store as entries.
 `TensorDictBase` marks its backend-specific methods with
 `@abc.abstractmethod`: the storage hooks (`_get_str`, `_set_str`, ...),
 the shape operations (`_view`, `_permute`, `_unsqueeze`, ...), `keys`,
-`_clone` and others, 35 in all. A class that lacks one
+`_clone` and others. A class that lacks one
 cannot be instantiated. The rest of `TensorDictBase` (`base.py` and the mixins in
 `_base/`) is written on top of these methods, and all the implementations
 share it, including generic
 implementations of operations such as `reshape`, `split`, `__setitem__`,
 `_index_tensordict`, `_apply_nest` and the comparison operators, which a class
-overrides only when it can do better. When only part of an operation is
-backend-specific, the class overrides a small private hook instead of the
-public method: `lock_` and `unlock_` walk the sub-tensordicts that
-`_lock_sub_tensordicts` returns (a store returns the ones it has cached, so
-that locking reads nothing from the server), and `contiguous(inplace=True)`
-calls `_contiguous_inplace`, which raises unless the class supports it.
+overrides only when it can do better.
 
 The implementations also reuse code in two ways:
 
