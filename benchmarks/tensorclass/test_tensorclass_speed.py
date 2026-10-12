@@ -9,7 +9,13 @@ from dataclasses import make_dataclass
 
 import pytest
 import torch
-from tensordict import TensorClass, tensorclass, TensorDict, TypedTensorDict
+from tensordict import (
+    NonTensorData,
+    TensorClass,
+    tensorclass,
+    TensorDict,
+    TypedTensorDict,
+)
 
 
 @tensorclass
@@ -210,6 +216,20 @@ def test_tc_second_layer_tensor(benchmark):
 def test_tc_second_layer_nontensor(benchmark):
     d = MyData(a=0, b=1, c="a string", d=MyData(torch.zeros(()), None, "a string"))
     benchmark(lambda: d.d.c)
+
+
+def test_tc_clone(benchmark):
+    d = MyData(a=torch.zeros(4), b=torch.ones(4), c="a string", batch_size=[4])
+    benchmark(d.clone)
+
+
+def test_nontensordata_init(benchmark):
+    benchmark(lambda: NonTensorData("a string", batch_size=[4]))
+
+
+def test_nontensordata_data(benchmark):
+    d = NonTensorData("a string", batch_size=[4])
+    benchmark(lambda: d.data)
 
 
 if __name__ == "__main__":

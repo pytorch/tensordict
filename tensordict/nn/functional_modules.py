@@ -10,7 +10,7 @@ from typing import Any, Callable
 
 import torch
 import torch.utils._pytree
-from tensordict._deprecation import deprecated
+from tensordict._deprecation import deprecated, warn_deprecated_env_var
 from tensordict._pytree import PYTREE_REGISTERED_LAZY_TDS, PYTREE_REGISTERED_TDS
 from tensordict.base import is_tensor_collection
 from tensordict.utils import _is_unbatched, _strtobool
@@ -336,4 +336,12 @@ of dimensionality {_vmap_dim(arg)} so expected in_dim to satisfy
 
 
 if _strtobool(os.environ.get("EXCLUDE_TD_FROM_PYTREE", "0")):
+    # Removing tensordicts from the pytree registry breaks torch.export,
+    # torch.func and tree_map on them (pytorch/tensordict#2076), and
+    # CudaGraphModule no longer needs it (pytorch/tensordict#2312).
+    warn_deprecated_env_var(
+        "EXCLUDE_TD_FROM_PYTREE",
+        os.environ["EXCLUDE_TD_FROM_PYTREE"],
+        removal="0.17",
+    )
     _exclude_td_from_pytree().set()
