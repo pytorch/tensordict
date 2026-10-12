@@ -3101,11 +3101,13 @@ def _wrap_td_method(
         unchecked_func = wrapped_func
 
         def wrapped_func(self, *args, **kwargs):
-            key = args[position] if len(args) > position else kwargs.get(name)
-            unknown = () if key is None else _non_field_keys(self, (key,))
             result = unchecked_func(self, *args, **kwargs)
-            if unknown:
-                _warn_non_field_keys(self, unknown, funcname)
+            # The call succeeded, so key is a string or a tuple of strings.
+            key = args[position] if len(args) > position else kwargs.get(name)
+            if key is not None and key not in type(self).__expected_keys__:
+                unknown = _non_field_keys(self, (key,))
+                if unknown:
+                    _warn_non_field_keys(self, unknown, funcname)
             return result
 
         return wrapped_func
@@ -3206,10 +3208,8 @@ def _clear_none_entries(self, keys: list[str], keys_to_update=None) -> None:
         _set_none_tensor_only(self, key)
 
 
-def _update_non_field_keys(self, source, keys_to_update) -> set[str]:
-    # The keys that are not fields and that update() writes from source.
-    # The keys of the dict of a TensorDict are faster to read than its keys().
-    keys = source._tensordict if type(source) is TensorDict else source.keys()
+def _update_non_field_keys(self, keys, keys_to_update) -> set[str]:
+    # The keys in keys that are not fields and that update() writes.
     unknown = _non_field_keys(self, keys)
     if unknown and keys_to_update is not None:
         unknown &= {_unravel_key_to_tuple(key)[0] for key in keys_to_update}
@@ -3278,9 +3278,6 @@ def _update(
             for k, v in input_dict_or_td.__dict__["_non_tensordict"].items()
             if v is not None
         }
-        unknown = _update_non_field_keys(
-            self, input_dict_or_td.__dict__["_tensordict"], keys_to_update
-        ) | _non_field_keys(self, non_tensordict)
         self._tensordict.update(
             input_dict_or_td.__dict__["_tensordict"],
             clone=clone,
@@ -3306,11 +3303,24 @@ def _update(
                     if key in keys:
                         del self_non_tensordict[key]
         self._non_tensordict.update(non_tensordict)
-        if unknown:
-            _warn_non_field_keys(self, unknown, "update")
+        # The keys of the dict of a TensorDict are faster to read than its
+        # keys(), and valid calls only pay for the issuperset checks.
+        source = input_dict_or_td.__dict__["_tensordict"]
+        source_keys = (
+            source._tensordict if type(source) is TensorDict else source.keys()
+        )
+        expected_keys = type(self).__expected_keys__
+        if not (
+            expected_keys.issuperset(source_keys)
+            and expected_keys.issuperset(non_tensordict)
+        ):
+            unknown = _update_non_field_keys(
+                self, source_keys, keys_to_update
+            ) | _non_field_keys(self, non_tensordict)
+            if unknown:
+                _warn_non_field_keys(self, unknown, "update")
         return self
 
-    unknown = _update_non_field_keys(self, input_dict_or_td, keys_to_update)
     self._tensordict.update(
         input_dict_or_td,
         clone=clone,
@@ -3327,8 +3337,15 @@ def _update(
         ntd = {k: val for k, val in self._non_tensordict.items() if k not in keys}
         self._non_tensordict.clear()
         self._non_tensordict.update(ntd)
-    if unknown:
-        _warn_non_field_keys(self, unknown, "update")
+    source_keys = (
+        input_dict_or_td._tensordict
+        if type(input_dict_or_td) is TensorDict
+        else input_dict_or_td.keys()
+    )
+    if not type(self).__expected_keys__.issuperset(source_keys):
+        unknown = _update_non_field_keys(self, source_keys, keys_to_update)
+        if unknown:
+            _warn_non_field_keys(self, unknown, "update")
     return self
 
 
