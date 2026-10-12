@@ -10,7 +10,7 @@ API pages that go deeper. If you are new to tensordict, read
 
 The sidebar lists the tutorials in four groups, in reading order:
 
-- Basics: keys, indexing, shapes, row-by-row filling and lazy stacks of
+- Basics: keys, indexing, shapes, row-by-row filling, and lazy stacks of
   streamed data.
 - Storage: devices and memory-mapped tensors, the zarr backend, and a
   benchmark of the serialization formats.

@@ -4,7 +4,7 @@ Changing the shape of a TensorDict
 **Author**: `Tom Begley <https://github.com/tcbegley>`_
 
 A :class:`~tensordict.TensorDict` has the shape operations of a tensor, such
-as ``reshape``, ``split``, ``stack`` and ``permute``. Each call changes every
+as ``reshape``, ``split``, ``stack``, and ``permute``. Each call changes every
 tensor in it in the same way, so you write the call once, and the tensors stay
 aligned. This tutorial is for readers who know these operations on a
 :class:`torch.Tensor`.
@@ -13,7 +13,7 @@ What you will learn:
 
 - How a shape operation on a tensordict applies to the batch dimensions of
   every entry.
-- How to split, unbind, stack and concatenate tensordicts.
+- How to split, unbind, stack, and concatenate tensordicts.
 - The difference between a lazy stack and a dense stack.
 - How to change the shape of a tensordict for the length of a ``with`` block.
 """
@@ -127,7 +127,7 @@ torch.testing.assert_close(slices[0]["a"], tensordict["a"][:, 0])
 # :func:`~tensordict.lazy_stack` keeps the original tensordicts in a list and
 # returns a :class:`~tensordict.LazyStackedTensorDict`, which stacks a value
 # only when you read it. Use a lazy stack when the tensordicts have different
-# shapes, devices or keys, or when you read only a few keys of the stack. The
+# shapes, devices, or keys, or when you read only a few keys of the stack. The
 # :ref:`stacking` page explains both kinds of stacks.
 
 from tensordict import lazy_stack
@@ -219,7 +219,7 @@ print(unsqueezed_tensordict)
 # .. note::
 #    :meth:`~tensordict.TensorDictBase.unsqueeze`,
 #    :meth:`~tensordict.TensorDictBase.squeeze`, :meth:`~tensordict.TensorDictBase.view`,
-#    :meth:`~tensordict.TensorDictBase.permute` and
+#    :meth:`~tensordict.TensorDictBase.permute`, and
 #    :meth:`~tensordict.TensorDictBase.transpose` apply the operation to the
 #    entries when you call them, and return a :class:`~tensordict.TensorDict`.
 #
@@ -272,7 +272,7 @@ assert permuted_tensordict["b"].shape == torch.Size([4, 3, 5])
 # shape operations :meth:`~tensordict.TensorDictBase.view`,
 # :meth:`~tensordict.TensorDictBase.permute`,
 # :meth:`~tensordict.TensorDictBase.transpose`,
-# :meth:`~tensordict.TensorDictBase.squeeze` and
+# :meth:`~tensordict.TensorDictBase.squeeze`, and
 # :meth:`~tensordict.TensorDictBase.unsqueeze` work in this way. So do
 # :meth:`~tensordict.TensorDictBase.to_module` for functional calls, and
 # :meth:`~tensordict.TensorDictBase.lock_` and
@@ -307,7 +307,7 @@ print("gathered_tensordict['a']:\n", gathered_tensordict["a"], end="\n\n")
 # ----------
 #
 # You can now index, ``reshape``, ``split``, ``unbind``, ``expand``,
-# ``squeeze``, ``unsqueeze``, ``view``, ``permute`` and ``gather`` a
+# ``squeeze``, ``unsqueeze``, ``view``, ``permute``, and ``gather`` a
 # :class:`~tensordict.TensorDict` with one call each. Each call changes the
 # batch dimensions of every entry and keeps the other dimensions. You can
 # stack tensordicts densely with :func:`torch.stack`, or lazily with
@@ -321,8 +321,8 @@ print("gathered_tensordict['a']:\n", gathered_tensordict["a"], end="\n\n")
 # Further reading
 # ---------------
 #
-# - :ref:`batch-size` explains batch sizes, shapes and indexing.
+# - :ref:`batch-size` explains batch sizes, shapes, and indexing.
 # - :ref:`stacking` explains lazy stacks and data of different sizes.
-# - :ref:`sphx_glr_tutorials_tensordict_slicing.py` shows indexing, masking
+# - :ref:`sphx_glr_tutorials_tensordict_slicing.py` shows indexing, masking,
 #   and writing into a tensordict with an index.
 # - :ref:`api-methods-shape` lists all the shape methods.

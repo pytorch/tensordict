@@ -93,6 +93,8 @@ from tensordict.utils import (
     _shape,
     _td_fields,
     _unravel_key_to_tuple,
+    _UPDATE_IGNORE_LOCK_WARNED,
+    _warn_update_ignore_lock,
     _zip_strict,
     DeviceType,
     expand_right,
@@ -1004,6 +1006,7 @@ class LazyStackedTensorDict(TensorDictBase):
         flatten=True,
     ) -> OrderedDict[str, Any]: ...
 
+    # Override: raises for keys that are not in every member.
     @_fails_exclusive_keys
     def flatten_keys(
         self,
@@ -1012,6 +1015,7 @@ class LazyStackedTensorDict(TensorDictBase):
         is_leaf: Callable[[Type], bool] | None = None,
     ) -> Self: ...
 
+    # Override: raises for keys that are not in every member.
     @_fails_exclusive_keys
     def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> Self: ...
 
@@ -1798,6 +1802,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 self.lazy_stack(vals, new_stack_dim) for vals in _zip_strict(*out)
             )
 
+    # Override: writes into each stacked tensordict, without a dense stack.
     def _stack_onto_(
         self,
         list_item: list[CompatibleType],
@@ -2627,6 +2632,7 @@ class LazyStackedTensorDict(TensorDictBase):
             result._set_str(key, tensor, validated=True, inplace=False)
         return result
 
+    # Override: a lazy stack of the members' empty tensordicts.
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> Self:
@@ -2837,6 +2843,7 @@ class LazyStackedTensorDict(TensorDictBase):
         # so that keys(), values() and items() agree.
         return [key for key in first_keys if key in keys]
 
+    # Override: pops the key from each member and stacks the values.
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         key, val = self.tensordicts[0].popitem()
@@ -3138,6 +3145,7 @@ class LazyStackedTensorDict(TensorDictBase):
             out.names = names
         return out
 
+    # Override: selects in each member, so a heterogeneous stack stays heterogeneous.
     def _select(
         self,
         *keys: NestedKey,
@@ -3157,6 +3165,7 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         return result
 
+    # Override: excludes in each member, so a heterogeneous stack stays heterogeneous.
     def _exclude(
         self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
     ) -> LazyStackedTensorDict:
@@ -3618,33 +3627,15 @@ class LazyStackedTensorDict(TensorDictBase):
             raise KeyError(f"Key {key} not found in any of the stacked tensordicts.")
         return self
 
+    # Override: with a default, a key three or more levels deep that
+    # keys(True) does not hold returns the default, even when its path runs
+    # through a tensor (get raises there).
     def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
-        # using try/except for get/del is suboptimal, but
-        # this is faster that checkink if key in self keys
-        key = _unravel_key_to_tuple(key)
-        if len(key) == 1:
-            key = key[0]
-        present = False
-        if isinstance(key, tuple):
-            if key in self.keys(True):
-                present = True
-                value = self._get_tuple(key, NO_DEFAULT)
-        elif key in self.keys():
-            present = True
-            value = self._get_str(key, NO_DEFAULT)
-        if present:
-            self.del_(key)
-        elif default is not NO_DEFAULT:
-            value = default
-        else:
-            raise KeyError(
-                _KEY_ERROR.format(
-                    key,
-                    type(self).__name__,
-                    sorted(self.keys(include_nested=isinstance(key, tuple)), key=str),
-                )
-            )
-        return value
+        if default is not NO_DEFAULT:
+            key_tuple = _unravel_key_to_tuple(key)
+            if len(key_tuple) > 2 and key_tuple not in self.keys(True):
+                return default
+        return super().pop(key, default)
 
     # Override: shares each member.
     def share_memory_(self) -> Self:
@@ -3862,6 +3853,8 @@ class LazyStackedTensorDict(TensorDictBase):
         # as well as vmapped lazy stacks.
         # We iterate over the tensordicts rather than iterating over the keys,
         # which requires stacking and unbinding but is also not robust to missing keys.
+        if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
+            ignore_lock = _warn_update_ignore_lock(stacklevel=3)
         if kwargs:
             if input_dict_or_td is None:
                 input_dict_or_td = kwargs
@@ -4142,6 +4135,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 td.rename_key_(old_key, new_key, safe=safe)
         return self
 
+    # Override: where runs on each member, so that members with different
+    # shapes work, and the result is a lazy stack.
     def where(
         self,
         condition: Tensor,
@@ -4198,15 +4193,13 @@ class LazyStackedTensorDict(TensorDictBase):
             return out
         return result
 
+    # Override: each member is filled with its slice of the mask, so that
+    # members with different shapes work.
     def masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
         mask_unbind = mask.unbind(dim=self.stack_dim)
         for _mask, td in _zip_strict(mask_unbind, self.tensordicts):
             td.masked_fill_(_mask, value)
         return self
-
-    def masked_fill(self, mask: Tensor, value: float | bool) -> Self:
-        td_copy = self.clone()
-        return td_copy.masked_fill_(mask, value)
 
     @_lock_blocked
     def insert(self, index: int, tensordict: T) -> None:
@@ -4741,13 +4734,6 @@ class LazyStackedTensorDict(TensorDictBase):
             for tds in _zip_strict(*tds)
         )
 
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
-        splits = -(self.batch_size[dim] // -chunks)
-        if splits == 0 and type(chunks) is int and chunks > 0:
-            # torch.chunk returns `chunks` empty pieces along a zero-size dim
-            return self.split([0] * chunks, dim)
-        return self.split(splits, dim)
-
     lock_ = TensorDictBase.lock_
 
     unlock_ = TensorDictBase.unlock_
@@ -4758,6 +4744,7 @@ class _CustomOpTensorDict(TensorDictBase):
 
     _safe = False
     _lazy = True
+    _masking_on_dense_copy = True
 
     def __init__(
         self,
@@ -5029,6 +5016,7 @@ class _CustomOpTensorDict(TensorDictBase):
             sort=sort,
         )
 
+    # Override: keeps the None fields of tensorclasses (retain_none=True).
     def _select(
         self,
         *keys: NestedKey,
@@ -5040,15 +5028,6 @@ class _CustomOpTensorDict(TensorDictBase):
             raise RuntimeError("Cannot call select inplace on a lazy tensordict.")
         return self.to_tensordict(retain_none=True)._select(
             *keys, inplace=False, strict=strict, set_shared=set_shared
-        )
-
-    def _exclude(
-        self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
-    ) -> _CustomOpTensorDict:
-        if inplace:
-            raise RuntimeError("Cannot call exclude inplace on a lazy tensordict.")
-        return self.to_tensordict()._exclude(
-            *keys, inplace=False, set_shared=set_shared
         )
 
     def _clone(self, recurse: bool = True) -> Self:
@@ -5143,6 +5122,7 @@ class _CustomOpTensorDict(TensorDictBase):
             )
         return self
 
+    # Override: pops from the source and transforms the value.
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         key, val = self._source.popitem()
@@ -5152,23 +5132,7 @@ class _CustomOpTensorDict(TensorDictBase):
         self._source.detach_()
         return self
 
-    def where(
-        self,
-        condition: Tensor,
-        other: Tensor | TensorDictBase,
-        *,
-        out: TensorDictBase | None = None,
-        pad: int | bool = None,
-        update_batch_size: bool = False,
-    ):
-        return self.to_tensordict().where(
-            condition=condition,
-            other=other,
-            out=out,
-            pad=pad,
-            update_batch_size=update_batch_size,
-        )
-
+    # Override: the mask goes through the inverse op and fills the source.
     def masked_fill_(self, mask: Tensor, value: float | bool) -> _CustomOpTensorDict:
         for key, item in self.items():
             val = self._source.get(key)
@@ -5181,10 +5145,6 @@ class _CustomOpTensorDict(TensorDictBase):
             val[mask_proc_inv] = value
             self._source.set(key, val)
         return self
-
-    def masked_fill(self, mask: Tensor, value: float | bool) -> Self:
-        td_copy = self.clone()
-        return td_copy.masked_fill_(mask, value)
 
     def _memmap_(
         self,
@@ -5413,13 +5373,6 @@ class _CustomOpTensorDict(TensorDictBase):
             tuple_ok=tuple_ok,
             **kwargs,
         )
-
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
-        splits = -(self.batch_size[dim] // -chunks)
-        if splits == 0 and type(chunks) is int and chunks > 0:
-            # torch.chunk returns `chunks` empty pieces along a zero-size dim
-            return self.split([0] * chunks, dim)
-        return self.split(splits, dim)
 
     _add_batch_dim = TensorDict._add_batch_dim
 

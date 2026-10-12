@@ -138,7 +138,7 @@ from tensordict.nn import EnsembleModule, TensorDictModule
 
 member = TensorDictModule(nn.Linear(3, 1), in_keys=["x"], out_keys=["y"])
 ensemble = EnsembleModule(member, num_copies=4)
-out = ensemble(TensorDict(x=torch.randn(5, 3), batch_size=[5]))
+out = ensemble(TensorDict({"x": torch.randn(5, 3)}, batch_size=[5]))
 print("EnsembleModule output batch_size:", out.batch_size)
 
 ##############################################################################

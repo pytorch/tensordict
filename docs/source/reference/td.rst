@@ -12,7 +12,7 @@ share, grouped by task. Each group also lists the functions of the
 ``tensordict`` module for its task. A :class:`~tensordict.TensorDict` is a
 ``dict[str, torch.Tensor]`` that behaves like one tensor. Its entries share
 their leading dimensions, the *batch size*, and an operation such as
-indexing, reshaping or :meth:`~tensordict.TensorDictBase.to` applies to every
+indexing, reshaping, or :meth:`~tensordict.TensorDictBase.to` applies to every
 entry. For an introduction, see :ref:`overview`.
 
 Containers
@@ -74,7 +74,7 @@ in the same group.
 Construction and conversion
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Create a tensordict from Python, numpy or pandas data, and convert a
+Create a tensordict from Python, numpy, or pandas data, and convert a
 tensordict to other types. Most ``from_*`` class methods have a function
 of the same name in the ``tensordict`` module. To read a tensordict from a
 file, see :ref:`api-methods-saving`. For the arguments of the constructor,
@@ -134,10 +134,10 @@ see :class:`TensorDict`.
 
 .. _api-methods-keys:
 
-Keys, values and entries
-~~~~~~~~~~~~~~~~~~~~~~~~
+Keys, values, and entries
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Read, write, select and rename the entries of a tensordict. A key is a
+Read, write, select, and rename the entries of a tensordict. A key is a
 string, or a tuple of strings that points to an entry of a nested
 tensordict. :class:`NestedKey` is the type of these keys. For the rules,
 see :ref:`keys`. For values that are not tensors, see
@@ -211,8 +211,8 @@ see :ref:`keys`. For values that are not tensors, see
 
 .. _api-methods-indexing:
 
-Indexing, masking and splitting
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Indexing, masking, and splitting
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Index every entry along the batch dimensions at once, and split a
 tensordict into several tensordicts. ``td[0]`` and ``td[mask]`` index the
@@ -238,8 +238,8 @@ batch dimensions. ``td["key"]`` returns an entry: see
 
 .. _api-methods-shape:
 
-Shape, batch dimensions and stacking
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Shape, batch dimensions, and stacking
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Read and change the batch size and the dimension names, reshape and expand
 a tensordict, and stack or concatenate several tensordicts. These methods
@@ -319,8 +319,8 @@ dimensions do not change. See :ref:`batch-size` and :ref:`stacking`.
 
 .. _api-methods-device:
 
-Device, dtype and memory
-~~~~~~~~~~~~~~~~~~~~~~~~
+Device, dtype, and memory
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Move a tensordict to a device, cast its entries to another dtype, and
 control the memory that holds them. See :ref:`devices`.
@@ -565,13 +565,13 @@ whole tensordict. See :ref:`operations`.
 
 .. _api-methods-functional:
 
-Apply, modules and gradients
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Apply, modules, and gradients
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Apply a function to every entry, and map a function over the batch. Put
 the parameters of a module in a tensordict and back, and compute
 gradients.
-See :ref:`operations`, :ref:`modules-guide` and :ref:`compile`.
+See :ref:`operations`, :ref:`modules-guide`, and :ref:`compile`.
 
 .. rubric:: Methods
 
@@ -609,12 +609,12 @@ See :ref:`operations`, :ref:`modules-guide` and :ref:`compile`.
 
 .. _api-methods-saving:
 
-Saving, loading and file formats
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Saving, loading, and file formats
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Save a tensordict to disk and load it again, and write its entries to
-memory-mapped files. Other methods read and write HDF5, zarr, CSV, JSON,
-Parquet and MDS files, and key-value stores.
+memory-mapped files. Other methods read and write key-value stores, and HDF5,
+zarr, CSV, JSON, Parquet, and MDS files.
 ``memmap(return_early=True)`` returns a
 :class:`~tensordict.utils.TensorDictFuture`. See :ref:`saving` and
 :ref:`storage`.
@@ -679,7 +679,7 @@ Parquet and MDS files, and key-value stores.
 Locking
 ~~~~~~~
 
-A locked tensordict raises an error if you add, replace, rename or delete
+A locked tensordict raises an error if you add, replace, rename, or delete
 an entry. In-place writes with ``set_`` still work, except for non-tensor
 entries (`#2288 <https://github.com/pytorch/tensordict/issues/2288>`_). ``unlock_`` also works
 in a ``with`` block: the tensordict is locked again at the end of the
@@ -744,7 +744,7 @@ Other functions
 Type checks and testing
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-Test whether an object is a tensordict, a tensorclass or non-tensor data,
+Test whether an object is a tensordict, a tensorclass, or non-tensor data,
 and compare two tensordicts in tests.
 
 .. autosummary::
@@ -831,8 +831,8 @@ See also
 --------
 
 - :ref:`overview`, :ref:`batch-size`, :ref:`keys`, :ref:`stacking`,
-  :ref:`operations` and :ref:`devices`: the user guide pages that explain
+  :ref:`operations`, and :ref:`devices`: the user guide pages that explain
   these methods.
-- :ref:`saving`, :ref:`storage`, :ref:`data-loading` and
+- :ref:`saving`, :ref:`storage`, :ref:`data-loading`, and
   :ref:`distributed`: the how-to guides.
 - :ref:`api-utils`: the helpers of ``tensordict.utils``.
