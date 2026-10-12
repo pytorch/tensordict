@@ -2794,10 +2794,18 @@ def _getattr(self, item: str, **kwargs) -> Any:
                 ):
                     return _from_shared_nontensor(out)
                 return out
-        out = self._tensordict._get_str(item, _UNSET, **kwargs)
+        td = self._tensordict
+        if type(td) is TensorDict:
+            # as in the tensor_only getter: Dynamo guards on a key that
+            # dict.get misses, but not on the KeyError in _get_str
+            out = td._tensordict.get(item, _UNSET)
+        else:
+            out = td._get_str(item, _UNSET, **kwargs)
+            if out is _UNSET and is_compiling() and item in td.keys():
+                out = td._get_str(item, None, **kwargs)
         if out is _UNSET:
-            # The field was deleted, or never held a value: a declared field
-            # that no store holds reads as None, as a None placeholder does.
+            # A declared field that neither store holds, e.g. after del or
+            # pop, reads as None, as a None placeholder does
             return None
         if is_non_tensor(out):
             return (
@@ -2847,10 +2855,17 @@ class _FieldGetter:
             if self._check_shared and (td._is_shared or td._is_memmap):
                 return _from_shared_nontensor(out)
             return out
-        out = td._get_str(name, _UNSET)
+        if type(td) is TensorDict:
+            # as in the tensor_only getter: Dynamo guards on a key that
+            # dict.get misses, but not on the KeyError in _get_str
+            out = td._tensordict.get(name, _UNSET)
+        else:
+            out = td._get_str(name, _UNSET)
+            if out is _UNSET and is_compiling() and name in td.keys():
+                out = td._get_str(name, None)
         if out is _UNSET:
-            # Same rule as _getattr: a declared field that neither store holds
-            # reads as None instead of raising KeyError out of a descriptor.
+            # A declared field that neither store holds, e.g. after del or
+            # pop, reads as None, as a None placeholder does
             return None
         if is_non_tensor(out):
             return (
@@ -3971,14 +3986,12 @@ def _set_at_str(
 
 
 def _delattr(self, key):
-    # A field lives in one store only: a set field in _tensordict, a None one
-    # in _non_tensordict, so both have to be tried. A key in neither store
-    # falls through to the TensorDict, which raises KeyError, as on main and
-    # as a second del_ does.
     td = self._tensordict
-    if key in (td._tensordict if type(td) is TensorDict else td.keys()):
-        del td[key]
-    elif key in self._non_tensordict:
+    if key in self._non_tensordict and key not in td.keys():
+        # A None field: drop its placeholder. A key in neither store goes to
+        # the TensorDict below, which raises KeyError.
+        if td.is_locked:
+            raise RuntimeError(_LOCK_ERROR)
         del self._non_tensordict[key]
     else:
         del td[key]
@@ -4088,7 +4101,9 @@ def _get_at(self, key: NestedKey, *args, **kwargs):
         default = NO_DEFAULT
 
     try:
-        return self.get(key, NO_DEFAULT)[index]
+        out = self.get(key, NO_DEFAULT)
+        # A None field is None at every index, as obj[index].field is
+        return None if out is None else out[index]
     except (AttributeError, KeyError):
         if default is NO_DEFAULT:
             raise
