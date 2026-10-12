@@ -67,7 +67,7 @@ Persistence and serialization:
   h5py) and a zarr backend (`_ZarrBackend`).
 - `_utils_key_json.py`: encodes keys into file names, and selects the JSON
   backend (`json` or `orjson`).
-- `tabular.py`: pandas, CSV, Parquet and JSON import and export.
+- `_tabular.py`: pandas, CSV, Parquet and JSON import and export.
 - `_datasets.py`: `to_mds`, which writes a MosaicML streaming dataset.
 
 Typed containers:
@@ -122,7 +122,7 @@ Options and utilities:
   name, and `test_deprecation_deadlines` fails once `version.txt` reaches it.
 - `_ucxx.py`: `TensorDictPipe` and `TensorDictServer`, transport over UCXX.
 - `prototype/fx.py`: `symbolic_trace` for tensordict modules.
-- `testing.py`: tensorclasses that the distributed tests import by name.
+- `_testing.py`: tensorclasses that the distributed tests import by name.
 
 `tensordict` is pure Python. `_C/` keeps the module path `tensordict._C`,
 which was a C++ extension, as a deprecated re-export of the nested-key
@@ -170,17 +170,18 @@ are `torch.Tensor` subclasses that a tensordict can store as entries.
 `TensorDictBase` marks its backend-specific methods with
 `@abc.abstractmethod`: the storage hooks (`_get_str`, `_set_str`, ...),
 the shape operations (`_view`, `_permute`, `_unsqueeze`, ...), `keys`,
-`_index_tensordict`, `_clone` and others, 40 in all. A class that lacks one
+`_clone` and others. A class that lacks one
 cannot be instantiated. The rest of `TensorDictBase` (`base.py` and the mixins in
 `_base/`) is written on top of these methods, and all the implementations
 share it, including generic
-implementations of operations such as `reshape`, `split`, `_apply_nest` and
-the comparison operators, which a class overrides only when it can do better.
+implementations of operations such as `reshape`, `split`, `__setitem__`,
+`_index_tensordict`, `_apply_nest` and the comparison operators, which a class
+overrides only when it can do better.
 
 The implementations also reuse code in two ways:
 
-- A few class-level aliases still borrow TensorDict's code, where it is
-  specific to dense storage or has not been moved to `TensorDictBase` yet. For
+- A few class-level aliases still borrow TensorDict's code where it is
+  specific to dense storage: the vmap hooks, `_memmap_` and `_load_memmap`. For
   example, `_load_memmap = TensorDict._load_memmap` binds the classmethod to
   `TensorDict`, so that a store or a `PersistentTensorDict` loads a memmap as
   a `TensorDict`.
@@ -188,6 +189,18 @@ The implementations also reuse code in two ways:
   (`_param_td`), through the `_fallback` decorators in `nn/params.py`.
   `TypedTensorDict` forwards to `_source` through the `_*_DELEGATES` lists at
   the end of `typedtensordict.py`.
+
+Some classes read copies of their data: each read of a
+`PersistentTensorDict` or a store returns a new tensor, and so does a read of
+a `TypedTensorDict` over a lazy stack or of a `_SubTensorDict` with an index
+tensor. They set `_reads_return_copies` (a class attribute, or a property).
+The in-place methods (`add_`, `abs_`, `+=`, ...) change the tensors that
+`_items_list` returns. On these classes, the `@_write_back_inplace` decorator
+runs the method on a `TensorDict` of the leaves that it reads
+(`_inplace_on_copies`), and `_write_back` writes each leaf back with
+`_set_tuple(..., inplace=True)`; `update_` calls `_write_back` itself. A new
+in-place method that changes the leaves takes the decorator. A file opened
+read-only stays unchanged, with a warning (`_storage_is_read_only`).
 
 An operation that a backend cannot support raises. For example,
 `TensorDictStore._view` raises a `RuntimeError` that asks the user to call
@@ -230,7 +243,13 @@ touches these places:
    each backend needs its own code. Abstract methods, properties,
    `implement_for` overloads and methods that read a global that `base.py`
    rebinds stay in `base.py`. The comment above the mixin imports in
-   `base.py` gives the rules for code in a mixin.
+   `base.py` gives the rules for code in a mixin. In particular, a mixin
+   imports `TensorDictBase` under `TYPE_CHECKING` only, and `base.py` binds
+   it into the mixin modules once the class exists, so that annotations
+   that name it resolve. Code that runs at import time, such as decorators
+   and default values, cannot use it, and a method that uses it at run time
+   imports it locally (ruff's TC004 flags a run-time use of the
+   `TYPE_CHECKING` import).
 2. If it is abstract: an implementation in each class of the hierarchy
    above (or a raise), and the name in one of the `_*_DELEGATES` lists of
    `typedtensordict.py`.
@@ -260,6 +279,11 @@ touches these places:
      torch. Its known failures are listed in
      `test/tensordict/indexing_known_failures.json`. When a change fixes one,
      set `TENSORDICT_UPDATE_KNOWN_FAILURES=1` to rewrite that file.
+   - Other operations: `test/tensordict/test_conformance.py` runs a set of
+     operations on each type and on its dense copy and compares the
+     results. Its known failures are in
+     `test/tensordict/conformance_known_failures.json`, rewritten the same
+     way.
 9. `benchmarks/` when the operation is on a hot path.
 
 ## Where things live

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import mmap
+import operator
 import os
 import re
 import sys
@@ -16,6 +17,8 @@ from typing import Any, overload, TYPE_CHECKING
 
 import numpy as np
 import torch
+from tensordict._deprecation import deprecated
+from tensordict._indexing import _expand_ellipsis, _INT, _NONE, _read_element, _SLICE
 from tensordict.utils import (
     _maybe_correct_neg_dim,
     _NESTED_TENSOR_ERR,
@@ -60,19 +63,127 @@ def _prepare_memmap_file(
         os.close(fd)
 
 
+def _index_elements(index, ndim: int) -> list:
+    """Read an index that makes a view of a tensor with ``ndim`` dims.
+
+    Returns its elements: ints as ints, and the Ellipsis and the dims that the
+    index leaves out as ``slice(None)``. Raises a ``ValueError`` for an index
+    that makes a copy.
+    """
+    if isinstance(index, list) and any(
+        element is None
+        or element is Ellipsis
+        or isinstance(element, (slice, torch.Tensor))
+        for element in index
+    ):
+        # torch reads such a list as a tuple (deprecated)
+        index = tuple(index)
+    elif not isinstance(index, tuple):
+        index = (index,)
+    elements = []
+    for element in _expand_ellipsis(index, ndim):
+        kind, _, element = _read_element(element)
+        if kind == _INT:
+            element = operator.index(element)
+        elif kind not in (_SLICE, _NONE):
+            raise ValueError(f"The index {element!r} makes a copy, not a view.")
+        elements.append(element)
+    return elements + [slice(None)] * (ndim - sum(e is not None for e in elements))
+
+
+def _compose_index(shape, first, second) -> tuple:
+    """Return one index that selects ``t[first][second]`` from a tensor ``t``.
+
+    ``first`` and ``second`` are indices that make views (ints, slices, None and
+    Ellipsis). ``shape`` is the shape of ``t``, or its nested shapes if ``t`` is
+    a nested tensor. Raises a ``ValueError`` if no index selects that view.
+    """
+    nested = isinstance(shape, torch.Tensor)
+    # the sizes of the dims of t, None for those of a nested tensor
+    sizes = [None] * (shape.shape[1] + 1) if nested else list(shape)
+    # t[first], as one entry per element of first: an int selects a dim of t, a
+    # range keeps part of one, slice(None) keeps one of unknown size, and None
+    # adds a dim of size 1
+    view = []
+    dim = 0
+    for element in _index_elements(first, len(sizes)):
+        if element is None:
+            view.append(None)
+            continue
+        if isinstance(element, int):
+            view.append(element)
+            if nested and dim == 0:
+                # the other dims have the sizes of the tensor that it selects
+                sizes[1:] = shape[element].tolist()
+        elif sizes[dim] is not None:
+            view.append(range(sizes[dim])[element])
+        elif element == slice(None):
+            view.append(element)
+        else:
+            raise ValueError("Torch slices no dim of a nested tensor.")
+        dim += 1
+    # t[first][second], in the same form
+    out = []
+    pos = 0
+    n_dims = sum(not isinstance(entry, int) for entry in view)
+    for element in _index_elements(second, n_dims):
+        # the ints go first: nested tensors take no None at dim 0
+        while pos < len(view) and isinstance(view[pos], int):
+            out.append(view[pos])
+            pos += 1
+        if element is None:
+            out.append(None)
+            continue
+        entry = view[pos]
+        pos += 1
+        if isinstance(entry, range):
+            out.append(entry[element])
+        elif entry is not None:
+            out.append(element)
+        elif isinstance(element, slice):
+            # a dim that None added, which an int removes
+            if not range(1)[element]:
+                raise ValueError(
+                    "No index selects a view that slices a dim that None added "
+                    "to length 0."
+                )
+            out.append(None)
+    out.extend(view[pos:])
+    index = [
+        slice(entry.start, entry.stop, entry.step)
+        if isinstance(entry, range)
+        else entry
+        for entry in out
+    ]
+    if nested and index[0] == slice(None):
+        # nested tensors take an Ellipsis, but no slice, for the dims they keep
+        end = next((i for i, entry in enumerate(index) if entry != slice(None)), None)
+        index[:end] = [Ellipsis]
+    return tuple(index)
+
+
 class MemoryMappedTensor(torch.Tensor):
-    """A Memory-mapped Tensor.
+    """A CPU tensor whose storage is a file on disk, or anonymous shared memory when no filename is given.
 
-    Supports filenames or file handlers.
+    Use it to share a tensor between processes, or to work with data that is
+    larger than RAM: the operating system reads from the file only the pages
+    that you access. When a MemoryMappedTensor is sent through a
+    multiprocessing queue or an RPC call, only its file or shared-memory
+    reference is sent, not the data. :meth:`~tensordict.TensorDictBase.memmap`
+    turns every leaf of a tensordict into a MemoryMappedTensor. See
+    :ref:`saving` and :ref:`data-loading`.
 
-    The main advantage of MemoryMappedTensor resides in its serialization methods,
-    which ensure that the tensor is passed through queues or RPC remote calls without
-    any copy.
+    Build one with :meth:`from_tensor`, :meth:`empty`, :meth:`zeros`,
+    :meth:`ones`, :meth:`full`, their ``*_like`` variants, or
+    :meth:`from_filename` for an existing file. Indexing a MemoryMappedTensor
+    gives a MemoryMappedTensor on the same storage. Other operations
+    (``mmap + 1``, for example) give a regular :class:`torch.Tensor`.
 
-    .. note::
-        When used within RPC settings, the filepath should be accessible to both nodes.
-        If it isn't the behaviour of passing a MemoryMappedTensor from one worker
-        to another is undefined.
+    A MemoryMappedTensor has these constraints:
+
+    - It must be on CPU, and it cannot require gradients.
+    - With RPC, every node must have read access to the file path. If it
+      does not, the result of sending the tensor is undefined.
 
     .. warning::
         A caller that supplies ``filename`` must control its parent directory.
@@ -85,12 +196,14 @@ class MemoryMappedTensor(torch.Tensor):
     Examples:
           >>> import os
           >>> import tempfile
+          >>> import torch
+          >>> from tensordict import MemoryMappedTensor
           >>> # from an existing tensor
           >>> tensor = torch.randn(3)
           >>> with tempfile.TemporaryDirectory() as tmpdir:
           ...     memmap_tensor = MemoryMappedTensor.from_tensor(tensor, filename=os.path.join(tmpdir, "tensor.memmap"))
           ...     assert memmap_tensor.filename is not None
-          >>> # if no filename is passed, a handler is used and the tensor has no filename
+          >>> # without a filename, the tensor lives in anonymous shared memory and has no filename
           >>> tensor = torch.randn(3)
           >>> memmap_tensor = MemoryMappedTensor.from_tensor(tensor)
           >>> memmap_tensor.filename
@@ -110,8 +223,11 @@ class MemoryMappedTensor(torch.Tensor):
     _handler: _FileHandler = None
     _mode: str | None = None
     _clear: bool
-    index: Any
-    parent_shape: torch.Size
+    _index: Any
+    # the indices that made this tensor from the one that its file or handler
+    # holds, as nested pairs: (the chain of the parent, the last index)
+    _index_chain: tuple = ()
+    _parent_shape: torch.Size
 
     def __new__(
         cls,
@@ -155,7 +271,7 @@ class MemoryMappedTensor(torch.Tensor):
                 filename=filename,
             )
         elif handler is not None:
-            return cls.from_handler(
+            return cls._from_handler(
                 handler,
                 dtype,
                 shape,
@@ -189,9 +305,12 @@ class MemoryMappedTensor(torch.Tensor):
     ):  # noqa: D417
         """Creates a MemoryMappedTensor with the same content as another tensor.
 
-        If the tensor is already a MemoryMappedTensor the original tensor is
-        returned if the `filename` argument is `None` or if the two paths match.
-        In all other cases, a new :class:`MemoryMappedTensor` is produced.
+        If ``input`` is a MemoryMappedTensor, it is returned unchanged in two
+        cases: ``filename`` is ``None`` and ``input`` has no file, or
+        ``filename`` is the file of ``input`` (and ``input`` was not opened
+        with ``mode="r"``). A file-backed ``input`` with ``filename=None`` is
+        copied to anonymous shared memory. In all other cases, a new
+        :class:`MemoryMappedTensor` is produced.
 
         Args:
             input (torch.Tensor): the tensor which content must be copied onto
@@ -199,8 +318,8 @@ class MemoryMappedTensor(torch.Tensor):
 
         Keyword Args:
             filename (path to a file): the path to the file where the tensor
-                should be stored. If none is provided, a file handler is used
-                instead.
+                is stored. If ``None``, the tensor lives in anonymous
+                shared memory.
             existsok (bool, optional): if ``True``, the file will overwrite
                 an existing file. Defaults to ``False``.
             copy_existing (bool, optional): if ``True`` and the provided input
@@ -213,6 +332,24 @@ class MemoryMappedTensor(torch.Tensor):
             shape (torch.Size or torch.Tensor): a shape to override the tensor
                 shape. If a tensor is passed, it must represent the nested shapes of a
                 nested tensor.
+
+        Raises:
+            RuntimeError: if ``input`` requires gradients, or if ``input`` has
+                a file, ``filename`` is another file and ``copy_existing`` is
+                ``False``.
+
+        Examples:
+            >>> import os
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import MemoryMappedTensor
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     filename = os.path.join(tmpdir, "tensor.memmap")
+            ...     mmap = MemoryMappedTensor.from_tensor(torch.arange(3.0), filename=filename)
+            ...     print(mmap)
+            ...     print(MemoryMappedTensor.from_tensor(mmap, filename=filename) is mmap)
+            MemoryMappedTensor([0., 1., 2.])
+            True
         """
         if isinstance(input, MemoryMappedTensor):
             if (filename is None and input._filename is None) or (
@@ -252,18 +389,7 @@ class MemoryMappedTensor(torch.Tensor):
         else:
             shape_numel = torch.Size(shape).numel()
         if filename is None:
-            if input.dtype.is_floating_point:
-                size = torch.finfo(input.dtype).bits // 8 * shape_numel
-            elif input.dtype.is_complex:
-                raise ValueError(
-                    "Complex-valued tensors are not supported by MemoryMappedTensor."
-                )
-            elif input.dtype == torch.bool:
-                size = shape_numel
-            else:
-                # assume integer
-                size = torch.iinfo(input.dtype).bits // 8 * shape_numel
-            handler = _FileHandler(size)
+            handler = _FileHandler(input.dtype.itemsize * shape_numel)
             if isinstance(shape, torch.Tensor):
                 func_offset_stride = getattr(
                     torch, "_nested_compute_contiguous_strides_offsets", None
@@ -315,8 +441,8 @@ class MemoryMappedTensor(torch.Tensor):
             result = cls(result)
         result._handler = handler
         result.filename = filename
-        result.index = None
-        result.parent_shape = shape
+        result._index = None
+        result._parent_shape = shape
         if copy_data:
             if hasattr(input, "full_tensor"):
                 # for DTensors, cheaper than importing DTensor every time
@@ -372,6 +498,14 @@ class MemoryMappedTensor(torch.Tensor):
             tensor.filename = filename
         elif handler is not None:
             tensor._handler = handler
+        if getattr(storage, "filename", None) is not None:
+            # Pickling reads these to map the file again, as for from_tensor.
+            # Other storages have no file to map, even when a filename is
+            # given, so they still cannot be pickled.
+            tensor._index = None
+            tensor._parent_shape = (
+                shape if isinstance(shape, torch.Tensor) else tensor.shape
+            )
         if index is not None:
             return tensor[index]
         return tensor
@@ -407,8 +541,8 @@ class MemoryMappedTensor(torch.Tensor):
             input (torch.Tensor): the tensor to use as an example.
 
         Keyword Args:
-            filename (path or equivalent): the path to the file, if any. If none
-                is provided, a handler is used.
+            filename (path or equivalent): the path to the file, if any. If
+                ``None``, the tensor lives in anonymous shared memory.
         """
         return cls.from_tensor(
             torch.zeros((), dtype=input.dtype, device=input.device).expand_as(input),
@@ -426,8 +560,8 @@ class MemoryMappedTensor(torch.Tensor):
             fill_value (float or equivalent): content of the tensor.
 
         Keyword Args:
-            filename (path or equivalent): the path to the file, if any. If none
-                is provided, a handler is used.
+            filename (path or equivalent): the path to the file, if any. If
+                ``None``, the tensor lives in anonymous shared memory.
         """
         return cls.from_tensor(
             torch.zeros((), dtype=input.dtype, device=input.device).expand_as(input),
@@ -444,8 +578,8 @@ class MemoryMappedTensor(torch.Tensor):
             input (torch.Tensor): the tensor to use as an example.
 
         Keyword Args:
-            filename (path or equivalent): the path to the file, if any. If none
-                is provided, a handler is used.
+            filename (path or equivalent): the path to the file, if any. If
+                ``None``, the tensor lives in anonymous shared memory.
         """
         return cls.from_tensor(
             torch.zeros((), dtype=input.dtype, device=input.device).expand_as(input),
@@ -462,8 +596,8 @@ class MemoryMappedTensor(torch.Tensor):
             input (torch.Tensor): the tensor to use as an example.
 
         Keyword Args:
-            filename (path or equivalent): the path to the file, if any. If none
-                is provided, a handler is used.
+            filename (path or equivalent): the path to the file, if any. If
+                ``None``, the tensor lives in anonymous shared memory.
         """
         return cls.from_tensor(
             torch.ones((), dtype=input.dtype, device=input.device).expand_as(input),
@@ -473,11 +607,15 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     @overload
-    def ones(cls, *size, dtype=None, device=None, filename=None): ...
+    def ones(
+        cls, *size, dtype=None, device=None, filename=None, existsok: bool = False
+    ): ...
 
     @classmethod
     @overload
-    def ones(cls, shape, *, dtype=None, device=None, filename=None): ...
+    def ones(
+        cls, shape, *, dtype=None, device=None, filename=None, existsok: bool = False
+    ): ...
 
     @classmethod
     def ones(cls, *args, **kwargs):
@@ -491,8 +629,8 @@ class MemoryMappedTensor(torch.Tensor):
             dtype (torch.dtype): the dtype of the tensor.
             device (torch.device): the device of the tensor. Only `None` and `"cpu"`
                 are accepted, any other device will raise an exception.
-            filename (path or equivalent): the path to the file, if any. If none
-                is provided, a handler is used.
+            filename (path or equivalent): the path to the file, if any. If
+                ``None``, the tensor lives in anonymous shared memory.
             existsok (bool, optional): whether it is ok to overwrite an existing file.
                 Defaults to ``False``.
         """
@@ -525,11 +663,15 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     @overload
-    def zeros(cls, *size, dtype=None, device=None, filename=None): ...
+    def zeros(
+        cls, *size, dtype=None, device=None, filename=None, existsok: bool = False
+    ): ...
 
     @classmethod
     @overload
-    def zeros(cls, shape, *, dtype=None, device=None, filename=None): ...
+    def zeros(
+        cls, shape, *, dtype=None, device=None, filename=None, existsok: bool = False
+    ): ...
 
     @classmethod
     def zeros(cls, *args, **kwargs):
@@ -543,8 +685,8 @@ class MemoryMappedTensor(torch.Tensor):
             dtype (torch.dtype): the dtype of the tensor.
             device (torch.device): the device of the tensor. Only `None` and `"cpu"`
                 are accepted, any other device will raise an exception.
-            filename (path or equivalent): the path to the file, if any. If none
-                is provided, a handler is used.
+            filename (path or equivalent): the path to the file, if any. If
+                ``None``, the tensor lives in anonymous shared memory.
             existsok (bool, optional): whether it is ok to overwrite an existing file.
                 Defaults to ``False``.
         """
@@ -578,11 +720,15 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     @overload
-    def empty(cls, *size, dtype=None, device=None, filename=None): ...
+    def empty(
+        cls, *size, dtype=None, device=None, filename=None, existsok: bool = False
+    ): ...
 
     @classmethod
     @overload
-    def empty(cls, shape, *, dtype=None, device=None, filename=None): ...
+    def empty(
+        cls, shape, *, dtype=None, device=None, filename=None, existsok: bool = False
+    ): ...
 
     @classmethod
     def empty(cls, *args, **kwargs):
@@ -596,8 +742,8 @@ class MemoryMappedTensor(torch.Tensor):
             dtype (torch.dtype): the dtype of the tensor.
             device (torch.device): the device of the tensor. Only `None` and `"cpu"`
                 are accepted, any other device will raise an exception.
-            filename (path or equivalent): the path to the file, if any. If none
-                is provided, a handler is used.
+            filename (path or equivalent): the path to the file, if any. If
+                ``None``, the tensor lives in anonymous shared memory.
             existsok (bool, optional): whether it is ok to overwrite an existing file.
                 Defaults to ``False``.
         """
@@ -613,18 +759,7 @@ class MemoryMappedTensor(torch.Tensor):
             existsok = kwargs.pop("existsok", False)
 
             if filename is None:
-                if dtype.is_floating_point:
-                    size = torch.finfo(dtype).bits // 8 * shape_numel
-                elif dtype.is_complex:
-                    raise ValueError(
-                        "Complex-valued tensors are not supported by MemoryMappedTensor."
-                    )
-                elif dtype == torch.bool:
-                    size = shape_numel
-                else:
-                    # assume integer
-                    size = torch.iinfo(dtype).bits // 8 * shape_numel
-                handler = _FileHandler(size)
+                handler = _FileHandler(dtype.itemsize * shape_numel)
 
                 # buffer
                 func_offset_stride = getattr(
@@ -688,11 +823,28 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     @overload
-    def full(cls, *size, fill_value, dtype=None, device=None, filename=None): ...
+    def full(
+        cls,
+        *size,
+        fill_value,
+        dtype=None,
+        device=None,
+        filename=None,
+        existsok: bool = False,
+    ): ...
 
     @classmethod
     @overload
-    def full(cls, shape, *, fill_value, dtype=None, device=None, filename=None): ...
+    def full(
+        cls,
+        shape,
+        *,
+        fill_value,
+        dtype=None,
+        device=None,
+        filename=None,
+        existsok: bool = False,
+    ): ...
 
     @classmethod
     def full(cls, *args, **kwargs):
@@ -707,8 +859,8 @@ class MemoryMappedTensor(torch.Tensor):
             dtype (torch.dtype): the dtype of the tensor.
             device (torch.device): the device of the tensor. Only `None` and `"cpu"`
                 are accepted, any other device will raise an exception.
-            filename (path or equivalent): the path to the file, if any. If none
-                is provided, a handler is used.
+            filename (path or equivalent): the path to the file, if any. If
+                ``None``, the tensor lives in anonymous shared memory.
             existsok (bool, optional): whether it is ok to overwrite an existing file.
                 Defaults to ``False``.
         """
@@ -801,14 +953,19 @@ class MemoryMappedTensor(torch.Tensor):
         out.filename = filename
         out._handler = None
         out._mode = mode
-        out.index = index
-        out.parent_shape = shape
+        out._index = index
+        out._index_chain = () if index is None else ((), index)
+        out._parent_shape = shape
         return out
 
     @classmethod
+    @deprecated("MemoryMappedTensor.from_handler()", removal="0.17")
     def from_handler(cls, handler, dtype, shape, index=None):
         # noqa: D417
         """Loads a MemoryMappedTensor from a given handler.
+
+        .. deprecated:: 0.15
+            The handler is private, and this method has no replacement.
 
         Args:
             handler (compatible file handler): the handler for the tensor.
@@ -820,6 +977,11 @@ class MemoryMappedTensor(torch.Tensor):
                 tensor.
 
         """
+        # Pickles made with TensorDict 0.14 and earlier call this method.
+        return cls._from_handler(handler, dtype, shape, index)
+
+    @classmethod
+    def _from_handler(cls, handler, dtype, shape, index=None):
         out = torch.frombuffer(memoryview(handler.buffer), dtype=dtype)
         if isinstance(shape, torch.Tensor):
             func_offset_stride = getattr(
@@ -847,30 +1009,33 @@ class MemoryMappedTensor(torch.Tensor):
         out = cls(out)
         out.filename = None
         out._handler = handler
-        out.index = index
-        out.parent_shape = shape
+        out._index = index
+        out._index_chain = () if index is None else ((), index)
+        out._parent_shape = shape
         return out
 
     def __setstate__(self, state):
         if "filename" in state:
             self.__dict__ = type(self).from_filename(**state).__dict__
         else:
-            self.__dict__ = type(self).from_handler(**state).__dict__
+            self.__dict__ = type(self)._from_handler(**state).__dict__
 
     def __getstate__(self):
         if getattr(self, "_handler", None) is not None:
+            shape, index = self._pickle_args()
             return {
                 "handler": self._handler,
                 "dtype": self.dtype,
-                "shape": list(self.parent_shape),
-                "index": self.index,
+                "shape": list(shape),
+                "index": index,
             }
         elif getattr(self, "_filename", None) is not None:
+            shape, index = self._pickle_args()
             return {
                 "filename": self._filename,
                 "dtype": self.dtype,
-                "shape": self.parent_shape,
-                "index": self.index,
+                "shape": shape,
+                "index": index,
                 "mode": self._mode,
             }
         else:
@@ -881,20 +1046,74 @@ class MemoryMappedTensor(torch.Tensor):
 
     def __reduce__(self):
         if getattr(self, "_handler", None) is not None:
-            return type(self).from_handler, (
+            return type(self)._from_handler, (
                 self._handler,
                 self.dtype,
-                self.parent_shape,
-                self.index,
+                *self._pickle_args(),
             )
         elif getattr(self, "_filename", None) is not None:
-            args = (self._filename, self.dtype, self.parent_shape, self.index)
+            args = (self._filename, self.dtype, *self._pickle_args())
             if self._mode is not None:
                 # Only when set, so that earlier versions can load other pickles.
                 args += (self._mode,)
             return type(self).from_filename, args
         else:
             raise RuntimeError("Could not find handler or filename.")
+
+    def _pickle_args(self):
+        # The shape of the tensor that the file or handler holds, and one index
+        # that selects this tensor from it, so that earlier versions can load
+        # the pickle too
+        if not self._index_chain:
+            return self._parent_shape, None
+        indices = []
+        chain = self._index_chain
+        while chain:
+            chain, item = chain
+            indices.append(item)
+        index, *items = reversed(indices)
+        if index is None:
+            # from_filename and _from_handler read None as no index
+            index = (None,)
+        if not items:
+            return self._parent_shape, index
+        if not self.is_nested and not self.numel():
+            # A view of a view with no elements has no memory to share, and
+            # maybe no index selects it (if a slice empties a dim that None
+            # added): pickle an empty tensor of its shape
+            if self._handler is None:
+                return self.shape, None
+            # _from_handler views all the elements of the handler
+            numel = self._handler.size // self.element_size()
+            return torch.Size([numel]), torch.empty(self.shape, dtype=torch.long)
+        try:
+            for item in items:
+                index = _compose_index(self._parent_shape, index, item)
+        except (IndexError, TypeError, ValueError):
+            # No index selects this view, for instance after an index that
+            # copies: pickle the last index, as earlier versions did
+            return self._parent_shape, self._index
+        return self._parent_shape, index
+
+    @property
+    @deprecated("MemoryMappedTensor.index", removal="0.17")
+    def index(self) -> Any:
+        """The index of this tensor in the tensor that it was built from.
+
+        .. deprecated:: 0.15
+            This is internal to pickling and has no replacement.
+        """
+        return self._index
+
+    @property
+    @deprecated("MemoryMappedTensor.parent_shape", removal="0.17")
+    def parent_shape(self) -> torch.Size:
+        """The shape of the tensor that this tensor was built from.
+
+        .. deprecated:: 0.15
+            This is internal to pickling and has no replacement.
+        """
+        return self._parent_shape
 
     def __getitem__(self, item: IndexType) -> Self | torch.Tensor:
         try:
@@ -928,8 +1147,9 @@ class MemoryMappedTensor(torch.Tensor):
         tensor._handler = getattr(self, "_handler", None)
         tensor.filename = getattr(self, "_filename", None)
         tensor._mode = self._mode
-        tensor.index = item
-        tensor.parent_shape = getattr(self, "parent_shape", None)
+        tensor._index = item
+        tensor._index_chain = (self._index_chain, item)
+        tensor._parent_shape = getattr(self, "_parent_shape", None)
         return tensor
 
     def unbind(self, dim):

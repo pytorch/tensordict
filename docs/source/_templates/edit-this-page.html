@@ -1,0 +1,8 @@
+{#
+  The build generates the API pages (from the docstrings) and the tutorial
+  pages (from tutorials/sphinx_tuto/*.py). They have no source file under
+  docs/source, so they get no "Edit on GitHub" link.
+#}
+{% if not pagename.startswith(("reference/generated/", "tutorials/")) %}
+  {% include "components/edit-this-page.html" %}
+{% endif %}

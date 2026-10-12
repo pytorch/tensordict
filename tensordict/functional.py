@@ -47,6 +47,11 @@ def pad(
 ) -> T:
     """Pads all tensors in a tensordict along the batch dimensions with a constant value.
 
+    Use it to grow the batch dimensions of one tensordict, for example to
+    bring samples to a common size before you stack them. To pad and stack a
+    list of tensordicts in one call, use :func:`~tensordict.pad_sequence`
+    (see :ref:`stacking`).
+
     Args:
          tensordict (TensorDict): The tensordict to pad
          pad_size (Sequence[int]): The padding size by which to pad some batch
@@ -144,10 +149,17 @@ def pad(
     if inplace:
         out = tensordict
     else:
+        try:
+            names = tensordict._maybe_names()
+        except (IndexError, ValueError):
+            # A lazy stack without members, or whose members have different
+            # names: leave the dims unnamed.
+            names = None
         out = TensorDict._new_unsafe(
             {},
             torch.Size(new_batch_size),
             device=tensordict.device,
+            names=names,
         )
 
     # Snapshot keys so mid-iteration rebinds on `out is tensordict` don't
@@ -295,6 +307,15 @@ def _pad_non_tensor(
     if all(left == 0 and right == 0 for left, right in pairs):
         return tensordict
     result = _pad_non_tensor_rec(tensordict, pairs)
+    try:
+        names = tensordict._maybe_names()
+        if names is not None:
+            # the pad slots are unnamed: give the whole result the input's names
+            result.names = names
+    except (IndexError, ValueError):
+        # A stack without members, or names that differ between its members
+        # or are used twice: leave the names as they are.
+        pass
     if not inplace:
         return result
     if not isinstance(tensordict, NonTensorStack):
@@ -430,18 +451,48 @@ def pad_sequence(
 ) -> T:
     """Pads a list of tensordicts in order for them to be stacked together in a contiguous format.
 
+    Use it to batch samples whose entries differ in size along one
+    dimension, such as sequences of different lengths. Every entry is padded
+    along ``pad_dim`` to the largest size among the inputs, then the inputs
+    are stacked along a new first dimension. The inputs must have the same
+    keys, and the entry shapes must match in every dimension other than
+    ``pad_dim``. To keep the inputs unpadded, use
+    :func:`~tensordict.lazy_stack` instead (see :ref:`stacking`).
+
     Args:
         list_of_tensordicts (List[TensorDictBase]): the list of instances to pad and stack.
-        pad_dim (int, optional): the ``pad_dim`` indicates the dimension to pad all the keys in the tensordict.
-            Defaults to ``0``.
+        pad_dim (int, optional): the dimension of the entries to pad, counted
+            from the first dimension of each entry (batch dimensions
+            included). If it is a batch dimension, the batch size of the
+            result is padded too. Defaults to ``0``.
         padding_value (number, optional): the padding value. Defaults to ``0.0``.
+            Non-tensor entries are not filled with ``padding_value``: when the padded
+            dim is a batch dimension of the output, they keep their values at the
+            valid positions and hold ``None`` in the pad slots, as with
+            :func:`~tensordict.pad`.
         out (TensorDictBase, optional): if provided, the destination where the data will be
             written.
-        return_mask (bool or NestedKey, optional): if ``True``, a "masks" entry will be returned. If ``return_mask`` is a nested key (string or tuple of strings), it will be return the masks and be used as the key for the masks entry.
-            It contains a tensordict with the same structure as the stacked tensordict where every entry contains the mask of valid values with size ``torch.Size([stack_len, *new_shape])``,
-            where `new_shape[pad_dim] = max_seq_length` and the rest of the `new_shape` matches the previous shape of the contained tensors.
+        return_mask (bool or NestedKey, optional): if ``True``, the result has
+            a ``"masks"`` entry. If ``return_mask`` is a nested key (a string
+            or a tuple of strings), the masks are stored under that key. The
+            masks entry is a tensordict with the structure of the stacked
+            tensordict. Each of its entries is the mask of the valid values,
+            of size ``torch.Size([stack_len, *new_shape])``, where
+            ``new_shape[pad_dim]`` is the largest size and the rest of
+            ``new_shape`` matches the shape of the input entries. Not
+            available for tensorclass inputs.
+
+    Returns:
+        a :class:`~tensordict.TensorDict` (or the tensorclass of the inputs)
+        with batch size ``[len(list_of_tensordicts), *batch_size]``.
+
+    Raises:
+        RuntimeError: if ``list_of_tensordicts`` is empty, or if the entry
+            shapes differ in a dimension other than ``pad_dim``.
 
     Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict, pad_sequence
         >>> list_td = [
         ...     TensorDict({"a": torch.zeros((3, 8)), "b": torch.zeros((6, 8))}, batch_size=[]),
         ...     TensorDict({"a": torch.zeros((5, 8)), "b": torch.zeros((6, 8))}, batch_size=[]),
@@ -523,8 +574,12 @@ def pad_sequence(
     keys = keys_copy
 
     old_batch_size = list(list_of_tensordicts[0].batch_size)
+    # The batch dim set to max_seq_length, if any: non-tensor entries are
+    # padded along it too.
+    batch_pad_dim = None
     if update_batch_size and len(old_batch_size) > 0:
         old_batch_size[pad_dim] = max_seq_length
+        batch_pad_dim = pad_dim % len(old_batch_size)
     shape = [
         len(list_of_tensordicts),
     ] + old_batch_size
@@ -539,7 +594,22 @@ def pad_sequence(
                 out.set(key, item0)
                 continue
             if is_non_tensor(item0):
-                out.set(key, TensorDict.lazy_stack([d[key] for d in list_of_dicts]))
+                items = [d[key] for d in list_of_dicts]
+                if batch_pad_dim is not None and out.batch_dims > batch_pad_dim + 1:
+                    # Pad the entries that are shorter than out along that
+                    # dim, as pad does: original values, then None.
+                    length = out.batch_size[batch_pad_dim + 1]
+                    items = [
+                        _pad_non_tensor(
+                            item,
+                            [0, 0] * batch_pad_dim
+                            + [0, length - item.batch_size[batch_pad_dim]],
+                        )
+                        if item.batch_size[batch_pad_dim] < length
+                        else item
+                        for item in items
+                    ]
+                out.set(key, TensorDict.lazy_stack(items))
                 continue
             tensor_shape = item0.shape
             pos_pad_dim = (
@@ -580,6 +650,7 @@ def merge_tensordicts(
             nested keys in the tensordicts passed to the function.
 
     Examples:
+        >>> import torch
         >>> from tensordict import merge_tensordicts, TensorDict
         >>> td0 = TensorDict({"a": {"b0": 0}, "c": {"d": {"e": 0}}, "common": 0})
         >>> td1 = TensorDict({"a": {"b1": 1}, "f": {"g": {"h": 1}}, "common": 1})
@@ -633,9 +704,19 @@ def merge_tensordicts(
 
     out = tensordicts[0].empty(recurse=True)
     key_list = set()
+    # The keys of the non-tensor entries of the other tensordicts, which are
+    # added at the end, with the tensordicts that hold them
+    non_tensor = {}
+    current = None
 
     def func(name, *vals):
         nonlocal key_list
+        if type(vals[0]) is not torch.Tensor and is_non_tensor(vals[0]):
+            if current is not tensordicts[0]:
+                owners = non_tensor.setdefault(name, [])
+                if not owners or owners[-1] is not current:
+                    owners.append(current)
+            return
         if name in key_list:
             return
         key_list.add(name)
@@ -657,9 +738,53 @@ def merge_tensordicts(
             tds = tensordicts[i + 1 :] + tensordicts[:i]
         else:
             tds = tensordicts[1:]
+        current = tensordicts[i]
         tensordicts[i]._fast_apply(
-            func, *tds, named=True, nested_keys=True, filter_empty=True, default=None
+            func,
+            *tds,
+            named=True,
+            nested_keys=True,
+            filter_empty=True,
+            default=None,
+            is_leaf=_is_leaf_nontensor,
         )
+    # out has the non-tensor entries of tensordicts[0] (from empty()). Add those
+    # of the others where nothing is on their path in out yet, so that the first
+    # one wins and the entries set above stay. Lazy stacks (no entry for a key
+    # that only some members hold) and tensorclasses (only their fields) in out
+    # are left as they are.
+    for name, owners in non_tensor.items():
+        node, first = out, tensordicts[0]
+        for subkey in (name,) if isinstance(name, str) else name:
+            if is_tensorclass(node) or isinstance(node, LazyStackedTensorDict):
+                break
+            parent, node = node, node._get_str(subkey, None)
+            if _is_tensor_collection(type(first)):
+                first = first._get_str(subkey, None)
+            else:
+                first = None
+            if node is not None and node is first:
+                # empty() keeps the sub-tensordicts of tensordicts[0] that have
+                # no tensors: write into a copy, not into tensordicts[0]
+                if type(node) is not TensorDict:
+                    break
+                node = node._select(*node.keys())
+                parent.set(subkey, node)
+            if node is None or _is_leaf_nontensor(type(node)):
+                break
+        if node is None:
+            for td in owners:
+                # For a lazy stack, get() stacks the values of the members
+                val = td.get(name, None)
+                if val is not None:
+                    try:
+                        # As before, leave out a value that out cannot take
+                        # (a stack of another batch size, other dim names)
+                        val = parent._validate_value(val, check_shape=True)
+                    except (RuntimeError, ValueError):
+                        break
+                    out.set(name, val)
+                    break
     return out
 
 
@@ -667,31 +792,36 @@ def dense_stack_tds(
     td_list: Sequence[TensorDictBase] | LazyStackedTensorDict,
     dim: int | None = None,
 ) -> T:
-    """Densely stack a list of :class:`~tensordict.TensorDictBase` objects (or a :class:`~tensordict.LazyStackedTensorDict`) given that they have the same structure.
+    """Stacks a list of tensordicts, or the tensordicts of a lazy stack, densely if possible.
 
-    This function is called with a list of :class:`~tensordict.TensorDictBase` (either passed directly or obtrained from
-    a :class:`~tensordict.LazyStackedTensorDict`).
-    Instead of calling ``lazy_stack(td_list)``, which would return a :class:`~tensordict.LazyStackedTensorDict`,
-    this function expands the first element of the input list and stacks the input list onto that element.
-    This works only when all the elements of the input list have the same structure.
-    The :class:`~tensordict.TensorDictBase` returned will have the same type of the elements of the input list.
-
-    This function is useful when some of the :class:`~tensordict.TensorDictBase` objects that need to be stacked
-    are :class:`~tensordict.LazyStackedTensorDict` or have :class:`~tensordict.LazyStackedTensorDict`
-    among entries (or nested entries).
-    In those cases, calling ``lazy_stack(td_list).to_tensordict()`` is infeasible.
-    Thus, this function provides an alternative for densely stacking the list provided.
+    Use it to turn a :class:`~tensordict.LazyStackedTensorDict` into a dense
+    :class:`~tensordict.TensorDict` when its tensordicts have the same keys
+    and entry shapes. It is useful when the tensordicts are lazy stacks
+    themselves, or hold lazy stacks among their nested entries: then
+    ``lazy_stack(td_list).to_tensordict()`` is not possible. This function
+    calls :func:`~tensordict.maybe_dense_stack`. So if the tensordicts have
+    different keys or entry shapes at the top level, the result is a
+    :class:`~tensordict.LazyStackedTensorDict`. See :ref:`stacking`.
 
     Args:
-        td_list (List of TensorDictBase or LazyStackedTensorDict): the tds to stack.
-        dim (int, optional): the dimension to stack them.
-            If td_list is a LazyStackedTensorDict, it will be retrieved automatically.
+        td_list (List of TensorDictBase or LazyStackedTensorDict): the
+            tensordicts to stack. A :class:`~tensordict.TensorDict` is
+            returned unchanged.
+        dim (int, optional): the dimension to stack them along. Required if
+            ``td_list`` is a list: without it, a ``ValueError`` is raised.
+            Ignored if ``td_list`` is a
+            :class:`~tensordict.LazyStackedTensorDict`, whose ``stack_dim`` is
+            used.
+
+    Returns:
+        a :class:`~tensordict.TensorDict` (or the class of the stacked
+        tensordicts) if they can be stacked densely, a
+        :class:`~tensordict.LazyStackedTensorDict` otherwise.
 
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict, lazy_stack
-        >>> from tensordict import dense_stack_tds
-        >>> from tensordict.tensordict import assert_allclose_td
+        >>> from tensordict import assert_allclose_td, dense_stack_tds
         >>> td0 = TensorDict({"a": torch.zeros(3)},[])
         >>> td1 = TensorDict({"a": torch.zeros(4), "b": torch.zeros(2)},[])
         >>> td_lazy = lazy_stack([td0, td1], dim=0)
@@ -782,6 +912,8 @@ def make_tensordict(
             Defaults to ``False``.
 
     Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict, make_tensordict
         >>> input_dict = {"a": torch.randn(3, 4), "b": torch.randn(3)}
         >>> print(make_tensordict(input_dict, auto_batch_size=True))
         TensorDict(
