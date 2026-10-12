@@ -2687,7 +2687,9 @@ class _PointwiseOps:
 
             result = self._fast_apply(func, propagate_lock=True)
             if out is not None:
-                # As in LazyStackedTensorDict.where
-                out.update(result, update_batch_size=update_batch_size)
+                # As in LazyStackedTensorDict.where. A result without leaves
+                # has nothing to write, and out may be locked.
+                if not result.is_empty():
+                    out.update(result, update_batch_size=update_batch_size)
                 return out
             return result
