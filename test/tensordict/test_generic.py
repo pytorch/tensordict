@@ -645,6 +645,107 @@ class TestGeneric:
         assert td["b"].batch_size == (3, 2)
         assert td.is_consolidated()
 
+    @pytest.mark.parametrize("consolidated", [False, True])
+    def test_to_batch_size_same_device(self, consolidated):
+        td = TensorDict(
+            {"a": torch.zeros(2, 3), "b": {"c": torch.ones(2, 3, 4)}},
+            batch_size=[2],
+            device="cpu",
+            names=["rows"],
+        )
+        if consolidated:
+            td = td.consolidate()
+        leaves = dict(td.items(True, True))
+        with pytest.raises(RuntimeError, match="incompatible with the batch-size"):
+            td.to("cpu", batch_size=[5])
+        assert td.to("cpu", batch_size=[2, 3]) is td
+        assert td.batch_size == (2, 3)
+        assert td["b"].batch_size == (2, 3)
+        assert td.names == ["rows", None]
+        assert td.is_consolidated() == consolidated
+        assert td.is_locked == consolidated
+        for key, leaf in leaves.items():
+            assert td[key] is leaf
+
+    @pytest.mark.parametrize("batch_size", [[2], [2, 3], []])
+    def test_consolidate_to_batch_size(self, batch_size):
+        td = TensorDict(
+            {"a": torch.zeros(2, 3), "b": {"c": torch.ones(2, 3, 4)}},
+            batch_size=[2],
+            device="cpu",
+        ).consolidate()
+        result = td.to("meta", batch_size=batch_size)
+        assert result.batch_size == torch.Size(batch_size)
+        assert result["b"].batch_size == torch.Size(
+            [2, 3] if len(batch_size) > 1 else [2]
+        )
+        assert result.device == torch.device("meta")
+        assert result["a"].shape == (2, 3)
+        assert result["b", "c"].shape == (2, 3, 4)
+        assert result.is_consolidated()
+        assert result.is_locked
+        assert result is not td
+        assert td.batch_size == (2,)
+        assert td["b"].batch_size == (2,)
+        assert td.device == torch.device("cpu")
+
+    def test_consolidate_to_batch_size_invalid(self):
+        td = TensorDict(a=torch.zeros(2, 3), batch_size=[2]).consolidate()
+        with pytest.raises(RuntimeError, match="incompatible with the batch-size"):
+            td.to("meta", batch_size=[5])
+        assert td.batch_size == (2,)
+
+    @pytest.mark.parametrize("consolidated", [False, True])
+    def test_to_batch_size_unchanged(self, consolidated, monkeypatch):
+        td = TensorDict(a=torch.zeros(2, 3), batch_size=[2], device="cpu")
+        if consolidated:
+            td = td.consolidate()
+
+        def check_new_batch_size(*args):
+            raise AssertionError("unchanged batch sizes should not check every leaf")
+
+        monkeypatch.setattr(type(td), "_check_new_batch_size", check_new_batch_size)
+        assert td.to("cpu", batch_size=[2]) is td
+        assert td.to("cpu", batch_size=torch.Size([2])) is td
+
+    def test_sub_to_batch_size_same_device(self):
+        source = TensorDict(a=torch.zeros(4, 2, 3), batch_size=[4, 2], device="cpu")
+        td = source._get_sub_tensordict(0)
+        assert td.to("cpu") is td
+        assert td.to("cpu", batch_size=[2]) is td
+        result = td.to("cpu", batch_size=[2, 3])
+        assert type(result) is TensorDict
+        assert result.batch_size == (2, 3)
+        assert source.batch_size == (4, 2)
+        assert td.batch_size == (2,)
+        torch.testing.assert_close(result["a"], td["a"])
+        with pytest.raises(RuntimeError, match="incompatible with the batch-size"):
+            td.to("cpu", batch_size=[5])
+
+    def test_to_batch_size_nested_lazy(self):
+        nested = lazy_stack(
+            [TensorDict(a=torch.zeros(3), batch_size=[]) for _ in range(2)]
+        )
+        td = TensorDict(nested=nested, batch_size=[2], device="cpu")
+        with pytest.raises(RuntimeError, match="Modifying the batch size of a lazy"):
+            td.to("cpu", batch_size=[2, 3])
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py needed for persistent tensordicts")
+    def test_persistent_to_batch_size_same_device(self, tmp_path):
+        td = PersistentTensorDict.from_dict(
+            {"a": torch.zeros(2, 3)},
+            filename=tmp_path / "td.h5",
+            batch_size=[2],
+            device="cpu",
+        )
+        try:
+            assert td.to("cpu", batch_size=[2]) is td
+            assert td.to("cpu", batch_size=[2, 3]) is td
+            assert td.batch_size == (2, 3)
+            torch.testing.assert_close(td["a"], torch.zeros(2, 3))
+        finally:
+            td.close()
+
     def test_consolidated_locking_behavior(self):
         """Test that consolidated TensorDicts are automatically locked and unlock properly."""
         td = TensorDict(

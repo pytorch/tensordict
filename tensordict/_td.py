@@ -2886,6 +2886,7 @@ class _SubTensorDict(TensorDictBase):
             and dtype is None
             and convert_to_format is None
             and device == self.device
+            and (batch_size is None or torch.Size(batch_size) == self.batch_size)
         ):
             return result
         return self.to_tensordict().to(*args, **kwargs)
