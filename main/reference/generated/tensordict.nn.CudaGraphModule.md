@@ -22,15 +22,6 @@ Warning
 
 Warning
 
-Creating a `CudaGraphModule` removes [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict)
-and the other tensordict classes from the PyTorch pytree registry, for
-the rest of the process, and warns. After that,
-[`torch.export.export()`](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export) and [`torch.func.grad()`](https://docs.pytorch.org/docs/stable/generated/torch.func.grad.html#torch.func.grad) no longer
-accept tensordicts. Set the environment variable
-`EXCLUDE_TD_FROM_PYTREE=1` to silence the warning.
-
-Warning
-
 This module requires the wrapped function to meet a few requirements. It is the user responsibility
 to make sure that all of these are fulfilled.
 
