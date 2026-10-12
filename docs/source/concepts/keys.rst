@@ -1,11 +1,11 @@
 .. _keys:
 
-Keys, nested keys and locking
-=============================
+Keys, nested keys, and locking
+==============================
 
 A tensordict groups related tensors in a tree. One key reads any of them: a
 string for the top level, a tuple of strings for a nested entry. A lock fixes
-the set of keys, so that no code adds, replaces or removes an entry by
+the set of keys, so that no code adds, replaces, or removes an entry by
 mistake.
 
 Nested tensordicts and nested keys
@@ -45,6 +45,14 @@ that do not exist yet:
 A tuple key in the constructor also creates nested entries:
 ``TensorDict({("x", "y"): torch.zeros(3)}, batch_size=[3])`` has a nested
 tensordict ``"x"`` with the key ``"y"``.
+
+Keyword arguments are a shorthand for top-level keys:
+``TensorDict(obs=torch.zeros(3), batch_size=[3])`` is the same as
+``TensorDict({"obs": torch.zeros(3)}, batch_size=[3])``. In the shorthand, the
+names of the constructor arguments (``source``, ``batch_size``, ``device``,
+``names``, ``non_blocking``, and ``lock``) are not keys, and a key must be a
+Python identifier. A key such as ``"obs.next"`` or a tuple key needs the dict.
+These docs build every TensorDict from a dict.
 
 If you know the keys when you write the code, a
 :class:`~tensordict.TensorClass` gives you typed attributes in place of string
@@ -87,8 +95,10 @@ a nested tensordict come before the key of that tensordict. This robot state
 has a timestamp, an arm, and a gripper on the arm:
 
   >>> td = TensorDict(
-  ...     time=torch.zeros(3),
-  ...     arm={"pos": torch.zeros(3), "gripper": {"force": torch.zeros(3)}},
+  ...     {
+  ...         "time": torch.zeros(3),
+  ...         "arm": {"pos": torch.zeros(3), "gripper": {"force": torch.zeros(3)}},
+  ...     },
   ...     batch_size=[3],
   ... )
   >>> list(td.keys())
@@ -152,7 +162,7 @@ to the tensor that is already there:
 
 For example:
 
-  >>> td = TensorDict(pos=torch.zeros(3), batch_size=[3])
+  >>> td = TensorDict({"pos": torch.zeros(3)}, batch_size=[3])
   >>> old = td["pos"]
   >>> _ = td.set("pos", torch.ones(3))
   >>> old  # replaced: the old tensor did not change
@@ -178,7 +188,7 @@ copies into the existing tensors, as ``set(..., inplace=True)`` does.
 :meth:`~tensordict.TensorDict.update_` copies into existing tensors only, and
 raises a ``KeyError`` for a missing key.
 
-  >>> td = TensorDict(time=torch.zeros(3), arm={"pos": torch.zeros(3)}, batch_size=[3])
+  >>> td = TensorDict({"time": torch.zeros(3), "arm": {"pos": torch.zeros(3)}}, batch_size=[3])
   >>> _ = td.update({"time": torch.ones(3), "arm": {"vel": torch.ones(3)}})
   >>> list(td.keys(include_nested=True, leaves_only=True))
   ['time', ('arm', 'pos'), ('arm', 'vel')]
@@ -186,17 +196,8 @@ raises a ``KeyError`` for a missing key.
 ``update`` writes the entries one after the other. If one entry raises, for
 example on a batch size mismatch, the entries before it are already written.
 
-.. warning::
-
-   Do not use ``update_`` on a :class:`~tensordict.PersistentTensorDict` or a
-   :class:`~tensordict.store.TensorDictStore`. On these backends, ``update_``
-   writes nothing and raises no error
-   (`#2217 <https://github.com/pytorch/tensordict/issues/2217>`_,
-   `#2242 <https://github.com/pytorch/tensordict/issues/2242>`_). Use ``set_``
-   for each key, or ``update(..., inplace=True)``.
-
-Select, exclude and remove entries
-----------------------------------
+Select, exclude, and remove entries
+-----------------------------------
 
 :meth:`~tensordict.TensorDict.select` returns a new tensordict with the keys
 that you name. :meth:`~tensordict.TensorDict.exclude` returns a new tensordict
@@ -204,8 +205,10 @@ without them. Both accept nested keys. They do not copy the tensors: the new
 tensordict holds the same tensors as the original.
 
   >>> td = TensorDict(
-  ...     time=torch.zeros(3),
-  ...     arm={"pos": torch.zeros(3), "gripper": {"force": torch.zeros(3)}},
+  ...     {
+  ...         "time": torch.zeros(3),
+  ...         "arm": {"pos": torch.zeros(3), "gripper": {"force": torch.zeros(3)}},
+  ...     },
   ...     batch_size=[3],
   ... )
   >>> list(td.select("time", ("arm", "pos")).keys(include_nested=True))
@@ -230,7 +233,7 @@ Rename a key
 the tensordict. The old and the new keys can be nested, and at different
 levels:
 
-  >>> td = TensorDict(time=torch.zeros(3), arm={"pos": torch.zeros(3)}, batch_size=[3])
+  >>> td = TensorDict({"time": torch.zeros(3), "arm": {"pos": torch.zeros(3)}}, batch_size=[3])
   >>> list(td.rename_key_(("arm", "pos"), "pos").keys(include_nested=True))
   ['time', 'arm', 'pos']
 
@@ -246,7 +249,7 @@ separator. :meth:`~tensordict.TensorDict.unflatten_keys` does the reverse.
 The two methods do not copy the tensors. Use them for code or file formats
 that accept only flat string keys.
 
-  >>> td = TensorDict(time=torch.zeros(3), arm={"pos": torch.zeros(3)}, batch_size=[3])
+  >>> td = TensorDict({"time": torch.zeros(3), "arm": {"pos": torch.zeros(3)}}, batch_size=[3])
   >>> flat = td.flatten_keys()
   >>> list(flat.keys())
   ['time', 'arm.pos']
@@ -271,14 +274,14 @@ tensordicts. A locked tensordict raises a ``RuntimeError`` for each of these
 operations:
 
 - Add a key, at any level.
-- Replace an entry: ``td[key] = value``, ``set`` and ``update`` without
+- Replace an entry: ``td[key] = value``, ``set``, and ``update`` without
   ``inplace=True``.
 - Remove or rename an entry: ``del``, ``pop``, ``rename_key_``, and
   ``select`` or ``exclude`` with ``inplace=True``.
 
 For example, a new key in a nested tensordict raises:
 
-  >>> td = TensorDict(time=torch.zeros(3), arm={"pos": torch.zeros(3)}, batch_size=[3])
+  >>> td = TensorDict({"time": torch.zeros(3), "arm": {"pos": torch.zeros(3)}}, batch_size=[3])
   >>> _ = td.lock_()
   >>> td["arm", "vel"] = torch.zeros(3)
   Traceback (most recent call last):
@@ -330,9 +333,9 @@ These methods also lock it:
   unlocked one.
 
 A new tensordict that a method returns is not always locked like the original.
-On a locked tensordict, ``clone()``, ``select()``, ``apply()``, indexing and
+On a locked tensordict, ``clone()``, ``select()``, ``apply()``, indexing, and
 :func:`torch.stack` return an unlocked tensordict. ``view()``, ``reshape()``,
-``unsqueeze()`` and ``to()`` return a locked one. Read ``is_locked`` on the
+``unsqueeze()``, and ``to()`` return a locked one. Read ``is_locked`` on the
 result if your code depends on it.
 
 Temporary changes with ``with``
@@ -344,7 +347,7 @@ Some methods of a tensordict also work as context managers. At the end of the
 ``with td.unlock_():`` unlocks the tensordict for the block, and locks it again
 at the end. ``with td.lock_():`` does the reverse.
 
-  >>> td = TensorDict(pos=torch.zeros(3), batch_size=[3], lock=True)
+  >>> td = TensorDict({"pos": torch.zeros(3)}, batch_size=[3], lock=True)
   >>> with td.unlock_():
   ...     td["vel"] = torch.ones(3)
   >>> td.is_locked, sorted(td.keys())
@@ -365,14 +368,14 @@ gets its original parameters back:
   >>> bool((module.weight == 0).all())
   False
 
-``unlock_``, ``lock_`` and ``to_module`` also undo their change when the
+``unlock_``, ``lock_``, and ``to_module`` also undo their change when the
 ``with`` block raises an exception.
 
 These shape operations also work as context managers:
 :meth:`~tensordict.TensorDict.view`, :meth:`~tensordict.TensorDict.permute`,
 :meth:`~tensordict.TensorDict.transpose`,
 :meth:`~tensordict.TensorDict.unsqueeze`,
-:meth:`~tensordict.TensorDict.flatten` and
+:meth:`~tensordict.TensorDict.flatten`, and
 :meth:`~tensordict.TensorDict.unflatten`. At the end of the block, the entries
 that you wrote into the result go back into the original, with the reverse
 operation. :meth:`~tensordict.TensorDict.reshape` does not write back.
@@ -381,7 +384,7 @@ entries back to their original device and dtype (see
 :ref:`devices-temporary-moves`). If the block raises an exception, these
 operations write nothing back.
 
-  >>> td = TensorDict(x=torch.zeros(3, 4), batch_size=[3, 4])
+  >>> td = TensorDict({"x": torch.zeros(3, 4)}, batch_size=[3, 4])
   >>> with td.unsqueeze(-1) as tdu:
   ...     tdu["y"] = torch.ones(3, 4, 1)
   >>> td["y"].shape
@@ -392,7 +395,7 @@ See also
 
 - :class:`~tensordict.NestedKey`, :meth:`~tensordict.TensorDict.keys`,
   :meth:`~tensordict.TensorDict.get`, :meth:`~tensordict.TensorDict.set`,
-  :meth:`~tensordict.TensorDict.set_` and :meth:`~tensordict.TensorDict.lock_`
+  :meth:`~tensordict.TensorDict.set_`, and :meth:`~tensordict.TensorDict.lock_`
   in the :ref:`api-reference`.
 - :ref:`api-methods-keys` and :ref:`api-methods-locking`: the methods for keys
   and locking.

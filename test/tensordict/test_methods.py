@@ -5210,12 +5210,6 @@ _POINTWISE_TD_NAMES = (
     "memmap_td",
     "td_h5",
 )
-_H5_INPLACE_XFAIL = pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="In-place pointwise methods on a PersistentTensorDict leave the "
-    "h5 file unchanged (#2217)",
-)
 
 
 @pytest.mark.parametrize(
@@ -5258,9 +5252,7 @@ class TestPointwise(TestTensorDictsBase):
             torch.testing.assert_close(out.get(key), val)
 
     @pytest.mark.parametrize("op", _POINTWISE_UNARY_OPS)
-    def test_unary_(self, td_name, device, op, request):
-        if td_name == "td_h5":
-            request.applymarker(_H5_INPLACE_XFAIL)
+    def test_unary_(self, td_name, device, op):
         value_range = _POINTWISE_RANGES.get(op, _POINTWISE_DEFAULT_RANGE)
         td = self._float_td(td_name, device, value_range)
         expected = {key: getattr(torch, op)(val) for key, val in td.items(True, True)}
@@ -5270,9 +5262,7 @@ class TestPointwise(TestTensorDictsBase):
 
     @pytest.mark.parametrize("inplace", [False, True])
     @pytest.mark.parametrize("op", sorted(_POINTWISE_BINARY_OPS))
-    def test_binary(self, td_name, device, op, inplace, request):
-        if inplace and td_name == "td_h5":
-            request.applymarker(_H5_INPLACE_XFAIL)
+    def test_binary(self, td_name, device, op, inplace):
         num_operands, args, kwargs = _POINTWISE_BINARY_OPS[op]
         # addcdiv divides by its second operand, which must not be close to 0
         td = self._float_td(td_name, device, _POINTWISE_POSITIVE_RANGE)

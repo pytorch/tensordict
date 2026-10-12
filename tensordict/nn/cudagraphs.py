@@ -73,14 +73,6 @@ class CudaGraphModule:
         ``CudaGraphModule`` is a prototype feature and its API restrictions are likely to change in the future.
 
     .. warning::
-        Creating a ``CudaGraphModule`` removes :class:`~tensordict.TensorDict`
-        and the other tensordict classes from the PyTorch pytree registry, for
-        the rest of the process, and warns. After that,
-        :func:`torch.export.export` and :func:`torch.func.grad` no longer
-        accept tensordicts. Set the environment variable
-        ``EXCLUDE_TD_FROM_PYTREE=1`` to silence the warning.
-
-    .. warning::
       This module requires the wrapped function to meet a few requirements. It is the user responsibility
       to make sure that all of these are fulfilled.
 

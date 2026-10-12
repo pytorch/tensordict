@@ -2014,7 +2014,11 @@ class _Reductions:
         elif dim is not NO_DEFAULT or keepdim:
             names = None
             if self._has_names():
-                if not keepdim and isinstance(dim, tuple):
+                if keepdim or batch_size is not None:
+                    # keepdim=True and the cumulative ops (which pass
+                    # batch_size) keep every batch dim, so every name
+                    names = list(self.names)
+                elif isinstance(dim, tuple):
                     names = [name for i, name in enumerate(self.names) if i not in dim]
                 else:
                     names = [name for i, name in enumerate(self.names) if i != dim]

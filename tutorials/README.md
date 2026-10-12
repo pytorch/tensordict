@@ -12,12 +12,12 @@ first. Then read the tutorials in this order.
 
 ## Basics
 
-1. [Getting, setting and nesting keys](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_keys.html)
-   (`tensordict_keys.py`): set, get, iterate over and flatten keys, and nested values.
-2. [Slicing, indexing and masking](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_slicing.html)
+1. [Getting, setting, and nesting keys](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_keys.html)
+   (`tensordict_keys.py`): set, get, iterate over, and flatten keys, nested keys included.
+2. [Slicing, indexing, and masking](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_slicing.html)
    (`tensordict_slicing.py`): index a TensorDict along its batch dimensions.
 3. [Changing the shape of a TensorDict](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_shapes.html)
-   (`tensordict_shapes.py`): the batch size, reshape, stack and concatenate.
+   (`tensordict_shapes.py`): the batch size, reshape, stack, and concatenate.
 4. [Filling a TensorDict row by row](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_preallocation.html)
    (`tensordict_preallocation.py`): the first write allocates every tensor.
 5. [Building tensordicts from streams](https://docs.pytorch.org/tensordict/stable/tutorials/streamed_tensordict.html)
@@ -28,16 +28,16 @@ first. Then read the tutorials in this order.
 6. [Devices and memory-mapped tensors](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_memory.html)
    (`tensordict_memory.py`): move a TensorDict to a device, and store it in memory-mapped files.
 7. [Storing TensorDicts in zarr](https://docs.pytorch.org/tensordict/stable/tutorials/zarr_storage.html)
-   (`zarr_storage.py`): Zarr stores, chunks and compression.
+   (`zarr_storage.py`): Zarr stores, chunks, and compression.
 8. [Benchmarking TensorDict serialization speed](https://docs.pytorch.org/tensordict/stable/tutorials/serialization_speed.html)
-   (`serialization_speed.py`): `memmap`, `torch.save`, safetensors and Zarr, compared.
+   (`serialization_speed.py`): `memmap`, `torch.save`, safetensors, and Zarr, compared.
 
 ## tensordict.nn
 
 9. [Building models with TensorDictModule](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_module.html)
    (`tensordict_module.py`): modules that read and write TensorDicts.
 10. [Functional calls and ensembles with TensorDict](https://docs.pytorch.org/tensordict/stable/tutorials/functional.html)
-    (`functional.py`): parameter TensorDicts, `torch.vmap` over model ensembles and `functional_call`.
+    (`functional.py`): parameter TensorDicts, `torch.vmap` over model ensembles, and `functional_call`.
 11. [Exporting tensordict modules](https://docs.pytorch.org/tensordict/stable/tutorials/export.html)
     (`export.py`): `torch.export` of a `TensorDictModule`.
 
@@ -62,7 +62,7 @@ Some tutorials need more packages:
 
 - `zarr_storage.py`: `pip install "tensordict[zarr]"` (Python 3.11+).
 - `serialization_speed.py`: `matplotlib`, and `safetensors` and `zarr` for all the comparisons.
-- `data_fashion.py`, `tensorclass_fashion.py` and `tensorclass_imagenet.py`:
+- `data_fashion.py`, `tensorclass_fashion.py`, and `tensorclass_imagenet.py`:
   `torchvision`. The first two download FashionMNIST into `./data`.
   `tensorclass_imagenet.py` reads the
   [hymenoptera dataset](https://download.pytorch.org/tutorial/hymenoptera_data.zip),

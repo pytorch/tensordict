@@ -642,6 +642,28 @@ class TestPointwiseOps:
                     result[key], torch.rsub(leaf, other_leaf, **kwargs)
                 )
 
+    @pytest.mark.parametrize("alpha", [None, 1, 2, -0.3])
+    @pytest.mark.parametrize("other_kind", ["tensordict", "number", "0-dim tensor"])
+    def test_rsub_alpha_scales_self(self, other_kind, alpha):
+        # Like torch.rsub, rsub computes other - alpha * self (#1950)
+        torch.manual_seed(0)
+        td = TensorDict(
+            a=torch.randn(3, 4), b={"c": torch.randn(3, 4, 5)}, batch_size=(3, 4)
+        )
+        if other_kind == "tensordict":
+            other = td.apply(torch.randn_like)
+        elif other_kind == "number":
+            other = 1.5
+        else:
+            other = torch.tensor(1.5)
+        kwargs = {} if alpha is None else {"alpha": alpha}
+        result = td.rsub(other, **kwargs)
+        for key in ("a", ("b", "c")):
+            other_leaf = other[key] if other_kind == "tensordict" else other
+            torch.testing.assert_close(
+                result[key], torch.rsub(td[key], other_leaf, **kwargs)
+            )
+
     @pytest.mark.parametrize("shape", [(4,), (3, 4), (2, 3, 4)])
     def test_broadcast_tensordict(self, shape):
         torch.manual_seed(0)
@@ -790,14 +812,32 @@ class TestPointwiseOps:
         assert data is alias
         assert (data.x == 2).all()
 
+    def test_inplace_pairs_operands_by_key(self):
+        # lerp_, addcdiv_ and addcmul_ pair the leaves of a tensordict operand
+        # by key, as add_ does, also when its keys come in another order
+        td = TensorDict(a=torch.zeros(3), n={"b": torch.zeros(3)}, batch_size=[3])
+        other = TensorDict(
+            n={"b": torch.full((3,), 2.0)}, a=torch.ones(3), batch_size=[3]
+        )
+        ones = other.apply(torch.ones_like)
+        for name, args, kwargs in [
+            ("lerp_", (other, 1.0), {}),
+            ("addcmul_", (other, ones), {"value": 1.0}),
+            ("addcdiv_", (other, ones), {"value": 1.0}),
+        ]:
+            result = getattr(td.clone(), name)(*args, **kwargs)
+            assert (result["a"] == 1).all(), name
+            assert (result["n", "b"] == 2).all(), name
+
     @pytest.mark.skipif(not _has_h5py, reason="h5py not available")
     def test_inplace_broadcast_tensor_h5(self, tmp_path):
-        # A PersistentTensorDict hands out copies of its datasets, so the result
-        # of the in-place op is the tensordict that it returns
+        # A PersistentTensorDict hands out copies of its datasets: the in-place
+        # op writes its result back to the file and returns self (#2217)
         td = TensorDict(a=torch.ones(3, 4), batch_size=(3, 4))
         h5 = PersistentTensorDict.from_dict(td, filename=str(tmp_path / "td.h5"))
         out = h5.add_(torch.full((3, 4), 2.0))
-        assert (out["a"] == 3).all()
+        assert out is h5
+        assert (h5["a"] == 3).all()
 
     def test_inplace_broadcast_tensor_lazy_hetero(self):
         # The tensors of this lazy stack differ in shape, so they cannot be

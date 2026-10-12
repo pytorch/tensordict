@@ -189,6 +189,9 @@ class _PersistentBackend:
     def write_masked(self, node, mask, value) -> None:
         raise NotImplementedError
 
+    def is_read_only(self, file) -> bool:
+        raise NotImplementedError
+
     def try_create_dataset(self, file, key, value, kwargs) -> bool:
         raise NotImplementedError
 
@@ -375,6 +378,9 @@ class _H5Backend(_PersistentBackend):
             if old_key not in file and new_key not in file:
                 raise KeyError(f"key {old_key} not found in TensorDict.") from err
             raise KeyError(f"key {new_key} already present in TensorDict.") from err
+
+    def is_read_only(self, file) -> bool:
+        return file.file.mode == "r"
 
     def getstate(self, file) -> dict:
         return {"filename": file.file.filename, "group_name": file.name}
@@ -728,6 +734,9 @@ class _ZarrBackend(_PersistentBackend):
             for subkey in node.keys():
                 self._copy_node(file, f"{new_key}/{subkey}", node[subkey])
 
+    def is_read_only(self, file) -> bool:
+        return file.read_only
+
     def getstate(self, file) -> dict:
         # zarr v3 groups (and their stores) are natively picklable
         return {"zarr_group": file}
@@ -765,7 +774,9 @@ class PersistentTensorDict(TensorDictBase):
     (``backend="zarr"``) needs ``zarr>=3.0``. Each read of an entry loads it
     from the file into a new tensor, so ``ptd["a"] is ptd["a"]`` is
     ``False``, and in-place changes to the tensor that you read do not reach
-    the file. Writes (``ptd["a"] = value``) go to the file.
+    the file. Writes (``ptd["a"] = value``) go to the file, and so do the
+    in-place methods of the tensordict, such as ``ptd.add_(1)`` and
+    ``ptd.update_(other)``.
 
     Use it to read or write existing HDF5 or Zarr data. To keep tensordict
     data on disk for fast reloads, use :meth:`~tensordict.TensorDictBase.memmap`
@@ -838,6 +849,8 @@ class PersistentTensorDict(TensorDictBase):
     _masking_on_dense_copy = True
     _rename_key_lenient = True
     LOCKING = None
+    # each read loads the entry from the file into a new tensor
+    _reads_return_copies = True
 
     @property
     @deprecated("PersistentTensorDict.kwargs", removal="0.17")
@@ -1484,9 +1497,13 @@ class PersistentTensorDict(TensorDictBase):
         return list(self._nested_tensordicts.values())
 
     def zero_(self) -> Self:
+        # Override: fill_ writes each array without reading it first
         for key in self.keys():
             self.fill_(key, 0)
         return self
+
+    def _storage_is_read_only(self) -> bool:
+        return self._backend.is_read_only(self.file)
 
     def entry_class(self, key: NestedKey) -> type:
         # Inspects the node only: no data is read from storage.
@@ -1974,6 +1991,8 @@ class PersistentTensorDict(TensorDictBase):
             )
         result = self
         if device is not None and dtype is None and device == self.device:
+            if batch_size is not None and torch.Size(batch_size) != result.batch_size:
+                result.batch_size = batch_size
             return result
         if dtype is not None:
             return self.to_tensordict().to(*args, **kwargs)

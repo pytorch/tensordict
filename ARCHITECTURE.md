@@ -190,6 +190,18 @@ The implementations also reuse code in two ways:
   `TypedTensorDict` forwards to `_source` through the `_*_DELEGATES` lists at
   the end of `typedtensordict.py`.
 
+Some classes read copies of their data: each read of a
+`PersistentTensorDict` or a store returns a new tensor, and so does a read of
+a `TypedTensorDict` over a lazy stack or of a `_SubTensorDict` with an index
+tensor. They set `_reads_return_copies` (a class attribute, or a property).
+The in-place methods (`add_`, `abs_`, `+=`, ...) change the tensors that
+`_items_list` returns. On these classes, the `@_write_back_inplace` decorator
+runs the method on a `TensorDict` of the leaves that it reads
+(`_inplace_on_copies`), and `_write_back` writes each leaf back with
+`_set_tuple(..., inplace=True)`; `update_` calls `_write_back` itself. A new
+in-place method that changes the leaves takes the decorator. A file opened
+read-only stays unchanged, with a warning (`_storage_is_read_only`).
+
 An operation that a backend cannot support raises. For example,
 `TensorDictStore._view` raises a `RuntimeError` that asks the user to call
 `to_tensordict()` first.
@@ -267,6 +279,11 @@ touches these places:
      torch. Its known failures are listed in
      `test/tensordict/indexing_known_failures.json`. When a change fixes one,
      set `TENSORDICT_UPDATE_KNOWN_FAILURES=1` to rewrite that file.
+   - Other operations: `test/tensordict/test_conformance.py` runs a set of
+     operations on each type and on its dense copy and compares the
+     results. Its known failures are in
+     `test/tensordict/conformance_known_failures.json`, rewritten the same
+     way.
 9. `benchmarks/` when the operation is on a hot path.
 
 ## Where things live

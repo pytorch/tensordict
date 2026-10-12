@@ -5,8 +5,8 @@ Storing TensorDicts in zarr
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
 `zarr <https://zarr.dev>`_ splits each array into chunks that you can read,
-write and compress one at a time. The same tree of groups and arrays can go to
-a local directory, a single zip file or an S3-compatible object store. This
+write, and compress one at a time. The same tree of groups and arrays can go to
+a local directory, a single zip file, or an S3-compatible object store. This
 tutorial is for readers who store tensordicts outside the local disk, or who
 share them with other zarr tools.
 
@@ -62,7 +62,7 @@ td_zarr = td.to_zarr(root / "dataset.zarr")
 td_zarr
 
 ##############################################################################
-# The store keeps the batch size, the dimension names and the non-tensor
+# The store keeps the batch size, the dimension names, and the non-tensor
 # entries (like the ``"description"`` string above).
 # :meth:`~tensordict.TensorDictBase.from_zarr` reads them back from the
 # store:
@@ -165,7 +165,7 @@ td_zip.close()
 # Pre-allocation
 # --------------
 # Like the other backends, zarr supports
-# :meth:`~tensordict.TensorDictBase.from_schema`. Give the keys, shapes and
+# :meth:`~tensordict.TensorDictBase.from_schema`. Give the keys, shapes, and
 # dtypes first, then fill the buffer row by row. The full dataset is never in
 # memory.
 
@@ -176,7 +176,9 @@ buffer = TensorDict.from_schema(
     filename=root / "buffer.zarr",
 )
 for i in range(4):
-    buffer[i] = TensorDict(obs=torch.randn(4), reward=torch.randn(()), batch_size=[])
+    buffer[i] = TensorDict(
+        {"obs": torch.randn(4), "reward": torch.randn(())}, batch_size=[]
+    )
 
 ##############################################################################
 # Conclusion
@@ -195,4 +197,4 @@ for i in range(4):
 #   <sphx_glr_tutorials_serialization_speed.py>` benchmarks zarr against
 #   the other on-disk formats.
 # - The `zarr documentation <https://zarr.readthedocs.io>`_ covers stores,
-#   codecs and the v3 format in depth.
+#   codecs, and the v3 format in depth.

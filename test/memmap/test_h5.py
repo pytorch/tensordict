@@ -232,6 +232,117 @@ def test_kwargs_passthrough_nested(tmpdir):
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_inplace_methods_write(tmp_path):
+    # #2217: the in-place methods, update_ and copy_ write to the file
+    td = TensorDict(
+        {"a": torch.full((3,), -1.0), "nested": {"b": torch.full((3, 2), -1.0)}},
+        batch_size=[3],
+    )
+    filename = tmp_path / "file.h5"
+    h5td = PersistentTensorDict.from_dict(td, filename=filename)
+    other = td.apply(lambda x: torch.rand_like(x) + 1)
+    for data in (h5td, td):
+        assert data.abs_() is data
+        assert data.add_(1.0) is data
+        data += 1
+        assert data.pow_(other) is data
+        assert data.update_(other.select("a") * 3) is data
+        assert data.update_(other, keys_to_update=[("nested", "b")]) is data
+    h5td.close()
+    with h5py.File(filename, "r") as file:
+        torch.testing.assert_close(torch.as_tensor(file["a"][()]), td["a"])
+        torch.testing.assert_close(
+            torch.as_tensor(file["nested/b"][()]), td["nested", "b"]
+        )
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_inplace_read_only_warns(tmp_path):
+    # from_h5 opens files read-only by default: the in-place methods leave the
+    # file unchanged, as before they wrote to files, and warn that this will
+    # raise. Writes such as zero_() still raise.
+    td = TensorDict({"a": torch.full((3,), -1.0)}, batch_size=[3])
+    td.to_h5(tmp_path / "file.h5").close()
+    h5td = PersistentTensorDict.from_h5(tmp_path / "file.h5")
+    match = (
+        r"^Calling abs_\(\) on a tensordict stored in a file opened read-only, "
+        r"which leaves the file unchanged, is deprecated and will be removed in "
+        r"TensorDict 0\.17\."
+    )
+    with pytest.warns(FutureWarning, match=match) as record:
+        assert h5td.abs_() is h5td
+    assert record[0].filename == __file__
+
+    def iadd():
+        nonlocal h5td
+        h5td += 1
+
+    for call in (
+        lambda: h5td.mul_(2.0),
+        iadd,
+        lambda: h5td[0:2].add_(1.0),
+        lambda: h5td[0:2].zero_(),
+        lambda: h5td.update_({"a": torch.zeros(3)}),
+        lambda: h5td.copy_(td.clone().zero_()),
+    ):
+        with pytest.warns(FutureWarning, match="leaves the file unchanged") as record:
+            call()
+        # one warning, which points to the caller
+        assert len(record) == 1
+        assert record[0].filename == __file__
+    assert (h5td["a"] == -1).all()
+    with pytest.raises(OSError):
+        h5td.zero_()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_inplace_methods_keep_key_order(tmp_path):
+    # lerp_ pairs the leaves of its operand with those of the file by key, also
+    # when a nested key comes first
+    td = TensorDict(
+        nested=TensorDict(d=torch.zeros(4, 3), batch_size=[4]),
+        a=torch.zeros(4, 2),
+        batch_size=[4],
+    )
+    h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+    for data in (h5td, td._get_sub_tensordict(torch.tensor([0, 2]))):
+        end = data.to_tensordict()
+        end["a"] = torch.full_like(end["a"], 10.0)
+        end["nested", "d"] = torch.full_like(end["nested", "d"], -10.0)
+        assert data.lerp_(end, 1.0) is data
+        assert (data["a"] == 10).all()
+        assert (data["nested", "d"] == -10).all()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+@pytest.mark.parametrize("keys_to_update", [None, ["a"]])
+def test_update_from_h5_reads(tmp_path, monkeypatch, keys_to_update):
+    # update_ from an h5 file reads it as often as a TensorDict destination does
+    td = TensorDict(
+        {"a": torch.ones(3), "nested": {"b": torch.ones(3, 2)}}, batch_size=[3]
+    )
+    source = PersistentTensorDict.from_dict(td, filename=tmp_path / "src.h5")
+    dest = PersistentTensorDict.from_dict(td * 0, filename=tmp_path / "dest.h5")
+    reads = []
+    read_full = source._backend.read_full
+
+    def counting_read_full(node):
+        reads.append(node.file.filename)
+        return read_full(node)
+
+    monkeypatch.setattr(
+        type(source._backend), "read_full", staticmethod(counting_read_full)
+    )
+    (td * 0).update_(source, keys_to_update=keys_to_update)
+    expected = reads.count(source.file.filename)
+    assert expected
+    reads.clear()
+    dest.update_(source, keys_to_update=keys_to_update)
+    assert reads.count(source.file.filename) == expected
+    assert (dest["a"] == 1).all()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_kwargs_is_deprecated(tmpdir):
     filename = Path(tmpdir) / "file.h5"
     td = PersistentTensorDict(
@@ -396,6 +507,23 @@ class TestH5Indexing:
         mask = torch.tensor([True, False])
         h5td[idx].masked_fill_(mask, -1)
         td[idx] = td[idx].masked_fill(mask, -1)
+        for key in td.keys(True, True):
+            assert (h5td.get(key) == td.get(key)).all(), key
+
+    @pytest.mark.parametrize("idx", [slice(0, 2), torch.tensor([1, 3])])
+    def test_index_inplace_methods(self, tmp_path, idx):
+        # h5td[idx] writes to the file: the in-place methods change only the
+        # indexed rows (#2217)
+        td = TensorDict(
+            {"a": torch.arange(8.0).view(4, 2), "nested": {"b": torch.arange(4.0)}},
+            batch_size=[4],
+        )
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        sub = h5td[idx]
+        sub.add_(1.0)
+        sub *= 2
+        sub.update_(sub.to_tensordict().neg())
+        td[idx] = td[idx].add(1.0).mul(2).neg()
         for key in td.keys(True, True):
             assert (h5td.get(key) == td.get(key)).all(), key
 

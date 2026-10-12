@@ -38,6 +38,7 @@ from tensordict.base import (
     _flatten_nested_dicts,
     _foreach_copy_,
     _foreach_copy_compiled,
+    _holds_its_tensors,
     _is_accepted_class,
     _is_leaf_nontensor,
     _is_tensor_collection,
@@ -94,6 +95,8 @@ from tensordict.utils import (
     _StringOnlyDict,
     _sub_index,
     _unravel_key_to_tuple,
+    _UPDATE_IGNORE_LOCK_WARNED,
+    _warn_update_ignore_lock,
     _zip_strict,
     DeviceType,
     expand_as_right,
@@ -1135,6 +1138,8 @@ class TensorDict(TensorDictBase):
         ignore_lock: bool = False,
         **kwargs,
     ) -> Self:
+        if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
+            ignore_lock = _warn_update_ignore_lock()
         if (
             not is_compiling()
             and type(self) is TensorDict
@@ -2501,6 +2506,22 @@ class _SubTensorDict(TensorDictBase):
     def _is_memmap(self):
         return self._source._is_memmap
 
+    @property
+    def _reads_return_copies(self):
+        # the entries are views only for a basic index of the tensors that the
+        # source holds: an index tensor or a mask, or a source that builds its
+        # entries on each read (a lazy stack, a file), gives copies
+        return not (
+            _holds_its_tensors(self._source)
+            and all(
+                (type(idx) is int) or idx is None or isinstance(idx, slice)
+                for idx in self.idx
+            )
+        )
+
+    def _storage_is_read_only(self) -> bool:
+        return self._source._storage_is_read_only()
+
     # Override: the names come from the source, at the index of the view.
     @TensorDictBase.names.getter
     def names(self):
@@ -2768,6 +2789,7 @@ class _SubTensorDict(TensorDictBase):
             and dtype is None
             and convert_to_format is None
             and device == self.device
+            and (batch_size is None or torch.Size(batch_size) == self.batch_size)
         ):
             return result
         return self.to_tensordict().to(*args, **kwargs)
@@ -2804,6 +2826,8 @@ class _SubTensorDict(TensorDictBase):
         ignore_lock: bool = False,
         **kwargs,
     ) -> _SubTensorDict:
+        if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
+            ignore_lock = _warn_update_ignore_lock(stacklevel=3)
         if kwargs:
             if input_dict_or_td is None:
                 input_dict_or_td = kwargs

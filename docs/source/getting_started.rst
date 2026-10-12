@@ -15,7 +15,7 @@ not installed yet, read :ref:`installation` first.
    :alt: A nested TensorDict in the center, with arrows to the result of
          td[0], torch.stack, td.split, td.split_keys, td0.update(td1),
          td.memmap, td.cuda, td.cpu, td.to_module, TensorDict.from_module,
-         td.consolidate and flatten_keys.
+         td.consolidate, and flatten_keys.
    :width: 100%
 
    Common operations on one nested TensorDict. The two arrows on
@@ -26,13 +26,13 @@ not installed yet, read :ref:`installation` first.
 Create a TensorDict
 -------------------
 
-A :class:`~tensordict.TensorDict` is a dictionary of tensors. Give the entries
-as keyword arguments or as a ``dict``. TensorDict converts NumPy arrays and
-``int``, ``float`` and ``bool`` values to :class:`torch.Tensor`:
+A :class:`~tensordict.TensorDict` is a dictionary of tensors. Give it the
+entries as a ``dict``. TensorDict converts NumPy arrays and ``int``, ``float``,
+and ``bool`` values to :class:`torch.Tensor`:
 
   >>> import torch
   >>> from tensordict import TensorDict
-  >>> td = TensorDict(a=0, b=torch.ones(3))
+  >>> td = TensorDict({"a": 0, "b": torch.ones(3)})
   >>> td
   TensorDict(
       fields={
@@ -41,12 +41,11 @@ as keyword arguments or as a ``dict``. TensorDict converts NumPy arrays and
       batch_size=torch.Size([]),
       device=None,
       is_shared=False)
-  >>> td = TensorDict({"a": 0, "b": torch.ones(3)})
   >>> td["a"]
   tensor(0)
 
 A TensorDict has the methods of a Python ``dict``: ``keys``, ``values``,
-``items``, ``get``, ``update``, ``pop``, ``setdefault`` and others. Keys are
+``items``, ``get``, ``update``, ``pop``, ``setdefault``, and others. Keys are
 strings, or tuples of strings for nested entries.
 :meth:`~tensordict.TensorDict.select` keeps some entries and
 :meth:`~tensordict.TensorDict.exclude` removes them. Both return a new
@@ -97,7 +96,7 @@ tensors. To infer it, use :meth:`~tensordict.TensorDict.from_dict` with
 :meth:`~tensordict.TensorDict.auto_batch_size_`. Both set the batch size to
 the leading dimensions that all the leaves share:
 
-  >>> TensorDict(reading=torch.ones(3, 4, 5)).batch_size
+  >>> TensorDict({"reading": torch.ones(3, 4, 5)}).batch_size
   torch.Size([])
   >>> TensorDict.from_dict(
   ...     {"reading": torch.ones(3, 4, 5), "valid": torch.zeros(3, 4)},
@@ -130,7 +129,7 @@ For the ``data`` of this section:
 Indexing and shape operations
 -----------------------------
 
-Indexing, slicing and shape operations apply to the batch dimensions. They
+Indexing, slicing, and shape operations apply to the batch dimensions. They
 return a new TensorDict, with the same operation applied to every leaf:
 
   >>> sub = data[..., :2]
@@ -156,8 +155,10 @@ A boolean mask over the batch dimensions selects elements, as for a tensor:
 To write into a part of a TensorDict, index it on the left of ``=``:
 
   >>> data[0] = TensorDict(
-  ...     reading=torch.zeros(4, 5),
-  ...     valid=torch.ones(4, dtype=torch.bool),
+  ...     {
+  ...         "reading": torch.zeros(4, 5),
+  ...         "valid": torch.ones(4, dtype=torch.bool),
+  ...     },
   ...     batch_size=[4],
   ... )
   >>> data["valid"][0]
@@ -171,7 +172,7 @@ TensorClass: the class form
 :class:`~tensordict.TensorClass` is the class form of a TensorDict. You
 declare the fields as class annotations, like a dataclass, and you add your
 own methods. A TensorClass has the tensor behavior of a TensorDict: the batch
-size, indexing, shape operations and the batch-size check. This class holds a
+size, indexing, shape operations, and the batch-size check. This class holds a
 batch of images and their labels:
 
   >>> from tensordict import TensorClass
@@ -250,8 +251,8 @@ level, with the keys joined by a separator.
 :ref:`keys` explains nested keys and the methods that select and flatten
 them.
 
-Devices, dtypes and arithmetic
-------------------------------
+Devices, dtypes, and arithmetic
+-------------------------------
 
 :meth:`~tensordict.TensorDict.to` moves or casts every leaf with one call. A
 dtype casts every leaf, the integer and boolean ones too. If you set
@@ -259,7 +260,7 @@ dtype casts every leaf, the integer and boolean ones too. If you set
 you write to that device:
 
   >>> device = "cuda" if torch.cuda.is_available() else "cpu"
-  >>> data = TensorDict(pos=torch.ones(3, 4), step=torch.arange(3), batch_size=[3])
+  >>> data = TensorDict({"pos": torch.ones(3, 4), "step": torch.arange(3)}, batch_size=[3])
   >>> data.to(device)["pos"].device.type == device
   True
   >>> data.to(torch.float64)["step"].dtype
@@ -287,8 +288,8 @@ TensorDict:
   >>> data.apply(lambda x: x.float().mean(-1) if x.ndim > 1 else x)["pos"]
   tensor([1., 1., 1.])
 
-:ref:`devices` explains devices, dtypes and ``non_blocking`` copies.
-:ref:`operations` lists the arithmetic, reductions and ``apply``.
+:ref:`devices` explains devices, dtypes, and ``non_blocking`` copies.
+:ref:`operations` lists the arithmetic, reductions, and ``apply``.
 
 Stacking and concatenation
 --------------------------
@@ -297,7 +298,7 @@ Stacking and concatenation
 stack or concatenate each leaf, and add or extend a batch dimension:
 
   >>> samples = [
-  ...     TensorDict(features=torch.ones(4), target=torch.zeros(()), batch_size=[])
+  ...     TensorDict({"features": torch.ones(4), "target": torch.zeros(())}, batch_size=[])
   ...     for _ in range(3)
   ... ]
   >>> batch = torch.stack(samples)
@@ -316,7 +317,7 @@ read it. To read a leaf with different shapes, ask for a list or a padded
 tensor:
 
   >>> from tensordict import lazy_stack
-  >>> ragged = lazy_stack([TensorDict(tokens=torch.arange(n)) for n in (2, 5)])
+  >>> ragged = lazy_stack([TensorDict({"tokens": torch.arange(n)}) for n in (2, 5)])
   >>> ragged.batch_size
   torch.Size([2])
   >>> ragged[1]["tokens"].shape
@@ -335,7 +336,7 @@ Non-tensor data
 A TensorDict can also hold values that are not tensors, such as strings.
 Reading one returns the value:
 
-  >>> data = TensorDict(weight=torch.ones(3), batch_size=[3])
+  >>> data = TensorDict({"weight": torch.ones(3)}, batch_size=[3])
   >>> data["label"] = "cat"
   >>> data["label"]
   'cat'
@@ -348,7 +349,7 @@ value, so indexing keeps it:
 
 When you stack TensorDicts, the non-tensor values become a list:
 
-  >>> pets = torch.stack([TensorDict(label="cat"), TensorDict(label="dog")])
+  >>> pets = torch.stack([TensorDict({"label": "cat"}), TensorDict({"label": "dog"})])
   >>> list(pets["label"])
   ['cat', 'dog']
 
@@ -368,8 +369,10 @@ are other names for the same two methods:
   >>> import tempfile
   >>> tmpdir = tempfile.TemporaryDirectory()
   >>> data = TensorDict(
-  ...     pos=torch.arange(6).reshape(3, 2),
-  ...     meta=TensorDict(scale=torch.zeros(3, 2), batch_size=[3]),
+  ...     {
+  ...         "pos": torch.arange(6).reshape(3, 2),
+  ...         "meta": TensorDict({"scale": torch.zeros(3, 2)}, batch_size=[3]),
+  ...     },
   ...     batch_size=[3],
   ... )
   >>> _ = data.memmap(tmpdir.name)
@@ -388,7 +391,7 @@ with ``allow_pickle``. :meth:`~tensordict.TensorDict.consolidate` copies all
 the leaves into one storage. A device move or an inter-process transfer of
 the result then copies one buffer.
 
-:ref:`saving` compares ``memmap``, :func:`torch.save` and ``state_dict``.
+:ref:`saving` compares ``memmap``, :func:`torch.save`, and ``state_dict``.
 :ref:`storage` covers datasets that do not fit in memory.
 
 Locking
@@ -401,7 +404,7 @@ still write new values into the existing tensors with
 These methods copy the values into the same storage. They raise for a
 non-tensor entry (`#2288 <https://github.com/pytorch/tensordict/issues/2288>`_):
 
-  >>> data = TensorDict(pos=torch.zeros(3), batch_size=[3]).lock_()
+  >>> data = TensorDict({"pos": torch.zeros(3)}, batch_size=[3]).lock_()
   >>> data["vel"] = torch.ones(3)
   Traceback (most recent call last):
   ...
@@ -467,7 +470,7 @@ inputs from a TensorDict and writes its outputs into the same TensorDict.
   ...     TensorDictModule(nn.Linear(3, 8), in_keys=["features"], out_keys=["hidden"]),
   ...     TensorDictModule(nn.Linear(8, 2), in_keys=["hidden"], out_keys=["logits"]),
   ... )
-  >>> batch = TensorDict(features=torch.randn(4, 3), batch_size=[4])
+  >>> batch = TensorDict({"features": torch.randn(4, 3)}, batch_size=[4])
   >>> _ = net(batch)
   >>> batch["logits"].shape
   torch.Size([4, 2])
@@ -486,5 +489,5 @@ Next steps
   :doc:`tutorials/tensordict_keys`, then :doc:`tutorials/tensordict_slicing`
   and :doc:`tutorials/tensordict_shapes`.
 - The how-to guides solve one task each: :ref:`saving`, :ref:`storage`,
-  :ref:`data-loading`, :ref:`distributed` and :ref:`compile`.
+  :ref:`data-loading`, :ref:`distributed`, and :ref:`compile`.
 - :ref:`api-reference` lists every class and method.

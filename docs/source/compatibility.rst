@@ -69,7 +69,7 @@ table:
    * - Memory-mapped ``TensorDict``
      - Write a field, ``update(d)``
      - ``memmap_()`` locks the tensordict, so these raise ``RuntimeError:
-       Cannot modify locked TensorDict``. Use ``set_()``, ``update_()`` or
+       Cannot modify locked TensorDict``. Use ``set_()``, ``update_()``, or
        ``update(d, inplace=True)``, which write into the existing files.
    * - ``PersistentTensorDict``
      - Write a field, ``update(d)``
@@ -83,20 +83,21 @@ table:
        temporary file that is not deleted. A zarr clone raises
        ``FileExistsError``. Pass a destination: ``w.clone(newfile=path)``.
        To copy the data into memory, use ``to_tensordict()``.
-   * - ``PersistentTensorDict``, ``TensorDictStore``
-     - ``update_(d)``
-     - Writes nothing, and raises no error
-       (`#2217 <https://github.com/pytorch/tensordict/issues/2217>`_,
-       `#2242 <https://github.com/pytorch/tensordict/issues/2242>`_).
-       ``TypedTensorDict`` over a
-       ``LazyStackedTensorDict`` has the same fault. Use ``set_()`` for each
-       key, or ``update(d, inplace=True)``.
+   * - ``PersistentTensorDict`` opened read-only (the default of
+       ``from_h5()`` and ``from_zarr()``)
+     - In-place methods such as ``add_()``, ``update_(d)``, ``copy_(d)``
+     - Write nothing, and warn ``FutureWarning: Calling add_() on a
+       tensordict stored in a file opened read-only, which leaves the file
+       unchanged, is deprecated and will be removed in TensorDict 0.17``.
+       From 0.17 on, these calls raise, as ``zero_()`` and ``set_()`` already
+       do. Open the file with ``mode="r+"`` to write, or call
+       ``to_tensordict()`` to change a copy in memory.
    * - ``PersistentTensorDict``, ``TensorDictStore``,
        ``LazyStackedTensorDict``
      - In-place operation on a field, such as ``w.a.add_(1)``
      - Reading an entry returns a new tensor with a copy of the data, so the
        operation does not change the storage. Write the result back with
-       ``w.a = ...``, ``set_()`` or an indexed assignment.
+       ``w.a = ...``, ``set_()``, or an indexed assignment.
 
 Nested tensorclass fields
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -129,7 +130,7 @@ The examples write their files to a temporary directory, and use this class:
 In-memory ``TensorDict``
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-  >>> td = TensorDict(a=torch.randn(4, 3), b=torch.randn(4, 5), batch_size=[4])
+  >>> td = TensorDict({"a": torch.randn(4, 3), "b": torch.randn(4, 5)}, batch_size=[4])
   >>> tc = MyTC.from_tensordict(td)
   >>> tc.a.shape
   torch.Size([4, 3])
@@ -167,7 +168,7 @@ Lazy stack
 ~~~~~~~~~~
 
   >>> from tensordict import lazy_stack
-  >>> tds = [TensorDict(a=torch.randn(3), b=torch.randn(5)) for _ in range(4)]
+  >>> tds = [TensorDict({"a": torch.randn(3), "b": torch.randn(5)}) for _ in range(4)]
   >>> ls = lazy_stack(tds, dim=0)
   >>> tc_lazy = MyTC.from_tensordict(ls)
   >>> tc_lazy[0].a.shape
@@ -225,7 +226,7 @@ The constructor creates an in-memory ``TensorDict``:
 
 ``from_tensordict`` wraps an existing ``TensorDict`` without a copy:
 
-  >>> td = TensorDict(x=torch.randn(4, 3), y=torch.randn(4, 5), batch_size=[4])
+  >>> td = TensorDict({"x": torch.randn(4, 3), "y": torch.randn(4, 5)}, batch_size=[4])
   >>> state = State.from_tensordict(td)
   >>> state.x.shape  # reads from td
   torch.Size([4, 3])
@@ -256,7 +257,7 @@ As above, these examples need a Redis server on ``localhost``:
 Lazy stack
 ~~~~~~~~~~
 
-  >>> tds = [TensorDict(x=torch.randn(3), y=torch.randn(5)) for _ in range(4)]
+  >>> tds = [TensorDict({"x": torch.randn(3), "y": torch.randn(5)}) for _ in range(4)]
   >>> ls = lazy_stack(tds, dim=0)
   >>> state = State.from_tensordict(ls)
   >>> state[0].x.shape
@@ -309,5 +310,5 @@ See also
   containers.
 - :ref:`choosing-a-container`: which container to use, and the
   ``TensorClass`` and ``TypedTensorDict`` comparison.
-- :ref:`storage`: HDF5, zarr, Redis and the other storage backends.
+- :ref:`storage`: HDF5, zarr, Redis, and the other storage backends.
 - :ref:`saving`: memory-mapped tensordicts and the other formats on disk.

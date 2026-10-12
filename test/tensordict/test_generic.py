@@ -645,6 +645,107 @@ class TestGeneric:
         assert td["b"].batch_size == (3, 2)
         assert td.is_consolidated()
 
+    @pytest.mark.parametrize("consolidated", [False, True])
+    def test_to_batch_size_same_device(self, consolidated):
+        td = TensorDict(
+            {"a": torch.zeros(2, 3), "b": {"c": torch.ones(2, 3, 4)}},
+            batch_size=[2],
+            device="cpu",
+            names=["rows"],
+        )
+        if consolidated:
+            td = td.consolidate()
+        leaves = dict(td.items(True, True))
+        with pytest.raises(RuntimeError, match="incompatible with the batch-size"):
+            td.to("cpu", batch_size=[5])
+        assert td.to("cpu", batch_size=[2, 3]) is td
+        assert td.batch_size == (2, 3)
+        assert td["b"].batch_size == (2, 3)
+        assert td.names == ["rows", None]
+        assert td.is_consolidated() == consolidated
+        assert td.is_locked == consolidated
+        for key, leaf in leaves.items():
+            assert td[key] is leaf
+
+    @pytest.mark.parametrize("batch_size", [[2], [2, 3], []])
+    def test_consolidate_to_batch_size(self, batch_size):
+        td = TensorDict(
+            {"a": torch.zeros(2, 3), "b": {"c": torch.ones(2, 3, 4)}},
+            batch_size=[2],
+            device="cpu",
+        ).consolidate()
+        result = td.to("meta", batch_size=batch_size)
+        assert result.batch_size == torch.Size(batch_size)
+        assert result["b"].batch_size == torch.Size(
+            [2, 3] if len(batch_size) > 1 else [2]
+        )
+        assert result.device == torch.device("meta")
+        assert result["a"].shape == (2, 3)
+        assert result["b", "c"].shape == (2, 3, 4)
+        assert result.is_consolidated()
+        assert result.is_locked
+        assert result is not td
+        assert td.batch_size == (2,)
+        assert td["b"].batch_size == (2,)
+        assert td.device == torch.device("cpu")
+
+    def test_consolidate_to_batch_size_invalid(self):
+        td = TensorDict(a=torch.zeros(2, 3), batch_size=[2]).consolidate()
+        with pytest.raises(RuntimeError, match="incompatible with the batch-size"):
+            td.to("meta", batch_size=[5])
+        assert td.batch_size == (2,)
+
+    @pytest.mark.parametrize("consolidated", [False, True])
+    def test_to_batch_size_unchanged(self, consolidated, monkeypatch):
+        td = TensorDict(a=torch.zeros(2, 3), batch_size=[2], device="cpu")
+        if consolidated:
+            td = td.consolidate()
+
+        def check_new_batch_size(*args):
+            raise AssertionError("unchanged batch sizes should not check every leaf")
+
+        monkeypatch.setattr(type(td), "_check_new_batch_size", check_new_batch_size)
+        assert td.to("cpu", batch_size=[2]) is td
+        assert td.to("cpu", batch_size=torch.Size([2])) is td
+
+    def test_sub_to_batch_size_same_device(self):
+        source = TensorDict(a=torch.zeros(4, 2, 3), batch_size=[4, 2], device="cpu")
+        td = source._get_sub_tensordict(0)
+        assert td.to("cpu") is td
+        assert td.to("cpu", batch_size=[2]) is td
+        result = td.to("cpu", batch_size=[2, 3])
+        assert type(result) is TensorDict
+        assert result.batch_size == (2, 3)
+        assert source.batch_size == (4, 2)
+        assert td.batch_size == (2,)
+        torch.testing.assert_close(result["a"], td["a"])
+        with pytest.raises(RuntimeError, match="incompatible with the batch-size"):
+            td.to("cpu", batch_size=[5])
+
+    def test_to_batch_size_nested_lazy(self):
+        nested = lazy_stack(
+            [TensorDict(a=torch.zeros(3), batch_size=[]) for _ in range(2)]
+        )
+        td = TensorDict(nested=nested, batch_size=[2], device="cpu")
+        with pytest.raises(RuntimeError, match="Modifying the batch size of a lazy"):
+            td.to("cpu", batch_size=[2, 3])
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py needed for persistent tensordicts")
+    def test_persistent_to_batch_size_same_device(self, tmp_path):
+        td = PersistentTensorDict.from_dict(
+            {"a": torch.zeros(2, 3)},
+            filename=tmp_path / "td.h5",
+            batch_size=[2],
+            device="cpu",
+        )
+        try:
+            assert td.to("cpu", batch_size=[2]) is td
+            assert td.to("cpu", batch_size=[2, 3]) is td
+            assert td.batch_size == (2, 3)
+            torch.testing.assert_close(td["a"], torch.zeros(2, 3))
+        finally:
+            td.close()
+
     def test_consolidated_locking_behavior(self):
         """Test that consolidated TensorDicts are automatically locked and unlock properly."""
         td = TensorDict(
@@ -4750,6 +4851,29 @@ class TestGeneric:
         assert (td._get_sub_tensordict(idx0).get("c") == 0).all()
         assert (td0.get("c") == 0).all()
 
+    @pytest.mark.parametrize(
+        "idx",
+        [slice(1, 3), torch.tensor([0, 2]), torch.tensor([True, False, True, False])],
+    )
+    @pytest.mark.parametrize("lazy", [False, True])
+    def test_sub_td_inplace_methods(self, idx, lazy):
+        # The entries of a sub-tensordict are copies for an index tensor, a
+        # mask or a lazy stack source: the in-place methods write them back
+        td = TensorDict(
+            a=torch.arange(8.0).view(4, 2),
+            nested=TensorDict(b=torch.arange(4.0), batch_size=[4]),
+            batch_size=[4],
+        )
+        expected = td.clone()
+        if lazy:
+            td = lazy_stack(list(td.unbind(0)))
+        sub_td = td._get_sub_tensordict(idx)
+        assert sub_td.add_(1.0) is sub_td
+        sub_td *= 2
+        assert sub_td.clamp_max_(9.0) is sub_td
+        expected[idx] = expected[idx].add(1.0).mul(2).clamp_max(9.0)
+        assert (td.to_tensordict() == expected).all()
+
     def test_setdefault_nested(self):
         tensor = torch.randn(4, 5, 6, 7)
         tensor2 = torch.ones(4, 5, 6, 7)
@@ -6341,6 +6465,52 @@ class TestGeneric:
         assert ("a", "b") in t.keys(include_nested=True)
         assert t["a", "b"].shape == torch.Size([2, 3, 1])
         t.update({"a": {"d": [[[1]] * 3] * 2}})
+
+    @pytest.mark.parametrize("lazy", [False, True])
+    def test_update_ignore_lock_deprecated(self, lazy):
+        # #2260: ignore_lock=True warns once per call, not once per nested
+        # tensordict, and otherwise behaves as before.
+        td = TensorDict({"a": torch.zeros(3), "n": {"b": {"c": torch.zeros(3)}}}, [3])
+        if lazy:
+            td = LazyStackedTensorDict(*td.unbind(0))
+        source = TensorDict({"a": torch.ones(3), "n": {"b": {"c": torch.ones(3)}}}, [3])
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^update\(ignore_lock=True\) is deprecated and will be removed in "
+            r"TensorDict 0\.17\. Use 'with td\.unlock_\(\): td\.update\(\.\.\.\)' instead\.$",
+        ) as record:
+            assert td.update(source, ignore_lock=True) is td
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert (td == source).all()
+
+        # On a locked tensordict, the call still raises for a new entry
+        td.lock_()
+        with (
+            pytest.warns(DeprecationWarning, match=r"ignore_lock=True") as record,
+            pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"),
+        ):
+            td.update({"d": torch.ones(3)}, ignore_lock=True)
+        assert len(record) == 1
+        with pytest.warns(DeprecationWarning, match=r"ignore_lock=True") as record:
+            td.update(source.zero_(), inplace=True, ignore_lock=True)
+        assert len(record) == 1
+        assert (td == 0).all()
+
+    @pytest.mark.parametrize("lazy", [False, True])
+    @pytest.mark.parametrize("ignore_lock", [None, False])
+    def test_update_ignore_lock_not_deprecated(self, lazy, ignore_lock):
+        td = TensorDict({"a": torch.zeros(3), "n": {"b": {"c": torch.zeros(3)}}}, [3])
+        if lazy:
+            td = LazyStackedTensorDict(*td.unbind(0))
+        source = TensorDict({"a": torch.ones(3), "n": {"b": {"c": torch.ones(3)}}}, [3])
+        kwargs = {} if ignore_lock is None else {"ignore_lock": ignore_lock}
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            td.update(source, **kwargs)
+            td.lock_()
+            td.update(source.zero_(), inplace=True, **kwargs)
+        assert (td == 0).all()
 
     @pytest.mark.parametrize("method", ["set", "update", "update_td", "update_kwargs"])
     @pytest.mark.parametrize("nested", [False, True])

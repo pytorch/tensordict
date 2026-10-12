@@ -5,7 +5,7 @@ Using tensorclasses for datasets
 A :class:`~tensordict.TensorClass` is the class form of a tensordict. You
 declare its fields with types, and you write methods that run on one sample or
 on a batch. This tutorial stores FashionMNIST in a tensorclass with an
-``images`` field, a ``targets`` field and a method that loads a dataset into
+``images`` field, a ``targets`` field, and a method that loads a dataset into
 memory-mapped tensors. Then it trains the model of the `PyTorch Quickstart
 Tutorial <https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html>`__
 from it. It is for readers who want named, typed fields and methods for their
@@ -58,7 +58,7 @@ test_data = datasets.FashionMNIST(
 
 ###############################################################################
 # Like a ``TensorDict``, a tensorclass has a batch size, and you can index it,
-# move it to a device or memory-map it. Use a tensorclass when you know the
+# move it to a device, or memory-map it. Use a tensorclass when you know the
 # fields of your data in advance. To define one, subclass
 # :class:`~tensordict.TensorClass` and annotate its fields. The
 # ``@tensorclass`` decorator is the older form of the same thing.
@@ -109,7 +109,7 @@ print(training_data_tc)
 # DataLoaders
 # -----------
 #
-# A tensorclass implements ``__len__``, ``__getitem__`` and ``__getitems__``,
+# A tensorclass implements ``__len__``, ``__getitem__``, and ``__getitems__``,
 # so you can use it as a map-style dataset. The ``DataLoader`` then reads each
 # batch with one batched index, and the result is already a
 # ``FashionMNISTData`` batch. Pass ``collate_fn=lambda x: x``: the default
@@ -242,7 +242,7 @@ print(f"Tensorclass training done! time: {time.perf_counter() - t0: 4.4f} s")
 # ---------------
 #
 # - :ref:`tensorclass-guide` explains how to define and use tensorclasses.
-# - :ref:`choosing-a-container` compares ``TensorDict``, ``TensorClass`` and
+# - :ref:`choosing-a-container` compares ``TensorDict``, ``TensorClass``, and
 #   ``TypedTensorDict``.
 # - :ref:`data-loading` explains the ways to load data with tensordict and to
 #   share it between processes.

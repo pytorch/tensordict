@@ -815,6 +815,18 @@ class TestTD:
         assert td_cpu_c.device == torch.device("cpu")
         torch.testing.assert_close(td_cpu_c["a"], td["a"])
 
+    @pytest.mark.parametrize("batch_size", [[2], [2, 3]])
+    def test_to_batch_size_same_device(self, mode, batch_size):
+        def to_cpu(td):
+            return td.to("cpu", batch_size=batch_size)
+
+        td = TensorDict(a=torch.zeros(2, 3), batch_size=[2], device="cpu")
+        to_cpu_c = torch.compile(to_cpu, fullgraph=True, mode=mode)
+        result = to_cpu_c(td)
+        assert result is td
+        assert result.batch_size == torch.Size(batch_size)
+        torch.testing.assert_close(result["a"], torch.zeros(2, 3))
+
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="cuda required")
     def test_to_cpu_from_cuda(self, mode):
         def to_cpu(td):
@@ -907,6 +919,27 @@ class TestTD:
         assert add_c(td, other) is td
         assert add_c(td, other) is td
         assert (td["a"] == 2).all()
+
+    def test_inplace_methods(self, mode):
+        # The in-place methods trace without a graph break: the check for
+        # containers that read copies of their data is a class attribute
+        def inplace(td, other):
+            td.abs_()
+            td.add_(other, alpha=2.0)
+            td.mul_(2.0)
+            td += 1
+            td.lerp_(other, 0.5)
+            td.clamp_max_(other)
+            td.update_(other * 2, keys_to_update=["a"])
+            return td.copy_(td * 0.5)
+
+        td = TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4, 2)}, batch_size=[4])
+        other = td.apply(lambda x: torch.rand_like(x) + 1)
+        expected = inplace(td.clone(), other)
+        inplace_c = torch.compile(inplace, fullgraph=True, mode=mode)
+        result = td.clone()
+        assert inplace_c(result, other) is result
+        assert_close(result, expected)
 
     @pytest.mark.parametrize("after_empty", ["tensor", "nested"])
     def test_tree_map_empty_nested_first(self, after_empty, mode):

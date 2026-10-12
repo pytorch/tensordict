@@ -11,6 +11,7 @@ from collections.abc import Callable, Sequence
 from typing import Any, ClassVar
 
 import torch
+from tensordict._lazy import LazyStackedTensorDict
 from tensordict._pytree import _register_td_node
 from tensordict._td import TensorDict
 from tensordict.base import _register_tensor_class, NO_DEFAULT, TensorDictBase
@@ -490,6 +491,13 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     @_is_memmap.setter
     def _is_memmap(self, value):
         self._source._is_memmap = value
+
+    @property
+    def _reads_return_copies(self):
+        # a lazy stack builds each entry that _get_str returns by stacking
+        return self._source._reads_return_copies or isinstance(
+            self._source, LazyStackedTensorDict
+        )
 
     # ------------------------------------------------------------------
     # Internal helper: wrap a TensorDictBase without key validation
@@ -983,6 +991,7 @@ _DIRECT_DELEGATES = [
     "entry_class",
     "_check_is_shared",
     "_check_device",
+    "_storage_is_read_only",
     "is_contiguous",
     "popitem",
     "_cast_reduction",
