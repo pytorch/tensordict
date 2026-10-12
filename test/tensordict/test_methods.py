@@ -2753,6 +2753,41 @@ class TestTensorDicts(TestTensorDictsBase):
             assert isinstance(getattr(td, red)(reduce=True), torch.Tensor)
 
     @pytest.mark.parametrize(
+        "red",
+        ("mean", "nanmean", "sum", "nansum", "prod", "std", "var", "amax", "amin"),
+    )
+    def test_reduction_empty_dim(self, td_name, device, red, tmpdir):
+        # dim=() reduces over all the elements, as torch.sum(x, dim=()) does
+        if td_name == "td_with_unbatched":
+            pytest.skip("UnbatchedTensor incompatible with reduction ops")
+        td = getattr(self, td_name)(device)
+        td = _to_float(td, td_name, tmpdir)
+        leaves = dict(td.items(True, True))
+        # torch.prod does not take dim=(); prod(dim=()) gives prod()
+        kwargs = {} if red == "prod" else {"dim": ()}
+        tdr = getattr(td, red)(dim=())
+        assert tdr.batch_size == torch.Size(())
+        for key, val in leaves.items():
+            torch.testing.assert_close(
+                tdr[key], getattr(torch, red)(val, **kwargs), equal_nan=True
+            )
+        torch.testing.assert_close(
+            getattr(td, red)(dim=(), reduce=True),
+            getattr(td, red)(reduce=True),
+            equal_nan=True,
+        )
+        if red == "prod":
+            return
+        tdr = getattr(td, red)(dim=(), keepdim=True)
+        assert tdr.batch_size == torch.Size([1] * td.ndim)
+        for key, val in leaves.items():
+            torch.testing.assert_close(
+                tdr[key],
+                getattr(torch, red)(val, dim=(), keepdim=True),
+                equal_nan=True,
+            )
+
+    @pytest.mark.parametrize(
         "red", ("mean", "nanmean", "sum", "nansum", "prod", "std", "var", "quantile")
     )
     def test_reduction_feature(self, td_name, device, red, tmpdir):

@@ -26,6 +26,10 @@ from tensordict.base import (
 )
 from tensordict.utils import _maybe_correct_neg_dim
 
+# dim=() reduces over every element, as in torch.sum(x, dim=()), except in
+# these reductions, which keep raising for it
+_NO_EMPTY_DIM_REDUCTIONS = frozenset({"max", "min", "cummax", "cummin", "quantile"})
+
 
 class _Reductions:
     """Reductions over the batch dimensions or the leaves."""
@@ -1886,6 +1890,9 @@ class _Reductions:
     ):
         from tensordict._td import TensorDict
 
+        if dim == () and reduction_name not in _NO_EMPTY_DIM_REDUCTIONS:
+            # dim=() reduces over all the elements, as in torch
+            dim = None
         if dim is None and not keepdim:
             # dim=None reduces over all the elements, as an omitted dim does
             dim = NO_DEFAULT
