@@ -3789,6 +3789,57 @@ class TestGeneric:
         with pytest.raises(NotImplementedError, match="gather"):
             lst.gather(dim=0, index=torch.zeros(3, 4, dtype=torch.long), inplace=True)
 
+    @pytest.mark.parametrize("inplace", [True, False])
+    @pytest.mark.parametrize("mask_dims", [1, 2])
+    def test_masked_select_inplace(self, inplace, mask_dims):
+        @tensorclass
+        class _Data:
+            x: torch.Tensor
+
+        def build():
+            td = self._build_nested_td(batch_size=(3, 4))
+            td["tc"] = _Data(x=torch.arange(12).view(3, 4), batch_size=[3, 4])
+            td["u"] = tensordict.UnbatchedTensor(torch.zeros(7))
+            td.set_non_tensor("s", "x")
+            return td
+
+        mask = torch.tensor([[True, False, True, False], [False] * 4, [True] * 4])
+        if mask_dims == 1:
+            mask = mask[:, 0]
+        ref = build().masked_select(mask)
+        td = build()
+        nested, tc = td["nested"], td["tc"]
+        out = td.masked_select(mask, inplace=inplace)
+        assert (out is td) is inplace
+        if inplace:
+            assert out["nested"] is nested
+            assert out["tc"] is tc
+        assert out.batch_size == ref.batch_size
+        assert out["tc"].batch_size == ref.batch_size
+        assert out["u"].batch_size == ref.batch_size
+        assert out["s"] == "x"
+        assert (out == ref).all()
+
+    def test_masked_select_inplace_names(self):
+        td = TensorDict(a=torch.zeros(3, 4), batch_size=[3, 4], names=["t", "f"])
+        td.masked_select(torch.ones(3, 4, dtype=torch.bool), inplace=True)
+        assert td.batch_size == torch.Size([12])
+        assert td.names == [None]
+
+    def test_masked_select_inplace_releases_storage(self):
+        td = TensorDict({"a": torch.zeros(4, 5, 8)}, batch_size=[4, 5])
+        ref = weakref.ref(td["a"])
+        td.masked_select(torch.ones(4, 5, dtype=torch.bool), inplace=True)
+        gc.collect()
+        assert ref() is None
+
+    def test_masked_select_inplace_lazy_stack_raises(self):
+        lst = lazy_stack(
+            [TensorDict({"x": torch.zeros(4)}, [4]) for _ in range(3)], dim=0
+        )
+        with pytest.raises(NotImplementedError, match="masked_select"):
+            lst.masked_select(torch.ones(3, 4, dtype=torch.bool), inplace=True)
+
     @pytest.mark.parametrize("lazy", [False, True])
     @pytest.mark.parametrize("with_out", [False, True])
     @pytest.mark.parametrize(

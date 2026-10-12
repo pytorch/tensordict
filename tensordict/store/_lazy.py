@@ -462,7 +462,13 @@ class _StoreStackElementView(TensorDictBase):
         return self
 
     # Override: to_tensordict reads all the entries in one round trip.
-    def masked_select(self, mask):
+    def masked_select(self, mask, *, inplace=False):
+        if inplace:
+            raise NotImplementedError(
+                f"masked_select(inplace=True) is not supported on "
+                f"{type(self).__name__}; call .to_tensordict() first or use "
+                f"inplace=False."
+            )
         return self.to_tensordict().masked_select(mask)
 
     # ---- pickling: materialize, don't try to serialize the view ----
@@ -2218,7 +2224,13 @@ class LazyStackedTensorDictStore(TensorDictBase):
         return self
 
     # Override: to_tensordict reads all the entries in one round trip.
-    def masked_select(self, mask):
+    def masked_select(self, mask, *, inplace=False):
+        if inplace:
+            raise NotImplementedError(
+                f"masked_select(inplace=True) is not supported on "
+                f"{type(self).__name__}; call .to_tensordict() first or use "
+                f"inplace=False."
+            )
         return self.to_tensordict().masked_select(mask)
 
     # ---- Pickling ----

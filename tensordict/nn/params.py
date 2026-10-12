@@ -1184,8 +1184,14 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback
     def expand(self, *args, **kwargs) -> Self: ...
 
-    @_fallback
-    def masked_select(self, mask: Tensor) -> Self: ...
+    def masked_select(self, mask: Tensor, *, inplace: bool = False) -> Self:
+        if inplace:
+            # the masked leaves would no longer be registered parameters
+            raise NotImplementedError(
+                "masked_select(inplace=True) is not supported on "
+                "TensorDictParams; use inplace=False."
+            )
+        return self._param_td.masked_select(mask)
 
     @_fallback
     def memmap_like(
