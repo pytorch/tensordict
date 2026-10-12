@@ -1,25 +1,29 @@
 """
-Manipulating the keys of a TensorDict
-=====================================
+Getting, setting and nesting keys
+=================================
 **Author**: `Tom Begley <https://github.com/tcbegley>`_
 
-In this tutorial you will learn how to work with and manipulate the keys in a
-``TensorDict``, including getting and setting keys, iterating over keys, manipulating
-nested values, and flattening the keys.
+A :class:`~tensordict.TensorDict` stores tensors under string keys, as a
+Python ``dict`` does, and a value can be another ``TensorDict``. If you know
+``dict``, most of this tutorial is familiar. It shows where a ``TensorDict``
+is different: what a missing key returns, what a ``for`` loop gives, and how
+tuples of strings address nested entries.
+
+What you will learn:
+
+- How to set and get entries, and what happens when a key is missing.
+- How to find out if a key exists, and how to iterate over the keys.
+- How to read and write nested entries with tuples of strings.
+- How to flatten nested keys, and how to select and exclude keys.
 """
 
 ##############################################################################
 # Setting and getting keys
 # ------------------------
-# We can set and get keys using the same syntax as a Python ``dict``
+# Set and get entries with the same syntax as for a Python ``dict``:
 
-# sphinx_gallery_start_ignore
-import warnings
-
-warnings.filterwarnings("ignore")
-# sphinx_gallery_end_ignore
 import torch
-from tensordict.tensordict import TensorDict
+from tensordict import TensorDict
 
 tensordict = TensorDict()
 
@@ -33,11 +37,10 @@ assert tensordict["a"] is a
 ##############################################################################
 # .. note::
 #
-#    Unlike a Python ``dict``, all keys in the ``TensorDict`` must be strings. However
-#    as we will see, it is also possible to use tuples of strings to manipulate nested
-#    values.
+#    Unlike the keys of a Python ``dict``, all the keys of a ``TensorDict`` must
+#    be strings. Tuples of strings refer to nested values, as shown below.
 #
-# We can also use the methods ``.get()`` and ``.set`` to accomplish the same thing.
+# The ``.get()`` and ``.set()`` methods do the same thing:
 
 tensordict = TensorDict()
 
@@ -49,40 +52,52 @@ tensordict.set("a", a)
 assert tensordict.get("a") is a
 
 ##############################################################################
-# Like ``dict``, we can provide a default value to ``get`` that should be returned in
-# case the requested key is not found.
+# Like ``dict.get``, ``get`` returns ``None`` if the key is not in the
+# ``TensorDict``. Indexing with ``tensordict[key]`` raises a ``KeyError``
+# instead. Use ``tensordict[key]`` when the key must exist, and ``get`` when it
+# can be missing:
+
+assert tensordict.get("banana") is None
+try:
+    tensordict["banana"]
+except KeyError:
+    print("tensordict['banana'] raises a KeyError")
+
+##############################################################################
+# If you give ``get`` a default value, it returns this value for a missing
+# key:
 
 assert tensordict.get("banana", a) is a
 
 ##############################################################################
-# Similarly, like ``dict``, we can use the :meth:`TensorDict.setdefault` to get the
-# value of a particular key, returning a default value if that key is not found, and
-# also setting that value in the :class:`~.TensorDict`.
+# Like ``dict.setdefault``,
+# :meth:`~tensordict.TensorDictBase.setdefault` returns the value of a key. If
+# the key is not found, it stores the default value under the key and returns
+# it.
 
 assert tensordict.setdefault("banana", a) is a
 # a is now stored under "banana"
 assert tensordict["banana"] is a
 
 ##############################################################################
-# Deleting keys is also achieve in the same way as a Python ``dict``, using the ``del``
-# statement and the chosen key. Equivalently we could use the
-# :meth:`TensorDict.del_ <tensordict.TensorDict.del_>` method.
+# To delete a key, use the ``del`` statement, as for a Python ``dict``. The
+# :meth:`TensorDict.del_ <tensordict.TensorDict.del_>` method does the same.
 
 del tensordict["banana"]
 
 ##############################################################################
-# Furthermore, when setting keys with ``.set()`` we can use the keyword argument
-# ``inplace=True`` to make an inplace update, or equivalently use the ``.set_()``
-# method.
+# To write new values into the existing tensor of a key, pass
+# ``inplace=True`` to ``.set()``, or use the ``.set_()`` method. The tensor
+# object stays the same, and only its values change.
 
 tensordict.set("a", torch.zeros(10), inplace=True)
 
 # all the entries of the "a" tensor are now zero
 assert (tensordict.get("a") == 0).all()
-# but it's still the same tensor as before
+# but it is still the same tensor as before
 assert tensordict.get("a") is a
 
-# we can achieve the same with set_
+# set_ does the same
 tensordict.set_("a", torch.ones(10))
 assert (tensordict.get("a") == 1).all()
 assert tensordict.get("a") is a
@@ -90,10 +105,9 @@ assert tensordict.get("a") is a
 ##############################################################################
 # Renaming keys
 # -------------
-# To rename a key, simply use the
-# :meth:`TensorDict.rename_key_ <tensordict.TensorDict.rename_key_>` method. The value
-# stored under the original key will remain in the :class:`~.TensorDict`, but the key
-# will be changed to the specified new key.
+# To rename a key, use the
+# :meth:`TensorDict.rename_key_ <tensordict.TensorDict.rename_key_>` method. The
+# value stays in the :class:`~tensordict.TensorDict`, under the new key.
 
 tensordict.rename_key_("a", "b")
 assert tensordict.get("b") is a
@@ -102,9 +116,13 @@ print(tensordict)
 ###############################################################################
 # Updating multiple values
 # ------------------------
-# The :meth:`TensorDict.update <tensordict.TensorDict.update>` method can be used to
-# update a :class:`TensorDict`` with another one or with a ``dict``. Keys that already
-# exist are overwritten, and keys that do not already exist are created.
+# :meth:`TensorDict.update <tensordict.TensorDict.update>` copies the entries of
+# another :class:`~tensordict.TensorDict`, or of a ``dict``, into a
+# :class:`~tensordict.TensorDict`. It overwrites the keys that exist, and
+# creates the keys that do not exist.
+#
+# The second argument of the constructor below, ``[10]``, is the batch size:
+# the leading dimensions that all the entries share (see :ref:`batch-size`).
 
 tensordict = TensorDict({"a": torch.rand(10), "b": torch.rand(10)}, [10])
 tensordict.update(TensorDict({"a": torch.zeros(10), "c": torch.zeros(10)}, [10]))
@@ -116,9 +134,9 @@ print(tensordict)
 ##############################################################################
 # Nested values
 # -------------
-# The values of a ``TensorDict`` can themselves be a ``TensorDict``. We can add nested
-# values during instantiation, either by adding ``TensorDict`` directly, or using nested
-# dictionaries
+# A value of a ``TensorDict`` can be another ``TensorDict``. To create nested
+# values, pass a ``TensorDict`` or a nested ``dict`` to the constructor. A
+# nested tensordict has the batch dimensions of its parent, and can have more.
 
 # creating nested values with a nested dict
 nested_tensordict = TensorDict(
@@ -130,13 +148,13 @@ tensordict = TensorDict({"a": torch.rand(2), "nested": nested_tensordict}, [2])
 print(tensordict)
 
 ##############################################################################
-# To access these nested values, we can use tuples of strings. For example
+# To read a nested value, use a tuple of strings:
 
 double_nested_a = tensordict["nested", "double_nested", "a"]
 nested_a = tensordict.get(("nested", "a"))
 
 ##############################################################################
-# Similarly we can set nested values using tuples of strings
+# To write a nested value, also use a tuple of strings:
 
 tensordict["nested", "double_nested", "b"] = torch.rand(2, 3)
 tensordict.set(("nested", "b"), torch.rand(2, 3))
@@ -144,33 +162,39 @@ tensordict.set(("nested", "b"), torch.rand(2, 3))
 print(tensordict)
 
 ##############################################################################
-# Iterating over a TensorDict's contents
-# --------------------------------------
-# We can iterate over the keys of a ``TensorDict`` using the ``.keys()`` method.
+# Iterating over the contents of a TensorDict
+# -------------------------------------------
+# To iterate over the keys of a ``TensorDict``, use the ``.keys()`` method.
+#
+# .. note::
+#
+#    Do not write ``for key in tensordict``. A ``TensorDict`` iterates like a
+#    tensor: this loop gives one sub-tensordict for each element of the first
+#    batch dimension. If the tensordict has no batch dimensions, the loop
+#    raises a ``TypeError``. In the same way, ``len(tensordict)`` is the size of
+#    the first batch dimension, not the number of keys.
 
 for key in tensordict.keys():
     print(key)
 
 ##############################################################################
-# By default this will iterate only over the top-level keys in the ``TensorDict``,
-# however it is possible to recursively iterate over all of the keys in the
-# ``TensorDict`` with the keyword argument ``include_nested=True``. This will iterate
-# recursively over all keys in any nested TensorDicts, returning nested keys as tuples
-# of strings.
+# By default, ``.keys()`` gives only the top-level keys of the ``TensorDict``.
+# With ``include_nested=True``, it also gives the keys of the nested
+# tensordicts, at all levels, as tuples of strings.
 
 for key in tensordict.keys(include_nested=True):
     print(key)
 
 ##############################################################################
-# In case you want to only iterate over keys corresponding to ``Tensor`` values, you can
-# additionally specify ``leaves_only=True``.
+# To get only the keys of tensor values, and not the keys of nested
+# tensordicts, also pass ``leaves_only=True``.
 
 for key in tensordict.keys(include_nested=True, leaves_only=True):
     print(key)
 
 ##############################################################################
-# Much like ``dict``, there are also ``.values`` and ``.items`` methods which accept the
-# same keyword arguments.
+# As for ``dict``, the ``.values()`` and ``.items()`` methods exist. They take the
+# same keyword arguments as ``.keys()``.
 
 for key, value in tensordict.items(include_nested=True):
     if isinstance(value, TensorDict):
@@ -179,43 +203,38 @@ for key, value in tensordict.items(include_nested=True):
         print(f"{key} is a Tensor")
 
 ##############################################################################
-# Checking for existence of a key
-# -------------------------------
-# To check if a key exists in a ``TensorDict``, use the ``in`` operator in conjunction
-# with ``.keys()``.
-#
-# .. note::
-#
-#    Performing ``key in tensordict.keys()`` does efficient ``dict`` lookups of keys
-#    (recursively at each level in the nested case), and so performance is not
-#    negatively impacted when there is a large number of keys in the ``TensorDict``.
+# Testing if a key exists
+# -----------------------
+# To find out if a key exists in a ``TensorDict``, use the ``in`` operator. It
+# also accepts nested keys as tuples of strings. Each ``in`` test is a ``dict``
+# lookup at each level of nesting, so its cost does not grow with the number
+# of keys.
 
-assert "a" in tensordict.keys()
-# to check for nested keys, set include_nested=True
-assert ("nested", "a") in tensordict.keys(include_nested=True)
-assert ("nested", "banana") not in tensordict.keys(include_nested=True)
+assert "a" in tensordict
+assert ("nested", "a") in tensordict
+assert ("nested", "banana") not in tensordict
 
 ##############################################################################
 # Flattening and unflattening nested keys
 # ---------------------------------------
-# We can flatten a ``TensorDict`` with nested values using the ``.flatten_keys()``
-# method.
+# The ``.flatten_keys()`` method turns nested keys into top-level keys. It
+# joins the parts of each nested key with a separator:
 
 print(tensordict, end="\n\n")
 print(tensordict.flatten_keys(separator="."))
 
 ##############################################################################
-# Given a ``TensorDict`` that has been flattened, it is possible to unflatten it again
-# with the ``.unflatten_keys()`` method.
+# The ``.unflatten_keys()`` method does the inverse:
 
 flattened_tensordict = tensordict.flatten_keys(separator=".")
 print(flattened_tensordict, end="\n\n")
 print(flattened_tensordict.unflatten_keys(separator="."))
 
 ##############################################################################
-# This can be particularly useful when manipulating the parameters of a
-# :class:`torch.nn.Module`, as we can end up with a :class:`~.TensorDict` whose
-# structure mimics the module structure.
+# ``unflatten_keys`` works on any flat key names with a separator. For
+# example, the parameter names of a :class:`torch.nn.Module` use ``"."``. This
+# code builds a :class:`~tensordict.TensorDict` with the structure of the
+# module:
 
 import torch.nn as nn
 
@@ -223,20 +242,53 @@ module = nn.Sequential(
     nn.Sequential(nn.Linear(100, 50), nn.Linear(50, 10)),
     nn.Linear(10, 1),
 )
-params = TensorDict(dict(module.named_parameters()), []).unflatten_keys()
+params = TensorDict(dict(module.named_parameters()), []).unflatten_keys(".")
 
 print(params)
 
 ##############################################################################
+# For modules, :meth:`TensorDict.from_module <tensordict.TensorDict.from_module>`
+# gives the same result in one call, and also includes the buffers of the
+# module. The :ref:`sphx_glr_tutorials_functional.py` tutorial uses it.
+
+params_from_module = TensorDict.from_module(module)
+assert set(params_from_module.keys(True, True)) == set(params.keys(True, True))
+
+##############################################################################
 # Selecting and excluding keys
 # ----------------------------
-# We can obtain a new :class:`~.TensorDict` with a subset of the keys by using
-# :meth:`TensorDict.select <tensordict.TensorDict.select>`, which returns a new
-# :class:`~.TensorDict` containing only the specified keys, or
-# :meth: `TensorDict.exclude <tensordict.TensorDict.exclude>`, which returns a new
-# :class:`~.TensorDict` with the specified keys omitted.
+# Two methods return a new :class:`~tensordict.TensorDict` with a subset of
+# the keys:
+#
+# - :meth:`TensorDict.select <tensordict.TensorDict.select>` keeps only the
+#   keys that you name.
+# - :meth:`TensorDict.exclude <tensordict.TensorDict.exclude>` keeps all the
+#   keys except the keys that you name.
 
 print("Select:")
 print(tensordict.select("a", ("nested", "a")), end="\n\n")
 print("Exclude:")
 print(tensordict.exclude(("nested", "b"), ("nested", "double_nested")))
+
+##############################################################################
+# Conclusion
+# ----------
+#
+# You can now set, read, rename and delete the entries of a
+# :class:`~tensordict.TensorDict` at any depth, with tuples of strings for the
+# nested keys. You can test keys with ``in``, list them with ``keys()``,
+# ``values()`` and ``items()``, flatten them, and keep or drop a subset with
+# ``select`` and ``exclude``.
+#
+# Two behaviors differ from a ``dict``. ``get`` returns ``None`` for a missing
+# key, and ``tensordict[key]`` raises a ``KeyError``. A ``for`` loop over a
+# ``TensorDict`` goes over its first batch dimension, so use ``keys()`` to go
+# over the keys.
+#
+# Further reading
+# ---------------
+#
+# - :ref:`keys` explains keys, nested keys and locking.
+# - :ref:`non-tensor-data` explains how to store values that are not tensors.
+# - :ref:`sphx_glr_tutorials_tensordict_shapes.py` shows the shape operations.
+# - :ref:`api-methods-keys` lists all the key methods.

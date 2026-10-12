@@ -271,25 +271,62 @@ def _compute_total_bytes(metadata: dict) -> int:
 class TensorDictPipe:
     """A persistent point-to-point channel for streaming TensorDicts over UCXX.
 
+    It needs the optional ``ucxx`` package. Import it from
+    ``tensordict._ucxx``: there is no public import path.
+
     Implements a two-phase protocol:
 
-    - **Handshake** (first send): transmits consolidation metadata and data.
+    - Handshake (first send): transmits consolidation metadata and data.
       The receiver allocates a buffer and builds a TensorDict whose leaves
       are views into the consolidated storage.
-    - **Steady-state** (subsequent sends with same schema): transmits only
+    - Steady state (subsequent sends with same schema): transmits only
       the raw storage buffer. The receiver overwrites its pre-allocated
-      buffer in-place — zero allocation, zero metadata parsing.
+      buffer in place, without a new allocation and without metadata parsing.
+
+    .. warning::
+        With ``consolidated=True`` (the default), every receive with the same
+        schema writes into the same TensorDict, and returns it. The next
+        receive overwrites the values of the previous one. Call ``clone()``
+        on a received TensorDict to keep it.
+
+    .. warning::
+        ``async for td in pipe`` stops at the first error, without raising
+        it. To see the error, call :meth:`arecv` or :meth:`recv` in a loop.
 
     Examples:
-        >>> # sender
-        >>> pipe = await TensorDictPipe.connect("node-b", 13337)
-        >>> await pipe.asend(td)
-        >>> # receiver
-        >>> pipe = await TensorDictPipe.listen(13337)
-        >>> td = await pipe.arecv()
-        >>> # steady-state loop (zero-alloc after first iteration)
-        >>> async for td in pipe:
-        ...     train(td)
+        The sender and the receiver run in two processes, on the same or
+        on two machines. This example is not tested: it needs ``ucxx`` and
+        two processes.
+
+        .. code-block:: python
+
+            # receiver, on host "node-b"
+            import asyncio
+            from tensordict._ucxx import TensorDictPipe
+
+            async def main():
+                pipe = await TensorDictPipe.listen(13337)
+                td = await pipe.arecv()  # first receive: allocates the buffer
+                async for td in pipe:  # same schema: overwrites td in place
+                    print(td["obs"].sum())
+
+            asyncio.run(main())
+
+        .. code-block:: python
+
+            # sender
+            import asyncio
+            import torch
+            from tensordict import TensorDict
+            from tensordict._ucxx import TensorDictPipe
+
+            async def main():
+                pipe = await TensorDictPipe.connect("node-b", 13337)
+                for _ in range(10):
+                    await pipe.asend(TensorDict(obs=torch.randn(64, 84)))
+                await pipe.aclose()
+
+            asyncio.run(main())
     """
 
     def __init__(
@@ -678,13 +715,27 @@ class TensorDictServer:
 
     Wraps ``ucxx.create_listener`` to provide a server that can handle
     multiple clients, each getting their own :class:`TensorDictPipe`.
+    It needs the optional ``ucxx`` package. Import it from
+    ``tensordict._ucxx``.
 
     Examples:
-        >>> server = TensorDictServer(port=13337)
-        >>> async def handler(pipe):
-        ...     async for td in pipe:
-        ...         process(td)
-        >>> await server.serve(handler)
+        Each client connects with :meth:`TensorDictPipe.connect`. This
+        example is not tested: it needs ``ucxx`` and client processes.
+
+        .. code-block:: python
+
+            import asyncio
+            from tensordict._ucxx import TensorDictServer
+
+            async def handler(pipe):
+                async for td in pipe:
+                    print(td["obs"].shape)
+
+            async def main():
+                server = TensorDictServer(port=13337)
+                await server.serve(handler)  # runs until server.close()
+
+            asyncio.run(main())
     """
 
     @_check_ucxx

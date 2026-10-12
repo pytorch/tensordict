@@ -713,14 +713,19 @@ def is_tensor_collection(datatype: type | Any) -> bool:
         ``False`` otherwise.
 
     Examples:
-        >>> is_tensor_collection(TensorDictBase)  # True
-        >>> is_tensor_collection(TensorDict())  # True
+        >>> from tensordict import TensorDict, TensorDictBase, is_tensor_collection, tensorclass
+        >>> is_tensor_collection(TensorDictBase)
+        True
+        >>> is_tensor_collection(TensorDict())
+        True
         >>> @tensorclass
         ... class MyClass:
         ...     pass
         ...
-        >>> is_tensor_collection(MyClass)  # True
-        >>> is_tensor_collection(MyClass(batch_size=[]))  # True
+        >>> is_tensor_collection(MyClass)
+        True
+        >>> is_tensor_collection(MyClass(batch_size=[]))
+        True
 
     """
     # memoizing is 2x faster
@@ -1317,10 +1322,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> from tensordict import TensorDict
             >>> import torch
             >>> td = TensorDict({"a": torch.randn(3, 4, 5), "b": {"c": torch.randn(3, 4, 6)}}, batch_size=[])
-            >>> td.auto_batch_size_()
+            >>> _ = td.auto_batch_size_()
             >>> print(td.batch_size)
             torch.Size([3, 4])
-            >>> td.auto_batch_size_(batch_dims=1)
+            >>> _ = td.auto_batch_size_(batch_dims=1)
             >>> print(td.batch_size)
             torch.Size([3])
 
@@ -1355,16 +1360,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         Keyword Args:
             auto_batch_size (bool, optional): if ``True``, the batch size will be computed automatically.
-                Defaults to ``False``.
+                Defaults to ``None``, which behaves like ``False``, unless
+                ``batch_dims`` is passed: then it behaves like ``True``.
             batch_size (iterable of int, optional): a batch size for the tensordict.
             device (torch.device or compatible type, optional): a device for the TensorDict.
-            batch_dims (int, optional): the ``batch_dims`` (ie number of leading dimensions
-                to be considered for ``batch_size``). Exclusinve with ``batch_size``.
-                Note that this is the __maximum__ number of batch dims of the tensordict,
-                a smaller number is tolerated.
+            batch_dims (int, optional): the maximum number of leading dimensions
+                of the computed batch size. A smaller number is used if the
+                tensors do not share that many leading dimensions. Exclusive
+                with ``batch_size``.
             names (list of str, optional): the dimension names of the tensordict.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> input_dict = {"a": torch.randn(3, 4), "b": torch.randn(3)}
             >>> print(TensorDict.from_dict(input_dict, auto_batch_size=True))
             TensorDict(
@@ -1430,41 +1438,64 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     @property
     @abc.abstractmethod
     def batch_size(self) -> torch.Size:
-        """Shape (or batch_size) of a TensorDict.
+        """The batch size of the tensordict, as a :class:`torch.Size`. ``shape`` is the same attribute.
 
-        The shape of a tensordict corresponds to the common first ``N``
-        dimensions of the tensors it contains, where ``N`` is an arbitrary
-        number. The batch-size contrasts with the "feature size" which repesents
-        the semantically relevant shapes of a tensor. For instance, a batch of videos
-        may have shape ``[B, T, C, W, H]``, where ``[B, T]`` is the batch-size (batch and
-        time dimensions) and ``[C, W, H]`` are the feature dimensions (channels and spacial
-        dimensions).
+        The batch size is the shape of the leading dimensions that all tensors
+        in the tensordict share. The other dimensions of each tensor are its
+        feature dimensions. For example, a batch of videos of shape
+        ``[B, T, C, W, H]`` can have batch size ``[B, T]`` (batch and time)
+        and feature dimensions ``[C, W, H]`` (channels and space).
 
-        The ``TensorDict`` shape is controlled by the user upon
-        initialization (ie, it is not inferred from the tensor shapes).
+        You set the batch size when you create the tensordict. The batch size
+        is not inferred from the tensors unless you ask for it, with
+        ``TensorDict.from_dict(..., auto_batch_size=True)`` or
+        :meth:`~.auto_batch_size_`.
 
-        The ``batch_size`` can be edited dynamically if the new size is compatible
-        with the TensorDict content. For instance, setting the batch size to
-        an empty value is always allowed.
+        You can assign a new batch size if every tensor has the new leading
+        dimensions. Otherwise, the assignment raises ``RuntimeError``. An empty
+        batch size ``()`` always fits a :class:`~tensordict.TensorDict`. A
+        :class:`~tensordict.LazyStackedTensorDict` raises ``RuntimeError`` for
+        any new batch size. A sub-tensordict with fewer batch dimensions than
+        the new batch size gets the new batch size. The other sub-tensordicts
+        keep theirs. See :ref:`batch-size`.
 
         Returns:
-            a :obj:`~torch.Size` object describing the TensorDict batch size.
+            a :class:`torch.Size` object that describes the batch size.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> data = TensorDict({
-            ...     "key 0": torch.randn(3, 4),
-            ...     "key 1": torch.randn(3, 5),
-            ...     "nested": TensorDict({"key 0": torch.randn(3, 4)}, batch_size=[3, 4])},
+            ...     "key 0": torch.zeros(3, 4),
+            ...     "key 1": torch.zeros(3, 5),
+            ...     "nested": TensorDict({"key 0": torch.zeros(3, 4)}, batch_size=[3, 4])},
             ...     batch_size=[3])
-            >>> data.batch_size = () # resets the batch-size to an empty value
+            >>> data.batch_size
+            torch.Size([3])
+            >>> data.batch_size = ()  # an empty batch size always fits
+            >>> data.batch_size, data["nested"].batch_size
+            (torch.Size([]), torch.Size([3, 4]))
+            >>> data.batch_size = [4]
+            Traceback (most recent call last):
+            ...
+            RuntimeError: the Tensor key 0 has shape torch.Size([3, 4]) which is incompatible with the batch-size torch.Size([4]).
         """
         raise NotImplementedError
 
     def size(self, dim: int | None = None) -> torch.Size | int:
-        """Returns the size of the dimension indicated by ``dim``.
+        """Returns the batch size, or the size of one batch dimension.
 
-        If ``dim`` is not specified, returns the ``batch_size`` attribute of the TensorDict.
+        Args:
+            dim (int, optional): a batch dimension. If ``None``, the whole
+                :attr:`~.batch_size` is returned. Defaults to ``None``.
 
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(batch_size=[3, 4])
+            >>> td.size()
+            torch.Size([3, 4])
+            >>> td.size(-1)
+            4
         """
         if dim is None:
             return self.batch_size
@@ -1472,7 +1503,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     @property
     def data(self) -> Self:
-        """Returns a tensordict containing the .data attributes of the leaf tensors."""
+        """Returns a tensordict containing the .data attributes of the leaf tensors.
+
+        The leaves of the result share storage with the leaves of ``self``,
+        and do not require gradients. An in-place change to the result
+        changes ``self``.
+        """
         return self._data()
 
     @data.setter
@@ -1526,7 +1562,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     @property
     def dtype(self):
-        """Returns the dtype of the values in the tensordict, if it is unique."""
+        """Returns the dtype of the leaves, or ``None`` if the leaves have different dtypes."""
         return self._dtype()
 
     def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
@@ -1597,11 +1633,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     @property
     def batch_dims(self) -> int:
-        """Length of the tensordict batch size.
+        """The number of batch dimensions, that is ``len(self.batch_size)``.
 
-        Returns:
-            int describing the number of dimensions of the tensordict.
+        ``ndim``, ``dim()`` and ``ndimension()`` return the same value.
 
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> TensorDict(batch_size=[3, 4]).batch_dims
+            2
         """
         return len(self.batch_size)
 
@@ -1619,19 +1658,35 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return self.batch_dims
 
     def numel(self) -> int:
-        """Total number of elements in the batch.
+        """Returns the number of elements in the batch, which is the product of ``batch_size``.
 
-        Lower-bounded to 1, as a stack of two tensordict with empty shape will
-        have two elements, therefore we consider that a tensordict is at least
-        1-element big.
+        The feature dimensions of the leaves do not count. The minimum is 1: a
+        tensordict with batch size ``[]`` or ``[0]`` returns 1. This way,
+        stacking two tensordicts of batch size ``[]`` gives a batch of 2
+        elements.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> TensorDict(a=torch.zeros(2, 3, 10), batch_size=[2, 3]).numel()
+            6
+            >>> TensorDict(batch_size=[]).numel()
+            1
         """
         return max(1, self.batch_size.numel())
 
     @property
     def depth(self) -> int:
-        """Returns the depth - maximum number of levels - of a tensordict.
+        """Returns the depth of the tensordict: the maximum number of levels of sub-tensordicts.
 
-        The minimum depth is 0 (no nested tensordict).
+        A tensordict with no sub-tensordict has depth 0.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> TensorDict({"a": 0}).depth
+            0
+            >>> TensorDict({"a": {"b": {"c": 0}}}).depth
+            2
         """
         return self._depth()
 
@@ -1653,28 +1708,41 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         pin_memory: bool | None = None,
         empty_lazy: bool = False,
     ):  # noqa: D417
-        """Returns a TensorDict of size ``size`` filled with 0.
+        """Returns a tensordict of batch size ``size`` with every leaf filled with 0.
 
-        By default, the returned TensorDict has the same ``torch.dtype`` and ``torch.device`` as this tensordict.
+        Each leaf keeps its feature dimensions: a leaf of shape
+        ``(*self.batch_size, *f)`` becomes ``(*size, *f)``. By default, each
+        leaf keeps its dtype and device.
 
         Args:
-            size (int...): a list, tuple, or torch.Size of integers defining the shape of the output tensor.
+            size (int...): the batch size of the result, as integers or as one
+                list, tuple or ``torch.Size``.
 
         Keyword Args:
-            dtype (torch.dtype, optional): the desired type of returned tensordict.
-                Default: if ``None``, the `torch.dtype` will be unchanged.
-            device (torch.device, optional): the desired device of returned tensordict.
-                Default: if ``None``, the ``torch.device`` will be unchanged.
-            requires_grad (bool, optional): If autograd should record operations on the
-                returned tensors. Default: ``False``.
-            layout (torch.layout, optional): the desired layout of returned TensorDict values.
-                Default: ``torch.strided``.
-            pin_memory (bool, optional): If set, returned tensor would be allocated in the
-                pinned memory. Works only for CPU tensors. Default: ``False``.
-            empty_lazy (bool, optional): If `True`, lazy stacks will be emptied of their content.
-                This can be useful whenever the content of a lazy stack is likely to change
-                during filling of the new tensordict. This argument is propagated to sub-tensordicts.
+            dtype (torch.dtype, optional): the dtype of every leaf of the
+                result. Defaults to ``None``: each leaf keeps its dtype.
+            device (torch.device, optional): the device of every leaf of the
+                result. If not passed, each leaf keeps its device.
+            requires_grad (bool, optional): if ``True``, autograd records the
+                operations on the new leaves. Defaults to ``False``.
+            layout (torch.layout, optional): the layout of the new leaves.
+                Defaults to ``torch.strided``.
+            pin_memory (bool, optional): if ``True``, the new leaves are
+                allocated in pinned memory. Works only for CPU tensors.
                 Defaults to ``False``.
+            empty_lazy (bool, optional): if ``True``, the lazy stacks of the
+                result are emptied of their content. Use it when the content
+                of a lazy stack is likely to change while you fill the new
+                tensordict. It applies to the sub-tensordicts too. Defaults to
+                ``False``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3, 4), b=torch.zeros(3, dtype=torch.int64), batch_size=[3])
+            >>> out = td.new_zeros(2, 2)
+            >>> out.batch_size, out["a"].shape, out["b"].dtype
+            (torch.Size([2, 2]), torch.Size([2, 2, 4]), torch.int64)
 
         """
         kwargs = {}
@@ -1701,28 +1769,41 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         pin_memory: bool | None = None,
         empty_lazy: bool = False,
     ):  # noqa: D417
-        """Returns a TensorDict of size ``size`` filled with 1.
+        """Returns a tensordict of batch size ``size`` with every leaf filled with 1.
 
-        By default, the returned TensorDict has the same ``torch.dtype`` and ``torch.device`` as this tensordict.
+        Each leaf keeps its feature dimensions: a leaf of shape
+        ``(*self.batch_size, *f)`` becomes ``(*size, *f)``. By default, each
+        leaf keeps its dtype and device.
 
         Args:
-            size (int...): a list, tuple, or torch.Size of integers defining the shape of the output tensor.
+            size (int...): the batch size of the result, as integers or as one
+                list, tuple or ``torch.Size``.
 
         Keyword Args:
-            dtype (torch.dtype, optional): the desired type of returned tensordict.
-                Default: if ``None``, the `torch.dtype` will be unchanged.
-            device (torch.device, optional): the desired device of returned tensordict.
-                Default: if ``None``, the ``torch.device`` will be unchanged.
-            requires_grad (bool, optional): If autograd should record operations on the
-                returned tensors. Default: ``False``.
-            layout (torch.layout, optional): the desired layout of returned TensorDict values.
-                Default: ``torch.strided``.
-            pin_memory (bool, optional): If set, returned tensor would be allocated in the
-                pinned memory. Works only for CPU tensors. Default: ``False``.
-            empty_lazy (bool, optional): If `True`, lazy stacks will be emptied of their content.
-                This can be useful whenever the content of a lazy stack is likely to change
-                during filling of the new tensordict. This argument is propagated to sub-tensordicts.
+            dtype (torch.dtype, optional): the dtype of every leaf of the
+                result. Defaults to ``None``: each leaf keeps its dtype.
+            device (torch.device, optional): the device of every leaf of the
+                result. If not passed, each leaf keeps its device.
+            requires_grad (bool, optional): if ``True``, autograd records the
+                operations on the new leaves. Defaults to ``False``.
+            layout (torch.layout, optional): the layout of the new leaves.
+                Defaults to ``torch.strided``.
+            pin_memory (bool, optional): if ``True``, the new leaves are
+                allocated in pinned memory. Works only for CPU tensors.
                 Defaults to ``False``.
+            empty_lazy (bool, optional): if ``True``, the lazy stacks of the
+                result are emptied of their content. Use it when the content
+                of a lazy stack is likely to change while you fill the new
+                tensordict. It applies to the sub-tensordicts too. Defaults to
+                ``False``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3, 4), b=torch.zeros(3, dtype=torch.int64), batch_size=[3])
+            >>> out = td.new_ones(2)
+            >>> out.batch_size, out["a"].shape
+            (torch.Size([2]), torch.Size([2, 4]))
 
         """
         kwargs = {}
@@ -1749,28 +1830,43 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         pin_memory: bool | None = None,
         empty_lazy: bool = False,
     ):  # noqa: D417
-        """Returns a TensorDict of size ``size`` with emtpy tensors.
+        """Returns a tensordict of batch size ``size`` with uninitialized leaves.
 
-        By default, the returned TensorDict has the same ``torch.dtype`` and ``torch.device`` as this tensordict.
+        The values of the leaves are not set, as with :func:`torch.empty`.
+
+        Each leaf keeps its feature dimensions: a leaf of shape
+        ``(*self.batch_size, *f)`` becomes ``(*size, *f)``. By default, each
+        leaf keeps its dtype and device.
 
         Args:
-            size (int...): a list, tuple, or torch.Size of integers defining the shape of the output tensor.
+            size (int...): the batch size of the result, as integers or as one
+                list, tuple or ``torch.Size``.
 
         Keyword Args:
-            dtype (torch.dtype, optional): the desired type of returned tensordict.
-                Default: if ``None``, the `torch.dtype` will be unchanged.
-            device (torch.device, optional): the desired device of returned tensordict.
-                Default: if ``None``, the ``torch.device`` will be unchanged.
-            requires_grad (bool, optional): If autograd should record operations on the
-                returned tensors. Default: ``False``.
-            layout (torch.layout, optional): the desired layout of returned TensorDict values.
-                Default: ``torch.strided``.
-            pin_memory (bool, optional): If set, returned tensor would be allocated in the
-                pinned memory. Works only for CPU tensors. Default: ``False``.
-            empty_lazy (bool, optional): If `True`, lazy stacks will be emptied of their content.
-                This can be useful whenever the content of a lazy stack is likely to change
-                during filling of the new tensordict. This argument is propagated to sub-tensordicts.
+            dtype (torch.dtype, optional): the dtype of every leaf of the
+                result. Defaults to ``None``: each leaf keeps its dtype.
+            device (torch.device, optional): the device of every leaf of the
+                result. If not passed, each leaf keeps its device.
+            requires_grad (bool, optional): if ``True``, autograd records the
+                operations on the new leaves. Defaults to ``False``.
+            layout (torch.layout, optional): the layout of the new leaves.
+                Defaults to ``torch.strided``.
+            pin_memory (bool, optional): if ``True``, the new leaves are
+                allocated in pinned memory. Works only for CPU tensors.
                 Defaults to ``False``.
+            empty_lazy (bool, optional): if ``True``, the lazy stacks of the
+                result are emptied of their content. Use it when the content
+                of a lazy stack is likely to change while you fill the new
+                tensordict. It applies to the sub-tensordicts too. Defaults to
+                ``False``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3, 4), b=torch.zeros(3, dtype=torch.int64), batch_size=[3])
+            >>> out = td.new_empty(5)
+            >>> out.batch_size, out["a"].shape
+            (torch.Size([5]), torch.Size([5, 4]))
 
         """
         kwargs = {}
@@ -1799,29 +1895,42 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         pin_memory: bool | None = None,
         empty_lazy: bool = False,
     ):  # noqa: D417
-        """Returns a TensorDict of size ``size`` filled with 1.
+        """Returns a tensordict of batch size ``size`` with every leaf filled with ``fill_value``.
 
-        By default, the returned TensorDict has the same ``torch.dtype`` and ``torch.device`` as this tensordict.
+        Each leaf keeps its feature dimensions: a leaf of shape
+        ``(*self.batch_size, *f)`` becomes ``(*size, *f)``. By default, each
+        leaf keeps its dtype and device.
 
         Args:
-            size (sequence of int): a list, tuple, or torch.Size of integers defining the shape of the output tensor.
-            fill_value (scalar): the number to fill the output tensor with.
+            size (sequence of int): the batch size of the result, as a list,
+                tuple or ``torch.Size``.
+            fill_value (scalar): the value of every element of the result.
 
         Keyword Args:
-            dtype (torch.dtype, optional): the desired type of returned tensordict.
-                Default: if ``None``, the `torch.dtype` will be unchanged.
-            device (torch.device, optional): the desired device of returned tensordict.
-                Default: if ``None``, the ``torch.device`` will be unchanged.
-            requires_grad (bool, optional): If autograd should record operations on the
-                returned tensors. Default: ``False``.
-            layout (torch.layout, optional): the desired layout of returned TensorDict values.
-                Default: ``torch.strided``.
-            pin_memory (bool, optional): If set, returned tensor would be allocated in the
-                pinned memory. Works only for CPU tensors. Default: ``False``.
-            empty_lazy (bool, optional): If `True`, lazy stacks will be emptied of their content.
-                This can be useful whenever the content of a lazy stack is likely to change
-                during filling of the new tensordict. This argument is propagated to sub-tensordicts.
+            dtype (torch.dtype, optional): the dtype of every leaf of the
+                result. Defaults to ``None``: each leaf keeps its dtype.
+            device (torch.device, optional): the device of every leaf of the
+                result. If not passed, each leaf keeps its device.
+            requires_grad (bool, optional): if ``True``, autograd records the
+                operations on the new leaves. Defaults to ``False``.
+            layout (torch.layout, optional): the layout of the new leaves.
+                Defaults to ``torch.strided``.
+            pin_memory (bool, optional): if ``True``, the new leaves are
+                allocated in pinned memory. Works only for CPU tensors.
                 Defaults to ``False``.
+            empty_lazy (bool, optional): if ``True``, the lazy stacks of the
+                result are emptied of their content. Use it when the content
+                of a lazy stack is likely to change while you fill the new
+                tensordict. It applies to the sub-tensordicts too. Defaults to
+                ``False``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3, 4), b=torch.zeros(3, dtype=torch.int64), batch_size=[3])
+            >>> out = td.new_full((2,), 7.0)
+            >>> out["a"][0], out["b"]
+            (tensor([7., 7., 7., 7.]), tensor([7, 7]))
 
         """
         kwargs = {}
@@ -2022,6 +2131,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 tensordict. Default is 0.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({
             ...     'x': torch.arange(24).reshape(3, 4, 2),
             ... }, batch_size=[3, 4])
@@ -2090,12 +2201,26 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Dim names functionality
     @property
     def names(self):
-        """The dimension names of the tensordict.
+        """The dimension names of the tensordict, one per batch dimension.
 
-        The names can be set at construction time using the ``names`` argument.
+        A dimension without a name is ``None``. The names can be set at
+        construction time using the ``names`` argument, or by assignment
+        (``td.names = [...]``). The names must be unique. Shape operations and
+        indexing keep the names of the dimensions that remain. See
+        :ref:`batch-size`.
 
         See also :meth:`~.refine_names` for details on how to set the names after
         construction.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3, 4), batch_size=[3, 4], names=["time", None])
+            >>> td.names
+            ['time', None]
+            >>> td.names = ["time", "batch"]
+            >>> td[0].names
+            ['batch']
         """
         names = self._td_dim_names
         if names is None:
@@ -2159,6 +2284,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Returns: the same tensordict with dimensions named according to the input.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({}, batch_size=[3, 4, 5, 6])
             >>> tdr = td.refine_names(None, None, None, "d")
             >>> assert tdr.names == [None, None, None, "d"]
@@ -2201,6 +2327,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Returns a clone of the tensordict with dimensions renamed.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({}, batch_size=[1, 2, 3 ,4])
             >>> td.names = list("abcd")
             >>> td_rename = td.rename(c="g")
@@ -2237,6 +2364,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Same as :meth:`~.rename`, but executes the renaming in-place.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({}, batch_size=[1, 2, 3 ,4])
             >>> td.names = list("abcd")
             >>> td_renamed = td.rename_(c="g")
@@ -2292,41 +2420,45 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Device of a TensorDict.
 
         If the TensorDict has a specified device, all
-        its tensors (incl. nested ones) must live on the same device.
-        If the TensorDict device is ``None``, different values can be located
-        on different devices.
+        its tensors (incl. nested ones) must live on the same device: the
+        tensors that you pass to the constructor or set later are moved to
+        it. If the TensorDict device is ``None``, different values can be
+        located on different devices. The device is not inferred from the
+        tensors. See :ref:`devices`.
 
         Returns:
             torch.device object indicating the device where the tensors
             are placed, or None if TensorDict does not have a device.
 
         Examples:
+            The examples use the ``"meta"`` device so that they run on CPU.
+            A CUDA device works the same way.
+
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({
             ...     "cpu": torch.randn(3, device='cpu'),
-            ...     "cuda": torch.randn(3, device='cuda'),
+            ...     "meta": torch.randn(3, device='meta'),
             ... }, batch_size=[], device=None)
             >>> td['cpu'].device
             device(type='cpu')
-            >>> td['cuda'].device
-            device(type='cuda')
-            >>> td = TensorDict({
-            ...     "x": torch.randn(3, device='cpu'),
-            ...     "y": torch.randn(3, device='cuda'),
-            ... }, batch_size=[], device='cuda')
-            >>> td['x'].device
-            device(type='cuda')
-            >>> td['y'].device
-            device(type='cuda')
+            >>> td['meta'].device
+            device(type='meta')
+            >>> print(td.device)
+            None
             >>> td = TensorDict({
             ...     "x": torch.randn(3, device='cpu'),
             ...     "y": TensorDict({'z': torch.randn(3, device='cpu')}, batch_size=[], device=None),
-            ... }, batch_size=[], device='cuda')
+            ... }, batch_size=[], device='meta')
             >>> td['x'].device
-            device(type='cuda')
+            device(type='meta')
             >>> td['y'].device # nested tensordicts are also mapped onto the appropriate device.
-            device(type='cuda')
-            >>> td['y', 'x'].device
-            device(type='cuda')
+            device(type='meta')
+            >>> td['y', 'z'].device
+            device(type='meta')
+            >>> td['w'] = torch.zeros(3)  # a new entry is moved to the device too
+            >>> td['w'].device
+            device(type='meta')
 
         """
         raise NotImplementedError
@@ -2535,10 +2667,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Key functionality: set, get, set_, set_at_, update, update_
     @abc.abstractmethod
     def entry_class(self, key: NestedKey) -> type:
-        """Returns the class of an entry, possibly avoiding a call to `isinstance(td.get(key), type)`.
+        """Returns the class of an entry, possibly without reading the entry.
 
-        This method should be preferred to ``tensordict.get(key).shape`` whenever
-        :meth:`.get` can be expensive to execute.
+        It returns ``type(tensordict.get(key))``. Prefer it to that expression
+        when :meth:`.get` is expensive, for example on a lazy stack or a
+        tensordict stored on disk.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3), b=TensorDict(c=torch.zeros(3)))
+            >>> td.entry_class("a")
+            <class 'torch.Tensor'>
+            >>> td.entry_class("b")
+            <class 'tensordict._td.TensorDict'>
 
         """
         raise NotImplementedError
@@ -2552,18 +2694,25 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         non_blocking: bool = False,
         **kwargs: Any,
     ) -> Self:
-        """Sets a new key-value pair.
+        """Sets an entry, and returns the tensordict.
+
+        ``td.set(key, value)`` is the same as ``td[key] = value``. By default,
+        the value replaces the existing entry (no data is copied). A tuple key
+        sets a nested entry, and creates the missing sub-tensordicts. The
+        leading dimensions of the value must match :attr:`~.batch_size`.
+        Arrays and numbers are converted to tensors. Strings and other
+        objects are stored as :class:`~tensordict.NonTensorData`.
 
         Args:
-            key (str, tuple of str): name of the key to be set.
+            key (NestedKey): the key to set: a string, or a tuple of strings
+                for a nested entry. See :ref:`keys`.
             item (torch.Tensor or equivalent, TensorDictBase instance): value
                 to be stored in the tensordict.
-            inplace (bool, optional): if ``True`` and if a key matches an existing
-                key in the tensordict, then the update will occur in-place
-                for that key-value pair. If inplace is ``True`` and
-                the entry cannot be found, it will be added. For a more restrictive
-                in-place operation, use :meth:`~.set_` instead.
-                Defaults to ``False``.
+            inplace (bool, optional): if ``True`` and the key exists, the value
+                is copied into the existing tensor, which keeps its storage. If
+                the key does not exist, the entry is added. For a write that
+                raises on a missing key, use :meth:`~.set_`. Defaults to
+                ``False``. See :ref:`inplace-conventions`.
 
         Keyword Args:
             non_blocking (bool, optional): if ``True`` and this copy is between
@@ -2573,14 +2722,27 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Returns:
             self
 
+        Raises:
+            RuntimeError: if the tensordict is locked (see :meth:`~.lock_`) and
+                ``inplace`` is ``False``, or if the leading dimensions of the
+                value do not match the batch size.
+
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({}, batch_size=[3, 4])
-            >>> td.set("x", torch.randn(3, 4))
+            >>> td = td.set("x", torch.randn(3, 4))
             >>> y = torch.randn(3, 4, 5)
-            >>> td.set("y", y, inplace=True) # works, even if 'y' is not present yet
-            >>> td.set("y", torch.zeros_like(y), inplace=True)
-            >>> assert (y==0).all() # y values are overwritten
-            >>> td.set("y", torch.ones(5), inplace=True) # raises an exception as shapes mismatch
+            >>> td = td.set("y", y, inplace=True)  # works, even if 'y' is not present yet
+            >>> td = td.set("y", torch.zeros_like(y), inplace=True)
+            >>> assert (y==0).all()  # y values are overwritten
+            >>> td = td.set(("nested", "z"), torch.zeros(3, 4, 2))  # creates td["nested"]
+            >>> td["nested"].batch_size
+            torch.Size([3, 4])
+            >>> td.set("y", torch.ones(5), inplace=True)  # the shape does not match
+            Traceback (most recent call last):
+            ...
+            RuntimeError: batch dimension mismatch, got self.batch_size=torch.Size([3, 4]) and value.shape=torch.Size([5]) ...
 
         """
         if item is self:
@@ -2623,8 +2785,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return: self
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> data = TensorDict({}, batch_size=[])
-            >>> data.set_non_tensor(("nested", "the string"), "a string!")
+            >>> data = data.set_non_tensor(("nested", "the string"), "a string!")
             >>> assert data.get_non_tensor(("nested", "the string")) == "a string!"
             >>> # regular `get` works but returns a NonTensorData object
             >>> data.get(("nested", "the string"))
@@ -2681,8 +2844,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             entry cannot be found).
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> data = TensorDict({}, batch_size=[])
-            >>> data.set_non_tensor(("nested", "the string"), "a string!")
+            >>> data = data.set_non_tensor(("nested", "the string"), "a string!")
             >>> assert data.get_non_tensor(("nested", "the string")) == "a string!"
             >>> # regular `get` works but returns a NonTensorData object
             >>> data.get(("nested", "the string"))
@@ -2738,7 +2902,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> from tensordict import TensorDict
             >>> import torch
             >>> td = TensorDict({"obs": torch.randn(4)}, [])
-            >>> td.set_non_tensor("label", "cat")
+            >>> td = td.set_non_tensor("label", "cat")
             >>> td.is_non_tensor("label")
             True
             >>> td.is_non_tensor("obs")
@@ -2798,10 +2962,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         *,
         non_blocking: bool = False,
     ) -> Self:
-        """Sets the values in-place at the index indicated by ``index``.
+        """Writes ``value`` into the existing entry ``key`` at the index ``index``, in place.
+
+        ``td.set_at_(key, value, index)`` is the same as ``td[key][index] = value``.
 
         Args:
-            key (str, tuple of str): key to be modified.
+            key (NestedKey): key to be modified. The key must exist: a
+                missing key raises ``KeyError``.
             value (torch.Tensor): value to be set at the index `index`
             index (int, tensor or tuple): index where to write the values.
 
@@ -2814,10 +2981,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({}, batch_size=[3, 4])
             >>> x = torch.randn(3, 4)
-            >>> td.set("x", x)
-            >>> td.set_at_("x", value=torch.ones(1, 4), index=slice(1))
+            >>> td = td.set("x", x)
+            >>> td = td.set_at_("x", value=torch.ones(1, 4), index=slice(1))
             >>> assert (x[0] == 1).all()
         """
         key = _unravel_key_to_tuple(key)
@@ -2840,12 +3009,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         *,
         non_blocking: bool = False,
     ) -> Self:
-        """Sets a value to an existing key while keeping the original storage.
+        """Copies a value into an existing entry, which keeps its storage.
+
+        The existing tensor keeps its ``data_ptr()``, so other references to
+        it see the new values. ``set_`` works on a locked tensordict. See
+        :ref:`inplace-conventions`.
 
         Args:
-            key (str): name of the value
+            key (NestedKey): the key of the entry. The key must exist.
             item (torch.Tensor or compatible type, TensorDictBase): value to
-                be stored in the tensordict
+                be copied into the entry. Its shape must match the entry.
 
         Keyword Args:
             non_blocking (bool, optional): if ``True`` and this copy is between
@@ -2855,11 +3028,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Returns:
             self
 
+        Raises:
+            KeyError: if the key is missing.
+            RuntimeError: if the shape of the value does not match the batch size.
+
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({}, batch_size=[3, 4])
             >>> x = torch.randn(3, 4)
-            >>> td.set("x", x)
-            >>> td.set_("x", torch.zeros_like(x))
+            >>> td = td.set("x", x)
+            >>> td = td.set_("x", torch.zeros_like(x))
             >>> assert (x == 0).all()
 
         """
@@ -2919,30 +3098,37 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def get(self, key, default): ...
 
     def get(self, key: NestedKey, *args, **kwargs) -> CompatibleType:
-        """Gets the value stored with the input key.
+        """Returns the value stored at ``key``, or ``default`` if the key is missing.
+
+        ``td.get(key)`` is the same as ``td[key]``, except for a missing key:
+        ``td[key]`` raises ``KeyError``, and ``get`` returns ``default``.
 
         Args:
-            key (str, tuple of str): key to be queried. If tuple of str it is
-                equivalent to chained calls of getattr.
-            default: default value if the key is not found in the tensordict. Defaults to ``None``.
+            key (NestedKey): the key to read. A tuple reads a nested entry:
+                ``td.get(("a", "b"))`` is ``td["a"]["b"]``. See :ref:`keys`.
+            default (optional): the value returned if the key is missing.
+                Defaults to ``None``, as for :meth:`dict.get`.
 
-                .. warning::
-                    Previously, if a key was not present in the tensordict and no default
-                    was passed, a `KeyError` was raised. From v0.7, this behaviour has been changed
-                    and a `None` value is returned instead (in accordance with the what dict.get behavior).
-                    Use ``td[key]`` to raise a `KeyError` for a missing key. Restoring the old behavior with
-                    ``TD_GET_DEFAULTS_TO_NONE=0`` or ``set_get_defaults_to_none(False)`` is deprecated
-                    and will be removed in TensorDict 0.17.
+        .. versionchanged:: 0.7
+            A missing key returns ``None`` instead of raising ``KeyError``.
+            ``set_get_defaults_to_none(False)`` and ``TD_GET_DEFAULTS_TO_NONE=0``
+            restore the old behavior. They are deprecated and will be removed
+            in 0.17.
 
         .. note:: Keyword arguments can be passed to :meth:`~.get` when dealing with ragged tensors.
             See :meth:`~tensordict.LazyStackedTensorDict.get` for a complete overview.
 
         Examples:
-            >>> td = TensorDict({"x": 1}, batch_size=[])
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict({"x": 1, "nested": {"y": 2}}, batch_size=[])
             >>> td.get("x")
             tensor(1)
-            >>> td.get("y")
+            >>> td.get(("nested", "y"))
+            tensor(2)
+            >>> print(td.get("z"))
             None
+            >>> td.get("z", 0)
+            0
         """
         key_tuple = _unravel_key_to_tuple(key)
         if not key_tuple:
@@ -3014,6 +3200,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             indexed tensor.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({"x": torch.arange(3)}, batch_size=[])
             >>> td.get_at("x", index=1)
             tensor(1)
@@ -3060,7 +3248,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return out[idx]
 
     def get_item_shape(self, key: NestedKey):
-        """Returns the shape of the entry, possibly avoiding recurring to :meth:`~.get`."""
+        """Returns the shape of the entry, without reading it with :meth:`~.get` when possible.
+
+        Args:
+            key (NestedKey): the key of the entry.
+        """
         return _shape(self.get(key))
 
     @_lock_blocked
@@ -3077,10 +3269,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         ignore_lock: bool = False,
         **kwargs,
     ) -> Self:
-        """Updates the TensorDict with values from either a dictionary or another TensorDict.
+        """Writes the entries of a dictionary or another tensordict into this tensordict, and returns it.
 
-        .. warning:: `update` will corrupt the data if called within a try/except block. Do not user this method within
-            such blocks hoping to catch and patch errors that occur during the execution.
+        Each entry is written as with :meth:`~.set`: by reference, unless
+        ``clone=True``. Sub-tensordicts are merged, not replaced: the entries
+        of ``self`` that the input does not have are kept.
+
+        .. warning:: ``update`` is not atomic. If one entry fails (for
+            example, its shape does not match the batch size), the entries
+            before it are already written. Do not catch the exception and
+            continue with the same tensordict. Update a copy, or make sure
+            that the input is valid first.
 
         Args:
             input_dict_or_td (TensorDictBase or dict, optional): input data to be written
@@ -3089,9 +3288,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 tensor) dict should be cloned before being set.
                 Defaults to ``False``.
             inplace (bool, optional): if ``True`` and if a key matches an existing
-                key in the tensordict, then the update will occur in-place
-                for that key-value pair. If the entry cannot be found, it will be
-                added. Defaults to ``False``.
+                key in the tensordict, the value is copied into the existing
+                tensor, which keeps its storage. If the entry cannot be found,
+                it will be added. Defaults to ``False``. See
+                :ref:`inplace-conventions`.
 
         Keyword Args:
             keys_to_update (sequence of NestedKeys, optional): if provided, only
@@ -3105,12 +3305,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 whether an object type is to be considered a leaf and swapped
                 or a tensor collection.
 
-                .. seealso:: :meth:`~tensordict.is_leaf_nontensor` and :meth:`~tensordict.default_is_leaf`.
+                .. seealso:: :func:`~tensordict.is_leaf_nontensor` and :func:`~tensordict.default_is_leaf`.
 
             update_batch_size (bool, optional): if ``True``, ``update`` will attempt to update the batch-size
                 of the destination (`self`) if it mismatches the source's batch size. Defaults to ``False``.
 
-                .. note:: In cases where the batch size does not match, :class:`~tensordict.LazyStackTensorDict`
+                .. note:: In cases where the batch size does not match, :class:`~tensordict.LazyStackedTensorDict`
                     instances will be emptied of their content and copies of the tensordicts from the source
                     will be used to repopulate the container.
 
@@ -3119,8 +3319,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     an exception will be raised, as TensorDict will be unable to infer what to do with the extra
                     destination entries.
 
-            ignore_lock (bool, optional): if ``True``, any tensordict can be updated regardless of its locked status.
-                Defaults to `False`.
+            ignore_lock (bool, optional): meant to update a tensordict
+                regardless of its locked status. Defaults to ``False``.
+                On a locked :class:`~tensordict.TensorDict`, ``ignore_lock=True``
+                does not lift the lock in the current version: a new or
+                replaced entry still raises ``RuntimeError``
+                (`#2260 <https://github.com/pytorch/tensordict/issues/2260>`_). Use
+                ``inplace=True``, or unlock the tensordict with
+                :meth:`~.unlock_` first.
 
             **kwargs: additional key-value pairs to write into ``self`` as top-level entries. When both
                 ``input_dict_or_td`` and ``kwargs`` are provided, kwargs win on key conflict.
@@ -3140,19 +3346,31 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Returns:
             self
 
+        Raises:
+            RuntimeError: if the tensordict is locked (see :meth:`~.lock_`) and
+                ``inplace`` is ``False``, or if the leading dimensions of a
+                value do not match the batch size.
+
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({}, batch_size=[3])
             >>> a = torch.randn(3)
             >>> b = torch.randn(3, 4)
             >>> other_td = TensorDict({"a": a, "b": b}, batch_size=[])
-            >>> td.update(other_td, inplace=True) # writes "a" and "b" even though they can't be found
+            >>> td = td.update(other_td, inplace=True)  # writes "a" and "b" even though they can't be found
             >>> assert td['a'] is other_td['a']
             >>> other_td = other_td.clone().zero_()
-            >>> td.update(other_td)
+            >>> td = td.update(other_td)
             >>> assert td['a'] is other_td['a']  # entries are written by reference unless clone=True
             >>> # keyword form for top-level entries
-            >>> td.update(monkey=torch.zeros(3))
+            >>> td = td.update(monkey=torch.zeros(3))
             >>> assert (td["monkey"] == 0).all()
+            >>> # sub-tensordicts are merged
+            >>> td = td.update({"nested": {"x": torch.zeros(3)}})
+            >>> td = td.update({"nested": {"y": torch.ones(3)}})
+            >>> sorted(td["nested"].keys())
+            ['x', 'y']
 
         """
         if kwargs:
@@ -3387,16 +3605,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> a = torch.randn(3)
             >>> b = torch.randn(3, 4)
             >>> td = TensorDict({"a": a, "b": b}, batch_size=[3])
             >>> other_td = TensorDict({"a": a*0, "b": b*0}, batch_size=[])
-            >>> td.update_(other_td)
+            >>> _ = td.update_(other_td)
             >>> assert td['a'] is not other_td['a']
             >>> assert (td['a'] == other_td['a']).all()
             >>> assert (td['a'] == 0).all()
             >>> # keyword form for top-level entries (key must already exist)
-            >>> td.update_(a=torch.ones(3))
+            >>> _ = td.update_(a=torch.ones(3))
             >>> assert (td["a"] == 1).all()
 
         """
@@ -3542,6 +3762,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({
             ...     'a': torch.zeros(3, 4, 5),
             ...     'b': torch.zeros(3, 4, 10)}, batch_size=[3, 4])
@@ -3656,9 +3878,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         This operation is blocked in locked tensordicts.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> data = TensorDict({}, [3, 4, 5])
-            >>> data.create_nested("root")
-            >>> data.create_nested(("some", "nested", "value"))
+            >>> _ = data.create_nested("root")
+            >>> _ = data.create_nested(("some", "nested", "value"))
             >>> print(data)
             TensorDict(
                 fields={
@@ -3774,7 +3997,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return self.update_at_(tensordict, idx, non_blocking=non_blocking)
 
     def is_empty(self) -> bool:
-        """Checks if the tensordict contains any leaf."""
+        """Returns ``True`` if the tensordict has no leaf.
+
+        Empty sub-tensordicts do not count as leaves.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> TensorDict().is_empty()
+            True
+            >>> TensorDict({"nested": TensorDict()}).is_empty()
+            True
+            >>> TensorDict({"a": torch.zeros(())}).is_empty()
+            False
+        """
         if is_compiling():
             # Dynamo cannot close a key generator that is left before its end.
             return not list(self.keys(True, True))
@@ -3786,20 +4022,24 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def setdefault(
         self, key: NestedKey, default: CompatibleType | Any, inplace: bool = False
     ) -> CompatibleType:
-        """Insert the ``key`` entry with a value of ``default`` if ``key`` is not in the tensordict.
+        """Inserts the ``key`` entry with a value of ``default`` if ``key`` is not in the tensordict.
 
-        Return the value for ``key`` if ``key`` is in the tensordict, else ``default``.
+        Returns the value for ``key`` if ``key`` is in the tensordict, else ``default``.
 
         Args:
-            key (str or nested key): the name of the value.
+            key (NestedKey): the name of the value.
             default (torch.Tensor or compatible type, TensorDictBase): value
                 to be stored in the tensordict if the key is not already present.
+            inplace (bool, optional): passed to :meth:`~.set` when ``default``
+                is written. Defaults to ``False``.
 
         Returns:
             The value of key in the tensordict. Will be default if the key was not
             previously set.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({}, batch_size=[3, 4])
             >>> val = td.setdefault("a", torch.zeros(3, 4))
             >>> assert (val == 0).all()
@@ -3819,34 +4059,45 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         *,
         sort: bool = False,
     ) -> Iterator[tuple[str, CompatibleType]]:  # noqa: D417
-        """Returns a generator of key-value pairs for the tensordict.
+        """Returns a generator of the ``(key, value)`` pairs of the tensordict.
+
+        By default, only the top-level entries are returned, and a
+        sub-tensordict is returned as one value. See :ref:`keys` for nested
+        keys and leaves.
 
         Args:
-            include_nested (bool, optional): if ``True``, nested values will be returned.
-                Defaults to ``False``.
-            leaves_only (bool, optional): if ``False``, only leaves will be
-                returned. Defaults to ``False``.
-            is_leaf (callable, optional): a callable over a class type returning
-                a bool indicating if this class has to be considered as a leaf.
-
-                .. note:: The purpose of `is_leaf` is not to prevent recursive calls into nested tensordicts, but
-                    rather to mark certain types as "leaves" for the purpose of filtering when `leaves_only=True`.
-                    Even if `is_leaf(cls)` returns `True`, the nested structure of the tensordict will still be
-                    traversed if `include_nested=True`.
-                    In other words, `is_leaf` does not control the recursion depth, but rather provides a way to filter
-                    out certain types from the result when `leaves_only=True`. This means that a node in the tree can
-                    be both a leaf and a node with children.
-                    In practice, the default value of ``is_leaf`` does exclude tensordict and tensorclass instances
-                    from the leaf set.
-
-                .. seealso:: :meth:`~tensordict.is_leaf_nontensor` and :meth:`~tensordict.default_is_leaf`.
+            include_nested (bool, optional): if ``True``, the entries of the
+                sub-tensordicts are also returned, with nested keys (tuples of
+                strings). Defaults to ``False``.
+            leaves_only (bool, optional): if ``True``, only leaves are returned,
+                and sub-tensordicts are skipped. Defaults to ``False``.
+            is_leaf (callable, optional): a function that takes a class and
+                returns ``True`` if values of that class count as leaves. It
+                only filters the result when ``leaves_only=True``. It does not
+                stop the recursion: with ``include_nested=True``, a
+                sub-tensordict is still searched even if ``is_leaf`` returns
+                ``True`` for it. By default, tensordicts and tensorclasses are
+                not leaves. See :func:`~tensordict.is_leaf_nontensor` and
+                :func:`~tensordict.default_is_leaf`.
 
         Keyword Args:
-            sort (bool, optional): whether the keys should be sorted. For nested keys,
-                the keys are sorted according to their joined name (ie, ``("a", "key")`` will
-                be counted as ``"a.key"`` for sorting). Be mindful that sorting may incur
-                significant overhead when dealing with large tensordicts.
+            sort (bool, optional): if ``True``, the keys are sorted. Nested keys
+                are sorted by their joined name: ``("a", "key")`` sorts as
+                ``"a.key"``. Sorting takes extra time on large tensordicts.
                 Defaults to ``False``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(
+            ...     a=torch.zeros(2),
+            ...     nested=TensorDict(b=torch.ones(2, 3), batch_size=[2]),
+            ...     batch_size=[2],
+            ... )
+            >>> for key, value in td.items(include_nested=True, leaves_only=True):
+            ...     print(key, value.shape)
+            a torch.Size([2])
+            ('nested', 'b') torch.Size([2, 3])
 
         """
         if sort:
@@ -3927,34 +4178,45 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         *,
         sort: bool = False,
     ) -> Iterator[CompatibleType]:  # noqa: D417
-        """Returns a generator representing the values for the tensordict.
+        """Returns a generator of the values of the tensordict.
+
+        By default, only the top-level values are returned, and a
+        sub-tensordict is returned as one value. See :ref:`keys` for nested
+        keys and leaves.
 
         Args:
-            include_nested (bool, optional): if ``True``, nested values will be returned.
-                Defaults to ``False``.
-            leaves_only (bool, optional): if ``False``, only leaves will be
-                returned. Defaults to ``False``.
-            is_leaf (callable, optional): a callable over a class type returning
-                a bool indicating if this class has to be considered as a leaf.
-
-                .. note:: The purpose of `is_leaf` is not to prevent recursive calls into nested tensordicts, but
-                    rather to mark certain types as "leaves" for the purpose of filtering when `leaves_only=True`.
-                    Even if `is_leaf(cls)` returns `True`, the nested structure of the tensordict will still be
-                    traversed if `include_nested=True`.
-                    In other words, `is_leaf` does not control the recursion depth, but rather provides a way to filter
-                    out certain types from the result when `leaves_only=True`. This means that a node in the tree can
-                    be both a leaf and a node with children.
-                    In practice, the default value of ``is_leaf`` does exclude tensordict and tensorclass instances
-                    from the leaf set.
-
-                .. seealso:: :meth:`~tensordict.is_leaf_nontensor` and :meth:`~tensordict.default_is_leaf`.
+            include_nested (bool, optional): if ``True``, the entries of the
+                sub-tensordicts are also returned, with nested keys (tuples of
+                strings). Defaults to ``False``.
+            leaves_only (bool, optional): if ``True``, only leaves are returned,
+                and sub-tensordicts are skipped. Defaults to ``False``.
+            is_leaf (callable, optional): a function that takes a class and
+                returns ``True`` if values of that class count as leaves. It
+                only filters the result when ``leaves_only=True``. It does not
+                stop the recursion: with ``include_nested=True``, a
+                sub-tensordict is still searched even if ``is_leaf`` returns
+                ``True`` for it. By default, tensordicts and tensorclasses are
+                not leaves. See :func:`~tensordict.is_leaf_nontensor` and
+                :func:`~tensordict.default_is_leaf`.
 
         Keyword Args:
-            sort (bool, optional): whether the keys should be sorted. For nested keys,
-                the keys are sorted according to their joined name (ie, ``("a", "key")`` will
-                be counted as ``"a.key"`` for sorting). Be mindful that sorting may incur
-                significant overhead when dealing with large tensordicts.
+            sort (bool, optional): if ``True``, the keys are sorted. Nested keys
+                are sorted by their joined name: ``("a", "key")`` sorts as
+                ``"a.key"``. Sorting takes extra time on large tensordicts.
                 Defaults to ``False``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(
+            ...     a=torch.zeros(2),
+            ...     nested=TensorDict(b=torch.ones(2, 3), batch_size=[2]),
+            ...     batch_size=[2],
+            ... )
+            >>> [type(value).__name__ for value in td.values()]
+            ['Tensor', 'TensorDict']
+            >>> [value.shape for value in td.values(include_nested=True, leaves_only=True)]
+            [torch.Size([2]), torch.Size([2, 3])]
 
         """
         if sort:
@@ -4122,38 +4384,35 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         *,
         sort: bool = False,
     ):
-        """Returns a generator of tensordict keys.
+        """Returns a view of the keys of the tensordict.
+
+        By default, only the top-level keys are returned. A nested key is a
+        tuple of strings, for example ``("nested", "b")``. See :ref:`keys`.
 
         .. warning::
-            TensorDict ``keys()`` method returns a lazy view of the keys. If the ``keys``
-            are queried but not iterated over and then the tensordict is modified, iterating over
-            the keys later will return the new configuration of the keys.
+            The view is lazy. If you modify the tensordict after you call
+            ``keys()`` and before you iterate over the result, the iteration
+            returns the keys after the change.
 
         Args:
-            include_nested (bool, optional): if ``True``, nested values will be returned.
-                Defaults to ``False``.
-            leaves_only (bool, optional): if ``False``, only leaves will be
-                returned. Defaults to ``False``.
-            is_leaf (callable, optional): a callable over a class type returning
-                a bool indicating if this class has to be considered as a leaf.
-
-                .. note:: The purpose of `is_leaf` is not to prevent recursive calls into nested tensordicts, but
-                    rather to mark certain types as "leaves" for the purpose of filtering when `leaves_only=True`.
-                    Even if `is_leaf(cls)` returns `True`, the nested structure of the tensordict will still be
-                    traversed if `include_nested=True`.
-                    In other words, `is_leaf` does not control the recursion depth, but rather provides a way to filter
-                    out certain types from the result when `leaves_only=True`. This means that a node in the tree can
-                    be both a leaf and a node with children.
-                    In practice, the default value of ``is_leaf`` does exclude tensordict and tensorclass instances
-                    from the leaf set.
-
-                .. seealso:: :meth:`~tensordict.is_leaf_nontensor` and :meth:`~tensordict.default_is_leaf`.
+            include_nested (bool, optional): if ``True``, the entries of the
+                sub-tensordicts are also returned, with nested keys (tuples of
+                strings). Defaults to ``False``.
+            leaves_only (bool, optional): if ``True``, only leaves are returned,
+                and sub-tensordicts are skipped. Defaults to ``False``.
+            is_leaf (callable, optional): a function that takes a class and
+                returns ``True`` if values of that class count as leaves. It
+                only filters the result when ``leaves_only=True``. It does not
+                stop the recursion: with ``include_nested=True``, a
+                sub-tensordict is still searched even if ``is_leaf`` returns
+                ``True`` for it. By default, tensordicts and tensorclasses are
+                not leaves. See :func:`~tensordict.is_leaf_nontensor` and
+                :func:`~tensordict.default_is_leaf`.
 
         Keyword Args:
-            sort (bool, optional): whether the keys shoulbe sorted. For nested keys,
-                the keys are sorted according to their joined name (ie, ``("a", "key")`` will
-                be counted as ``"a.key"`` for sorting). Be mindful that sorting may incur
-                significant overhead when dealing with large tensordicts.
+            sort (bool, optional): if ``True``, the keys are sorted. Nested keys
+                are sorted by their joined name: ``("a", "key")`` sorts as
+                ``"a.key"``. Sorting takes extra time on large tensordicts.
                 Defaults to ``False``.
 
         Examples:
@@ -4172,13 +4431,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Removes and returns a value from a tensordict.
 
         If the value is not present and no default value is provided, a KeyError
-        is thrown.
+        is thrown. A locked tensordict raises ``RuntimeError`` (see
+        :meth:`~.lock_`).
 
         Args:
-            key (str or nested key): the entry to look for.
+            key (NestedKey): the entry to look for. A tuple removes a nested
+                entry, and keeps the sub-tensordict that held it.
             default (Any, optional): the value to return if the key cannot be found.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({"1": 1}, [])
             >>> one = td.pop("1")
             >>> assert one == 1
@@ -4254,14 +4516,29 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     ) -> Self:
         """Renames a key with a new string and returns the same tensordict with the updated key name.
 
+        The value is not copied. A locked tensordict raises ``RuntimeError``
+        (see :meth:`~.lock_`).
+
         Args:
-            old_key (str or nested key): key to be renamed.
-            new_key (str or nested key): new name of the entry.
-            safe (bool, optional): if ``True``, an error is thrown when the new
-                key is already present in the TensorDict.
+            old_key (NestedKey): key to be renamed. A missing key raises
+                ``KeyError``.
+            new_key (NestedKey): new name of the entry.
+            safe (bool, optional): if ``True``, a ``KeyError`` is raised when
+                the new key is already present in the TensorDict. If
+                ``False``, the existing entry is overwritten. Defaults to
+                ``False``.
 
         Returns:
             self
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict({"a": torch.zeros(3), "b": {"c": torch.ones(3)}}, [3])
+            >>> td = td.rename_key_("a", "x")
+            >>> td = td.rename_key_(("b", "c"), ("b", "y"))
+            >>> list(td.keys(include_nested=True, leaves_only=True))
+            [('b', 'y'), 'x']
 
         """
         raise NotImplementedError
@@ -4334,8 +4611,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             device (torch.device, optional): the resulting device, if any.
             names (list of str, optional): the new dimension names, in case the
                 batch_size is modified.
-            inplace (bool, optional): if True, changes are made in-place.
-                Default is False. This is a keyword only argument.
+            inplace (bool, optional): if ``True``, the results are written into
+                the existing leaves of ``self`` (as :meth:`~.set_` does), and
+                ``self`` is returned. Defaults to ``False``. See
+                :ref:`inplace-conventions`.
             default (Any, optional): default value for missing entries in the
                 other tensordicts. If not provided, missing entries will
                 raise a `KeyError`.
@@ -4356,6 +4635,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 If ``False``, the function will only be called on leaves, and ``apply`` will take care of dispatching
                 the function to all leaves.
 
+                    >>> from tensordict import TensorDict, is_tensor_collection
                     >>> td = TensorDict({"a": {"b": [0.0, 1.0]}, "c": [1.0, 2.0]})
                     >>> def mean_tensor_only(val):
                     ...     if is_tensor_collection(val):
@@ -4373,7 +4653,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 creating a new tensordict:
 
                     >>> td = TensorDict({"a": 0})
-                    >>> td.apply(lambda x: x+1, out=td)
+                    >>> _ = td.apply(lambda x: x+1, out=td)
                     >>> assert (td==1).all()
 
                 .. warning::
@@ -4392,9 +4672,24 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 TensorDict constructor.
 
         Returns:
-            a new tensordict with transformed_in tensors.
+            a new tensordict with the transformed tensors, or ``self`` if
+            ``inplace=True``. ``None`` if ``fn`` returns ``None`` for every
+            leaf and ``filter_empty`` is not ``False``.
 
-        Example:
+            The result has the same type as ``self`` for
+            :class:`~tensordict.TensorDict`,
+            :class:`~tensordict.LazyStackedTensorDict` and tensorclasses.
+            Other types, for example
+            :class:`~tensordict.PersistentTensorDict` or a memory-mapped
+            tensordict, give a :class:`~tensordict.TensorDict` that lives in
+            memory.
+
+            A locked tensordict gives an unlocked result unless
+            ``propagate_lock=True``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({
             ...     "a": -torch.ones(3),
             ...     "b": {"c": torch.ones(3)}},
@@ -4427,13 +4722,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 batch_size=torch.Size([]),
                 device=None,
                 is_shared=False)
-
-        .. note::
-            The apply method will return an :class:`~tensordict.TensorDict` instance,
-            regardless of the input type. To keep the same type, one can execute
-
-            >>> out = td.clone(False).update(td.apply(...))
-
 
         """
         result = self._apply_nest(
@@ -4470,7 +4758,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> Self | None:
-        """Applies a key-conditioned callable to all values stored in the tensordict and sets them in a new atensordict.
+        """Applies a key-conditioned callable to all values stored in the tensordict and sets them in a new tensordict.
 
         The callable signature must be ``Callable[Tuple[str, Tensor, ...], Tensor | TensorDictBase | None]``.
 
@@ -4494,8 +4782,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             device (torch.device, optional): the resulting device, if any.
             names (list of str, optional): the new dimension names, in case the
                 batch_size is modified.
-            inplace (bool, optional): if True, changes are made in-place.
-                Default is False. This is a keyword only argument.
+            inplace (bool, optional): if ``True``, the results are written into
+                the existing leaves of ``self`` (as :meth:`~.set_` does), and
+                ``self`` is returned. Defaults to ``False``. See
+                :ref:`inplace-conventions`.
             default (Any, optional): default value for missing entries in the
                 other tensordicts. If not provided, missing entries will
                 raise a `KeyError`.
@@ -4515,6 +4805,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 If ``False``, the function will only be called on leaves, and ``apply`` will take care of dispatching
                 the function to all leaves.
 
+                    >>> from tensordict import TensorDict, is_tensor_collection
                     >>> td = TensorDict({"a": {"b": [0.0, 1.0]}, "c": [1.0, 2.0]})
                     >>> def mean_tensor_only(val):
                     ...     if is_tensor_collection(val):
@@ -4532,7 +4823,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 creating a new tensordict:
 
                     >>> td = TensorDict({"a": 0})
-                    >>> td.apply(lambda x: x+1, out=td)
+                    >>> _ = td.apply(lambda x: x+1, out=td)
                     >>> assert (td==1).all()
 
                 .. warning::
@@ -4551,9 +4842,24 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 TensorDict constructor.
 
         Returns:
-            a new tensordict with transformed_in tensors.
+            a new tensordict with the transformed tensors, or ``self`` if
+            ``inplace=True``. ``None`` if ``fn`` returns ``None`` for every
+            leaf and ``filter_empty`` is not ``False``.
 
-        Example:
+            The result has the same type as ``self`` for
+            :class:`~tensordict.TensorDict`,
+            :class:`~tensordict.LazyStackedTensorDict` and tensorclasses.
+            Other types, for example
+            :class:`~tensordict.PersistentTensorDict` or a memory-mapped
+            tensordict, give a :class:`~tensordict.TensorDict` that lives in
+            memory.
+
+            A locked tensordict gives an unlocked result unless
+            ``propagate_lock=True``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({
             ...     "a": -torch.ones(3),
             ...     "nested": {"a": torch.ones(3), "b": torch.zeros(3)}},
@@ -4579,7 +4885,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             ...         r = 0
             ...         for tensor in tensors:
             ...             r = r + tensor
-            ...         return tensor
+            ...         return r
             >>> out = td.named_apply(name_filter, td)
             >>> print(out)
             TensorDict(
@@ -4595,7 +4901,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 device=None,
                 is_shared=False)
             >>> print(out["a"])
-            tensor([-1., -1., -1.])
+            tensor([-2., -2., -2.])
 
         .. note::
             If ``None`` is returned by the function, the entry is ignored. This
@@ -5224,21 +5530,21 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         it in tensordicts of equal size and dispatching the operations over the
         desired number of workers.
 
-        The function signature should be ``Callabe[[TensorDict], TensorDict | Tensor]``.
+        The function signature must be ``Callable[[TensorDict], TensorDict | Tensor]``.
         The output must support the :func:`torch.cat` operation. The function
         must be serializable.
 
         .. note::
             This method is particularly useful when working with large
-            datasets stored on disk (e.g. memory-mapped tensordicts) where
-            chunks will be zero-copied slices of the original data which can
-            be passed to the processes with virtually zero-cost. This allows
-            to tread very large datasets (eg. over a Tb big) to be processed
-            at little cost.
+            datasets stored on disk (for example, memory-mapped tensordicts).
+            The chunks are slices of the original data that are not copied,
+            and the processes receive them without a data transfer. This way,
+            you can process datasets larger than the memory (for example,
+            over 1 TB).
 
         Args:
             fn (callable): function to apply to the tensordict.
-                Signatures similar to ``Callabe[[TensorDict], TensorDict | Tensor]``
+                Signatures similar to ``Callable[[TensorDict], TensorDict | Tensor]``
                 are supported.
             dim (int, optional): the dim along which the tensordict will be chunked.
             num_workers (int, optional): the number of workers. Exclusive with ``pool``.
@@ -5318,18 +5624,25 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 is passed to the ``map`` method.
 
         Examples:
-            >>> import torch
-            >>> from tensordict import TensorDict
-            >>>
-            >>> def process_data(data):
-            ...     data.set("y", data.get("x") + 1)
-            ...     return data
-            >>> if __name__ == "__main__":
-            ...     data = TensorDict({"x": torch.zeros(1, 1_000_000)}, [1, 1_000_000]).memmap_()
-            ...     data = data.map(process_data, dim=1)
-            ...     print(data["y"][:, :10])
-            ...
-            tensor([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]])
+            Run this example as a script, not in a REPL: the worker processes
+            must import ``process_data``, and the ``if __name__ == "__main__"``
+            block keeps them from running the main code again.
+
+            .. code-block:: python
+
+                import torch
+                from tensordict import TensorDict
+
+                def process_data(data):
+                    # The chunks of a memory-mapped tensordict are locked:
+                    # return a new tensordict instead of adding a key to data.
+                    return data.empty().set("y", data["x"] + 1)
+
+                if __name__ == "__main__":
+                    data = TensorDict({"x": torch.zeros(1, 1_000)}, [1, 1_000]).memmap_()
+                    data = data.map(process_data, dim=1, num_workers=2)
+                    print(data["y"][:, :10])
+                    # tensor([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]])
         """
         from torch import multiprocessing as mp
 
@@ -5406,24 +5719,24 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         it in tensordicts of equal size and dispatching the operations over the
         desired number of workers. It will yield the results one at a time.
 
-        The function signature should be ``Callabe[[TensorDict], TensorDict | Tensor]``.
+        The function signature must be ``Callable[[TensorDict], TensorDict | Tensor]``.
         The function must be serializable.
 
         .. note::
             This method is particularly useful when working with large
-            datasets stored on disk (e.g. memory-mapped tensordicts) where
-            chunks will be zero-copied slices of the original data which can
-            be passed to the processes with virtually zero-cost. This allows
-            to tread very large datasets (eg. over a Tb big) to be processed
-            at little cost.
+            datasets stored on disk (for example, memory-mapped tensordicts).
+            The chunks are slices of the original data that are not copied,
+            and the processes receive them without a data transfer. This way,
+            you can process datasets larger than the memory (for example,
+            over 1 TB).
 
         .. note::
-            This function be used to represent a dataset and load from it,
-            in a dataloader-like fashion.
+            You can use this function to represent a dataset and load from
+            it, as a dataloader does.
 
         Args:
             fn (callable): function to apply to the tensordict.
-                Signatures similar to ``Callabe[[TensorDict], TensorDict | Tensor]``
+                Signatures similar to ``Callable[[TensorDict], TensorDict | Tensor]``
                 are supported.
             dim (int, optional): the dim along which the tensordict will be chunked.
             num_workers (int, optional): the number of workers. Exclusive with ``pool``.
@@ -5506,20 +5819,26 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 is passed to the ``map`` method.
 
         Examples:
-            >>> import torch
-            >>> from tensordict import TensorDict
-            >>>
-            >>> def process_data(data):
-            ...     data.unlock_()
-            ...     data.set("y", data.get("x") + 1)
-            ...     return data
-            >>> if __name__ == "__main__":
-            ...     data = TensorDict({"x": torch.zeros(1, 1_000_000)}, [1, 1_000_000]).memmap_()
-            ...     for sample in data.map_iter(process_data, dim=1, chunksize=5):
-            ...         print(sample["y"])
-            ...         break
-            ...
-            tensor([[1., 1., 1., 1., 1.]])
+            Run this example as a script, not in a REPL: the worker processes
+            must import ``process_data``, and the ``if __name__ == "__main__"``
+            block keeps them from running the main code again.
+
+            .. code-block:: python
+
+                import torch
+                from tensordict import TensorDict
+
+                def process_data(data):
+                    # The chunks of a memory-mapped tensordict are locked:
+                    # return a new tensordict instead of adding a key to data.
+                    return data.empty().set("y", data["x"] + 1)
+
+                if __name__ == "__main__":
+                    data = TensorDict({"x": torch.zeros(1, 1_000)}, [1, 1_000]).memmap_()
+                    for sample in data.map_iter(process_data, dim=1, num_workers=2, chunksize=5):
+                        print(sample["y"])
+                        # tensor([[1., 1., 1., 1., 1.]])
+                        break
 
         """
         from torch import multiprocessing as mp
@@ -6147,16 +6466,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     ) -> Self:
         """Selects the keys of the tensordict and returns a new tensordict with only the selected keys.
 
-        The values are not copied: in-place modifications a tensor of either
-        of the original or new tensordict will result in a change in both
-        tensordicts.
+        The values are not copied. The result shares its tensors with the
+        original, so an in-place change to a tensor in one tensordict shows in
+        the other. A nested key selects one entry of a sub-tensordict, and a
+        key of a sub-tensordict selects the whole sub-tensordict. See
+        :ref:`keys`.
 
         Args:
-            *keys (str): keys to select
-            inplace (bool): if True, the tensordict is pruned in place.
+            *keys (NestedKey): keys to select.
+            inplace (bool): if ``True``, the other keys are removed from this
+                tensordict, and this tensordict is returned.
                 Default is ``False``.
-            strict (bool, optional): whether selecting a key that is not present
-                will return an error or not. Default: :obj:`True`.
+            strict (bool, optional): if ``True``, a missing key raises
+                ``KeyError``. If ``False``, missing keys are ignored.
+                Default: ``True``.
             as_tensordict (bool, optional): if ``True``, the result will be a
                 plain :class:`~tensordict.TensorDict` even when called on a
                 :class:`~tensordict.TensorClass` instance. This avoids the
@@ -6228,13 +6551,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def exclude(self, *keys: NestedKey, inplace: bool = False) -> Self:
         """Excludes the keys of the tensordict and returns a new tensordict without these entries.
 
-        The values are not copied: in-place modifications a tensor of either
-        of the original or new tensordict will result in a change in both
-        tensordicts.
+        The values are not copied. The result shares its tensors with the
+        original, so an in-place change to a tensor in one tensordict shows in
+        the other. Unlike :meth:`~.select`, a missing key is ignored: there is
+        no ``strict`` argument. See :ref:`keys`.
 
         Args:
-            *keys (str): keys to exclude.
-            inplace (bool): if True, the tensordict is pruned in place.
+            *keys (NestedKey): keys to exclude.
+            inplace (bool): if ``True``, the keys are removed from this
+                tensordict, and this tensordict is returned.
                 Default is ``False``.
 
         Returns:
@@ -6262,6 +6587,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 batch_size=torch.Size([]),
                 device=None,
                 is_shared=False)
+            >>> list(td.exclude("this key does not exist").keys())
+            ['a', 'b']
 
         """
         keys = unravel_key_list(keys)
@@ -6299,12 +6626,27 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Args:
             recurse (bool, optional): if ``True``, each tensor contained in the
                 TensorDict will be copied too. Otherwise only the TensorDict
-                tree structure will be copied. Defaults to ``True``.
+                tree structure is copied: the sub-tensordicts are new objects,
+                but the leaves are the same tensors as in ``self``. Defaults to
+                ``True``.
 
         .. note::
             Unlike many other ops (pointwise arithmetic, shape operations, ...) ``clone`` does not inherit the
             original lock attribute. This design choice is made such that a clone can be created to be modified,
             which is the most frequent usage.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict({"a": torch.zeros(3), "b": {"c": torch.ones(3)}}, [3])
+            >>> td_clone = td.clone()
+            >>> td_clone["a"] is td["a"]
+            False
+            >>> td_shallow = td.clone(recurse=False)
+            >>> td_shallow["a"] is td["a"], td_shallow["b"] is td["b"]
+            (True, False)
+            >>> td.lock_().clone().is_locked
+            False
 
         """
         result = self._clone(recurse=recurse, **kwargs)
@@ -6334,9 +6676,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     ) -> Self:  # noqa: D417
         """Returns a new, empty tensordict with the same device and batch size.
 
+        The result is not locked, even if ``self`` is.
+
         Args:
             recurse (bool, optional): if ``True``, the entire structure of the
-                ``TensorDict`` will be reproduced without content.
+                ``TensorDict`` will be reproduced without content: the result
+                has the sub-tensordicts of ``self``, without their leaves.
                 Otherwise, only the root will be duplicated.
                 Defaults to ``False``.
 
@@ -6344,6 +6689,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             batch_size (torch.Size, optional): a new batch-size for the tensordict.
             device (torch.device, optional): a new device.
             names (list of str, optional): dimension names.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict({"a": torch.zeros(3), "b": {"c": torch.ones(3)}}, [3])
+            >>> empty = td.empty()
+            >>> list(empty.keys()), empty.batch_size
+            ([], torch.Size([3]))
+            >>> list(td.empty(recurse=True).keys(include_nested=True))
+            ['b']
 
         """
         if not recurse:
@@ -6369,6 +6724,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
         """Fills the values corresponding to the mask with the desired value.
 
+        The values are written into the existing leaves, which keep their
+        storage. See :ref:`inplace-conventions`.
+
         Args:
             mask (boolean torch.Tensor): mask of values to be filled. Shape
                 must match the tensordict batch-size.
@@ -6378,10 +6736,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict(source={'a': torch.zeros(3, 4)},
             ...     batch_size=[3])
             >>> mask = torch.tensor([True, False, False])
-            >>> td.masked_fill_(mask, 1.0)
+            >>> _ = td.masked_fill_(mask, 1.0)
             >>> td.get("a")
             tensor([[1., 1., 1., 1.],
                     [0., 0., 0., 0.],
@@ -6402,6 +6762,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict(source={'a': torch.zeros(3, 4)},
             ...     batch_size=[3])
             >>> mask = torch.tensor([True, False, False])
@@ -6463,22 +6825,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             inplace (bool, optional): if ``True``, the resulting tensordict will
                 have the same identity as the one where the call has been made.
                 Defaults to ``False``.
-            is_leaf (callable, optional): a callable over a class type returning
-                a bool indicating if this class has to be considered as a leaf.
-
-                .. note:: The purpose of `is_leaf` is not to prevent recursive calls into nested tensordicts, but
-                    rather to mark certain types as "leaves" for the purpose of filtering when `leaves_only=True`.
-                    Even if `is_leaf(cls)` returns `True`, the nested structure of the tensordict will still be
-                    traversed if `include_nested=True`.
-                    In other words, `is_leaf` does not control the recursion depth, but rather provides a way to filter
-                    out certain types from the result when `leaves_only=True`. This means that a node in the tree can
-                    be both a leaf and a node with children.
-                    In practice, the default value of ``is_leaf`` does exclude tensordict and tensorclass instances
-                    from the leaf set.
-
-                .. seealso:: :meth:`~tensordict.is_leaf_nontensor` and :meth:`~tensordict.default_is_leaf`.
+            is_leaf (callable, optional): a function that takes a class and
+                returns ``True`` if values of that class count as leaves. Here
+                it stops the flattening: a sub-tensordict whose class is a
+                leaf is kept as one value under its key. By default,
+                tensordicts and tensorclasses are not leaves. See
+                :func:`~tensordict.is_leaf_nontensor` and
+                :func:`~tensordict.default_is_leaf`.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> data = TensorDict({"a": 1, ("b", "c"): 2, ("e", "f", "g"): 3}, batch_size=[])
             >>> data.flatten_keys(separator=" - ")
             TensorDict(
@@ -6531,7 +6888,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 batch_size=torch.Size([]),
                 device=None,
                 is_shared=False)
-            >>> model.load_state_dict(dict(model_state_dict.flatten_keys(".")))
+            >>> _ = model.load_state_dict(dict(model_state_dict.flatten_keys(".")))
         """
         if inplace:
             return self._flatten_keys_inplace(separator=separator, is_leaf=is_leaf)
@@ -6635,6 +6992,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 Defaults to ``False``.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> data = TensorDict({"a": 1, "b - c": 2, "e - f - g": 3}, batch_size=[])
             >>> data.unflatten_keys(separator=" - ")
             TensorDict(
@@ -6702,7 +7061,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 batch_size=torch.Size([]),
                 device=None,
                 is_shared=False)
-            >>> model.load_state_dict(dict(model_state_dict.flatten_keys(".")))
+            >>> _ = model.load_state_dict(dict(model_state_dict.flatten_keys(".")))
 
         """
         if not inplace:
@@ -6740,7 +7099,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Splits the tensordict in subsets given one or more set of keys.
 
         The method will return ``N+1`` tensordicts, where ``N`` is the number of
-        the arguments provided.
+        the arguments provided. The last tensordict holds the keys that are in
+        no set.
 
         Args:
             key_sets (sequence of Dict[in_key, out_key] or list of keys): the various splits.
@@ -6761,6 +7121,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             The method does not check for duplicates in the provided lists.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> td = TensorDict(
             ...     a=0,
             ...     b=0,
@@ -6768,7 +7129,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             ...     d=0,
             ... )
             >>> td_a, td_bc, td_d = td.split_keys(["a"], ["b", "c"])
-            >>> print(td_bc)
+            >>> sorted(td_a.keys()), sorted(td_bc.keys()), sorted(td_d.keys())
+            (['a'], ['b', 'c'], ['d'])
+            >>> # with inplace=True, the last tensordict is ``td`` itself
+            >>> td_a, rest = td.split_keys(["a"], inplace=True)
+            >>> rest is td, sorted(td.keys())
+            (True, ['b', 'c', 'd'])
         """
         from tensordict import PersistentTensorDict
 
@@ -6839,6 +7205,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             T: the separated tensordict.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> td = TensorDict(
             ...     a=0,
             ...     b=0,
@@ -6959,6 +7326,24 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Locking functionality
     @property
     def is_locked(self) -> bool:
+        """``True`` if the tensordict is locked.
+
+        A locked tensordict raises ``RuntimeError`` on any operation that adds,
+        removes or renames an entry, or that replaces a leaf with a new tensor.
+        Writes into the existing leaves still work. See :meth:`~.lock_`.
+
+        Setting ``td.is_locked = True`` calls :meth:`~.lock_`, and
+        ``td.is_locked = False`` calls :meth:`~.unlock_`.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict({"a": 0})
+            >>> td.is_locked
+            False
+            >>> td.is_locked = True
+            >>> td.is_locked
+            True
+        """
         return self._is_locked
 
     @is_locked.setter
@@ -7022,36 +7407,45 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     @_as_context_manager("is_locked")
     def lock_(self) -> Self:
-        """Locks a tensordict for non in-place operations.
+        """Locks the tensordict and its sub-tensordicts, and returns it.
 
-        Functions such as :meth:`~.set`, :meth:`~.__setitem__`, :meth:`~.update`,
-        :meth:`~.rename_key_` or other operations that add or remove entries
-        will be blocked.
+        A locked tensordict raises ``RuntimeError`` on any operation that adds,
+        removes or renames an entry, or that replaces a leaf with a new tensor:
+        :meth:`~.set`, ``__setitem__``, :meth:`~.update`, :meth:`~.pop`,
+        :meth:`~.rename_key_`, ``del``. Writes into the existing leaves still
+        work: :meth:`~.set_`, :meth:`~.update_`, and ``set(..., inplace=True)``.
+        Check the state with :attr:`~.is_locked`. See :ref:`keys`.
 
-        This method can be used as a decorator.
+        Can be used as a context manager: the tensordict is unlocked when the
+        ``with`` block exits, also if the block raises an exception.
 
-        Example:
+        Examples:
             >>> from tensordict import TensorDict
             >>> td = TensorDict({"a": 1, "b": 2, "c": 3}, batch_size=[])
             >>> with td.lock_():
             ...     assert td.is_locked
             ...     try:
-            ...         td.set("d", 0) # error!
+            ...         td.set("d", 0)  # adds a key: error
             ...     except RuntimeError:
             ...         print("td is locked!")
             ...     try:
-            ...         del td["d"]
+            ...         del td["a"]  # removes a key: error
             ...     except RuntimeError:
             ...         print("td is locked!")
             ...     try:
-            ...         td.rename_key_("a", "d")
+            ...         td.rename_key_("a", "d")  # renames a key: error
             ...     except RuntimeError:
             ...         print("td is locked!")
-            ...     td.set("a", 0, inplace=True)  # No storage is added, moved or removed
-            ...     td.set_("a", 0) # No storage is added, moved or removed
-            ...     td.update({"a": 0}, inplace=True)  # No storage is added, moved or removed
-            ...     td.update_({"a": 0})  # No storage is added, moved or removed
-            >>> assert not td.is_locked
+            ...     # These calls write into the existing leaves, so they work:
+            ...     _ = td.set("a", 0, inplace=True)
+            ...     _ = td.set_("a", 0)
+            ...     _ = td.update({"a": 0}, inplace=True)
+            ...     _ = td.update_({"a": 0})
+            td is locked!
+            td is locked!
+            td is locked!
+            >>> td.is_locked
+            False
         """
         if self.is_locked:
             return self
@@ -7116,11 +7510,29 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     @_as_context_manager("is_locked")
     def unlock_(self) -> Self:
-        """Unlocks a tensordict for non in-place operations.
+        """Unlocks the tensordict and its sub-tensordicts, and returns it.
 
-        Can be used as a decorator.
+        After this call, entries can be added, removed and renamed again. See
+        :meth:`~.lock_` for what a lock blocks.
 
-        See :meth:`~.lock_` for more details.
+        Can be used as a context manager: the tensordict is locked again when
+        the ``with`` block exits, also if the block raises an exception.
+
+        Raises:
+            RuntimeError: if this tensordict, or one of its sub-tensordicts,
+                is also an entry of another locked tensordict. Unlock that
+                parent first. The tensordict stays locked.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3), batch_size=[3], lock=True)
+            >>> with td.unlock_():
+            ...     td["b"] = torch.ones(3)
+            >>> td.is_locked
+            True
+            >>> sorted(td.keys())
+            ['a', 'b']
         """
         try:
             sub_tds = self._propagate_unlock()
