@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Keys, nested keys and locking &#8212; tensordict main documentation</title>
+    <title>Keys, nested keys, and locking &#8212; tensordict main documentation</title>
   
   
   
@@ -61,7 +61,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Stacking and variable-size data" href="stacking.html" />
-    <link rel="prev" title="Batch size, shapes and indexing" href="batch_size.html" />
+    <link rel="prev" title="Batch size, shapes, and indexing" href="batch_size.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -71,7 +71,7 @@
 <meta name="llm:site-type" content="documentation">
 <meta name="llm:framework" content="PyTorch">
 
-<meta name="llm:description" content="A dict[str, torch.Tensor] that behaves like one tensor. - Keys, nested keys and locking">
+<meta name="llm:description" content="A dict[str, torch.Tensor] that behaves like one tensor. - Keys, nested keys, and locking">
 
 
 
@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5166+g328602c08.d20261012)">
+<meta name="llm:version" content="main (0.14.0.dev5167+g88f8baec0.d20261012)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5166+g328602c08.d20261012)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5167+g88f8baec0.d20261012)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -561,13 +561,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="batch_size.html">
-                  Batch size, shapes and indexing
+                  Batch size, shapes, and indexing
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="#">
-                  Keys, nested keys and locking
+                  Keys, nested keys, and locking
                 </a>
               </li>
             
@@ -579,13 +579,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="operations.html">
-                  Arithmetic, apply, reductions and gradients
+                  Arithmetic, apply, reductions, and gradients
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="devices.html">
-                  Devices, dtypes and memory
+                  Devices, dtypes, and memory
                 </a>
               </li>
             
@@ -659,7 +659,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../compile.html">
-                  torch.compile, torch.func, torch.export and CUDA graphs
+                  torch.compile, torch.func, torch.export, and CUDA graphs
                 </a>
               </li>
             
@@ -697,13 +697,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_keys.html">
-                  Getting, setting and nesting keys
+                  Getting, setting, and nesting keys
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_slicing.html">
-                  Slicing, indexing and masking
+                  Slicing, indexing, and masking
                 </a>
               </li>
             
@@ -1058,13 +1058,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="batch_size.html">
-                  Batch size, shapes and indexing
+                  Batch size, shapes, and indexing
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="#">
-                  Keys, nested keys and locking
+                  Keys, nested keys, and locking
                 </a>
               </li>
             
@@ -1076,13 +1076,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="operations.html">
-                  Arithmetic, apply, reductions and gradients
+                  Arithmetic, apply, reductions, and gradients
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="devices.html">
-                  Devices, dtypes and memory
+                  Devices, dtypes, and memory
                 </a>
               </li>
             
@@ -1156,7 +1156,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../compile.html">
-                  torch.compile, torch.func, torch.export and CUDA graphs
+                  torch.compile, torch.func, torch.export, and CUDA graphs
                 </a>
               </li>
             
@@ -1194,13 +1194,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_keys.html">
-                  Getting, setting and nesting keys
+                  Getting, setting, and nesting keys
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_slicing.html">
-                  Slicing, indexing and masking
+                  Slicing, indexing, and masking
                 </a>
               </li>
             
@@ -1442,11 +1442,11 @@ document.write(`
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">User guide</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../overview.html">What is TensorDict?</a></li>
-<li class="toctree-l1"><a class="reference internal" href="batch_size.html">Batch size, shapes and indexing</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Keys, nested keys and locking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="batch_size.html">Batch size, shapes, and indexing</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Keys, nested keys, and locking</a></li>
 <li class="toctree-l1"><a class="reference internal" href="stacking.html">Stacking and variable-size data</a></li>
-<li class="toctree-l1"><a class="reference internal" href="operations.html">Arithmetic, apply, reductions and gradients</a></li>
-<li class="toctree-l1"><a class="reference internal" href="devices.html">Devices, dtypes and memory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="operations.html">Arithmetic, apply, reductions, and gradients</a></li>
+<li class="toctree-l1"><a class="reference internal" href="devices.html">Devices, dtypes, and memory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="non_tensor.html">Non-tensor data and unbatched entries</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tensorclass.html">TensorClass</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../typed_tensordict.html">TypedTensorDict</a></li>
@@ -1459,15 +1459,15 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="../storage.html">Large datasets and storage backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../data_loading.html">Load data and share it between processes</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../distributed.html">Distributed tensordicts</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../compile.html">torch.compile, torch.func, torch.export and CUDA graphs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../compile.html">torch.compile, torch.func, torch.export, and CUDA graphs</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../printing.html">Printing and display</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../compatibility.html">Containers on storage backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../fx.html">FX tracing (prototype)</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: basics</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_keys.html">Getting, setting and nesting keys</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_slicing.html">Slicing, indexing and masking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_keys.html">Getting, setting, and nesting keys</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_slicing.html">Slicing, indexing, and masking</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_shapes.html">Changing the shape of a TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_preallocation.html">Filling a TensorDict row by row</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/streamed_tensordict.html">Building tensordicts from streams</a></li>
@@ -1572,7 +1572,7 @@ document.write(`
   <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
     
     <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-      <meta itemprop="name" content="Keys, nested keys and locking">
+      <meta itemprop="name" content="Keys, nested keys, and locking">
       <meta itemprop="position" content="1">
     </div>
   </div>
@@ -1612,10 +1612,10 @@ document.write(`
                 <article class="bd-article">
                   
   <section id="keys-nested-keys-and-locking">
-<span id="keys"></span><h1>Keys, nested keys and locking<a class="headerlink" href="#keys-nested-keys-and-locking" title="Link to this heading">#</a></h1>
+<span id="keys"></span><h1>Keys, nested keys, and locking<a class="headerlink" href="#keys-nested-keys-and-locking" title="Link to this heading">#</a></h1>
 <p>A tensordict groups related tensors in a tree. One key reads any of them: a
 string for the top level, a tuple of strings for a nested entry. A lock fixes
-the set of keys, so that no code adds, replaces or removes an entry by
+the set of keys, so that no code adds, replaces, or removes an entry by
 mistake.</p>
 <section id="nested-tensordicts-and-nested-keys">
 <h2>Nested tensordicts and nested keys<a class="headerlink" href="#nested-tensordicts-and-nested-keys" title="Link to this heading">#</a></h2>
@@ -1653,6 +1653,13 @@ that do not exist yet:</p>
 <p>A tuple key in the constructor also creates nested entries:
 <code class="docutils literal notranslate"><span class="pre">TensorDict({(&quot;x&quot;,</span> <span class="pre">&quot;y&quot;):</span> <span class="pre">torch.zeros(3)},</span> <span class="pre">batch_size=[3])</span></code> has a nested
 tensordict <code class="docutils literal notranslate"><span class="pre">&quot;x&quot;</span></code> with the key <code class="docutils literal notranslate"><span class="pre">&quot;y&quot;</span></code>.</p>
+<p>Keyword arguments are a shorthand for top-level keys:
+<code class="docutils literal notranslate"><span class="pre">TensorDict(obs=torch.zeros(3),</span> <span class="pre">batch_size=[3])</span></code> is the same as
+<code class="docutils literal notranslate"><span class="pre">TensorDict({&quot;obs&quot;:</span> <span class="pre">torch.zeros(3)},</span> <span class="pre">batch_size=[3])</span></code>. In the shorthand, the
+names of the constructor arguments (<code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">batch_size</span></code>, <code class="docutils literal notranslate"><span class="pre">device</span></code>,
+<code class="docutils literal notranslate"><span class="pre">names</span></code>, <code class="docutils literal notranslate"><span class="pre">non_blocking</span></code>, and <code class="docutils literal notranslate"><span class="pre">lock</span></code>) are not keys, and a key must be a
+Python identifier. A key such as <code class="docutils literal notranslate"><span class="pre">&quot;obs.next&quot;</span></code> or a tuple key needs the dict.
+These docs build every TensorDict from a dict.</p>
 <p>If you know the keys when you write the code, a
 <a class="reference internal" href="../reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> gives you typed attributes in place of string
 keys, and your editor completes them (see <a class="reference internal" href="../tensorclass.html#tensorclass-guide"><span class="std std-ref">TensorClass</span></a>).</p>
@@ -1692,8 +1699,10 @@ tensordict, such as a tensor or a <a class="reference internal" href="../referen
 a nested tensordict come before the key of that tensordict. This robot state
 has a timestamp, an arm, and a gripper on the arm:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">time</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span>
-<span class="gp">... </span>    <span class="n">arm</span><span class="o">=</span><span class="p">{</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"gripper"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"force"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)}},</span>
+<span class="gp">... </span>    <span class="p">{</span>
+<span class="gp">... </span>        <span class="s2">"time"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span>
+<span class="gp">... </span>        <span class="s2">"arm"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"gripper"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"force"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)}},</span>
+<span class="gp">... </span>    <span class="p">},</span>
 <span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
@@ -1753,7 +1762,7 @@ tensor if the key exists. If the key does not exist, it is added.</p></li>
 does not exist, it raises a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>.</p></li>
 </ul>
 <p>For example:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">pos</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">old</span> <span class="o">=</span> <span class="n">td</span><span class="p">[</span><span class="s2">"pos"</span><span class="p">]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">"pos"</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">old</span>  <span class="c1"># replaced: the old tensor did not change</span>
@@ -1778,7 +1787,7 @@ the keys that it does not give stay as they are. With <code class="docutils lite
 copies into the existing tensors, as <code class="docutils literal notranslate"><span class="pre">set(...,</span> <span class="pre">inplace=True)</span></code> does.
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_" title="tensordict.TensorDict.update_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update_()</span></code></a> copies into existing tensors only, and
 raises a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> for a missing key.</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">time</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">arm</span><span class="o">=</span><span class="p">{</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"time"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"arm"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)}},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">"time"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"arm"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"vel"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">)}})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
 <span class="go">['time', ('arm', 'pos'), ('arm', 'vel')]</span>
@@ -1797,14 +1806,16 @@ for each key, or <code class="docutils literal notranslate"><span class="pre">up
 </div>
 </section>
 <section id="select-exclude-and-remove-entries">
-<h2>Select, exclude and remove entries<a class="headerlink" href="#select-exclude-and-remove-entries" title="Link to this heading">#</a></h2>
+<h2>Select, exclude, and remove entries<a class="headerlink" href="#select-exclude-and-remove-entries" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.select.html#tensordict.TensorDictBase.select" title="tensordict.TensorDict.select"><code class="xref py py-meth docutils literal notranslate"><span class="pre">select()</span></code></a> returns a new tensordict with the keys
 that you name. <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.exclude.html#tensordict.TensorDictBase.exclude" title="tensordict.TensorDict.exclude"><code class="xref py py-meth docutils literal notranslate"><span class="pre">exclude()</span></code></a> returns a new tensordict
 without them. Both accept nested keys. They do not copy the tensors: the new
 tensordict holds the same tensors as the original.</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">time</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span>
-<span class="gp">... </span>    <span class="n">arm</span><span class="o">=</span><span class="p">{</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"gripper"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"force"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)}},</span>
+<span class="gp">... </span>    <span class="p">{</span>
+<span class="gp">... </span>        <span class="s2">"time"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span>
+<span class="gp">... </span>        <span class="s2">"arm"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"gripper"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"force"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)}},</span>
+<span class="gp">... </span>    <span class="p">},</span>
 <span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s2">"time"</span><span class="p">,</span> <span class="p">(</span><span class="s2">"arm"</span><span class="p">,</span> <span class="s2">"pos"</span><span class="p">))</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
@@ -1827,7 +1838,7 @@ returns <code class="docutils literal notranslate"><span class="pre">default</sp
 <p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.rename_key_.html#tensordict.TensorDictBase.rename_key_" title="tensordict.TensorDict.rename_key_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rename_key_()</span></code></a> renames a key in place and returns
 the tensordict. The old and the new keys can be nested, and at different
 levels:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">time</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">arm</span><span class="o">=</span><span class="p">{</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"time"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"arm"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)}},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">rename_key_</span><span class="p">((</span><span class="s2">"arm"</span><span class="p">,</span> <span class="s2">"pos"</span><span class="p">),</span> <span class="s2">"pos"</span><span class="p">)</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
 <span class="go">['time', 'arm', 'pos']</span>
 </pre></div>
@@ -1842,7 +1853,7 @@ level. It joins each nested key into one string, with <code class="docutils lite
 separator. <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.unflatten_keys.html#tensordict.TensorDictBase.unflatten_keys" title="tensordict.TensorDict.unflatten_keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unflatten_keys()</span></code></a> does the reverse.
 The two methods do not copy the tensors. Use them for code or file formats
 that accept only flat string keys.</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">time</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">arm</span><span class="o">=</span><span class="p">{</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"time"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"arm"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)}},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">flat</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">flatten_keys</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">flat</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
 <span class="go">['time', 'arm.pos']</span>
@@ -1864,13 +1875,13 @@ tensordicts. A locked tensordict raises a <code class="docutils literal notransl
 operations:</p>
 <ul class="simple">
 <li><p>Add a key, at any level.</p></li>
-<li><p>Replace an entry: <code class="docutils literal notranslate"><span class="pre">td[key]</span> <span class="pre">=</span> <span class="pre">value</span></code>, <code class="docutils literal notranslate"><span class="pre">set</span></code> and <code class="docutils literal notranslate"><span class="pre">update</span></code> without
+<li><p>Replace an entry: <code class="docutils literal notranslate"><span class="pre">td[key]</span> <span class="pre">=</span> <span class="pre">value</span></code>, <code class="docutils literal notranslate"><span class="pre">set</span></code>, and <code class="docutils literal notranslate"><span class="pre">update</span></code> without
 <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code>.</p></li>
 <li><p>Remove or rename an entry: <code class="docutils literal notranslate"><span class="pre">del</span></code>, <code class="docutils literal notranslate"><span class="pre">pop</span></code>, <code class="docutils literal notranslate"><span class="pre">rename_key_</span></code>, and
 <code class="docutils literal notranslate"><span class="pre">select</span></code> or <code class="docutils literal notranslate"><span class="pre">exclude</span></code> with <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code>.</p></li>
 </ul>
 <p>For example, a new key in a nested tensordict raises:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">time</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">arm</span><span class="o">=</span><span class="p">{</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"time"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"arm"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)}},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">lock_</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"arm"</span><span class="p">,</span> <span class="s2">"vel"</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
 <span class="gt">Traceback (most recent call last):</span>
@@ -1914,16 +1925,16 @@ These methods also lock it:</p>
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap" title="tensordict.TensorDict.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a> returns a locked tensordict.
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDict.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a> returns an unlocked tensordict.</p></li>
 <li><p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.share_memory_.html#tensordict.TensorDictBase.share_memory_" title="tensordict.TensorDict.share_memory_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">share_memory_()</span></code></a> locks the tensordict (see
-<a class="reference internal" href="devices.html#devices"><span class="std std-ref">Devices, dtypes and memory</span></a>).</p></li>
+<a class="reference internal" href="devices.html#devices"><span class="std std-ref">Devices, dtypes, and memory</span></a>).</p></li>
 <li><p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate" title="tensordict.TensorDict.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a> returns a locked tensordict.</p></li>
 <li><p><a class="reference internal" href="../reference/generated/tensordict.from_module.html#tensordict.from_module" title="tensordict.from_module"><code class="xref py py-func docutils literal notranslate"><span class="pre">tensordict.from_module()</span></code></a> returns a locked tensordict.
 <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.from_module" title="tensordict.TensorDict.from_module"><code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDict.from_module</span></code></a> returns an
 unlocked one.</p></li>
 </ul>
 <p>A new tensordict that a method returns is not always locked like the original.
-On a locked tensordict, <code class="docutils literal notranslate"><span class="pre">clone()</span></code>, <code class="docutils literal notranslate"><span class="pre">select()</span></code>, <code class="docutils literal notranslate"><span class="pre">apply()</span></code>, indexing and
+On a locked tensordict, <code class="docutils literal notranslate"><span class="pre">clone()</span></code>, <code class="docutils literal notranslate"><span class="pre">select()</span></code>, <code class="docutils literal notranslate"><span class="pre">apply()</span></code>, indexing, and
 <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> return an unlocked tensordict. <code class="docutils literal notranslate"><span class="pre">view()</span></code>, <code class="docutils literal notranslate"><span class="pre">reshape()</span></code>,
-<code class="docutils literal notranslate"><span class="pre">unsqueeze()</span></code> and <code class="docutils literal notranslate"><span class="pre">to()</span></code> return a locked one. Read <code class="docutils literal notranslate"><span class="pre">is_locked</span></code> on the
+<code class="docutils literal notranslate"><span class="pre">unsqueeze()</span></code>, and <code class="docutils literal notranslate"><span class="pre">to()</span></code> return a locked one. Read <code class="docutils literal notranslate"><span class="pre">is_locked</span></code> on the
 result if your code depends on it.</p>
 </section>
 <section id="temporary-changes-with-with">
@@ -1932,7 +1943,7 @@ result if your code depends on it.</p>
 <code class="docutils literal notranslate"><span class="pre">with</span></code> block, they undo their change.</p>
 <p><code class="docutils literal notranslate"><span class="pre">with</span> <span class="pre">td.unlock_():</span></code> unlocks the tensordict for the block, and locks it again
 at the end. <code class="docutils literal notranslate"><span class="pre">with</span> <span class="pre">td.lock_():</span></code> does the reverse.</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">pos</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">lock</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">lock</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">td</span><span class="o">.</span><span class="n">unlock_</span><span class="p">():</span>
 <span class="gp">... </span>    <span class="n">td</span><span class="p">[</span><span class="s2">"vel"</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">is_locked</span><span class="p">,</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
@@ -1954,13 +1965,13 @@ gets its original parameters back:</p>
 <span class="go">False</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">unlock_</span></code>, <code class="docutils literal notranslate"><span class="pre">lock_</span></code> and <code class="docutils literal notranslate"><span class="pre">to_module</span></code> also undo their change when the
+<p><code class="docutils literal notranslate"><span class="pre">unlock_</span></code>, <code class="docutils literal notranslate"><span class="pre">lock_</span></code>, and <code class="docutils literal notranslate"><span class="pre">to_module</span></code> also undo their change when the
 <code class="docutils literal notranslate"><span class="pre">with</span></code> block raises an exception.</p>
 <p>These shape operations also work as context managers:
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.view.html#tensordict.TensorDictBase.view" title="tensordict.TensorDict.view"><code class="xref py py-meth docutils literal notranslate"><span class="pre">view()</span></code></a>, <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.permute.html#tensordict.TensorDictBase.permute" title="tensordict.TensorDict.permute"><code class="xref py py-meth docutils literal notranslate"><span class="pre">permute()</span></code></a>,
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.transpose.html#tensordict.TensorDictBase.transpose" title="tensordict.TensorDict.transpose"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transpose()</span></code></a>,
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.unsqueeze.html#tensordict.TensorDictBase.unsqueeze" title="tensordict.TensorDict.unsqueeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unsqueeze()</span></code></a>,
-<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.flatten.html#tensordict.TensorDictBase.flatten" title="tensordict.TensorDict.flatten"><code class="xref py py-meth docutils literal notranslate"><span class="pre">flatten()</span></code></a> and
+<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.flatten.html#tensordict.TensorDictBase.flatten" title="tensordict.TensorDict.flatten"><code class="xref py py-meth docutils literal notranslate"><span class="pre">flatten()</span></code></a>, and
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.unflatten.html#tensordict.TensorDictBase.unflatten" title="tensordict.TensorDict.unflatten"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unflatten()</span></code></a>. At the end of the block, the entries
 that you wrote into the result go back into the original, with the reverse
 operation. <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.reshape.html#tensordict.TensorDictBase.reshape" title="tensordict.TensorDict.reshape"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reshape()</span></code></a> does not write back.
@@ -1968,7 +1979,7 @@ operation. <a class="reference internal" href="../reference/generated/tensordict
 entries back to their original device and dtype (see
 <a class="reference internal" href="devices.html#devices-temporary-moves"><span class="std std-ref">Temporary moves</span></a>). If the block raises an exception, these
 operations write nothing back.</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"x"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">td</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">as</span> <span class="n">tdu</span><span class="p">:</span>
 <span class="gp">... </span>    <span class="n">tdu</span><span class="p">[</span><span class="s2">"y"</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"y"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
@@ -1982,11 +1993,11 @@ operations write nothing back.</p>
 <ul class="simple">
 <li><p><a class="reference internal" href="../reference/generated/tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><code class="xref py py-class docutils literal notranslate"><span class="pre">NestedKey</span></code></a>, <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.keys.html#tensordict.TensorDictBase.keys" title="tensordict.TensorDict.keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">keys()</span></code></a>,
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get" title="tensordict.TensorDict.get"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get()</span></code></a>, <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.set.html#tensordict.TensorDictBase.set" title="tensordict.TensorDict.set"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set()</span></code></a>,
-<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.set_.html#tensordict.TensorDictBase.set_" title="tensordict.TensorDict.set_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set_()</span></code></a> and <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_" title="tensordict.TensorDict.lock_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">lock_()</span></code></a>
+<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.set_.html#tensordict.TensorDictBase.set_" title="tensordict.TensorDict.set_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set_()</span></code></a>, and <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_" title="tensordict.TensorDict.lock_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">lock_()</span></code></a>
 in the <a class="reference internal" href="../reference/index.html#api-reference"><span class="std std-ref">API reference</span></a>.</p></li>
-<li><p><a class="reference internal" href="../reference/td.html#api-methods-keys"><span class="std std-ref">Keys, values and entries</span></a> and <a class="reference internal" href="../reference/td.html#api-methods-locking"><span class="std std-ref">Locking</span></a>: the methods for keys
+<li><p><a class="reference internal" href="../reference/td.html#api-methods-keys"><span class="std std-ref">Keys, values, and entries</span></a> and <a class="reference internal" href="../reference/td.html#api-methods-locking"><span class="std std-ref">Locking</span></a>: the methods for keys
 and locking.</p></li>
-<li><p>The tutorial <a class="reference internal" href="../tutorials/tensordict_keys.html"><span class="doc">Getting, setting and nesting keys</span></a>.</p></li>
+<li><p>The tutorial <a class="reference internal" href="../tutorials/tensordict_keys.html"><span class="doc">Getting, setting, and nesting keys</span></a>.</p></li>
 </ul>
 </section>
 </section>
@@ -2039,7 +2050,7 @@ and locking.</p></li>
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Batch size, shapes and indexing</p>
+        <p class="prev-next-title">Batch size, shapes, and indexing</p>
       </div>
     </a>
     <a class="right-next"
@@ -2078,7 +2089,7 @@ and locking.</p></li>
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Batch size, shapes and indexing</p>
+        <p class="prev-next-title">Batch size, shapes, and indexing</p>
       </div>
     </a>
     <a class="right-next"
@@ -2114,7 +2125,7 @@ and locking.</p></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#read-an-entry">Read an entry</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#write-an-entry">Write an entry</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#write-several-entries">Write several entries</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#select-exclude-and-remove-entries">Select, exclude and remove entries</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#select-exclude-and-remove-entries">Select, exclude, and remove entries</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rename-a-key">Rename a key</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#flatten-and-unflatten-the-keys">Flatten and unflatten the keys</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#locking-and-temporary-changes">Locking and temporary changes</a><ul class="visible nav section-nav flex-column">
@@ -2375,11 +2386,11 @@ and locking.</p></li>
     {
        "@context": "https://schema.org",
        "@type": "Article",
-       "name": "Keys, nested keys and locking",
-       "headline": "Keys, nested keys and locking",
-       "description": "A dict[str, torch.Tensor] that behaves like one tensor. - Keys, nested keys and locking",
+       "name": "Keys, nested keys, and locking",
+       "headline": "Keys, nested keys, and locking",
+       "description": "A dict[str, torch.Tensor] that behaves like one tensor. - Keys, nested keys, and locking",
        "url": "/concepts/keys.html",
-       "articleBody": "Keys, nested keys and locking# A tensordict groups related tensors in a tree. One key reads any of them: a string for the top level, a tuple of strings for a nested entry. A lock fixes the set of keys, so that no code adds, replaces or removes an entry by mistake. Nested tensordicts and nested keys# A key is a string. The value of an entry can be another TensorDict: the constructor converts each nested dictionary into one, with the batch size of the parent. This training batch has two levels: \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e data = TensorDict( ... { ... \"inputs\": { ... \"image\": torch.rand(100, 28, 28), ... \"mask\": torch.randint(2, (100, 28, 28), dtype=torch.uint8), ... }, ... \"outputs\": {\"logits\": torch.randn(100, 10)}, ... }, ... batch_size=[100], ... ) \u003e\u003e\u003e type(data[\"inputs\"]).__name__, data[\"inputs\"].batch_size (\u0027TensorDict\u0027, torch.Size([100])) A nested key is a tuple of strings, and each string selects one level of the tree. data[\"a\", \"b\"] is the same as data[(\"a\", \"b\")] and as data[\"a\"][\"b\"]. A write with a nested key creates the nested tensordicts that do not exist yet: \u003e\u003e\u003e image = data[\"inputs\", \"image\"] \u003e\u003e\u003e logits = data.get((\"outputs\", \"logits\")) \u003e\u003e\u003e data[\"outputs\", \"probabilities\"] = torch.sigmoid(logits) \u003e\u003e\u003e data[\"extra\", \"count\"] = torch.zeros(100) \u003e\u003e\u003e data[\"extra\"].batch_size torch.Size([100]) A tuple key in the constructor also creates nested entries: TensorDict({(\"x\", \"y\"): torch.zeros(3)}, batch_size=[3]) has a nested tensordict \"x\" with the key \"y\". If you know the keys when you write the code, a TensorClass gives you typed attributes in place of string keys, and your editor completes them (see TensorClass). Valid keys# The type name NestedKey covers the two forms of a key: a string, or a tuple of strings. A tuple inside a tuple is flattened, and a tuple of one string is the same as the string: \u003e\u003e\u003e from tensordict import unravel_key \u003e\u003e\u003e unravel_key((\"a\", (\"b\", \"c\"))) (\u0027a\u0027, \u0027b\u0027, \u0027c\u0027) \u003e\u003e\u003e unravel_key((\"a\",)) \u0027a\u0027 Any other key raises a KeyError. A string with a dot, such as \"a.b\", is one plain key, not a nested key. \u003e\u003e\u003e TensorDict().get((\"a\", 1)) Traceback (most recent call last): ... KeyError: \"Only NestedKeys are supported: a key must be a string or a non-empty, possibly nested tuple of strings. Got key (\u0027a\u0027, 1).\" List the keys# keys() lists the keys of the top level. Two arguments change this: include_nested=True also lists the keys inside the nested tensordicts, as tuples. leaves_only=True lists only the leaves. A leaf is an entry that is not a tensordict, such as a tensor or a NonTensorData. The keys come in insertion order. With include_nested=True, the keys inside a nested tensordict come before the key of that tensordict. This robot state has a timestamp, an arm, and a gripper on the arm: \u003e\u003e\u003e td = TensorDict( ... time=torch.zeros(3), ... arm={\"pos\": torch.zeros(3), \"gripper\": {\"force\": torch.zeros(3)}}, ... batch_size=[3], ... ) \u003e\u003e\u003e list(td.keys()) [\u0027time\u0027, \u0027arm\u0027] \u003e\u003e\u003e list(td.keys(include_nested=True)) [\u0027time\u0027, (\u0027arm\u0027, \u0027pos\u0027), (\u0027arm\u0027, \u0027gripper\u0027, \u0027force\u0027), (\u0027arm\u0027, \u0027gripper\u0027), \u0027arm\u0027] \u003e\u003e\u003e list(td.keys(include_nested=True, leaves_only=True)) [\u0027time\u0027, (\u0027arm\u0027, \u0027pos\u0027), (\u0027arm\u0027, \u0027gripper\u0027, \u0027force\u0027)] \u003e\u003e\u003e list(td.keys(leaves_only=True)) [\u0027time\u0027] values() and items() take the same arguments. To test a key, use key in td. It accepts nested keys. key in td.keys() accepts a nested key only with include_nested=True: \u003e\u003e\u003e (\"arm\", \"pos\") in td True \u003e\u003e\u003e (\"arm\", \"pos\") in td.keys(include_nested=True) True Read an entry# td[key] and td.get(key) act differently on a missing key: td[key] raises a KeyError. td.get(key) returns None, as dict.get() does. td.get(key, default) returns default. This is also true for a nested key, at any depth: \u003e\u003e\u003e td.get(\"missing\") is None True \u003e\u003e\u003e td.get((\"arm\", \"missing\"), torch.ones(3)) tensor([1., 1., 1.]) \u003e\u003e\u003e td[\"missing\"] Traceback (most recent call last): ... KeyError: \u0027key \"missing\" not found in TensorDict with keys [\\\u0027arm\\\u0027, \\\u0027time\\\u0027]\u0027 get takes more arguments for lazy stacks whose entries have different shapes. See Variable-size data. Write an entry# There are three ways to write a value under a key. They differ in what happens to the tensor that is already there: td[key] = value and td.set(key, value) put value in the tensordict. If the key exists, the old tensor is replaced, not changed. If the key does not exist, it is added. td.set(key, value, inplace=True) copies value into the existing tensor if the key exists. If the key does not exist, it is added. td.set_(key, value) copies value into the existing tensor. If the key does not exist, it raises a KeyError. For example: \u003e\u003e\u003e td = TensorDict(pos=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e old = td[\"pos\"] \u003e\u003e\u003e _ = td.set(\"pos\", torch.ones(3)) \u003e\u003e\u003e old # replaced: the old tensor did not change tensor([0., 0., 0.]) \u003e\u003e\u003e old = td[\"pos\"] \u003e\u003e\u003e _ = td.set_(\"pos\", torch.full((3,), 2.0)) \u003e\u003e\u003e old # copied into the same tensor tensor([2., 2., 2.]) \u003e\u003e\u003e td.set_(\"vel\", torch.zeros(3)) Traceback (most recent call last): ... KeyError: \u0027key \"vel\" not found in TensorDict with keys [\\\u0027pos\\\u0027]\u0027 In-place operations gives the rules for the other in-place operations. Write several entries# update() calls set for each entry of a dictionary or a TensorDict. A nested dictionary updates the nested tensordict: the keys that it does not give stay as they are. With inplace=True, it copies into the existing tensors, as set(..., inplace=True) does. update_() copies into existing tensors only, and raises a KeyError for a missing key. \u003e\u003e\u003e td = TensorDict(time=torch.zeros(3), arm={\"pos\": torch.zeros(3)}, batch_size=[3]) \u003e\u003e\u003e _ = td.update({\"time\": torch.ones(3), \"arm\": {\"vel\": torch.ones(3)}}) \u003e\u003e\u003e list(td.keys(include_nested=True, leaves_only=True)) [\u0027time\u0027, (\u0027arm\u0027, \u0027pos\u0027), (\u0027arm\u0027, \u0027vel\u0027)] update writes the entries one after the other. If one entry raises, for example on a batch size mismatch, the entries before it are already written. Warning Do not use update_ on a PersistentTensorDict or a TensorDictStore. On these backends, update_ writes nothing and raises no error (#2217, #2242). Use set_ for each key, or update(..., inplace=True). Select, exclude and remove entries# select() returns a new tensordict with the keys that you name. exclude() returns a new tensordict without them. Both accept nested keys. They do not copy the tensors: the new tensordict holds the same tensors as the original. \u003e\u003e\u003e td = TensorDict( ... time=torch.zeros(3), ... arm={\"pos\": torch.zeros(3), \"gripper\": {\"force\": torch.zeros(3)}}, ... batch_size=[3], ... ) \u003e\u003e\u003e list(td.select(\"time\", (\"arm\", \"pos\")).keys(include_nested=True)) [\u0027time\u0027, (\u0027arm\u0027, \u0027pos\u0027), \u0027arm\u0027] \u003e\u003e\u003e list(td.exclude(\"time\", (\"arm\", \"gripper\")).keys(include_nested=True)) [(\u0027arm\u0027, \u0027pos\u0027), \u0027arm\u0027] \u003e\u003e\u003e td.select(\"time\")[\"time\"] is td[\"time\"] True select raises a KeyError for a missing key, unless you pass strict=False. exclude ignores missing keys. With inplace=True, both change the tensordict and return it. To remove one entry, use del td[key] or pop(). pop(key) raises a KeyError for a missing key, and pop(key, default) returns default. Rename a key# rename_key_() renames a key in place and returns the tensordict. The old and the new keys can be nested, and at different levels: \u003e\u003e\u003e td = TensorDict(time=torch.zeros(3), arm={\"pos\": torch.zeros(3)}, batch_size=[3]) \u003e\u003e\u003e list(td.rename_key_((\"arm\", \"pos\"), \"pos\").keys(include_nested=True)) [\u0027time\u0027, \u0027arm\u0027, \u0027pos\u0027] If the new key exists, rename_key_ replaces its value. With safe=True, it raises a KeyError instead. Flatten and unflatten the keys# flatten_keys() returns a tensordict with one level. It joins each nested key into one string, with \".\" as the default separator. unflatten_keys() does the reverse. The two methods do not copy the tensors. Use them for code or file formats that accept only flat string keys. \u003e\u003e\u003e td = TensorDict(time=torch.zeros(3), arm={\"pos\": torch.zeros(3)}, batch_size=[3]) \u003e\u003e\u003e flat = td.flatten_keys() \u003e\u003e\u003e list(flat.keys()) [\u0027time\u0027, \u0027arm.pos\u0027] \u003e\u003e\u003e list(flat.unflatten_keys().keys(include_nested=True)) [\u0027time\u0027, (\u0027arm\u0027, \u0027pos\u0027), \u0027arm\u0027] \u003e\u003e\u003e list(td.flatten_keys(\"/\").keys()) [\u0027time\u0027, \u0027arm/pos\u0027] Locking and temporary changes# A locked tensordict does not accept a change to its keys. Code can still change the values of the existing tensors. What a lock blocks# lock_() locks a tensordict and all its nested tensordicts. A locked tensordict raises a RuntimeError for each of these operations: Add a key, at any level. Replace an entry: td[key] = value, set and update without inplace=True. Remove or rename an entry: del, pop, rename_key_, and select or exclude with inplace=True. For example, a new key in a nested tensordict raises: \u003e\u003e\u003e td = TensorDict(time=torch.zeros(3), arm={\"pos\": torch.zeros(3)}, batch_size=[3]) \u003e\u003e\u003e _ = td.lock_() \u003e\u003e\u003e td[\"arm\", \"vel\"] = torch.zeros(3) Traceback (most recent call last): ... RuntimeError: Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method and make sure the key is present. These operations write into the existing tensors, so they work on a locked tensordict. For a non-tensor entry, set_ and update_ raise on a locked tensordict (#2288): set_ and update_. set(..., inplace=True) and update(..., inplace=True), if the key exists. An assignment to a batch index, such as td[0] = other. An in-place method of the tensordict, such as td.add_(1) or td.zero_(), or of one tensor, such as td[\"time\"].add_(1). For example: \u003e\u003e\u003e _ = td.set_(\"time\", torch.ones(3)) \u003e\u003e\u003e td[\"time\"].add_(1) tensor([2., 2., 2.]) td[\"time\"] += 1 raises on a locked tensordict, but only after it changed the tensor. Python runs it as td[\"time\"] = td[\"time\"].__iadd__(1): the in-place add works, and the assignment then raises. Use td[\"time\"].add_(1) instead. To read the lock state, use is_locked. To remove it, call unlock_() on the root tensordict. If you unlock a nested tensordict of a locked tensordict alone, it raises a RuntimeError. Who locks a tensordict# You lock a tensordict with lock_() or with TensorDict(..., lock=True). These methods also lock it: memmap_() locks the tensordict, and memmap() returns a locked tensordict. load_memmap() returns an unlocked tensordict. share_memory_() locks the tensordict (see Devices, dtypes and memory). consolidate() returns a locked tensordict. tensordict.from_module() returns a locked tensordict. TensorDict.from_module returns an unlocked one. A new tensordict that a method returns is not always locked like the original. On a locked tensordict, clone(), select(), apply(), indexing and torch.stack() return an unlocked tensordict. view(), reshape(), unsqueeze() and to() return a locked one. Read is_locked on the result if your code depends on it. Temporary changes with with# Some methods of a tensordict also work as context managers. At the end of the with block, they undo their change. with td.unlock_(): unlocks the tensordict for the block, and locks it again at the end. with td.lock_(): does the reverse. \u003e\u003e\u003e td = TensorDict(pos=torch.zeros(3), batch_size=[3], lock=True) \u003e\u003e\u003e with td.unlock_(): ... td[\"vel\"] = torch.ones(3) \u003e\u003e\u003e td.is_locked, sorted(td.keys()) (True, [\u0027pos\u0027, \u0027vel\u0027]) with params.to_module(module): puts the parameters and buffers of the tensordict params into module for the block. At the end, the module gets its original parameters back: \u003e\u003e\u003e from torch import nn \u003e\u003e\u003e module = nn.Linear(3, 2) \u003e\u003e\u003e params = TensorDict.from_module(module).clone() \u003e\u003e\u003e _ = params.zero_() \u003e\u003e\u003e with params.to_module(module): ... y = module(torch.ones(1, 3)) \u003e\u003e\u003e y.detach() tensor([[0., 0.]]) \u003e\u003e\u003e bool((module.weight == 0).all()) False unlock_, lock_ and to_module also undo their change when the with block raises an exception. These shape operations also work as context managers: view(), permute(), transpose(), unsqueeze(), flatten() and unflatten(). At the end of the block, the entries that you wrote into the result go back into the original, with the reverse operation. reshape() does not write back. to() also writes back, and casts the existing entries back to their original device and dtype (see Temporary moves). If the block raises an exception, these operations write nothing back. \u003e\u003e\u003e td = TensorDict(x=torch.zeros(3, 4), batch_size=[3, 4]) \u003e\u003e\u003e with td.unsqueeze(-1) as tdu: ... tdu[\"y\"] = torch.ones(3, 4, 1) \u003e\u003e\u003e td[\"y\"].shape torch.Size([3, 4]) See also# NestedKey, keys(), get(), set(), set_() and lock_() in the API reference. Keys, values and entries and Locking: the methods for keys and locking. The tutorial Getting, setting and nesting keys.",
+       "articleBody": "Keys, nested keys, and locking# A tensordict groups related tensors in a tree. One key reads any of them: a string for the top level, a tuple of strings for a nested entry. A lock fixes the set of keys, so that no code adds, replaces, or removes an entry by mistake. Nested tensordicts and nested keys# A key is a string. The value of an entry can be another TensorDict: the constructor converts each nested dictionary into one, with the batch size of the parent. This training batch has two levels: \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e data = TensorDict( ... { ... \"inputs\": { ... \"image\": torch.rand(100, 28, 28), ... \"mask\": torch.randint(2, (100, 28, 28), dtype=torch.uint8), ... }, ... \"outputs\": {\"logits\": torch.randn(100, 10)}, ... }, ... batch_size=[100], ... ) \u003e\u003e\u003e type(data[\"inputs\"]).__name__, data[\"inputs\"].batch_size (\u0027TensorDict\u0027, torch.Size([100])) A nested key is a tuple of strings, and each string selects one level of the tree. data[\"a\", \"b\"] is the same as data[(\"a\", \"b\")] and as data[\"a\"][\"b\"]. A write with a nested key creates the nested tensordicts that do not exist yet: \u003e\u003e\u003e image = data[\"inputs\", \"image\"] \u003e\u003e\u003e logits = data.get((\"outputs\", \"logits\")) \u003e\u003e\u003e data[\"outputs\", \"probabilities\"] = torch.sigmoid(logits) \u003e\u003e\u003e data[\"extra\", \"count\"] = torch.zeros(100) \u003e\u003e\u003e data[\"extra\"].batch_size torch.Size([100]) A tuple key in the constructor also creates nested entries: TensorDict({(\"x\", \"y\"): torch.zeros(3)}, batch_size=[3]) has a nested tensordict \"x\" with the key \"y\". Keyword arguments are a shorthand for top-level keys: TensorDict(obs=torch.zeros(3), batch_size=[3]) is the same as TensorDict({\"obs\": torch.zeros(3)}, batch_size=[3]). In the shorthand, the names of the constructor arguments (source, batch_size, device, names, non_blocking, and lock) are not keys, and a key must be a Python identifier. A key such as \"obs.next\" or a tuple key needs the dict. These docs build every TensorDict from a dict. If you know the keys when you write the code, a TensorClass gives you typed attributes in place of string keys, and your editor completes them (see TensorClass). Valid keys# The type name NestedKey covers the two forms of a key: a string, or a tuple of strings. A tuple inside a tuple is flattened, and a tuple of one string is the same as the string: \u003e\u003e\u003e from tensordict import unravel_key \u003e\u003e\u003e unravel_key((\"a\", (\"b\", \"c\"))) (\u0027a\u0027, \u0027b\u0027, \u0027c\u0027) \u003e\u003e\u003e unravel_key((\"a\",)) \u0027a\u0027 Any other key raises a KeyError. A string with a dot, such as \"a.b\", is one plain key, not a nested key. \u003e\u003e\u003e TensorDict().get((\"a\", 1)) Traceback (most recent call last): ... KeyError: \"Only NestedKeys are supported: a key must be a string or a non-empty, possibly nested tuple of strings. Got key (\u0027a\u0027, 1).\" List the keys# keys() lists the keys of the top level. Two arguments change this: include_nested=True also lists the keys inside the nested tensordicts, as tuples. leaves_only=True lists only the leaves. A leaf is an entry that is not a tensordict, such as a tensor or a NonTensorData. The keys come in insertion order. With include_nested=True, the keys inside a nested tensordict come before the key of that tensordict. This robot state has a timestamp, an arm, and a gripper on the arm: \u003e\u003e\u003e td = TensorDict( ... { ... \"time\": torch.zeros(3), ... \"arm\": {\"pos\": torch.zeros(3), \"gripper\": {\"force\": torch.zeros(3)}}, ... }, ... batch_size=[3], ... ) \u003e\u003e\u003e list(td.keys()) [\u0027time\u0027, \u0027arm\u0027] \u003e\u003e\u003e list(td.keys(include_nested=True)) [\u0027time\u0027, (\u0027arm\u0027, \u0027pos\u0027), (\u0027arm\u0027, \u0027gripper\u0027, \u0027force\u0027), (\u0027arm\u0027, \u0027gripper\u0027), \u0027arm\u0027] \u003e\u003e\u003e list(td.keys(include_nested=True, leaves_only=True)) [\u0027time\u0027, (\u0027arm\u0027, \u0027pos\u0027), (\u0027arm\u0027, \u0027gripper\u0027, \u0027force\u0027)] \u003e\u003e\u003e list(td.keys(leaves_only=True)) [\u0027time\u0027] values() and items() take the same arguments. To test a key, use key in td. It accepts nested keys. key in td.keys() accepts a nested key only with include_nested=True: \u003e\u003e\u003e (\"arm\", \"pos\") in td True \u003e\u003e\u003e (\"arm\", \"pos\") in td.keys(include_nested=True) True Read an entry# td[key] and td.get(key) act differently on a missing key: td[key] raises a KeyError. td.get(key) returns None, as dict.get() does. td.get(key, default) returns default. This is also true for a nested key, at any depth: \u003e\u003e\u003e td.get(\"missing\") is None True \u003e\u003e\u003e td.get((\"arm\", \"missing\"), torch.ones(3)) tensor([1., 1., 1.]) \u003e\u003e\u003e td[\"missing\"] Traceback (most recent call last): ... KeyError: \u0027key \"missing\" not found in TensorDict with keys [\\\u0027arm\\\u0027, \\\u0027time\\\u0027]\u0027 get takes more arguments for lazy stacks whose entries have different shapes. See Variable-size data. Write an entry# There are three ways to write a value under a key. They differ in what happens to the tensor that is already there: td[key] = value and td.set(key, value) put value in the tensordict. If the key exists, the old tensor is replaced, not changed. If the key does not exist, it is added. td.set(key, value, inplace=True) copies value into the existing tensor if the key exists. If the key does not exist, it is added. td.set_(key, value) copies value into the existing tensor. If the key does not exist, it raises a KeyError. For example: \u003e\u003e\u003e td = TensorDict({\"pos\": torch.zeros(3)}, batch_size=[3]) \u003e\u003e\u003e old = td[\"pos\"] \u003e\u003e\u003e _ = td.set(\"pos\", torch.ones(3)) \u003e\u003e\u003e old # replaced: the old tensor did not change tensor([0., 0., 0.]) \u003e\u003e\u003e old = td[\"pos\"] \u003e\u003e\u003e _ = td.set_(\"pos\", torch.full((3,), 2.0)) \u003e\u003e\u003e old # copied into the same tensor tensor([2., 2., 2.]) \u003e\u003e\u003e td.set_(\"vel\", torch.zeros(3)) Traceback (most recent call last): ... KeyError: \u0027key \"vel\" not found in TensorDict with keys [\\\u0027pos\\\u0027]\u0027 In-place operations gives the rules for the other in-place operations. Write several entries# update() calls set for each entry of a dictionary or a TensorDict. A nested dictionary updates the nested tensordict: the keys that it does not give stay as they are. With inplace=True, it copies into the existing tensors, as set(..., inplace=True) does. update_() copies into existing tensors only, and raises a KeyError for a missing key. \u003e\u003e\u003e td = TensorDict({\"time\": torch.zeros(3), \"arm\": {\"pos\": torch.zeros(3)}}, batch_size=[3]) \u003e\u003e\u003e _ = td.update({\"time\": torch.ones(3), \"arm\": {\"vel\": torch.ones(3)}}) \u003e\u003e\u003e list(td.keys(include_nested=True, leaves_only=True)) [\u0027time\u0027, (\u0027arm\u0027, \u0027pos\u0027), (\u0027arm\u0027, \u0027vel\u0027)] update writes the entries one after the other. If one entry raises, for example on a batch size mismatch, the entries before it are already written. Warning Do not use update_ on a PersistentTensorDict or a TensorDictStore. On these backends, update_ writes nothing and raises no error (#2217, #2242). Use set_ for each key, or update(..., inplace=True). Select, exclude, and remove entries# select() returns a new tensordict with the keys that you name. exclude() returns a new tensordict without them. Both accept nested keys. They do not copy the tensors: the new tensordict holds the same tensors as the original. \u003e\u003e\u003e td = TensorDict( ... { ... \"time\": torch.zeros(3), ... \"arm\": {\"pos\": torch.zeros(3), \"gripper\": {\"force\": torch.zeros(3)}}, ... }, ... batch_size=[3], ... ) \u003e\u003e\u003e list(td.select(\"time\", (\"arm\", \"pos\")).keys(include_nested=True)) [\u0027time\u0027, (\u0027arm\u0027, \u0027pos\u0027), \u0027arm\u0027] \u003e\u003e\u003e list(td.exclude(\"time\", (\"arm\", \"gripper\")).keys(include_nested=True)) [(\u0027arm\u0027, \u0027pos\u0027), \u0027arm\u0027] \u003e\u003e\u003e td.select(\"time\")[\"time\"] is td[\"time\"] True select raises a KeyError for a missing key, unless you pass strict=False. exclude ignores missing keys. With inplace=True, both change the tensordict and return it. To remove one entry, use del td[key] or pop(). pop(key) raises a KeyError for a missing key, and pop(key, default) returns default. Rename a key# rename_key_() renames a key in place and returns the tensordict. The old and the new keys can be nested, and at different levels: \u003e\u003e\u003e td = TensorDict({\"time\": torch.zeros(3), \"arm\": {\"pos\": torch.zeros(3)}}, batch_size=[3]) \u003e\u003e\u003e list(td.rename_key_((\"arm\", \"pos\"), \"pos\").keys(include_nested=True)) [\u0027time\u0027, \u0027arm\u0027, \u0027pos\u0027] If the new key exists, rename_key_ replaces its value. With safe=True, it raises a KeyError instead. Flatten and unflatten the keys# flatten_keys() returns a tensordict with one level. It joins each nested key into one string, with \".\" as the default separator. unflatten_keys() does the reverse. The two methods do not copy the tensors. Use them for code or file formats that accept only flat string keys. \u003e\u003e\u003e td = TensorDict({\"time\": torch.zeros(3), \"arm\": {\"pos\": torch.zeros(3)}}, batch_size=[3]) \u003e\u003e\u003e flat = td.flatten_keys() \u003e\u003e\u003e list(flat.keys()) [\u0027time\u0027, \u0027arm.pos\u0027] \u003e\u003e\u003e list(flat.unflatten_keys().keys(include_nested=True)) [\u0027time\u0027, (\u0027arm\u0027, \u0027pos\u0027), \u0027arm\u0027] \u003e\u003e\u003e list(td.flatten_keys(\"/\").keys()) [\u0027time\u0027, \u0027arm/pos\u0027] Locking and temporary changes# A locked tensordict does not accept a change to its keys. Code can still change the values of the existing tensors. What a lock blocks# lock_() locks a tensordict and all its nested tensordicts. A locked tensordict raises a RuntimeError for each of these operations: Add a key, at any level. Replace an entry: td[key] = value, set, and update without inplace=True. Remove or rename an entry: del, pop, rename_key_, and select or exclude with inplace=True. For example, a new key in a nested tensordict raises: \u003e\u003e\u003e td = TensorDict({\"time\": torch.zeros(3), \"arm\": {\"pos\": torch.zeros(3)}}, batch_size=[3]) \u003e\u003e\u003e _ = td.lock_() \u003e\u003e\u003e td[\"arm\", \"vel\"] = torch.zeros(3) Traceback (most recent call last): ... RuntimeError: Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method and make sure the key is present. These operations write into the existing tensors, so they work on a locked tensordict. For a non-tensor entry, set_ and update_ raise on a locked tensordict (#2288): set_ and update_. set(..., inplace=True) and update(..., inplace=True), if the key exists. An assignment to a batch index, such as td[0] = other. An in-place method of the tensordict, such as td.add_(1) or td.zero_(), or of one tensor, such as td[\"time\"].add_(1). For example: \u003e\u003e\u003e _ = td.set_(\"time\", torch.ones(3)) \u003e\u003e\u003e td[\"time\"].add_(1) tensor([2., 2., 2.]) td[\"time\"] += 1 raises on a locked tensordict, but only after it changed the tensor. Python runs it as td[\"time\"] = td[\"time\"].__iadd__(1): the in-place add works, and the assignment then raises. Use td[\"time\"].add_(1) instead. To read the lock state, use is_locked. To remove it, call unlock_() on the root tensordict. If you unlock a nested tensordict of a locked tensordict alone, it raises a RuntimeError. Who locks a tensordict# You lock a tensordict with lock_() or with TensorDict(..., lock=True). These methods also lock it: memmap_() locks the tensordict, and memmap() returns a locked tensordict. load_memmap() returns an unlocked tensordict. share_memory_() locks the tensordict (see Devices, dtypes, and memory). consolidate() returns a locked tensordict. tensordict.from_module() returns a locked tensordict. TensorDict.from_module returns an unlocked one. A new tensordict that a method returns is not always locked like the original. On a locked tensordict, clone(), select(), apply(), indexing, and torch.stack() return an unlocked tensordict. view(), reshape(), unsqueeze(), and to() return a locked one. Read is_locked on the result if your code depends on it. Temporary changes with with# Some methods of a tensordict also work as context managers. At the end of the with block, they undo their change. with td.unlock_(): unlocks the tensordict for the block, and locks it again at the end. with td.lock_(): does the reverse. \u003e\u003e\u003e td = TensorDict({\"pos\": torch.zeros(3)}, batch_size=[3], lock=True) \u003e\u003e\u003e with td.unlock_(): ... td[\"vel\"] = torch.ones(3) \u003e\u003e\u003e td.is_locked, sorted(td.keys()) (True, [\u0027pos\u0027, \u0027vel\u0027]) with params.to_module(module): puts the parameters and buffers of the tensordict params into module for the block. At the end, the module gets its original parameters back: \u003e\u003e\u003e from torch import nn \u003e\u003e\u003e module = nn.Linear(3, 2) \u003e\u003e\u003e params = TensorDict.from_module(module).clone() \u003e\u003e\u003e _ = params.zero_() \u003e\u003e\u003e with params.to_module(module): ... y = module(torch.ones(1, 3)) \u003e\u003e\u003e y.detach() tensor([[0., 0.]]) \u003e\u003e\u003e bool((module.weight == 0).all()) False unlock_, lock_, and to_module also undo their change when the with block raises an exception. These shape operations also work as context managers: view(), permute(), transpose(), unsqueeze(), flatten(), and unflatten(). At the end of the block, the entries that you wrote into the result go back into the original, with the reverse operation. reshape() does not write back. to() also writes back, and casts the existing entries back to their original device and dtype (see Temporary moves). If the block raises an exception, these operations write nothing back. \u003e\u003e\u003e td = TensorDict({\"x\": torch.zeros(3, 4)}, batch_size=[3, 4]) \u003e\u003e\u003e with td.unsqueeze(-1) as tdu: ... tdu[\"y\"] = torch.ones(3, 4, 1) \u003e\u003e\u003e td[\"y\"].shape torch.Size([3, 4]) See also# NestedKey, keys(), get(), set(), set_(), and lock_() in the API reference. Keys, values, and entries and Locking: the methods for keys and locking. The tutorial Getting, setting, and nesting keys.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

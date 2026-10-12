@@ -5,7 +5,7 @@ TensorDictBase.clear_device_() → Self
 Sets the device of the tensordict and its sub-tensordicts to `None`, and returns it.
 
 The leaves are not moved. After this call, you can set leaves on any
-device. See [Devices, dtypes and memory](../../concepts/devices.html#devices).
+device. See [Devices, dtypes, and memory](../../concepts/devices.html#devices).
 
 Returns: self
 

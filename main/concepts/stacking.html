@@ -60,8 +60,8 @@
     <link rel="canonical" href="https://docs.pytorch.org/tensordict/stable/concepts/stacking.html" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Arithmetic, apply, reductions and gradients" href="operations.html" />
-    <link rel="prev" title="Keys, nested keys and locking" href="keys.html" />
+    <link rel="next" title="Arithmetic, apply, reductions, and gradients" href="operations.html" />
+    <link rel="prev" title="Keys, nested keys, and locking" href="keys.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5166+g328602c08.d20261012)">
+<meta name="llm:version" content="main (0.14.0.dev5167+g88f8baec0.d20261012)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5166+g328602c08.d20261012)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5167+g88f8baec0.d20261012)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -561,13 +561,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="batch_size.html">
-                  Batch size, shapes and indexing
+                  Batch size, shapes, and indexing
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="keys.html">
-                  Keys, nested keys and locking
+                  Keys, nested keys, and locking
                 </a>
               </li>
             
@@ -579,13 +579,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="operations.html">
-                  Arithmetic, apply, reductions and gradients
+                  Arithmetic, apply, reductions, and gradients
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="devices.html">
-                  Devices, dtypes and memory
+                  Devices, dtypes, and memory
                 </a>
               </li>
             
@@ -659,7 +659,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../compile.html">
-                  torch.compile, torch.func, torch.export and CUDA graphs
+                  torch.compile, torch.func, torch.export, and CUDA graphs
                 </a>
               </li>
             
@@ -697,13 +697,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_keys.html">
-                  Getting, setting and nesting keys
+                  Getting, setting, and nesting keys
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_slicing.html">
-                  Slicing, indexing and masking
+                  Slicing, indexing, and masking
                 </a>
               </li>
             
@@ -1058,13 +1058,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="batch_size.html">
-                  Batch size, shapes and indexing
+                  Batch size, shapes, and indexing
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="keys.html">
-                  Keys, nested keys and locking
+                  Keys, nested keys, and locking
                 </a>
               </li>
             
@@ -1076,13 +1076,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="operations.html">
-                  Arithmetic, apply, reductions and gradients
+                  Arithmetic, apply, reductions, and gradients
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="devices.html">
-                  Devices, dtypes and memory
+                  Devices, dtypes, and memory
                 </a>
               </li>
             
@@ -1156,7 +1156,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../compile.html">
-                  torch.compile, torch.func, torch.export and CUDA graphs
+                  torch.compile, torch.func, torch.export, and CUDA graphs
                 </a>
               </li>
             
@@ -1194,13 +1194,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_keys.html">
-                  Getting, setting and nesting keys
+                  Getting, setting, and nesting keys
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_slicing.html">
-                  Slicing, indexing and masking
+                  Slicing, indexing, and masking
                 </a>
               </li>
             
@@ -1442,11 +1442,11 @@ document.write(`
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">User guide</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../overview.html">What is TensorDict?</a></li>
-<li class="toctree-l1"><a class="reference internal" href="batch_size.html">Batch size, shapes and indexing</a></li>
-<li class="toctree-l1"><a class="reference internal" href="keys.html">Keys, nested keys and locking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="batch_size.html">Batch size, shapes, and indexing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="keys.html">Keys, nested keys, and locking</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Stacking and variable-size data</a></li>
-<li class="toctree-l1"><a class="reference internal" href="operations.html">Arithmetic, apply, reductions and gradients</a></li>
-<li class="toctree-l1"><a class="reference internal" href="devices.html">Devices, dtypes and memory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="operations.html">Arithmetic, apply, reductions, and gradients</a></li>
+<li class="toctree-l1"><a class="reference internal" href="devices.html">Devices, dtypes, and memory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="non_tensor.html">Non-tensor data and unbatched entries</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tensorclass.html">TensorClass</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../typed_tensordict.html">TypedTensorDict</a></li>
@@ -1459,15 +1459,15 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="../storage.html">Large datasets and storage backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../data_loading.html">Load data and share it between processes</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../distributed.html">Distributed tensordicts</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../compile.html">torch.compile, torch.func, torch.export and CUDA graphs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../compile.html">torch.compile, torch.func, torch.export, and CUDA graphs</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../printing.html">Printing and display</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../compatibility.html">Containers on storage backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../fx.html">FX tracing (prototype)</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: basics</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_keys.html">Getting, setting and nesting keys</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_slicing.html">Slicing, indexing and masking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_keys.html">Getting, setting, and nesting keys</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_slicing.html">Slicing, indexing, and masking</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_shapes.html">Changing the shape of a TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_preallocation.html">Filling a TensorDict row by row</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/streamed_tensordict.html">Building tensordicts from streams</a></li>
@@ -1624,8 +1624,8 @@ numbers of nodes or sequences of different lengths.</p>
 tensordict holds the 3-D positions of 2 particles:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">pos</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">b</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">pos</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">b</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">stacked</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">stacked</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">stacked</span><span class="o">.</span><span class="n">batch_size</span>
 <span class="go">('TensorDict', torch.Size([2, 2]))</span>
@@ -1643,12 +1643,12 @@ result does not change the inputs. <a class="reference internal" href="../refere
 same keys, the same batch size, and the same shape for each entry.
 <code class="docutils literal notranslate"><span class="pre">torch.cat</span></code> accepts different sizes along the joined dimension, but it
 raises a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> if the keys differ:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">c</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">pos</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>  <span class="c1"># 2-D positions</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">c</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>  <span class="c1"># 2-D positions</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">a</span><span class="p">,</span> <span class="n">c</span><span class="p">])</span>
 <span class="gt">Traceback (most recent call last):</span>
 <span class="c">...</span>
 <span class="gr">RuntimeError</span>: <span class="n">The shapes of the tensors to stack is incompatible: torch.Size([2, 2]) vs torch.Size([2, 3]) for key pos.</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">a</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">vel</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">a</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"vel"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])])</span>
 <span class="gt">Traceback (most recent call last):</span>
 <span class="c">...</span>
 <span class="gr">RuntimeError</span>: <span class="n">The sets of keys in the tensordicts to stack are exclusive. Consider using `LazyStackedTensorDict.maybe_dense_stack` instead.</span>
@@ -1664,7 +1664,7 @@ them. <a class="reference internal" href="../reference/generated/tensordict.lazy
 tensordict holds 10 time steps of one robot:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">lazy_stack</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">tds</span> <span class="o">=</span> <span class="p">[</span>
-<span class="gp">... </span>    <span class="n">TensorDict</span><span class="p">(</span><span class="n">battery</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span> <span class="n">joints</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">10</span><span class="p">])</span>
+<span class="gp">... </span>    <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"battery"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span> <span class="s2">"joints"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">4</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">10</span><span class="p">])</span>
 <span class="gp">... </span>    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
 <span class="gp">... </span><span class="p">]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">stacked</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="n">tds</span><span class="p">)</span>  <span class="c1"># no data is stacked here</span>
@@ -1714,7 +1714,7 @@ different shapes. See <a class="reference internal" href="#stacking-variable-siz
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Only stacking is lazy. Shape operations such as <code class="docutils literal notranslate"><span class="pre">squeeze</span></code>, <code class="docutils literal notranslate"><span class="pre">unsqueeze</span></code>,
-<code class="docutils literal notranslate"><span class="pre">permute</span></code> and <code class="docutils literal notranslate"><span class="pre">view</span></code> return a regular TensorDict. The legacy lazy
+<code class="docutils literal notranslate"><span class="pre">permute</span></code>, and <code class="docutils literal notranslate"><span class="pre">view</span></code> return a regular TensorDict. The legacy lazy
 versions of these operations exist only with
 <a class="reference internal" href="../reference/generated/tensordict.set_lazy_legacy.html#tensordict.set_lazy_legacy" title="tensordict.set_lazy_legacy"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_lazy_legacy()</span></code></a> set to <code class="docutils literal notranslate"><span class="pre">True</span></code>. This mode is deprecated
 and will be removed in tensordict 0.17.</p>
@@ -1727,8 +1727,8 @@ every tensordict are exclusive keys. <code class="docutils literal notranslate">
 cannot read them from the stack. Read them from one tensordict of the stack
 instead:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">mixed</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span>
-<span class="gp">... </span>    <span class="n">TensorDict</span><span class="p">(</span><span class="n">pos</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">]),</span>
-<span class="gp">... </span>    <span class="n">TensorDict</span><span class="p">(</span><span class="n">pos</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">charge</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"charge"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">]),</span>
 <span class="gp">... </span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">mixed</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
 <span class="go">['pos']</span>
@@ -1740,8 +1740,8 @@ instead:</p>
 the same number of batch dimensions. The batch size then shows <code class="docutils literal notranslate"><span class="pre">-1</span></code> for each
 dimension that differs. Here, two systems have 2 and 4 particles:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">ragged</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span>
-<span class="gp">... </span>    <span class="n">TensorDict</span><span class="p">(</span><span class="n">pos</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span>
-<span class="gp">... </span>    <span class="n">TensorDict</span><span class="p">(</span><span class="n">pos</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">]),</span>
 <span class="gp">... </span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">ragged</span><span class="o">.</span><span class="n">batch_size</span>
 <span class="go">torch.Size([2, -1])</span>
@@ -1844,10 +1844,10 @@ Set the padding with <code class="docutils literal notranslate"><span class="pre
 <li><p><code class="docutils literal notranslate"><span class="pre">as_nested_tensor=True</span></code> returns a nested tensor (<a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.nested</span></code></a>). The
 default layout is <code class="docutils literal notranslate"><span class="pre">torch.jagged</span></code>. Set another one with <code class="docutils literal notranslate"><span class="pre">layout</span></code>.</p></li>
 </ul>
-<p>For example, with three graphs of 2, 3 and 1 nodes, and 2 features for each
+<p>For example, with three graphs of 2, 3, and 1 nodes, and 2 features for each
 node:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">graphs</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">nodes</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">graphs</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"nodes"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">2</span><span class="p">)})</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">]])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">graphs</span>
 <span class="go">LazyStackedTensorDict(</span>
 <span class="go">    fields={</span>
@@ -1880,7 +1880,7 @@ warning from PyTorch, which recommends the jagged layout.</p>
 <p>A TensorDict can also hold a nested tensor with the <code class="docutils literal notranslate"><span class="pre">torch.jagged</span></code> layout
 directly. Its first dimension is a batch dimension:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">nt</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nested</span><span class="o">.</span><span class="n">nested_tensor</span><span class="p">([</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">)],</span> <span class="n">layout</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">jagged</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">nodes</span><span class="o">=</span><span class="n">nt</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"nodes"</span><span class="p">:</span> <span class="n">nt</span><span class="p">},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="s2">"nodes"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
 <span class="go">torch.Size([3, 2])</span>
 </pre></div>
@@ -1892,9 +1892,9 @@ directly. Its first dimension is a batch dimension:</p>
 the longest one along <code class="docutils literal notranslate"><span class="pre">pad_dim</span></code>, and stacks them. With <code class="docutils literal notranslate"><span class="pre">return_mask=True</span></code>,
 it adds a <code class="docutils literal notranslate"><span class="pre">&quot;masks&quot;</span></code> entry that marks the values that are not padding. Use it
 to get one dense TensorDict, for example for a model that takes a padded
-batch. Here, three recordings of a 2-channel sensor have 2, 3 and 1 samples:</p>
+batch. Here, three recordings of a 2-channel sensor have 2, 3, and 1 samples:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">pad_sequence</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">tds</span> <span class="o">=</span> <span class="p">[</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">signal</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">]]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tds</span> <span class="o">=</span> <span class="p">[</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"signal"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">2</span><span class="p">)})</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">]]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">padded</span> <span class="o">=</span> <span class="n">pad_sequence</span><span class="p">(</span><span class="n">tds</span><span class="p">,</span> <span class="n">return_mask</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">padded</span><span class="p">[</span><span class="s2">"signal"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
 <span class="go">torch.Size([3, 3, 2])</span>
@@ -1911,7 +1911,7 @@ scalars”). Give such entries one dimension, or stack them separately.</p>
 <h3>Strings and other Python objects<a class="headerlink" href="#strings-and-other-python-objects" title="Link to this heading">#</a></h3>
 <p>A list of strings, one for each element of the batch, becomes a
 <a class="reference internal" href="../reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a>. The strings can have any length:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">TensorDict</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="p">[</span><span class="s2">"a"</span><span class="p">,</span> <span class="s2">"bb"</span><span class="p">,</span> <span class="s2">"ccc"</span><span class="p">],</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])[</span><span class="mi">1</span><span class="p">][</span><span class="s2">"text"</span><span class="p">]</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"text"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"a"</span><span class="p">,</span> <span class="s2">"bb"</span><span class="p">,</span> <span class="s2">"ccc"</span><span class="p">]},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])[</span><span class="mi">1</span><span class="p">][</span><span class="s2">"text"</span><span class="p">]</span>
 <span class="go">'bb'</span>
 </pre></div>
 </div>
@@ -1939,7 +1939,7 @@ The next assignments write into these entries in place. In this example, a
 simulation writes one state for each of its <code class="docutils literal notranslate"><span class="pre">N</span></code> steps:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">N</span> <span class="o">=</span> <span class="mi">4</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">simulate</span><span class="p">(</span><span class="n">i</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="k">return</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">pos</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">3</span><span class="p">,),</span> <span class="nb">float</span><span class="p">(</span><span class="n">i</span><span class="p">)),</span> <span class="n">info</span><span class="o">=</span><span class="p">{</span><span class="s2">"step"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">i</span><span class="p">)})</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">3</span><span class="p">,),</span> <span class="nb">float</span><span class="p">(</span><span class="n">i</span><span class="p">)),</span> <span class="s2">"info"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"step"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">i</span><span class="p">)}})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">N</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">simulate</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
@@ -1961,7 +1961,7 @@ zeros. A value with another shape raises a <code class="docutils literal notrans
 <ul class="simple">
 <li><p><a class="reference internal" href="../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>, <a class="reference internal" href="../reference/generated/tensordict.stack.html#tensordict.stack" title="tensordict.stack"><code class="xref py py-func docutils literal notranslate"><span class="pre">stack()</span></code></a>,
 <a class="reference internal" href="../reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack" title="tensordict.lazy_stack"><code class="xref py py-func docutils literal notranslate"><span class="pre">lazy_stack()</span></code></a>, <a class="reference internal" href="../reference/generated/tensordict.maybe_dense_stack.html#tensordict.maybe_dense_stack" title="tensordict.maybe_dense_stack"><code class="xref py py-func docutils literal notranslate"><span class="pre">maybe_dense_stack()</span></code></a>,
-<a class="reference internal" href="../reference/generated/tensordict.cat.html#tensordict.cat" title="tensordict.cat"><code class="xref py py-func docutils literal notranslate"><span class="pre">cat()</span></code></a> and <a class="reference internal" href="../reference/generated/tensordict.pad_sequence.html#tensordict.pad_sequence" title="tensordict.pad_sequence"><code class="xref py py-func docutils literal notranslate"><span class="pre">pad_sequence()</span></code></a> in the
+<a class="reference internal" href="../reference/generated/tensordict.cat.html#tensordict.cat" title="tensordict.cat"><code class="xref py py-func docutils literal notranslate"><span class="pre">cat()</span></code></a>, and <a class="reference internal" href="../reference/generated/tensordict.pad_sequence.html#tensordict.pad_sequence" title="tensordict.pad_sequence"><code class="xref py py-func docutils literal notranslate"><span class="pre">pad_sequence()</span></code></a> in the
 <a class="reference internal" href="../reference/index.html#api-reference"><span class="std std-ref">API reference</span></a>.</p></li>
 <li><p>The tutorials <a class="reference internal" href="../tutorials/tensordict_shapes.html"><span class="doc">Changing the shape of a TensorDict</span></a> (stacking and
 concatenating) and <a class="reference internal" href="../tutorials/streamed_tensordict.html"><span class="doc">Building tensordicts from streams</span></a> (building lazy
@@ -2018,7 +2018,7 @@ stacks from a stream of data).</p></li>
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Keys, nested keys and locking</p>
+        <p class="prev-next-title">Keys, nested keys, and locking</p>
       </div>
     </a>
     <a class="right-next"
@@ -2026,7 +2026,7 @@ stacks from a stream of data).</p></li>
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Arithmetic, apply, reductions and gradients</p>
+        <p class="prev-next-title">Arithmetic, apply, reductions, and gradients</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2057,7 +2057,7 @@ stacks from a stream of data).</p></li>
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Keys, nested keys and locking</p>
+        <p class="prev-next-title">Keys, nested keys, and locking</p>
       </div>
     </a>
     <a class="right-next"
@@ -2065,7 +2065,7 @@ stacks from a stream of data).</p></li>
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Arithmetic, apply, reductions and gradients</p>
+        <p class="prev-next-title">Arithmetic, apply, reductions, and gradients</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2358,7 +2358,7 @@ stacks from a stream of data).</p></li>
        "headline": "Stacking and variable-size data",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - Stacking and variable-size data",
        "url": "/concepts/stacking.html",
-       "articleBody": "Stacking and variable-size data# torch.stack() and torch.cat() join tensordicts as they join tensors, so a list of samples becomes one batch in one call. A lazy stack also joins tensordicts whose keys or shapes differ, such as graphs with different numbers of nodes or sequences of different lengths. Dense stacking: torch.stack and torch.cat# torch.stack() puts tensordicts along a new batch dimension. torch.cat() joins them along an existing batch dimension. Here, each tensordict holds the 3-D positions of 2 particles: \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e a = TensorDict(pos=torch.zeros(2, 3), batch_size=[2]) \u003e\u003e\u003e b = TensorDict(pos=torch.ones(2, 3), batch_size=[2]) \u003e\u003e\u003e stacked = torch.stack([a, b]) \u003e\u003e\u003e type(stacked).__name__, stacked.batch_size (\u0027TensorDict\u0027, torch.Size([2, 2])) \u003e\u003e\u003e torch.stack([a, b], dim=1)[\"pos\"].shape torch.Size([2, 2, 3]) \u003e\u003e\u003e torch.cat([a, b]).batch_size torch.Size([4]) Both return a regular TensorDict, with one new tensor for each key. This is a dense stack: it copies the data, so a later change to the result does not change the inputs. tensordict.stack() and tensordict.cat() are the same functions. torch.stack raises a RuntimeError if the tensordicts do not have the same keys, the same batch size, and the same shape for each entry. torch.cat accepts different sizes along the joined dimension, but it raises a KeyError if the keys differ: \u003e\u003e\u003e c = TensorDict(pos=torch.zeros(2, 2), batch_size=[2]) # 2-D positions \u003e\u003e\u003e torch.stack([a, c]) Traceback (most recent call last): ... RuntimeError: The shapes of the tensors to stack is incompatible: torch.Size([2, 2]) vs torch.Size([2, 3]) for key pos. \u003e\u003e\u003e torch.stack([a, TensorDict(vel=torch.zeros(2, 3), batch_size=[2])]) Traceback (most recent call last): ... RuntimeError: The sets of keys in the tensordicts to stack are exclusive. Consider using `LazyStackedTensorDict.maybe_dense_stack` instead. For tensordicts that differ in these ways, use a lazy stack. Lazy stacks# A lazy stack is a LazyStackedTensorDict. It keeps the list of the original tensordicts, and it stacks their entries only when you read them. lazy_stack() always returns one. In this example, each tensordict holds 10 time steps of one robot: \u003e\u003e\u003e from tensordict import lazy_stack \u003e\u003e\u003e tds = [ ... TensorDict(battery=torch.zeros(10), joints=torch.zeros(10, 4), batch_size=[10]) ... for _ in range(3) ... ] \u003e\u003e\u003e stacked = lazy_stack(tds) # no data is stacked here \u003e\u003e\u003e type(stacked).__name__, stacked.batch_size (\u0027LazyStackedTensorDict\u0027, torch.Size([3, 10])) \u003e\u003e\u003e stacked[\"battery\"].shape # stacks the \"battery\" entries only torch.Size([3, 10]) You also get a lazy stack from torch.stack() or torch.cat() of lazy stacks, and from maybe_dense_stack() if the inputs cannot make a dense stack. The table in Which function to use lists each case. Read and write a lazy stack# A lazy stack reads and writes the original tensordicts: An index along the stack dimension returns the original tensordict. A write of an entry, or an in-place change, goes to the original tensordicts. A new key goes to each of them. Any other index returns a new lazy stack, for example stacked[:, 0]. For example: \u003e\u003e\u003e stacked[0] is tds[0] True \u003e\u003e\u003e stacked[\"battery\"] = torch.ones(3, 10) \u003e\u003e\u003e tds[0][\"battery\"].sum() tensor(10.) Each read of an entry stacks the values again, and allocates a new tensor. If you read the same keys many times, call contiguous() once and read from its result. contiguous() returns a regular TensorDict that owns its data, so a write to it does not change the original tensordicts: \u003e\u003e\u003e dense = stacked.contiguous() \u003e\u003e\u003e type(dense).__name__ \u0027TensorDict\u0027 \u003e\u003e\u003e dense[\"battery\"] += 1 \u003e\u003e\u003e tds[0][\"battery\"].sum() # not changed tensor(10.) to_tensordict() does the same. contiguous() raises a RuntimeError if the stacked entries have different shapes. See Variable-size data for that case. Note Only stacking is lazy. Shape operations such as squeeze, unsqueeze, permute and view return a regular TensorDict. The legacy lazy versions of these operations exist only with set_lazy_legacy() set to True. This mode is deprecated and will be removed in tensordict 0.17. Different keys and batch sizes# A lazy stack accepts tensordicts with different keys. The keys that are not in every tensordict are exclusive keys. keys() does not list them, and you cannot read them from the stack. Read them from one tensordict of the stack instead: \u003e\u003e\u003e mixed = lazy_stack([ ... TensorDict(pos=torch.zeros(3), batch_size=[3]), ... TensorDict(pos=torch.zeros(3), charge=torch.zeros(3), batch_size=[3]), ... ]) \u003e\u003e\u003e list(mixed.keys()) [\u0027pos\u0027] \u003e\u003e\u003e mixed[1][\"charge\"].shape torch.Size([3]) A lazy stack also accepts tensordicts with different batch sizes, if they have the same number of batch dimensions. The batch size then shows -1 for each dimension that differs. Here, two systems have 2 and 4 particles: \u003e\u003e\u003e ragged = lazy_stack([ ... TensorDict(pos=torch.zeros(2, 3), batch_size=[2]), ... TensorDict(pos=torch.zeros(4, 3), batch_size=[4]), ... ]) \u003e\u003e\u003e ragged.batch_size torch.Size([2, -1]) \u003e\u003e\u003e ragged[1].batch_size torch.Size([4]) Which function to use# The table gives the type that each function returns, for a list of two tensordicts of each kind. \u201cLazy stack\u201d means a LazyStackedTensorDict, and \u201craises\u201d means that the function raises an error. Inputs torch.stack lazy_stack maybe_dense_stack torch.cat pad_sequence Same keys and shapes TensorDict lazy stack TensorDict TensorDict TensorDict Entry shapes differ raises lazy stack lazy stack raises raises, unless only the pad_dim dimension differs Keys differ raises lazy stack lazy stack raises KeyError raises TypeError Batch sizes differ (same number of dimensions) raises lazy stack, -1 in the batch size lazy stack, -1 in the batch size TensorDict TensorDict (padded) Tensorclass instances the tensorclass the tensorclass the tensorclass the tensorclass the tensorclass Lazy stacks lazy stack lazy stack lazy stack lazy stack TensorDict Use these rules to choose: If the inputs always have the same keys and shapes, use torch.stack. It gives a regular TensorDict: a read returns the stored tensor, without a new stack. If you must write back into the inputs, or if the keys or shapes can differ, use lazy_stack. If the inputs usually match but sometimes do not, use maybe_dense_stack. It gives a dense stack when it can, and a lazy stack otherwise. Variable-size data# Some data does not have the same shape for each element: sequences of different lengths, graphs with different numbers of nodes, strings. A dense TensorDict cannot hold it, because each entry is one tensor. Lazy stacks# A lazy stack holds tensordicts whose entries have different shapes. The shape of such an entry shows -1 for each dimension that differs. stacked[key] then raises a RuntimeError. To read the entry, pass one of these keyword arguments to get(): as_list=True returns a list with one tensor for each element. as_padded_tensor=True returns one tensor, padded to the longest element. Set the padding with padding_value (default 0.0) and padding_side (\"right\" or \"left\"). as_nested_tensor=True returns a nested tensor (torch.nested). The default layout is torch.jagged. Set another one with layout. For example, with three graphs of 2, 3 and 1 nodes, and 2 features for each node: \u003e\u003e\u003e _ = torch.manual_seed(0) \u003e\u003e\u003e graphs = lazy_stack([TensorDict(nodes=torch.randn(n, 2)) for n in [2, 3, 1]]) \u003e\u003e\u003e graphs LazyStackedTensorDict( fields={ nodes: Tensor(shape=torch.Size([3, -1, 2]), device=cpu, dtype=torch.float32, is_shared=False)}, exclusive_fields={ }, batch_size=torch.Size([3]), device=None, is_shared=False, stack_dim=0) \u003e\u003e\u003e [t.shape for t in graphs.get(\"nodes\", as_list=True)] [torch.Size([2, 2]), torch.Size([3, 2]), torch.Size([1, 2])] \u003e\u003e\u003e graphs.get(\"nodes\", as_padded_tensor=True).shape torch.Size([3, 3, 2]) \u003e\u003e\u003e graphs.get(\"nodes\", as_nested_tensor=True).is_nested True \u003e\u003e\u003e graphs[1][\"nodes\"].shape torch.Size([3, 2]) densify() turns the whole lazy stack into a regular TensorDict. The entries with different shapes become nested tensors. Pass layout=torch.jagged: the default, torch.strided, gives a warning from PyTorch, which recommends the jagged layout. \u003e\u003e\u003e dense = graphs.densify(layout=torch.jagged) \u003e\u003e\u003e type(dense).__name__, dense[\"nodes\"].is_nested (\u0027TensorDict\u0027, True) A TensorDict can also hold a nested tensor with the torch.jagged layout directly. Its first dimension is a batch dimension: \u003e\u003e\u003e nt = torch.nested.nested_tensor([torch.ones(2, 2), torch.ones(3, 2)], layout=torch.jagged) \u003e\u003e\u003e data = TensorDict(nodes=nt, batch_size=[2]) \u003e\u003e\u003e data[1][\"nodes\"].shape torch.Size([3, 2]) Padding with pad_sequence# pad_sequence() pads the entries of a list of tensordicts to the longest one along pad_dim, and stacks them. With return_mask=True, it adds a \"masks\" entry that marks the values that are not padding. Use it to get one dense TensorDict, for example for a model that takes a padded batch. Here, three recordings of a 2-channel sensor have 2, 3 and 1 samples: \u003e\u003e\u003e from tensordict import pad_sequence \u003e\u003e\u003e tds = [TensorDict(signal=torch.ones(n, 2)) for n in [2, 3, 1]] \u003e\u003e\u003e padded = pad_sequence(tds, return_mask=True) \u003e\u003e\u003e padded[\"signal\"].shape torch.Size([3, 3, 2]) \u003e\u003e\u003e padded[\"masks\", \"signal\"] tensor([[ True, True, False], [ True, True, True], [ True, False, False]]) pad_sequence raises a RuntimeError for 0-dim entries (\u201cCannot pad scalars\u201d). Give such entries one dimension, or stack them separately. Strings and other Python objects# A list of strings, one for each element of the batch, becomes a NonTensorStack. The strings can have any length: \u003e\u003e\u003e TensorDict(text=[\"a\", \"bb\", \"ccc\"], batch_size=[3])[1][\"text\"] \u0027bb\u0027 Non-tensor data and unbatched entries explains non-tensor data and what reads return. Choose an option# To keep each element as it is, and to write into the elements, use a lazy stack. To give a model one tensor with a mask, use pad_sequence, or get(key, as_padded_tensor=True) on a lazy stack. To give a model a nested tensor, use get(key, as_nested_tensor=True) or densify(layout=torch.jagged). For strings and other Python objects, use a NonTensorStack. Lazy pre-allocation# To fill a tensordict one element at a time, create an empty tensordict with the full batch size, and assign each element to an index. The first assignment creates each entry, filled with zeros, with the batch size of the tensordict. The next assignments write into these entries in place. In this example, a simulation writes one state for each of its N steps: \u003e\u003e\u003e N = 4 \u003e\u003e\u003e def simulate(i): ... return TensorDict(pos=torch.full((3,), float(i)), info={\"step\": torch.tensor(i)}) \u003e\u003e\u003e data = TensorDict(batch_size=[N]) \u003e\u003e\u003e for i in range(N): ... data[i] = simulate(i) \u003e\u003e\u003e data[\"pos\"] tensor([[0., 0., 0.], [1., 1., 1.], [2., 2., 2.], [3., 3., 3.]]) \u003e\u003e\u003e data[\"info\", \"step\"] tensor([0, 1, 2, 3]) A later assignment can add a new key: the other elements of that entry are zeros. A value with another shape raises a RuntimeError. The Filling a TensorDict row by row tutorial steps through this loop. See also# LazyStackedTensorDict, stack(), lazy_stack(), maybe_dense_stack(), cat() and pad_sequence() in the API reference. The tutorials Changing the shape of a TensorDict (stacking and concatenating) and Building tensordicts from streams (building lazy stacks from a stream of data).",
+       "articleBody": "Stacking and variable-size data# torch.stack() and torch.cat() join tensordicts as they join tensors, so a list of samples becomes one batch in one call. A lazy stack also joins tensordicts whose keys or shapes differ, such as graphs with different numbers of nodes or sequences of different lengths. Dense stacking: torch.stack and torch.cat# torch.stack() puts tensordicts along a new batch dimension. torch.cat() joins them along an existing batch dimension. Here, each tensordict holds the 3-D positions of 2 particles: \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e a = TensorDict({\"pos\": torch.zeros(2, 3)}, batch_size=[2]) \u003e\u003e\u003e b = TensorDict({\"pos\": torch.ones(2, 3)}, batch_size=[2]) \u003e\u003e\u003e stacked = torch.stack([a, b]) \u003e\u003e\u003e type(stacked).__name__, stacked.batch_size (\u0027TensorDict\u0027, torch.Size([2, 2])) \u003e\u003e\u003e torch.stack([a, b], dim=1)[\"pos\"].shape torch.Size([2, 2, 3]) \u003e\u003e\u003e torch.cat([a, b]).batch_size torch.Size([4]) Both return a regular TensorDict, with one new tensor for each key. This is a dense stack: it copies the data, so a later change to the result does not change the inputs. tensordict.stack() and tensordict.cat() are the same functions. torch.stack raises a RuntimeError if the tensordicts do not have the same keys, the same batch size, and the same shape for each entry. torch.cat accepts different sizes along the joined dimension, but it raises a KeyError if the keys differ: \u003e\u003e\u003e c = TensorDict({\"pos\": torch.zeros(2, 2)}, batch_size=[2]) # 2-D positions \u003e\u003e\u003e torch.stack([a, c]) Traceback (most recent call last): ... RuntimeError: The shapes of the tensors to stack is incompatible: torch.Size([2, 2]) vs torch.Size([2, 3]) for key pos. \u003e\u003e\u003e torch.stack([a, TensorDict({\"vel\": torch.zeros(2, 3)}, batch_size=[2])]) Traceback (most recent call last): ... RuntimeError: The sets of keys in the tensordicts to stack are exclusive. Consider using `LazyStackedTensorDict.maybe_dense_stack` instead. For tensordicts that differ in these ways, use a lazy stack. Lazy stacks# A lazy stack is a LazyStackedTensorDict. It keeps the list of the original tensordicts, and it stacks their entries only when you read them. lazy_stack() always returns one. In this example, each tensordict holds 10 time steps of one robot: \u003e\u003e\u003e from tensordict import lazy_stack \u003e\u003e\u003e tds = [ ... TensorDict({\"battery\": torch.zeros(10), \"joints\": torch.zeros(10, 4)}, batch_size=[10]) ... for _ in range(3) ... ] \u003e\u003e\u003e stacked = lazy_stack(tds) # no data is stacked here \u003e\u003e\u003e type(stacked).__name__, stacked.batch_size (\u0027LazyStackedTensorDict\u0027, torch.Size([3, 10])) \u003e\u003e\u003e stacked[\"battery\"].shape # stacks the \"battery\" entries only torch.Size([3, 10]) You also get a lazy stack from torch.stack() or torch.cat() of lazy stacks, and from maybe_dense_stack() if the inputs cannot make a dense stack. The table in Which function to use lists each case. Read and write a lazy stack# A lazy stack reads and writes the original tensordicts: An index along the stack dimension returns the original tensordict. A write of an entry, or an in-place change, goes to the original tensordicts. A new key goes to each of them. Any other index returns a new lazy stack, for example stacked[:, 0]. For example: \u003e\u003e\u003e stacked[0] is tds[0] True \u003e\u003e\u003e stacked[\"battery\"] = torch.ones(3, 10) \u003e\u003e\u003e tds[0][\"battery\"].sum() tensor(10.) Each read of an entry stacks the values again, and allocates a new tensor. If you read the same keys many times, call contiguous() once and read from its result. contiguous() returns a regular TensorDict that owns its data, so a write to it does not change the original tensordicts: \u003e\u003e\u003e dense = stacked.contiguous() \u003e\u003e\u003e type(dense).__name__ \u0027TensorDict\u0027 \u003e\u003e\u003e dense[\"battery\"] += 1 \u003e\u003e\u003e tds[0][\"battery\"].sum() # not changed tensor(10.) to_tensordict() does the same. contiguous() raises a RuntimeError if the stacked entries have different shapes. See Variable-size data for that case. Note Only stacking is lazy. Shape operations such as squeeze, unsqueeze, permute, and view return a regular TensorDict. The legacy lazy versions of these operations exist only with set_lazy_legacy() set to True. This mode is deprecated and will be removed in tensordict 0.17. Different keys and batch sizes# A lazy stack accepts tensordicts with different keys. The keys that are not in every tensordict are exclusive keys. keys() does not list them, and you cannot read them from the stack. Read them from one tensordict of the stack instead: \u003e\u003e\u003e mixed = lazy_stack([ ... TensorDict({\"pos\": torch.zeros(3)}, batch_size=[3]), ... TensorDict({\"pos\": torch.zeros(3), \"charge\": torch.zeros(3)}, batch_size=[3]), ... ]) \u003e\u003e\u003e list(mixed.keys()) [\u0027pos\u0027] \u003e\u003e\u003e mixed[1][\"charge\"].shape torch.Size([3]) A lazy stack also accepts tensordicts with different batch sizes, if they have the same number of batch dimensions. The batch size then shows -1 for each dimension that differs. Here, two systems have 2 and 4 particles: \u003e\u003e\u003e ragged = lazy_stack([ ... TensorDict({\"pos\": torch.zeros(2, 3)}, batch_size=[2]), ... TensorDict({\"pos\": torch.zeros(4, 3)}, batch_size=[4]), ... ]) \u003e\u003e\u003e ragged.batch_size torch.Size([2, -1]) \u003e\u003e\u003e ragged[1].batch_size torch.Size([4]) Which function to use# The table gives the type that each function returns, for a list of two tensordicts of each kind. \u201cLazy stack\u201d means a LazyStackedTensorDict, and \u201craises\u201d means that the function raises an error. Inputs torch.stack lazy_stack maybe_dense_stack torch.cat pad_sequence Same keys and shapes TensorDict lazy stack TensorDict TensorDict TensorDict Entry shapes differ raises lazy stack lazy stack raises raises, unless only the pad_dim dimension differs Keys differ raises lazy stack lazy stack raises KeyError raises TypeError Batch sizes differ (same number of dimensions) raises lazy stack, -1 in the batch size lazy stack, -1 in the batch size TensorDict TensorDict (padded) Tensorclass instances the tensorclass the tensorclass the tensorclass the tensorclass the tensorclass Lazy stacks lazy stack lazy stack lazy stack lazy stack TensorDict Use these rules to choose: If the inputs always have the same keys and shapes, use torch.stack. It gives a regular TensorDict: a read returns the stored tensor, without a new stack. If you must write back into the inputs, or if the keys or shapes can differ, use lazy_stack. If the inputs usually match but sometimes do not, use maybe_dense_stack. It gives a dense stack when it can, and a lazy stack otherwise. Variable-size data# Some data does not have the same shape for each element: sequences of different lengths, graphs with different numbers of nodes, strings. A dense TensorDict cannot hold it, because each entry is one tensor. Lazy stacks# A lazy stack holds tensordicts whose entries have different shapes. The shape of such an entry shows -1 for each dimension that differs. stacked[key] then raises a RuntimeError. To read the entry, pass one of these keyword arguments to get(): as_list=True returns a list with one tensor for each element. as_padded_tensor=True returns one tensor, padded to the longest element. Set the padding with padding_value (default 0.0) and padding_side (\"right\" or \"left\"). as_nested_tensor=True returns a nested tensor (torch.nested). The default layout is torch.jagged. Set another one with layout. For example, with three graphs of 2, 3, and 1 nodes, and 2 features for each node: \u003e\u003e\u003e _ = torch.manual_seed(0) \u003e\u003e\u003e graphs = lazy_stack([TensorDict({\"nodes\": torch.randn(n, 2)}) for n in [2, 3, 1]]) \u003e\u003e\u003e graphs LazyStackedTensorDict( fields={ nodes: Tensor(shape=torch.Size([3, -1, 2]), device=cpu, dtype=torch.float32, is_shared=False)}, exclusive_fields={ }, batch_size=torch.Size([3]), device=None, is_shared=False, stack_dim=0) \u003e\u003e\u003e [t.shape for t in graphs.get(\"nodes\", as_list=True)] [torch.Size([2, 2]), torch.Size([3, 2]), torch.Size([1, 2])] \u003e\u003e\u003e graphs.get(\"nodes\", as_padded_tensor=True).shape torch.Size([3, 3, 2]) \u003e\u003e\u003e graphs.get(\"nodes\", as_nested_tensor=True).is_nested True \u003e\u003e\u003e graphs[1][\"nodes\"].shape torch.Size([3, 2]) densify() turns the whole lazy stack into a regular TensorDict. The entries with different shapes become nested tensors. Pass layout=torch.jagged: the default, torch.strided, gives a warning from PyTorch, which recommends the jagged layout. \u003e\u003e\u003e dense = graphs.densify(layout=torch.jagged) \u003e\u003e\u003e type(dense).__name__, dense[\"nodes\"].is_nested (\u0027TensorDict\u0027, True) A TensorDict can also hold a nested tensor with the torch.jagged layout directly. Its first dimension is a batch dimension: \u003e\u003e\u003e nt = torch.nested.nested_tensor([torch.ones(2, 2), torch.ones(3, 2)], layout=torch.jagged) \u003e\u003e\u003e data = TensorDict({\"nodes\": nt}, batch_size=[2]) \u003e\u003e\u003e data[1][\"nodes\"].shape torch.Size([3, 2]) Padding with pad_sequence# pad_sequence() pads the entries of a list of tensordicts to the longest one along pad_dim, and stacks them. With return_mask=True, it adds a \"masks\" entry that marks the values that are not padding. Use it to get one dense TensorDict, for example for a model that takes a padded batch. Here, three recordings of a 2-channel sensor have 2, 3, and 1 samples: \u003e\u003e\u003e from tensordict import pad_sequence \u003e\u003e\u003e tds = [TensorDict({\"signal\": torch.ones(n, 2)}) for n in [2, 3, 1]] \u003e\u003e\u003e padded = pad_sequence(tds, return_mask=True) \u003e\u003e\u003e padded[\"signal\"].shape torch.Size([3, 3, 2]) \u003e\u003e\u003e padded[\"masks\", \"signal\"] tensor([[ True, True, False], [ True, True, True], [ True, False, False]]) pad_sequence raises a RuntimeError for 0-dim entries (\u201cCannot pad scalars\u201d). Give such entries one dimension, or stack them separately. Strings and other Python objects# A list of strings, one for each element of the batch, becomes a NonTensorStack. The strings can have any length: \u003e\u003e\u003e TensorDict({\"text\": [\"a\", \"bb\", \"ccc\"]}, batch_size=[3])[1][\"text\"] \u0027bb\u0027 Non-tensor data and unbatched entries explains non-tensor data and what reads return. Choose an option# To keep each element as it is, and to write into the elements, use a lazy stack. To give a model one tensor with a mask, use pad_sequence, or get(key, as_padded_tensor=True) on a lazy stack. To give a model a nested tensor, use get(key, as_nested_tensor=True) or densify(layout=torch.jagged). For strings and other Python objects, use a NonTensorStack. Lazy pre-allocation# To fill a tensordict one element at a time, create an empty tensordict with the full batch size, and assign each element to an index. The first assignment creates each entry, filled with zeros, with the batch size of the tensordict. The next assignments write into these entries in place. In this example, a simulation writes one state for each of its N steps: \u003e\u003e\u003e N = 4 \u003e\u003e\u003e def simulate(i): ... return TensorDict({\"pos\": torch.full((3,), float(i)), \"info\": {\"step\": torch.tensor(i)}}) \u003e\u003e\u003e data = TensorDict(batch_size=[N]) \u003e\u003e\u003e for i in range(N): ... data[i] = simulate(i) \u003e\u003e\u003e data[\"pos\"] tensor([[0., 0., 0.], [1., 1., 1.], [2., 2., 2.], [3., 3., 3.]]) \u003e\u003e\u003e data[\"info\", \"step\"] tensor([0, 1, 2, 3]) A later assignment can add a new key: the other elements of that entry are zeros. A value with another shape raises a RuntimeError. The Filling a TensorDict row by row tutorial steps through this loop. See also# LazyStackedTensorDict, stack(), lazy_stack(), maybe_dense_stack(), cat(), and pad_sequence() in the API reference. The tutorials Changing the shape of a TensorDict (stacking and concatenating) and Building tensordicts from streams (building lazy stacks from a stream of data).",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

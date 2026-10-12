@@ -54,11 +54,11 @@ into the backend.
 
 | Backend | Operation | What happens, and what to do |
 | --- | --- | --- |
-| Memory-mapped `TensorDict` | Write a field, `update(d)` | `memmap_()` locks the tensordict, so these raise `RuntimeError: Cannot modify locked TensorDict`. Use `set_()`, `update_()` or `update(d, inplace=True)`, which write into the existing files. |
+| Memory-mapped `TensorDict` | Write a field, `update(d)` | `memmap_()` locks the tensordict, so these raise `RuntimeError: Cannot modify locked TensorDict`. Use `set_()`, `update_()`, or `update(d, inplace=True)`, which write into the existing files. |
 | `PersistentTensorDict` | Write a field, `update(d)` | Each write replaces the dataset in the file and warns `UserWarning: Replacing an array with another one is inefficient`. To write into the existing dataset, use `set_()` or `update(d, inplace=True)`. |
 | `PersistentTensorDict` | `clone()` | Without a destination, it warns `A destination should be provided when cloning a PersistentTensorDict`. An HDF5 clone goes to a temporary file that is not deleted. A zarr clone raises `FileExistsError`. Pass a destination: `w.clone(newfile=path)`. To copy the data into memory, use `to_tensordict()`. |
 | `PersistentTensorDict`, `TensorDictStore` | `update_(d)` | Writes nothing, and raises no error ([#2217](https://github.com/pytorch/tensordict/issues/2217), [#2242](https://github.com/pytorch/tensordict/issues/2242)). `TypedTensorDict` over a `LazyStackedTensorDict` has the same fault. Use `set_()` for each key, or `update(d, inplace=True)`. |
-| `PersistentTensorDict`, `TensorDictStore`, `LazyStackedTensorDict` | In-place operation on a field, such as `w.a.add_(1)` | Reading an entry returns a new tensor with a copy of the data, so the operation does not change the storage. Write the result back with `w.a = ...`, `set_()` or an indexed assignment. |
+| `PersistentTensorDict`, `TensorDictStore`, `LazyStackedTensorDict` | In-place operation on a field, such as `w.a.add_(1)` | Reading an entry returns a new tensor with a copy of the data, so the operation does not change the storage. Write the result back with `w.a = ...`, `set_()`, or an indexed assignment. |
 
 ### Nested tensorclass fields
 
@@ -91,7 +91,7 @@ The examples write their files to a temporary directory, and use this class:
 ### In-memory `TensorDict`
 
 ```
->>> td = TensorDict(a=torch.randn(4, 3), b=torch.randn(4, 5), batch_size=[4])
+>>> td = TensorDict({"a": torch.randn(4, 3), "b": torch.randn(4, 5)}, batch_size=[4])
 >>> tc = MyTC.from_tensordict(td)
 >>> tc.a.shape
 torch.Size([4, 3])
@@ -134,7 +134,7 @@ The data stays on the server after the process ends. To delete it, call
 
 ```
 >>> from tensordict import lazy_stack
->>> tds = [TensorDict(a=torch.randn(3), b=torch.randn(5)) for _ in range(4)]
+>>> tds = [TensorDict({"a": torch.randn(3), "b": torch.randn(5)}) for _ in range(4)]
 >>> ls = lazy_stack(tds, dim=0)
 >>> tc_lazy = MyTC.from_tensordict(ls)
 >>> tc_lazy[0].a.shape
@@ -198,7 +198,7 @@ torch.Size([4, 3])
 `from_tensordict` wraps an existing `TensorDict` without a copy:
 
 ```
->>> td = TensorDict(x=torch.randn(4, 3), y=torch.randn(4, 5), batch_size=[4])
+>>> td = TensorDict({"x": torch.randn(4, 3), "y": torch.randn(4, 5)}, batch_size=[4])
 >>> state = State.from_tensordict(td)
 >>> state.x.shape # reads from td
 torch.Size([4, 3])
@@ -232,7 +232,7 @@ torch.Size([4, 3])
 ### Lazy stack
 
 ```
->>> tds = [TensorDict(x=torch.randn(3), y=torch.randn(5)) for _ in range(4)]
+>>> tds = [TensorDict({"x": torch.randn(3), "y": torch.randn(5)}) for _ in range(4)]
 >>> ls = lazy_stack(tds, dim=0)
 >>> state = State.from_tensordict(ls)
 >>> state[0].x.shape
@@ -291,5 +291,5 @@ see [pre-allocating on Redis](storage.html#compat-redis-prealloc).
 containers.
 - [Which container should I use?](choosing_a_container.html#choosing-a-container): which container to use, and the
 `TensorClass` and `TypedTensorDict` comparison.
-- [Large datasets and storage backends](storage.html#storage): HDF5, zarr, Redis and the other storage backends.
+- [Large datasets and storage backends](storage.html#storage): HDF5, zarr, Redis, and the other storage backends.
 - [Save and load tensordicts](saving.html#saving): memory-mapped tensordicts and the other formats on disk.

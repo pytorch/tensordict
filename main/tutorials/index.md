@@ -9,7 +9,7 @@ API pages that go deeper. If you are new to tensordict, read
 
 The sidebar lists the tutorials in four groups, in reading order:
 
-- Basics: keys, indexing, shapes, row-by-row filling and lazy stacks of
+- Basics: keys, indexing, shapes, row-by-row filling, and lazy stacks of
 streamed data.
 - Storage: devices and memory-mapped tensors, the zarr backend, and a
 benchmark of the serialization formats.
@@ -20,14 +20,14 @@ loading of an image dataset.
 
 ![](../_images/sphx_glr_tensordict_keys_thumb.png)
 
-[Getting, setting and nesting keys](tensordict_keys.html)
+[Getting, setting, and nesting keys](tensordict_keys.html)
 
-Getting, setting and nesting keys
+Getting, setting, and nesting keys
 ![](../_images/sphx_glr_tensordict_slicing_thumb.png)
 
-[Slicing, indexing and masking](tensordict_slicing.html)
+[Slicing, indexing, and masking](tensordict_slicing.html)
 
-Slicing, indexing and masking
+Slicing, indexing, and masking
 ![](../_images/sphx_glr_tensordict_shapes_thumb.png)
 
 [Changing the shape of a TensorDict](tensordict_shapes.html)

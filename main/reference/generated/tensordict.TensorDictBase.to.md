@@ -83,7 +83,7 @@ This operation can be used as a context manager too. Inside the
 `with` block, you work on the cast tensordict. When the block exits,
 its entries are written back to the original tensordict, on the
 original device. Use it to run a module that expects its input on a
-specific device. See [Devices, dtypes and memory](../../concepts/devices.html#devices).
+specific device. See [Devices, dtypes, and memory](../../concepts/devices.html#devices).
 
 Note
 

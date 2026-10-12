@@ -32,9 +32,9 @@ Benchmarking TensorDict serialization speed
 Building tensordicts from streams
 ![](../../_images/sphx_glr_tensordict_keys_thumb.png)
 
-[Getting, setting and nesting keys](../../tutorials/tensordict_keys.html)
+[Getting, setting, and nesting keys](../../tutorials/tensordict_keys.html)
 
-Getting, setting and nesting keys
+Getting, setting, and nesting keys
 ![](../../_images/sphx_glr_tensordict_memory_thumb.png)
 
 [Devices and memory-mapped tensors](../../tutorials/tensordict_memory.html)
@@ -57,9 +57,9 @@ Filling a TensorDict row by row
 Changing the shape of a TensorDict
 ![](../../_images/sphx_glr_tensordict_slicing_thumb.png)
 
-[Slicing, indexing and masking](../../tutorials/tensordict_slicing.html)
+[Slicing, indexing, and masking](../../tutorials/tensordict_slicing.html)
 
-Slicing, indexing and masking
+Slicing, indexing, and masking
 ![](../../_images/sphx_glr_zarr_storage_thumb.png)
 
 [Storing TensorDicts in zarr](../../tutorials/zarr_storage.html)

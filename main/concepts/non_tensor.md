@@ -1,6 +1,6 @@
 # Non-tensor data and unbatched entries
 
-A tensordict can store strings, labels and other Python objects next to its
+A tensordict can store strings, labels, and other Python objects next to its
 tensors. Indexing and stacking keep them aligned with the batch. A tensordict
 can also hold a tensor that belongs to the whole batch, such as a parameter
 that all the elements share. Shape operations leave that tensor as it is.
@@ -15,8 +15,10 @@ sequences too:
 >>> import torch
 >>> from tensordict import TensorDict
 >>> reads = TensorDict(
-... seq=["ACGT", "GGCC", "TTAG"],
-... gc=torch.tensor([0.50, 1.00, 0.25]),
+... {
+... "seq": ["ACGT", "GGCC", "TTAG"],
+... "gc": torch.tensor([0.50, 1.00, 0.25]),
+... },
 ... batch_size=[3],
 ... )
 >>> gc_rich = reads[reads["gc"] > 0.4]
@@ -40,7 +42,7 @@ the batch. The list of sequences above becomes one.
 
 When you set a value that is not a tensor, tensordict converts it:
 
-- Python numbers, booleans, NumPy arrays and lists of numbers become
+- Python numbers, booleans, NumPy arrays, and lists of numbers become
 tensors. `True` becomes `tensor(True)`.
 - A dict becomes a nested tensordict.
 - A list of other values, such as strings, becomes a
@@ -56,7 +58,7 @@ This example shows the type of each entry:
 >>> import numpy as np
 >>> from tensordict import MetaData, NonTensorData, NonTensorStack
 >>> td = TensorDict(
-... flag=True, n=3, arr=np.zeros(2), nums=[1, 2], text="hello", words=["x", "y"]
+... {"flag": True, "n": 3, "arr": np.zeros(2), "nums": [1, 2], "text": "hello", "words": ["x", "y"]}
 ... )
 >>> for key in ["flag", "n", "arr", "nums", "text", "words"]:
 ... print(key, type(td.get(key)).__name__)
@@ -74,7 +76,7 @@ one value for each element, use [`set_non_tensor()`](../reference/generated/tens
 or wrap the list in [`NonTensorData`](../reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData):
 
 ```
->>> td = TensorDict(flag=NonTensorData(True), batch_size=[2])
+>>> td = TensorDict({"flag": NonTensorData(True)}, batch_size=[2])
 >>> td["flag"]
 True
 >>> _ = td.set_non_tensor("labels", ["cat", "dog", "bird"])
@@ -93,8 +95,10 @@ genome of the reads:
 
 ```
 >>> td = TensorDict(
-... genome=NonTensorData("hg38"),
-... score=torch.zeros(()),
+... {
+... "genome": NonTensorData("hg38"),
+... "score": torch.zeros(()),
+... },
 ... )
 >>> print(td)
 TensorDict(
@@ -128,8 +132,10 @@ gets the batch size of the tensordict:
 
 ```
 >>> td = TensorDict(
-... genome=NonTensorData("hg38"),
-... score=torch.zeros(3),
+... {
+... "genome": NonTensorData("hg38"),
+... "score": torch.zeros(3),
+... },
 ... batch_size=[3]
 ... )
 >>> print(td)
@@ -159,7 +165,7 @@ If you write a different value into one element, the entry becomes a
 [`NonTensorStack`](../reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack):
 
 ```
->>> td[0] = TensorDict(genome="mm10", score=torch.ones(()))
+>>> td[0] = TensorDict({"genome": "mm10", "score": torch.ones(())})
 >>> type(td.get("genome")).__name__
 'NonTensorStack'
 ```
@@ -169,8 +175,10 @@ To give each element of the batch its own value, use a
 
 ```
 >>> td = TensorDict(
-... seq=NonTensorStack("ACGT", "GGCC", "TTAG"),
-... score=torch.zeros(3),
+... {
+... "seq": NonTensorStack("ACGT", "GGCC", "TTAG"),
+... "score": torch.zeros(3),
+... },
 ... batch_size=[3]
 ... )
 >>> print(td)
@@ -222,8 +230,10 @@ list is one value for the whole batch:
 
 ```
 >>> td = TensorDict(
-... seq=NonTensorData(["ACGT", "GGCC", "TTAG"]),
-... score=torch.zeros(3),
+... {
+... "seq": NonTensorData(["ACGT", "GGCC", "TTAG"]),
+... "score": torch.zeros(3),
+... },
 ... batch_size=[3]
 ... )
 >>> print(td[0])
@@ -244,8 +254,10 @@ same:
 
 ```
 >>> td = TensorDict(
-... genome=NonTensorData("hg38"),
-... score=torch.zeros(()),
+... {
+... "genome": NonTensorData("hg38"),
+... "score": torch.zeros(()),
+... },
 ... )
 >>> print(torch.stack([td, td]))
 TensorDict(
@@ -268,8 +280,10 @@ a [`NonTensorStack`](../reference/generated/tensordict.NonTensorStack.html#tenso
 
 ```
 >>> td = TensorDict(
-... genome=MetaData("hg38"),
-... score=torch.zeros(()),
+... {
+... "genome": MetaData("hg38"),
+... "score": torch.zeros(()),
+... },
 ... )
 >>> print(torch.stack([td, td]))
 TensorDict(
@@ -279,7 +293,7 @@ TensorDict(
  batch_size=torch.Size([2]),
  device=None,
  is_shared=False)
->>> equal_lists = [TensorDict(a=MetaData([1, 2])), TensorDict(a=MetaData([1, 2]))]
+>>> equal_lists = [TensorDict({"a": MetaData([1, 2])}), TensorDict({"a": MetaData([1, 2])})]
 >>> type(torch.stack(equal_lists).get("a")).__name__
 'NonTensorStack'
 ```
@@ -292,17 +306,17 @@ that is the same for every element.
 
 ### Non-tensor data in other operations
 
-- Arithmetic, [`apply()`](../reference/generated/tensordict.TensorDictBase.apply.html#tensordict.TensorDictBase.apply) and
+- Arithmetic, [`apply()`](../reference/generated/tensordict.TensorDictBase.apply.html#tensordict.TensorDictBase.apply), and
 [`to()`](../reference/generated/tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to) pass non-tensor entries to the result as
 they are. `==` and `!=` between two tensordicts compare them (see
-[Arithmetic, apply, reductions and gradients](operations.html#operations)).
-- `keys(leaves_only=True)`, `values(leaves_only=True)` and
+[Arithmetic, apply, reductions, and gradients](operations.html#operations)).
+- `keys(leaves_only=True)`, `values(leaves_only=True)`, and
 `items(leaves_only=True)` skip the non-tensor entries. To include them,
 pass `is_leaf=tensordict.is_leaf_nontensor`:
 
 ```
 >>> from tensordict import is_leaf_nontensor
->>> td = TensorDict(text="x", t=torch.zeros(()))
+>>> td = TensorDict({"text": "x", "t": torch.zeros(())})
 >>> list(td.keys(leaves_only=True))
 ['t']
 >>> list(td.keys(leaves_only=True, is_leaf=is_leaf_nontensor))
@@ -311,9 +325,9 @@ pass `is_leaf=tensordict.is_leaf_nontensor`:
 - Under [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), a function that returns a string entry
 compiles again for each new string, and non-strict
 [`torch.export.export()`](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export) does not accept non-tensor entries. See
-[torch.compile, torch.func, torch.export and CUDA graphs](../compile.html#compile).
+[torch.compile, torch.func, torch.export, and CUDA graphs](../compile.html#compile).
 - [`share_memory_()`](../reference/generated/tensordict.TensorDictBase.share_memory_.html#tensordict.TensorDictBase.share_memory_) can change non-tensor values
-(see [Devices, dtypes and memory](devices.html#devices)), and [`parse_tensor_dict_string()`](../reference/generated/tensordict.parse_tensor_dict_string.html#tensordict.parse_tensor_dict_string)
+(see [Devices, dtypes, and memory](devices.html#devices)), and [`parse_tensor_dict_string()`](../reference/generated/tensordict.parse_tensor_dict_string.html#tensordict.parse_tensor_dict_string)
 raises a `ValueError` for them (see [Printing and display](../printing.html#printing)).
 
 ## UnbatchedTensor
@@ -332,8 +346,10 @@ particles share one gravity vector:
 ```
 >>> from tensordict import UnbatchedTensor
 >>> td = TensorDict(
-... height=torch.randn(2, 3),
-... gravity=UnbatchedTensor(torch.tensor([0.0, 0.0, -9.8])),
+... {
+... "height": torch.randn(2, 3),
+... "gravity": UnbatchedTensor(torch.tensor([0.0, 0.0, -9.8])),
+... },
 ... batch_size=[2, 3],
 ... )
 ```
@@ -369,13 +385,13 @@ as one.
 - Operations that change only the batch shape do not change it.
 `reshape`, `view`, `unbind`, `split`, `squeeze`, `unsqueeze`,
 `permute`, `transpose`, `flatten`, `unflatten`, `chunk`,
-`expand`, `cat`, `stack` and indexing return the same
+`expand`, `cat`, `stack`, and indexing return the same
 [`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor), with the same storage.
 - Other operations work as for a tensor: device and dtype casts (`to`),
 pointwise arithmetic (`+`, `-`, `*`, `/`), `clone`, gradient
-computation and access by key.
+computation, and access by key.
 - Python conversions follow PyTorch. `str()`, `bool()`, `int()`,
-`float()`, `complex()` and conversions to an integer index go to the
+`float()`, `complex()`, and conversions to an integer index go to the
 wrapped tensor.
 
 For example, an [`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor) with one element
@@ -434,7 +450,7 @@ one, and it warns.
 
 - [tensorclass and non-tensor data](../reference/tc.html#api-tensorclass): the reference entries of
 [`NonTensorData`](../reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData), [`NonTensorStack`](../reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack),
-[`MetaData`](../reference/generated/tensordict.MetaData.html#tensordict.MetaData) and [`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor).
+[`MetaData`](../reference/generated/tensordict.MetaData.html#tensordict.MetaData), and [`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor).
 - [Stacking and variable-size data](stacking.html#stacking): stacks of tensordicts, and variable-size data.
 - [TensorClass](../tensorclass.html#tensorclass-guide): tensorclass fields that hold non-tensor values.
 - [Save and load tensordicts](../saving.html#saving): how non-tensor entries are saved.

@@ -8,8 +8,8 @@ to download the full example code.
 **Author**: [Vincent Moens](https://github.com/vmoens)
 
 [zarr](https://zarr.dev) splits each array into chunks that you can read,
-write and compress one at a time. The same tree of groups and arrays can go to
-a local directory, a single zip file or an S3-compatible object store. This
+write, and compress one at a time. The same tree of groups and arrays can go to
+a local directory, a single zip file, or an S3-compatible object store. This
 tutorial is for readers who store tensordicts outside the local disk, or who
 share them with other zarr tools.
 
@@ -81,7 +81,7 @@ PersistentTensorDict(
  is_shared=False)
 ```
 
-The store keeps the batch size, the dimension names and the non-tensor
+The store keeps the batch size, the dimension names, and the non-tensor
 entries (like the `"description"` string above).
 [`from_zarr()`](../reference/generated/tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr) reads them back from the
 store:
@@ -192,7 +192,7 @@ zarr. To write to S3-compatible storage, pass
 ## Pre-allocation
 
 Like the other backends, zarr supports
-[`from_schema()`](../reference/generated/tensordict.TensorDictBase.from_schema.html#tensordict.TensorDictBase.from_schema). Give the keys, shapes and
+[`from_schema()`](../reference/generated/tensordict.TensorDictBase.from_schema.html#tensordict.TensorDictBase.from_schema). Give the keys, shapes, and
 dtypes first, then fill the buffer row by row. The full dataset is never in
 memory.
 
@@ -204,7 +204,9 @@ buffer = TensorDict.from_schema(
  filename=root / "buffer.zarr",
 )
 for i in range(4):
- buffer[i] = TensorDict(obs=torch.randn(4), reward=torch.randn(()), batch_size=[])
+ buffer[i] = TensorDict(
+ {"obs": torch.randn(4), "reward": torch.randn(())}, batch_size=[]
+ )
 ```
 
 ## Conclusion
@@ -222,9 +224,9 @@ the keyword arguments for zarr.
 - The [serialization speed tutorial](serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) benchmarks zarr against
 the other on-disk formats.
 - The [zarr documentation](https://zarr.readthedocs.io) covers stores,
-codecs and the v3 format in depth.
+codecs, and the v3 format in depth.
 
-**Total running time of the script:** (0 minutes 0.154 seconds)
+**Total running time of the script:** (0 minutes 0.167 seconds)
 
 [`Download Jupyter notebook: zarr_storage.ipynb`](../_downloads/299d79c6946d13f056a08f21d56a241b/zarr_storage.ipynb)
 

@@ -7,7 +7,7 @@ Excludes the keys of the tensordict and returns a new tensordict without these e
 The values are not copied. The result shares its tensors with the
 original, so an in-place change to a tensor in one tensordict shows in
 the other. Unlike [`select()`](tensordict.TensorDictBase.select.html#tensordict.TensorDictBase.select), a missing key is ignored: there is
-no `strict` argument. See [Keys, nested keys and locking](../../concepts/keys.html#keys).
+no `strict` argument. See [Keys, nested keys, and locking](../../concepts/keys.html#keys).
 
 Parameters:
 
@@ -55,6 +55,6 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 ![](../../_images/sphx_glr_tensordict_keys_thumb.png)
 
-[Getting, setting and nesting keys](../../tutorials/tensordict_keys.html)
+[Getting, setting, and nesting keys](../../tutorials/tensordict_keys.html)
 
-Getting, setting and nesting keys
+Getting, setting, and nesting keys

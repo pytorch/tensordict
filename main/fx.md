@@ -12,7 +12,7 @@ Warning
 `tensordict.prototype.fx` is a prototype. Its API can change without a
 deprecation cycle. To make a module faster or to export it, use
 [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile) or [`torch.export.export()`](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export) (see
-[torch.compile, torch.func, torch.export and CUDA graphs](compile.html#compile)). If you find a problem, open an issue.
+[torch.compile, torch.func, torch.export, and CUDA graphs](compile.html#compile)). If you find a problem, open an issue.
 
 ## Trace a `TensorDictModule`
 
@@ -159,7 +159,7 @@ as `graph_module(x=torch.randn(32, 100))`, raises `TypeError`.
 
 ## See also
 
-- [torch.compile, torch.func, torch.export and CUDA graphs](compile.html#compile): [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile) and [`torch.export.export()`](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export)
+- [torch.compile, torch.func, torch.export, and CUDA graphs](compile.html#compile): [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile) and [`torch.export.export()`](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export)
 with tensordicts and tensordict modules.
 - [Modules: TensorDictModule and tensordict.nn](modules.html#modules-guide): [`TensorDictModule`](reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule) and
 [`TensorDictSequential`](reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential).

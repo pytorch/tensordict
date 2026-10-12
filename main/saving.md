@@ -14,7 +14,7 @@ the state of 100 particles:
 >>> tmp = tempfile.TemporaryDirectory()
 >>> root = Path(tmp.name)
 >>> particles = TensorDict(
-... pos=torch.zeros(100, 3), vel=torch.ones(100, 3), batch_size=[100]
+... {"pos": torch.zeros(100, 3), "vel": torch.ones(100, 3)}, batch_size=[100]
 ... )
 >>> _ = particles.save(root / "particles")
 >>> loaded = TensorDict.load_memmap(root / "particles")
@@ -36,7 +36,7 @@ The examples on this page run in order, and share the temporary directory
 | Give the tensors to code that expects a flat state dict | [`state_dict()`](reference/generated/tensordict.TensorDictBase.state_dict.html#tensordict.TensorDictBase.state_dict) | state_dict and load_state_dict |
 | Load a file that you did not write | `allow_pickle`, `weights_only` | Load data that you did not write |
 | Preallocate a dataset on disk and fill it one sample at a time | [`memmap_like()`](reference/generated/tensordict.TensorDictBase.memmap_like.html#tensordict.TensorDictBase.memmap_like), [`from_schema()`](reference/generated/tensordict.TensorDictBase.from_schema.html#tensordict.TensorDictBase.from_schema) | [Large datasets and storage backends](storage.html#storage) |
-| Store chunked, compressed or remote data (HDF5, zarr, Redis) | [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict), [`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) | [Large datasets and storage backends](storage.html#storage) |
+| Store chunked, compressed, or remote data (HDF5, zarr, Redis) | [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict), [`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) | [Large datasets and storage backends](storage.html#storage) |
 
 ## Save a checkpoint
 
@@ -85,7 +85,7 @@ only that part of the tree. `subpath` takes a nested key, such as
 torch.Size([2, 4])
 ```
 
-To read the keys, shapes and dtypes of a checkpoint without its data, load
+To read the keys, shapes, and dtypes of a checkpoint without its data, load
 it on the `"meta"` device:
 
 ```
@@ -98,7 +98,7 @@ tensor(..., device='meta', size=(4, 3))
 The methods have several names:
 
 - [`save()`](reference/generated/tensordict.TensorDictBase.save.html#tensordict.TensorDictBase.save),
-[`dumps()`](reference/generated/tensordict.TensorDictBase.dumps.html#tensordict.TensorDictBase.dumps) and
+[`dumps()`](reference/generated/tensordict.TensorDictBase.dumps.html#tensordict.TensorDictBase.dumps), and
 [`memmap()`](reference/generated/tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) are one method. They return a
 new tensordict with memory-mapped leaves.
 - [`memmap_()`](reference/generated/tensordict.TensorDictBase.memmap_.html#tensordict.TensorDictBase.memmap_) writes the same files, and
@@ -106,8 +106,8 @@ replaces the leaves of the tensordict itself.
 - [`load()`](reference/generated/tensordict.TensorDictBase.load.html#tensordict.TensorDictBase.load) and
 [`load_memmap()`](reference/generated/tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap) are one method.
 
-`memmap`, `memmap_` and `save` lock the tensordict that they return.
-You can write into its tensors in place, but you cannot add, remove or
+`memmap`, `memmap_`, and `save` lock the tensordict that they return.
+You can write into its tensors in place, but you cannot add, remove, or
 replace an entry (see [Locking and temporary changes](concepts/keys.html#keys-locking)).
 
 To write several files at the same time, pass `num_threads`. Threads make
@@ -166,7 +166,7 @@ Here, the reader with `mode="r"` changes memory only, and the writer with
 the default mode changes the file:
 
 ```
->>> _ = TensorDict(a=torch.zeros(3), batch_size=[3]).save(root / "data")
+>>> _ = TensorDict({"a": torch.zeros(3)}, batch_size=[3]).save(root / "data")
 >>> reader = TensorDict.load_memmap(root / "data", mode="r")
 >>> _ = reader["a"].add_(1)
 >>> TensorDict.load_memmap(root / "data")["a"]
@@ -187,7 +187,7 @@ swap, `mode="r"` can fail to map it. In that case, use the default mode.
 ## Save to one file
 
 A directory has one file for each leaf. To write one file instead, use an
-archive, a consolidated file or [`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save):
+archive, a consolidated file, or [`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save):
 
 | Format | Write, then read | Lazy load | Load one sub-tree | Use it to |
 | --- | --- | --- | --- | --- |
@@ -204,9 +204,11 @@ temperature field on its vertices:
 
 ```
 >>> mesh = TensorDict(
-... vertices=torch.rand(10, 3),
-... faces=torch.randint(10, (16, 3)),
-... fields={"temperature": torch.rand(10)},
+... {
+... "vertices": torch.rand(10, 3),
+... "faces": torch.randint(10, (16, 3)),
+... "fields": {"temperature": torch.rand(10)},
+... },
 ... )
 >>> _ = mesh.save(root / "mesh.tdz")
 >>> loaded = TensorDict.load_memmap(root / "mesh.tdz")
@@ -265,7 +267,7 @@ you give a changed archive to a tool that reads them, such as `unzip` or
 >>> _ = refresh_archive_checksums(root / "mesh.tdz")
 ```
 
-To compress an archive, pass `compression="deflate"`, `"bzip2"` or
+To compress an archive, pass `compression="deflate"`, `"bzip2"`, or
 `"lzma"`. tensordict cannot memory-map a compressed leaf. It decompresses
 the leaf into memory the first time you use it, and `mode="r+"` raises an
 error. Use compression for archival storage. `uint8` images and boolean
@@ -281,8 +283,10 @@ the file again. This example saves a graph with four nodes and three edges:
 ```
 >>> from tensordict import from_consolidated
 >>> graph = TensorDict(
-... nodes=torch.zeros(4, 8),
-... edges={"index": torch.tensor([[0, 1, 2], [1, 2, 3]]), "weight": torch.ones(3)},
+... {
+... "nodes": torch.zeros(4, 8),
+... "edges": {"index": torch.tensor([[0, 1, 2], [1, 2, 3]]), "weight": torch.ones(3)},
+... },
 ... )
 >>> graph_c = graph.consolidate(root / "graph.bin")
 >>> from_consolidated(root / "graph.bin")["edges", "index"]
@@ -316,10 +320,10 @@ tensordict, it allowlists the classes and functions that these files
 reference, with [`torch.serialization.add_safe_globals()`](https://docs.pytorch.org/docs/stable/notes/serialization.html#torch.serialization.add_safe_globals). The list covers
 [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), [`LazyStackedTensorDict`](reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict),
 consolidated tensordicts, and non-tensor values made of Python builtins, such
-as strings, numbers, lists and dicts:
+as strings, numbers, lists, and dicts:
 
 ```
->>> batch = TensorDict(loss=torch.zeros(3), meta={"split": "train"}, batch_size=[3])
+>>> batch = TensorDict({"loss": torch.zeros(3), "meta": {"split": "train"}}, batch_size=[3])
 >>> torch.save(batch, root / "batch.pt")
 >>> torch.load(root / "batch.pt", weights_only=True)["meta", "split"]
 'train'
@@ -332,7 +336,7 @@ values, such as NumPy arrays or dates. For these, loading stops with an
 ```
 >>> import datetime
 >>> from tensordict import NonTensorData
->>> td = TensorDict(date=NonTensorData(datetime.date(2024, 1, 1)))
+>>> td = TensorDict({"date": NonTensorData(datetime.date(2024, 1, 1))})
 >>> torch.save(td, root / "date.pt")
 >>> torch.load(root / "date.pt", weights_only=True)
 Traceback (most recent call last):
@@ -428,9 +432,11 @@ JSON can represent to `meta.json`, and the other values to an
 
 ```
 >>> run = TensorDict(
-... x=torch.zeros(3),
-... config=NonTensorData({"lr": 0.1}),
-... date=NonTensorData(datetime.date(2024, 1, 1)),
+... {
+... "x": torch.zeros(3),
+... "config": NonTensorData({"lr": 0.1}),
+... "date": NonTensorData(datetime.date(2024, 1, 1)),
+... },
 ... batch_size=[3],
 ... )
 >>> _ = run.save(root / "run")
@@ -514,8 +520,10 @@ inside a [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordic
 ... data: torch.Tensor
 ... metadata: str
 >>> data = TensorDict(
-... td_list=torch.stack(td_list),
-... record=Record(torch.randn(3), metadata="some text", batch_size=[]),
+... {
+... "td_list": torch.stack(td_list),
+... "record": Record(torch.randn(3), metadata="some text", batch_size=[]),
+... },
 ... )
 >>> _ = data.memmap_(root / "mixed")
 >>> loaded = TensorDict.load_memmap(root / "mixed")
@@ -537,7 +545,7 @@ convert it to a list first.
 
 A [`MemoryMappedTensor`](reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor) is a tensor whose data is in a file
 on disk. It has constructors like those of torch, such as `empty`,
-`zeros` and `from_tensor`, and tensordict manages the file. Use it:
+`zeros`, and `from_tensor`, and tensordict manages the file. Use it:
 
 - To work with contiguous data that is larger than the memory.
 - To send data to other processes. If all the processes can read the same
@@ -574,7 +582,7 @@ the number of leaves. In one run of
 
 - Open: a single file parses one metadata block, and a directory opens one
 file for each leaf. With 2000 leaves, opening took 122 ms for a directory,
-50 ms for an archive and 13 ms for a consolidated file.
+50 ms for an archive, and 13 ms for a consolidated file.
 - Save: a directory save is the fastest. With 8 leaves, an archive took 25
 times as long as a directory (845 ms and 34 ms). With 2000 leaves, it took
 3.4 times as long.
@@ -595,7 +603,7 @@ load.
 The figure comes from the [serialization speed tutorial](tutorials/serialization_speed.html#sphx-glr-tutorials-serialization-speed-py), which runs when this
 documentation is built. Download its script to measure your own machine.
 
-[![Bar charts of the save and open times of memmap directories, consolidated files, zip archives, torch.save files and safetensors files, for two tensordict layouts.](_images/sphx_glr_serialization_speed_002.png)](tutorials/serialization_speed.html)
+[![Bar charts of the save and open times of memmap directories, consolidated files, zip archives, torch.save files, and safetensors files, for two tensordict layouts.](_images/sphx_glr_serialization_speed_002.png)](tutorials/serialization_speed.html)
 
 Save time (single-threaded and multithreaded) and open time for each
 format and layout, on the machine that built this documentation. Lower
@@ -604,14 +612,14 @@ interquartile range. Hatched bars are multithreaded saves.
 
 ## See also
 
-- [Large datasets and storage backends](storage.html#storage): preallocate a dataset on disk, and the HDF5, zarr and
+- [Large datasets and storage backends](storage.html#storage): preallocate a dataset on disk, and the HDF5, zarr, and
 Redis backends.
 - [Load data and share it between processes](data_loading.html#data-loading): read a saved dataset with a `DataLoader`, and share
 it between processes.
 - The reference of [`memmap()`](reference/generated/tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap),
 [`load_memmap()`](reference/generated/tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap),
-[`consolidate()`](reference/generated/tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate) and
+[`consolidate()`](reference/generated/tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate), and
 [`MemoryMappedTensor`](reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor), and the saving methods in
-[Saving, loading and file formats](reference/td.html#api-methods-saving).
+[Saving, loading, and file formats](reference/td.html#api-methods-saving).
 - Tutorials: [Devices and memory-mapped tensors](tutorials/tensordict_memory.html#sphx-glr-tutorials-tensordict-memory-py) and
 [Benchmarking TensorDict serialization speed](tutorials/serialization_speed.html#sphx-glr-tutorials-serialization-speed-py).

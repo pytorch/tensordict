@@ -9,7 +9,7 @@ to download the full example code.
 
 The fastest way to save a tensordict depends on its layout and on your
 storage. This script times the write paths and the on-disk formats of
-tensordict against `torch.save`, safetensors and zarr, and plots the
+tensordict against `torch.save`, safetensors, and zarr, and plots the
 results. It is for readers who choose a format for checkpoints or datasets.
 
 What you will learn:
@@ -103,7 +103,7 @@ all the leaves into one memory-mapped file.
 - [`save()`](../reference/generated/tensordict.TensorDictBase.save.html#tensordict.TensorDictBase.save) writes one memory-mapped file per
 leaf, in a directory tree.
 
-It times each path single-threaded, with 8 threads and with 16 threads, on
+It times each path single-threaded, with 8 threads, and with 16 threads, on
 both layouts. Each method returns the path that it wrote (or `None` for
 the in-memory path), so that the benchmark loop can remove it between runs.
 
@@ -177,7 +177,7 @@ for layout_name, td in LAYOUTS.items():
 ## Plotting
 
 The figure has one panel per layout. Each panel has one group of bars per
-method: single-threaded, 8 threads and 16 threads. The error bars show the
+method: single-threaded, 8 threads, and 16 threads. The error bars show the
 interquartile range.
 
 ```
@@ -232,8 +232,9 @@ larger payloads (`SCALE = 8`, or 1 GiB, or more) for stable measurements.
 ## Choosing an on-disk format
 
 The second benchmark compares the on-disk formats that tensordict can
-write with `torch.save` and, if they are installed, safetensors and zarr.
-The tensordict formats are the memmap directory, the consolidated file and
+write with `torch.save`, safetensors, and zarr (the last two if they are
+installed).
+The tensordict formats are the memmap directory, the consolidated file, and
 the `.tdz` zip archive.
 
 `torch.save` and safetensors use their fastest paths. The benchmark writes
@@ -253,7 +254,7 @@ The benchmark times two operations:
 directory and the consolidated file take a `num_threads` argument, so
 they are timed single-threaded and with `num_threads=8`. The `.tdz`
 writer is sequential and takes no `num_threads` argument, so the first
-benchmark does not include it. `torch.save`, safetensors and zarr are
+benchmark does not include it. `torch.save`, safetensors, and zarr are
 timed single-threaded only.
 - *Open* builds a lazy tensordict over an existing artifact. All formats
 except zarr memory-map their payload, so for them this time is the cost of
@@ -465,7 +466,7 @@ header. For every format, building the tensordict costs time for each
 leaf, so compare the two columns to see the effect of the number of leaves.
 - The hatched bars show where `num_threads` changes the save time.
 - The flat formats (`torch.save`, safetensors) store only tensors. The
-tensordict formats also store nested structure, lazy stacks and
+tensordict formats also store nested structure, lazy stacks, and
 non-tensor data. The memmap directory and the archive can also be written
 in place after they are opened.
 
@@ -486,9 +487,9 @@ results depend on the machine, so measure before you choose a format.
 tracks these operations with `pytest-benchmark`.
 `benchmarks/scripts/serialization_formats_bench.py` runs a larger
 offline version of the format comparison, with larger payloads, more
-layouts and read timings.
+layouts, and read timings.
 
-**Total running time of the script:** (0 minutes 39.237 seconds)
+**Total running time of the script:** (0 minutes 40.333 seconds)
 
 [`Download Jupyter notebook: serialization_speed.ipynb`](../_downloads/7587cc1b855a09e68c4f61c6c20f4220/serialization_speed.ipynb)
 

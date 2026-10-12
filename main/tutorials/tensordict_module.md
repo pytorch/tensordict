@@ -8,7 +8,7 @@ to download the full example code.
 **Author**: [Nicolas Dufour](https://github.com/nicolas-dufour), [Vincent Moens](https://github.com/vmoens)
 
 The parts of a model often exchange many named tensors, such as observations,
-hidden states and the parameters of a distribution. You then write code that
+hidden states, and the parameters of a distribution. You then write code that
 passes each tensor to the right layer. With
 [`TensorDictModule`](../reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule), each layer reads and writes named
 entries of one [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), and you chain the layers by
@@ -24,7 +24,7 @@ how to keep only some of the outputs.
 - How to sample from a distribution with
 [`ProbabilisticTensorDictModule`](../reference/generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule).
 
-Before you start, read [Getting, setting and nesting keys](tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py), which
+Before you start, read [Getting, setting, and nesting keys](tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py), which
 explains how to read and write the entries of a tensordict.
 
 A [`TensorDictModule`](../reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule) is a [`Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)
@@ -54,7 +54,7 @@ The input of the block is a [`TensorDict`](../reference/generated/tensordict.Ten
 
 ```
 tensordict = TensorDict(
- x=torch.randn(5, 3),
+ {"x": torch.randn(5, 3)},
  batch_size=[5],
 )
 ```
@@ -129,7 +129,7 @@ residual = TensorDictModule(
 )
 ```
 
-Put `block0`, `block1` and `residual` together to get the residual
+Put `block0`, `block1`, and `residual` together to get the residual
 block:
 
 ```
@@ -150,7 +150,7 @@ removes the other output keys from the tensordict:
 ```
 block.select_out_keys("y")
 
-tensordict = TensorDict(x=torch.randn(1, 3), batch_size=[1])
+tensordict = TensorDict({"x": torch.randn(1, 3)}, batch_size=[1])
 block(tensordict)
 assert "y" in tensordict
 
@@ -244,13 +244,13 @@ for name, module in [
 
 ```
 Eager
- Regular: 137.8 us
- TDM: 152.7 us
- Sequential: 210.8 us
+ Regular: 134.7 us
+ TDM: 151.6 us
+ Sequential: 210.6 us
 Compiled
- Regular: 152.0 us
- TDM: 167.2 us
- Sequential: 174.0 us
+ Regular: 151.8 us
+ TDM: 166.7 us
+ Sequential: 173.0 us
 ```
 
 The numbers above come from the machine that built this page, which runs on
@@ -267,7 +267,7 @@ the compiled versions are not faster than the eager `Regular` module.
 On a GPU, the cost to launch each kernel adds up. CUDA graphs replay all the
 kernels of a call at once. Use `torch.compile(module, mode="reduce-overhead")`
 or [`CudaGraphModule`](../reference/generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule) to record them. The
-[torch.compile, torch.func, torch.export and CUDA graphs](../compile.html#compile) guide explains both tools, and what makes a compiled
+[torch.compile, torch.func, torch.export, and CUDA graphs](../compile.html#compile) guide explains both tools, and what makes a compiled
 tensordict function compile again.
 
 ## Rules for TensorDictModule
@@ -395,7 +395,7 @@ and choose a deterministic or a random sample.
 ## Further reading
 
 - [Modules: TensorDictModule and tensordict.nn](../modules.html#modules-guide) explains `tensordict.nn` in more detail.
-- [torch.compile, torch.func, torch.export and CUDA graphs](../compile.html#compile) explains how to compile tensordict code and record CUDA
+- [torch.compile, torch.func, torch.export, and CUDA graphs](../compile.html#compile) explains how to compile tensordict code and record CUDA
 graphs.
 - [Exporting tensordict modules](export.html#sphx-glr-tutorials-export-py) exports a `tensordict.nn` module to a
 graph that takes and returns plain tensors.
@@ -403,7 +403,7 @@ graph that takes and returns plain tensors.
 and runs ensembles with [`torch.vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap).
 - [tensordict.nn](../reference/nn.html#api-nn) lists all the classes of `tensordict.nn`.
 
-**Total running time of the script:** (0 minutes 16.425 seconds)
+**Total running time of the script:** (0 minutes 16.607 seconds)
 
 [`Download Jupyter notebook: tensordict_module.ipynb`](../_downloads/ba42555713e16dc342a5f3e550dec192/tensordict_module.ipynb)
 

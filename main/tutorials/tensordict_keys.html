@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Getting, setting and nesting keys &#8212; tensordict main documentation</title>
+    <title>Getting, setting, and nesting keys &#8212; tensordict main documentation</title>
   
   
   
@@ -60,7 +60,7 @@
     <link rel="canonical" href="https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_keys.html" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Slicing, indexing and masking" href="tensordict_slicing.html" />
+    <link rel="next" title="Slicing, indexing, and masking" href="tensordict_slicing.html" />
     <link rel="prev" title="FX tracing (prototype)" href="../fx.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -71,7 +71,7 @@
 <meta name="llm:site-type" content="documentation">
 <meta name="llm:framework" content="PyTorch">
 
-<meta name="llm:description" content="A dict[str, torch.Tensor] that behaves like one tensor. - Getting, setting and nesting keys">
+<meta name="llm:description" content="A dict[str, torch.Tensor] that behaves like one tensor. - Getting, setting, and nesting keys">
 
 
 
@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5166+g328602c08.d20261012)">
+<meta name="llm:version" content="main (0.14.0.dev5167+g88f8baec0.d20261012)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="tutorial">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5166+g328602c08.d20261012)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5167+g88f8baec0.d20261012)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -561,13 +561,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../concepts/batch_size.html">
-                  Batch size, shapes and indexing
+                  Batch size, shapes, and indexing
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../concepts/keys.html">
-                  Keys, nested keys and locking
+                  Keys, nested keys, and locking
                 </a>
               </li>
             
@@ -579,13 +579,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../concepts/operations.html">
-                  Arithmetic, apply, reductions and gradients
+                  Arithmetic, apply, reductions, and gradients
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../concepts/devices.html">
-                  Devices, dtypes and memory
+                  Devices, dtypes, and memory
                 </a>
               </li>
             
@@ -659,7 +659,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../compile.html">
-                  torch.compile, torch.func, torch.export and CUDA graphs
+                  torch.compile, torch.func, torch.export, and CUDA graphs
                 </a>
               </li>
             
@@ -697,13 +697,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="#">
-                  Getting, setting and nesting keys
+                  Getting, setting, and nesting keys
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tensordict_slicing.html">
-                  Slicing, indexing and masking
+                  Slicing, indexing, and masking
                 </a>
               </li>
             
@@ -1058,13 +1058,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../concepts/batch_size.html">
-                  Batch size, shapes and indexing
+                  Batch size, shapes, and indexing
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../concepts/keys.html">
-                  Keys, nested keys and locking
+                  Keys, nested keys, and locking
                 </a>
               </li>
             
@@ -1076,13 +1076,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../concepts/operations.html">
-                  Arithmetic, apply, reductions and gradients
+                  Arithmetic, apply, reductions, and gradients
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../concepts/devices.html">
-                  Devices, dtypes and memory
+                  Devices, dtypes, and memory
                 </a>
               </li>
             
@@ -1156,7 +1156,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../compile.html">
-                  torch.compile, torch.func, torch.export and CUDA graphs
+                  torch.compile, torch.func, torch.export, and CUDA graphs
                 </a>
               </li>
             
@@ -1194,13 +1194,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="#">
-                  Getting, setting and nesting keys
+                  Getting, setting, and nesting keys
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tensordict_slicing.html">
-                  Slicing, indexing and masking
+                  Slicing, indexing, and masking
                 </a>
               </li>
             
@@ -1442,11 +1442,11 @@ document.write(`
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">User guide</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../overview.html">What is TensorDict?</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../concepts/batch_size.html">Batch size, shapes and indexing</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../concepts/keys.html">Keys, nested keys and locking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../concepts/batch_size.html">Batch size, shapes, and indexing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../concepts/keys.html">Keys, nested keys, and locking</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../concepts/stacking.html">Stacking and variable-size data</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../concepts/operations.html">Arithmetic, apply, reductions and gradients</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../concepts/devices.html">Devices, dtypes and memory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../concepts/operations.html">Arithmetic, apply, reductions, and gradients</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../concepts/devices.html">Devices, dtypes, and memory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../concepts/non_tensor.html">Non-tensor data and unbatched entries</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tensorclass.html">TensorClass</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../typed_tensordict.html">TypedTensorDict</a></li>
@@ -1459,15 +1459,15 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="../storage.html">Large datasets and storage backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../data_loading.html">Load data and share it between processes</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../distributed.html">Distributed tensordicts</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../compile.html">torch.compile, torch.func, torch.export and CUDA graphs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../compile.html">torch.compile, torch.func, torch.export, and CUDA graphs</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../printing.html">Printing and display</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../compatibility.html">Containers on storage backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../fx.html">FX tracing (prototype)</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: basics</span></p>
 <ul class="current nav bd-sidenav">
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Getting, setting and nesting keys</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tensordict_slicing.html">Slicing, indexing and masking</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Getting, setting, and nesting keys</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tensordict_slicing.html">Slicing, indexing, and masking</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tensordict_shapes.html">Changing the shape of a TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tensordict_preallocation.html">Filling a TensorDict row by row</a></li>
 <li class="toctree-l1"><a class="reference internal" href="streamed_tensordict.html">Building tensordicts from streams</a></li>
@@ -1572,7 +1572,7 @@ document.write(`
   <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
     
     <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-      <meta itemprop="name" content="Getting, setting and nesting keys">
+      <meta itemprop="name" content="Getting, setting, and nesting keys">
       <meta itemprop="position" content="1">
     </div>
   </div>
@@ -1617,7 +1617,7 @@ document.write(`
 to download the full example code.</p>
 </div>
 <section class="sphx-glr-example-title" id="getting-setting-and-nesting-keys">
-<span id="sphx-glr-tutorials-tensordict-keys-py"></span><h1>Getting, setting and nesting keys<a class="headerlink" href="#getting-setting-and-nesting-keys" title="Link to this heading">#</a></h1>
+<span id="sphx-glr-tutorials-tensordict-keys-py"></span><h1>Getting, setting, and nesting keys<a class="headerlink" href="#getting-setting-and-nesting-keys" title="Link to this heading">#</a></h1>
 <p><strong>Author</strong>: <a class="reference external" href="https://github.com/tcbegley">Tom Begley</a></p>
 <p>A <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> stores tensors under string keys, as a
 Python <code class="docutils literal notranslate"><span class="pre">dict</span></code> does, and a value can be another <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code>. If you know
@@ -1731,7 +1731,7 @@ another <a class="reference internal" href="../reference/generated/tensordict.Te
 <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>. It overwrites the keys that exist, and
 creates the keys that do not exist.</p>
 <p>The second argument of the constructor below, <code class="docutils literal notranslate"><span class="pre">[10]</span></code>, is the batch size:
-the leading dimensions that all the entries share (see <a class="reference internal" href="../concepts/batch_size.html#batch-size"><span class="std std-ref">Batch size, shapes and indexing</span></a>).</p>
+the leading dimensions that all the entries share (see <a class="reference internal" href="../concepts/batch_size.html#batch-size"><span class="std std-ref">Batch size, shapes, and indexing</span></a>).</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><span class="n">tensordict</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><span class="n">TensorDict</span></a><span class="p">(</span><span class="p">{</span><span class="s2">&quot;</span><span class="s2">a</span><span class="s2">&quot;</span><span class="p">:</span> <a class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.rand.html#torch.rand" title="torch.rand"><span class="n">torch</span><span class="o">.</span><span class="n">rand</span></a><span class="p">(</span><span class="mi">10</span><span class="p">)</span><span class="p">,</span> <span class="s2">&quot;</span><span class="s2">b</span><span class="s2">&quot;</span><span class="p">:</span> <a class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.rand.html#torch.rand" title="torch.rand"><span class="n">torch</span><span class="o">.</span><span class="n">rand</span></a><span class="p">(</span><span class="mi">10</span><span class="p">)</span><span class="p">}</span><span class="p">,</span> <span class="p">[</span><span class="mi">10</span><span class="p">]</span><span class="p">)</span><span class="w">
 </span><a class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-method reference internal" href="../reference/generated/tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update" title="tensordict.TensorDictBase.update"><span class="n">tensordict</span><span class="o">.</span><span class="n">update</span></a><span class="p">(</span><a class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><span class="n">TensorDict</span></a><span class="p">(</span><span class="p">{</span><span class="s2">&quot;</span><span class="s2">a</span><span class="s2">&quot;</span><span class="p">:</span> <a class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="mi">10</span><span class="p">)</span><span class="p">,</span> <span class="s2">&quot;</span><span class="s2">c</span><span class="s2">&quot;</span><span class="p">:</span> <a class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="mi">10</span><span class="p">)</span><span class="p">}</span><span class="p">,</span> <span class="p">[</span><span class="mi">10</span><span class="p">]</span><span class="p">)</span><span class="p">)</span><span class="w">
 </span><span class="k">assert</span> <span class="p">(</span><a class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><span class="n">tensordict</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">a</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="p">)</span><span class="w">
@@ -2070,10 +2070,10 @@ TensorDict(
 </section>
 <section id="conclusion">
 <h2>Conclusion<a class="headerlink" href="#conclusion" title="Link to this heading">#</a></h2>
-<p>You can now set, read, rename and delete the entries of a
+<p>You can now set, read, rename, and delete the entries of a
 <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> at any depth, with tuples of strings for the
 nested keys. You can test keys with <code class="docutils literal notranslate"><span class="pre">in</span></code>, list them with <code class="docutils literal notranslate"><span class="pre">keys()</span></code>,
-<code class="docutils literal notranslate"><span class="pre">values()</span></code> and <code class="docutils literal notranslate"><span class="pre">items()</span></code>, flatten them, and keep or drop a subset with
+<code class="docutils literal notranslate"><span class="pre">values()</span></code>, and <code class="docutils literal notranslate"><span class="pre">items()</span></code>, flatten them, and keep or drop a subset with
 <code class="docutils literal notranslate"><span class="pre">select</span></code> and <code class="docutils literal notranslate"><span class="pre">exclude</span></code>.</p>
 <p>Two behaviors differ from a <code class="docutils literal notranslate"><span class="pre">dict</span></code>. <code class="docutils literal notranslate"><span class="pre">get</span></code> returns <code class="docutils literal notranslate"><span class="pre">None</span></code> for a missing
 key, and <code class="docutils literal notranslate"><span class="pre">tensordict[key]</span></code> raises a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>. A <code class="docutils literal notranslate"><span class="pre">for</span></code> loop over a
@@ -2083,10 +2083,10 @@ over the keys.</p>
 <section id="further-reading">
 <h2>Further reading<a class="headerlink" href="#further-reading" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><a class="reference internal" href="../concepts/keys.html#keys"><span class="std std-ref">Keys, nested keys and locking</span></a> explains keys, nested keys and locking.</p></li>
+<li><p><a class="reference internal" href="../concepts/keys.html#keys"><span class="std std-ref">Keys, nested keys, and locking</span></a> explains keys, nested keys, and locking.</p></li>
 <li><p><a class="reference internal" href="../concepts/non_tensor.html#non-tensor-data"><span class="std std-ref">Non-tensor data and unbatched entries</span></a> explains how to store values that are not tensors.</p></li>
 <li><p><a class="reference internal" href="tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py"><span class="std std-ref">Changing the shape of a TensorDict</span></a> shows the shape operations.</p></li>
-<li><p><a class="reference internal" href="../reference/td.html#api-methods-keys"><span class="std std-ref">Keys, values and entries</span></a> lists all the key methods.</p></li>
+<li><p><a class="reference internal" href="../reference/td.html#api-methods-keys"><span class="std std-ref">Keys, values, and entries</span></a> lists all the key methods.</p></li>
 </ul>
 <p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.009 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensordict-keys-py">
@@ -2160,7 +2160,7 @@ over the keys.</p>
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Slicing, indexing and masking</p>
+        <p class="prev-next-title">Slicing, indexing, and masking</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2199,7 +2199,7 @@ over the keys.</p>
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Slicing, indexing and masking</p>
+        <p class="prev-next-title">Slicing, indexing, and masking</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2463,11 +2463,11 @@ over the keys.</p>
     {
        "@context": "https://schema.org",
        "@type": "Article",
-       "name": "Getting, setting and nesting keys",
-       "headline": "Getting, setting and nesting keys",
-       "description": "A dict[str, torch.Tensor] that behaves like one tensor. - Getting, setting and nesting keys",
+       "name": "Getting, setting, and nesting keys",
+       "headline": "Getting, setting, and nesting keys",
+       "description": "A dict[str, torch.Tensor] that behaves like one tensor. - Getting, setting, and nesting keys",
        "url": "/tutorials/tensordict_keys.html",
-       "articleBody": "Note Go to the end to download the full example code. Getting, setting and nesting keys# Author: Tom Begley A TensorDict stores tensors under string keys, as a Python dict does, and a value can be another TensorDict. If you know dict, most of this tutorial is familiar. It shows where a TensorDict is different: what a missing key returns, what a for loop gives, and how tuples of strings address nested entries. What you will learn: How to set and get entries, and what happens when a key is missing. How to find out if a key exists, and how to iterate over the keys. How to read and write nested entries with tuples of strings. How to flatten nested keys, and how to select and exclude keys. Setting and getting keys# Set and get entries with the same syntax as for a Python dict: import torch from tensordict import TensorDict tensordict = TensorDict() # set a key a = torch.rand(10) tensordict[\"a\"] = a # retrieve the value stored under \"a\" assert tensordict[\"a\"] is a Note Unlike the keys of a Python dict, all the keys of a TensorDict must be strings. Tuples of strings refer to nested values, as shown below. The .get() and .set() methods do the same thing: tensordict = TensorDict() # set a key a = torch.rand(10) tensordict.set(\"a\", a) # retrieve the value stored under \"a\" assert tensordict.get(\"a\") is a Like dict.get, get returns None if the key is not in the TensorDict. Indexing with tensordict[key] raises a KeyError instead. Use tensordict[key] when the key must exist, and get when it can be missing: assert tensordict.get(\"banana\") is None try: tensordict[\"banana\"] except KeyError: print(\"tensordict[\u0027banana\u0027] raises a KeyError\") tensordict[\u0027banana\u0027] raises a KeyError If you give get a default value, it returns this value for a missing key: assert tensordict.get(\"banana\", a) is a Like dict.setdefault, setdefault() returns the value of a key. If the key is not found, it stores the default value under the key and returns it. assert tensordict.setdefault(\"banana\", a) is a # a is now stored under \"banana\" assert tensordict[\"banana\"] is a To delete a key, use the del statement, as for a Python dict. The TensorDict.del_ method does the same. del tensordict[\"banana\"] To write new values into the existing tensor of a key, pass inplace=True to .set(), or use the .set_() method. The tensor object stays the same, and only its values change. tensordict.set(\"a\", torch.zeros(10), inplace=True) # all the entries of the \"a\" tensor are now zero assert (tensordict.get(\"a\") == 0).all() # but it is still the same tensor as before assert tensordict.get(\"a\") is a # set_ does the same tensordict.set_(\"a\", torch.ones(10)) assert (tensordict.get(\"a\") == 1).all() assert tensordict.get(\"a\") is a Renaming keys# To rename a key, use the TensorDict.rename_key_ method. The value stays in the TensorDict, under the new key. tensordict.rename_key_(\"a\", \"b\") assert tensordict.get(\"b\") is a print(tensordict) TensorDict( fields={ b: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) Updating multiple values# TensorDict.update copies the entries of another TensorDict, or of a dict, into a TensorDict. It overwrites the keys that exist, and creates the keys that do not exist. The second argument of the constructor below, [10], is the batch size: the leading dimensions that all the entries share (see Batch size, shapes and indexing). tensordict = TensorDict({\"a\": torch.rand(10), \"b\": torch.rand(10)}, [10]) tensordict.update(TensorDict({\"a\": torch.zeros(10), \"c\": torch.zeros(10)}, [10])) assert (tensordict[\"a\"] == 0).all() assert (tensordict[\"b\"] != 0).all() assert (tensordict[\"c\"] == 0).all() print(tensordict) TensorDict( fields={ a: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False), b: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False), c: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([10]), device=None, is_shared=False) Nested values# A value of a TensorDict can be another TensorDict. To create nested values, pass a TensorDict or a nested dict to the constructor. A nested tensordict has the batch dimensions of its parent, and can have more. # creating nested values with a nested dict nested_tensordict = TensorDict( {\"a\": torch.rand(2, 3), \"double_nested\": {\"a\": torch.rand(2, 3)}}, [2, 3] ) # creating nested values with a TensorDict tensordict = TensorDict({\"a\": torch.rand(2), \"nested\": nested_tensordict}, [2]) print(tensordict) TensorDict( fields={ a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False), nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), double_nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([2, 3]), device=None, is_shared=False)}, batch_size=torch.Size([2, 3]), device=None, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False) To read a nested value, use a tuple of strings: double_nested_a = tensordict[\"nested\", \"double_nested\", \"a\"] nested_a = tensordict.get((\"nested\", \"a\")) To write a nested value, also use a tuple of strings: tensordict[\"nested\", \"double_nested\", \"b\"] = torch.rand(2, 3) tensordict.set((\"nested\", \"b\"), torch.rand(2, 3)) print(tensordict) TensorDict( fields={ a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False), nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), double_nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([2, 3]), device=None, is_shared=False)}, batch_size=torch.Size([2, 3]), device=None, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False) Iterating over the contents of a TensorDict# To iterate over the keys of a TensorDict, use the .keys() method. Note Do not write for key in tensordict. A TensorDict iterates like a tensor: this loop gives one sub-tensordict for each element of the first batch dimension. If the tensordict has no batch dimensions, the loop raises a TypeError. In the same way, len(tensordict) is the size of the first batch dimension, not the number of keys. for key in tensordict.keys(): print(key) a nested By default, .keys() gives only the top-level keys of the TensorDict. With include_nested=True, it also gives the keys of the nested tensordicts, at all levels, as tuples of strings. for key in tensordict.keys(include_nested=True): print(key) a (\u0027nested\u0027, \u0027a\u0027) (\u0027nested\u0027, \u0027double_nested\u0027, \u0027a\u0027) (\u0027nested\u0027, \u0027double_nested\u0027, \u0027b\u0027) (\u0027nested\u0027, \u0027double_nested\u0027) (\u0027nested\u0027, \u0027b\u0027) nested To get only the keys of tensor values, and not the keys of nested tensordicts, also pass leaves_only=True. for key in tensordict.keys(include_nested=True, leaves_only=True): print(key) a (\u0027nested\u0027, \u0027a\u0027) (\u0027nested\u0027, \u0027double_nested\u0027, \u0027a\u0027) (\u0027nested\u0027, \u0027double_nested\u0027, \u0027b\u0027) (\u0027nested\u0027, \u0027b\u0027) As for dict, the .values() and .items() methods exist. They take the same keyword arguments as .keys(). for key, value in tensordict.items(include_nested=True): if isinstance(value, TensorDict): print(f\"{key} is a TensorDict\") else: print(f\"{key} is a Tensor\") a is a Tensor nested is a TensorDict (\u0027nested\u0027, \u0027a\u0027) is a Tensor (\u0027nested\u0027, \u0027double_nested\u0027) is a TensorDict (\u0027nested\u0027, \u0027double_nested\u0027, \u0027a\u0027) is a Tensor (\u0027nested\u0027, \u0027double_nested\u0027, \u0027b\u0027) is a Tensor (\u0027nested\u0027, \u0027b\u0027) is a Tensor Testing if a key exists# To find out if a key exists in a TensorDict, use the in operator. It also accepts nested keys as tuples of strings. Each in test is a dict lookup at each level of nesting, so its cost does not grow with the number of keys. assert \"a\" in tensordict assert (\"nested\", \"a\") in tensordict assert (\"nested\", \"banana\") not in tensordict Flattening and unflattening nested keys# The .flatten_keys() method turns nested keys into top-level keys. It joins the parts of each nested key with a separator: print(tensordict, end=\"\\n\\n\") print(tensordict.flatten_keys(separator=\".\")) TensorDict( fields={ a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False), nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), double_nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([2, 3]), device=None, is_shared=False)}, batch_size=torch.Size([2, 3]), device=None, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False) TensorDict( fields={ a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False), nested.a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), nested.b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), nested.double_nested.a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), nested.double_nested.b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False) The .unflatten_keys() method does the inverse: flattened_tensordict = tensordict.flatten_keys(separator=\".\") print(flattened_tensordict, end=\"\\n\\n\") print(flattened_tensordict.unflatten_keys(separator=\".\")) TensorDict( fields={ a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False), nested.a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), nested.b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), nested.double_nested.a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), nested.double_nested.b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False) TensorDict( fields={ a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False), nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), double_nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False) unflatten_keys works on any flat key names with a separator. For example, the parameter names of a torch.nn.Module use \".\". This code builds a TensorDict with the structure of the module: import torch.nn as nn module = nn.Sequential( nn.Sequential(nn.Linear(100, 50), nn.Linear(50, 10)), nn.Linear(10, 1), ) params = TensorDict(dict(module.named_parameters()), []).unflatten_keys(\".\") print(params) TensorDict( fields={ 0: TensorDict( fields={ 0: TensorDict( fields={ bias: Parameter(shape=torch.Size([50]), device=cpu, dtype=torch.float32, is_shared=False), weight: Parameter(shape=torch.Size([50, 100]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False), 1: TensorDict( fields={ bias: Parameter(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False), weight: Parameter(shape=torch.Size([10, 50]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False), 1: TensorDict( fields={ bias: Parameter(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False), weight: Parameter(shape=torch.Size([1, 10]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) For modules, TensorDict.from_module gives the same result in one call, and also includes the buffers of the module. The Functional calls and ensembles with TensorDict tutorial uses it. params_from_module = TensorDict.from_module(module) assert set(params_from_module.keys(True, True)) == set(params.keys(True, True)) Selecting and excluding keys# Two methods return a new TensorDict with a subset of the keys: TensorDict.select keeps only the keys that you name. TensorDict.exclude keeps all the keys except the keys that you name. print(\"Select:\") print(tensordict.select(\"a\", (\"nested\", \"a\")), end=\"\\n\\n\") print(\"Exclude:\") print(tensordict.exclude((\"nested\", \"b\"), (\"nested\", \"double_nested\"))) Select: TensorDict( fields={ a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False), nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([2, 3]), device=None, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False) Exclude: TensorDict( fields={ a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False), nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([2, 3]), device=None, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False) Conclusion# You can now set, read, rename and delete the entries of a TensorDict at any depth, with tuples of strings for the nested keys. You can test keys with in, list them with keys(), values() and items(), flatten them, and keep or drop a subset with select and exclude. Two behaviors differ from a dict. get returns None for a missing key, and tensordict[key] raises a KeyError. A for loop over a TensorDict goes over its first batch dimension, so use keys() to go over the keys. Further reading# Keys, nested keys and locking explains keys, nested keys and locking. Non-tensor data and unbatched entries explains how to store values that are not tensors. Changing the shape of a TensorDict shows the shape operations. Keys, values and entries lists all the key methods. Total running time of the script: (0 minutes 0.009 seconds) Download Jupyter notebook: tensordict_keys.ipynb Download Python source code: tensordict_keys.py Download zipped: tensordict_keys.zip Gallery generated by Sphinx-Gallery",
+       "articleBody": "Note Go to the end to download the full example code. Getting, setting, and nesting keys# Author: Tom Begley A TensorDict stores tensors under string keys, as a Python dict does, and a value can be another TensorDict. If you know dict, most of this tutorial is familiar. It shows where a TensorDict is different: what a missing key returns, what a for loop gives, and how tuples of strings address nested entries. What you will learn: How to set and get entries, and what happens when a key is missing. How to find out if a key exists, and how to iterate over the keys. How to read and write nested entries with tuples of strings. How to flatten nested keys, and how to select and exclude keys. Setting and getting keys# Set and get entries with the same syntax as for a Python dict: import torch from tensordict import TensorDict tensordict = TensorDict() # set a key a = torch.rand(10) tensordict[\"a\"] = a # retrieve the value stored under \"a\" assert tensordict[\"a\"] is a Note Unlike the keys of a Python dict, all the keys of a TensorDict must be strings. Tuples of strings refer to nested values, as shown below. The .get() and .set() methods do the same thing: tensordict = TensorDict() # set a key a = torch.rand(10) tensordict.set(\"a\", a) # retrieve the value stored under \"a\" assert tensordict.get(\"a\") is a Like dict.get, get returns None if the key is not in the TensorDict. Indexing with tensordict[key] raises a KeyError instead. Use tensordict[key] when the key must exist, and get when it can be missing: assert tensordict.get(\"banana\") is None try: tensordict[\"banana\"] except KeyError: print(\"tensordict[\u0027banana\u0027] raises a KeyError\") tensordict[\u0027banana\u0027] raises a KeyError If you give get a default value, it returns this value for a missing key: assert tensordict.get(\"banana\", a) is a Like dict.setdefault, setdefault() returns the value of a key. If the key is not found, it stores the default value under the key and returns it. assert tensordict.setdefault(\"banana\", a) is a # a is now stored under \"banana\" assert tensordict[\"banana\"] is a To delete a key, use the del statement, as for a Python dict. The TensorDict.del_ method does the same. del tensordict[\"banana\"] To write new values into the existing tensor of a key, pass inplace=True to .set(), or use the .set_() method. The tensor object stays the same, and only its values change. tensordict.set(\"a\", torch.zeros(10), inplace=True) # all the entries of the \"a\" tensor are now zero assert (tensordict.get(\"a\") == 0).all() # but it is still the same tensor as before assert tensordict.get(\"a\") is a # set_ does the same tensordict.set_(\"a\", torch.ones(10)) assert (tensordict.get(\"a\") == 1).all() assert tensordict.get(\"a\") is a Renaming keys# To rename a key, use the TensorDict.rename_key_ method. The value stays in the TensorDict, under the new key. tensordict.rename_key_(\"a\", \"b\") assert tensordict.get(\"b\") is a print(tensordict) TensorDict( fields={ b: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) Updating multiple values# TensorDict.update copies the entries of another TensorDict, or of a dict, into a TensorDict. It overwrites the keys that exist, and creates the keys that do not exist. The second argument of the constructor below, [10], is the batch size: the leading dimensions that all the entries share (see Batch size, shapes, and indexing). tensordict = TensorDict({\"a\": torch.rand(10), \"b\": torch.rand(10)}, [10]) tensordict.update(TensorDict({\"a\": torch.zeros(10), \"c\": torch.zeros(10)}, [10])) assert (tensordict[\"a\"] == 0).all() assert (tensordict[\"b\"] != 0).all() assert (tensordict[\"c\"] == 0).all() print(tensordict) TensorDict( fields={ a: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False), b: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False), c: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([10]), device=None, is_shared=False) Nested values# A value of a TensorDict can be another TensorDict. To create nested values, pass a TensorDict or a nested dict to the constructor. A nested tensordict has the batch dimensions of its parent, and can have more. # creating nested values with a nested dict nested_tensordict = TensorDict( {\"a\": torch.rand(2, 3), \"double_nested\": {\"a\": torch.rand(2, 3)}}, [2, 3] ) # creating nested values with a TensorDict tensordict = TensorDict({\"a\": torch.rand(2), \"nested\": nested_tensordict}, [2]) print(tensordict) TensorDict( fields={ a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False), nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), double_nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([2, 3]), device=None, is_shared=False)}, batch_size=torch.Size([2, 3]), device=None, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False) To read a nested value, use a tuple of strings: double_nested_a = tensordict[\"nested\", \"double_nested\", \"a\"] nested_a = tensordict.get((\"nested\", \"a\")) To write a nested value, also use a tuple of strings: tensordict[\"nested\", \"double_nested\", \"b\"] = torch.rand(2, 3) tensordict.set((\"nested\", \"b\"), torch.rand(2, 3)) print(tensordict) TensorDict( fields={ a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False), nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), double_nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([2, 3]), device=None, is_shared=False)}, batch_size=torch.Size([2, 3]), device=None, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False) Iterating over the contents of a TensorDict# To iterate over the keys of a TensorDict, use the .keys() method. Note Do not write for key in tensordict. A TensorDict iterates like a tensor: this loop gives one sub-tensordict for each element of the first batch dimension. If the tensordict has no batch dimensions, the loop raises a TypeError. In the same way, len(tensordict) is the size of the first batch dimension, not the number of keys. for key in tensordict.keys(): print(key) a nested By default, .keys() gives only the top-level keys of the TensorDict. With include_nested=True, it also gives the keys of the nested tensordicts, at all levels, as tuples of strings. for key in tensordict.keys(include_nested=True): print(key) a (\u0027nested\u0027, \u0027a\u0027) (\u0027nested\u0027, \u0027double_nested\u0027, \u0027a\u0027) (\u0027nested\u0027, \u0027double_nested\u0027, \u0027b\u0027) (\u0027nested\u0027, \u0027double_nested\u0027) (\u0027nested\u0027, \u0027b\u0027) nested To get only the keys of tensor values, and not the keys of nested tensordicts, also pass leaves_only=True. for key in tensordict.keys(include_nested=True, leaves_only=True): print(key) a (\u0027nested\u0027, \u0027a\u0027) (\u0027nested\u0027, \u0027double_nested\u0027, \u0027a\u0027) (\u0027nested\u0027, \u0027double_nested\u0027, \u0027b\u0027) (\u0027nested\u0027, \u0027b\u0027) As for dict, the .values() and .items() methods exist. They take the same keyword arguments as .keys(). for key, value in tensordict.items(include_nested=True): if isinstance(value, TensorDict): print(f\"{key} is a TensorDict\") else: print(f\"{key} is a Tensor\") a is a Tensor nested is a TensorDict (\u0027nested\u0027, \u0027a\u0027) is a Tensor (\u0027nested\u0027, \u0027double_nested\u0027) is a TensorDict (\u0027nested\u0027, \u0027double_nested\u0027, \u0027a\u0027) is a Tensor (\u0027nested\u0027, \u0027double_nested\u0027, \u0027b\u0027) is a Tensor (\u0027nested\u0027, \u0027b\u0027) is a Tensor Testing if a key exists# To find out if a key exists in a TensorDict, use the in operator. It also accepts nested keys as tuples of strings. Each in test is a dict lookup at each level of nesting, so its cost does not grow with the number of keys. assert \"a\" in tensordict assert (\"nested\", \"a\") in tensordict assert (\"nested\", \"banana\") not in tensordict Flattening and unflattening nested keys# The .flatten_keys() method turns nested keys into top-level keys. It joins the parts of each nested key with a separator: print(tensordict, end=\"\\n\\n\") print(tensordict.flatten_keys(separator=\".\")) TensorDict( fields={ a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False), nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), double_nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([2, 3]), device=None, is_shared=False)}, batch_size=torch.Size([2, 3]), device=None, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False) TensorDict( fields={ a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False), nested.a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), nested.b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), nested.double_nested.a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), nested.double_nested.b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False) The .unflatten_keys() method does the inverse: flattened_tensordict = tensordict.flatten_keys(separator=\".\") print(flattened_tensordict, end=\"\\n\\n\") print(flattened_tensordict.unflatten_keys(separator=\".\")) TensorDict( fields={ a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False), nested.a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), nested.b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), nested.double_nested.a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), nested.double_nested.b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False) TensorDict( fields={ a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False), nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), double_nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False), b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False) unflatten_keys works on any flat key names with a separator. For example, the parameter names of a torch.nn.Module use \".\". This code builds a TensorDict with the structure of the module: import torch.nn as nn module = nn.Sequential( nn.Sequential(nn.Linear(100, 50), nn.Linear(50, 10)), nn.Linear(10, 1), ) params = TensorDict(dict(module.named_parameters()), []).unflatten_keys(\".\") print(params) TensorDict( fields={ 0: TensorDict( fields={ 0: TensorDict( fields={ bias: Parameter(shape=torch.Size([50]), device=cpu, dtype=torch.float32, is_shared=False), weight: Parameter(shape=torch.Size([50, 100]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False), 1: TensorDict( fields={ bias: Parameter(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False), weight: Parameter(shape=torch.Size([10, 50]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False), 1: TensorDict( fields={ bias: Parameter(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False), weight: Parameter(shape=torch.Size([1, 10]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) For modules, TensorDict.from_module gives the same result in one call, and also includes the buffers of the module. The Functional calls and ensembles with TensorDict tutorial uses it. params_from_module = TensorDict.from_module(module) assert set(params_from_module.keys(True, True)) == set(params.keys(True, True)) Selecting and excluding keys# Two methods return a new TensorDict with a subset of the keys: TensorDict.select keeps only the keys that you name. TensorDict.exclude keeps all the keys except the keys that you name. print(\"Select:\") print(tensordict.select(\"a\", (\"nested\", \"a\")), end=\"\\n\\n\") print(\"Exclude:\") print(tensordict.exclude((\"nested\", \"b\"), (\"nested\", \"double_nested\"))) Select: TensorDict( fields={ a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False), nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([2, 3]), device=None, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False) Exclude: TensorDict( fields={ a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False), nested: TensorDict( fields={ a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([2, 3]), device=None, is_shared=False)}, batch_size=torch.Size([2]), device=None, is_shared=False) Conclusion# You can now set, read, rename, and delete the entries of a TensorDict at any depth, with tuples of strings for the nested keys. You can test keys with in, list them with keys(), values(), and items(), flatten them, and keep or drop a subset with select and exclude. Two behaviors differ from a dict. get returns None for a missing key, and tensordict[key] raises a KeyError. A for loop over a TensorDict goes over its first batch dimension, so use keys() to go over the keys. Further reading# Keys, nested keys, and locking explains keys, nested keys, and locking. Non-tensor data and unbatched entries explains how to store values that are not tensors. Changing the shape of a TensorDict shows the shape operations. Keys, values, and entries lists all the key methods. Total running time of the script: (0 minutes 0.009 seconds) Download Jupyter notebook: tensordict_keys.ipynb Download Python source code: tensordict_keys.py Download zipped: tensordict_keys.zip Gallery generated by Sphinx-Gallery",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

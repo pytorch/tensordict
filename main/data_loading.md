@@ -9,7 +9,7 @@ of the other processes.
 ## Use a tensordict as a dataset
 
 A tensordict is a map-style dataset: `len(td)` is the size of its first
-batch dimension, and `td[i]` is one sample (see [Batch size, shapes and indexing](concepts/batch_size.html#batch-size)). It also
+batch dimension, and `td[i]` is one sample (see [Batch size, shapes, and indexing](concepts/batch_size.html#batch-size)). It also
 has `__getitems__`, which reads a whole batch with one index operation.
 Pass `collate_fn=lambda x: x` to keep that batch as it is:
 
@@ -19,7 +19,7 @@ Pass `collate_fn=lambda x: x` to keep that batch as it is:
 >>> from tensordict import TensorDict
 >>> _ = torch.manual_seed(0)
 >>> data = TensorDict(
-... image=torch.randn(10, 1, 8, 8), label=torch.arange(10), batch_size=[10]
+... {"image": torch.randn(10, 1, 8, 8), "label": torch.arange(10)}, batch_size=[10]
 ... )
 >>> loader = DataLoader(data, batch_size=4, shuffle=True, collate_fn=lambda x: x)
 >>> batches = list(loader)
@@ -61,7 +61,7 @@ each batch, and the default `collate_fn` raises the same `TypeError`.
 Pass `collate_fn=torch.stack` to stack the list into one tensordict:
 
 ```
->>> samples = [TensorDict(features=torch.randn(3), label=i) for i in range(10)]
+>>> samples = [TensorDict({"features": torch.randn(3), "label": i}) for i in range(10)]
 >>> batch = next(iter(DataLoader(samples, batch_size=4, collate_fn=torch.stack)))
 >>> batch.batch_size, batch["label"]
 (torch.Size([4]), tensor([0, 1, 2, 3]))
@@ -75,7 +75,7 @@ of points:
 
 ```
 >>> from tensordict import lazy_stack
->>> clouds = [TensorDict(points=torch.randn(n, 3)) for n in (5, 2, 7, 3)]
+>>> clouds = [TensorDict({"points": torch.randn(n, 3)}) for n in (5, 2, 7, 3)]
 >>> batch = next(iter(DataLoader(clouds, batch_size=4, collate_fn=lazy_stack)))
 >>> type(batch).__name__, batch.batch_size
 ('LazyStackedTensorDict', torch.Size([4]))
@@ -128,8 +128,10 @@ def keep_batch(batch):
 if __name__ == "__main__":
  with tempfile.TemporaryDirectory() as path:
  data = TensorDict(
- image=torch.randn(1_000, 1, 8, 8),
- label=torch.arange(1_000),
+ {
+ "image": torch.randn(1_000, 1, 8, 8),
+ "label": torch.arange(1_000),
+ },
  batch_size=[1_000],
  ).memmap_(path)
  loader = DataLoader(
@@ -152,7 +154,7 @@ when this page is tested:
 
 Without a `DataLoader`, `td.to("cuda", non_blocking_pin=True)` pins the
 leaves with several threads (`num_threads`), and copies them to the GPU
-(see [Devices, dtypes and memory](concepts/devices.html#devices)).
+(see [Devices, dtypes, and memory](concepts/devices.html#devices)).
 
 ## Share a tensordict between processes
 
@@ -174,10 +176,10 @@ import torch.multiprocessing as mp
 from tensordict import TensorDict
 
 def simulate(systems, i):
- systems[i] = TensorDict(state=torch.full((3,), float(i)))
+ systems[i] = TensorDict({"state": torch.full((3,), float(i))})
 
 if __name__ == "__main__":
- systems = TensorDict(state=torch.zeros(4, 3), batch_size=[4]).share_memory_()
+ systems = TensorDict({"state": torch.zeros(4, 3)}, batch_size=[4]).share_memory_()
  processes = [mp.Process(target=simulate, args=(systems, i)) for i in range(4)]
  for p in processes:
  p.start()
@@ -213,7 +215,7 @@ def consume(queue):
 
 if __name__ == "__main__":
  queue = mp.Queue()
- systems = TensorDict(state=torch.zeros(4, 3), batch_size=[4]).share_memory_()
+ systems = TensorDict({"state": torch.zeros(4, 3)}, batch_size=[4]).share_memory_()
  p = mp.Process(target=consume, args=(queue,))
  p.start()
  queue.put(systems)
@@ -241,7 +243,7 @@ from tensordict import TensorDict
 def fill(path, start, stop):
  data = TensorDict.load_memmap(path)
  for i in range(start, stop):
- data[i] = TensorDict(image=torch.full((3, 8, 8), i, dtype=torch.uint8))
+ data[i] = TensorDict({"image": torch.full((3, 8, 8), i, dtype=torch.uint8)})
 
 if __name__ == "__main__":
  with tempfile.TemporaryDirectory() as path:
@@ -284,16 +286,18 @@ from tensordict import TensorDict
 
 def kinetic_energy(chunk):
  energy = 0.5 * chunk["mass"] * (chunk["vel"] ** 2).sum(-1)
- return TensorDict(energy=energy, batch_size=chunk.batch_size)
+ return TensorDict({"energy": energy}, batch_size=chunk.batch_size)
 
 if __name__ == "__main__":
  with tempfile.TemporaryDirectory() as path:
  particles = TensorDict(
- mass=torch.ones(8),
- vel=torch.arange(8.0).unsqueeze(-1).repeat(1, 3),
+ {
+ "mass": torch.ones(8),
+ "vel": torch.arange(8.0).unsqueeze(-1).repeat(1, 3),
+ },
  batch_size=[8],
  ).memmap_()
- out = TensorDict(energy=torch.zeros(8), batch_size=[8]).memmap_like(path)
+ out = TensorDict({"energy": torch.zeros(8)}, batch_size=[8]).memmap_like(path)
  particles.map(kinetic_energy, num_workers=2, chunksize=2, out=out)
  # MemoryMappedTensor([ 0.0000, 1.5000, 6.0000, 13.5000])
  print(out["energy"][:4])
@@ -305,14 +309,14 @@ returns the results one chunk at a time.
 
 ## See also
 
-- [Large datasets and storage backends](storage.html#storage): memory-mapped, HDF5, zarr, shared-memory and Redis
+- [Large datasets and storage backends](storage.html#storage): memory-mapped, HDF5, zarr, shared-memory, and Redis
 backends.
 - [Save and load tensordicts](saving.html#saving): memory-mapped directories and the `mode` of
 `load_memmap`.
 - [Distributed tensordicts](distributed.html#distributed): send tensordicts between nodes.
 - The reference of [`share_memory_()`](reference/generated/tensordict.TensorDictBase.share_memory_.html#tensordict.TensorDictBase.share_memory_),
 [`pin_memory()`](reference/generated/tensordict.TensorDictBase.pin_memory.html#tensordict.TensorDictBase.pin_memory),
-[`map()`](reference/generated/tensordict.TensorDictBase.map.html#tensordict.TensorDictBase.map) and [`lazy_stack()`](reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack).
+[`map()`](reference/generated/tensordict.TensorDictBase.map.html#tensordict.TensorDictBase.map), and [`lazy_stack()`](reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack).
 - Tutorials: [Using TensorDict for datasets](tutorials/data_fashion.html#sphx-glr-tutorials-data-fashion-py),
-[Using tensorclasses for datasets](tutorials/tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) and
+[Using tensorclasses for datasets](tutorials/tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py), and
 [Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py).

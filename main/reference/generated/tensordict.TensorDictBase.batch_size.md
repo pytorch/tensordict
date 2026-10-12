@@ -21,7 +21,7 @@ batch size `()` always fits a [`TensorDict`](tensordict.TensorDict.html#tensordi
 [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) raises `RuntimeError` for
 any new batch size. A sub-tensordict with fewer batch dimensions than
 the new batch size gets the new batch size. The other sub-tensordicts
-keep theirs. See [Batch size, shapes and indexing](../../concepts/batch_size.html#batch-size).
+keep theirs. See [Batch size, shapes, and indexing](../../concepts/batch_size.html#batch-size).
 
 Returns:
 
@@ -65,9 +65,9 @@ Functional calls and ensembles with TensorDict
 Changing the shape of a TensorDict
 ![](../../_images/sphx_glr_tensordict_slicing_thumb.png)
 
-[Slicing, indexing and masking](../../tutorials/tensordict_slicing.html)
+[Slicing, indexing, and masking](../../tutorials/tensordict_slicing.html)
 
-Slicing, indexing and masking
+Slicing, indexing, and masking
 ![](../../_images/sphx_glr_zarr_storage_thumb.png)
 
 [Storing TensorDicts in zarr](../../tutorials/zarr_storage.html)

@@ -5,7 +5,7 @@
 Returns a view of the keys of the tensordict.
 
 By default, only the top-level keys are returned. A nested key is a
-tuple of strings, for example `("nested", "b")`. See [Keys, nested keys and locking](../../concepts/keys.html#keys).
+tuple of strings, for example `("nested", "b")`. See [Keys, nested keys, and locking](../../concepts/keys.html#keys).
 
 Warning
 
@@ -56,6 +56,6 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 ![](../../_images/sphx_glr_tensordict_keys_thumb.png)
 
-[Getting, setting and nesting keys](../../tutorials/tensordict_keys.html)
+[Getting, setting, and nesting keys](../../tutorials/tensordict_keys.html)
 
-Getting, setting and nesting keys
+Getting, setting, and nesting keys

@@ -12,7 +12,7 @@ Returns the value stored at `key`, or `default` if the key is missing.
 Parameters:
 
 - **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the key to read. A tuple reads a nested entry:
-`td.get(("a", "b"))` is `td["a"]["b"]`. See [Keys, nested keys and locking](../../concepts/keys.html#keys).
+`td.get(("a", "b"))` is `td["a"]["b"]`. See [Keys, nested keys, and locking](../../concepts/keys.html#keys).
 - **default** (*optional*) - the value returned if the key is missing.
 Defaults to `None`, as for [`dict.get()`](https://docs.python.org/3/builtins/stdtypes.html#dict.get).
 
@@ -48,9 +48,9 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 ![](../../_images/sphx_glr_tensordict_keys_thumb.png)
 
-[Getting, setting and nesting keys](../../tutorials/tensordict_keys.html)
+[Getting, setting, and nesting keys](../../tutorials/tensordict_keys.html)
 
-Getting, setting and nesting keys
+Getting, setting, and nesting keys
 ![](../../_images/sphx_glr_tensordict_shapes_thumb.png)
 
 [Changing the shape of a TensorDict](../../tutorials/tensordict_shapes.html)

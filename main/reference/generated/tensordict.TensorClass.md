@@ -349,6 +349,6 @@ Batched data loading with tensorclasses
 Changing the shape of a TensorDict
 ![](../../_images/sphx_glr_tensordict_slicing_thumb.png)
 
-[Slicing, indexing and masking](../../tutorials/tensordict_slicing.html)
+[Slicing, indexing, and masking](../../tutorials/tensordict_slicing.html)
 
-Slicing, indexing and masking
+Slicing, indexing, and masking

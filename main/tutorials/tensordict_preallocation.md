@@ -131,7 +131,7 @@ allocate the tensors on disk.
 
 ## Further reading
 
-- [Batch size, shapes and indexing](../concepts/batch_size.html#batch-size) explains batch sizes and indexing.
+- [Batch size, shapes, and indexing](../concepts/batch_size.html#batch-size) explains batch sizes and indexing.
 - [Large datasets and storage backends](../storage.html#storage) shows how to pre-allocate a tensordict on disk or on a
 storage backend.
 - [Devices and memory-mapped tensors](tensordict_memory.html#sphx-glr-tutorials-tensordict-memory-py) allocates memory-mapped

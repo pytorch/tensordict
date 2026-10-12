@@ -61,7 +61,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Filling a TensorDict row by row" href="tensordict_preallocation.html" />
-    <link rel="prev" title="Slicing, indexing and masking" href="tensordict_slicing.html" />
+    <link rel="prev" title="Slicing, indexing, and masking" href="tensordict_slicing.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5166+g328602c08.d20261012)">
+<meta name="llm:version" content="main (0.14.0.dev5167+g88f8baec0.d20261012)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="tutorial">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5166+g328602c08.d20261012)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5167+g88f8baec0.d20261012)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -561,13 +561,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../concepts/batch_size.html">
-                  Batch size, shapes and indexing
+                  Batch size, shapes, and indexing
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../concepts/keys.html">
-                  Keys, nested keys and locking
+                  Keys, nested keys, and locking
                 </a>
               </li>
             
@@ -579,13 +579,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../concepts/operations.html">
-                  Arithmetic, apply, reductions and gradients
+                  Arithmetic, apply, reductions, and gradients
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../concepts/devices.html">
-                  Devices, dtypes and memory
+                  Devices, dtypes, and memory
                 </a>
               </li>
             
@@ -659,7 +659,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../compile.html">
-                  torch.compile, torch.func, torch.export and CUDA graphs
+                  torch.compile, torch.func, torch.export, and CUDA graphs
                 </a>
               </li>
             
@@ -697,13 +697,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tensordict_keys.html">
-                  Getting, setting and nesting keys
+                  Getting, setting, and nesting keys
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tensordict_slicing.html">
-                  Slicing, indexing and masking
+                  Slicing, indexing, and masking
                 </a>
               </li>
             
@@ -1058,13 +1058,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../concepts/batch_size.html">
-                  Batch size, shapes and indexing
+                  Batch size, shapes, and indexing
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../concepts/keys.html">
-                  Keys, nested keys and locking
+                  Keys, nested keys, and locking
                 </a>
               </li>
             
@@ -1076,13 +1076,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../concepts/operations.html">
-                  Arithmetic, apply, reductions and gradients
+                  Arithmetic, apply, reductions, and gradients
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../concepts/devices.html">
-                  Devices, dtypes and memory
+                  Devices, dtypes, and memory
                 </a>
               </li>
             
@@ -1156,7 +1156,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../compile.html">
-                  torch.compile, torch.func, torch.export and CUDA graphs
+                  torch.compile, torch.func, torch.export, and CUDA graphs
                 </a>
               </li>
             
@@ -1194,13 +1194,13 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tensordict_keys.html">
-                  Getting, setting and nesting keys
+                  Getting, setting, and nesting keys
                 </a>
               </li>
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tensordict_slicing.html">
-                  Slicing, indexing and masking
+                  Slicing, indexing, and masking
                 </a>
               </li>
             
@@ -1442,11 +1442,11 @@ document.write(`
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">User guide</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../overview.html">What is TensorDict?</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../concepts/batch_size.html">Batch size, shapes and indexing</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../concepts/keys.html">Keys, nested keys and locking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../concepts/batch_size.html">Batch size, shapes, and indexing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../concepts/keys.html">Keys, nested keys, and locking</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../concepts/stacking.html">Stacking and variable-size data</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../concepts/operations.html">Arithmetic, apply, reductions and gradients</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../concepts/devices.html">Devices, dtypes and memory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../concepts/operations.html">Arithmetic, apply, reductions, and gradients</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../concepts/devices.html">Devices, dtypes, and memory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../concepts/non_tensor.html">Non-tensor data and unbatched entries</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tensorclass.html">TensorClass</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../typed_tensordict.html">TypedTensorDict</a></li>
@@ -1459,15 +1459,15 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="../storage.html">Large datasets and storage backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../data_loading.html">Load data and share it between processes</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../distributed.html">Distributed tensordicts</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../compile.html">torch.compile, torch.func, torch.export and CUDA graphs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../compile.html">torch.compile, torch.func, torch.export, and CUDA graphs</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../printing.html">Printing and display</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../compatibility.html">Containers on storage backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../fx.html">FX tracing (prototype)</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: basics</span></p>
 <ul class="current nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="tensordict_keys.html">Getting, setting and nesting keys</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tensordict_slicing.html">Slicing, indexing and masking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tensordict_keys.html">Getting, setting, and nesting keys</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tensordict_slicing.html">Slicing, indexing, and masking</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Changing the shape of a TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tensordict_preallocation.html">Filling a TensorDict row by row</a></li>
 <li class="toctree-l1"><a class="reference internal" href="streamed_tensordict.html">Building tensordicts from streams</a></li>
@@ -1620,7 +1620,7 @@ to download the full example code.</p>
 <span id="sphx-glr-tutorials-tensordict-shapes-py"></span><h1>Changing the shape of a TensorDict<a class="headerlink" href="#changing-the-shape-of-a-tensordict" title="Link to this heading">#</a></h1>
 <p><strong>Author</strong>: <a class="reference external" href="https://github.com/tcbegley">Tom Begley</a></p>
 <p>A <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> has the shape operations of a tensor, such
-as <code class="docutils literal notranslate"><span class="pre">reshape</span></code>, <code class="docutils literal notranslate"><span class="pre">split</span></code>, <code class="docutils literal notranslate"><span class="pre">stack</span></code> and <code class="docutils literal notranslate"><span class="pre">permute</span></code>. Each call changes every
+as <code class="docutils literal notranslate"><span class="pre">reshape</span></code>, <code class="docutils literal notranslate"><span class="pre">split</span></code>, <code class="docutils literal notranslate"><span class="pre">stack</span></code>, and <code class="docutils literal notranslate"><span class="pre">permute</span></code>. Each call changes every
 tensor in it in the same way, so you write the call once, and the tensors stay
 aligned. This tutorial is for readers who know these operations on a
 <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a>.</p>
@@ -1628,13 +1628,13 @@ aligned. This tutorial is for readers who know these operations on a
 <ul class="simple">
 <li><p>How a shape operation on a tensordict applies to the batch dimensions of
 every entry.</p></li>
-<li><p>How to split, unbind, stack and concatenate tensordicts.</p></li>
+<li><p>How to split, unbind, stack, and concatenate tensordicts.</p></li>
 <li><p>The difference between a lazy stack and a dense stack.</p></li>
 <li><p>How to change the shape of a tensordict for the length of a <code class="docutils literal notranslate"><span class="pre">with</span></code> block.</p></li>
 </ul>
 <p>When you create a <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, you give it a
 <code class="docutils literal notranslate"><span class="pre">batch_size</span></code>: the leading dimensions that all the entries share. An entry
-can have more dimensions after them (see <a class="reference internal" href="../concepts/batch_size.html#batch-size"><span class="std std-ref">Batch size, shapes and indexing</span></a>). The shape
+can have more dimensions after them (see <a class="reference internal" href="../concepts/batch_size.html#batch-size"><span class="std std-ref">Batch size, shapes, and indexing</span></a>). The shape
 operations below change the batch dimensions of every entry, and keep the
 other dimensions.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span><span class="w">
@@ -1642,14 +1642,14 @@ other dimensions.</p>
 </span><span class="w">
 </span><a class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="torch.manual_seed"><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span></a><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="w">
 </span></pre></div></div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>&lt;torch._C.Generator object at 0x7f9e63db82f0&gt;
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>&lt;torch._C.Generator object at 0x7f78e47b82f0&gt;
 </pre></div>
 </div>
 <section id="indexing">
 <h2>Indexing<a class="headerlink" href="#indexing" title="Link to this heading">#</a></h2>
 <p>An index applies to the batch dimensions. Each entry of the
 <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> is indexed in the same way. The
-<a class="reference internal" href="tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py"><span class="std std-ref">Slicing, indexing and masking</span></a> tutorial covers indexing
+<a class="reference internal" href="tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py"><span class="std std-ref">Slicing, indexing, and masking</span></a> tutorial covers indexing
 in detail.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor"><span class="n">a</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.rand.html#torch.rand" title="torch.rand"><span class="n">torch</span><span class="o">.</span><span class="n">rand</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span><span class="w">
 </span><a class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor"><span class="n">b</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.rand.html#torch.rand" title="torch.rand"><span class="n">torch</span><span class="o">.</span><span class="n">rand</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span><span class="w">
@@ -1731,7 +1731,7 @@ into new tensors and returns a <a class="reference internal" href="../reference/
 <a class="reference internal" href="../reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack" title="tensordict.lazy_stack"><code class="xref py py-func docutils literal notranslate"><span class="pre">lazy_stack()</span></code></a> keeps the original tensordicts in a list and
 returns a <a class="reference internal" href="../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>, which stacks a value
 only when you read it. Use a lazy stack when the tensordicts have different
-shapes, devices or keys, or when you read only a few keys of the stack. The
+shapes, devices, or keys, or when you read only a few keys of the stack. The
 <a class="reference internal" href="../concepts/stacking.html#stacking"><span class="std std-ref">Stacking and variable-size data</span></a> page explains both kinds of stacks.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span class="kn">from</span><span class="w"> </span><a class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><span class="nn">tensordict</span></a><span class="w"> </span><span class="kn">import</span> <a class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-function reference internal" href="../reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack" title="tensordict.lazy_stack"><span class="n">lazy_stack</span></a><span class="w">
 </span><span class="w">
@@ -1841,7 +1841,7 @@ TensorDict(
 <p class="admonition-title">Note</p>
 <p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.unsqueeze.html#tensordict.TensorDictBase.unsqueeze" title="tensordict.TensorDictBase.unsqueeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unsqueeze()</span></code></a>,
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.squeeze.html#tensordict.TensorDictBase.squeeze" title="tensordict.TensorDictBase.squeeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">squeeze()</span></code></a>, <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.view.html#tensordict.TensorDictBase.view" title="tensordict.TensorDictBase.view"><code class="xref py py-meth docutils literal notranslate"><span class="pre">view()</span></code></a>,
-<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.permute.html#tensordict.TensorDictBase.permute" title="tensordict.TensorDictBase.permute"><code class="xref py py-meth docutils literal notranslate"><span class="pre">permute()</span></code></a> and
+<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.permute.html#tensordict.TensorDictBase.permute" title="tensordict.TensorDictBase.permute"><code class="xref py py-meth docutils literal notranslate"><span class="pre">permute()</span></code></a>, and
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.transpose.html#tensordict.TensorDictBase.transpose" title="tensordict.TensorDictBase.transpose"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transpose()</span></code></a> apply the operation to the
 entries when you call them, and return a <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>.</p>
 </div>
@@ -1888,7 +1888,7 @@ operation and writes the changes back into the original tensordict. The
 shape operations <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.view.html#tensordict.TensorDictBase.view" title="tensordict.TensorDictBase.view"><code class="xref py py-meth docutils literal notranslate"><span class="pre">view()</span></code></a>,
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.permute.html#tensordict.TensorDictBase.permute" title="tensordict.TensorDictBase.permute"><code class="xref py py-meth docutils literal notranslate"><span class="pre">permute()</span></code></a>,
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.transpose.html#tensordict.TensorDictBase.transpose" title="tensordict.TensorDictBase.transpose"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transpose()</span></code></a>,
-<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.squeeze.html#tensordict.TensorDictBase.squeeze" title="tensordict.TensorDictBase.squeeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">squeeze()</span></code></a> and
+<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.squeeze.html#tensordict.TensorDictBase.squeeze" title="tensordict.TensorDictBase.squeeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">squeeze()</span></code></a>, and
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.unsqueeze.html#tensordict.TensorDictBase.unsqueeze" title="tensordict.TensorDictBase.unsqueeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unsqueeze()</span></code></a> work in this way. So do
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.to_module.html#tensordict.TensorDictBase.to_module" title="tensordict.TensorDictBase.to_module"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_module()</span></code></a> for functional calls, and
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_" title="tensordict.TensorDictBase.lock_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">lock_()</span></code></a> and
@@ -1934,7 +1934,7 @@ gathered_tensordict['a']:
 <section id="conclusion">
 <h2>Conclusion<a class="headerlink" href="#conclusion" title="Link to this heading">#</a></h2>
 <p>You can now index, <code class="docutils literal notranslate"><span class="pre">reshape</span></code>, <code class="docutils literal notranslate"><span class="pre">split</span></code>, <code class="docutils literal notranslate"><span class="pre">unbind</span></code>, <code class="docutils literal notranslate"><span class="pre">expand</span></code>,
-<code class="docutils literal notranslate"><span class="pre">squeeze</span></code>, <code class="docutils literal notranslate"><span class="pre">unsqueeze</span></code>, <code class="docutils literal notranslate"><span class="pre">view</span></code>, <code class="docutils literal notranslate"><span class="pre">permute</span></code> and <code class="docutils literal notranslate"><span class="pre">gather</span></code> a
+<code class="docutils literal notranslate"><span class="pre">squeeze</span></code>, <code class="docutils literal notranslate"><span class="pre">unsqueeze</span></code>, <code class="docutils literal notranslate"><span class="pre">view</span></code>, <code class="docutils literal notranslate"><span class="pre">permute</span></code>, and <code class="docutils literal notranslate"><span class="pre">gather</span></code> a
 <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> with one call each. Each call changes the
 batch dimensions of every entry and keeps the other dimensions. You can
 stack tensordicts densely with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a>, or lazily with
@@ -1947,11 +1947,11 @@ form of a tensordict with typed fields (see <a class="reference internal" href="
 <section id="further-reading">
 <h2>Further reading<a class="headerlink" href="#further-reading" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><a class="reference internal" href="../concepts/batch_size.html#batch-size"><span class="std std-ref">Batch size, shapes and indexing</span></a> explains batch sizes, shapes and indexing.</p></li>
+<li><p><a class="reference internal" href="../concepts/batch_size.html#batch-size"><span class="std std-ref">Batch size, shapes, and indexing</span></a> explains batch sizes, shapes, and indexing.</p></li>
 <li><p><a class="reference internal" href="../concepts/stacking.html#stacking"><span class="std std-ref">Stacking and variable-size data</span></a> explains lazy stacks and data of different sizes.</p></li>
-<li><p><a class="reference internal" href="tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py"><span class="std std-ref">Slicing, indexing and masking</span></a> shows indexing, masking
+<li><p><a class="reference internal" href="tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py"><span class="std std-ref">Slicing, indexing, and masking</span></a> shows indexing, masking,
 and writing into a tensordict with an index.</p></li>
-<li><p><a class="reference internal" href="../reference/td.html#api-methods-shape"><span class="std std-ref">Shape, batch dimensions and stacking</span></a> lists all the shape methods.</p></li>
+<li><p><a class="reference internal" href="../reference/td.html#api-methods-shape"><span class="std std-ref">Shape, batch dimensions, and stacking</span></a> lists all the shape methods.</p></li>
 </ul>
 <p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.009 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensordict-shapes-py">
@@ -2017,7 +2017,7 @@ and writing into a tensordict with an index.</p></li>
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Slicing, indexing and masking</p>
+        <p class="prev-next-title">Slicing, indexing, and masking</p>
       </div>
     </a>
     <a class="right-next"
@@ -2056,7 +2056,7 @@ and writing into a tensordict with an index.</p></li>
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Slicing, indexing and masking</p>
+        <p class="prev-next-title">Slicing, indexing, and masking</p>
       </div>
     </a>
     <a class="right-next"
@@ -2339,7 +2339,7 @@ and writing into a tensordict with an index.</p></li>
        "headline": "Changing the shape of a TensorDict",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - Changing the shape of a TensorDict",
        "url": "/tutorials/tensordict_shapes.html",
-       "articleBody": "Note Go to the end to download the full example code. Changing the shape of a TensorDict# Author: Tom Begley A TensorDict has the shape operations of a tensor, such as reshape, split, stack and permute. Each call changes every tensor in it in the same way, so you write the call once, and the tensors stay aligned. This tutorial is for readers who know these operations on a torch.Tensor. What you will learn: How a shape operation on a tensordict applies to the batch dimensions of every entry. How to split, unbind, stack and concatenate tensordicts. The difference between a lazy stack and a dense stack. How to change the shape of a tensordict for the length of a with block. When you create a TensorDict, you give it a batch_size: the leading dimensions that all the entries share. An entry can have more dimensions after them (see Batch size, shapes and indexing). The shape operations below change the batch dimensions of every entry, and keep the other dimensions. import torch from tensordict import TensorDict torch.manual_seed(0) \u003ctorch._C.Generator object at 0x7f9e63db82f0\u003e Indexing# An index applies to the batch dimensions. Each entry of the TensorDict is indexed in the same way. The Slicing, indexing and masking tutorial covers indexing in detail. a = torch.rand(3, 4) b = torch.rand(3, 4, 5) tensordict = TensorDict({\"a\": a, \"b\": b}, batch_size=[3, 4]) indexed_tensordict = tensordict[:2, 1] assert indexed_tensordict[\"a\"].shape == torch.Size([2]) assert indexed_tensordict[\"b\"].shape == torch.Size([2, 5]) Reshaping# TensorDict.reshape works like torch.Tensor.reshape(). It reshapes the batch dimensions of every entry, and keeps the other dimensions, as the shape of b below shows. It also updates the batch_size attribute. reshaped_tensordict = tensordict.reshape(-1) assert reshaped_tensordict.batch_size == torch.Size([12]) assert reshaped_tensordict[\"a\"].shape == torch.Size([12]) assert reshaped_tensordict[\"b\"].shape == torch.Size([12, 5]) Splitting# TensorDict.split works like torch.Tensor.split(). It splits the TensorDict into chunks. Each chunk is a TensorDict with the same keys as the original one. Its entries are views of the entries of the original TensorDict: they share memory with them. chunks = tensordict.split([3, 1], dim=1) assert chunks[0].batch_size == torch.Size([3, 3]) assert chunks[1].batch_size == torch.Size([3, 1]) torch.testing.assert_close(chunks[0][\"a\"], tensordict[\"a\"][:, :-1]) Note If a function or method takes a dim argument, a negative dim counts from the end of the batch_size of the TensorDict that you call it on. If the tensordict contains nested tensordicts with more batch dimensions, a negative dim still counts from the end of the batch dimensions of the root tensordict. \u003e\u003e\u003e tensordict = TensorDict( ... { ... \"a\": torch.rand(3, 4), ... \"nested\": TensorDict({\"b\": torch.rand(3, 4, 5)}, [3, 4, 5]) ... }, ... [3, 4], ... ) \u003e\u003e\u003e # dim=-2 is the first dimension for all entries: the root \u003e\u003e\u003e # TensorDict has 2 batch dimensions, the nested TensorDict has 3 \u003e\u003e\u003e chunks = tensordict.split([2, 1], dim=-2) \u003e\u003e\u003e assert chunks[0].batch_size == torch.Size([2, 4]) \u003e\u003e\u003e assert chunks[0][\"nested\"].batch_size == torch.Size([2, 4, 5]) In this example, TensorDict.split gives the same result as with dim=tensordict.batch_dims - 2. Unbinding# TensorDict.unbind works like torch.Tensor.unbind(). It removes a dimension and returns a tuple of all the slices along that dimension. slices = tensordict.unbind(dim=1) assert len(slices) == 4 assert all(s.batch_size == torch.Size([3]) for s in slices) torch.testing.assert_close(slices[0][\"a\"], tensordict[\"a\"][:, 0]) Stacking and concatenating# torch.cat() and torch.stack() accept lists of TensorDict instances. Stacking# You can stack tensordicts in two ways. torch.stack() copies the values into new tensors and returns a TensorDict. lazy_stack() keeps the original tensordicts in a list and returns a LazyStackedTensorDict, which stacks a value only when you read it. Use a lazy stack when the tensordicts have different shapes, devices or keys, or when you read only a few keys of the stack. The Stacking and variable-size data page explains both kinds of stacks. from tensordict import lazy_stack cloned_tensordict = tensordict.clone() stacked_tensordict = lazy_stack([tensordict, cloned_tensordict], dim=0) print(stacked_tensordict) LazyStackedTensorDict( fields={ a: Tensor(shape=torch.Size([2, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False), b: Tensor(shape=torch.Size([2, 3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)}, exclusive_fields={ }, batch_size=torch.Size([2, 3, 4]), device=None, is_shared=False, stack_dim=0) Like torch.stack() on tensors, torch.stack() on tensordicts returns a dense TensorDict: dense_stack = torch.stack([tensordict, cloned_tensordict]) assert isinstance(dense_stack, TensorDict) If you index a LazyStackedTensorDict along the stack dimension, you get back the original TensorDict. assert stacked_tensordict[0] is tensordict assert stacked_tensordict[1] is cloned_tensordict If you read a key of the LazyStackedTensorDict, it stacks the values of this key. If the value is a nested TensorDict, you get another LazyStackedTensorDict. assert stacked_tensordict[\"a\"].shape == torch.Size([2, 3, 4]) Note A lazy stack stacks a value each time you read it. If you read a value of the stack more than once, convert the LazyStackedTensorDict to a dense TensorDict first, with LazyStackedTensorDict.to_tensordict or LazyStackedTensorDict.contiguous. \u003e\u003e\u003e assert isinstance(stacked_tensordict.to_tensordict(), TensorDict) \u003e\u003e\u003e assert isinstance(stacked_tensordict.contiguous(), TensorDict) The result holds the stacked values, and reading a value does not stack it again. Concatenating# Concatenation is never lazy. torch.cat() on a list of TensorDict instances returns a TensorDict. Each of its entries concatenates the entries with the same key in the tensordicts of the list. concatenated_tensordict = torch.cat([tensordict, cloned_tensordict], dim=0) assert isinstance(concatenated_tensordict, TensorDict) assert concatenated_tensordict.batch_size == torch.Size([6, 4]) assert concatenated_tensordict[\"b\"].shape == torch.Size([6, 4, 5]) Expanding# TensorDict.expand expands all the entries of a TensorDict. As with torch.Tensor.expand(), the expanded entries are views: they share memory with the original entries. Call clone() on the result before you write into it. exp_tensordict = tensordict.expand(2, *tensordict.batch_size) assert exp_tensordict.batch_size == torch.Size([2, 3, 4]) torch.testing.assert_close(exp_tensordict[\"a\"][0], exp_tensordict[\"a\"][1]) Squeezing and unsqueezing# The squeeze() and unsqueeze() methods remove or add a batch dimension of size one. tensordict = TensorDict({\"a\": torch.rand(3, 1, 4)}, [3, 1, 4]) squeezed_tensordict = tensordict.squeeze() assert squeezed_tensordict[\"a\"].shape == torch.Size([3, 4]) print(squeezed_tensordict, end=\"\\n\\n\") unsqueezed_tensordict = tensordict.unsqueeze(-1) assert unsqueezed_tensordict[\"a\"].shape == torch.Size([3, 1, 4, 1]) print(unsqueezed_tensordict) TensorDict( fields={ a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([3, 4]), device=None, is_shared=False) TensorDict( fields={ a: Tensor(shape=torch.Size([3, 1, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([3, 1, 4, 1]), device=None, is_shared=False) Note unsqueeze(), squeeze(), view(), permute() and transpose() apply the operation to the entries when you call them, and return a TensorDict. These methods apply only to the batch dimensions. The other dimensions of the entries do not change: tensordict = TensorDict({\"a\": torch.rand(3, 1, 1, 4)}, [3, 1]) squeezed_tensordict = tensordict.squeeze() # only one of the two dimensions of size one is removed: the other # one is not a batch dimension assert squeezed_tensordict[\"a\"].shape == torch.Size([3, 1, 4]) Viewing# view() returns a TensorDict of views of the original entries. tensordict = TensorDict({\"a\": torch.arange(12)}, [12]) # the entries are viewed at this step viewed_tensordict = tensordict.view((2, 3, 2)) # \"a\" is a view of the original tensor assert viewed_tensordict[\"a\"].shape == torch.Size([2, 3, 2]) Permuting the batch dimensions# TensorDict.permute reorders the batch dimensions, like torch.permute(). The other dimensions do not change. Like the other shape operations above, permute applies to the entries when you call it. tensordict = TensorDict({\"a\": torch.rand(3, 4), \"b\": torch.rand(3, 4, 5)}, [3, 4]) # swap the batch dimensions permuted_tensordict = tensordict.permute([1, 0]) assert permuted_tensordict[\"a\"].shape == torch.Size([4, 3]) assert permuted_tensordict[\"b\"].shape == torch.Size([4, 3, 5]) Reversible operations as context managers# You can use the result of some reversible operations as a context manager, in a with block. At the end of the block, tensordict applies the inverse operation and writes the changes back into the original tensordict. The shape operations view(), permute(), transpose(), squeeze() and unsqueeze() work in this way. So do to_module() for functional calls, and lock_() and unlock_(). This example uses transpose: tensordict = TensorDict({\"a\": torch.rand(3, 4), \"b\": torch.rand(3, 4, 5)}, [3, 4]) with tensordict.transpose(1, 0) as tdt: tdt.set(\"c\", torch.ones(4, 3)) # the batch size of tdt is [4, 3] After the block, the original tensordict has the \"c\" entry, with the batch dimensions in the original order: assert (tensordict.get(\"c\") == 1).all() assert tensordict[\"c\"].shape == torch.Size([3, 4]) Gathering values# TensorDict.gather gathers values along a batch dimension with an index tensor, like torch.gather(). index = torch.randint(4, (3, 4)) gathered_tensordict = tensordict.gather(dim=1, index=index) print(\"index:\\n\", index, end=\"\\n\\n\") print(\"tensordict[\u0027a\u0027]:\\n\", tensordict[\"a\"], end=\"\\n\\n\") print(\"gathered_tensordict[\u0027a\u0027]:\\n\", gathered_tensordict[\"a\"], end=\"\\n\\n\") index: tensor([[0, 1, 2, 1], [1, 3, 1, 0], [0, 0, 3, 3]]) tensordict[\u0027a\u0027]: tensor([[0.0500, 0.4663, 0.9397, 0.2961], [0.9515, 0.6811, 0.0488, 0.8163], [0.4423, 0.2768, 0.8998, 0.0960]]) gathered_tensordict[\u0027a\u0027]: tensor([[0.0500, 0.4663, 0.9397, 0.4663], [0.6811, 0.8163, 0.6811, 0.9515], [0.4423, 0.4423, 0.0960, 0.0960]]) Conclusion# You can now index, reshape, split, unbind, expand, squeeze, unsqueeze, view, permute and gather a TensorDict with one call each. Each call changes the batch dimensions of every entry and keeps the other dimensions. You can stack tensordicts densely with torch.stack(), or lazily with lazy_stack() when their shapes differ. You can also change the shape for the length of a with block, and get the changes back in the original tensordict. The same operations work on a TensorClass, the class form of a tensordict with typed fields (see TensorClass). Further reading# Batch size, shapes and indexing explains batch sizes, shapes and indexing. Stacking and variable-size data explains lazy stacks and data of different sizes. Slicing, indexing and masking shows indexing, masking and writing into a tensordict with an index. Shape, batch dimensions and stacking lists all the shape methods. Total running time of the script: (0 minutes 0.009 seconds) Download Jupyter notebook: tensordict_shapes.ipynb Download Python source code: tensordict_shapes.py Download zipped: tensordict_shapes.zip Gallery generated by Sphinx-Gallery",
+       "articleBody": "Note Go to the end to download the full example code. Changing the shape of a TensorDict# Author: Tom Begley A TensorDict has the shape operations of a tensor, such as reshape, split, stack, and permute. Each call changes every tensor in it in the same way, so you write the call once, and the tensors stay aligned. This tutorial is for readers who know these operations on a torch.Tensor. What you will learn: How a shape operation on a tensordict applies to the batch dimensions of every entry. How to split, unbind, stack, and concatenate tensordicts. The difference between a lazy stack and a dense stack. How to change the shape of a tensordict for the length of a with block. When you create a TensorDict, you give it a batch_size: the leading dimensions that all the entries share. An entry can have more dimensions after them (see Batch size, shapes, and indexing). The shape operations below change the batch dimensions of every entry, and keep the other dimensions. import torch from tensordict import TensorDict torch.manual_seed(0) \u003ctorch._C.Generator object at 0x7f78e47b82f0\u003e Indexing# An index applies to the batch dimensions. Each entry of the TensorDict is indexed in the same way. The Slicing, indexing, and masking tutorial covers indexing in detail. a = torch.rand(3, 4) b = torch.rand(3, 4, 5) tensordict = TensorDict({\"a\": a, \"b\": b}, batch_size=[3, 4]) indexed_tensordict = tensordict[:2, 1] assert indexed_tensordict[\"a\"].shape == torch.Size([2]) assert indexed_tensordict[\"b\"].shape == torch.Size([2, 5]) Reshaping# TensorDict.reshape works like torch.Tensor.reshape(). It reshapes the batch dimensions of every entry, and keeps the other dimensions, as the shape of b below shows. It also updates the batch_size attribute. reshaped_tensordict = tensordict.reshape(-1) assert reshaped_tensordict.batch_size == torch.Size([12]) assert reshaped_tensordict[\"a\"].shape == torch.Size([12]) assert reshaped_tensordict[\"b\"].shape == torch.Size([12, 5]) Splitting# TensorDict.split works like torch.Tensor.split(). It splits the TensorDict into chunks. Each chunk is a TensorDict with the same keys as the original one. Its entries are views of the entries of the original TensorDict: they share memory with them. chunks = tensordict.split([3, 1], dim=1) assert chunks[0].batch_size == torch.Size([3, 3]) assert chunks[1].batch_size == torch.Size([3, 1]) torch.testing.assert_close(chunks[0][\"a\"], tensordict[\"a\"][:, :-1]) Note If a function or method takes a dim argument, a negative dim counts from the end of the batch_size of the TensorDict that you call it on. If the tensordict contains nested tensordicts with more batch dimensions, a negative dim still counts from the end of the batch dimensions of the root tensordict. \u003e\u003e\u003e tensordict = TensorDict( ... { ... \"a\": torch.rand(3, 4), ... \"nested\": TensorDict({\"b\": torch.rand(3, 4, 5)}, [3, 4, 5]) ... }, ... [3, 4], ... ) \u003e\u003e\u003e # dim=-2 is the first dimension for all entries: the root \u003e\u003e\u003e # TensorDict has 2 batch dimensions, the nested TensorDict has 3 \u003e\u003e\u003e chunks = tensordict.split([2, 1], dim=-2) \u003e\u003e\u003e assert chunks[0].batch_size == torch.Size([2, 4]) \u003e\u003e\u003e assert chunks[0][\"nested\"].batch_size == torch.Size([2, 4, 5]) In this example, TensorDict.split gives the same result as with dim=tensordict.batch_dims - 2. Unbinding# TensorDict.unbind works like torch.Tensor.unbind(). It removes a dimension and returns a tuple of all the slices along that dimension. slices = tensordict.unbind(dim=1) assert len(slices) == 4 assert all(s.batch_size == torch.Size([3]) for s in slices) torch.testing.assert_close(slices[0][\"a\"], tensordict[\"a\"][:, 0]) Stacking and concatenating# torch.cat() and torch.stack() accept lists of TensorDict instances. Stacking# You can stack tensordicts in two ways. torch.stack() copies the values into new tensors and returns a TensorDict. lazy_stack() keeps the original tensordicts in a list and returns a LazyStackedTensorDict, which stacks a value only when you read it. Use a lazy stack when the tensordicts have different shapes, devices, or keys, or when you read only a few keys of the stack. The Stacking and variable-size data page explains both kinds of stacks. from tensordict import lazy_stack cloned_tensordict = tensordict.clone() stacked_tensordict = lazy_stack([tensordict, cloned_tensordict], dim=0) print(stacked_tensordict) LazyStackedTensorDict( fields={ a: Tensor(shape=torch.Size([2, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False), b: Tensor(shape=torch.Size([2, 3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)}, exclusive_fields={ }, batch_size=torch.Size([2, 3, 4]), device=None, is_shared=False, stack_dim=0) Like torch.stack() on tensors, torch.stack() on tensordicts returns a dense TensorDict: dense_stack = torch.stack([tensordict, cloned_tensordict]) assert isinstance(dense_stack, TensorDict) If you index a LazyStackedTensorDict along the stack dimension, you get back the original TensorDict. assert stacked_tensordict[0] is tensordict assert stacked_tensordict[1] is cloned_tensordict If you read a key of the LazyStackedTensorDict, it stacks the values of this key. If the value is a nested TensorDict, you get another LazyStackedTensorDict. assert stacked_tensordict[\"a\"].shape == torch.Size([2, 3, 4]) Note A lazy stack stacks a value each time you read it. If you read a value of the stack more than once, convert the LazyStackedTensorDict to a dense TensorDict first, with LazyStackedTensorDict.to_tensordict or LazyStackedTensorDict.contiguous. \u003e\u003e\u003e assert isinstance(stacked_tensordict.to_tensordict(), TensorDict) \u003e\u003e\u003e assert isinstance(stacked_tensordict.contiguous(), TensorDict) The result holds the stacked values, and reading a value does not stack it again. Concatenating# Concatenation is never lazy. torch.cat() on a list of TensorDict instances returns a TensorDict. Each of its entries concatenates the entries with the same key in the tensordicts of the list. concatenated_tensordict = torch.cat([tensordict, cloned_tensordict], dim=0) assert isinstance(concatenated_tensordict, TensorDict) assert concatenated_tensordict.batch_size == torch.Size([6, 4]) assert concatenated_tensordict[\"b\"].shape == torch.Size([6, 4, 5]) Expanding# TensorDict.expand expands all the entries of a TensorDict. As with torch.Tensor.expand(), the expanded entries are views: they share memory with the original entries. Call clone() on the result before you write into it. exp_tensordict = tensordict.expand(2, *tensordict.batch_size) assert exp_tensordict.batch_size == torch.Size([2, 3, 4]) torch.testing.assert_close(exp_tensordict[\"a\"][0], exp_tensordict[\"a\"][1]) Squeezing and unsqueezing# The squeeze() and unsqueeze() methods remove or add a batch dimension of size one. tensordict = TensorDict({\"a\": torch.rand(3, 1, 4)}, [3, 1, 4]) squeezed_tensordict = tensordict.squeeze() assert squeezed_tensordict[\"a\"].shape == torch.Size([3, 4]) print(squeezed_tensordict, end=\"\\n\\n\") unsqueezed_tensordict = tensordict.unsqueeze(-1) assert unsqueezed_tensordict[\"a\"].shape == torch.Size([3, 1, 4, 1]) print(unsqueezed_tensordict) TensorDict( fields={ a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([3, 4]), device=None, is_shared=False) TensorDict( fields={ a: Tensor(shape=torch.Size([3, 1, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([3, 1, 4, 1]), device=None, is_shared=False) Note unsqueeze(), squeeze(), view(), permute(), and transpose() apply the operation to the entries when you call them, and return a TensorDict. These methods apply only to the batch dimensions. The other dimensions of the entries do not change: tensordict = TensorDict({\"a\": torch.rand(3, 1, 1, 4)}, [3, 1]) squeezed_tensordict = tensordict.squeeze() # only one of the two dimensions of size one is removed: the other # one is not a batch dimension assert squeezed_tensordict[\"a\"].shape == torch.Size([3, 1, 4]) Viewing# view() returns a TensorDict of views of the original entries. tensordict = TensorDict({\"a\": torch.arange(12)}, [12]) # the entries are viewed at this step viewed_tensordict = tensordict.view((2, 3, 2)) # \"a\" is a view of the original tensor assert viewed_tensordict[\"a\"].shape == torch.Size([2, 3, 2]) Permuting the batch dimensions# TensorDict.permute reorders the batch dimensions, like torch.permute(). The other dimensions do not change. Like the other shape operations above, permute applies to the entries when you call it. tensordict = TensorDict({\"a\": torch.rand(3, 4), \"b\": torch.rand(3, 4, 5)}, [3, 4]) # swap the batch dimensions permuted_tensordict = tensordict.permute([1, 0]) assert permuted_tensordict[\"a\"].shape == torch.Size([4, 3]) assert permuted_tensordict[\"b\"].shape == torch.Size([4, 3, 5]) Reversible operations as context managers# You can use the result of some reversible operations as a context manager, in a with block. At the end of the block, tensordict applies the inverse operation and writes the changes back into the original tensordict. The shape operations view(), permute(), transpose(), squeeze(), and unsqueeze() work in this way. So do to_module() for functional calls, and lock_() and unlock_(). This example uses transpose: tensordict = TensorDict({\"a\": torch.rand(3, 4), \"b\": torch.rand(3, 4, 5)}, [3, 4]) with tensordict.transpose(1, 0) as tdt: tdt.set(\"c\", torch.ones(4, 3)) # the batch size of tdt is [4, 3] After the block, the original tensordict has the \"c\" entry, with the batch dimensions in the original order: assert (tensordict.get(\"c\") == 1).all() assert tensordict[\"c\"].shape == torch.Size([3, 4]) Gathering values# TensorDict.gather gathers values along a batch dimension with an index tensor, like torch.gather(). index = torch.randint(4, (3, 4)) gathered_tensordict = tensordict.gather(dim=1, index=index) print(\"index:\\n\", index, end=\"\\n\\n\") print(\"tensordict[\u0027a\u0027]:\\n\", tensordict[\"a\"], end=\"\\n\\n\") print(\"gathered_tensordict[\u0027a\u0027]:\\n\", gathered_tensordict[\"a\"], end=\"\\n\\n\") index: tensor([[0, 1, 2, 1], [1, 3, 1, 0], [0, 0, 3, 3]]) tensordict[\u0027a\u0027]: tensor([[0.0500, 0.4663, 0.9397, 0.2961], [0.9515, 0.6811, 0.0488, 0.8163], [0.4423, 0.2768, 0.8998, 0.0960]]) gathered_tensordict[\u0027a\u0027]: tensor([[0.0500, 0.4663, 0.9397, 0.4663], [0.6811, 0.8163, 0.6811, 0.9515], [0.4423, 0.4423, 0.0960, 0.0960]]) Conclusion# You can now index, reshape, split, unbind, expand, squeeze, unsqueeze, view, permute, and gather a TensorDict with one call each. Each call changes the batch dimensions of every entry and keeps the other dimensions. You can stack tensordicts densely with torch.stack(), or lazily with lazy_stack() when their shapes differ. You can also change the shape for the length of a with block, and get the changes back in the original tensordict. The same operations work on a TensorClass, the class form of a tensordict with typed fields (see TensorClass). Further reading# Batch size, shapes, and indexing explains batch sizes, shapes, and indexing. Stacking and variable-size data explains lazy stacks and data of different sizes. Slicing, indexing, and masking shows indexing, masking, and writing into a tensordict with an index. Shape, batch dimensions, and stacking lists all the shape methods. Total running time of the script: (0 minutes 0.009 seconds) Download Jupyter notebook: tensordict_shapes.ipynb Download Python source code: tensordict_shapes.py Download zipped: tensordict_shapes.zip Gallery generated by Sphinx-Gallery",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

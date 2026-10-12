@@ -1,8 +1,8 @@
-# Batch size, shapes and indexing
+# Batch size, shapes, and indexing
 
 The batch size is the shape that all the entries of a
 [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) share at the front. With it, one index, one
-`reshape` or one `unbind` applies to every tensor of the group. A tensor
+`reshape`, or one `unbind` applies to every tensor of the group. A tensor
 of the wrong shape raises an error when you add it.
 
 ## Batch size and batch dimensions
@@ -18,8 +18,10 @@ In this example, a tensordict holds 3 time steps of 2 robots. Each robot has
 >>> import torch
 >>> from tensordict import TensorDict
 >>> td = TensorDict(
-... joints=torch.zeros(2, 3, 4),
-... battery=torch.zeros(2, 3),
+... {
+... "joints": torch.zeros(2, 3, 4),
+... "battery": torch.zeros(2, 3),
+... },
 ... batch_size=[2, 3],
 ... )
 >>> td.batch_size
@@ -82,7 +84,7 @@ size, the entries can have any shape, but you cannot index the tensordict or
 iterate over it:
 
 ```
->>> data = TensorDict(images=torch.zeros(3, 4), labels=torch.zeros(3))
+>>> data = TensorDict({"images": torch.zeros(3, 4), "labels": torch.zeros(3)})
 >>> data.batch_size
 torch.Size([])
 >>> data[0]
@@ -109,7 +111,7 @@ entries share. Use `batch_dims` to set a maximum number of batch dimensions:
 ... {"images": torch.zeros(3, 4), "labels": torch.zeros(3)}, auto_batch_size=True
 ... ).batch_size
 torch.Size([3])
->>> data = TensorDict(images=torch.zeros(3, 4, 5), masks=torch.zeros(3, 4))
+>>> data = TensorDict({"images": torch.zeros(3, 4, 5), "masks": torch.zeros(3, 4)})
 >>> data.auto_batch_size_().batch_size
 torch.Size([3, 4])
 >>> data.auto_batch_size_(batch_dims=1).batch_size
@@ -125,7 +127,7 @@ You can assign a new batch size if all the entries are compatible with it. An
 empty batch size is always compatible:
 
 ```
->>> data = TensorDict(images=torch.zeros(3, 4), batch_size=[3])
+>>> data = TensorDict({"images": torch.zeros(3, 4)}, batch_size=[3])
 >>> data.batch_size = [3, 4]
 >>> data.batch_size = [4]
 Traceback (most recent call last):
@@ -141,7 +143,7 @@ accept a new batch size, not even an empty one. Call
 
 An index on a TensorDict follows one rule:
 
-- A string, or a tuple of strings, reads one entry (see [Keys, nested keys and locking](keys.html#keys)).
+- A string, or a tuple of strings, reads one entry (see [Keys, nested keys, and locking](keys.html#keys)).
 - Any other index applies to the batch dimensions of all the entries at once:
 an integer, a slice, `...`, `None`, a list or tensor of integers, or a
 boolean mask.
@@ -151,7 +153,7 @@ batch dimensions, `td[..., :2]["joints"]` and `td["joints"][..., :2]` are
 different:
 
 ```
->>> td = TensorDict(joints=torch.zeros(2, 3, 4), battery=torch.zeros(2, 3), batch_size=[2, 3])
+>>> td = TensorDict({"joints": torch.zeros(2, 3, 4), "battery": torch.zeros(2, 3)}, batch_size=[2, 3])
 >>> td[0].batch_size # robot 0, all time steps
 torch.Size([3])
 >>> td[..., :2]["joints"].shape # the first 2 time steps
@@ -176,7 +178,7 @@ torch.Size([1, 3])
 ```
 
 A list of strings is not a key selection. To keep some keys, use
-[`select()`](../reference/generated/tensordict.TensorDictBase.select.html#tensordict.TensorDictBase.select) (see [Keys, nested keys and locking](keys.html#keys)).
+[`select()`](../reference/generated/tensordict.TensorDictBase.select.html#tensordict.TensorDictBase.select) (see [Keys, nested keys, and locking](keys.html#keys)).
 
 Indexing follows the rules of [`torch`](https://docs.pytorch.org/docs/stable/torch.html#module-torch) for storage. An integer or a slice
 gives views, so an in-place change of an entry of the result changes the
@@ -199,7 +201,7 @@ value can be a TensorDict with the batch size of the indexed result, or a
 number or tensor that broadcasts to each entry:
 
 ```
->>> td[1] = TensorDict(joints=torch.ones(3, 4), battery=torch.ones(3), batch_size=[3])
+>>> td[1] = TensorDict({"joints": torch.ones(3, 4), "battery": torch.ones(3)}, batch_size=[3])
 >>> td[:, 0] = 0
 >>> td["battery"]
 tensor([[0., 1., 1.],
@@ -216,7 +218,7 @@ dimensions of each entry. They do not change the feature dimensions, and their
 dimension arguments count batch dimensions only:
 
 ```
->>> td = TensorDict(joints=torch.zeros(2, 3, 4), battery=torch.zeros(2, 3), batch_size=[2, 3])
+>>> td = TensorDict({"joints": torch.zeros(2, 3, 4), "battery": torch.zeros(2, 3)}, batch_size=[2, 3])
 >>> td.reshape(6)["joints"].shape
 torch.Size([6, 4])
 >>> td.permute(1, 0)["joints"].shape
@@ -235,9 +237,9 @@ The other shape operations are [`view()`](../reference/generated/tensordict.Tens
 [`transpose()`](../reference/generated/tensordict.TensorDictBase.transpose.html#tensordict.TensorDictBase.transpose),
 [`squeeze()`](../reference/generated/tensordict.TensorDictBase.squeeze.html#tensordict.TensorDictBase.squeeze),
 [`expand()`](../reference/generated/tensordict.TensorDictBase.expand.html#tensordict.TensorDictBase.expand),
-[`chunk()`](../reference/generated/tensordict.TensorDictBase.chunk.html#tensordict.TensorDictBase.chunk), [`repeat()`](../reference/generated/tensordict.TensorDictBase.repeat.html#tensordict.TensorDictBase.repeat)
+[`chunk()`](../reference/generated/tensordict.TensorDictBase.chunk.html#tensordict.TensorDictBase.chunk), [`repeat()`](../reference/generated/tensordict.TensorDictBase.repeat.html#tensordict.TensorDictBase.repeat),
 and [`repeat_interleave()`](../reference/generated/tensordict.TensorDictBase.repeat_interleave.html#tensordict.TensorDictBase.repeat_interleave). As for tensors,
-`view`, `permute`, `unbind` and `expand` return views of the same
+`view`, `permute`, `unbind`, and `expand` return views of the same
 storage. `expand` repeats the same memory, so an in-place write into an
 expanded entry raises a `RuntimeError`. Call `clone()` first to get
 separate copies.
@@ -289,7 +291,7 @@ dimensions. The shape operations take dimension numbers, not names.
 
 A [`dict`](https://docs.python.org/3/builtins/stdtypes.html#dict) is a good model of a TensorDict. A TensorDict has the
 mapping methods of a dict: `keys()`, `values()`, `items()`, `get()`,
-`pop()`, `update()` and `setdefault()`, and it unpacks with `**td`.
+`pop()`, `update()`, and `setdefault()`, and it unpacks with `**td`.
 The operations below are the exceptions. Most of them follow the rules of a
 tensor:
 
@@ -297,7 +299,7 @@ Iteration
 
 `for x in td` iterates over the first batch dimension, like a tensor. Each
 `x` is a TensorDict. A tensordict with no batch dimensions raises a
-`TypeError`. To iterate over the entries, use `keys()`, `values()` or
+`TypeError`. To iterate over the entries, use `keys()`, `values()`, or
 `items()`.
 
 `len`
@@ -307,7 +309,7 @@ is empty. `len(td.keys())` is the number of keys.
 
 `bool`
 
-`bool(td)`, `if td:` and `while td:` raise a `RuntimeError`
+`bool(td)`, `if td:`, and `while td:` raise a `RuntimeError`
 ([#1939](https://github.com/pytorch/tensordict/issues/1939) asks for a
 dict-like truth value). To test for no entries, use
 [`is_empty()`](../reference/generated/tensordict.TensorDictBase.is_empty.html#tensordict.TensorDictBase.is_empty).
@@ -328,7 +330,7 @@ list. A TensorDict is not hashable.
 For example:
 
 ```
->>> td = TensorDict(a=torch.arange(3), nested={"b": torch.zeros(3, 2)}, batch_size=[3])
+>>> td = TensorDict({"a": torch.arange(3), "nested": {"b": torch.zeros(3, 2)}}, batch_size=[3])
 >>> [x.batch_size for x in td]
 [torch.Size([]), torch.Size([]), torch.Size([])]
 >>> len(td), len(td.keys())
@@ -353,9 +355,9 @@ the same `TypeError`. [Load data and share it between processes](../data_loading
 
 - [`batch_size`](../reference/generated/tensordict.TensorDictBase.batch_size.html#tensordict.TensorDictBase.batch_size),
 [`auto_batch_size_()`](../reference/generated/tensordict.TensorDictBase.auto_batch_size_.html#tensordict.TensorDictBase.auto_batch_size_),
-[`from_dict()`](../reference/generated/tensordict.TensorDictBase.from_dict.html#tensordict.TensorDictBase.from_dict) and
+[`from_dict()`](../reference/generated/tensordict.TensorDictBase.from_dict.html#tensordict.TensorDictBase.from_dict), and
 [`names`](../reference/generated/tensordict.TensorDictBase.names.html#tensordict.TensorDictBase.names) in the [API reference](../reference/index.html#api-reference).
-- [Indexing, masking and splitting](../reference/td.html#api-methods-indexing) and [Shape, batch dimensions and stacking](../reference/td.html#api-methods-shape): the indexing and
+- [Indexing, masking, and splitting](../reference/td.html#api-methods-indexing) and [Shape, batch dimensions, and stacking](../reference/td.html#api-methods-shape): the indexing and
 shape methods.
-- The tutorials [Slicing, indexing and masking](../tutorials/tensordict_slicing.html) and
+- The tutorials [Slicing, indexing, and masking](../tutorials/tensordict_slicing.html) and
 [Changing the shape of a TensorDict](../tutorials/tensordict_shapes.html).

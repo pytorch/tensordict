@@ -14,7 +14,7 @@ objects are stored as [`NonTensorData`](tensordict.NonTensorData.html#tensordict
 Parameters:
 
 - **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the key to set: a string, or a tuple of strings
-for a nested entry. See [Keys, nested keys and locking](../../concepts/keys.html#keys).
+for a nested entry. See [Keys, nested keys, and locking](../../concepts/keys.html#keys).
 - **item** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or**equivalent**,**TensorDictBase instance*) - value
 to be stored in the tensordict.
 - **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True` and the key exists, the value
@@ -66,9 +66,9 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 ![](../../_images/sphx_glr_tensordict_keys_thumb.png)
 
-[Getting, setting and nesting keys](../../tutorials/tensordict_keys.html)
+[Getting, setting, and nesting keys](../../tutorials/tensordict_keys.html)
 
-Getting, setting and nesting keys
+Getting, setting, and nesting keys
 ![](../../_images/sphx_glr_tensordict_shapes_thumb.png)
 
 [Changing the shape of a TensorDict](../../tutorials/tensordict_shapes.html)

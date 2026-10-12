@@ -26,7 +26,7 @@ Building models with TensorDictModule
 **Author**: `Nicolas Dufour <https://github.com/nicolas-dufour>`_, `Vincent Moens <https://github.com/vmoens>`_
 
 The parts of a model often exchange many named tensors, such as observations,
-hidden states and the parameters of a distribution. You then write code that
+hidden states, and the parameters of a distribution. You then write code that
 passes each tensor to the right layer. With
 :class:`~tensordict.nn.TensorDictModule`, each layer reads and writes named
 entries of one :class:`~tensordict.TensorDict`, and you chain the layers by
@@ -91,7 +91,7 @@ The input of the block is a :class:`~tensordict.TensorDict` with one entry,
 
 
     tensordict = TensorDict(
-        x=torch.randn(5, 3),
+        {"x": torch.randn(5, 3)},
         batch_size=[5],
     )
 
@@ -238,7 +238,7 @@ so you do not need a new :class:`~torch.nn.Module` subclass:
 
 .. GENERATED FROM PYTHON SOURCE LINES 135-137
 
-Put ``block0``, ``block1`` and ``residual`` together to get the residual
+Put ``block0``, ``block1``, and ``residual`` together to get the residual
 block:
 
 .. GENERATED FROM PYTHON SOURCE LINES 137-142
@@ -276,7 +276,7 @@ removes the other output keys from the tensordict:
 
     block.select_out_keys("y")
 
-    tensordict = TensorDict(x=torch.randn(1, 3), batch_size=[1])
+    tensordict = TensorDict({"x": torch.randn(1, 3)}, batch_size=[1])
     block(tensordict)
     assert "y" in tensordict
 
@@ -417,13 +417,13 @@ It times each version in eager mode, then compiled with
  .. code-block:: none
 
     Eager
-      Regular:      137.8 us
-      TDM:          152.7 us
-      Sequential:   210.8 us
+      Regular:      134.7 us
+      TDM:          151.6 us
+      Sequential:   210.6 us
     Compiled
-      Regular:      152.0 us
-      TDM:          167.2 us
-      Sequential:   174.0 us
+      Regular:      151.8 us
+      TDM:          166.7 us
+      Sequential:   173.0 us
 
 
 
@@ -613,7 +613,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 16.425 seconds)
+   **Total running time of the script:** (0 minutes 16.607 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensordict_module.py:

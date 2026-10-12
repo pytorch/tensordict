@@ -21,7 +21,7 @@ particles:
 >>> from tensordict import TensorDict
 >>> from tensordict.nn import TensorDictModule
 >>> module = TensorDictModule(nn.Linear(3, 4), in_keys=["pos"], out_keys=["hidden"])
->>> td = TensorDict(pos=torch.randn(5, 3), batch_size=[5])
+>>> td = TensorDict({"pos": torch.randn(5, 3)}, batch_size=[5])
 >>> out = module(td)
 >>> out is td
 True
@@ -51,7 +51,7 @@ If `in_keys` is a list, the module passes the values to the wrapped module
 as positional arguments, in the order of the list. `out_keys` has one key
 for each output of the wrapped module, in order. A key can be a nested key: a
 tuple of strings that names an entry inside a nested tensordict (see
-[Keys, nested keys and locking](concepts/keys.html#keys)):
+[Keys, nested keys, and locking](concepts/keys.html#keys)):
 
 ```
 >>> shift = TensorDictModule(
@@ -72,12 +72,12 @@ tensordict to an argument name instead:
 
 ```
 >>> diff = TensorDictModule(lambda x, y: x - y, in_keys={"x": "a", "y": "b"}, out_keys=["c"])
->>> diff(TensorDict(a=torch.tensor(5.0), b=torch.tensor(2.0)))["c"]
+>>> diff(TensorDict({"a": torch.tensor(5.0), "b": torch.tensor(2.0)}))["c"]
 tensor(3.)
 >>> diff = TensorDictModule(
 ... lambda x, y: x - y, in_keys={"a": "x", "b": "y"}, out_keys=["c"], out_to_in_map=False
 ... )
->>> diff(TensorDict(a=torch.tensor(5.0), b=torch.tensor(2.0)))["c"]
+>>> diff(TensorDict({"a": torch.tensor(5.0), "b": torch.tensor(2.0)}))["c"]
 tensor(3.)
 ```
 
@@ -90,7 +90,7 @@ output, give it the out-key `"_"`:
 
 ```
 >>> first_only = TensorDictModule(lambda x: (x + 1, x - 1), in_keys=["x"], out_keys=["y", "_"])
->>> list(first_only(TensorDict(x=torch.zeros(2))).keys())
+>>> list(first_only(TensorDict({"x": torch.zeros(2)})).keys())
 ['x', 'y']
 ```
 
@@ -101,7 +101,7 @@ its place. A wrapped module that cannot take `None` then fails, and the
 error names the missing keys:
 
 ```
->>> module(TensorDict(other=torch.zeros(5, 3), batch_size=[5]))
+>>> module(TensorDict({"other": torch.zeros(5, 3)}, batch_size=[5]))
 Traceback (most recent call last):
  ...
 KeyError: "Some tensors ... the following inputs are None: {'pos'}."
@@ -113,7 +113,7 @@ before it calls the wrapped module.
 When the wrapped module raises an error, [`TensorDictModule`](reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule)
 raises the same error again. Its cause is a `RuntimeError` with the text
 `TensorDictModule failed with operation`, followed by the wrapped module, its
-`in_keys` and its `out_keys`. Python prints the cause first, so the
+`in_keys`, and its `out_keys`. Python prints the cause first, so the
 original error is the last one in the traceback.
 
 ### Where the outputs go
@@ -124,13 +124,13 @@ The `inplace` argument sets where the module writes its outputs:
 - `False`: into a new [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) that holds only the
 outputs, with an empty batch size and no device. The input does not change.
 - `"empty"`: into `tensordict.empty()`, a new tensordict with no entries
-and the type, batch size and device of the input.
+and the type, batch size, and device of the input.
 
 In this example, the module writes into a new tensordict:
 
 ```
 >>> module = TensorDictModule(nn.Linear(3, 4), in_keys=["pos"], out_keys=["hidden"], inplace=False)
->>> td = TensorDict(pos=torch.randn(5, 3), batch_size=[5])
+>>> td = TensorDict({"pos": torch.randn(5, 3)}, batch_size=[5])
 >>> out = module(td)
 >>> list(out.keys()), out.batch_size, list(td.keys())
 (['hidden'], torch.Size([]), ['pos'])
@@ -209,7 +209,7 @@ skips the `dispatch` wrapper.
 To write a module that works on the tensordict itself, subclass
 [`TensorDictModuleBase`](reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase). Give the class `in_keys` and
 `out_keys`, and a `forward` that takes a tensordict, writes the
-`out_keys` into it and returns it. To accept keyword calls too, decorate
+`out_keys` into it, and returns it. To accept keyword calls too, decorate
 `forward` with [`dispatch`](reference/generated/tensordict.nn.dispatch.html#tensordict.nn.dispatch):
 
 ```
@@ -224,7 +224,7 @@ To write a module that works on the tensordict itself, subclass
 ... tensordict["signal_norm"] = (signal - signal.mean()) / signal.std()
 ... return tensordict
 >>> normalize = Normalize()
->>> normalize(TensorDict(signal=torch.arange(4.0), batch_size=[4]))["signal_norm"]
+>>> normalize(TensorDict({"signal": torch.arange(4.0)}, batch_size=[4]))["signal_norm"]
 tensor([-1.1619, -0.3873, 0.3873, 1.1619])
 >>> normalize(signal=torch.arange(4.0))
 tensor([-1.1619, -0.3873, 0.3873, 1.1619])
@@ -233,7 +233,7 @@ tensor([-1.1619, -0.3873, 0.3873, 1.1619])
 A plain [`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) with `in_keys` and `out_keys`
 attributes also works in a sequence (see Chain modules:
 TensorDictSequential), if its `forward` takes a tensordict, writes its
-outputs into it and returns it.
+outputs into it, and returns it.
 
 ### Run a module on a tensorclass
 
@@ -342,7 +342,7 @@ tensordict. The sequence does not track the keys of a callable that has no
 
 A [`torch.nn.Sequential`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential) of tensordict modules runs on a tensordict,
 because each module returns the tensordict. But it has no `in_keys` and
-`out_keys`, so keyword calls, `select_out_keys` and
+`out_keys`, so keyword calls, `select_out_keys`, and
 `select_subsequence` do not work on it. Use
 [`TensorDictSequential`](reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential) instead.
 
@@ -372,7 +372,7 @@ dict: `TensorDictSequential({"encoder": enc, "head": head})`, then read
 `seq["encoder"]`.
 
 Build the subsequence once, outside a compiled function. Dynamo cannot build
-it inside the graph (see [torch.compile, torch.func, torch.export and CUDA graphs](compile.html#compile)).
+it inside the graph (see [torch.compile, torch.func, torch.export, and CUDA graphs](compile.html#compile)).
 
 ### Where a sequence writes
 
@@ -391,7 +391,7 @@ shallow copy of the input. The sequence returns a new tensordict with its
 ... Mod(lambda h: h * 2, in_keys=["h"], out_keys=["y"]),
 ... inplace=False,
 ... )
->>> td = TensorDict(x=torch.zeros(3), batch_size=[3])
+>>> td = TensorDict({"x": torch.zeros(3)}, batch_size=[3])
 >>> sorted(seq(td).keys())
 ['h', 'y']
 >>> sorted(td.keys())
@@ -420,7 +420,7 @@ call removes the other output keys from the result:
 >>> _ = seq.select_out_keys("y")
 >>> seq.out_keys
 ['y']
->>> td = seq(TensorDict(x=torch.zeros(3), other=torch.ones(3), batch_size=[3]))
+>>> td = seq(TensorDict({"x": torch.zeros(3), "other": torch.ones(3)}, batch_size=[3]))
 >>> sorted(td.keys())
 ['other', 'x', 'y']
 >>> seq(x=torch.zeros(3))
@@ -442,7 +442,7 @@ input stay:
 
 ```
 >>> two = Mod(lambda x: (x + 1, x + 2), in_keys=["x"], out_keys=["a", "b"]).select_out_keys("b")
->>> sorted(two(TensorDict(x=torch.zeros(3), other=torch.ones(3), batch_size=[3])).keys())
+>>> sorted(two(TensorDict({"x": torch.zeros(3), "other": torch.ones(3)}, batch_size=[3])).keys())
 ['b', 'other', 'x']
 ```
 
@@ -460,7 +460,7 @@ The rule applies to the `out_keys` of a sequence first, then to the
 ... Mod(lambda h: h * 2, in_keys=["h"], out_keys=["y"]),
 ... )
 >>> from tensordict.nn import set_skip_existing
->>> td = TensorDict(x=torch.ones(2), h=torch.zeros(2), batch_size=[2])
+>>> td = TensorDict({"x": torch.ones(2), "h": torch.zeros(2)}, batch_size=[2])
 >>> with set_skip_existing(True):
 ... td = seq(td)
 >>> td["h"], td["y"]
@@ -516,7 +516,7 @@ The wrapper returns a new tensordict that holds only the output fields:
 
 ```
 >>> td_sum_diff = sum_diff.as_td_module()
->>> td = TensorDict(a=torch.tensor([1.0, 2.0]), b=torch.tensor([3.0, 4.0]), batch_size=[2])
+>>> td = TensorDict({"a": torch.tensor([1.0, 2.0]), "b": torch.tensor([3.0, 4.0])}, batch_size=[2])
 >>> sorted(td_sum_diff(td).keys())
 ['difference', 'total']
 ```
@@ -562,7 +562,7 @@ of the network into a location and a positive scale:
 ... )
 >>> policy.out_keys
 ['params', 'loc', 'scale', 'action', 'action_log_prob']
->>> td = policy(TensorDict(obs=torch.randn(5, 3), batch_size=[5]))
+>>> td = policy(TensorDict({"obs": torch.randn(5, 3)}, batch_size=[5]))
 >>> td["action"].shape, td["action_log_prob"].shape
 (torch.Size([5, 2]), torch.Size([5, 2]))
 ```
@@ -586,7 +586,7 @@ of `in_keys` as keyword arguments. To set the value that the
 >>> clipped = ProbabilisticTensorDictModule(
 ... in_keys=["loc", "scale"], out_keys=["action"], distribution_class=ClippedNormal
 ... )
->>> clipped(TensorDict(loc=torch.tensor([3.0, -0.5]), scale=torch.ones(2), batch_size=[2]))["action"]
+>>> clipped(TensorDict({"loc": torch.tensor([3.0, -0.5]), "scale": torch.ones(2)}, batch_size=[2]))["action"]
 tensor([ 1.0000, -0.5000])
 ```
 
@@ -603,10 +603,10 @@ the log-probability of the values in the tensordict.
 
 If the sequence returns the distribution of its last module (see
 `return_composite` below), these methods write the intermediate entries
-(`"params"`, `"loc"` and `"scale"` here) into the input tensordict:
+(`"params"`, `"loc"`, and `"scale"` here) into the input tensordict:
 
 ```
->>> td = TensorDict(obs=torch.randn(5, 3), batch_size=[5])
+>>> td = TensorDict({"obs": torch.randn(5, 3)}, batch_size=[5])
 >>> policy.get_dist(td)
 Normal(loc: torch.Size([5, 2]), scale: torch.Size([5, 2]))
 >>> list(td.keys())
@@ -648,7 +648,7 @@ strings in any case:
 >>> sampler = ProbabilisticTensorDictModule(
 ... in_keys=["logits"], out_keys=["choice"], distribution_class=d.Categorical
 ... )
->>> td = TensorDict(logits=torch.tensor([[0.0, 1.0, 0.0]]).expand(8, 3), batch_size=[8])
+>>> td = TensorDict({"logits": torch.tensor([[0.0, 1.0, 0.0]]).expand(8, 3)}, batch_size=[8])
 >>> sampler(td)["choice"]
 tensor([1, 1, 1, 1, 1, 1, 1, 1])
 >>> _ = torch.manual_seed(0)
@@ -684,7 +684,7 @@ deterministic value `num_samples` times.
 ... num_samples=4,
 ... default_interaction_type="random",
 ... )
->>> multi(TensorDict(loc=torch.zeros(3, 2), scale=torch.ones(3, 2), batch_size=[3])).batch_size
+>>> multi(TensorDict({"loc": torch.zeros(3, 2), "scale": torch.ones(3, 2)}, batch_size=[3])).batch_size
 torch.Size([4, 3])
 ```
 
@@ -754,8 +754,10 @@ output name to its distribution class. The module then takes its
 ... def forward(self, obs):
 ... out = self.linear(obs)
 ... return TensorDict(
-... move={"loc": out[..., :2], "scale": out[..., 2:4].exp()},
-... grip={"logits": out[..., 4:]},
+... {
+... "move": {"loc": out[..., :2], "scale": out[..., 2:4].exp()},
+... "grip": {"logits": out[..., 4:]},
+... },
 ... batch_size=obs.shape[:-1],
 ... )
 >>> policy = ProbabilisticTensorDictSequential(
@@ -768,7 +770,7 @@ output name to its distribution class. The module then takes its
 ... default_interaction_type="random",
 ... ),
 ... )
->>> td = policy(TensorDict(obs=torch.randn(5, 3), batch_size=[5]))
+>>> td = policy(TensorDict({"obs": torch.randn(5, 3)}, batch_size=[5]))
 >>> td["move"].shape, td["grip"].shape
 (torch.Size([5, 2]), torch.Size([5]))
 >>> list(policy.log_prob(td).keys())
@@ -791,7 +793,7 @@ probabilistic.
 The parameters of a model fit in a tensordict, with one nested key for each
 submodule. With such a tensordict, you can make a functional call: a call of
 a module with parameters that the module does not own. Use functional calls
-for ensembles, target networks, meta-learning and per-sample gradients.
+for ensembles, target networks, meta-learning, and per-sample gradients.
 
 ### Extract and swap parameters
 
@@ -846,7 +848,7 @@ torch.Size([4, 10, 1])
 ```
 
 The [functional tutorial](tutorials/functional.html) explains this pattern
-in more detail. [torch.compile, torch.func, torch.export and CUDA graphs](compile.html#compile) shows it under [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile) and with
+in more detail. [torch.compile, torch.func, torch.export, and CUDA graphs](compile.html#compile) shows it under [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile) and with
 [`torch.func.grad()`](https://docs.pytorch.org/docs/stable/generated/torch.func.grad.html#torch.func.grad) for per-sample gradients.
 
 [`EnsembleModule`](reference/generated/tensordict.nn.EnsembleModule.html#tensordict.nn.EnsembleModule) does the same for a
@@ -860,7 +862,7 @@ dimension of size `num_copies`:
 >>> ensemble = EnsembleModule(
 ... TensorDictModule(nn.Linear(3, 2), in_keys=["x"], out_keys=["y"]), num_copies=4
 ... )
->>> ensemble(TensorDict(x=torch.randn(10, 3), batch_size=[10]))["y"].shape
+>>> ensemble(TensorDict({"x": torch.randn(10, 3)}, batch_size=[10]))["y"].shape
 torch.Size([4, 10, 2])
 >>> ensemble.params_td.batch_size
 torch.Size([4])
@@ -877,7 +879,7 @@ the output of the first one.
 ### Keep parameters on a module: TensorDictParams
 
 A plain [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) attribute of a module is not seen by
-`module.parameters()`, `module.state_dict()` or `module.to()`. An
+`module.parameters()`, `module.state_dict()`, or `module.to()`. An
 optimizer then does not train it, and a checkpoint does not save it.
 [`TensorDictParams`](reference/generated/tensordict.TensorDictParams.html#tensordict.TensorDictParams) is a tensordict whose entries are
 registered as parameters and buffers of the module that holds it. Use it to
@@ -909,12 +911,12 @@ torch.float64
 ```
 
 A [`TensorDictParams`](reference/generated/tensordict.TensorDictParams.html#tensordict.TensorDictParams) behaves like the tensordict that it
-wraps: you can index it, set entries and call `to_module`. These rules
+wraps: you can index it, set entries, and call `to_module`. These rules
 apply:
 
-- When you set an entry, `float16`, `float32` and `float64` tensors
+- When you set an entry, `float16`, `float32`, and `float64` tensors
 become [`Parameter`](https://docs.pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html#torch.nn.parameter.Parameter). Tensors of all other dtypes, including
-`bfloat16`, complex and `bool`, become buffers. An optimizer does not see
+`bfloat16`, complex, and `bool`, become buffers. An optimizer does not see
 a buffer. With `no_convert=True`, all tensors that are not already
 parameters become buffers.
 - `named_parameters()` names each entry by its nested key, joined with
@@ -930,9 +932,11 @@ In this example, only the `float32` entry becomes a parameter:
 ```
 >>> p = TensorDictParams(
 ... TensorDict(
-... f32=torch.zeros(2),
-... bf16=torch.zeros(2, dtype=torch.bfloat16),
-... flags=torch.zeros(2, dtype=torch.bool),
+... {
+... "f32": torch.zeros(2),
+... "bf16": torch.zeros(2, dtype=torch.bfloat16),
+... "flags": torch.zeros(2, dtype=torch.bool),
+... },
 ... )
 ... )
 >>> [name for name, _ in p.named_parameters()]
@@ -944,23 +948,23 @@ In this example, only the `float32` entry becomes a parameter:
 ## Compile and capture modules
 
 The modules of [`tensordict.nn`](reference/nn.html#module-tensordict.nn) work with [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile),
-[`torch.func`](https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func) and [`torch.export.export()`](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export). A module that writes into
+[`torch.func`](https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func), and [`torch.export.export()`](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export). A module that writes into
 its input recompiles when the key set of the input changes. For this limit,
-the others and their workarounds, see [torch.compile, torch.func, torch.export and CUDA graphs](compile.html#compile). To record a module as
+the others, and their workarounds, see [torch.compile, torch.func, torch.export, and CUDA graphs](compile.html#compile). To record a module as
 a CUDA graph and replay it, use [`CudaGraphModule`](reference/generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule) (see
 [CUDA graphs](compile.html#compile-cudagraphs)).
 
 ## See also
 
 - [tensordict.nn](reference/nn.html#api-nn): the reference of every class and function on this page.
-- [torch.compile, torch.func, torch.export and CUDA graphs](compile.html#compile): [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), [`torch.func`](https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func),
-[`torch.export.export()`](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export) and CUDA graphs with tensordict modules.
+- [torch.compile, torch.func, torch.export, and CUDA graphs](compile.html#compile): [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), [`torch.func`](https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func),
+[`torch.export.export()`](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export), and CUDA graphs with tensordict modules.
 - The [TensorDictModule tutorial](tutorials/tensordict_module.html): a
 residual block built step by step from tensordict modules, plain functions
 in a sequence, and a first probabilistic module.
 - The [functional tutorial](tutorials/functional.html): functional calls,
-ensembles and `vmap` with `from_module` and `to_module`.
+ensembles, and `vmap` with `from_module` and `to_module`.
 - The [export tutorial](tutorials/export.html): export a tensordict module
 with [`torch.export.export()`](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export), and select its outputs first.
-- [TorchRL](https://pytorch.org/rl/): policies, value networks and losses
+- [TorchRL](https://pytorch.org/rl/): policies, value networks, and losses
 built from these modules.

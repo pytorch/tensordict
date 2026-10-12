@@ -1,7 +1,7 @@
 # What is TensorDict?
 
 A [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) is a dictionary of tensors that behaves
-like one tensor. You index, reshape, move and save the whole group with one
+like one tensor. You index, reshape, move, and save the whole group with one
 call. TensorDict also makes sure that every tensor keeps the dimensions that
 the group shares. A [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) gives the same behavior
 to a class with typed fields and methods.
@@ -16,10 +16,12 @@ each robot, and the camera images in a nested TensorDict:
 >>> import torch
 >>> from tensordict import TensorDict
 >>> robots = TensorDict(
-... joints=torch.zeros(4, 7),
-... camera={
+... {
+... "joints": torch.zeros(4, 7),
+... "camera": {
 ... "rgb": torch.zeros(4, 3, 32, 32, dtype=torch.uint8),
 ... "depth": torch.zeros(4, 32, 32),
+... },
 ... },
 ... batch_size=[4],
 ... )
@@ -41,7 +43,7 @@ torch.float64
 You can also save a TensorDict to disk, send it to other processes or nodes,
 and pass it to [`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) objects through [`tensordict.nn`](reference/nn.html#module-tensordict.nn).
 With [`torch.func`](https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func), a TensorDict of parameters makes model ensembles and
-parameter edits shorter to write (see [torch.compile, torch.func, torch.export and CUDA graphs](compile.html#compile)). TensorDict started as
+parameter edits shorter to write (see [torch.compile, torch.func, torch.export, and CUDA graphs](compile.html#compile)). TensorDict started as
 part of TorchRL and is now a separate library.
 
 ## TensorClass: the class form
@@ -157,8 +159,8 @@ also work on a TensorDict. The result is a TensorDict:
 
 A TensorDict is not *exactly* a [`dict`](https://docs.python.org/3/builtins/stdtypes.html#dict). A dict is a good model: a
 TensorDict has the methods of a mapping, `keys`, `values`, `items`,
-`get`, `pop`, `update`, `in` and `**data`. But `for x in data`,
-`len(data)`, `bool(data)` and `data == other` follow the rules of a
+`get`, `pop`, `update`, `in`, and `**data`. But `for x in data`,
+`len(data)`, `bool(data)`, and `data == other` follow the rules of a
 tensor:
 
 ```
@@ -173,7 +175,7 @@ False
 [A TensorDict is not exactly a dict](concepts/batch_size.html#batch-size-not-a-dict) lists these differences.
 
 A TensorDict is not a [`torch.Tensor`](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) either. Each entry keeps its own
-dtype, device and the dimensions after the batch dimensions.
+dtype, device, and the dimensions after the batch dimensions.
 `robots.shape` is the batch size, not the shape of an entry:
 
 ```
@@ -183,7 +185,7 @@ False
 torch.Size([4])
 ```
 
-A TensorDict is not a data frame. For tables that you filter, group and
+A TensorDict is not a data frame. For tables that you filter, group, and
 join, use pandas or Polars. [`to_pandas()`](reference/generated/tensordict.TensorDictBase.to_pandas.html#tensordict.TensorDictBase.to_pandas) and
 [`from_pandas()`](reference/generated/tensordict.TensorDictBase.from_pandas.html#tensordict.TensorDictBase.from_pandas) convert between the two.
 
@@ -191,14 +193,14 @@ join, use pandas or Polars. [`to_pandas()`](reference/generated/tensordict.Tenso
 
 The user guide explains one concept on each page:
 
-- [Batch size, shapes and indexing](concepts/batch_size.html#batch-size): the batch size, indexing, shape operations and dimension
+- [Batch size, shapes, and indexing](concepts/batch_size.html#batch-size): the batch size, indexing, shape operations, and dimension
 names.
-- [Keys, nested keys and locking](concepts/keys.html#keys): string and nested keys, reading and writing entries, nested
-tensordicts and locking.
+- [Keys, nested keys, and locking](concepts/keys.html#keys): string and nested keys, reading and writing entries, nested
+tensordicts, and locking.
 - [Stacking and variable-size data](concepts/stacking.html#stacking): dense and lazy stacks, and data with different shapes.
-- [Arithmetic, apply, reductions and gradients](concepts/operations.html#operations): arithmetic, [`apply()`](reference/generated/tensordict.TensorDictBase.apply.html#tensordict.TensorDictBase.apply),
-reductions, gradients and the in-place conventions.
-- [Devices, dtypes and memory](concepts/devices.html#devices): devices, dtypes and memory.
+- [Arithmetic, apply, reductions, and gradients](concepts/operations.html#operations): arithmetic, [`apply()`](reference/generated/tensordict.TensorDictBase.apply.html#tensordict.TensorDictBase.apply),
+reductions, gradients, and the in-place conventions.
+- [Devices, dtypes, and memory](concepts/devices.html#devices): devices, dtypes, and memory.
 - [Non-tensor data and unbatched entries](concepts/non_tensor.html#non-tensor-data): strings and other Python objects, and entries outside
 the batch size.
 - [TensorClass](tensorclass.html#tensorclass-guide) and [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide): containers with
@@ -206,13 +208,13 @@ typed fields. [Which container should I use?](choosing_a_container.html#choosing
 - [Modules: TensorDictModule and tensordict.nn](modules.html#modules-guide): [`TensorDictModule`](reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule) and the other
 modules that read and write tensordicts.
 
-For saving, storage, data loading, distributed training and
+For saving, storage, data loading, distributed training, and
 [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), see [Save and load tensordicts](saving.html#saving), [Large datasets and storage backends](storage.html#storage), [Load data and share it between processes](data_loading.html#data-loading),
-[Distributed tensordicts](distributed.html#distributed) and [torch.compile, torch.func, torch.export and CUDA graphs](compile.html#compile).
+[Distributed tensordicts](distributed.html#distributed), and [torch.compile, torch.func, torch.export, and CUDA graphs](compile.html#compile).
 
 ## See also
 
 - [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) and [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) in the
 [API reference](reference/index.html#api-reference).
-- The tutorials [Getting, setting and nesting keys](tutorials/tensordict_keys.html),
-[Slicing, indexing and masking](tutorials/tensordict_slicing.html) and [Changing the shape of a TensorDict](tutorials/tensordict_shapes.html).
+- The tutorials [Getting, setting, and nesting keys](tutorials/tensordict_keys.html),
+[Slicing, indexing, and masking](tutorials/tensordict_slicing.html), and [Changing the shape of a TensorDict](tutorials/tensordict_shapes.html).

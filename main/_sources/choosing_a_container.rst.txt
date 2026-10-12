@@ -14,7 +14,7 @@ class form without a copy:
 
   >>> import torch
   >>> from tensordict import TensorClass, TensorDict
-  >>> td = TensorDict(pos=torch.zeros(4, 3), vel=torch.zeros(4, 3), batch_size=[4])
+  >>> td = TensorDict({"pos": torch.zeros(4, 3), "vel": torch.zeros(4, 3)}, batch_size=[4])
   >>> td["mass"] = torch.ones(4)  # add a key at run time
   >>> class Particles(TensorClass):
   ...     pos: torch.Tensor
@@ -32,7 +32,7 @@ The other containers are special cases: items of different shapes, data on
 disk or on a server, and typed fields on a ``TensorDictBase``. All the
 containers except the plain ``dict`` have a *batch size*: the leading
 dimensions that all their entries share (see :ref:`batch-size`). Indexing,
-reshaping and stacking apply to these dimensions.
+reshaping, and stacking apply to these dimensions.
 
 The containers
 --------------
@@ -64,7 +64,7 @@ The containers
        changes them.
      - Each read of an entry stacks it into a new tensor. An entry with
        different shapes raises ``RuntimeError`` unless you ask for a padded
-       tensor, a nested tensor or a list (``get(key, as_padded_tensor=True)``).
+       tensor, a nested tensor, or a list (``get(key, as_padded_tensor=True)``).
        ``keys()`` lists only the keys that all the stacked tensordicts have.
    * - :class:`~tensordict.PersistentTensorDict`
      - Data in an HDF5 or Zarr file, read on demand. The file can be larger
@@ -76,7 +76,7 @@ The containers
        `#2242 <https://github.com/pytorch/tensordict/issues/2242>`_). Needs
        ``h5py`` or ``zarr``.
    * - :class:`~tensordict.store.TensorDictStore`
-     - Data on a Redis, Dragonfly or KeyDB server, which several processes
+     - Data on a Redis, Dragonfly, or KeyDB server, which several processes
        or machines can read and write.
      - Needs a running server and the ``redis`` package. Each read goes over
        the network. The data stays on the server until you call
@@ -122,7 +122,7 @@ Choose by need
   :class:`~tensordict.PersistentTensorDict`. See :ref:`storage`.
 - If several processes or machines must share the data through a server, use
   a :class:`~tensordict.store.TensorDictStore`. See :ref:`storage`.
-- If you want typed fields on a file, a server or a lazy stack, wrap it with
+- If you want typed fields on a file, a server, or a lazy stack, wrap it with
   ``from_tensordict`` of a ``TensorClass`` or a ``TypedTensorDict``. See
   :ref:`compatibility`.
 - If your values have no common leading dimension, use a plain ``dict``, or
@@ -193,7 +193,7 @@ differences follow from this:
      - ``Foo.from_tensordict(tc)`` reads the fields, but an attribute write
        raises ``ValueError``.
    * - Type checkers (pyright, mypy)
-     - Report a field value of the wrong type, a missing field and an
+     - Report a field value of the wrong type, a missing field, and an
        unknown keyword argument in the constructor.
      - Type the fields. Only mypy reports a missing field. Neither reports an
        unknown keyword argument.
@@ -202,7 +202,7 @@ Use ``TensorClass`` if:
 
 - Your fields include strings or other Python objects that you read as plain
   values.
-- You need a custom ``__init__``, ``__post_init__`` or the ``autocast`` flag.
+- You need a custom ``__init__``, ``__post_init__``, or the ``autocast`` flag.
 
 Use ``TypedTensorDict`` if:
 
@@ -219,5 +219,5 @@ See also
 - :ref:`stacking`: lazy stacks and data of variable size.
 - :ref:`storage` and :ref:`saving`: the backends on disk and on servers.
 - :ref:`compatibility`: the typed containers on each backend.
-- :ref:`api-tensordict`, :ref:`api-tensorclass` and
+- :ref:`api-tensordict`, :ref:`api-tensorclass`, and
   :ref:`api-typed-tensordict`: the API reference.

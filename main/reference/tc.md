@@ -5,7 +5,7 @@ tensordict, and the classes for non-tensor data and unbatched entries. A
 *tensorclass* is a class that you declare like a dataclass, with typed fields
 and methods, and that has the tensor operations of a
 [`TensorDict`](generated/tensordict.TensorDict.html#tensordict.TensorDict). For a guide to fields, auto-casting, the
-class options and static type checking, see [TensorClass](../tensorclass.html#tensorclass-guide).
+class options, and static type checking, see [TensorClass](../tensorclass.html#tensorclass-guide).
 
 To declare a tensorclass, subclass [`TensorClass`](generated/tensordict.TensorClass.html#tensordict.TensorClass). The
 [`tensorclass()`](generated/tensordict.tensorclass.html#tensordict.tensorclass) decorator is the original way, kept for
@@ -15,7 +15,7 @@ A tensorclass has the methods of [`TensorDictBase`](generated/tensordict.TensorD
 listed by task in [Methods by task](td.html#api-tensordict-methods). On a tensorclass, the
 methods that return a `TensorDict` on a `TensorDict` return an
 instance of the tensorclass. Examples are `select`, `clone`, `to`,
-`apply`, indexing and reshaping.
+`apply`, indexing, and reshaping.
 
 ## Tensorclasses
 
@@ -34,7 +34,7 @@ as strings or Python objects. It wraps each one in a
 [`NonTensorStack`](generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack). If you stack
 [`MetaData`](generated/tensordict.MetaData.html#tensordict.MetaData) entries that hold the same object, the
 result is one `MetaData`, not a `NonTensorStack`.
-[`TensorAttrs`](generated/tensordict.TensorAttrs.html#tensordict.TensorAttrs) describes the device, dtype and shape of
+[`TensorAttrs`](generated/tensordict.TensorAttrs.html#tensordict.TensorAttrs) describes the device, dtype, and shape of
 an entry: [`attrs()`](generated/tensordict.TensorDictBase.attrs.html#tensordict.TensorDictBase.attrs) returns them. See
 [Non-tensor data and unbatched entries](../concepts/non_tensor.html#non-tensor-data).
 
@@ -64,7 +64,7 @@ Operations on its data, such as arithmetic or
 ## See also
 
 - [TensorClass](../tensorclass.html#tensorclass-guide): declare and use a tensorclass.
-- [Which container should I use?](../choosing_a_container.html#choosing-a-container): tensorclass, `TypedTensorDict` or
+- [Which container should I use?](../choosing_a_container.html#choosing-a-container): tensorclass, `TypedTensorDict`, or
 `TensorDict`.
 - [TypedTensorDict](ttd.html#api-typed-tensordict): the other container with typed fields.
 - The tutorials [Using tensorclasses for datasets](../tutorials/tensorclass_fashion.html) and

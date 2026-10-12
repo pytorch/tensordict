@@ -9,7 +9,7 @@ removes or renames an entry, or that replaces a leaf with a new tensor:
 [`set()`](tensordict.TensorDictBase.set.html#tensordict.TensorDictBase.set), `__setitem__`, [`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update), [`pop()`](tensordict.TensorDictBase.pop.html#tensordict.TensorDictBase.pop),
 [`rename_key_()`](tensordict.TensorDictBase.rename_key_.html#tensordict.TensorDictBase.rename_key_), `del`. Writes into the existing leaves still
 work: [`set_()`](tensordict.TensorDictBase.set_.html#tensordict.TensorDictBase.set_), [`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_), and `set(..., inplace=True)`.
-Check the state with [`is_locked`](tensordict.TensorDictBase.is_locked.html#tensordict.TensorDictBase.is_locked). See [Keys, nested keys and locking](../../concepts/keys.html#keys).
+Check the state with [`is_locked`](tensordict.TensorDictBase.is_locked.html#tensordict.TensorDictBase.is_locked). See [Keys, nested keys, and locking](../../concepts/keys.html#keys).
 
 Can be used as a context manager: the tensordict is unlocked when the
 `with` block exits, also if the block raises an exception.

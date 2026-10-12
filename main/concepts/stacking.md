@@ -14,8 +14,8 @@ tensordict holds the 3-D positions of 2 particles:
 ```
 >>> import torch
 >>> from tensordict import TensorDict
->>> a = TensorDict(pos=torch.zeros(2, 3), batch_size=[2])
->>> b = TensorDict(pos=torch.ones(2, 3), batch_size=[2])
+>>> a = TensorDict({"pos": torch.zeros(2, 3)}, batch_size=[2])
+>>> b = TensorDict({"pos": torch.ones(2, 3)}, batch_size=[2])
 >>> stacked = torch.stack([a, b])
 >>> type(stacked).__name__, stacked.batch_size
 ('TensorDict', torch.Size([2, 2]))
@@ -36,12 +36,12 @@ same keys, the same batch size, and the same shape for each entry.
 raises a `KeyError` if the keys differ:
 
 ```
->>> c = TensorDict(pos=torch.zeros(2, 2), batch_size=[2]) # 2-D positions
+>>> c = TensorDict({"pos": torch.zeros(2, 2)}, batch_size=[2]) # 2-D positions
 >>> torch.stack([a, c])
 Traceback (most recent call last):
 ...
 RuntimeError: The shapes of the tensors to stack is incompatible: torch.Size([2, 2]) vs torch.Size([2, 3]) for key pos.
->>> torch.stack([a, TensorDict(vel=torch.zeros(2, 3), batch_size=[2])])
+>>> torch.stack([a, TensorDict({"vel": torch.zeros(2, 3)}, batch_size=[2])])
 Traceback (most recent call last):
 ...
 RuntimeError: The sets of keys in the tensordicts to stack are exclusive. Consider using `LazyStackedTensorDict.maybe_dense_stack` instead.
@@ -59,7 +59,7 @@ tensordict holds 10 time steps of one robot:
 ```
 >>> from tensordict import lazy_stack
 >>> tds = [
-... TensorDict(battery=torch.zeros(10), joints=torch.zeros(10, 4), batch_size=[10])
+... TensorDict({"battery": torch.zeros(10), "joints": torch.zeros(10, 4)}, batch_size=[10])
 ... for _ in range(3)
 ... ]
 >>> stacked = lazy_stack(tds) # no data is stacked here
@@ -115,7 +115,7 @@ different shapes. See Variable-size data for that case.
 Note
 
 Only stacking is lazy. Shape operations such as `squeeze`, `unsqueeze`,
-`permute` and `view` return a regular TensorDict. The legacy lazy
+`permute`, and `view` return a regular TensorDict. The legacy lazy
 versions of these operations exist only with
 [`set_lazy_legacy()`](../reference/generated/tensordict.set_lazy_legacy.html#tensordict.set_lazy_legacy) set to `True`. This mode is deprecated
 and will be removed in tensordict 0.17.
@@ -129,8 +129,8 @@ instead:
 
 ```
 >>> mixed = lazy_stack([
-... TensorDict(pos=torch.zeros(3), batch_size=[3]),
-... TensorDict(pos=torch.zeros(3), charge=torch.zeros(3), batch_size=[3]),
+... TensorDict({"pos": torch.zeros(3)}, batch_size=[3]),
+... TensorDict({"pos": torch.zeros(3), "charge": torch.zeros(3)}, batch_size=[3]),
 ... ])
 >>> list(mixed.keys())
 ['pos']
@@ -144,8 +144,8 @@ dimension that differs. Here, two systems have 2 and 4 particles:
 
 ```
 >>> ragged = lazy_stack([
-... TensorDict(pos=torch.zeros(2, 3), batch_size=[2]),
-... TensorDict(pos=torch.zeros(4, 3), batch_size=[4]),
+... TensorDict({"pos": torch.zeros(2, 3)}, batch_size=[2]),
+... TensorDict({"pos": torch.zeros(4, 3)}, batch_size=[4]),
 ... ])
 >>> ragged.batch_size
 torch.Size([2, -1])
@@ -200,12 +200,12 @@ Set the padding with `padding_value` (default `0.0`) and
 - `as_nested_tensor=True` returns a nested tensor ([`torch.nested`](https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested)). The
 default layout is `torch.jagged`. Set another one with `layout`.
 
-For example, with three graphs of 2, 3 and 1 nodes, and 2 features for each
+For example, with three graphs of 2, 3, and 1 nodes, and 2 features for each
 node:
 
 ```
 >>> _ = torch.manual_seed(0)
->>> graphs = lazy_stack([TensorDict(nodes=torch.randn(n, 2)) for n in [2, 3, 1]])
+>>> graphs = lazy_stack([TensorDict({"nodes": torch.randn(n, 2)}) for n in [2, 3, 1]])
 >>> graphs
 LazyStackedTensorDict(
  fields={
@@ -242,7 +242,7 @@ directly. Its first dimension is a batch dimension:
 
 ```
 >>> nt = torch.nested.nested_tensor([torch.ones(2, 2), torch.ones(3, 2)], layout=torch.jagged)
->>> data = TensorDict(nodes=nt, batch_size=[2])
+>>> data = TensorDict({"nodes": nt}, batch_size=[2])
 >>> data[1]["nodes"].shape
 torch.Size([3, 2])
 ```
@@ -253,11 +253,11 @@ torch.Size([3, 2])
 the longest one along `pad_dim`, and stacks them. With `return_mask=True`,
 it adds a `"masks"` entry that marks the values that are not padding. Use it
 to get one dense TensorDict, for example for a model that takes a padded
-batch. Here, three recordings of a 2-channel sensor have 2, 3 and 1 samples:
+batch. Here, three recordings of a 2-channel sensor have 2, 3, and 1 samples:
 
 ```
 >>> from tensordict import pad_sequence
->>> tds = [TensorDict(signal=torch.ones(n, 2)) for n in [2, 3, 1]]
+>>> tds = [TensorDict({"signal": torch.ones(n, 2)}) for n in [2, 3, 1]]
 >>> padded = pad_sequence(tds, return_mask=True)
 >>> padded["signal"].shape
 torch.Size([3, 3, 2])
@@ -276,7 +276,7 @@ A list of strings, one for each element of the batch, becomes a
 [`NonTensorStack`](../reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack). The strings can have any length:
 
 ```
->>> TensorDict(text=["a", "bb", "ccc"], batch_size=[3])[1]["text"]
+>>> TensorDict({"text": ["a", "bb", "ccc"]}, batch_size=[3])[1]["text"]
 'bb'
 ```
 
@@ -303,7 +303,7 @@ simulation writes one state for each of its `N` steps:
 ```
 >>> N = 4
 >>> def simulate(i):
-... return TensorDict(pos=torch.full((3,), float(i)), info={"step": torch.tensor(i)})
+... return TensorDict({"pos": torch.full((3,), float(i)), "info": {"step": torch.tensor(i)}})
 >>> data = TensorDict(batch_size=[N])
 >>> for i in range(N):
 ... data[i] = simulate(i)
@@ -324,7 +324,7 @@ zeros. A value with another shape raises a `RuntimeError`. The
 
 - [`LazyStackedTensorDict`](../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict), [`stack()`](../reference/generated/tensordict.stack.html#tensordict.stack),
 [`lazy_stack()`](../reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack), [`maybe_dense_stack()`](../reference/generated/tensordict.maybe_dense_stack.html#tensordict.maybe_dense_stack),
-[`cat()`](../reference/generated/tensordict.cat.html#tensordict.cat) and [`pad_sequence()`](../reference/generated/tensordict.pad_sequence.html#tensordict.pad_sequence) in the
+[`cat()`](../reference/generated/tensordict.cat.html#tensordict.cat), and [`pad_sequence()`](../reference/generated/tensordict.pad_sequence.html#tensordict.pad_sequence) in the
 [API reference](../reference/index.html#api-reference).
 - The tutorials [Changing the shape of a TensorDict](../tutorials/tensordict_shapes.html) (stacking and
 concatenating) and [Building tensordicts from streams](../tutorials/streamed_tensordict.html) (building lazy

@@ -5,7 +5,7 @@ share, grouped by task. Each group also lists the functions of the
 `tensordict` module for its task. A [`TensorDict`](generated/tensordict.TensorDict.html#tensordict.TensorDict) is a
 `dict[str, torch.Tensor]` that behaves like one tensor. Its entries share
 their leading dimensions, the *batch size*, and an operation such as
-indexing, reshaping or [`to()`](generated/tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to) applies to every
+indexing, reshaping, or [`to()`](generated/tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to) applies to every
 entry. For an introduction, see [What is TensorDict?](../overview.html#overview).
 
 ## Containers
@@ -54,10 +54,10 @@ in the same group.
 
 ### Construction and conversion
 
-Create a tensordict from Python, numpy or pandas data, and convert a
+Create a tensordict from Python, numpy, or pandas data, and convert a
 tensordict to other types. Most `from_*` class methods have a function
 of the same name in the `tensordict` module. To read a tensordict from a
-file, see Saving, loading and file formats. For the arguments of the constructor,
+file, see Saving, loading, and file formats. For the arguments of the constructor,
 see [`TensorDict`](generated/tensordict.TensorDict.html#tensordict.TensorDict).
 
 Methods
@@ -106,12 +106,12 @@ Functions
 | [`fromkeys`](generated/tensordict.fromkeys.html#tensordict.fromkeys)(keys[, value]) | Creates a tensordict from a list of keys and a single value. |
 | [`make_tensordict`](generated/tensordict.make_tensordict.html#tensordict.make_tensordict)([input_dict, batch_size, ...]) | Returns a TensorDict created from the keyword arguments or an input dictionary. |
 
-### Keys, values and entries
+### Keys, values, and entries
 
-Read, write, select and rename the entries of a tensordict. A key is a
+Read, write, select, and rename the entries of a tensordict. A key is a
 string, or a tuple of strings that points to an entry of a nested
 tensordict. [`NestedKey`](generated/tensordict.NestedKey.html#tensordict.NestedKey) is the type of these keys. For the rules,
-see [Keys, nested keys and locking](../concepts/keys.html#keys). For values that are not tensors, see
+see [Keys, nested keys, and locking](../concepts/keys.html#keys). For values that are not tensors, see
 [Non-tensor data and unbatched entries](../concepts/non_tensor.html#non-tensor-data).
 
 Methods
@@ -171,12 +171,12 @@ Classes and functions
 | [`unravel_key_list`](generated/tensordict.unravel_key_list.html#tensordict.unravel_key_list)(keys) | Unravels every key of a list, as [`unravel_key()`](generated/tensordict.unravel_key.html#tensordict.unravel_key) does. |
 | [`merge_tensordicts`](generated/tensordict.merge_tensordicts.html#tensordict.merge_tensordicts)(*tensordicts[, callback_exist]) | Merges tensordicts together. |
 
-### Indexing, masking and splitting
+### Indexing, masking, and splitting
 
 Index every entry along the batch dimensions at once, and split a
 tensordict into several tensordicts. `td[0]` and `td[mask]` index the
 batch dimensions. `td["key"]` returns an entry: see
-Keys, values and entries. For the rules, see [Batch size, shapes and indexing](../concepts/batch_size.html#batch-size).
+Keys, values, and entries. For the rules, see [Batch size, shapes, and indexing](../concepts/batch_size.html#batch-size).
 
 | [`TensorDictBase.__getitem__`](generated/tensordict.TensorDictBase.__getitem__.html#tensordict.TensorDictBase.__getitem__)() | Indexes all tensors according to the provided index. |
 | --- | --- |
@@ -192,12 +192,12 @@ Keys, values and entries. For the rules, see [Batch size, shapes and indexing](.
 | [`TensorDictBase.unbind`](generated/tensordict.TensorDictBase.unbind.html#tensordict.TensorDictBase.unbind)(dim) | Returns a tuple of indexed tensordicts, unbound along the indicated dimension. |
 | [`TensorDictBase.narrow`](generated/tensordict.TensorDictBase.narrow.html#tensordict.TensorDictBase.narrow)(dim, start, length) | Returns a new tensordict that is a narrowed version of the input. |
 
-### Shape, batch dimensions and stacking
+### Shape, batch dimensions, and stacking
 
 Read and change the batch size and the dimension names, reshape and expand
 a tensordict, and stack or concatenate several tensordicts. These methods
 change the batch dimensions. The dimensions of each entry after the batch
-dimensions do not change. See [Batch size, shapes and indexing](../concepts/batch_size.html#batch-size) and [Stacking and variable-size data](../concepts/stacking.html#stacking).
+dimensions do not change. See [Batch size, shapes, and indexing](../concepts/batch_size.html#batch-size) and [Stacking and variable-size data](../concepts/stacking.html#stacking).
 
 Methods
 
@@ -264,10 +264,10 @@ Functions
 | [`pad`](generated/tensordict.pad.html#tensordict.pad)(tensordict, pad_size[, value, inplace, safe]) | Pads all tensors in a tensordict along the batch dimensions with a constant value. |
 | [`pad_sequence`](generated/tensordict.pad_sequence.html#tensordict.pad_sequence)(list_of_tensordicts[, pad_dim, ...]) | Pads a list of tensordicts in order for them to be stacked together in a contiguous format. |
 
-### Device, dtype and memory
+### Device, dtype, and memory
 
 Move a tensordict to a device, cast its entries to another dtype, and
-control the memory that holds them. See [Devices, dtypes and memory](../concepts/devices.html#devices).
+control the memory that holds them. See [Devices, dtypes, and memory](../concepts/devices.html#devices).
 
 Device and memory
 
@@ -336,7 +336,7 @@ operators (`+`, `-`, `*`, `/`, `**`, `==`, `&`, ...) call
 these methods. A method whose name ends with an underscore, such as
 `add_`, writes into the existing tensors: see
 [In-place operations](../concepts/operations.html#inplace-conventions). For broadcasting and for tensordicts with
-different keys, see [Arithmetic, apply, reductions and gradients](../concepts/operations.html#operations).
+different keys, see [Arithmetic, apply, reductions, and gradients](../concepts/operations.html#operations).
 
 Arithmetic
 
@@ -458,7 +458,7 @@ Comparisons and logical operations
 
 Reduce each entry over all its elements, or along batch dimensions with
 `dim`. With `reduce=True`, most reductions return one tensor for the
-whole tensordict. See [Arithmetic, apply, reductions and gradients](../concepts/operations.html#operations).
+whole tensordict. See [Arithmetic, apply, reductions, and gradients](../concepts/operations.html#operations).
 
 | [`TensorDictBase.all`](generated/tensordict.TensorDictBase.all.html#tensordict.TensorDictBase.all)([dim]) | Checks if all values are True/non-null in the tensordict. |
 | --- | --- |
@@ -480,12 +480,12 @@ whole tensordict. See [Arithmetic, apply, reductions and gradients](../concepts/
 | [`TensorDictBase.logsumexp`](generated/tensordict.TensorDictBase.logsumexp.html#tensordict.TensorDictBase.logsumexp)([dim, keepdim, out]) | Returns the log of summed exponentials of each row of the input tensordict in the given dimension `dim`. |
 | [`TensorDictBase.norm`](generated/tensordict.TensorDictBase.norm.html#tensordict.TensorDictBase.norm)(*[, out, dtype, ...]) | Computes the norm of each tensor in the tensordict. |
 
-### Apply, modules and gradients
+### Apply, modules, and gradients
 
 Apply a function to every entry, and map a function over the batch. Put
 the parameters of a module in a tensordict and back, and compute
 gradients.
-See [Arithmetic, apply, reductions and gradients](../concepts/operations.html#operations), [Modules: TensorDictModule and tensordict.nn](../modules.html#modules-guide) and [torch.compile, torch.func, torch.export and CUDA graphs](../compile.html#compile).
+See [Arithmetic, apply, reductions, and gradients](../concepts/operations.html#operations), [Modules: TensorDictModule and tensordict.nn](../modules.html#modules-guide), and [torch.compile, torch.func, torch.export, and CUDA graphs](../compile.html#compile).
 
 Methods
 
@@ -515,11 +515,11 @@ Functions
 | [`default_is_leaf`](generated/tensordict.default_is_leaf.html#tensordict.default_is_leaf)(cls) | Returns `True` if a type is not a tensor collection (tensordict or tensorclass), or is a pass-through type. |
 | [`is_leaf_nontensor`](generated/tensordict.is_leaf_nontensor.html#tensordict.is_leaf_nontensor)(cls) | Returns `True` if a type is not a tensor collection (tensordict or tensorclass) or is a non-tensor. |
 
-### Saving, loading and file formats
+### Saving, loading, and file formats
 
 Save a tensordict to disk and load it again, and write its entries to
-memory-mapped files. Other methods read and write HDF5, zarr, CSV, JSON,
-Parquet and MDS files, and key-value stores.
+memory-mapped files. Other methods read and write key-value stores, and HDF5,
+zarr, CSV, JSON, Parquet, and MDS files.
 `memmap(return_early=True)` returns a
 [`TensorDictFuture`](generated/tensordict.utils.TensorDictFuture.html#tensordict.utils.TensorDictFuture). See [Save and load tensordicts](../saving.html#saving) and
 [Large datasets and storage backends](../storage.html#storage).
@@ -575,11 +575,11 @@ Functions
 
 ### Locking
 
-A locked tensordict raises an error if you add, replace, rename or delete
+A locked tensordict raises an error if you add, replace, rename, or delete
 an entry. In-place writes with `set_` still work, except for non-tensor
 entries ([#2288](https://github.com/pytorch/tensordict/issues/2288)). `unlock_` also works
 in a `with` block: the tensordict is locked again at the end of the
-block. See [Keys, nested keys and locking](../concepts/keys.html#keys).
+block. See [Keys, nested keys, and locking](../concepts/keys.html#keys).
 
 | [`TensorDictBase.lock_`](generated/tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_)() | Locks the tensordict and its sub-tensordicts, and returns it. |
 | --- | --- |
@@ -621,7 +621,7 @@ Their pages name the replacement and the release that removes them.
 
 ### Type checks and testing
 
-Test whether an object is a tensordict, a tensorclass or non-tensor data,
+Test whether an object is a tensordict, a tensorclass, or non-tensor data,
 and compare two tensordicts in tests.
 
 | [`is_tensor_collection`](generated/tensordict.is_tensor_collection.html#tensordict.is_tensor_collection)(datatype) | Checks if a data object or a type is a tensor container from the tensordict lib. |
@@ -682,9 +682,9 @@ tree that is not installed.
 
 ## See also
 
-- [What is TensorDict?](../overview.html#overview), [Batch size, shapes and indexing](../concepts/batch_size.html#batch-size), [Keys, nested keys and locking](../concepts/keys.html#keys), [Stacking and variable-size data](../concepts/stacking.html#stacking),
-[Arithmetic, apply, reductions and gradients](../concepts/operations.html#operations) and [Devices, dtypes and memory](../concepts/devices.html#devices): the user guide pages that explain
+- [What is TensorDict?](../overview.html#overview), [Batch size, shapes, and indexing](../concepts/batch_size.html#batch-size), [Keys, nested keys, and locking](../concepts/keys.html#keys), [Stacking and variable-size data](../concepts/stacking.html#stacking),
+[Arithmetic, apply, reductions, and gradients](../concepts/operations.html#operations), and [Devices, dtypes, and memory](../concepts/devices.html#devices): the user guide pages that explain
 these methods.
-- [Save and load tensordicts](../saving.html#saving), [Large datasets and storage backends](../storage.html#storage), [Load data and share it between processes](../data_loading.html#data-loading) and
+- [Save and load tensordicts](../saving.html#saving), [Large datasets and storage backends](../storage.html#storage), [Load data and share it between processes](../data_loading.html#data-loading), and
 [Distributed tensordicts](../distributed.html#distributed): the how-to guides.
 - [Utilities](utils.html#api-utils): the helpers of `tensordict.utils`.

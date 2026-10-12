@@ -1,18 +1,18 @@
-# torch.compile, torch.func, torch.export and CUDA graphs
+# torch.compile, torch.func, torch.export, and CUDA graphs
 
 This page lists what works when tensordicts and tensorclasses go through
-[`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), [`torch.func`](https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func), [`torch.export.export()`](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export) and CUDA
+[`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), [`torch.func`](https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func), [`torch.export.export()`](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export), and CUDA
 graphs, what makes a function recompile or fail, and how to work around each
 limit.
 
 ## How tensordicts compile
 
-[`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), [`LazyStackedTensorDict`](reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict)
+[`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), [`LazyStackedTensorDict`](reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict),
 and tensorclasses are registered as pytree nodes, so [`torch.func`](https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func) and
 [`torch.export.export()`](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export) see their tensors as leaves. Inside
 [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), Dynamo traces the Python code of tensordict like user
-code: indexing, `apply`, arithmetic, reductions (see [Arithmetic, apply, reductions and gradients](concepts/operations.html#operations)),
-shape operations, stacking and construction all end up in the graph. Most
+code: indexing, `apply`, arithmetic, reductions (see [Arithmetic, apply, reductions, and gradients](concepts/operations.html#operations)),
+shape operations, stacking, and construction all end up in the graph. Most
 operations compile with `fullgraph=True`. With that flag, a graph break
 raises an error instead of splitting the function into several graphs.
 
@@ -30,8 +30,10 @@ raises an error instead of splitting the function into several graphs.
 ... def step(data):
 ... return Transition(data.obs + 1, data.reward * 0.5, batch_size=data.batch_size)
 >>> td = TensorDict(
-... obs=torch.randn(8, 3),
-... next=TensorDict(obs=torch.randn(8, 3), batch_size=[8]),
+... {
+... "obs": torch.randn(8, 3),
+... "next": TensorDict({"obs": torch.randn(8, 3)}, batch_size=[8]),
+... },
 ... batch_size=[8],
 ... )
 >>> scale(td).batch_size
@@ -62,7 +64,7 @@ depend on the other keys.
 
 Writing into an input tensordict
 
-`td["y"] = ...`, `td.set`, `td.update` and a
+`td["y"] = ...`, `td.set`, `td.update`, and a
 [`TensorDictModule`](reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule) (which writes its `out_keys` into
 its input, see [Modules: TensorDictModule and tensordict.nn](modules.html#modules-guide)) recompile whenever the key set of the
 input changes, even when the key written already exists. Dynamo guards on
@@ -76,8 +78,8 @@ function and write it into the input outside:
 ```
 >>> @torch.compile(fullgraph=True)
 ... def policy(td):
-... return TensorDict(action=td["obs"].tanh(), batch_size=td.batch_size)
->>> td = TensorDict(obs=torch.randn(4, 3), batch_size=[4])
+... return TensorDict({"action": td["obs"].tanh()}, batch_size=td.batch_size)
+>>> td = TensorDict({"obs": torch.randn(4, 3)}, batch_size=[4])
 >>> td["action"] = policy(td)["action"]
 ```
 
@@ -89,7 +91,7 @@ The first call with a new batch size recompiles once with dynamic shapes
 `torch._dynamo.mark_dynamic` on an entry does not: the batch size holds
 Python ints, and a function that builds a tensordict with
 `batch_size=td.batch_size` then raises `ConstraintViolationError`.
-`split`, `chunk`, `unbind` and `tolist` recompile for each batch
+`split`, `chunk`, `unbind`, and `tolist` recompile for each batch
 size, also after that.
 
 Lazy stacks of another length
@@ -103,7 +105,7 @@ Strings in the output
 Each distinct `str` value of a tensorclass field or of a
 [`NonTensorData`](reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData) entry (see [Non-tensor data and unbatched entries](concepts/non_tensor.html#non-tensor-data))
 recompiles the function when the function returns it, for instance
-through `apply`, `clone` or the constructor of a tensorclass. Dynamo
+through `apply`, `clone`, or the constructor of a tensorclass. Dynamo
 specializes the graph on the value. Reading only the tensors does not
 recompile. Return tensors from the
 compiled function and rebuild the tensorclass outside, or keep the strings
@@ -125,15 +127,15 @@ batch size.
 ## Known limits
 
 The following patterns break the graph (an error with `fullgraph=True`).
-The error messages in the table are those of PyTorch 2.13, 2.14 and the 2.16
+The error messages in the table are those of PyTorch 2.13, 2.14, and the 2.16
 nightly. Other versions can word them differently.
 
 | Pattern | What happens | Workaround |
 | --- | --- | --- |
 | `td * t`, `t * td`, `td + t`, `td -= t` where `t` is a [`Tensor`](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) (also with tensorclasses) | Dynamo turns the operator into a `Tensor` method and does not call `TensorDict.__mul__` ([pytorch/pytorch#200455](https://github.com/pytorch/pytorch/issues/200455)): `Unsupported: All __torch_function__ overrides returned NotImplemented`. Operators with a Python number or another tensordict work. | Call the method: `td.mul(t)`, `td.add(t)`, `td.sub_(t)`. |
 | `td.all()`, `td.any()` without `dim`, and `if (td == other).all():` | These return a Python `bool`, so the graph depends on tensor values: `Unsupported: Data-dependent branching`. | Reduce in the graph: `torch.stack([v.all() for v in td.values(include_nested=True, leaves_only=True)]).all()`, and select with [`torch.where()`](https://docs.pytorch.org/docs/stable/generated/torch.where.html#torch.where) instead of `if`. `td.all(dim=0)` returns a tensordict and compiles. |
-| Boolean-mask indexing: `td[mask]`, `td[mask] = other[mask]` | The result has a data-dependent shape, also with `torch._dynamo.config.capture_dynamic_output_shape_ops = True`: `Could not guard on data-dependent expression`. | Keep the shapes fixed: `torch.where(mask, td, other)`, `td.where(mask, other)` or `td.masked_fill(~mask, 0.0)`, or index outside the compiled function. |
-| `memmap`, `memmap_like`, `share_memory_`, `to_namedtuple`, `data_ptr` | Eager-only operations (files, shared memory, Python classes built at run time). See [Devices, dtypes and memory](concepts/devices.html#devices) and [Save and load tensordicts](saving.html#saving). | Call them outside the compiled function. |
+| Boolean-mask indexing: `td[mask]`, `td[mask] = other[mask]` | The result has a data-dependent shape, also with `torch._dynamo.config.capture_dynamic_output_shape_ops = True`: `Could not guard on data-dependent expression`. | Keep the shapes fixed: `torch.where(mask, td, other)`, `td.where(mask, other)`, or `td.masked_fill(~mask, 0.0)`, or index outside the compiled function. |
+| `memmap`, `memmap_like`, `share_memory_`, `to_namedtuple`, `data_ptr` | Eager-only operations (files, shared memory, Python classes built at run time). See [Devices, dtypes, and memory](concepts/devices.html#devices) and [Save and load tensordicts](saving.html#saving). | Call them outside the compiled function. |
 | `loss.backward()` or `torch.autograd.grad` inside the compiled function | Dynamo does not trace the backward pass: `Unsupported Tensor.backward() call`. | Return the loss and call `loss.backward()` outside. |
 | Building a [`TensorDictSequential`](reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential) inside the compiled function (`seq[:2](td)`, `seq.select_subsequence(...)`) | Dynamo cannot build the new module inside the graph: `Unexpected type in sourceless builder`. | Build the subsequence once, outside, and call it inside. |
 
@@ -145,7 +147,7 @@ tensordict methods, arithmetic included, work on the per-sample tensordict.
 `torch.compile(torch.vmap(fn))` compiles the same code.
 
 ```
->>> td = TensorDict(a=torch.randn(5, 3), b=torch.randn(5, 3), batch_size=[5])
+>>> td = TensorDict({"a": torch.randn(5, 3), "b": torch.randn(5, 3)}, batch_size=[5])
 >>> torch.vmap(lambda t: (t * 2 + 1).exp())(td).batch_size
 torch.Size([5])
 >>> torch.vmap(lambda t, x: t["a"] @ x, (0, None))(td, torch.randn(3)).shape
@@ -157,7 +159,7 @@ operation per entry, so they are slower than in eager mode
 ([pytorch/pytorch#200456](https://github.com/pytorch/pytorch/issues/200456)).
 
 [`torch.func.grad()`](https://docs.pytorch.org/docs/stable/generated/torch.func.grad.html#torch.func.grad), [`grad_and_value()`](https://docs.pytorch.org/docs/stable/generated/torch.func.grad_and_value.html#torch.func.grad_and_value),
-[`vjp()`](https://docs.pytorch.org/docs/stable/generated/torch.func.vjp.html#torch.func.vjp) and [`jacrev()`](https://docs.pytorch.org/docs/stable/generated/torch.func.jacrev.html#torch.func.jacrev) accept tensordict
+[`vjp()`](https://docs.pytorch.org/docs/stable/generated/torch.func.vjp.html#torch.func.vjp), and [`jacrev()`](https://docs.pytorch.org/docs/stable/generated/torch.func.jacrev.html#torch.func.jacrev) accept tensordict
 inputs. The gradient is a tensordict with the structure of the input:
 
 ```
@@ -167,11 +169,11 @@ inputs. The gradient is a tensordict with the structure of the input:
 
 For Jacobians and Hessians of functions that take and return tensordicts,
 and for `torch.autograd.grad` and `backward` on tensordicts, see the
-"Gradients" section of [Arithmetic, apply, reductions and gradients](concepts/operations.html#operations).
+"Gradients" section of [Arithmetic, apply, reductions, and gradients](concepts/operations.html#operations).
 
 To call a module with other parameters, extract them with
 [`from_module()`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.from_module) and swap them in with
-[`to_module()`](reference/generated/tensordict.TensorDictBase.to_module.html#tensordict.TensorDictBase.to_module). This works in eager mode, compiled
+[`to_module()`](reference/generated/tensordict.TensorDictBase.to_module.html#tensordict.TensorDictBase.to_module). This works in eager mode, compiled,
 and under [`torch.vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap), which gives model ensembles and per-sample
 gradients:
 
@@ -208,11 +210,13 @@ list for a nested tensordict:
 ```
 >>> class Model(nn.Module):
 ... def forward(self, td):
-... return TensorDict(c=td["a"] * 2 + td["n", "b"], batch_size=td.batch_size)
+... return TensorDict({"c": td["a"] * 2 + td["n", "b"]}, batch_size=td.batch_size)
 >>> def make(batch):
 ... return TensorDict(
-... a=torch.randn(batch, 3),
-... n=TensorDict(b=torch.randn(batch, 3), batch_size=[batch]),
+... {
+... "a": torch.randn(batch, 3),
+... "n": TensorDict({"b": torch.randn(batch, 3)}, batch_size=[batch]),
+... },
 ... batch_size=[batch],
 ... )
 >>> batch = torch.export.Dim("batch")
@@ -255,7 +259,7 @@ data-dependent control flow, and inputs that do not require gradients.
 >>> module = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
 >>> graph_module = CudaGraphModule(module)
 >>> results = [
-... graph_module(TensorDict(x=torch.full((3,), float(i), device="cuda"), batch_size=[3]))
+... graph_module(TensorDict({"x": torch.full((3,), float(i), device="cuda")}, batch_size=[3]))
 ... for i in range(4)
 ... ]
 >>> [result["y"][0].item() for result in results]
@@ -313,7 +317,7 @@ For example:
 ... )
 >>> with torch.no_grad():
 ... outputs = [
-... policy(TensorDict(obs=torch.randn(8, 3, device="cuda"), batch_size=[8])).clone()
+... policy(TensorDict({"obs": torch.randn(8, 3, device="cuda")}, batch_size=[8])).clone()
 ... for _ in range(4)
 ... ]
 >>> outputs[0]["action"].shape
@@ -322,9 +326,9 @@ torch.Size([8, 4])
 
 ## See also
 
-- [Arithmetic, apply, reductions and gradients](concepts/operations.html#operations): arithmetic, `apply`, reductions and gradients with
+- [Arithmetic, apply, reductions, and gradients](concepts/operations.html#operations): arithmetic, `apply`, reductions, and gradients with
 tensordicts.
 - [Modules: TensorDictModule and tensordict.nn](modules.html#modules-guide): [`TensorDictModule`](reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule) and the
 other modules of `tensordict.nn`.
-- [Devices, dtypes and memory](concepts/devices.html#devices): `to()`, pinned memory and shared memory.
+- [Devices, dtypes, and memory](concepts/devices.html#devices): `to()`, pinned memory, and shared memory.
 - [FX tracing (prototype)](fx.html#fx): FX tracing of tensordict modules, a prototype.

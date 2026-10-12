@@ -9,15 +9,17 @@ Available options.
 
 ## What `print` shows
 
-By default, the display shows the shape, device, dtype and `is_shared` of
-each entry, and the batch size, device and `is_shared` of the tensordict:
+By default, the display shows the shape, device, dtype, and `is_shared` of
+each entry, and the batch size, device, and `is_shared` of the tensordict:
 
 ```
 >>> import torch
 >>> from tensordict import TensorDict
 >>> td = TensorDict(
-... image=torch.randn(32, 3, 64, 64),
-... label=torch.randint(10, (32,)),
+... {
+... "image": torch.randn(32, 3, 64, 64),
+... "label": torch.randint(10, (32,)),
+... },
 ... batch_size=[32],
 ... )
 >>> print(td)
@@ -35,7 +37,7 @@ TensorDict(
 If all your work is on the CPU and nothing is shared, `device=cpu` and
 `is_shared=False` repeat on every line and tell you nothing.
 [`set_printoptions`](reference/generated/tensordict.set_printoptions.html#tensordict.set_printoptions) selects the attributes that appear. It
-works for the whole process, as a context manager or as a decorator, as
+works for the whole process, as a context manager, or as a decorator, as
 [`torch.no_grad`](https://docs.pytorch.org/docs/stable/generated/torch.no_grad.html#torch.no_grad) does for the last two. Its role is similar to
 [`torch.set_printoptions()`](https://docs.pytorch.org/docs/stable/generated/torch.set_printoptions.html#torch.set_printoptions), which is only a function.
 
@@ -121,7 +123,7 @@ TensorDict(
 ### Shapes only: `verbose=False`
 
 To see only the shapes, pass `verbose=False`. This one argument hides the
-device, the dtype and `is_shared`:
+device, the dtype, and `is_shared`:
 
 ```
 >>> with set_printoptions(verbose=False):
@@ -200,7 +202,7 @@ When you debug, you sometimes have only the printed form of a tensordict, for
 example from a log file or from the terminal of a colleague.
 [`parse_tensor_dict_string()`](reference/generated/tensordict.parse_tensor_dict_string.html#tensordict.parse_tensor_dict_string) builds a
 [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) from that string. The result has the keys,
-shapes, dtypes, batch size and device of the printed tensordict. All the
+shapes, dtypes, batch size, and device of the printed tensordict. All the
 values are zeros, because the repr does not contain the data:
 
 ```
@@ -220,7 +222,7 @@ torch.Size([32, 3, 64, 64])
 ```
 
 [`parse_tensor_dict_string()`](reference/generated/tensordict.parse_tensor_dict_string.html#tensordict.parse_tensor_dict_string) is a debugging aid. It reads
-the default print format, with `shape=`, `device=`, `dtype=` and
+the default print format, with `shape=`, `device=`, `dtype=`, and
 `is_shared=` for each field. It reads nested tensordicts at any depth, keys
 with any character, such as `my-key`, and devices with an index, such as
 `cuda:0`. It has these limits:
@@ -239,7 +241,7 @@ stack with exclusive keys, it raises a `RuntimeError`
 ## See also
 
 - The reference entries of [`set_printoptions`](reference/generated/tensordict.set_printoptions.html#tensordict.set_printoptions),
-[`get_printoptions()`](reference/generated/tensordict.get_printoptions.html#tensordict.get_printoptions) and
+[`get_printoptions()`](reference/generated/tensordict.get_printoptions.html#tensordict.get_printoptions), and
 [`parse_tensor_dict_string()`](reference/generated/tensordict.parse_tensor_dict_string.html#tensordict.parse_tensor_dict_string).
-- [Devices, dtypes and memory](concepts/devices.html#devices): what `device=None` in the repr means.
+- [Devices, dtypes, and memory](concepts/devices.html#devices): what `device=None` in the repr means.
 - [Non-tensor data and unbatched entries](concepts/non_tensor.html#non-tensor-data): how non-tensor entries appear in the repr.

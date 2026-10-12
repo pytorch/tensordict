@@ -21,7 +21,7 @@ minor release without a deprecation cycle.
 
 Both classes have the methods of [`TensorDictBase`](generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase),
 listed by task in [Methods by task](td.html#api-tensordict-methods). Their pages list the
-methods that they add, such as `from_store`, `close` and
+methods that they add, such as `from_store`, `close`, and
 `clear_redis`. `STORE_BACKENDS` is the type of their `backend`
 argument.
 
@@ -36,13 +36,13 @@ argument.
 
 Warning
 
-`TensorDictPipe`, `TensorDictServer`, `send_tensordict` and
+`TensorDictPipe`, `TensorDictServer`, `send_tensordict`, and
 `recv_tensordict` are experimental: their API can change in a minor
 release without a deprecation cycle.
 
 UCXX is the Python interface of UCX, a communication library that
 chooses the transport between two processes, such as shared memory,
-InfiniBand or TCP. These classes and functions need the optional `ucxx`
+InfiniBand, or TCP. These classes and functions need the optional `ucxx`
 package.
 
 - A [`TensorDictPipe`](generated/tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe) is a channel between two
@@ -73,7 +73,7 @@ path for now, although the module name starts with an underscore.
 
 ## See also
 
-- [Large datasets and storage backends](../storage.html#storage): start a server, write a tensordict to it and read it
+- [Large datasets and storage backends](../storage.html#storage): start a server, write a tensordict to it, and read it
 back.
 - [Containers on storage backends](../compatibility.html#compatibility): which containers work on a store.
 - [Distributed tensordicts](../distributed.html#distributed): send tensordicts between processes.

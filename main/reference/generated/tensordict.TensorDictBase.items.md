@@ -5,7 +5,7 @@ TensorDictBase.items(*include_nested: [bool](https://docs.python.org/3/builtins/
 Returns a generator of the `(key, value)` pairs of the tensordict.
 
 By default, only the top-level entries are returned, and a
-sub-tensordict is returned as one value. See [Keys, nested keys and locking](../../concepts/keys.html#keys) for nested
+sub-tensordict is returned as one value. See [Keys, nested keys, and locking](../../concepts/keys.html#keys) for nested
 keys and leaves.
 
 Parameters:
@@ -59,6 +59,6 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 Functional calls and ensembles with TensorDict
 ![](../../_images/sphx_glr_tensordict_keys_thumb.png)
 
-[Getting, setting and nesting keys](../../tutorials/tensordict_keys.html)
+[Getting, setting, and nesting keys](../../tutorials/tensordict_keys.html)
 
-Getting, setting and nesting keys
+Getting, setting, and nesting keys

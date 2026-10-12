@@ -5,7 +5,7 @@ to download the full example code.
 
 # Batched data loading with tensorclasses
 
-A `torchvision` image pipeline opens, decodes and transforms each image
+A `torchvision` image pipeline opens, decodes, and transforms each image
 file again at every epoch, one image at a time. This tutorial stores the
 images once in the memory-mapped fields of a [`TensorClass`](../reference/generated/tensordict.TensorClass.html#tensordict.TensorClass),
 then reads and transforms whole batches. A memory-mapped tensor is a tensor
@@ -206,7 +206,7 @@ train_collate_transform = nn.Sequential(
 
 A tensorclass is the class form of a tensordict: a dataclass whose fields
 are tensors. Like a [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), it has a batch size,
-and you can index it, move it to a device or memory-map it. Use a
+and you can index it, move it to a device, or memory-map it. Use a
 tensorclass when you know the fields of your data in advance. To define one, subclass
 [`TensorClass`](../reference/generated/tensordict.TensorClass.html#tensordict.TensorClass).
 
@@ -265,7 +265,7 @@ ImageNetData(
 
 ## DataLoaders
 
-A tensorclass implements `__len__`, `__getitem__` and `__getitems__`,
+A tensorclass implements `__len__`, `__getitem__`, and `__getitems__`,
 so you can pass it to a `DataLoader` as a map-style dataset. The
 `DataLoader` then reads each batch with one batched index, and the result
 is already an `ImageNetData` batch. The `collate_fn` receives this
@@ -327,7 +327,7 @@ val_dataloader_tc = DataLoader( # noqa: TOR401
 
 The loops below measure how many images per second each data loader
 delivers in one pass over the data. The regular data loader reads the
-images one by one from disk, applies the transform to each image and then
+images one by one from disk, applies the transform to each image, and then
 stacks the results. The timer starts at the fourth batch, because the
 first batches include the start of the worker processes.
 
@@ -352,12 +352,12 @@ measure(train_dataloader_tc, "train, tensorclass DataLoader")
 ```
 
 ```
-train, regular DataLoader: 974 images per second, 0.23 s
-train, tensorclass DataLoader: 3494 images per second, 0.06 s
+train, regular DataLoader: 1040 images per second, 0.21 s
+train, tensorclass DataLoader: 3823 images per second, 0.06 s
 ```
 
 The tensorclass data loader reads `uint8` batches from the memory-mapped
-tensor. Then it normalizes, crops and flips each batch with one call per
+tensor. Then it normalizes, crops, and flips each batch with one call per
 transform.
 
 For the validation data, the memory-mapped tensor already holds the
@@ -370,12 +370,12 @@ measure(val_dataloader_tc, "val, tensorclass DataLoader")
 ```
 
 ```
-val, regular DataLoader: 579 images per second, 0.22 s
-val, tensorclass DataLoader: 14679 images per second, 0.01 s
+val, regular DataLoader: 598 images per second, 0.22 s
+val, tensorclass DataLoader: 14684 images per second, 0.01 s
 ```
 
 The rates above come from the machine that built this page. They depend on
-the number of CPU cores, the disk and the device. This dataset is small (244
+the number of CPU cores, the disk, and the device. This dataset is small (244
 training images and 153 validation images), so run the script on your own
 data before you choose a pipeline.
 
@@ -384,7 +384,7 @@ data before you choose a pipeline.
 The charts below come from a run of an earlier version of this tutorial on
 the full ImageNet dataset, in February 2023 (tensordict 0.0.3). The machine
 was an AWS EC2 instance with 32 CPU cores and one A100 GPU. The charts
-compare the regular `DataLoader` with 8, 16 and 32 workers, the
+compare the regular `DataLoader` with 8, 16, and 32 workers, the
 single-process tensorclass loader of this tutorial, and distributed
 versions of the tensorclass loader.
 
@@ -397,7 +397,7 @@ workers, and 1169 s with 8 workers. The distributed rows use several
 processes to read batches from the memory-mapped tensor, on one or five
 GPUs. The code of the distributed benchmark is in
 [benchmarks/distributed/test_dataloading.py](https://github.com/pytorch/tensordict/blob/main/benchmarks/distributed/test_dataloading.py).
-It needs ImageNet, several GPUs and `torch.distributed.rpc`.
+It needs ImageNet, several GPUs, and `torch.distributed.rpc`.
 
 ## Conclusion
 
@@ -418,7 +418,7 @@ again.
 - [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) applies the same idea to
 a smaller dataset and trains a model on it.
 
-**Total running time of the script:** (0 minutes 1.550 seconds)
+**Total running time of the script:** (0 minutes 1.493 seconds)
 
 [`Download Jupyter notebook: tensorclass_imagenet.ipynb`](../_downloads/a4db2295c156dd86b1f4437d354c9744/tensorclass_imagenet.ipynb)
 

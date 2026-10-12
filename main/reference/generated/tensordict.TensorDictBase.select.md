@@ -8,7 +8,7 @@ The values are not copied. The result shares its tensors with the
 original, so an in-place change to a tensor in one tensordict shows in
 the other. A nested key selects one entry of a sub-tensordict, and a
 key of a sub-tensordict selects the whole sub-tensordict. See
-[Keys, nested keys and locking](../../concepts/keys.html#keys).
+[Keys, nested keys, and locking](../../concepts/keys.html#keys).
 
 Parameters:
 
@@ -88,9 +88,9 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 Building tensordicts from streams
 ![](../../_images/sphx_glr_tensordict_keys_thumb.png)
 
-[Getting, setting and nesting keys](../../tutorials/tensordict_keys.html)
+[Getting, setting, and nesting keys](../../tutorials/tensordict_keys.html)
 
-Getting, setting and nesting keys
+Getting, setting, and nesting keys
 ![](../../_images/sphx_glr_tensordict_module_thumb.png)
 
 [Building models with TensorDictModule](../../tutorials/tensordict_module.html)

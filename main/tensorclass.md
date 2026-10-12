@@ -5,7 +5,7 @@ annotations, as in a [`dataclass()`](https://docs.python.org/3/library/dataclass
 once. A method then runs on one item or on a batch of any shape, and compiles
 with `torch.compile(fullgraph=True)`. The instances have the tensor
 operations of a [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict): indexing, reshaping,
-`to(device)`, `torch.stack`, `torch.cat` and saving to disk.
+`to(device)`, `torch.stack`, `torch.cat`, and saving to disk.
 
 ```
 >>> import torch
@@ -42,7 +42,7 @@ True
 
 `step` has no loop over the systems and no shape argument. The *batch size*
 (`[64, 1000]` here) is the leading dimensions that all the fields share (see
-[Batch size, shapes and indexing](concepts/batch_size.html#batch-size)). An index or a `reshape` applies to these dimensions and
+[Batch size, shapes, and indexing](concepts/batch_size.html#batch-size)). An index or a `reshape` applies to these dimensions and
 returns a `Particles`. So the same method runs on one system or on a grid
 of systems. The compiled `step` gives the same result as the eager
 `step`. The class declares its fields, so your editor completes
@@ -116,7 +116,7 @@ torch.Size([2, 4, 5])
 ```
 
 The shape and device operations of [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) work on a
-tensorclass: `stack`, `cat`, `reshape`, `to`, `clone`, `apply` and
+tensorclass: `stack`, `cat`, `reshape`, `to`, `clone`, `apply`, and
 the others. They return an instance of the same class:
 
 ```
@@ -147,8 +147,8 @@ of the data as a [`TensorDict`](reference/generated/tensordict.TensorDict.html#t
 ## Methods
 
 A tensorclass is a Python class: you can add methods, properties, class
-methods and class constants to it. Of the dataclass features,
-`__post_init__`, field defaults and a custom `__init__` work, with the
+methods, and class constants to it. Of the dataclass features,
+`__post_init__`, field defaults, and a custom `__init__` work, with the
 rules below.
 
 ### Methods and properties
@@ -210,7 +210,7 @@ tensor([True, True, True])
 ```
 
 `__post_init__` also runs each time tensordict makes a new instance from an
-existing one: an index, `clone`, `torch.stack`, `apply` and
+existing one: an index, `clone`, `torch.stack`, `apply`, and
 `from_tensordict`. Do little work in it, and make sure that a second run
 gives the same result. In the example above, the second run finds a mask and
 keeps it.
@@ -218,7 +218,7 @@ keeps it.
 ### A custom `__init__`
 
 If the class defines `__init__`, it replaces the generated one. When it
-runs, the instance already exists, with the `batch_size`, `device` and
+runs, the instance already exists, with the `batch_size`, `device`, and
 `names` that the caller passed as keyword arguments. Assign the fields as
 attributes. To set the batch size from the data, assign `self.batch_size`
 after the fields:
@@ -240,7 +240,7 @@ These rules apply to a custom `__init__`:
 
 - If it does not set a required field, the constructor raises
 `TypeError: Points.__init__() did not set the required field 'xyz'`.
-- Indexing, `clone`, `torch.stack` and the other operations make new
+- Indexing, `clone`, `torch.stack`, and the other operations make new
 instances without a call to `__init__`. So `__init__` must only fill
 the fields, and the fields must be enough to rebuild the instance.
 - As in a dataclass, a custom `__init__` does not call `__post_init__`.
@@ -330,7 +330,7 @@ Slots(
  is_shared=False)
 ```
 
-### Comparison, item assignment and concatenation
+### Comparison, item assignment, and concatenation
 
 `==` and `!=` compare two tensorclasses field by field, also the nested
 ones. The result is a tensorclass with a boolean tensor for each field. For a
@@ -418,7 +418,7 @@ annotation of its field. See Auto-casting.
 `nocast`
 
 Python numbers and NumPy arrays stay as they are. Without this flag, an
-`int`, `float`, `bool` or NumPy array becomes a tensor.
+`int`, `float`, `bool`, or NumPy array becomes a tensor.
 
 `tensor_only`
 
@@ -443,12 +443,12 @@ Assigning a field raises [`dataclasses.FrozenInstanceError`](https://docs.python
 `shadow`
 
 Allows field names that are members of a tensorclass, for example
-`batch_size`, `device`, `names`, `sum`, `keys`, `get` or
+`batch_size`, `device`, `names`, `sum`, `keys`, `get`, or
 `to_dict`. Without this flag, such a name raises `AttributeError` when
 the class is defined. A field named `data` or `fields` is allowed
 without the flag, and it replaces the member of that name.
 
-`autocast`, `nocast` and `tensor_only` are mutually exclusive. A class
+`autocast`, `nocast`, and `tensor_only` are mutually exclusive. A class
 with two of them raises `TypeError`.
 
 ### Auto-casting
@@ -463,8 +463,8 @@ to the annotation of its field:
 
 - A dict becomes a [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), or the tensorclass of the
 annotation.
-- A value for an `int`, `float` or `str` field becomes an `int`,
-`float` or `str`. For example, `torch.tensor(3)` becomes `3`.
+- A value for an `int`, `float`, or `str` field becomes an `int`,
+`float`, or `str`. For example, `torch.tensor(3)` becomes `3`.
 - A value for a `torch.Tensor` field goes through [`torch.as_tensor()`](https://docs.pytorch.org/docs/stable/generated/torch.as_tensor.html#torch.as_tensor).
 A value that it cannot convert, for example a `str`, raises `TypeError`.
 
@@ -492,9 +492,9 @@ In this example, the dict of `td` becomes a `TensorDict`, the dict of
 
 `update()` and `from_dict()` also convert a dict into the
 `TensorDict` or tensorclass of its field. They do not convert values to
-`int`, `float` or `str`.
+`int`, `float`, or `str`.
 
-A field annotated with `Optional[...]`, `Union[...]` or `A | B` is not
+A field annotated with `Optional[...]`, `Union[...]`, or `A | B` is not
 auto-cast. A dict that you assign to it stays a dict, because a tensorclass
 can hold values that are not tensors. The other fields of the class are still
 auto-cast:
@@ -522,7 +522,7 @@ module level.
 With `frozen`, assigning a field raises
 [`dataclasses.FrozenInstanceError`](https://docs.python.org/3/library/dataclasses.html#dataclasses.FrozenInstanceError), as with `@dataclass(frozen=True)`.
 The instance is also locked, so you cannot add entries to it (see
-[Keys, nested keys and locking](concepts/keys.html#keys)):
+[Keys, nested keys, and locking](concepts/keys.html#keys)):
 
 ```
 >>> class State(TensorClass["frozen"]):
@@ -615,9 +615,9 @@ example.
 
 ## `torch.compile`
 
-Tensorclasses work with [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), [`torch.func`](https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func) and
+Tensorclasses work with [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), [`torch.func`](https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func), and
 [`torch.export.export()`](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export). The `Particles` example at the top of this page
-compiles a method with `fullgraph=True`. [torch.compile, torch.func, torch.export and CUDA graphs](compile.html#compile) lists what makes a
+compiles a method with `fullgraph=True`. [torch.compile, torch.func, torch.export, and CUDA graphs](compile.html#compile) lists what makes a
 function recompile or break its graph, and the workarounds. Two of them
 concern tensorclasses:
 
@@ -629,8 +629,8 @@ tensorclass is defined.
 
 Type checkers read the fields of a [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) subclass
 as its constructor signature, as they do for a `@dataclass`. The
-keyword-only `batch_size`, `device`, `names` and `lock` arguments
-follow the fields. A missing field, an unknown keyword argument or a value of
+keyword-only `batch_size`, `device`, `names`, and `lock` arguments
+follow the fields. A missing field, an unknown keyword argument, or a value of
 the wrong type is an error:
 
 ```
@@ -641,7 +641,7 @@ the wrong type is an error:
 >>> obs = Obs(a=[0.0, 1.0, 2.0], batch_size=[3]) # error: a list is not a Tensor
 ```
 
-The constructor converts a list, a NumPy array or a Python number that you
+The constructor converts a list, a NumPy array, or a Python number that you
 pass to a `torch.Tensor` field. A type checker expects a tensor there, so
 pass `torch.as_tensor(value)`. Tensordict methods such as `reshape` and
 an index return the type of the class.
@@ -672,7 +672,7 @@ methods written in the class body. `__init__` is not marked: it keeps the
 annotations of the fields, or those of a user-defined `__init__`.
 
 Some methods of a tensorclass have the names of builtins, such as `bool`,
-`int`, `float`, `set` and `type`. With
+`int`, `float`, `set`, and `type`. With
 `from __future__ import annotations`, annotations are strings. A checker that
 evaluates them in the namespace of the class finds these methods there when
 the class uses the `@tensorclass` decorator, so an `int` annotation names
@@ -702,12 +702,12 @@ The decorator accepts each flag as a keyword argument:
 ## See also
 
 - [tensorclass and non-tensor data](reference/tc.html#api-tensorclass): the reference of [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass),
-[`tensorclass()`](reference/generated/tensordict.tensorclass.html#tensordict.tensorclass), [`from_dataclass()`](reference/generated/tensordict.from_dataclass.html#tensordict.from_dataclass) and the
+[`tensorclass()`](reference/generated/tensordict.tensorclass.html#tensordict.tensorclass), [`from_dataclass()`](reference/generated/tensordict.from_dataclass.html#tensordict.from_dataclass), and the
 non-tensor classes.
 - [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide): typed fields on a
 [`TensorDictBase`](reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) subclass.
 - [Which container should I use?](choosing_a_container.html#choosing-a-container): which container to use.
-- [Containers on storage backends](compatibility.html#compatibility): tensorclasses on HDF5, Redis, lazy stacks and
+- [Containers on storage backends](compatibility.html#compatibility): tensorclasses on HDF5, Redis, lazy stacks, and
 memory-mapped tensordicts.
 - The tutorials [Using tensorclasses for datasets](tutorials/tensorclass_fashion.html) and
 [Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html).

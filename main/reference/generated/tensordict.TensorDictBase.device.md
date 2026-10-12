@@ -9,7 +9,7 @@ its tensors (incl. nested ones) must live on the same device: the
 tensors that you pass to the constructor or set later are moved to
 it. If the TensorDict device is `None`, different values can be
 located on different devices. The device is not inferred from the
-tensors. See [Devices, dtypes and memory](../../concepts/devices.html#devices).
+tensors. See [Devices, dtypes, and memory](../../concepts/devices.html#devices).
 
 Returns:
 

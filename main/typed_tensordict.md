@@ -117,7 +117,7 @@ A `TypedTensorDict` stores each value as a [`TensorDict`](reference/generated/te
 does, whatever the annotation. It does not compare the values with the
 annotations:
 
-- A Python number, a `bool` or a list of numbers becomes a tensor. A number
+- A Python number, a `bool`, or a list of numbers becomes a tensor. A number
 is a tensor with no dimensions, so it needs `batch_size=[]`.
 - A string is stored as [`NonTensorData`](reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData). Attribute access
 and `get` return the `NonTensorData` wrapper, and a string index returns
@@ -215,7 +215,7 @@ without a copy. Writes through the typed wrapper go to the storage of `td`:
 ```
 >>> from tensordict import TensorDict
 >>> td = TensorDict(
-... eta=torch.randn(5, 3), X=torch.randn(5, 4), beta=torch.randn(5, 1),
+... {"eta": torch.randn(5, 3), "X": torch.randn(5, 4), "beta": torch.randn(5, 1)},
 ... batch_size=[5],
 ... )
 >>> state = PredictorState.from_tensordict(td)
@@ -228,7 +228,7 @@ tensor(True)
 
 This works with a [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) (HDF5 or Zarr), a
 [`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) (Redis), a
-[`LazyStackedTensorDict`](reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) and a memory-mapped
+[`LazyStackedTensorDict`](reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict), and a memory-mapped
 `TensorDict`. Some operations behave differently on these backends. See
 [Containers on storage backends](compatibility.html#compatibility) for the examples and the limits.
 
@@ -275,7 +275,7 @@ torch.Size([2, 5])
 ```
 
 This includes `.memmap()`, `.apply()`, `torch.cat`, `.unbind()`,
-`.select()`, `.exclude()` and `.update()`.
+`.select()`, `.exclude()`, and `.update()`.
 
 The declared fields describe a valid instance. They do not change what the
 `TensorDictBase` methods do. `pop`, `rename_key_`, and `select` or
@@ -315,8 +315,8 @@ access under `torch.compile`.
 - [TypedTensorDict](reference/ttd.html#api-typed-tensordict): the reference of
 [`TypedTensorDict`](reference/generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict).
 - [TensorClass](tensorclass.html#tensorclass-guide): typed fields with plain values, custom
-`__init__` and dataclass features.
+`__init__`, and dataclass features.
 - [Which container should I use?](choosing_a_container.html#choosing-a-container): which container to use, and the
 `TensorClass` and `TypedTensorDict` comparison.
-- [Containers on storage backends](compatibility.html#compatibility): `TypedTensorDict` on HDF5, Redis, lazy stacks and
+- [Containers on storage backends](compatibility.html#compatibility): `TypedTensorDict` on HDF5, Redis, lazy stacks, and
 memory-mapped tensordicts.

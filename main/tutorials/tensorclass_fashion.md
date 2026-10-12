@@ -8,7 +8,7 @@ to download the full example code.
 A [`TensorClass`](../reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) is the class form of a tensordict. You
 declare its fields with types, and you write methods that run on one sample or
 on a batch. This tutorial stores FashionMNIST in a tensorclass with an
-`images` field, a `targets` field and a method that loads a dataset into
+`images` field, a `targets` field, and a method that loads a dataset into
 memory-mapped tensors. Then it trains the model of the [PyTorch Quickstart
 Tutorial](https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html)
 from it. It is for readers who want named, typed fields and methods for their
@@ -65,7 +65,7 @@ test_data = datasets.FashionMNIST(
 ```
 
 Like a `TensorDict`, a tensorclass has a batch size, and you can index it,
-move it to a device or memory-map it. Use a tensorclass when you know the
+move it to a device, or memory-map it. Use a tensorclass when you know the
 fields of your data in advance. To define one, subclass
 [`TensorClass`](../reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) and annotate its fields. The
 `@tensorclass` decorator is the older form of the same thing.
@@ -124,7 +124,7 @@ FashionMNISTData(
 
 ## DataLoaders
 
-A tensorclass implements `__len__`, `__getitem__` and `__getitems__`,
+A tensorclass implements `__len__`, `__getitem__`, and `__getitems__`,
 so you can use it as a map-style dataset. The `DataLoader` then reads each
 batch with one batched index, and the result is already a
 `FashionMNISTData` batch. Pass `collate_fn=lambda x: x`: the default
@@ -260,7 +260,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Tensorclass training done! time: 2.4099 s
+Tensorclass training done! time: 2.4015 s
 ```
 
 ## Conclusion
@@ -274,14 +274,14 @@ read its fields as attributes.
 ## Further reading
 
 - [TensorClass](../tensorclass.html#tensorclass-guide) explains how to define and use tensorclasses.
-- [Which container should I use?](../choosing_a_container.html#choosing-a-container) compares `TensorDict`, `TensorClass` and
+- [Which container should I use?](../choosing_a_container.html#choosing-a-container) compares `TensorDict`, `TensorClass`, and
 `TypedTensorDict`.
 - [Load data and share it between processes](../data_loading.html#data-loading) explains the ways to load data with tensordict and to
 share it between processes.
 - [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) applies random
 transforms to whole batches, for a larger image dataset.
 
-**Total running time of the script:** (0 minutes 4.749 seconds)
+**Total running time of the script:** (0 minutes 4.719 seconds)
 
 [`Download Jupyter notebook: tensorclass_fashion.ipynb`](../_downloads/5a8f2d6b38b250cbfadc2a295255dde6/tensorclass_fashion.ipynb)
 

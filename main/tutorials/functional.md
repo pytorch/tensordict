@@ -26,7 +26,7 @@ parameters.
 [`EnsembleModule`](../reference/generated/tensordict.nn.EnsembleModule.html#tensordict.nn.EnsembleModule) does it for you.
 - How to call [`torch.func.functional_call()`](https://docs.pytorch.org/docs/stable/generated/torch.func.functional_call.html#torch.func.functional_call) with these parameters.
 
-Before you start, read [Getting, setting and nesting keys](tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) for nested
+Before you start, read [Getting, setting, and nesting keys](tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) for nested
 keys.
 
 ## TensorDict as a parameter container
@@ -193,7 +193,7 @@ from tensordict.nn import EnsembleModule, TensorDictModule
 
 member = TensorDictModule(nn.Linear(3, 1), in_keys=["x"], out_keys=["y"])
 ensemble = EnsembleModule(member, num_copies=4)
-out = ensemble(TensorDict(x=torch.randn(5, 3), batch_size=[5]))
+out = ensemble(TensorDict({"x": torch.randn(5, 3)}, batch_size=[5]))
 print("EnsembleModule output batch_size:", out.batch_size)
 ```
 
@@ -234,7 +234,7 @@ that [`torch.func.functional_call()`](https://docs.pytorch.org/docs/stable/gener
 
 ## Further reading
 
-- [torch.compile, torch.func, torch.export and CUDA graphs](../compile.html#compile) explains how tensordicts work with [`torch.func`](https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func),
+- [torch.compile, torch.func, torch.export, and CUDA graphs](../compile.html#compile) explains how tensordicts work with [`torch.func`](https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func),
 including per-sample gradients with [`torch.vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap).
 - [Modules: TensorDictModule and tensordict.nn](../modules.html#modules-guide) explains [`TensorDictParams`](../reference/generated/tensordict.TensorDictParams.html#tensordict.TensorDictParams) and
 the other modules of `tensordict.nn`.

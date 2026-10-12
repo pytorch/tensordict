@@ -18,8 +18,8 @@ with `(3, 4)`. Shape operations (indexing, `reshape`, `view`,
 entry at once. Pointwise operations (`td + other`, `td * 2`),
 `td.to(device)` and `td.to(dtype)` apply to every entry. An entry can
 be another tensordict, so keys can be nested: `td["a", "b"]` reads the
-entry `"b"` of the nested tensordict `"a"`. [Batch size, shapes and indexing](../../concepts/batch_size.html#batch-size) and
-[Keys, nested keys and locking](../../concepts/keys.html#keys) explain these ideas.
+entry `"b"` of the nested tensordict `"a"`. [Batch size, shapes, and indexing](../../concepts/batch_size.html#batch-size) and
+[Keys, nested keys, and locking](../../concepts/keys.html#keys) explain these ideas.
 
 Use `TensorDict` for most data. To stack tensordicts whose keys or
 entry shapes differ, use [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict). To
@@ -210,9 +210,9 @@ Using tensorclasses for datasets
 Batched data loading with tensorclasses
 ![](../../_images/sphx_glr_tensordict_keys_thumb.png)
 
-[Getting, setting and nesting keys](../../tutorials/tensordict_keys.html)
+[Getting, setting, and nesting keys](../../tutorials/tensordict_keys.html)
 
-Getting, setting and nesting keys
+Getting, setting, and nesting keys
 ![](../../_images/sphx_glr_tensordict_memory_thumb.png)
 
 [Devices and memory-mapped tensors](../../tutorials/tensordict_memory.html)
@@ -235,9 +235,9 @@ Filling a TensorDict row by row
 Changing the shape of a TensorDict
 ![](../../_images/sphx_glr_tensordict_slicing_thumb.png)
 
-[Slicing, indexing and masking](../../tutorials/tensordict_slicing.html)
+[Slicing, indexing, and masking](../../tutorials/tensordict_slicing.html)
 
-Slicing, indexing and masking
+Slicing, indexing, and masking
 ![](../../_images/sphx_glr_zarr_storage_thumb.png)
 
 [Storing TensorDicts in zarr](../../tutorials/zarr_storage.html)

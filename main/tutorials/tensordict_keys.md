@@ -3,7 +3,7 @@ Note
 Go to the end
 to download the full example code.
 
-# Getting, setting and nesting keys
+# Getting, setting, and nesting keys
 
 **Author**: [Tom Begley](https://github.com/tcbegley)
 
@@ -145,7 +145,7 @@ another [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensord
 creates the keys that do not exist.
 
 The second argument of the constructor below, `[10]`, is the batch size:
-the leading dimensions that all the entries share (see [Batch size, shapes and indexing](../concepts/batch_size.html#batch-size)).
+the leading dimensions that all the entries share (see [Batch size, shapes, and indexing](../concepts/batch_size.html#batch-size)).
 
 ```
 tensordict = TensorDict({"a": torch.rand(10), "b": torch.rand(10)}, [10])
@@ -530,10 +530,10 @@ TensorDict(
 
 ## Conclusion
 
-You can now set, read, rename and delete the entries of a
+You can now set, read, rename, and delete the entries of a
 [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) at any depth, with tuples of strings for the
 nested keys. You can test keys with `in`, list them with `keys()`,
-`values()` and `items()`, flatten them, and keep or drop a subset with
+`values()`, and `items()`, flatten them, and keep or drop a subset with
 `select` and `exclude`.
 
 Two behaviors differ from a `dict`. `get` returns `None` for a missing
@@ -543,10 +543,10 @@ over the keys.
 
 ## Further reading
 
-- [Keys, nested keys and locking](../concepts/keys.html#keys) explains keys, nested keys and locking.
+- [Keys, nested keys, and locking](../concepts/keys.html#keys) explains keys, nested keys, and locking.
 - [Non-tensor data and unbatched entries](../concepts/non_tensor.html#non-tensor-data) explains how to store values that are not tensors.
 - [Changing the shape of a TensorDict](tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) shows the shape operations.
-- [Keys, values and entries](../reference/td.html#api-methods-keys) lists all the key methods.
+- [Keys, values, and entries](../reference/td.html#api-methods-keys) lists all the key methods.
 
 **Total running time of the script:** (0 minutes 0.009 seconds)
 

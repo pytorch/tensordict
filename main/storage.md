@@ -24,9 +24,11 @@ first four:
 ... )
 >>> for i in range(4):
 ... log[i] = TensorDict(
-... camera=torch.full((3, 64, 64), i, dtype=torch.uint8),
-... joints=torch.zeros(7),
-... step=i,
+... {
+... "camera": torch.full((3, 64, 64), i, dtype=torch.uint8),
+... "joints": torch.zeros(7),
+... "step": i,
+... },
 ... )
 >>> log["step"][:5]
 MemoryMappedTensor([0, 1, 2, 3, 0])
@@ -42,11 +44,11 @@ The examples on this page run in order, and share the temporary directory
 | Regular tensors | `None` | [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) | the memory of the process | The data fits in memory. |
 | Memory-mapped files | `"memmap"` | [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) | one file for each leaf, in a directory | The dataset is larger than RAM, and the processes that read it can open the same files (one node, or a shared file system). |
 | HDF5 | `"h5"` | [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) | one HDF5 file | You need one portable file that `h5py` or HDFView can open. |
-| zarr | `"zarr"` | [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) | a directory, a zip file or an object store | You need chunks, compression or an object store, or you read the data with xarray or dask. |
+| zarr | `"zarr"` | [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) | a directory, a zip file, or an object store | You need chunks, compression, or an object store, or you read the data with xarray or dask. |
 | Shared memory | `"shared"` | [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) | shared memory (RAM) of one node | Processes on one node read and write the same tensors, and the data fits in RAM. |
-| Redis-compatible server | `"redis"`, `"dragonfly"` | [`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) | the memory of a Redis, Dragonfly or KeyDB server | Processes on several nodes share data, without a shared file system. |
+| Redis-compatible server | `"redis"`, `"dragonfly"` | [`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) | the memory of a Redis, Dragonfly, or KeyDB server | Processes on several nodes share data, without a shared file system. |
 
-Only the memory-mapped files, HDF5 and zarr keep the data after the
+Only the memory-mapped files, HDF5, and zarr keep the data after the
 processes end. A Redis server keeps it while the server runs.
 
 ## Declare a schema with from_schema
@@ -91,7 +93,7 @@ are anonymous temporary files (see [Save and load tensordicts](saving.html#savin
 [`zarr.Group.create_array()`](https://zarr.readthedocs.io/en/stable/api/zarr/group/#zarr.Group.create_array) (`chunks`, `compressors`).
 - `"shared"`: none.
 - `"redis"` and `"dragonfly"`: `host`, `port`, `db`,
-`unix_socket_path`, `prefix` (the namespace of the keys on the server)
+`unix_socket_path`, `prefix` (the namespace of the keys on the server),
 and `td_id` (see Share data between nodes with Redis).
 
 ## Preallocate a dataset that is larger than memory
@@ -127,7 +129,7 @@ with `zarr`, and open the store with
 >>> with h5py.File(root / "large.h5", "w") as f:
 ... _ = f.create_dataset("image", shape=(1_000, 3, 64, 64), dtype="uint8")
 >>> large = PersistentTensorDict.from_h5(root / "large.h5", mode="r+", batch_size=[1_000])
->>> large[0] = TensorDict(image=torch.ones(3, 64, 64, dtype=torch.uint8))
+>>> large[0] = TensorDict({"image": torch.ones(3, 64, 64, dtype=torch.uint8)})
 >>> large["image"][0].sum()
 tensor(12288)
 ```
@@ -139,7 +141,7 @@ without copying the values. Make one sample, and expand it, which does not
 allocate memory:
 
 ```
->>> datum = TensorDict(image=torch.zeros(3, 64, 64, dtype=torch.uint8), label=0)
+>>> datum = TensorDict({"image": torch.zeros(3, 64, 64, dtype=torch.uint8), "label": 0})
 >>> dataset = datum.expand(1_000).memmap_like(root / "dataset")
 >>> dataset.batch_size
 torch.Size([1000])
@@ -154,7 +156,7 @@ sparse: `memmap_like` writes every byte of zeros to disk.
 ## Read and write
 
 You read and write a tensordict on any backend with the usual operations.
-On `"h5"`, `"zarr"` and `"redis"`, an index reads only the selected
+On `"h5"`, `"zarr"`, and `"redis"`, an index reads only the selected
 rows. On `"memmap"`, the operating system reads only the pages of those
 rows from disk, and keeps the pages that you read often in memory:
 
@@ -166,7 +168,7 @@ tensor([0, 2, 3])
 
 The `"memmap"` and `"shared"` backends return a locked tensordict (see
 [Locking and temporary changes](concepts/keys.html#keys-locking)). Write into its tensors in place, with `td[i] = sample`,
-`set_`, `update_` or an in-place method such as `td["x"].add_(1)`. Do
+`set_`, `update_`, or an in-place method such as `td["x"].add_(1)`. Do
 not use `td["x"] += 1`: it changes the tensor, then raises a
 `RuntimeError`. To add an entry, add it before you create the files:
 
@@ -207,7 +209,7 @@ tensordict does not lock the files or order the writes between processes:
 ### Share data between nodes with Redis
 
 [`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) keeps each tensor as raw bytes on a
-Redis-compatible server (Redis, Dragonfly or KeyDB). Processes on any node
+Redis-compatible server (Redis, Dragonfly, or KeyDB). Processes on any node
 that can connect to the server share one store. It needs the `redis`
 package (`pip install redis`).
 
@@ -236,7 +238,7 @@ on several nodes write their results into one store:
 ... port=6379,
 ... td_id="sweep-1",
 ... ) 
->>> results[0] = TensorDict(pos=torch.ones(100, 3), energy=-1.5)
+>>> results[0] = TensorDict({"pos": torch.ones(100, 3), "energy": -1.5})
 ```
 
 In another process, on any node, open the store with
@@ -330,8 +332,10 @@ memory-mapped tensordict cannot get a new entry:
 ```
 >>> from tensordict import NonTensorData
 >>> td = TensorDict(
-... features=torch.randn(4, 3),
-... label=NonTensorData("cat", batch_size=[4]),
+... {
+... "features": torch.randn(4, 3),
+... "label": NonTensorData("cat", batch_size=[4]),
+... },
 ... batch_size=[4],
 ... )
 >>> _ = td.memmap_(root / "labels")
@@ -359,7 +363,7 @@ unpickles these bytes: see the warning in Share data between nodes with Redis.
 
 The `"memmap"` backend stores each leaf in a `.memmap` file, through
 [`MemoryMappedTensor`](reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor). [Save and load tensordicts](saving.html#saving) describes the
-directory layout, the `meta.json` files, single-file archives and the
+directory layout, the `meta.json` files, single-file archives, and the
 `mode` of `load_memmap`.
 
 ### HDF5
@@ -371,7 +375,7 @@ that is in memory with [`from_dict()`](reference/generated/tensordict.Persistent
 This example writes 500 readings of 4 sensors:
 
 ```
->>> td_mem = TensorDict(sensors=torch.randn(500, 4), batch_size=[500])
+>>> td_mem = TensorDict({"sensors": torch.randn(500, 4)}, batch_size=[500])
 >>> td_h5 = PersistentTensorDict.from_dict(td_mem, root / "data.h5")
 >>> PersistentTensorDict.from_h5(root / "data.h5")["sensors"].shape
 torch.Size([500, 4])
@@ -381,7 +385,7 @@ torch.Size([500, 4])
 
 With `backend="zarr"`, [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) stores each
 tensor as a zarr array and each nested tensordict as a zarr group. The store
-can be a local directory, a `zarr.storage.ZipStore` or any other
+can be a local directory, a `zarr.storage.ZipStore`, or any other
 `zarr.abc.store.Store`. You can read and write separate chunks in parallel.
 The zarr backend needs `zarr>=3.0` (`pip install "tensordict[zarr]"`).
 
@@ -441,14 +445,14 @@ on Redis.
 
 ## See also
 
-- [Save and load tensordicts](saving.html#saving): memory-mapped directories, archives and their on-disk
+- [Save and load tensordicts](saving.html#saving): memory-mapped directories, archives, and their on-disk
 layout.
 - [Load data and share it between processes](data_loading.html#data-loading): read these datasets with a `DataLoader`, and share
 them between processes.
 - [Distributed tensordicts](distributed.html#distributed): send tensordicts between nodes.
 - The reference of [`from_schema()`](reference/generated/tensordict.TensorDictBase.from_schema.html#tensordict.TensorDictBase.from_schema),
 [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict),
-[`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) and
+[`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore), and
 [`MemoryMappedTensor`](reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor).
 - Tutorials: [Devices and memory-mapped tensors](tutorials/tensordict_memory.html#sphx-glr-tutorials-tensordict-memory-py) and
 [Storing TensorDicts in zarr](tutorials/zarr_storage.html#sphx-glr-tutorials-zarr-storage-py).

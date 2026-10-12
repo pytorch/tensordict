@@ -21,6 +21,6 @@ listed by task in [Methods by task](td.html#api-tensordict-methods).
 ## See also
 
 - [TypedTensorDict](../typed_tensordict.html#typed-tensordict-guide): declare and use a `TypedTensorDict`.
-- [Which container should I use?](../choosing_a_container.html#choosing-a-container): tensorclass, `TypedTensorDict` or
+- [Which container should I use?](../choosing_a_container.html#choosing-a-container): tensorclass, `TypedTensorDict`, or
 `TensorDict`.
 - [Containers on storage backends](../compatibility.html#compatibility): which containers work on which storage backends.

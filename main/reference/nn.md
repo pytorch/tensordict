@@ -1,7 +1,7 @@
 # tensordict.nn
 
 This page lists the modules of `tensordict.nn`, and the probabilistic
-modules, distributions and helpers that go with them. A module reads the
+modules, distributions, and helpers that go with them. A module reads the
 entries named in its `in_keys` from a tensordict, and writes the entries
 named in its `out_keys` into it. For a guide with examples, see
 [Modules: TensorDictModule and tensordict.nn](../modules.html#modules-guide).
@@ -25,7 +25,7 @@ like it, except for the methods that a subclass overrides.
 - [`as_tensordict_module`](generated/tensordict.nn.as_tensordict_module.html#tensordict.nn.as_tensordict_module) is a decorator that turns a function into
 a [`TensorDictModule`](generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule).
 - [`CudaGraphModule`](generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule) captures a module or a function in a CUDA graph
-and replays it. See [torch.compile, torch.func, torch.export and CUDA graphs](../compile.html#compile).
+and replays it. See [torch.compile, torch.func, torch.export, and CUDA graphs](../compile.html#compile).
 
 | [`TensorDictModuleBase`](generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase)(*args, **kwargs) | Base class to TensorDict modules. |
 | --- | --- |
@@ -91,7 +91,7 @@ size `num_copies`. To keep parameters as a tensordict on a module, see
 
 The modules of `tensordict.nn` work with [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile). For
 example, you can compile a [`TensorDictSequential`](generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential). For the limits
-and their workarounds, see [torch.compile, torch.func, torch.export and CUDA graphs](../compile.html#compile). To capture a module in CUDA
+and their workarounds, see [torch.compile, torch.func, torch.export, and CUDA graphs](../compile.html#compile). To capture a module in CUDA
 graphs, use [`CudaGraphModule`](generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule).
 
 ## Distributions
@@ -118,7 +118,7 @@ entry of a tensordict.
 of a tensordict.
 - [`set_skip_existing`](generated/tensordict.nn.set_skip_existing.html#tensordict.nn.set_skip_existing) and [`skip_existing()`](generated/tensordict.nn.skip_existing.html#tensordict.nn.skip_existing) make a module skip
 its computation when its output entries are already in the tensordict.
-- [`mappings()`](generated/tensordict.nn.mappings.html#tensordict.nn.mappings), [`add_custom_mapping()`](generated/tensordict.nn.add_custom_mapping.html#tensordict.nn.add_custom_mapping) and [`biased_softplus`](generated/tensordict.nn.biased_softplus.html#tensordict.nn.biased_softplus)
+- [`mappings()`](generated/tensordict.nn.mappings.html#tensordict.nn.mappings), [`add_custom_mapping()`](generated/tensordict.nn.add_custom_mapping.html#tensordict.nn.add_custom_mapping), and [`biased_softplus`](generated/tensordict.nn.biased_softplus.html#tensordict.nn.biased_softplus)
 map the output of a network to positive values, for example the scale
 of a distribution. [`inv_softplus()`](generated/tensordict.nn.inv_softplus.html#tensordict.nn.inv_softplus) is the inverse of the softplus
 function, and [`expln()`](generated/tensordict.nn.utils.expln.html#tensordict.nn.utils.expln) is the positive mapping
@@ -156,6 +156,6 @@ prototypes. See [FX tracing (prototype)](../fx.html#fx).
 
 - [Modules: TensorDictModule and tensordict.nn](../modules.html#modules-guide): how a module reads and writes a tensordict, with
 examples.
-- [torch.compile, torch.func, torch.export and CUDA graphs](../compile.html#compile): compile modules and capture them in CUDA graphs.
+- [torch.compile, torch.func, torch.export, and CUDA graphs](../compile.html#compile): compile modules and capture them in CUDA graphs.
 - The tutorials [Building models with TensorDictModule](../tutorials/tensordict_module.html),
-[Functional calls and ensembles with TensorDict](../tutorials/functional.html) and [Exporting tensordict modules](../tutorials/export.html).
+[Functional calls and ensembles with TensorDict](../tutorials/functional.html), and [Exporting tensordict modules](../tutorials/export.html).

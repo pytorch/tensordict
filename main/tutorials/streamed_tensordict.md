@@ -7,7 +7,7 @@ to download the full example code.
 
 **Author**: [Vincent Moens](https://github.com/vmoens)
 
-Sensors, robots and transaction logs produce streams of data, often at
+Sensors, robots, and transaction logs produce streams of data, often at
 different rates. To process a stream in batches, you group the incoming values
 into buckets, one for each fixed time window. The buckets have different
 lengths, so they do not fit in one tensor. This tutorial groups two streams,
@@ -35,8 +35,8 @@ buckets can be as follows:
 import torch
 from tensordict import TensorDict
 
-bucket0 = TensorDict(stream0=torch.randn(5), stream1=torch.randn(4))
-bucket1 = TensorDict(stream0=torch.randn(4), stream1=torch.randn(5))
+bucket0 = TensorDict({"stream0": torch.randn(5), "stream1": torch.randn(4)})
+bucket1 = TensorDict({"stream0": torch.randn(4), "stream1": torch.randn(5)})
 ```
 
 You cannot stack these two tensordicts into one block of memory, because the
@@ -242,8 +242,8 @@ print("TensorDict from stream", td)
 ```
 TensorDict from stream TensorDict(
  fields={
- bucket0: NestedTensor(shape=torch.Size([5, j4]), device=cpu, dtype=torch.int64, is_shared=False),
- bucket1: NestedTensor(shape=torch.Size([5, j3]), device=cpu, dtype=torch.int64, is_shared=False)},
+ bucket0: NestedTensor(shape=torch.Size([5, j3]), device=cpu, dtype=torch.int64, is_shared=False),
+ bucket1: NestedTensor(shape=torch.Size([5, j4]), device=cpu, dtype=torch.int64, is_shared=False)},
  batch_size=torch.Size([5]),
  device=None,
  is_shared=False)
@@ -285,7 +285,7 @@ operations of a lazy stack.
 - The [torch.nested documentation](https://pytorch.org/docs/stable/nested.html)
 explains the jagged layout of nested tensors.
 
-**Total running time of the script:** (0 minutes 6.018 seconds)
+**Total running time of the script:** (0 minutes 6.019 seconds)
 
 [`Download Jupyter notebook: streamed_tensordict.ipynb`](../_downloads/ea350b8ef859f0797dd9ceffacb742e6/streamed_tensordict.ipynb)
 

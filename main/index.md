@@ -3,7 +3,7 @@
 A `dict[str, torch.Tensor]` that behaves like one tensor.
 
 PyTorch code that handles groups of tensors, such as a training batch, a
-particle system or a batch of graphs, repeats every operation for every
+particle system, or a batch of graphs, repeats every operation for every
 tensor:
 
 ```
@@ -31,10 +31,12 @@ Build a TensorDict from the four tensors, then call the function:
 
 ```
 >>> batch = TensorDict(
-... images=torch.randn(32, 3, 64, 64),
-... labels=torch.randint(10, (32,)),
-... masks=torch.ones(32, 64, 64, dtype=torch.bool),
-... weights=torch.rand(32),
+... {
+... "images": torch.randn(32, 3, 64, 64),
+... "labels": torch.randint(10, (32,)),
+... "masks": torch.ones(32, 64, 64, dtype=torch.bool),
+... "weights": torch.rand(32),
+... },
 ... batch_size=[32], # the leading dimension that all tensors share
 ... )
 >>> first, second = shuffle_and_split(batch)
@@ -48,7 +50,7 @@ The new function names no tensor, so it does not change when you add one.
 
 You add and read keys at run time, as in a `dict`. A `dict` value becomes
 a nested TensorDict, and a tuple of keys reads its entries. The tensors share
-the batch size, so indexing, reshaping, stacking and `.to(device)` apply to
+the batch size, so indexing, reshaping, stacking, and `.to(device)` apply to
 every tensor at once, nested ones too:
 
 ```
@@ -72,7 +74,7 @@ Traceback (most recent call last):
 RuntimeError: batch dimension mismatch, got self.batch_size=torch.Size([32]) and value.shape=torch.Size([31]) for key 'scores'. The leading dimensions of a value must match the batch size.
 ```
 
-You can also [save it to disk](saving.html#saving), [pass it to modules](modules.html#modules-guide) and [compile functions that take it](compile.html#compile).
+You can also [save it to disk](saving.html#saving), [pass it to modules](modules.html#modules-guide), and [compile functions that take it](compile.html#compile).
 
 ## TensorClass: fields and methods, like a dataclass
 
@@ -108,7 +110,7 @@ torch.Size([64, 1000])
 ```
 
 The fields are class attributes, so your editor completes `systems.pos`.
-Indexing, stacking, `.to(device)` and saving work as for a TensorDict.
+Indexing, stacking, `.to(device)`, and saving work as for a TensorDict.
 [TensorClass](tensorclass.html#tensorclass-guide) explains TensorClass, and
 [Which container should I use?](choosing_a_container.html#choosing-a-container) helps you choose between the two forms.
 
@@ -119,7 +121,7 @@ pip install tensordict
 ```
 
 tensordict needs Python 3.10+ and PyTorch 2.13+. [Installation](installation.html#installation) covers
-nightly builds, the optional dependencies, conda-forge and source installs.
+nightly builds, the optional dependencies, conda-forge, and source installs.
 
 ## Where to go
 
@@ -128,9 +130,9 @@ that you can run. Start here.
 - [User guide](overview.html#overview): one page for each concept, from the batch
 size to TensorClass and `tensordict.nn`.
 - [How-to guides](saving.html#saving): one page for each task, such as saving,
-large datasets, data loading, distributed training and
+large datasets, data loading, distributed training, and
 [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile).
 - [Tutorials](tutorials/tensordict_keys.html): scripts that you can run or
 download as notebooks.
-- [API reference](reference/index.html#api-reference): every public class, function and
+- [API reference](reference/index.html#api-reference): every public class, function, and
 method. The [Index](genindex.html) lists them from A to Z.

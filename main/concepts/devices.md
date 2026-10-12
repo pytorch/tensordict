@@ -1,4 +1,4 @@
-# Devices, dtypes and memory
+# Devices, dtypes, and memory
 
 One call moves or casts every tensor of a tensordict, nested ones too:
 `td.to("cuda")`, `td.to(torch.float16)`, or a device and a dtype for each
@@ -19,7 +19,7 @@ of a key path). It returns a new tensordict, and sets its `device` attribute
 ```
 >>> import torch
 >>> from tensordict import TensorDict
->>> batch = TensorDict(images=torch.zeros(4, 3, 8, 8), labels=torch.arange(4), batch_size=[4])
+>>> batch = TensorDict({"images": torch.zeros(4, 3, 8, 8), "labels": torch.arange(4)}, batch_size=[4])
 >>> batch.to("meta").device
 device(type='meta')
 >>> batch64 = batch.to(torch.float64)
@@ -39,7 +39,7 @@ casting. These forms also work:
 all its leaves have one dtype.
 - [`float()`](../reference/generated/tensordict.TensorDictBase.float.html#tensordict.TensorDictBase.float), [`double()`](../reference/generated/tensordict.TensorDictBase.double.html#tensordict.TensorDictBase.double),
 [`half()`](../reference/generated/tensordict.TensorDictBase.half.html#tensordict.TensorDictBase.half), [`int()`](../reference/generated/tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int),
-[`bool()`](../reference/generated/tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool) and the other dtype methods of
+[`bool()`](../reference/generated/tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool), and the other dtype methods of
 [`torch.Tensor`](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) cast every leaf.
 - [`cpu()`](../reference/generated/tensordict.TensorDictBase.cpu.html#tensordict.TensorDictBase.cpu) and [`cuda()`](../reference/generated/tensordict.TensorDictBase.cuda.html#tensordict.TensorDictBase.cuda)
 are the same as `to("cpu")` and `to("cuda")`.
@@ -72,7 +72,7 @@ the original tensordict too. They keep the dtype that they have in the block.
 If the original tensordict has a device, they go to that device:
 
 ```
->>> td = TensorDict(x=torch.zeros(3), batch_size=[3], device="cpu")
+>>> td = TensorDict({"x": torch.zeros(3)}, batch_size=[3], device="cpu")
 >>> with td.to(torch.float64) as td64:
 ... td64["x"] += 1
 ... td64["y"] = td64["x"] * 2
@@ -103,7 +103,7 @@ A tensordict has a [`device`](../reference/generated/tensordict.TensorDict.html#
 default, it is `None`, also if all the leaves are on the same device:
 
 ```
->>> td = TensorDict(a=torch.zeros(3), batch_size=[3])
+>>> td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
 >>> print(td.device)
 None
 ```
@@ -118,14 +118,14 @@ on different devices.
 In this example, `td` has the `meta` device, and `mixed` has no device:
 
 ```
->>> td = TensorDict(a=torch.zeros(3), batch_size=[3], device="meta")
+>>> td = TensorDict({"a": torch.zeros(3)}, batch_size=[3], device="meta")
 >>> td["b"] = torch.ones(3) # a CPU tensor
 >>> td["b"].device
 device(type='meta')
 >>> td["n"] = {"c": torch.ones(3)}
 >>> td["n"].device, td["n", "c"].device
 (device(type='meta'), device(type='meta'))
->>> mixed = TensorDict(a=torch.zeros(3), b=torch.zeros(3, device="meta"), batch_size=[3])
+>>> mixed = TensorDict({"a": torch.zeros(3), "b": torch.zeros(3, device="meta")}, batch_size=[3])
 >>> print(mixed.device)
 None
 ```
@@ -139,7 +139,7 @@ of the leaves if they are all on one device, and to `None` otherwise.
 Here, all the leaves are on the CPU:
 
 ```
->>> TensorDict(a=torch.zeros(3), batch_size=[3]).auto_device_().device
+>>> TensorDict({"a": torch.zeros(3)}, batch_size=[3]).auto_device_().device
 device(type='cpu')
 ```
 
@@ -155,15 +155,17 @@ mixed-precision state dict.
 
 [`attrs()`](../reference/generated/tensordict.TensorDictBase.attrs.html#tensordict.TensorDictBase.attrs) returns a tensordict whose leaves are
 [`TensorAttrs`](../reference/generated/tensordict.TensorAttrs.html#tensordict.TensorAttrs) objects, one for each leaf. Each one records
-the device, the dtype and the shape of its leaf. `to()` casts each leaf of
+the device, the dtype, and the shape of its leaf. `to()` casts each leaf of
 the tensordict to the device and the dtype of the leaf with the same key in
 this spec:
 
 ```
->>> source = TensorDict(a=torch.zeros(3), b=torch.zeros(3, dtype=torch.float64), batch_size=[3])
+>>> source = TensorDict({"a": torch.zeros(3), "b": torch.zeros(3, dtype=torch.float64)}, batch_size=[3])
 >>> layout = TensorDict(
-... a=torch.zeros(3, dtype=torch.float16, device="meta"),
-... b=torch.zeros(3, dtype=torch.float32),
+... {
+... "a": torch.zeros(3, dtype=torch.float16, device="meta"),
+... "b": torch.zeros(3, dtype=torch.float32),
+... },
 ... batch_size=[3],
 ... )
 >>> out = source.to(layout.attrs())
@@ -208,7 +210,7 @@ dtype. With `fields=("dtype",)`, the spec changes only the dtypes.
 In this example, the spec has only the key `"a"`, so `"b"` keeps its dtype:
 
 ```
->>> partial = TensorDict(a=torch.zeros(3, dtype=torch.float16), batch_size=[3]).attrs()
+>>> partial = TensorDict({"a": torch.zeros(3, dtype=torch.float16)}, batch_size=[3]).attrs()
 >>> out = source.to(partial)
 >>> out["a"].dtype, out["b"].dtype
 (torch.float16, torch.float64)
@@ -230,7 +232,7 @@ Pinning needs an accelerator, so this example does not run on a CPU-only
 machine:
 
 ```
->>> td = TensorDict(pos=torch.zeros(64, 3), batch_size=[64])
+>>> td = TensorDict({"pos": torch.zeros(64, 3)}, batch_size=[64])
 >>> pinned = td.pin_memory() 
 >>> td_gpu = pinned.to("cuda", non_blocking=True)
 ```
@@ -249,10 +251,10 @@ memory. Other processes on the same machine can then read and write the
 leaves without a copy, for example the workers of
 [`torch.multiprocessing`](https://docs.pytorch.org/docs/stable/multiprocessing.html#module-torch.multiprocessing). After this call, the tensordict is locked (see
 [Locking and temporary changes](keys.html#keys-locking)). You can write into the existing leaves, but you cannot
-add, remove or replace an entry:
+add, remove, or replace an entry:
 
 ```
->>> td = TensorDict(a=torch.zeros(3), batch_size=[3]).share_memory_()
+>>> td = TensorDict({"a": torch.zeros(3)}, batch_size=[3]).share_memory_()
 >>> td.is_shared(), td.is_locked
 (True, True)
 >>> td["b"] = torch.zeros(3)
@@ -282,7 +284,7 @@ consolidated tensordict is faster to send to another process. The result of
 [`unlock_()`](../reference/generated/tensordict.TensorDictBase.unlock_.html#tensordict.TensorDictBase.unlock_) on it, it is no longer consolidated:
 
 ```
->>> c = TensorDict(a=torch.zeros(3), b=torch.ones(3, 2), batch_size=[3]).consolidate()
+>>> c = TensorDict({"a": torch.zeros(3), "b": torch.ones(3, 2)}, batch_size=[3]).consolidate()
 >>> c.is_consolidated(), c.is_locked
 (True, True)
 >>> c.to("meta").is_consolidated()
@@ -293,13 +295,13 @@ True
 
 ## See also
 
-- [Device, dtype and memory](../reference/td.html#api-methods-device): the reference entries of
+- [Device, dtype, and memory](../reference/td.html#api-methods-device): the reference entries of
 [`to()`](../reference/generated/tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to), [`attrs()`](../reference/generated/tensordict.TensorDictBase.attrs.html#tensordict.TensorDictBase.attrs),
-[`pin_memory()`](../reference/generated/tensordict.TensorDictBase.pin_memory.html#tensordict.TensorDictBase.pin_memory) and the other methods on this
+[`pin_memory()`](../reference/generated/tensordict.TensorDictBase.pin_memory.html#tensordict.TensorDictBase.pin_memory), and the other methods on this
 page.
-- [Arithmetic, apply, reductions and gradients](operations.html#operations): arithmetic, and the in-place conventions that
+- [Arithmetic, apply, reductions, and gradients](operations.html#operations): arithmetic, and the in-place conventions that
 `share_memory_()` and `memmap_()` do not follow.
 - [Save and load tensordicts](../saving.html#saving): memory-mapped tensordicts and consolidation.
-- [torch.compile, torch.func, torch.export and CUDA graphs](../compile.html#compile): `to()` and device copies under [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile).
+- [torch.compile, torch.func, torch.export, and CUDA graphs](../compile.html#compile): `to()` and device copies under [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile).
 - The [Devices and memory-mapped tensors](../tutorials/tensordict_memory.html) tutorial: devices and memory
 placement, step by step.

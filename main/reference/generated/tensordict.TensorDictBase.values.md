@@ -5,7 +5,7 @@ TensorDictBase.values(*include_nested: [bool](https://docs.python.org/3/builtins
 Returns a generator of the values of the tensordict.
 
 By default, only the top-level values are returned, and a
-sub-tensordict is returned as one value. See [Keys, nested keys and locking](../../concepts/keys.html#keys) for nested
+sub-tensordict is returned as one value. See [Keys, nested keys, and locking](../../concepts/keys.html#keys) for nested
 keys and leaves.
 
 Parameters:

@@ -8,7 +8,7 @@ to download the full example code.
 **Author**: [Tom Begley](https://github.com/tcbegley)
 
 A [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) has the shape operations of a tensor, such
-as `reshape`, `split`, `stack` and `permute`. Each call changes every
+as `reshape`, `split`, `stack`, and `permute`. Each call changes every
 tensor in it in the same way, so you write the call once, and the tensors stay
 aligned. This tutorial is for readers who know these operations on a
 [`torch.Tensor`](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor).
@@ -17,13 +17,13 @@ What you will learn:
 
 - How a shape operation on a tensordict applies to the batch dimensions of
 every entry.
-- How to split, unbind, stack and concatenate tensordicts.
+- How to split, unbind, stack, and concatenate tensordicts.
 - The difference between a lazy stack and a dense stack.
 - How to change the shape of a tensordict for the length of a `with` block.
 
 When you create a [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), you give it a
 `batch_size`: the leading dimensions that all the entries share. An entry
-can have more dimensions after them (see [Batch size, shapes and indexing](../concepts/batch_size.html#batch-size)). The shape
+can have more dimensions after them (see [Batch size, shapes, and indexing](../concepts/batch_size.html#batch-size)). The shape
 operations below change the batch dimensions of every entry, and keep the
 other dimensions.
 
@@ -35,14 +35,14 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7f9e63db82f0>
+<torch._C.Generator object at 0x7f78e47b82f0>
 ```
 
 ## Indexing
 
 An index applies to the batch dimensions. Each entry of the
 [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) is indexed in the same way. The
-[Slicing, indexing and masking](tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py) tutorial covers indexing
+[Slicing, indexing, and masking](tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py) tutorial covers indexing
 in detail.
 
 ```
@@ -135,7 +135,7 @@ into new tensors and returns a [`TensorDict`](../reference/generated/tensordict.
 [`lazy_stack()`](../reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack) keeps the original tensordicts in a list and
 returns a [`LazyStackedTensorDict`](../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict), which stacks a value
 only when you read it. Use a lazy stack when the tensordicts have different
-shapes, devices or keys, or when you read only a few keys of the stack. The
+shapes, devices, or keys, or when you read only a few keys of the stack. The
 [Stacking and variable-size data](../concepts/stacking.html#stacking) page explains both kinds of stacks.
 
 ```
@@ -266,7 +266,7 @@ Note
 
 [`unsqueeze()`](../reference/generated/tensordict.TensorDictBase.unsqueeze.html#tensordict.TensorDictBase.unsqueeze),
 [`squeeze()`](../reference/generated/tensordict.TensorDictBase.squeeze.html#tensordict.TensorDictBase.squeeze), [`view()`](../reference/generated/tensordict.TensorDictBase.view.html#tensordict.TensorDictBase.view),
-[`permute()`](../reference/generated/tensordict.TensorDictBase.permute.html#tensordict.TensorDictBase.permute) and
+[`permute()`](../reference/generated/tensordict.TensorDictBase.permute.html#tensordict.TensorDictBase.permute), and
 [`transpose()`](../reference/generated/tensordict.TensorDictBase.transpose.html#tensordict.TensorDictBase.transpose) apply the operation to the
 entries when you call them, and return a [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict).
 
@@ -320,7 +320,7 @@ operation and writes the changes back into the original tensordict. The
 shape operations [`view()`](../reference/generated/tensordict.TensorDictBase.view.html#tensordict.TensorDictBase.view),
 [`permute()`](../reference/generated/tensordict.TensorDictBase.permute.html#tensordict.TensorDictBase.permute),
 [`transpose()`](../reference/generated/tensordict.TensorDictBase.transpose.html#tensordict.TensorDictBase.transpose),
-[`squeeze()`](../reference/generated/tensordict.TensorDictBase.squeeze.html#tensordict.TensorDictBase.squeeze) and
+[`squeeze()`](../reference/generated/tensordict.TensorDictBase.squeeze.html#tensordict.TensorDictBase.squeeze), and
 [`unsqueeze()`](../reference/generated/tensordict.TensorDictBase.unsqueeze.html#tensordict.TensorDictBase.unsqueeze) work in this way. So do
 [`to_module()`](../reference/generated/tensordict.TensorDictBase.to_module.html#tensordict.TensorDictBase.to_module) for functional calls, and
 [`lock_()`](../reference/generated/tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_) and
@@ -374,7 +374,7 @@ gathered_tensordict['a']:
 ## Conclusion
 
 You can now index, `reshape`, `split`, `unbind`, `expand`,
-`squeeze`, `unsqueeze`, `view`, `permute` and `gather` a
+`squeeze`, `unsqueeze`, `view`, `permute`, and `gather` a
 [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) with one call each. Each call changes the
 batch dimensions of every entry and keeps the other dimensions. You can
 stack tensordicts densely with [`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack), or lazily with
@@ -387,11 +387,11 @@ form of a tensordict with typed fields (see [TensorClass](../tensorclass.html#te
 
 ## Further reading
 
-- [Batch size, shapes and indexing](../concepts/batch_size.html#batch-size) explains batch sizes, shapes and indexing.
+- [Batch size, shapes, and indexing](../concepts/batch_size.html#batch-size) explains batch sizes, shapes, and indexing.
 - [Stacking and variable-size data](../concepts/stacking.html#stacking) explains lazy stacks and data of different sizes.
-- [Slicing, indexing and masking](tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py) shows indexing, masking
+- [Slicing, indexing, and masking](tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py) shows indexing, masking,
 and writing into a tensordict with an index.
-- [Shape, batch dimensions and stacking](../reference/td.html#api-methods-shape) lists all the shape methods.
+- [Shape, batch dimensions, and stacking](../reference/td.html#api-methods-shape) lists all the shape methods.
 
 **Total running time of the script:** (0 minutes 0.009 seconds)
 

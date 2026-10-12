@@ -251,7 +251,7 @@ another one.
 
 ## Further reading
 
-- [Devices, dtypes and memory](../concepts/devices.html#devices) explains devices, dtypes and memory.
+- [Devices, dtypes, and memory](../concepts/devices.html#devices) explains devices, dtypes, and memory.
 - [Save and load tensordicts](../saving.html#saving) explains all the ways to save and load tensordicts.
 - [Large datasets and storage backends](../storage.html#storage) explains how to work with datasets that do not fit in RAM.
 - [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) loads an image dataset

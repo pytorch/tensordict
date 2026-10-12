@@ -3,12 +3,12 @@ Note
 Go to the end
 to download the full example code.
 
-# Slicing, indexing and masking
+# Slicing, indexing, and masking
 
 **Author**: [Tom Begley](https://github.com/tcbegley)
 
 One index on a [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) indexes every tensor in it in
-the same way. If you now index the images, the labels and the weights of a
+the same way. If you now index the images, the labels, and the weights of a
 batch one by one, one index replaces these lines. This tutorial is for
 readers who know how to index a [`torch.Tensor`](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor).
 
@@ -20,7 +20,7 @@ What you will learn:
 
 When you create a [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), you give it a
 `batch_size`: the leading dimensions that all its entries share (see
-[Batch size, shapes and indexing](../concepts/batch_size.html#batch-size)). You can index these batch dimensions as you index a
+[Batch size, shapes, and indexing](../concepts/batch_size.html#batch-size)). You can index these batch dimensions as you index a
 [`torch.Tensor`](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor). The index applies to all the entries of the
 [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict).
 
@@ -188,7 +188,7 @@ assert masked_tensordict["a"].shape == torch.Size([6, 5])
 
 ## Conclusion
 
-You can now index, slice and mask a [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) as you
+You can now index, slice, and mask a [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) as you
 do a tensor, and write a tensordict into another one with an index. An index
 or a mask applies to the batch dimensions of every entry, and keeps the
 other dimensions. The same indexing works on a
@@ -197,12 +197,12 @@ fields (see [TensorClass](../tensorclass.html#tensorclass-guide)).
 
 ## Further reading
 
-- [Batch size, shapes and indexing](../concepts/batch_size.html#batch-size) explains batch sizes, shapes and indexing.
+- [Batch size, shapes, and indexing](../concepts/batch_size.html#batch-size) explains batch sizes, shapes, and indexing.
 - [Changing the shape of a TensorDict](tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) shows the other shape
 operations: reshape, split, stack, permute.
 - [Filling a TensorDict row by row](tensordict_preallocation.html#sphx-glr-tutorials-tensordict-preallocation-py) fills an empty
 tensordict row by row with an index.
-- [Indexing, masking and splitting](../reference/td.html#api-methods-indexing) lists the indexing methods.
+- [Indexing, masking, and splitting](../reference/td.html#api-methods-indexing) lists the indexing methods.
 
 **Total running time of the script:** (0 minutes 0.005 seconds)
 

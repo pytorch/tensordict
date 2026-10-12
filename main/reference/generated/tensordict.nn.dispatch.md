@@ -167,7 +167,7 @@ To turn keyword calls off for every module, set the environment
 variable `DISPATCH_TDNN_MODULES=0` before you import tensordict.
 The decorated functions then accept a tensordict only, and the call
 does not go through the wrapper of `dispatch()`. See
-[torch.compile, torch.func, torch.export and CUDA graphs](../../compile.html#compile) for how modules behave under [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile).
+[torch.compile, torch.func, torch.export, and CUDA graphs](../../compile.html#compile) for how modules behave under [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile).
 
 get_source(*func*, *self_func*)
 

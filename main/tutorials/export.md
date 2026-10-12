@@ -73,7 +73,7 @@ print(model(x=x))
 ```
 
 Called with a tensor, the model returns one tensor per output key: here
-`"hidden"`, `"latent"`, `"loc"` and `"scale"`. For a large model,
+`"hidden"`, `"latent"`, `"loc"`, and `"scale"`. For a large model,
 you usually need fewer outputs. The section "Selecting the outputs" below
 shows how to keep only some of them.
 
@@ -149,7 +149,7 @@ for out_model, out_exported in zip(model(x=x), exported(x=x)):
 
 Export does not optimize the graph. The exported module runs the same tensor
 operations as the original module, one by one, without the tensordict reads
-and writes. To make it faster, compile it (see [torch.compile, torch.func, torch.export and CUDA graphs](../compile.html#compile)), or compile
+and writes. To make it faster, compile it (see [torch.compile, torch.func, torch.export, and CUDA graphs](../compile.html#compile)), or compile
 it ahead of time with AOTInductor (see "Further reading").
 
 Print the FX graph:
@@ -331,7 +331,7 @@ the export.
 
 ## Further reading
 
-- [torch.compile, torch.func, torch.export and CUDA graphs](../compile.html#compile) explains how tensordicts go through `torch.export`,
+- [torch.compile, torch.func, torch.export, and CUDA graphs](../compile.html#compile) explains how tensordicts go through `torch.export`,
 including dynamic batch sizes.
 - [Modules: TensorDictModule and tensordict.nn](../modules.html#modules-guide) explains `tensordict.nn` modules and
 [`dispatch`](../reference/generated/tensordict.nn.dispatch.html#tensordict.nn.dispatch).

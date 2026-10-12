@@ -12,7 +12,7 @@ API pages that go deeper. If you are new to tensordict, read
 
 The sidebar lists the tutorials in four groups, in reading order:
 
-- Basics: keys, indexing, shapes, row-by-row filling and lazy stacks of
+- Basics: keys, indexing, shapes, row-by-row filling, and lazy stacks of
   streamed data.
 - Storage: devices and memory-mapped tensors, the zarr backend, and a
   benchmark of the serialization formats.
@@ -46,13 +46,13 @@ The sidebar lists the tutorials in four groups, in reading order:
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Getting, setting and nesting keys</div>
+      <div class="sphx-glr-thumbnail-title">Getting, setting, and nesting keys</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="One index on a TensorDict indexes every tensor in it in the same way. If you now index the images, the labels and the weights of a batch one by one, one index replaces these lines. This tutorial is for readers who know how to index a torch.Tensor.">
+    <div class="sphx-glr-thumbcontainer" tooltip="One index on a TensorDict indexes every tensor in it in the same way. If you now index the images, the labels, and the weights of a batch one by one, one index replaces these lines. This tutorial is for readers who know how to index a torch.Tensor.">
 
 .. only:: html
 
@@ -63,13 +63,13 @@ The sidebar lists the tutorials in four groups, in reading order:
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Slicing, indexing and masking</div>
+      <div class="sphx-glr-thumbnail-title">Slicing, indexing, and masking</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A TensorDict has the shape operations of a tensor, such as reshape, split, stack and permute. Each call changes every tensor in it in the same way, so you write the call once, and the tensors stay aligned. This tutorial is for readers who know these operations on a torch.Tensor.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A TensorDict has the shape operations of a tensor, such as reshape, split, stack, and permute. Each call changes every tensor in it in the same way, so you write the call once, and the tensors stay aligned. This tutorial is for readers who know these operations on a torch.Tensor.">
 
 .. only:: html
 
@@ -239,7 +239,7 @@ The sidebar lists the tutorials in four groups, in reading order:
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A TensorClass is the class form of a tensordict. You declare its fields with types, and you write methods that run on one sample or on a batch. This tutorial stores FashionMNIST in a tensorclass with an images field, a targets field and a method that loads a dataset into memory-mapped tensors. Then it trains the model of the PyTorch Quickstart Tutorial from it. It is for readers who want named, typed fields and methods for their data.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A TensorClass is the class form of a tensordict. You declare its fields with types, and you write methods that run on one sample or on a batch. This tutorial stores FashionMNIST in a tensorclass with an images field, a targets field, and a method that loads a dataset into memory-mapped tensors. Then it trains the model of the PyTorch Quickstart Tutorial from it. It is for readers who want named, typed fields and methods for their data.">
 
 .. only:: html
 
@@ -256,7 +256,7 @@ The sidebar lists the tutorials in four groups, in reading order:
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A torchvision image pipeline opens, decodes and transforms each image file again at every epoch, one image at a time. This tutorial stores the images once in the memory-mapped fields of a TensorClass, then reads and transforms whole batches. A memory-mapped tensor is a tensor whose values are stored in a file and read through the page cache of the operating system. This tutorial is for readers who train from a folder of image files.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A torchvision image pipeline opens, decodes, and transforms each image file again at every epoch, one image at a time. This tutorial stores the images once in the memory-mapped fields of a TensorClass, then reads and transforms whole batches. A memory-mapped tensor is a tensor whose values are stored in a file and read through the page cache of the operating system. This tutorial is for readers who train from a folder of image files.">
 
 .. only:: html
 
