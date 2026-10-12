@@ -64,6 +64,11 @@ an entry: :meth:`~tensordict.TensorDictBase.attrs` returns them. See
 Entries that ignore the batch shape
 -----------------------------------
 
+.. warning::
+
+    ``UnbatchedTensor`` is experimental: its API can change in a minor release
+    without a deprecation cycle.
+
 An :class:`~tensordict.UnbatchedTensor` is a tensor that shape operations
 on its tensordict (indexing, reshaping, stacking) leave unchanged.
 Operations on its data, such as arithmetic or

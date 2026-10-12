@@ -417,6 +417,12 @@ this example:
 Stream between nodes with UCXX
 ------------------------------
 
+.. warning::
+
+    ``TensorDictPipe``, ``TensorDictServer``, ``send_tensordict`` and
+    ``recv_tensordict`` are experimental: their API can change in a minor
+    release without a deprecation cycle.
+
 :class:`~tensordict._ucxx.TensorDictPipe` sends tensordicts from one process
 to one other process over `UCXX <https://github.com/rapidsai/ucxx>`_, the
 Python bindings of `UCX <https://openucx.org/>`_. Use it when one node

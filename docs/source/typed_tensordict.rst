@@ -5,6 +5,11 @@
 TypedTensorDict
 ===============
 
+.. warning::
+
+    ``TypedTensorDict`` is experimental: its API can change in a minor release
+    without a deprecation cycle.
+
 A :class:`~tensordict.TypedTensorDict` is a tensordict with declared fields.
 It subclasses :class:`~tensordict.TensorDictBase`, and you declare its fields
 as class annotations, as in a :class:`typing.TypedDict`. Choose it over a

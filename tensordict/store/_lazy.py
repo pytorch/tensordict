@@ -644,6 +644,10 @@ class _LazyStackedStoreKeysView(_TensorDictKeysView):
 class LazyStackedTensorDictStore(TensorDictBase):
     """A lazy stack of tensordicts whose entries live on a Redis-compatible server.
 
+    .. warning::
+        ``LazyStackedTensorDictStore`` is experimental: its API can change in a
+        minor release without a deprecation cycle.
+
     :meth:`TensorDictStore.from_tensordict <tensordict.store.TensorDictStore.from_tensordict>`
     returns this class when you pass a :class:`~tensordict.LazyStackedTensorDict`,
     so that the elements of the stack can have entries of different shapes.
