@@ -35,7 +35,9 @@ def from_any(
 
     .. seealso:: :meth:`~tensordict.TensorDictBase.from_any` for more information.
     """
-    return TensorDictBase.from_any(
+    from tensordict import TensorDict
+
+    return TensorDict.from_any(
         obj,
         auto_batch_size=auto_batch_size,
         batch_dims=batch_dims,
@@ -56,7 +58,9 @@ def from_tuple(
 
     .. seealso:: :meth:`TensorDictBase.from_tuple` for more information.
     """
-    return TensorDictBase.from_tuple(
+    from tensordict import TensorDict
+
+    return TensorDict.from_tuple(
         obj,
         auto_batch_size=auto_batch_size,
         batch_dims=batch_dims,
@@ -101,6 +105,8 @@ def from_struct_array(
     .. seealso:: :meth:`TensorDictBase.from_struct_array` for more information.
 
     Examples:
+        >>> import numpy as np
+        >>> from tensordict import from_struct_array
         >>> x = np.array(
         ...     [("Rex", 9, 81.0), ("Fido", 3, 27.0)],
         ...     dtype=[("name", "U10"), ("age", "i4"), ("weight", "f4")],
@@ -135,10 +141,18 @@ def from_dict(
 
     .. seealso:: :meth:`TensorDictBase.from_dict` for more information.
 
+    .. note::
+        The defaults differ from :meth:`TensorDict.from_dict
+        <tensordict.TensorDictBase.from_dict>`. Here ``auto_batch_size``
+        defaults to ``False`` even if ``batch_dims`` is passed, so
+        ``batch_dims`` has no effect unless you also pass
+        ``auto_batch_size=True``.
 
     Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict, from_dict
         >>> input_dict = {"a": torch.randn(3, 4), "b": torch.randn(3)}
-        >>> print(from_dict(input_dict))
+        >>> print(from_dict(input_dict, auto_batch_size=True))
         TensorDict(
             fields={
                 a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -149,7 +163,7 @@ def from_dict(
         >>> # nested dict: the nested TensorDict can have a different batch-size
         >>> # as long as its leading dims match.
         >>> input_dict = {"a": torch.randn(3), "b": {"c": torch.randn(3, 4)}}
-        >>> print(from_dict(input_dict))
+        >>> print(from_dict(input_dict, auto_batch_size=True))
         TensorDict(
             fields={
                 a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -162,22 +176,13 @@ def from_dict(
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
-        >>> # we can also use this to work out the batch sie of a tensordict
+        >>> # Without auto_batch_size=True, the batch size is empty.
+        >>> from_dict(input_dict).batch_size
+        torch.Size([])
+        >>> # To work out the batch size of an existing tensordict, use auto_batch_size_
         >>> input_td = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3, 4)}}, [])
-        >>> print(
-        from_dict(input_td))
-        TensorDict(
-            fields={
-                a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                b: TensorDict(
-                    fields={
-                        c: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
-                    batch_size=torch.Size([3, 4]),
-                    device=None,
-                    is_shared=False)},
-            batch_size=torch.Size([3]),
-            device=None,
-            is_shared=False)
+        >>> input_td.auto_batch_size_().batch_size
+        torch.Size([3])
 
     """
     from tensordict import TensorDict

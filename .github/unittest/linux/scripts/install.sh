@@ -31,17 +31,19 @@ fi
 git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
+# The test environment already holds a torch from PyPI (mosaicml-streaming
+# depends on it), so pip must replace it: without --upgrade it keeps it.
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
+      python -m pip install --upgrade --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
   else
-      python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+      python -m pip install --upgrade --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
-      python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+      python -m pip install --upgrade torch torchvision --index-url https://download.pytorch.org/whl/cpu
   else
-      python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
+      python -m pip install --upgrade torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
   fi
 elif [[ "$TORCH_VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
   # a release series, such as 2.13, with the torchvision release built for it
@@ -53,6 +55,12 @@ elif [[ "$TORCH_VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
 else
   printf "Failed to install pytorch"
   exit 1
+fi
+python -c "import torch; print('Installed torch', torch.__version__)"
+if [[ "$TORCH_VERSION" == "nightly" ]]; then
+  # an index that no longer gets nightlies (such as cu128) leaves an older build
+  python -c "import torch, sys; sys.exit('.dev' not in torch.__version__)" \
+    || { printf "Expected a nightly build of torch\n"; exit 1; }
 fi
 
 printf "* Installing tensordict\n"
