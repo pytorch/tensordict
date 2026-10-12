@@ -39,7 +39,7 @@ import numpy as np
 import torch
 from pyvers import implement_for  # noqa: F401
 from tensordict import _indexing, _utils_key_json
-from tensordict._deprecation import deprecated_attributes
+from tensordict._deprecation import deprecated_attributes, warn_deprecated
 from tensordict._indexing import _getitem_batch_size  # noqa: F401
 from tensordict._nestedkey import NestedKey
 from torch import Tensor
@@ -806,6 +806,42 @@ def _lock_blocked(func):
         return func(self, *args, **kwargs)
 
     return new_func
+
+
+class _UpdateIgnoreLockWarned:
+    """The type of :data:`_UPDATE_IGNORE_LOCK_WARNED`."""
+
+    __slots__ = ()
+
+    def __bool__(self) -> bool:
+        return True
+
+    def __repr__(self) -> str:
+        return "_UPDATE_IGNORE_LOCK_WARNED"
+
+
+# A truthy ``ignore_lock`` value. A public ``update`` method that warns about
+# ``ignore_lock=True`` passes it down instead of ``True``, so that the nested
+# ``update`` calls behave the same but do not warn again.
+_UPDATE_IGNORE_LOCK_WARNED = _UpdateIgnoreLockWarned()
+
+
+def _warn_update_ignore_lock(stacklevel: int = 2) -> _UpdateIgnoreLockWarned:
+    """Warns that ``update(ignore_lock=True)`` is deprecated.
+
+    Call it from a public ``update`` method only when ``ignore_lock`` is truthy
+    and is not :data:`_UPDATE_IGNORE_LOCK_WARNED`, and pass the returned value
+    down as ``ignore_lock``. ``stacklevel`` counts as in :func:`warnings.warn`
+    from that ``update`` method: ``2`` points to its caller, ``3`` to the
+    caller of a decorated ``update``.
+    """
+    warn_deprecated(
+        "update(ignore_lock=True)",
+        removal="0.17",
+        replacement="'with td.unlock_(): td.update(...)'",
+        stacklevel=stacklevel + 1,
+    )
+    return _UPDATE_IGNORE_LOCK_WARNED
 
 
 def _strong_ref(obj):

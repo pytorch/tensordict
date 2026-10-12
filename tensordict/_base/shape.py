@@ -1069,6 +1069,52 @@ class _ShapeOps:
             input, dim=dim, out=out, **kwargs
         )
 
+    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
+        """Splits a tensordict into the specified number of chunks, if possible.
+
+        Each chunk is a view of the input tensordict.
+
+        Args:
+            chunks (int): number of chunks to return
+            dim (int, optional): dimension along which to split the
+                tensordict. Default is 0.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict({
+            ...     'x': torch.arange(24).reshape(3, 4, 2),
+            ... }, batch_size=[3, 4])
+            >>> td0, td1 = td.chunk(dim=-1, chunks=2)
+            >>> td0['x']
+            tensor([[[ 0,  1],
+                     [ 2,  3]],
+                    [[ 8,  9],
+                     [10, 11]],
+                    [[16, 17],
+                     [18, 19]]])
+
+        """
+        if chunks < 1:
+            raise ValueError(
+                f"chunks must be a strictly positive integer, got {chunks}."
+            )
+        batch_size = self.batch_size
+        dim = _maybe_correct_neg_dim(dim, batch_size)
+        if not isinstance(chunks, int):
+            # numpy and 0-d tensor integers
+            chunks = operator.index(chunks)
+        max_size = batch_size[dim]
+        if max_size == 0:
+            # torch.chunk returns `chunks` empty pieces along a zero-size dim
+            return self.split([0] * chunks, dim)
+        return self._chunk(chunks, dim)
+
+    def _chunk(self, chunks: int, dim: int) -> tuple[TensorCollection, ...]:
+        # chunk with a positive int `chunks` along a non-negative `dim` of
+        # non-zero size: torch.chunk splits with the upper-rounded size
+        return self.split(-(self.batch_size[dim] // -chunks), dim)
+
     def split(
         self, split_size: int | list[int], dim: int = 0
     ) -> tuple[TensorDictBase, ...]:

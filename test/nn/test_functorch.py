@@ -32,6 +32,8 @@ VMAP_TD_OPS = {
     "mul": lambda t: t * 2,
     "add": lambda t: t + t,
     "rsub": lambda t: 1 - t,
+    "rsub_alpha": lambda t: t.rsub(t.exp(), alpha=2),
+    "rsub_scalar_alpha": lambda t: t.rsub(1.0, alpha=2),
     "neg": lambda t: -t,
     "exp": lambda t: t.exp(),
     "maximum": lambda t: t.maximum(t.exp()),

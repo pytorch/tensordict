@@ -68,7 +68,7 @@ print(model(x=x))
 
 ##################################################
 # Called with a tensor, the model returns one tensor per output key: here
-# ``"hidden"``, ``"latent"``, ``"loc"`` and ``"scale"``. For a large model,
+# ``"hidden"``, ``"latent"``, ``"loc"``, and ``"scale"``. For a large model,
 # you usually need fewer outputs. The section "Selecting the outputs" below
 # shows how to keep only some of them.
 #

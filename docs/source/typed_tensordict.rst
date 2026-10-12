@@ -5,6 +5,11 @@
 TypedTensorDict
 ===============
 
+.. warning::
+
+    ``TypedTensorDict`` is experimental: its API can change in a minor release
+    without a deprecation cycle.
+
 A :class:`~tensordict.TypedTensorDict` is a tensordict with declared fields.
 It subclasses :class:`~tensordict.TensorDictBase`, and you declare its fields
 as class annotations, as in a :class:`typing.TypedDict`. Choose it over a
@@ -114,7 +119,7 @@ A ``TypedTensorDict`` stores each value as a :class:`~tensordict.TensorDict`
 does, whatever the annotation. It does not compare the values with the
 annotations:
 
-- A Python number, a ``bool`` or a list of numbers becomes a tensor. A number
+- A Python number, a ``bool``, or a list of numbers becomes a tensor. A number
   is a tensor with no dimensions, so it needs ``batch_size=[]``.
 - A string is stored as :class:`~tensordict.NonTensorData`. Attribute access
   and ``get`` return the ``NonTensorData`` wrapper, and a string index returns
@@ -205,7 +210,7 @@ without a copy. Writes through the typed wrapper go to the storage of ``td``:
 
   >>> from tensordict import TensorDict
   >>> td = TensorDict(
-  ...     eta=torch.randn(5, 3), X=torch.randn(5, 4), beta=torch.randn(5, 1),
+  ...     {"eta": torch.randn(5, 3), "X": torch.randn(5, 4), "beta": torch.randn(5, 1)},
   ...     batch_size=[5],
   ... )
   >>> state = PredictorState.from_tensordict(td)
@@ -217,7 +222,7 @@ without a copy. Writes through the typed wrapper go to the storage of ``td``:
 
 This works with a :class:`~tensordict.PersistentTensorDict` (HDF5 or Zarr), a
 :class:`~tensordict.store.TensorDictStore` (Redis), a
-:class:`~tensordict.LazyStackedTensorDict` and a memory-mapped
+:class:`~tensordict.LazyStackedTensorDict`, and a memory-mapped
 ``TensorDict``. Some operations behave differently on these backends. See
 :ref:`compatibility` for the examples and the limits.
 
@@ -261,7 +266,7 @@ the operations that return a new tensordict return the same class:
   torch.Size([2, 5])
 
 This includes ``.memmap()``, ``.apply()``, ``torch.cat``, ``.unbind()``,
-``.select()``, ``.exclude()`` and ``.update()``.
+``.select()``, ``.exclude()``, and ``.update()``.
 
 The declared fields describe a valid instance. They do not change what the
 ``TensorDictBase`` methods do. ``pop``, ``rename_key_``, and ``select`` or
@@ -304,8 +309,8 @@ See also
 - :ref:`api-typed-tensordict`: the reference of
   :class:`~tensordict.TypedTensorDict`.
 - :ref:`tensorclass-guide`: typed fields with plain values, custom
-  ``__init__`` and dataclass features.
+  ``__init__``, and dataclass features.
 - :ref:`choosing-a-container`: which container to use, and the
   ``TensorClass`` and ``TypedTensorDict`` comparison.
-- :ref:`compatibility`: ``TypedTensorDict`` on HDF5, Redis, lazy stacks and
+- :ref:`compatibility`: ``TypedTensorDict`` on HDF5, Redis, lazy stacks, and
   memory-mapped tensordicts.

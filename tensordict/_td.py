@@ -94,6 +94,8 @@ from tensordict.utils import (
     _StringOnlyDict,
     _sub_index,
     _unravel_key_to_tuple,
+    _UPDATE_IGNORE_LOCK_WARNED,
+    _warn_update_ignore_lock,
     _zip_strict,
     DeviceType,
     expand_as_right,
@@ -734,21 +736,12 @@ class TensorDict(TensorDictBase):
         )
         return out
 
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
-        if chunks < 1:
-            raise ValueError(
-                f"chunks must be a strictly positive integer, got {chunks}."
-            )
-        # fall back on split, using upper rounding
+    # Override: Tensor.chunk on each leaf is faster than the generic split
+    def _chunk(self, chunks: int, dim: int) -> tuple[TensorCollection, ...]:
         batch_size = self.batch_size
-        dim = _maybe_correct_neg_dim(dim, batch_size)
         max_size = batch_size[dim]
-        if max_size == 0:
-            # torch.chunk returns `chunks` empty pieces along a zero-size dim
-            segments = [(0, 0)] * chunks
-        else:
-            split_size = -(max_size // -chunks)
-            segments = _create_segments_from_int(split_size, max_size)
+        split_size = -(max_size // -chunks)
+        segments = _create_segments_from_int(split_size, max_size)
         splits = {
             k: (v,) * len(segments) if _is_unbatched(v) else v.chunk(chunks, dim)
             for k, v in self.items()
@@ -1128,6 +1121,7 @@ class TensorDict(TensorDictBase):
             else:
                 renames.append((item, td_names))
 
+    # Override: O(1) on the dict of entries, which keeps the insertion order.
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         return self._tensordict.popitem()
@@ -1145,6 +1139,8 @@ class TensorDict(TensorDictBase):
         ignore_lock: bool = False,
         **kwargs,
     ) -> Self:
+        if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
+            ignore_lock = _warn_update_ignore_lock()
         if (
             not is_compiling()
             and type(self) is TensorDict
@@ -1566,6 +1562,7 @@ class TensorDict(TensorDictBase):
             self.del_(old_key)
         return self
 
+    # Override: stacks into the existing leaf storages (torch.stack(out=)).
     def _stack_onto_(self, list_item: list[CompatibleType], dim: int) -> TensorDict:
         for key in self.keys():
             vals = [item._get_str(key, None) for item in list_item]
@@ -1602,17 +1599,48 @@ class TensorDict(TensorDictBase):
             idx = (idx,)
         idx = convert_ellipsis_to_idx(idx, self.batch_size)
         for key in self.keys():
-            vals = [td._get_str(key, NO_DEFAULT) for td in list_item]
-            if all(v is None for v in vals):
-                continue
+            try:
+                vals = [td._get_str(key, NO_DEFAULT) for td in list_item]
+            except KeyError:
+                if all(td._get_str(key, None) is None for td in list_item):
+                    # as in _stack_onto_, keep an entry that no tensordict has
+                    continue
+                raise
             v = self._get_str(key, NO_DEFAULT)
             if _is_unbatched(v):
                 continue
+            if _is_tensor_collection(type(v)):
+                if not isinstance(v, TensorDictBase):
+                    raise RuntimeError(
+                        f"Cannot call _stack_onto_at_ with an entry of type {type(v).__name__}."
+                    )
+                if not all(
+                    _is_tensor_collection(type(val)) and not _is_non_tensor(type(val))
+                    for val in vals
+                ):
+                    raise RuntimeError(
+                        f"Cannot stack non-tensordict values into the tensordict entry {key!r}."
+                    )
+                v._stack_onto_at_(vals, dim=dim, idx=idx)
+                continue
             v_idx = v[idx]
-            if v.data_ptr() != v_idx.data_ptr():
+            # A copy (advanced index) is not a view: writing into it would be lost.
+            # Empty and meta tensors have no data (data_ptr() is 0 for both).
+            if not v_idx._is_view() and v_idx.data_ptr() != v.data_ptr():
                 raise IndexError(
                     f"Index {idx} is incompatible with stack(..., out=data) as the storages of the indexed tensors differ."
                 )
+            # torch.stack would resize the view and write past the indexed region.
+            val = vals[0]
+            if isinstance(val, Tensor):
+                shape = v_idx.shape
+                stacked_shape = list(val.shape)
+                stacked_shape.insert(dim if dim >= 0 else dim + len(shape), len(vals))
+                if shape != tuple(stacked_shape):
+                    raise RuntimeError(
+                        f"Cannot stack values of shape {tuple(val.shape)} into the entry "
+                        f"{key!r} of shape {tuple(shape)} with stack(..., out=data)."
+                    )
             torch.stack(vals, dim=dim, out=v_idx)
         return self
 
@@ -2156,118 +2184,6 @@ class TensorDict(TensorDictBase):
 
         return memmap_tensor
 
-    def where(
-        self,
-        condition: Tensor,
-        other: Tensor | TensorCollection,
-        *,
-        out: TensorCollection | None = None,
-        pad: int | bool = None,
-        update_batch_size: bool = False,
-    ) -> Self:
-        if _is_tensor_collection(type(other)):
-
-            def func(tensor, _other, key):
-                if tensor is None:
-                    if pad is not None:
-                        tensor = _other
-                        _other = torch.tensor(
-                            pad, dtype=_other.dtype, device=_other.device
-                        )
-                    else:
-                        raise KeyError(
-                            f"Key {key} not found and no pad value provided."
-                        )
-                    cond = expand_as_right(~condition, tensor)
-                elif _other is None:
-                    if pad is not None:
-                        _other = torch.tensor(
-                            pad, dtype=tensor.dtype, device=tensor.device
-                        )
-                    else:
-                        raise KeyError(
-                            f"Key {key} not found and no pad value provided."
-                        )
-                    cond = expand_as_right(condition, tensor)
-                else:
-                    cond = expand_as_right(condition, tensor)
-                return torch.where(
-                    condition=cond,
-                    input=tensor,
-                    other=_other,
-                )
-
-            result = self.empty() if out is None else out
-            other_keys = set(other.keys())
-            # we turn into a list because out could be = to self!
-            for key in list(self.keys()):
-                tensor = self._get_str(key, default=NO_DEFAULT)
-                _other = other._get_str(key, default=None)
-                if _is_tensor_collection(type(tensor)):
-                    _out = None if out is None else out._get_str(key, None)
-                    if _other is None:
-                        _other = tensor.empty()
-                    val = tensor.where(
-                        condition=condition, other=_other, out=_out, pad=pad
-                    )
-                else:
-                    val = func(tensor, _other, key)
-                result._set_str(
-                    key, val, inplace=False, validated=True, non_blocking=False
-                )
-                other_keys.discard(key)
-            for key in other_keys:
-                tensor = None
-                _other = other._get_str(key, default=NO_DEFAULT)
-                if _is_tensor_collection(type(_other)):
-                    try:
-                        tensor = _other.empty()
-                    except NotImplementedError:
-                        # H5 tensordicts do not support select()
-                        tensor = _other.to_tensordict().empty()
-                    val = _other.where(
-                        condition=~condition, other=tensor, out=None, pad=pad
-                    )
-                else:
-                    val = func(tensor, _other, key)
-                result._set_str(
-                    key, val, inplace=False, validated=True, non_blocking=False
-                )
-            return result
-        else:
-            if out is None:
-
-                def func(tensor):
-                    return torch.where(
-                        condition=expand_as_right(condition, tensor),
-                        input=tensor,
-                        other=other,
-                    )
-
-                return self._fast_apply(func, propagate_lock=True)
-            else:
-
-                def func(tensor, _out):
-                    return torch.where(
-                        condition=expand_as_right(condition, tensor),
-                        input=tensor,
-                        other=other,
-                        out=_out,
-                        update_batch_size=update_batch_size,
-                    )
-
-                return self._fast_apply(func, out, propagate_lock=True)
-
-    def masked_fill_(self, mask: Tensor, value: float | int | bool) -> Self:
-        for item in self.values():
-            mask_expand = expand_as_right(mask, item)
-            item.masked_fill_(mask_expand, value)
-        return self
-
-    def masked_fill(self, mask: Tensor, value: float | bool) -> Self:
-        td_copy = self.clone()
-        return td_copy.masked_fill_(mask, value)
-
     def is_contiguous(self) -> bool:
         return all([value.is_contiguous() for _, value in self.items()])
 
@@ -2359,6 +2275,7 @@ class TensorDict(TensorDictBase):
         )
         return out
 
+    # Override: fast path for the dense root, which many operations call.
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=NO_DEFAULT
     ) -> Self:
@@ -2377,6 +2294,7 @@ class TensorDict(TensorDictBase):
             )
         return super().empty(recurse=recurse)
 
+    # Override: dense fast path that shares the leaves and supports inplace.
     def _select(
         self,
         *keys: NestedKey,
@@ -2433,6 +2351,7 @@ class TensorDict(TensorDictBase):
         #     self._maybe_set_shared_attributes(result)
         return result
 
+    # Override: dense fast path that shares the leaves and supports inplace.
     def _exclude(
         self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
     ) -> Self:
@@ -2620,6 +2539,7 @@ class _SubTensorDict(TensorDictBase):
     _lazy = True
     _inplace_set = True
     _safe = False
+    _masking_on_dense_copy = True
 
     def __init__(
         self,
@@ -2901,6 +2821,7 @@ class _SubTensorDict(TensorDictBase):
             return type(self)
         return source_type
 
+    # Override: writes at self.idx of the source, in place.
     def _stack_onto_(self, list_item: list[CompatibleType], dim: int) -> _SubTensorDict:
         self._source._stack_onto_at_(list_item, dim=dim, idx=self.idx)
         return self
@@ -2963,6 +2884,8 @@ class _SubTensorDict(TensorDictBase):
         ignore_lock: bool = False,
         **kwargs,
     ) -> _SubTensorDict:
+        if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
+            ignore_lock = _warn_update_ignore_lock(stacklevel=3)
         if kwargs:
             if input_dict_or_td is None:
                 input_dict_or_td = kwargs
@@ -3153,6 +3076,7 @@ class _SubTensorDict(TensorDictBase):
         self._source = self._source.del_(key)
         return self
 
+    # Override: not supported on a sub-tensordict.
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         raise NotImplementedError(
@@ -3236,28 +3160,6 @@ class _SubTensorDict(TensorDictBase):
             names=self.names if self._has_names() else None,
         )
 
-    def _select(
-        self,
-        *keys: NestedKey,
-        inplace: bool = False,
-        strict: bool = True,
-        set_shared: bool = True,
-    ) -> Self:
-        if inplace:
-            raise RuntimeError("Cannot call select inplace on a lazy tensordict.")
-        return self.to_tensordict()._select(
-            *keys, inplace=False, strict=strict, set_shared=set_shared
-        )
-
-    def _exclude(
-        self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
-    ) -> Self:
-        if inplace:
-            raise RuntimeError("Cannot call exclude inplace on a lazy tensordict.")
-        return self.to_tensordict()._exclude(
-            *keys, inplace=False, set_shared=set_shared
-        )
-
     def expand(self, *args: int, inplace: bool = False) -> Self:
         if len(args) == 1 and isinstance(args[0], Sequence):
             shape = tuple(args[0])
@@ -3308,31 +3210,12 @@ class _SubTensorDict(TensorDictBase):
     def detach_(self) -> Self:
         raise RuntimeError("Detaching a sub-tensordict in-place cannot be done.")
 
-    def where(
-        self,
-        condition: Tensor,
-        other: Tensor | TensorDictBase,
-        *,
-        out: TensorDictBase | None = None,
-        pad: int | bool = None,
-        update_batch_size: bool = False,
-    ):
-        return self.to_tensordict().where(
-            condition=condition,
-            other=other,
-            out=out,
-            pad=pad,
-            update_batch_size=update_batch_size,
-        )
-
+    # Override: an entry read through a tensor index is a copy, so the
+    # filled entry is written back with set_.
     def masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
         for key, item in self.items():
             self.set_(key, item.masked_fill(expand_as_right(mask, item), value))
         return self
-
-    def masked_fill(self, mask: Tensor, value: float | bool) -> Self:
-        td_copy = self.clone()
-        return td_copy.masked_fill_(mask, value)
 
     def memmap_(
         self,
@@ -3553,13 +3436,6 @@ class _SubTensorDict(TensorDictBase):
         )
 
     # TODO: check these implementations
-
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
-        splits = -(self.batch_size[dim] // -chunks)
-        if splits == 0 and type(chunks) is int and chunks > 0:
-            # torch.chunk returns `chunks` empty pieces along a zero-size dim
-            return self.split([0] * chunks, dim)
-        return self.split(splits, dim)
 
     def _view(self, *args, **kwargs):
         raise RuntimeError(

@@ -3,7 +3,7 @@
 Distributed tensordicts
 =======================
 
-A tensordict sends, receives and reduces all its tensors with one call:
+A tensordict sends, receives, and reduces all its tensors with one call:
 ``td.send(dst=1)`` sends every leaf to rank 1, and ``td.all_reduce()``
 reduces every leaf over all ranks of :mod:`torch.distributed`. To stream
 tensordicts between two nodes without a process group, use a UCXX pipe. To
@@ -98,10 +98,10 @@ example in each. Each example on this page is a function of ``rank`` and
 
    def send_recv(rank, world_size):
        if rank == 0:
-           td = TensorDict(a=torch.randn(4), b=torch.randn(4, 3), batch_size=[4])
+           td = TensorDict({"a": torch.randn(4), "b": torch.randn(4, 3)}, batch_size=[4])
            td.send(dst=1)
        elif rank == 1:
-           td = TensorDict(a=torch.zeros(4), b=torch.zeros(4, 3), batch_size=[4])
+           td = TensorDict({"a": torch.zeros(4), "b": torch.zeros(4, 3)}, batch_size=[4])
            td.recv(src=0)
            print((td["b"] != 0).all())  # tensor(True)
 
@@ -121,7 +121,7 @@ send and recv
 ~~~~~~~~~~~~~
 
 The ``send_recv`` example above sends each leaf as one message. The receiver
-must hold a tensordict with the same keys, shapes and dtypes. ``recv`` writes
+must hold a tensordict with the same keys, shapes, and dtypes. ``recv`` writes
 the received values into its tensors.
 
 With ``consolidated=True``, ``send`` sends all the leaves as one message
@@ -130,16 +130,16 @@ copies the leaves into one storage (see :ref:`saving`), unless the tensordict
 is consolidated already. This is faster when the tensordict has many small
 leaves. In one measurement with 100 leaves of 256 bytes, on one machine with
 ``gloo``, a consolidated send was 34 times as fast as a send per leaf. The receiver must
-hold a consolidated tensordict with the same keys, shapes and dtypes:
+hold a consolidated tensordict with the same keys, shapes, and dtypes:
 
 .. code-block:: python
 
    def send_consolidated(rank, world_size):
        if rank == 0:
-           td = TensorDict(a=torch.randn(4), b=torch.randn(4, 3), batch_size=[4])
+           td = TensorDict({"a": torch.randn(4), "b": torch.randn(4, 3)}, batch_size=[4])
            td.send(dst=1, consolidated=True)
        elif rank == 1:
-           td = TensorDict(a=torch.zeros(4), b=torch.zeros(4, 3), batch_size=[4])
+           td = TensorDict({"a": torch.zeros(4), "b": torch.zeros(4, 3)}, batch_size=[4])
            td = td.consolidate(metadata=True)
            td.recv(src=0, consolidated=True)
            print((td["b"] != 0).all())  # tensor(True)
@@ -163,13 +163,13 @@ on each one before you use or change the data:
 
    def isend_irecv(rank, world_size):
        if rank == 0:
-           td = TensorDict(a=torch.randn(4), b=torch.randn(4, 3), batch_size=[4])
+           td = TensorDict({"a": torch.randn(4), "b": torch.randn(4, 3)}, batch_size=[4])
            works = td.isend(dst=1, return_early=True)
            # ... do other work, without changing td ...
            for work in works:
                work.wait()
        elif rank == 1:
-           td = TensorDict(a=torch.zeros(4), b=torch.zeros(4, 3), batch_size=[4])
+           td = TensorDict({"a": torch.zeros(4), "b": torch.zeros(4, 3)}, batch_size=[4])
            works = td.irecv(src=0, return_premature=True)
            # ... do other work, without reading td ...
            for work in works:
@@ -179,7 +179,7 @@ on each one before you use or change the data:
 A receiver that does not know the structure
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If the receiver does not know the keys, shapes and dtypes of the tensordict,
+If the receiver does not know the keys, shapes, and dtypes of the tensordict,
 call :meth:`~tensordict.TensorDictBase.init_remote` on the sender and
 :meth:`~tensordict.TensorDictBase.from_remote_init` on the receiver. The
 sender sends the metadata, then the data. The receiver builds a new
@@ -196,7 +196,7 @@ allocate memory again:
    def cold_start(rank, world_size):
        if rank == 0:
            td = TensorDict(
-               obs=torch.randn(2, 84), reward=torch.randn(2, 1), batch_size=[2]
+               {"obs": torch.randn(2, 84), "reward": torch.randn(2, 1)}, batch_size=[2]
            )
            td.init_remote(dst=1)
            for step in range(3):
@@ -216,7 +216,7 @@ the group must call them:
 
    def cold_start_broadcast(rank, world_size):
        if rank == 0:
-           td = TensorDict(obs=torch.randn(2, 84), batch_size=[2])
+           td = TensorDict({"obs": torch.randn(2, 84)}, batch_size=[2])
            td.init_remote(use_broadcast=True)
        else:
            td = TensorDict.from_remote_init(src=0, use_broadcast=True)
@@ -246,7 +246,7 @@ ranks can start with an empty tensordict:
 .. code-block:: python
 
    def broadcast(rank, world_size):
-       td = TensorDict(a=torch.arange(3.0), batch_size=[3]) if rank == 0 else TensorDict()
+       td = TensorDict({"a": torch.arange(3.0)}, batch_size=[3]) if rank == 0 else TensorDict()
        td = td.broadcast(src=0)
        print(rank, td["a"])  # tensor([0., 1., 2.]) on every rank
 
@@ -260,7 +260,7 @@ objects to wait on:
 .. code-block:: python
 
    def all_reduce(rank, world_size):
-       td = TensorDict(a=torch.ones(3) * rank, batch_size=[3])
+       td = TensorDict({"a": torch.ones(3) * rank}, batch_size=[3])
        td.all_reduce(op=dist.ReduceOp.SUM)
        print(rank, td["a"])  # with 2 ranks: tensor([1., 1., 1.]) on every rank
        works = td.all_reduce(async_op=True)
@@ -275,13 +275,13 @@ the local values after the call, clone the tensordict before it:
 .. code-block:: python
 
    def reduce(rank, world_size):
-       td = TensorDict(a=torch.ones(3) * (rank + 1), batch_size=[3])
+       td = TensorDict({"a": torch.ones(3) * (rank + 1)}, batch_size=[3])
        td.reduce(dst=0, op=dist.ReduceOp.SUM)
        if rank == 0:
            print(td["a"])  # with 2 ranks: tensor([3., 3., 3.])
 
-all_gather, scatter and gather_and_stack
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+all_gather, scatter, and gather_and_stack
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 :meth:`~tensordict.TensorDictBase.all_gather` returns a list with the
 tensordict of each rank, on every rank. The tensordicts can have different
@@ -290,7 +290,7 @@ structures:
 .. code-block:: python
 
    def all_gather(rank, world_size):
-       local = TensorDict(a=torch.full((3,), float(rank)), batch_size=[3])
+       local = TensorDict({"a": torch.full((3,), float(rank))}, batch_size=[3])
        tds = local.all_gather()
        print(rank, [td["a"][0].item() for td in tds])  # [0.0, 1.0] on every rank
 
@@ -302,7 +302,7 @@ on rank ``src`` to each rank. The other ranks pass ``tensordicts=None``:
    def scatter(rank, world_size):
        if rank == 0:
            tds = [
-               TensorDict(a=torch.full((3,), float(i)), batch_size=[3])
+               TensorDict({"a": torch.full((3,), float(i))}, batch_size=[3])
                for i in range(world_size)
            ]
        else:
@@ -320,17 +320,17 @@ dimension is ``world_size - 1``. Its own data is not in the result:
 
    def gather_and_stack(rank, world_size):
        if rank == 0:
-           out = TensorDict(a=torch.zeros(world_size - 1, 3), batch_size=[world_size - 1])
+           out = TensorDict({"a": torch.zeros(world_size - 1, 3)}, batch_size=[world_size - 1])
            out.gather_and_stack(dst=0)
            print(out["a"][:, 0])  # with 2 ranks: tensor([1.])
        else:
-           td = TensorDict(a=torch.full((3,), float(rank)), batch_size=[3])
+           td = TensorDict({"a": torch.full((3,), float(rank))}, batch_size=[3])
            td.gather_and_stack(dst=0)
 
 Several transfers and custom groups
 -----------------------------------
 
-``send``, ``recv``, ``isend`` and ``irecv`` mark the message of each leaf with
+``send``, ``recv``, ``isend``, and ``irecv`` mark the message of each leaf with
 a tag: ``init_tag``, ``init_tag + 1``, and so on. If two tensordicts go
 from one rank to another at the same time, give them tag ranges that do not
 overlap. Pass the same ``init_tag`` on both sides. With
@@ -341,15 +341,15 @@ them costs about 10 µs for each leaf.
 
    def two_transfers(rank, world_size):
        if rank == 0:
-           obs = TensorDict(a=torch.ones(4), b=torch.ones(4), batch_size=[4])
-           reward = TensorDict(r=torch.full((4,), 2.0), batch_size=[4])
+           obs = TensorDict({"a": torch.ones(4), "b": torch.ones(4)}, batch_size=[4])
+           reward = TensorDict({"r": torch.full((4,), 2.0)}, batch_size=[4])
            works = obs.isend(dst=1, init_tag=0, return_early=True)
            works += reward.isend(dst=1, init_tag=100, return_early=True)
            for work in works:
                work.wait()
        elif rank == 1:
-           obs = TensorDict(a=torch.zeros(4), b=torch.zeros(4), batch_size=[4])
-           reward = TensorDict(r=torch.zeros(4), batch_size=[4])
+           obs = TensorDict({"a": torch.zeros(4), "b": torch.zeros(4)}, batch_size=[4])
+           reward = TensorDict({"r": torch.zeros(4)}, batch_size=[4])
            reward.irecv(src=0, init_tag=100)
            obs.irecv(src=0, init_tag=0)
            print(obs["a"][0], reward["r"][0])  # tensor(1.) tensor(2.)
@@ -366,9 +366,9 @@ group:
    def custom_group(rank, world_size):
        group = dist.new_group([0, world_size - 1])
        if rank == 0:
-           TensorDict(a=torch.ones(3), batch_size=[3]).send(group=group, group_dst=1)
+           TensorDict({"a": torch.ones(3)}, batch_size=[3]).send(group=group, group_dst=1)
        elif rank == world_size - 1:
-           td = TensorDict(a=torch.zeros(3), batch_size=[3])
+           td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
            td.recv(group=group, group_src=0)
            print(td["a"])  # tensor([1., 1., 1.])
 
@@ -417,6 +417,12 @@ this example:
 Stream between nodes with UCXX
 ------------------------------
 
+.. warning::
+
+    ``TensorDictPipe``, ``TensorDictServer``, ``send_tensordict``, and
+    ``recv_tensordict`` are experimental: their API can change in a minor
+    release without a deprecation cycle.
+
 :class:`~tensordict._ucxx.TensorDictPipe` sends tensordicts from one process
 to one other process over `UCXX <https://github.com/rapidsai/ucxx>`_, the
 Python bindings of `UCX <https://openucx.org/>`_. Use it when one node
@@ -426,7 +432,7 @@ trainer. Compared with ``send`` and ``recv`` of ``torch.distributed``:
 - It needs no process group. The two sides connect by IP address and port.
 - After the first message, the receiver writes each new batch into the same
   buffer. It does not allocate memory or parse metadata.
-- UCX selects the transport: TCP, InfiniBand verbs or RoCE.
+- UCX selects the transport: TCP, InfiniBand verbs, or RoCE.
 - If the tensors are on a GPU and GPUDirect RDMA is available, the buffer
   goes from GPU memory to the network, with no copy in CPU memory.
 - The API uses :mod:`asyncio`, and has synchronous wrappers.
@@ -438,7 +444,7 @@ is tested: ``ucxx`` is not installed on the machines that test it.
 Install UCXX
 ~~~~~~~~~~~~
 
-UCXX needs Linux, Python 3.11+ and the UCX system libraries. The ``pip``
+UCXX needs Linux, Python 3.11+, and the UCX system libraries. The ``pip``
 packages are built for CUDA:
 
 .. code-block:: bash
@@ -478,7 +484,7 @@ phases:
    flag, then the storage only. The receiver writes it into the buffer of
    the first message.
 
-If the structure changes (other keys, shapes or dtypes), the pipe sends the
+If the structure changes (other keys, shapes, or dtypes), the pipe sends the
 metadata again. The sender compares a hash of the metadata at each send. If
 the tensordict is not consolidated, the sender consolidates it at each send,
 which allocates a new buffer. To avoid that, consolidate once and copy each
@@ -513,7 +519,7 @@ same tensordict, with the new values:
        pipe = await TensorDictPipe.connect("10.0.1.1", port=13337)
        buffer = None
        for obs, label in dataloader:
-           batch = TensorDict(obs=obs, label=label, batch_size=[obs.shape[0]])
+           batch = TensorDict({"obs": obs, "label": label}, batch_size=[obs.shape[0]])
            if buffer is None:
                buffer = batch.consolidate(metadata=True)  # allocate once
            else:
@@ -537,7 +543,7 @@ error happens: the iterator turns every exception into the end of the loop,
 and does not raise it. If you need the error, call ``await pipe.arecv()`` in
 a ``while`` loop instead.
 
-``pipe.send(td)``, ``pipe.recv()`` and ``pipe.close()`` are synchronous
+``pipe.send(td)``, ``pipe.recv()``, and ``pipe.close()`` are synchronous
 wrappers. If no event loop runs in the thread, each call runs the coroutine
 with :func:`asyncio.run`. In a coroutine, or in a callback of a running event
 loop, use the async methods (``asend``, ``arecv``, ``aclose``). There, a
@@ -555,7 +561,7 @@ on the device of the sender, unless you pass ``device``:
 
 .. code-block:: python
 
-   td = TensorDict(x=torch.randn(1024, 1024, device="cuda"), batch_size=[1024])
+   td = TensorDict({"x": torch.randn(1024, 1024, device="cuda")}, batch_size=[1024])
    await pipe.asend(td)  # sender
 
    td = await pipe.arecv()  # receiver: td is on cuda
@@ -621,7 +627,7 @@ These numbers come from the pull request that added UCXX
 measured them on two nodes with NVIDIA H200 GPUs and 400 Gb/s InfiniBand,
 with ``nvidia_peermem`` loaded. This page does not repeat the measurement.
 The script is ``benchmarks/distributed/bench_transport.py``. It needs a Ray
-cluster of two nodes, or the ``RANK``, ``MASTER_ADDR`` and ``PEER_ADDR``
+cluster of two nodes, or the ``RANK``, ``MASTER_ADDR``, and ``PEER_ADDR``
 environment variables.
 
 Each tensordict has two leaves of the size in the "Size" column, so each

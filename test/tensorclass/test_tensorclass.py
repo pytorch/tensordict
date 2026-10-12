@@ -2983,6 +2983,38 @@ class TestTensorClass:
         assert (data0.y.X == 1).all()
         assert data0.y.z == "test_tensorclass1"
 
+    def test_update_ignore_lock_deprecated(self):
+        # #2260: ignore_lock=True warns once per call, also when the update
+        # goes on into the tensordict of the tensorclass and its nested entries
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+            y: TensorDict
+
+        def make(value):
+            return TC(
+                x=torch.full((3,), value),
+                y=TensorDict(z={"w": torch.full((3,), value)}, batch_size=[3]),
+                batch_size=[3],
+            )
+
+        data = make(0.0)
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^update\(ignore_lock=True\) is deprecated and will be removed in "
+            r"TensorDict 0\.17\.",
+        ) as record:
+            assert data.update(make(1.0), ignore_lock=True) is data
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert (data.x == 1).all() and (data.y["z", "w"] == 1).all()
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            data.update(make(2.0))
+            data.update(make(3.0), ignore_lock=False)
+        assert (data.x == 3).all() and (data.y["z", "w"] == 3).all()
+
     def test_update_kwargs(self):
         @tensorclass
         class TC:

@@ -35,7 +35,6 @@ from tensordict.base import (
     _default_is_leaf,
     _is_leaf_nontensor,
     _register_tensor_class,
-    _UNSET,
     is_tensor_collection,
     T,
     TensorDictBase,
@@ -46,7 +45,6 @@ from tensordict.utils import (
     _cache_while_locked,
     _CloudpickleWrapper,
     _erase_cache_first,
-    _GENERIC_NESTED_ERR,
     _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
@@ -839,6 +837,7 @@ class PersistentTensorDict(TensorDictBase):
     """
 
     _td_dim_names = None
+    _masking_on_dense_copy = True
     LOCKING = None
 
     @property
@@ -1401,17 +1400,6 @@ class PersistentTensorDict(TensorDictBase):
     def _change_batch_size(self, value):
         raise NotImplementedError
 
-    def _stack_onto_(
-        self, list_item: list[CompatibleType], dim: int
-    ) -> PersistentTensorDict:
-        for key in self.keys():
-            vals = [td._get_str(key, None) for td in list_item]
-            if all(v is None for v in vals):
-                continue
-            stacked = torch.stack(vals, dim=dim)
-            self.set_(key, stacked)
-        return self
-
     # Override: checks the batch size against the file, and keeps the old
     # one if it does not fit.
     @TensorDictBase.batch_size.setter
@@ -1440,14 +1428,27 @@ class PersistentTensorDict(TensorDictBase):
 
     @_lock_blocked
     def del_(self, key):
-        key = self._process_key(key)
-        self._backend.delete(self.file, key)
+        path = self._process_key(key)
+        # h5py raises a KeyError for a missing key, zarr does not
+        missing = self.backend == "zarr" and not self._backend.contains(self.file, path)
+        self._backend.delete(self.file, path)
+        if missing:
+            # stacklevel 3: skip the _lock_blocked wrapper
+            warnings.warn(
+                f"{type(self).__name__}.del_ of a missing key {key!r} does "
+                "nothing today with the zarr backend. Starting with TensorDict "
+                "0.17, the default will change to raising a KeyError, as "
+                "TensorDict does.",
+                FutureWarning,
+                stacklevel=3,
+            )
         return self
 
     def detach_(self):
         # PersistentTensorDict do not carry gradients. This is a no-op
         return self
 
+    # Override: a TensorDict skeleton, built without reading the data.
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> T:
@@ -1533,26 +1534,8 @@ class PersistentTensorDict(TensorDictBase):
     def is_contiguous(self):
         return False
 
-    def masked_fill(self, mask, value):
-        return self.to_tensordict().masked_fill(mask, value)
-
-    def where(
-        self,
-        condition: torch.Tensor,
-        other: torch.Tensor | TensorDictBase,
-        *,
-        out: TensorDictBase | None = None,
-        pad: int | bool = None,
-        update_batch_size: bool = False,
-    ):
-        return self.to_tensordict().where(
-            condition=condition,
-            other=other,
-            out=out,
-            pad=pad,
-            update_batch_size=update_batch_size,
-        )
-
+    # Override: the file reads give copies, so the fill is written to the
+    # arrays directly, without reading them.
     def masked_fill_(self, mask, value):
         for key in self.keys(include_nested=True, leaves_only=True):
             array = self._get_array(key)
@@ -1753,31 +1736,17 @@ class PersistentTensorDict(TensorDictBase):
             f"Cannot pin memory of a {type(self).__name__}. Call to_tensordict() before making this call."
         )
 
-    def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
-        key_tuple = _unravel_key_to_tuple(key)
-        if not key_tuple:
-            raise KeyError(_GENERIC_NESTED_ERR.format(key))
-        out = self.get(key_tuple, _UNSET)
-        if out is _UNSET:
-            if default is NO_DEFAULT:
-                raise KeyError(
-                    _KEY_ERROR.format(
-                        key_tuple[0] if len(key_tuple) == 1 else key_tuple,
-                        type(self).__name__,
-                        sorted(self.keys(include_nested=len(key_tuple) > 1), key=str),
-                    )
-                )
-            return default
+    def _popped_value(self, value):
+        # Override: a zarr group reads from the store: copy it before deleting it
         if (
             self.backend == "zarr"
             and not self.is_locked
-            and isinstance(out, PersistentTensorDict)
+            and isinstance(value, PersistentTensorDict)
         ):
-            # A zarr group reads from the store: copy it before deleting it
-            out = out.to_tensordict()
-        self.del_(key_tuple)
-        return out
+            return value.to_tensordict()
+        return value
 
+    # Override: not supported.
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         raise NotImplementedError(
@@ -1942,6 +1911,7 @@ class PersistentTensorDict(TensorDictBase):
         target_td = self._get_str(key, default=NO_DEFAULT)
         return target_td
 
+    # Override: not supported: it would load the file.
     def _select(
         self, *keys: NestedKey, inplace: bool = False, strict: bool = True
     ) -> PersistentTensorDict:
@@ -1950,6 +1920,7 @@ class PersistentTensorDict(TensorDictBase):
             "Create a regular tensordict first using the `to_tensordict` method."
         )
 
+    # Override: not supported: it would load the file.
     def _exclude(
         self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
     ) -> PersistentTensorDict:
@@ -1958,6 +1929,7 @@ class PersistentTensorDict(TensorDictBase):
             "Create a regular tensordict first using the `to_tensordict` method."
         )
 
+    # Override: works on an in-memory copy; inplace would rename in the file.
     @_as_context_manager()
     def flatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
         """Returns an in-memory copy where the nested keys are joined by ``separator``.
@@ -1977,6 +1949,7 @@ class PersistentTensorDict(TensorDictBase):
             )
         return self.to_tensordict().flatten_keys(separator=separator)
 
+    # Override: works on an in-memory copy; inplace would rename in the file.
     @_as_context_manager()
     def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
         if inplace:
@@ -2330,13 +2303,6 @@ class PersistentTensorDict(TensorDictBase):
         raise RuntimeError(
             "Cannot call `unsqueeze` on a persistent tensordict. Make it dense before calling this method by calling `to_tensordict`."
         )
-
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
-        splits = -(self.batch_size[dim] // -chunks)
-        if splits == 0 and type(chunks) is int and chunks > 0:
-            # torch.chunk returns `chunks` empty pieces along a zero-size dim
-            return self.split([0] * chunks, dim)
-        return self.split(splits, dim)
 
 
 _register_tensor_class(PersistentTensorDict)
