@@ -24,13 +24,6 @@ else:
 __all__ = ["CompositeDistribution"]
 
 
-def _entropy(dist):
-    # TruncatedStandardNormal and TruncatedNormal expose entropy as a property,
-    # not as a method like torch.distributions do.
-    e = dist.entropy
-    return e() if callable(e) else e
-
-
 class CompositeDistribution(d.Distribution, Mapping):
     """A composite distribution that groups multiple distributions together using the TensorDict interface.
 
@@ -534,7 +527,7 @@ class CompositeDistribution(d.Distribution, Mapping):
         se = 0.0
         for dist in self.dists.values():
             try:
-                e = _entropy(dist)
+                e = dist.entropy()
             except NotImplementedError:
                 x = dist.rsample((samples_mc,))
                 e = -dist.log_prob(x).mean(0)
@@ -575,7 +568,7 @@ class CompositeDistribution(d.Distribution, Mapping):
         d = {}
         for name, dist in self.dists.items():
             try:
-                e = _entropy(dist)
+                e = dist.entropy()
             except NotImplementedError:
                 x = dist.rsample((samples_mc,))
                 e = -dist.log_prob(x).mean(0)
