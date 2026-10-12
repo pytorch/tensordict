@@ -113,6 +113,15 @@ class TestH5Serialization:
         assert set(h5td.keys(True, True)) == {"a", ("b", "c")}
         h5td.close()
 
+    def test_device_setter(self, tmp_path):
+        # as on a TensorDict, the device changes only through to()
+        td = TensorDict({"a": torch.zeros(3)}, [3])
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        with pytest.raises(RuntimeError, match="device cannot be set"):
+            h5td.device = "cpu"
+        assert h5td.device is None
+        h5td.close()
+
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_auto_batch_size(tmpdir):
