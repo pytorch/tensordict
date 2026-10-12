@@ -1849,20 +1849,36 @@ class PersistentTensorDict(TensorDictBase):
 
     # Override: moves the node in the file, without reading the data.
     def _rename_key(self, old_key: NestedKey, new_key: NestedKey) -> None:
-        old_path = self._process_key(old_key)
-        new_path = self._process_key(new_key)
+        old = _unravel_key_to_tuple(old_key)
+        new = _unravel_key_to_tuple(new_key)
+        old_path = self._process_key(old)
+        new_path = self._process_key(new)
         if (
-            old_path
-            and new_path
-            and old_path != new_path
-            and not old_path.startswith(new_path + "/")
+            old
+            and new
+            and all(old)
+            and all(new)
+            # neither key lies under the other
+            and old[: len(new)] != new
+            and new[: len(old)] != old
             and self._backend.contains(self.file, new_path)
             and self._backend.contains(self.file, old_path)
         ):
             # the backends refuse to move onto an existing node (rename_key_
             # has checked safe): overwrite it, as TensorDict does
             self._backend.delete(self.file, new_path)
+            self._forget_nested(new)
         self._backend.move(self.file, old_path, new_path)
+        if old:
+            self._forget_nested(old)
+
+    def _forget_nested(self, key: tuple) -> None:
+        """Drops the cached nested tensordicts at or under ``key``, whose node has moved or gone."""
+        for cached in list(self._nested_tensordicts):
+            if cached[: len(key)] == key:
+                del self._nested_tensordicts[cached]
+            elif key[: len(cached)] == cached:
+                self._nested_tensordicts[cached]._forget_nested(key[len(cached) :])
 
     def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
         """Fills a tensor pointed by the key with the a given value.

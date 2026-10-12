@@ -113,6 +113,33 @@ class TestH5Serialization:
         assert set(h5td.keys(True, True)) == {"a", ("b", "c")}
         h5td.close()
 
+    def test_rename_key_overwrite_read_group(self, tmp_path):
+        # the overwritten group was read first: reads and writes after the
+        # rename go to the new node, not to the deleted group
+        td = TensorDict({"a": {"x": torch.zeros(3)}, "b": {"y": torch.ones(3)}}, [3])
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        _ = h5td["b"], h5td["a"]
+        h5td.rename_key_("a", "b")
+        assert set(h5td["b"].keys()) == {"x"}
+        h5td["b", "z"] = torch.full((3,), 2.0)
+        assert set(h5td.keys(True, True)) == {("b", "x"), ("b", "z")}
+        # a new "a" is not the moved group
+        h5td["a"] = TensorDict(w=torch.zeros(3), batch_size=[3])
+        assert set(h5td.keys(True, True)) == {("a", "w"), ("b", "x"), ("b", "z")}
+        h5td.close()
+
+    def test_rename_key_into_own_child(self, tmp_path):
+        # a key is not moved into, or replaced by, one of its own entries: the
+        # backends raise, and the file keeps its data
+        td = TensorDict({"n": {"sub": torch.zeros(3), "c": torch.ones(3)}}, [3])
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        with pytest.raises(KeyError, match="already present"):
+            h5td.rename_key_("n", ("n", "sub"))
+        with pytest.raises(KeyError, match="already present"):
+            h5td.rename_key_(("n", "sub"), "n")
+        assert set(h5td.keys(True, True)) == {("n", "sub"), ("n", "c")}
+        h5td.close()
+
     def test_device_setter(self, tmp_path):
         # as on a TensorDict, the device changes only through to()
         td = TensorDict({"a": torch.zeros(3)}, [3])

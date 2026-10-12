@@ -730,6 +730,13 @@ class TestTensorDictStore:
         assert record[0].filename == __file__
         assert set(store_td.keys()) == {"renamed"}
 
+    def test_rename_key_bad_new_key(self, store_td):
+        # the store moved "obs" to the empty key ""
+        store_td["obs"] = torch.randn(10, 3)
+        with pytest.raises(TypeError, match="Expected new_name to be a string"):
+            store_td.rename_key_("obs", 1)
+        assert set(store_td.keys()) == {"obs"}
+
     def test_rename_key_safe_nested_destination(self, store_td):
         # safe=True checks the sub-tensordicts too: the store renamed "obs" to
         # "nested", which then was both a leaf and a sub-tensordict
