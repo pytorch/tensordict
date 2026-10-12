@@ -4851,6 +4851,29 @@ class TestGeneric:
         assert (td._get_sub_tensordict(idx0).get("c") == 0).all()
         assert (td0.get("c") == 0).all()
 
+    @pytest.mark.parametrize(
+        "idx",
+        [slice(1, 3), torch.tensor([0, 2]), torch.tensor([True, False, True, False])],
+    )
+    @pytest.mark.parametrize("lazy", [False, True])
+    def test_sub_td_inplace_methods(self, idx, lazy):
+        # The entries of a sub-tensordict are copies for an index tensor, a
+        # mask or a lazy stack source: the in-place methods write them back
+        td = TensorDict(
+            a=torch.arange(8.0).view(4, 2),
+            nested=TensorDict(b=torch.arange(4.0), batch_size=[4]),
+            batch_size=[4],
+        )
+        expected = td.clone()
+        if lazy:
+            td = lazy_stack(list(td.unbind(0)))
+        sub_td = td._get_sub_tensordict(idx)
+        assert sub_td.add_(1.0) is sub_td
+        sub_td *= 2
+        assert sub_td.clamp_max_(9.0) is sub_td
+        expected[idx] = expected[idx].add(1.0).mul(2).clamp_max(9.0)
+        assert (td.to_tensordict() == expected).all()
+
     def test_setdefault_nested(self):
         tensor = torch.randn(4, 5, 6, 7)
         tensor2 = torch.ones(4, 5, 6, 7)

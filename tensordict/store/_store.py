@@ -302,6 +302,8 @@ class TensorDictStore(TensorDictBase):
 
     _td_dim_names = None
     _masking_on_dense_copy = True
+    # each read fetches the entry from the server into a new tensor
+    _reads_return_copies = True
     # Set on the shallow copies that _clone(recurse=False) returns: they share
     # the data and the metadata keys of the store, but not its batch size.
     _is_shallow_copy = False
@@ -2486,11 +2488,6 @@ class TensorDictStore(TensorDictBase):
         # only the store's own handle persists its batch size.
         if not self._prefix and not self._is_shallow_copy:
             self._run_sync(self._apersist_metadata())
-
-    def zero_(self) -> Self:
-        for key in self.keys():
-            self.fill_(key, 0)
-        return self
 
     def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
         existing = self.get(key)

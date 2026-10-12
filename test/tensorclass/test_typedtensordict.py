@@ -18,11 +18,18 @@ import warnings
 
 import pytest
 import torch
-from tensordict import lazy_stack, TensorDict, TypedTensorDict
+from tensordict import (
+    lazy_stack,
+    LazyStackedTensorDict,
+    PersistentTensorDict,
+    TensorDict,
+    TypedTensorDict,
+)
 from tensordict.base import _default_is_leaf, TensorDictBase
 from torch import Tensor
 
 _has_mypy = importlib.util.find_spec("mypy") is not None
+_has_h5py = importlib.util.find_spec("h5py") is not None
 
 # ---------------------------------------------------------------------------
 # Fixture classes
@@ -824,6 +831,39 @@ class TestFromTensordict:
         assert isinstance(state, PredictorState)
         assert state.batch_size == torch.Size([2])
         assert state.eta.shape == (2, 3)
+
+    def test_from_tensordict_lazy_stack_inplace(self):
+        # #2242: the in-place methods write into the members of the stack
+        tds = [self._make_td() for _ in range(2)]
+        state = PredictorState.from_tensordict(lazy_stack(tds))
+        expected = state.to_tensordict()
+        other = expected.apply(lambda x: torch.rand_like(x) + 1)
+        for td in (state, expected):
+            assert td.abs_() is td
+            assert td.add_(other, alpha=2.0) is td
+            td *= 2
+            assert td.lerp_(other, 0.5) is td
+            assert td.update_(other.select("eta") * 3) is td
+        assert (state._source[0]["eta"] == tds[0]["eta"]).all()
+        torch.testing.assert_close(lazy_stack(tds)["eta"], expected["eta"])
+        torch.testing.assert_close(state.to_tensordict(), expected)
+        state.copy_(other)
+        torch.testing.assert_close(state.to_tensordict(), other)
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+    def test_from_tensordict_lazy_stack_read_only_inplace(self, tmp_path):
+        # A stack of files opened read-only stays unchanged, and warns
+        files = []
+        for i in range(2):
+            self._make_td().to_h5(tmp_path / f"{i}.h5").close()
+            files.append(PersistentTensorDict.from_h5(tmp_path / f"{i}.h5"))
+        state = PredictorState.from_tensordict(LazyStackedTensorDict(*files))
+        before = state.to_tensordict()
+        with pytest.warns(FutureWarning, match="leaves the file unchanged"):
+            state.add_(1.0)
+        with pytest.warns(FutureWarning, match="leaves the file unchanged"):
+            state.update_(before + 1)
+        torch.testing.assert_close(state.to_tensordict(), before)
 
     def test_from_tensordict_memmap(self):
         with tempfile.TemporaryDirectory() as tmpdir:

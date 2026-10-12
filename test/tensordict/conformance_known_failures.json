@@ -134,16 +134,7 @@
   "keys(True)"
  ],
  "td_h5 masking": [],
- "td_h5 pointwise": [
-  "abs_()",
-  "add_(1)",
-  "add_(td)",
-  "clamp_max_(1)",
-  "clamp_min_(-1)",
-  "mul_(2)",
-  "mul_(td)",
-  "mul_(tensor(2))"
- ],
+ "td_h5 pointwise": [],
  "td_h5 reductions": [],
  "td_h5 select": [
   "exclude('a')",

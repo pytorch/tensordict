@@ -38,6 +38,7 @@ from tensordict.base import (
     _flatten_nested_dicts,
     _foreach_copy_,
     _foreach_copy_compiled,
+    _holds_its_tensors,
     _is_accepted_class,
     _is_leaf_nontensor,
     _is_tensor_collection,
@@ -2584,6 +2585,22 @@ class _SubTensorDict(TensorDictBase):
     @property
     def _is_memmap(self):
         return self._source._is_memmap
+
+    @property
+    def _reads_return_copies(self):
+        # the entries are views only for a basic index of the tensors that the
+        # source holds: an index tensor or a mask, or a source that builds its
+        # entries on each read (a lazy stack, a file), gives copies
+        return not (
+            _holds_its_tensors(self._source)
+            and all(
+                (type(idx) is int) or idx is None or isinstance(idx, slice)
+                for idx in self.idx
+            )
+        )
+
+    def _storage_is_read_only(self) -> bool:
+        return self._source._storage_is_read_only()
 
     @property
     def batch_size(self) -> torch.Size:

@@ -101,6 +101,8 @@ class _StoreStackElementView(TensorDictBase):
 
     _td_dim_names = None
     _masking_on_dense_copy = True
+    # each read fetches the entry from the server into a new tensor
+    _reads_return_copies = True
 
     def __init__(self, parent, element_idx: int):
         self._parent = parent
@@ -437,11 +439,6 @@ class _StoreStackElementView(TensorDictBase):
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._batch_size = new_size
 
-    def zero_(self) -> Self:
-        for key in self.keys():
-            self.fill_(key, 0)
-        return self
-
     def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
         existing = self.get(key)
         if is_tensor_collection(existing):
@@ -716,6 +713,8 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     _td_dim_names = None
     _masking_on_dense_copy = True
+    # each read fetches the entry from the server into a new tensor
+    _reads_return_copies = True
 
     def __init__(
         self,
@@ -2181,10 +2180,19 @@ class LazyStackedTensorDictStore(TensorDictBase):
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._batch_size = new_size
 
-    def zero_(self) -> Self:
-        for key in self.keys():
-            self.fill_(key, 0)
-        return self
+    def _write_back(self, keys, values, method: str) -> None:
+        # Override: a key whose elements differ in shape is read with the shape
+        # of the first element, and writing it back would lose the others: it
+        # is left unchanged, as fill_ does.
+        keys = [_unravel_key_to_tuple(key) for key in keys]
+        homogeneous = self._run_sync(
+            self._ais_homogeneous([_KEY_SEP.join(key) for key in keys])
+        )
+        super()._write_back(
+            [key for key, keep in zip(keys, homogeneous) if keep],
+            [value for value, keep in zip(values, homogeneous) if keep],
+            method,
+        )
 
     def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
         existing = self.get(key)
