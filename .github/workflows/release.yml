@@ -7,9 +7,10 @@
 # 1. Sanity checks (version files, branch, tag, PyPI)
 # 2. Builds the wheel (one py3-none-any wheel) and smoke-tests it on each platform
 # 3. Collects wheels into a single artifact
-# 4. Updates gh-pages docs (stable symlink)
-# 5. Creates draft GitHub release with wheels attached
-# 6. Publishes to PyPI using OIDC trusted publishing
+# 4. Creates draft GitHub release with wheels attached
+# 5. Publishes to PyPI using OIDC trusted publishing
+# 6. Updates gh-pages docs (stable symlink and versions.html), once the tag's
+#    docs are there
 #
 # Triggers:
 # - Manual workflow_dispatch only (no automatic triggers)
@@ -56,7 +57,8 @@ on:
 
 # One release run per branch at a time. A new run waits for the current one
 # instead of cancelling it, so that a second dispatch cannot interrupt a
-# publish. Use `gh run cancel` to stop a run.
+# publish. `gh run cancel` does not stop the build jobs; to stop a run, use
+# `gh api -X POST repos/pytorch/tensordict/actions/runs/<run id>/force-cancel`.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
@@ -371,15 +373,19 @@ jobs:
   # =============================================================================
   # UPDATE GH-PAGES DOCS
   # =============================================================================
+  # Runs after the PyPI upload, so that stable only moves to a published
+  # version, and so that the upload does not wait for the docs.
   update-docs:
     name: Update Stable Docs
-    needs: [sanity-checks, collect-wheels]
-    if: ${{ !cancelled() && needs.collect-wheels.result == 'success' && needs.sanity-checks.result != 'failure' }}
+    needs: [sanity-checks, collect-wheels, publish-pypi]
+    if: ${{ !cancelled() && needs.publish-pypi.result == 'success' && needs.sanity-checks.result != 'failure' }}
     runs-on: ubuntu-latest
-    # Every job that pushes to gh-pages joins this group, so they push one at a
-    # time. With `queue: max`, later jobs wait instead of being cancelled.
+    # One stable update at a time, so that two releases from different branches
+    # do not both move `stable`. With `queue: max`, later ones wait instead of
+    # being cancelled. Other jobs that push to gh-pages write other folders, and
+    # the push below rebases onto them.
     concurrency:
-      group: gh-pages
+      group: gh-pages-stable
       queue: max
     steps:
       - name: Get version info
@@ -404,11 +410,19 @@ jobs:
 
           echo "Updating stable docs to version $VERSION_MAJOR_MINOR"
 
-          # Check if the version folder exists
-          if [[ ! -d "$VERSION_MAJOR_MINOR" ]]; then
-            echo "::error::Docs folder for $VERSION_MAJOR_MINOR does not exist. Run docs workflow first."
-            exit 1
-          fi
+          # For a new minor version, the docs build of the tag creates the
+          # folder. It starts when the tag is pushed and can still be running,
+          # so wait for it as long as that build may take.
+          DEADLINE=$((SECONDS + 120 * 60))
+          until [[ -d "$VERSION_MAJOR_MINOR" ]]; do
+            if (( SECONDS >= DEADLINE )); then
+              echo "::error::Docs folder for $VERSION_MAJOR_MINOR does not exist after 120 minutes. Check the docs build of the tag, then re-run this job."
+              exit 1
+            fi
+            echo "Waiting for the docs folder $VERSION_MAJOR_MINOR on gh-pages..."
+            sleep 60
+            git pull --ff-only origin gh-pages
+          done
 
           # A release of an older line must not move stable back.
           CURRENT=$(readlink stable || true)
@@ -422,26 +436,78 @@ jobs:
           ln -sf "$VERSION_MAJOR_MINOR" stable
           echo "Updated stable symlink -> $VERSION_MAJOR_MINOR"
 
-          # Update versions.html if it exists
-          if [[ -f "versions.html" ]]; then
-            # Check if this version is already in versions.html
-            if ! grep -q "\"$VERSION_MAJOR_MINOR\"" versions.html; then
-              echo "::notice::Version $VERSION_MAJOR_MINOR not in versions.html, may need manual update"
-            fi
-          fi
+          # Rewrite versions.html from the X.Y docs folders, newest first, so
+          # that it lists every version that has docs. The page carries its
+          # own style, because the files of a docs theme change with the
+          # theme.
+          STABLE=$(readlink stable)
+          {
+            cat <<'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>TensorDict documentation versions</title>
+              <style>
+                body {
+                  margin: 3rem auto;
+                  max-width: 40rem;
+                  padding: 0 1rem;
+                  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+                  line-height: 1.6;
+                  color: #262626;
+                }
+                h1 { font-size: 2rem; font-weight: 600; }
+                ul { list-style: none; padding: 0; }
+                li { border-bottom: 1px solid #e5e5e5; padding: 0.4rem 0; }
+                a { color: #ee4c2c; text-decoration: none; }
+                a:hover { text-decoration: underline; }
+              </style>
+            </head>
+            <body>
+              <h1>TensorDict documentation</h1>
+              <p>Pick a version:</p>
+              <ul>
+                <li><a href="main/">main (unstable)</a></li>
+          EOF
+            find . -maxdepth 1 -type d -regextype posix-extended -regex '\./[0-9]+\.[0-9]+' -printf '%f\n' |
+              sort -rV |
+              while read -r FOLDER; do
+                LABEL="v${FOLDER}"
+                if [[ "$FOLDER" == "$STABLE" ]]; then
+                  LABEL="${LABEL} (stable release)"
+                fi
+                printf '      <li><a href="%s/">%s</a></li>\n' "$FOLDER" "$LABEL"
+              done
+            cat <<'EOF'
+              </ul>
+            </body>
+          </html>
+          EOF
+          } > versions.html
 
           # Check if changes were made
-          if git diff --quiet; then
-            echo "::notice::Stable docs already point to $VERSION_MAJOR_MINOR. No changes needed."
+          git add stable versions.html
+          if git diff --cached --quiet; then
+            echo "::notice::Stable docs already point to $VERSION_MAJOR_MINOR and versions.html is up to date. No changes needed."
             exit 0
           fi
 
           # Commit and push
           git config user.name 'pytorchbot'
           git config user.email 'soumith+bot@pytorch.org'
-          git add stable versions.html 2>/dev/null || git add stable
           git commit -m "Update stable docs to $VERSION_MAJOR_MINOR"
-          git push
+          for attempt in 1 2 3 4 5; do
+            if git push; then
+              break
+            elif [[ "${attempt}" == 5 ]]; then
+              echo "::error::Could not push to gh-pages after ${attempt} attempts."
+              exit 1
+            fi
+            sleep $((attempt * 10))
+            git pull --rebase origin gh-pages
+          done
 
           echo "Successfully updated stable docs"
 
@@ -449,7 +515,7 @@ jobs:
         if: ${{ env.DRY_RUN == 'true' }}
         run: |
           VERSION_MAJOR_MINOR="${{ steps.version.outputs.version_major_minor }}"
-          echo "DRY RUN: Would update stable symlink to point to $VERSION_MAJOR_MINOR"
+          echo "DRY RUN: Would update stable symlink to point to $VERSION_MAJOR_MINOR and rewrite versions.html"
 
           if [[ -L "stable" ]]; then
             CURRENT=$(readlink stable)
@@ -463,7 +529,7 @@ jobs:
   # =============================================================================
   create-release:
     name: Create GitHub Release
-    needs: [sanity-checks, collect-wheels, update-docs]
+    needs: [sanity-checks, collect-wheels]
     if: ${{ !cancelled() && needs.collect-wheels.result == 'success' && needs.sanity-checks.result != 'failure' }}
     runs-on: ubuntu-latest
     steps:
@@ -583,7 +649,7 @@ jobs:
   # =============================================================================
   release-summary:
     name: Release Summary
-    needs: [sanity-checks, build, collect-wheels, update-docs, create-release, publish-pypi]
+    needs: [sanity-checks, build, collect-wheels, create-release, publish-pypi, update-docs]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -596,9 +662,9 @@ jobs:
           echo "| Sanity Checks | ${{ needs.sanity-checks.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Build Wheel | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Collect Wheels | ${{ needs.collect-wheels.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Update Docs | ${{ needs.update-docs.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Create Release | ${{ needs.create-release.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Publish PyPI | ${{ needs.publish-pypi.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Update Docs | ${{ needs.update-docs.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [[ "${{ env.DRY_RUN }}" == "true" ]]; then

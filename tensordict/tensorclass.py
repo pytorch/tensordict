@@ -14,17 +14,19 @@ import inspect
 import multiprocessing.managers
 import multiprocessing.sharedctypes
 import numbers
+import operator
 import os
 import pickle
 import shutil
 import sys
 import warnings
+import weakref
 from collections.abc import Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
-from types import NoneType, UnionType
+from types import FunctionType, NoneType, UnionType
 from typing import (
     AbstractSet,
     Any,
@@ -43,17 +45,18 @@ from typing import (
 )
 
 import numpy as np
-import tensordict as tensordict_lib
 import torch
+from tensordict import base as _td_base
+from tensordict._deprecation import deprecated, warn_deprecated
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._pytree import _register_td_node
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._tensorcollection import TensorCollection
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
+from tensordict._utils_options import _set_capture_non_tensor_stack
 from tensordict.base import (
-    _ACCEPTED_CLASSES,
-    _GET_DEFAULTS_TO_NONE,
+    _is_accepted_class,
     _is_leaf_nontensor,
     _is_tensor_collection,
     _register_tensor_class,
@@ -67,12 +70,16 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _is_dataclass as is_dataclass,
     _is_json_serializable,
     _is_tensorclass,
-    _KeyDependentDefaultDict,
+    _is_unbatched,
     _LOCK_ERROR,
     _REPR_OPTIONS,
+    _resolve_expand_shape,
+    _strong_ref,
     _td_fields,
     _TENSORCLASS_MEMO,
     _unravel_key_to_tuple,
+    _UPDATE_IGNORE_LOCK_WARNED,
+    _warn_update_ignore_lock,
     _zip_strict,
     capture_non_tensor_stack,
     DeviceType,
@@ -80,10 +87,9 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     is_tensorclass,
     LinkedList,
     list_to_stack,
-    set_capture_non_tensor_stack,
 )
 from torch import multiprocessing as mp, Tensor
-from torch.compiler import is_compiling
+from torch.compiler import is_compiling, is_dynamo_compiling
 from torch.multiprocessing import Manager
 from torch.utils._pytree import tree_map
 
@@ -158,6 +164,7 @@ _TD_PASS_THROUGH = {
     torch.atleast_3d: True,
     torch.broadcast_to: True,
     torch.cat: True,
+    torch.chunk: True,
     torch.clone: True,
     torch.empty_like: True,
     torch.flatten: True,
@@ -173,6 +180,8 @@ _TD_PASS_THROUGH = {
     torch.permute: True,
     torch.rand_like: True,
     torch.randn_like: True,
+    torch.repeat_interleave: True,
+    torch.reshape: True,
     torch.roll: True,
     torch.rot90: True,
     torch.split: True,
@@ -180,17 +189,19 @@ _TD_PASS_THROUGH = {
     torch.stack: True,
     torch.swapaxes: True,
     torch.swapdims: True,
+    torch.tensor_split: True,
     torch.tile: True,
     torch.unbind: True,
     torch.unflatten: True,
     torch.unsqueeze: True,
+    torch.where: True,
     torch.zeros_like: True,
     torch.autograd.grad: True,
 }
 # Methods to be executed from tensordict, any ref to self means 'tensorclass'
 _METHOD_FROM_TD = [
     "__enter__",
-    "__exit__",
+    "__iter__",
     "dumps",
     "load_",
     "memmap",
@@ -425,7 +436,6 @@ _FALLBACK_METHOD_FROM_TD = [
     "expand_as",
     "expm1",
     "expm1_",
-    "extend",
     "fill_",
     "filter_empty_",
     "filter_non_tensor_data",
@@ -617,11 +627,11 @@ _FALLBACK_METHOD_FROM_TD_COPY = [
 def is_non_tensor(obj) -> bool:
     """A local implementation of is_non_tensor.
 
-    The utils implementation does an attribute check, but here we have access to the classes
-    which is more immediate.
+    NonTensorDataBase and NonTensorStack set ``_is_non_tensor = True`` on the class. Reading
+    it from the type is faster than ``isinstance``, whose ABCMeta check runs Python code.
 
     """
-    return isinstance(obj, (NonTensorDataBase, NonTensorStack))
+    return getattr(type(obj), "_is_non_tensor", False) is True
 
 
 class _tensorclass_dec:
@@ -724,8 +734,9 @@ def from_dataclass(
         inplace (bool, optional): If ``True``, the dataclass type passed will be modified in-place. Defaults to ``False``.
             Without effect if an instance is provided.
         device (torch.device, optional): The device on which the TensorDict will be created. Defaults to ``None``.
-        shadow (bool, optional): Disables the validation of field names against TensorDict's reserved attributes.
-            Use with caution, as this may cause unintended consequences. Defaults to False.
+        shadow (bool, optional): Disables the validation of field names against the names of the tensorclass
+            members (e.g. ``batch_size`` or ``sum``). Use with caution, as this may cause unintended consequences.
+            Defaults to False.
 
     Returns:
         A tensor-compatible class or instance derived from the provided dataclass.
@@ -862,32 +873,49 @@ def tensorclass(
     shadow: bool = False,
     tensor_only: bool = False,
 ) -> T | None:
-    """A decorator to create :obj:`tensorclass` classes.
+    """A decorator that turns a class with annotated fields into a tensorclass.
 
-    ``tensorclass`` classes are specialized :func:`dataclasses.dataclass` instances that
-    can execute some pre-defined tensor operations out of the box, such as
-    indexing, item assignment, reshaping, casting to device or storage and many
-    others.
+    A tensorclass is a dataclass whose instances behave like a
+    :class:`~tensordict.TensorDict`: they have a batch size, and they support
+    indexing, reshaping, ``to(device)``, stacking and memory-mapping. For new
+    code, subclass :class:`~tensordict.TensorClass` instead. It takes the same
+    flags, and type checkers understand it without a plugin. This decorator
+    is kept for existing code and for code that moves from
+    ``@dataclass``. See :ref:`tensorclass-guide`.
 
     Keyword Args:
-        autocast (bool, optional): if ``True``, the types indicated will be enforced when an argument is set.
-            This argument is exclusive with ``nocast`` (both cannot be true at the same time). Defaults to ``False``.
-        frozen (bool, optional): if ``True``, the content of the tensorclass cannot be modified. This argument is
-            provided to dataclass-compatibility, a similar behavior can be obtained through the `lock` argument in
-            the class constructor. Defaults to ``False``.
-        nocast (bool, optional): if ``True``, Tensor-compatible types such as ``int``, ``np.ndarray`` and the like
-            will not be cast to a tensor type. This argument is exclusive with ``autocast`` (both cannot be true
-            at the same time). Defaults to ``False``.
-        shadow (bool, optional): Disables the validation of field names against TensorDict's reserved attributes.
-            Use with caution, as this may cause unintended consequences. Defaults to False.
-        tensor_only (bool, optional): if ``True``, it is expected that all items in tensorclass will be
-            tensor instances (tensor-compatible, since non-tensor data is converted to tensors if possible).
-            This can bring significant speed-ups at the cost of flexible interactions with non-tensor data.
+        autocast (bool, optional): if ``True``, when a field is set, the value
+            is converted to the annotated type. Exclusive with ``nocast`` and
+            ``tensor_only``. Defaults to ``False``.
+        frozen (bool, optional): if ``True``, assigning a field raises
+            ``dataclasses.FrozenInstanceError``, as with
+            ``@dataclass(frozen=True)``. To block writes on one instance only,
+            call ``lock_()`` on it or pass ``lock=True`` to the constructor:
+            writes then raise a ``RuntimeError``. Defaults to ``False``.
+        nocast (bool, optional): if ``True``, Tensor-compatible types such as
+            ``int``, ``np.ndarray`` and the like are not cast to a tensor
+            type. Exclusive with ``autocast`` and ``tensor_only``. Defaults
+            to ``False``.
+        shadow (bool, optional): if ``True``, fields can have the name of a
+            tensorclass member (``batch_size``, ``sum``, ...), and hide that
+            member. If ``False``, such a name raises an ``AttributeError``
+            when the class is defined. Defaults to ``False``.
+        tensor_only (bool, optional): if ``True``, every field annotation must
+            be a tensor type or a tensor collection. Values that can be cast
+            to a tensor are cast. Reading a field then skips the lookup in the
+            non-tensor storage. Exclusive with ``autocast`` and ``nocast``.
             Defaults to ``False``.
 
-    tensorclass can be used with or without arguments:
+    Returns:
+        the tensorclass, or a decorator if the flags are given without a
+        class (``@tensorclass(autocast=True)``).
 
     Examples:
+        tensorclass can be used with or without arguments:
+
+        >>> from typing import Any
+        >>> import torch
+        >>> from tensordict import tensorclass
         >>> @tensorclass
         ... class X:
         ...     y: int
@@ -914,11 +942,9 @@ def tensorclass(
         >>> X(1).y
         tensor(1)
 
-    Examples:
-        >>> from tensordict import tensorclass
-        >>> import torch
-        >>> from typing import Optional
-        >>>
+        A tensorclass can have methods. Fields that are not tensors are stored
+        as :class:`~tensordict.NonTensorData`:
+
         >>> @tensorclass
         ... class MyData:
         ...     X: torch.Tensor
@@ -945,12 +971,8 @@ def tensorclass(
         >>> print(data.expand_and_mask())
         tensor([])
 
-    It is also possible to nest tensorclasses instances within each other:
-        Examples:
-        >>> from tensordict import tensorclass
-        >>> import torch
-        >>> from typing import Optional
-        >>>
+        A tensorclass instance can be a field of another tensorclass:
+
         >>> @tensorclass
         ... class NestingMyData:
         ...     nested: MyData
@@ -959,7 +981,6 @@ def tensorclass(
         >>> # although the data is stored as a TensorDict, the type hint helps us
         >>> # to appropriately cast the data to the right type
         >>> assert isinstance(nesting_data.nested, type(data))
-
 
     """
 
@@ -994,16 +1015,92 @@ def _own_annotation_names(cls: type) -> list[str]:
     return list(annotations)
 
 
+# The names of the members of a tensorclass and of the attributes that hold its
+# state. A tensorclass has or forwards to its TensorDict every TensorDict
+# attribute, and library code calls private TensorDict methods on nested tensor
+# collections (e.g. _get_non_tensor, _send, _transform_keys), so the names of
+# TensorDict are in the set, except the two below. The tuple holds the names
+# that only tensorclasses have.
+_TENSORCLASS_MEMBER_NAMES = frozenset(dir(TensorDict)).union(
+    (
+        "extend",
+        "fields",
+        "from_tensordict",
+        "_autocast",
+        "_from_tensordict",
+        "_frozen",
+        "_is_tensorclass",
+        "_nocast",
+        "_set_dict_warn_msg",
+        "_shadow",
+        "_tensor_only",
+        "_tensorclass_fields",
+        "_tensordict_fields",
+        "_type_hints",
+        # instance attributes
+        "_is_initialized",
+        "_non_tensordict",
+        "_tensordict",
+        # a TensorDict attribute that TensorDict.__enter__ reads from a tensorclass
+        "_last_op_queue",
+    )
+) - {
+    # a field of NonTensorData
+    "_is_non_tensor",
+    # read only by the cache decorator of TensorDict methods, on the TensorDict
+    "_cache",
+}
+
+
 def _is_reserved_field_name(name: str) -> bool:
-    return name in dir(TensorDict) and name not in ("_is_non_tensor", "data")
+    # A field named "data" (as in NonTensorData) or "fields" replaces the member.
+    return name in _TENSORCLASS_MEMBER_NAMES and name not in ("data", "fields")
 
 
 def _raise_reserved_field_name(name: str) -> None:
     raise AttributeError(
-        f"Attribute name {name} can't be used with @tensorclass or TensorClass. To allow it, please indicate "
-        f"that builtin names can be overwritten by using the allow_names keyword argument (@tensorclass(shadow=True) "
-        f"or TensorClass['shadow']."
+        f"Attribute name {name} can't be used with @tensorclass or TensorClass, as tensorclasses have a "
+        f"member of that name. To allow it, pass shadow=True (@tensorclass(shadow=True) or "
+        f"TensorClass['shadow'])."
     )
+
+
+def _attribute_functions(value: Any) -> tuple[FunctionType, ...]:
+    """Return the functions behind a method, classmethod, staticmethod or property."""
+    if isinstance(value, FunctionType):
+        return (value,)
+    if isinstance(value, property):
+        functions = (value.fget, value.fset, value.fdel)
+    elif isinstance(value, (classmethod, staticmethod)):
+        functions = (value.__func__,)
+    else:
+        return ()
+    return tuple(func for func in functions if isinstance(func, FunctionType))
+
+
+@functools.cache
+def _unchecked_copy(func: FunctionType) -> FunctionType:
+    """Return a copy of a TensorDict method that runtime type-checkers skip.
+
+    Tensorclasses get the copy, so that marking it leaves the TensorDict method as
+    is. The copy is named after the attribute of TensorClass that holds it, where
+    pickle finds it.
+    """
+    copied = FunctionType(
+        func.__code__,
+        func.__globals__,
+        func.__name__,
+        func.__defaults__,
+        func.__closure__,
+    )
+    copied.__kwdefaults__ = func.__kwdefaults__
+    copied.__dict__.update(func.__dict__)
+    copied.__doc__ = func.__doc__
+    copied.__annotations__ = dict(func.__annotations__)
+    copied.__module__ = __name__
+    copied.__qualname__ = f"TensorClass.{func.__name__}"
+    copied.__no_type_check__ = True
+    return copied
 
 
 @dataclass_transform()
@@ -1031,7 +1128,10 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             kwargs = {}
 
         # get the output type from the arguments / keyword arguments
-        if len(args) > 0:
+        if func is torch.where:
+            # torch.where(condition, input, other): the result has the type of input
+            tensorclass_instance = args[1] if len(args) > 1 else kwargs.get("input")
+        elif len(args) > 0:
             tensorclass_instance = args[0]
         else:
             tensorclass_instance = kwargs.get("input", kwargs["tensors"])
@@ -1048,6 +1148,19 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             )
         return _from_tensordict_with_copy(tensorclass_instance, result)
 
+    # Python 3.14+ evaluates the annotations of a method when they are first
+    # read, and looks their names up in the namespace of the class (PEP 649).
+    # Read those of the methods in the class body now, before the methods
+    # added below (bool, int, set...) shadow the builtins that they name.
+    attrs_before = dict(cls.__dict__)
+    for value in attrs_before.values():
+        for func in _attribute_functions(value):
+            try:
+                func.__annotations__  # noqa: B018
+            except Exception:
+                # e.g. a name defined later in the module: read on first use
+                pass
+
     _is_non_tensor = getattr(cls, "_is_non_tensor", False)
 
     # dataclass() takes an inherited attribute as the default of the field with
@@ -1056,12 +1169,13 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     inherited_reserved_fields = [
         name
         for name in _own_annotation_names(cls)
-        if name not in cls.__dict__ and _is_reserved_field_name(name)
+        if name not in cls.__dict__ and name in _TENSORCLASS_MEMBER_NAMES
         if hasattr(cls, name)
     ]
     if not shadow:
         for name in inherited_reserved_fields:
-            _raise_reserved_field_name(name)
+            if _is_reserved_field_name(name):
+                _raise_reserved_field_name(name)
     for name in inherited_reserved_fields:
         setattr(cls, name, dataclasses.field())
 
@@ -1095,6 +1209,20 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     else:
         user_init = init
 
+    # Keep the docstring of the class. A class that was a dataclass already
+    # may carry the docstring that dataclass() generated from its signature:
+    # treat it as absent, so that it is regenerated below.
+    own_doc = cls.__dict__.get("__doc__")
+    if own_doc and "__dataclass_fields__" in cls.__dict__:
+        try:
+            generated_doc = cls.__name__ + str(inspect.signature(cls)).replace(
+                " -> None", ""
+            )
+        except (TypeError, ValueError):
+            generated_doc = None
+        if own_doc == generated_doc:
+            own_doc = None
+
     # Breaks some tests, don't do that:
     # if not dataclasses.is_dataclass(cls):
     cls = dataclass(cls, frozen=frozen)
@@ -1111,8 +1239,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             if _is_reserved_field_name(attr):
                 _raise_reserved_field_name(attr)
 
-    cls.fields = classmethod(dataclasses.fields)
-    for field in cls.fields():
+    cls.fields = classmethod(_fields)
+    for field in dataclasses.fields(cls):
         if hasattr(cls, field.name):
             # if we have used Cls(TensorClass["shadow"]), we have a subclass of Cls(TensorClass)
             #  so we cannot directly delete the attribute
@@ -1121,18 +1249,37 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             except AttributeError:
                 pass
 
+    if not tensor_only and not shadow:
+        for field in dataclasses.fields(cls):
+            setattr(
+                cls,
+                field.name,
+                _FieldGetter(field.name, _is_non_tensor and field.name == "data"),
+            )
+
     if tensor_only:
-        for field in cls.fields():
+        for field in dataclasses.fields(cls):
             name = field.name
 
             def _make_prop(key):
                 def _getter(self):
-                    out = self._tensordict._get_str(key, _UNSET)
+                    td = self._tensordict
+                    if type(td) is TensorDict:
+                        # Cheaper than _get_str. Dynamo also guards on a key
+                        # that dict.get misses, but not on the KeyError in
+                        # _get_str: a compiled function that read None would
+                        # keep reading None once the field holds a tensor.
+                        out = td._tensordict.get(key, _UNSET)
+                    else:
+                        out = td._get_str(key, _UNSET)
+                        if out is _UNSET and is_compiling() and key in td.keys():
+                            # see above: only for the guard, as keys() can be
+                            # costly (e.g. on a lazy stack)
+                            out = td._get_str(key, None)
                     if out is _UNSET:
-                        out = self._non_tensordict.get(key, _UNSET)
-                        if out is _UNSET:
-                            raise AttributeError(key)
-                        return out
+                        # A field missing from the TensorDict is None
+                        non_tensordict = self._non_tensordict
+                        return non_tensordict.get(key) if non_tensordict else None
                     return out
 
                 def _setter(self, value):
@@ -1161,9 +1308,10 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             tensor_only,
             _has_custom_setattr,
             _custom_init=user_init is not None,
+            _is_non_tensor=_is_non_tensor,
         )
     cls._from_tensordict = classmethod(_from_tensordict)
-    cls.from_tensordict = cls._from_tensordict
+    cls.from_tensordict = classmethod(_from_tensordict_public)
     if not hasattr(cls, "__torch_function__"):
         cls.__torch_function__ = classmethod(__torch_function__)
     cls.__getstate__ = _getstate
@@ -1237,9 +1385,13 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         cls.update_ = _update_
     if not hasattr(cls, "update_at_") and "update_at_" not in expected_keys:
         cls.update_at_ = _update_at_
+    if not hasattr(cls, "extend"):
+        cls.extend = _extend
+    if not hasattr(cls, "__exit__"):
+        cls.__exit__ = _exit
     for method_name in _METHOD_FROM_TD:
         if not hasattr(cls, method_name):
-            setattr(cls, method_name, getattr(TensorDict, method_name))
+            setattr(cls, method_name, _unchecked_copy(getattr(TensorDict, method_name)))
     for method_name in _FALLBACK_METHOD_FROM_TD:
         if not hasattr(cls, method_name):
             setattr(cls, method_name, _wrap_td_method(method_name))
@@ -1282,9 +1434,11 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     # below): load_memmap falls back on the class it is called on when the
     # saved class cannot be found by name.
     if not hasattr(cls, "load_memmap") and "load_memmap" not in expected_keys:
-        cls.load_memmap = classmethod(TensorDictBase.load_memmap.__func__)
+        cls.load_memmap = classmethod(
+            _unchecked_copy(TensorDictBase.load_memmap.__func__)
+        )
     if not hasattr(cls, "load") and "load" not in expected_keys:
-        cls.load = classmethod(TensorDictBase.load.__func__)
+        cls.load = classmethod(_unchecked_copy(TensorDictBase.load.__func__))
     if not hasattr(cls, "load_memmap_") and "load_memmap_" not in expected_keys:
         cls.load_memmap_ = _load_memmap_
     if not hasattr(cls, "_load_memmap"):
@@ -1348,14 +1502,34 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     if not hasattr(cls, "to_dict") and "to_dict" not in expected_keys:
         cls.to_dict = _to_dict
 
-    if shadow and not tensor_only:
+    if not tensor_only:
         # Attribute lookup would find a TensorClass method or property of the
-        # same name (e.g. "sum") before the field, which _getattr serves.
+        # same name (e.g. "sum", or the "fields" of a tensorclass base) before
+        # the field, which _getattr serves.
         for name in expected_keys:
-            if hasattr(cls, name):
+            if (shadow or name == "fields") and hasattr(cls, name):
                 setattr(cls, name, property(functools.partial(_getattr, item=name)))
 
-    cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
+    # Without a docstring, the class documents its constructor signature.
+    cls.__doc__ = own_doc or f"{cls.__name__}{inspect.signature(cls)}"
+
+    # A runtime type-checker that decorates the class (e.g. beartype) checks
+    # every method in its namespace. Mark the methods added above with PEP
+    # 484's __no_type_check__ so that it skips them: their annotations name
+    # builtins that the class shadows (bool, int, type...), and some do not
+    # hold for tensorclasses (e.g. the device can be None). __init__ keeps the
+    # annotations of the fields (or of a user-defined __init__), which
+    # checkers such as jaxtyping check.
+    module_globals = globals()
+    for name, value in cls.__dict__.items():
+        if name == "__init__" or attrs_before.get(name) is value:
+            continue
+        for func in _attribute_functions(value):
+            # A function of this module, or a wrapper of one (e.g. deprecated)
+            if func.__annotations__ and (
+                func.__globals__ is module_globals or func.__module__ == __name__
+            ):
+                func.__no_type_check__ = True
 
     _register_tensor_class(cls)
     try:
@@ -1367,10 +1541,6 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     # faster than doing instance checks
     cls._is_non_tensor = _is_non_tensor
     cls._is_tensorclass = True
-
-    from tensordict import _pytree
-
-    _pytree._CONSTRUCTORS[cls] = _pytree._tensorclass_constructor
     return cls
 
 
@@ -1427,6 +1597,34 @@ def _tc_broadcast(self, src, *, group=None, device=None):
     return result
 
 
+@deprecated(
+    "TensorClass.fields()", removal="0.17", replacement="dataclasses.fields(cls)"
+)
+def _fields(cls) -> tuple[dataclasses.Field, ...]:
+    """Returns the fields of the tensorclass.
+
+    .. deprecated:: 0.15
+        Use ``dataclasses.fields(cls)`` instead. It returns the same tuple of
+        :class:`dataclasses.Field` objects.
+    """
+    return dataclasses.fields(cls)
+
+
+@deprecated(
+    "TensorClass.extend()",
+    removal="0.17",
+    replacement="lazy_stack or torch.cat to build a new instance",
+)
+def _extend(self, tensordict: list[TensorDictBase] | TensorDictBase) -> None:
+    """Appends tensordicts to the lazy stack that the instance holds.
+
+    .. deprecated:: 0.15
+        Build a new instance with :func:`tensordict.lazy_stack` or
+        :func:`torch.cat` instead.
+    """
+    self._tensordict.extend(tensordict)
+
+
 def _from_tensordict_with_copy(tc, tensordict):
     # creates a new tensorclass with the same type as tc, and a copy of the
     # non_tensordict data
@@ -1444,6 +1642,21 @@ def _from_tensordict_with_none(tc, tensordict):
     )
 
 
+def _warn_unknown_tensor_only_fields(cls, kwargs: dict) -> None:
+    # The tensor_only path of __init__ stores the arguments that are not
+    # fields. The other paths raise AttributeError for them, and this path
+    # will too once the deprecation ends.
+    unknown = sorted(key for key in kwargs if key not in cls.__expected_keys__)
+    warn_deprecated(
+        f"Passing arguments that are not fields ({unknown}) to the tensor_only "
+        f"tensorclass {cls.__name__}, which other tensorclasses reject with "
+        "AttributeError,",
+        removal="0.17",
+        replacement=f"only its fields ({sorted(cls.__expected_keys__)})",
+        stacklevel=3,
+    )
+
+
 def _init_wrapper(
     __init__: Callable,
     cls,
@@ -1452,6 +1665,7 @@ def _init_wrapper(
     tensor_only: bool,
     _has_custom_setattr: bool = False,
     _custom_init: bool = False,
+    _is_non_tensor: bool = False,
 ) -> Callable:
     init_sig = inspect.signature(__init__)
     params = list(init_sig.parameters.values())
@@ -1478,6 +1692,31 @@ def _init_wrapper(
         )
         and set(required_params) == required_fields
     )
+    # Non-tensor carriers (NonTensorData, MetaData) keep every field in
+    # _non_tensordict, so their constructor can fill that dict directly
+    # instead of routing each field through set(). The defaults are only
+    # collected for these classes: Dynamo cannot wrap a closure dict that
+    # holds a tensor default (as in ``x: torch.Tensor = torch.zeros(3)``).
+    can_init_non_tensor = (
+        _is_non_tensor
+        and not _custom_init
+        and not shadow
+        and not tensor_only
+        and not _has_custom_setattr
+        and all(
+            field.init and field.default_factory is dataclasses.MISSING
+            for field in fields
+        )
+    )
+    if can_init_non_tensor:
+        non_tensor_defaults = {
+            field.name: field.default
+            for field in fields
+            if field.default is not dataclasses.MISSING
+        }
+        non_tensor_required = required_fields - non_tensor_defaults.keys()
+    else:
+        non_tensor_defaults = non_tensor_required = None
     # if not required_params and hasattr(cls, "__init_parent__"):
     #     init_sig_parent = inspect.signature(cls.__init_parent__)
     #     params_parent = list(init_sig_parent.parameters.values())
@@ -1516,6 +1755,12 @@ def _init_wrapper(
                 object.__setattr__(self, "_tensordict", td)
                 object.__setattr__(self, "_non_tensordict", {})
                 object.__setattr__(self, "_is_initialized", True)
+                if type(self)._tensor_only:
+                    # A None field of a tensor_only class is a missing key.
+                    # Record (as keys) the fields that __init__ sets to None,
+                    # so that the loop below can tell them from the fields
+                    # that it does not set.
+                    self.__dict__["_init_none_fields"] = {}
             elif batch_size is not None or device is not None or names is not None:
                 # Metadata passed to super().__init__() replaces the outer
                 # call's. Keep the entries set before that call.
@@ -1539,12 +1784,16 @@ def _init_wrapper(
                 self_dict = self.__dict__
                 td_dict = self._tensordict._tensordict
                 non_td = self._non_tensordict
+                init_none_fields = self_dict.pop("_init_none_fields", ())
                 for key, field in type(self).__dataclass_fields__.items():
                     if key not in required_fields:
                         continue
                     if key in self_dict:
                         value = self_dict.pop(key)
-                    elif key in td_dict or key in non_td:
+                    elif key in td_dict or key in init_none_fields or key in non_td:
+                        continue
+                    elif field.default is None and type(self)._tensor_only:
+                        # A None field of a tensor_only class is a missing key
                         continue
                     elif field.default_factory is not dataclasses.MISSING:
                         value = field.default_factory()
@@ -1587,8 +1836,7 @@ def _init_wrapper(
             lock = kwargs.pop("lock", None)
         if lock is None:
             lock = frozen
-        if not is_compiling():
-            # zip not supported by dynamo
+        if args:
             # Use __dataclass_fields__ but filter out ClassVar fields to preserve order
             expected_keys_list = (
                 field_names
@@ -1610,6 +1858,7 @@ def _init_wrapper(
                 if key in kwargs:
                     raise ValueError(f"The key {key} is already set in kwargs")
                 kwargs[key] = value
+        if not is_compiling():
             if (
                 can_init_tensors
                 and type(self) is cls
@@ -1640,11 +1889,37 @@ def _init_wrapper(
                     if lock:
                         td.lock_()
                     return
-        else:
-            if args:
-                raise RuntimeError(
-                    "dynamo doesn't support arguments when building a tensorclass, pass the keyword explicitly."
+            if (
+                can_init_non_tensor
+                and type(self) is cls
+                and not cls._autocast
+                and cls.set is _set
+                and kwargs.keys() <= required_fields
+                and non_tensor_required <= kwargs.keys()
+            ):
+                # Same result as set() with a non-tensor self: every value,
+                # unwrapped from NonTensorData, goes to _non_tensordict.
+                non_tensordict = {}
+                for key, value in kwargs.items():
+                    while is_non_tensor(value):
+                        value = value.data
+                    non_tensordict[key] = value
+                for key, value in non_tensor_defaults.items():
+                    non_tensordict.setdefault(key, value)
+                td = TensorDict._new_unsafe(
+                    {},
+                    batch_size=torch.Size(batch_size),
+                    device=device,
+                    names=names,
                 )
+                object.__setattr__(self, "_tensordict", td)
+                object.__setattr__(self, "_non_tensordict", non_tensordict)
+                object.__setattr__(self, "_is_initialized", True)
+                if hasattr(cls, "__post_init__"):
+                    self.__post_init__()
+                if lock:
+                    td.lock_()
+                return
 
         # Use `is`/isinstance instead of `in (..., dataclasses.MISSING)`:
         # under torch.compile, Dynamo can't proxy `_MISSING_TYPE` for `==`
@@ -1708,24 +1983,29 @@ def _init_wrapper(
             for key in self.__expected_keys__:
                 kwargs.setdefault(key, None)
             if tensor_only:
+                if (
+                    len(kwargs) != len(self.__expected_keys__)
+                    and not is_dynamo_compiling()
+                ):
+                    # Dynamo cannot trace warnings.warn, so only eager calls warn.
+                    _warn_unknown_tensor_only_fields(type(self), kwargs)
                 # Fast path: validate and assign directly to the
                 # underlying dict, skipping the set → _set_str →
                 # _tensordict._set_str chain entirely.
                 _td = self._tensordict
                 _td_dict = _td._tensordict
-                _non_td = self._non_tensordict
                 _validate = _td._validate_value
                 _tensordict_fields = type(self)._tensordict_fields
                 for key, value in kwargs.items():
                     if value is None:
-                        _non_td[key] = None
+                        continue
                     else:
                         if _tensordict_fields:
                             value, _ = _convert_mapping_for_field(
                                 key, value, _tensordict_fields
                             )
                         _td_dict[key] = _validate(
-                            value, check_shape=True, non_blocking=False
+                            value, check_shape=True, non_blocking=False, key=key
                         )
             else:
                 set_value = type(self).set
@@ -1781,9 +2061,15 @@ def _init_wrapper(
     return wrapper
 
 
-_cast_funcs = _KeyDependentDefaultDict(_identity)
-_cast_funcs[torch.Tensor] = torch.as_tensor
-_cast_funcs[np.ndarray] = np.asarray
+def _cast_func(cls: type) -> Callable:
+    """Returns the function that casts a value to the type annotation ``cls``."""
+    # Not a module-level dict: Dynamo guards on all the keys of a global dict
+    # read with a non-constant key, so a new type cast in eager would recompile.
+    if cls is torch.Tensor:
+        return torch.as_tensor
+    if cls is np.ndarray:
+        return np.asarray
+    return cls
 
 
 def _new_unsafe(cls, *args, **kwargs) -> T:
@@ -1840,6 +2126,7 @@ def _get_type_hints(cls, with_locals=False, tensor_only=False):
     globalns = None
 
     cls._tensordict_fields = frozenset()
+    cls._tensorclass_fields = {}
     try:
         type_hints = get_type_hints(
             cls,
@@ -1931,13 +2218,53 @@ def _is_tensordict_annotation(type_hint: Any) -> bool:
     return isinstance(type_hint, type) and issubclass(type_hint, TensorDictBase)
 
 
+def _tensorclass_annotation(type_hint: Any) -> type | None:
+    """Return the tensorclass of a ``T``, ``T[...]`` or ``Optional[T]`` annotation, else ``None``.
+
+    The base ``TensorClass``, which declares no fields, and the non-tensor classes
+    (``NonTensorData``, ``MetaData``) do not count.
+    """
+    if get_origin(type_hint) in (Union, UnionType):
+        args = [arg for arg in get_args(type_hint) if arg is not NoneType]
+        if len(args) != 1:
+            return None
+        type_hint = args[0]
+    origin = get_origin(type_hint)
+    if origin is not None:
+        type_hint = origin
+    if (
+        isinstance(type_hint, type)
+        and _is_tensorclass(type_hint)
+        and "__expected_keys__" in vars(type_hint)
+        and not getattr(type_hint, "_is_non_tensor", False)
+    ):
+        return type_hint
+    return None
+
+
+def _fits_tensorclass(tensorclass_type: type, entry: Any) -> bool:
+    """Return whether ``entry`` is a tensordict whose keys are all fields of ``tensorclass_type``."""
+    if not isinstance(entry, TensorDictBase) or is_non_tensor(entry):
+        return False
+    expected_keys = tensorclass_type.__expected_keys__
+    return all(key in expected_keys for key in entry.keys())
+
+
 def _set_tensorclass_type_hints(cls: type, type_hints: dict[str, Any]) -> None:
-    """Store resolved hints and cache fields with TensorDict-like annotations."""
+    """Store resolved hints and cache the TensorDict- and tensorclass-annotated fields."""
     cls._tensordict_fields = frozenset(
         key
         for key, val in type_hints.items()
         if key in cls.__expected_keys__ and _is_tensordict_annotation(val)
     )
+    tensorclass_fields = {}
+    for key, val in type_hints.items():
+        if key not in cls.__expected_keys__:
+            continue
+        tensorclass_type = _tensorclass_annotation(val)
+        if tensorclass_type is not None:
+            tensorclass_fields[key] = tensorclass_type
+    cls._tensorclass_fields = tensorclass_fields
     cls._type_hints = type_hints
 
 
@@ -1985,6 +2312,15 @@ def _from_tensordict(
         raise RuntimeError(
             f"Expected a TensorDictBase instance but got {type(tensordict)}"
         )
+    tensor_only = cls._tensor_only
+    if tensor_only:
+        # A None field of a tensor_only class is a key missing from the
+        # tensordict. Copy the dict: callers may pass the one of an instance.
+        non_tensordict = (
+            {k: v for k, v in non_tensordict.items() if v is not None}
+            if non_tensordict
+            else {}
+        )
     # Validating keys of tensordict
     # tensordict = tensordict.copy()
     tensor_keys = tensordict.keys()
@@ -2024,7 +2360,7 @@ def _from_tensordict(
             f"correspond to the class attributes ({cls.__expected_keys__}). Got the set of "
             f"keys {{{total_keys - exp_keys}}} which do not belong to the class."
         )
-    else:
+    elif not tensor_only:
         to_add = exp_keys - total_keys
         for key in to_add:
             non_tensordict[key] = None
@@ -2049,6 +2385,89 @@ def _from_tensordict(
     return tc
 
 
+def _tensorclass_keys(cls, tensordict: TensorDict) -> list[str]:
+    """Return the tensorclass fields of ``cls`` whose entry in ``tensordict`` fits their class."""
+    return [
+        key
+        for key, tensorclass_type in cls._tensorclass_fields.items()
+        if _fits_tensorclass(tensorclass_type, tensordict._get_str(key, None))
+    ]
+
+
+def _set_tensorclass_entries(cls, tensordict: TensorDict, keys: list[str]) -> None:
+    """Replace the entries ``keys`` of ``tensordict`` with the tensorclasses of these fields of ``cls``.
+
+    ``tensordict`` must own its nested TensorDicts (a ``copy()``): they are modified in place.
+    """
+    for key in keys:
+        tensorclass_type = cls._tensorclass_fields[key]
+        entry = tensordict._get_str(key, None)
+        if tensorclass_type._tensorclass_fields and isinstance(entry, TensorDict):
+            nested_keys = _tensorclass_keys(tensorclass_type, entry)
+            if nested_keys:
+                _set_tensorclass_entries(tensorclass_type, entry, nested_keys)
+        tensordict._set_str(
+            key,
+            tensorclass_type._from_tensordict(entry),
+            validated=True,
+            inplace=False,
+            non_blocking=False,
+        )
+
+
+def _from_tensordict_public(
+    cls,
+    tensordict: TensorDictBase,
+    non_tensordict: dict | None = None,
+    safe: bool | None = None,
+) -> Self:
+    """Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+    If ``tensordict`` is a :class:`~tensordict.TensorDict`, the entries of the fields
+    annotated with a tensorclass (or ``Optional`` of one) that are tensordicts become
+    instances of that tensorclass, recursively. They are set in a shallow copy of
+    ``tensordict``, which keeps its own entries. An entry with keys that the annotated
+    class does not declare stays a tensordict. Other backends are wrapped as they are:
+    setting a tensorclass in them would write to their storage (e.g. an H5 file).
+
+    Args:
+        tensordict (TensorDictBase): the tensordict that holds the tensor fields.
+        non_tensordict (dict, optional): the values of the non-tensor fields. The
+            fields that neither argument holds are set to ``None``.
+        safe (bool, optional): Deprecated in 0.15, to be removed in TensorDict 0.17. Whether to
+            raise an error if ``tensordict`` is not a :class:`~tensordict.TensorDictBase`.
+            Without it, such a tensordict raises an error.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorClass
+        >>> class Pose(TensorClass):
+        ...     q: torch.Tensor
+        >>> class Obs(TensorClass):
+        ...     a: Pose
+        >>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+        >>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+        'Pose'
+    """
+    if safe is None:
+        safe = True
+    else:
+        warn_deprecated("TensorClass.from_tensordict(safe=...)", removal="0.17")
+    # The tensorclass ops rebuild their results with _from_tensordict: their
+    # nested entries are already tensorclasses.
+    if cls._tensorclass_fields and isinstance(tensordict, TensorDict):
+        keys = _tensorclass_keys(cls, tensordict)
+        if keys:
+            # The copy owns its nested TensorDicts, so the tensorclasses can be
+            # set in them, at every level, without another copy.
+            is_locked = tensordict.is_locked
+            tensordict = tensordict.copy()
+            _set_tensorclass_entries(cls, tensordict, keys)
+            if is_locked:
+                tensordict.lock_()
+    return cls._from_tensordict(tensordict, non_tensordict, safe)
+
+
 def _memmap_(
     self,
     *,
@@ -2062,8 +2481,11 @@ def _memmap_(
     share_non_tensor: bool = False,
     existsok: bool = True,
     robust_key,
+    non_tensordict: dict | None = None,
 ):
-    _non_tensordict = dict(self._non_tensordict)
+    if non_tensordict is None:
+        non_tensordict = self._non_tensordict
+    _non_tensordict = dict(non_tensordict)
     cls = type(self)
 
     if not memmaped and prefix is not None:
@@ -2154,7 +2576,7 @@ def _load_pickle_file(path, *, allow_pickle: bool | None):
         warnings.warn(
             "TensorDict.load_memmap is loading a pickled non-tensor field. "
             "This is only safe for trusted data. Starting with TensorDict "
-            "0.15, the default will change to allow_pickle=False. Pass "
+            "0.16, the default will change to allow_pickle=False. Pass "
             "allow_pickle=True to acknowledge trusted data or "
             "allow_pickle=False to reject pickle now.",
             FutureWarning,
@@ -2258,7 +2680,11 @@ def _getstate(self) -> dict[str, Any]:
         dictionary of state of tensor class
 
     """
-    return {"tensordict": self._tensordict, "non_tensordict": self._non_tensordict}
+    non_tensordict = self._non_tensordict
+    if type(self)._tensor_only:
+        # Pickle the None fields as earlier versions did, so that they can load it
+        non_tensordict = {**non_tensordict, **dict.fromkeys(_none_fields(self))}
+    return {"tensordict": self._tensordict, "non_tensordict": non_tensordict}
 
 
 def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
@@ -2267,14 +2693,47 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
     Args:
         state (dict): State parameter to set the object
     """
+    non_tensordict = state.get("non_tensordict")
+    if type(self)._tensor_only and non_tensordict:
+        # Pickled by a version that kept None fields in _non_tensordict
+        non_tensordict = {k: v for k, v in non_tensordict.items() if v is not None}
     if type(self)._frozen:
         # Bypass the dataclass guard while preserving custom __setattr__ behavior
         # for non-frozen tensorclasses.
         object.__setattr__(self, "_tensordict", state.get("tensordict"))
-        object.__setattr__(self, "_non_tensordict", state.get("non_tensordict"))
+        object.__setattr__(self, "_non_tensordict", non_tensordict)
     else:
         self._tensordict = state.get("tensordict")
-        self._non_tensordict = state.get("non_tensordict")
+        self._non_tensordict = non_tensordict
+
+
+def _none_fields(self) -> list[str]:
+    # The None fields of a tensor_only instance, in field order: the fields
+    # missing from its TensorDict (and from _non_tensordict, which is empty
+    # unless the instance was built with non-tensor values there).
+    td = self._tensordict
+    expected_keys = self.__expected_keys__
+    if type(td) is TensorDict:
+        # A TensorDict is checked with a dict lookup, much cheaper than keys().
+        keys = td._tensordict
+        if keys.keys() >= expected_keys:
+            # no field is None
+            return []
+    else:
+        keys = td.keys()
+    non_tensordict = self._non_tensordict
+    return [
+        key
+        for key in type(self).__dataclass_fields__
+        if key not in keys and key not in non_tensordict and key in expected_keys
+    ]
+
+
+def _non_tensor_keys(self):
+    # The fields that the TensorDict of self does not hold
+    if type(self)._tensor_only:
+        return [*self._non_tensordict, *_none_fields(self)]
+    return self._non_tensordict.keys()
 
 
 def _copy(self) -> Any:
@@ -2354,6 +2813,46 @@ def _getattr(self, item: str, **kwargs) -> Any:
     raise AttributeError(item)
 
 
+# Reads a field of a tensorclass instance, as the field branch of _getattr does.
+# Tensorclasses that are neither tensor_only nor shadow have one per field, so
+# that x.field does not first fail the normal attribute lookup and then go
+# through __getattr__. It defines no __set__, so an entry of the instance
+# __dict__ (which a custom __setattr__ can write with object.__setattr__) still
+# comes first. On the class it raises AttributeError, as the field had no class
+# attribute before: otherwise dataclass() would take it as the default of a
+# field that a subclass declares again. It has no docstring, so that Sphinx and
+# help() do not show one for every field.
+class _FieldGetter:
+    __slots__ = ("_check_shared", "_name")
+
+    def __init__(self, name: str, check_shared: bool):
+        self._name = name
+        # True for the data field of NonTensorData and MetaData.
+        self._check_shared = check_shared
+
+    def __get__(self, obj, objtype=None):
+        name = self._name
+        if obj is None:
+            raise AttributeError(
+                f"type object {objtype.__name__!r} has no attribute {name!r}"
+            )
+        _non_tensordict = obj._non_tensordict
+        td = obj._tensordict
+        if _non_tensordict and name in _non_tensordict and name not in td.keys():
+            out = _non_tensordict[name]
+            if self._check_shared and (td._is_shared or td._is_memmap):
+                return _from_shared_nontensor(out)
+            return out
+        out = td._get_str(name, NO_DEFAULT)
+        if is_non_tensor(out):
+            return (
+                out.data
+                if not isinstance(out, NonTensorStack)
+                else out.tolist(as_linked_list=True)
+            )
+        return out
+
+
 SET_ATTRIBUTES = (
     "batch_size",
     "device",
@@ -2388,7 +2887,8 @@ def _setattr(self, key: str, value: Any) -> None:  # noqa: D417
 
     if key not in self.__expected_keys__:
         raise AttributeError(
-            f"Cannot set the attribute {key} in {self} as this entry is not amongst the expected ones ({self.__expected_keys__})."
+            f"Cannot set the attribute {key!r}: {type(self).__name__} has no such "
+            f"field. Its fields are {sorted(self.__expected_keys__)}."
         )
     out = self.set(key, value)
     if out is not self:
@@ -2398,8 +2898,25 @@ def _setattr(self, key: str, value: Any) -> None:  # noqa: D417
         )
 
 
+def _set_none_tensor_only(self, key: str) -> None:
+    # A field of a tensor_only instance was set to None, and is no longer in its
+    # TensorDict. _setattr_tensor_only inlines this.
+    __dict__ = self.__dict__
+    if "_init_none_fields" in __dict__:
+        # A custom __init__ runs: see _init_wrapper
+        __dict__["_init_none_fields"][key] = None
+    else:
+        non_tensordict = __dict__["_non_tensordict"]
+        if non_tensordict and key in non_tensordict:
+            # e.g. a value passed to from_tensordict(non_tensordict=...)
+            del non_tensordict[key]
+
+
 def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
-    if not is_compiling():
+    # ``is_compiling()`` stays true in every thread while any thread compiles,
+    # so code that runs eagerly (such as unpickling in a DataLoader's
+    # pin-memory thread) must not take the branch meant for Dynamo tracing.
+    if not is_dynamo_compiling():
         __dict__ = self.__dict__
         if (
             "_tensordict" not in __dict__
@@ -2416,15 +2933,37 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
         ):
             return object.__setattr__(self, key, value)
     else:
-        # Pass?
-        if key in SET_ATTRIBUTES:
+        # The generated __init__ of a subclass sets _tensordict through
+        # super().__setattr__, which is this method if the parent class is a
+        # tensor_only tensorclass. The key is a constant while Dynamo traces,
+        # so other writes skip the __dict__ lookup and add no guard.
+        if key in SET_ATTRIBUTES or (
+            key == "_tensordict" and "_tensordict" not in self.__dict__
+        ):
             return object.__setattr__(self, key, value)
+        # read below for a None value only
+        __dict__ = None
     if key not in self.__expected_keys__:
         raise AttributeError(
-            f"Cannot set attribute {key} in {self} as this entry is not amongst the expected ones ({self.__expected_keys__})."
+            f"Cannot set the attribute {key!r}: {type(self).__name__} has no such "
+            f"field. Its fields are {sorted(self.__expected_keys__)}."
         )
     if value is None:
-        self._non_tensordict[key] = None
+        # A None field is a key missing from the TensorDict, as in set(). A
+        # TensorDict is checked with a dict lookup, which is much cheaper than
+        # keys().
+        td = self._tensordict
+        if key in (td._tensordict if type(td) is TensorDict else td.keys()):
+            td.del_(key)
+        # _set_none_tensor_only, inlined
+        if __dict__ is None:
+            __dict__ = self.__dict__
+        if "_init_none_fields" in __dict__:
+            __dict__["_init_none_fields"][key] = None
+        else:
+            non_tensordict = __dict__["_non_tensordict"]
+            if non_tensordict and key in non_tensordict:
+                del non_tensordict[key]
         return
     value, _ = _convert_mapping_for_field(key, value, type(self)._tensordict_fields)
     out = self._set_str(key, value, inplace=False, validated=False, ignore_lock=False)
@@ -2433,6 +2972,51 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
             "Cannot set attribute on a locked tensorclass, even if "
             "clone_on_set is set to True. Use my_obj.set(...) instead."
         )
+
+
+def _write_back_dest(td_ref, tc_ref):
+    # Returns tc._tensordict, which the context manager writes back into on exit,
+    # as td_ref() did. tc_ref is for _exit, which updates tc._non_tensordict.
+    return td_ref()
+
+
+def _record_tensorclass(tc, result, last_op):
+    # ``with tc.view(-1) as f:`` writes f back into tc._tensordict on exit, the
+    # object that the last op of f refers to. Also refer to tc.
+    name, (args, kwargs, td_ref) = last_op
+    if type(td_ref) is functools.partial and td_ref.func is _write_back_dest:
+        # flatten_keys/unflatten_keys of a locked TensorDict return their cached
+        # result again: record the tensorclass again, do not wrap twice
+        td_ref = td_ref.args[0]
+    if td_ref() is tc._tensordict:
+        tc_ref = _strong_ref(tc) if is_compiling() else weakref.ref(tc)
+        dest = functools.partial(_write_back_dest, td_ref, tc_ref)
+        result._last_op = (name, (args, kwargs, dest))
+
+
+def _exit(self, exc_type, exc_val, exc_tb):
+    queue = getattr(self._tensordict, "_last_op_queue", None)
+    last_op = queue[-1] if queue else None
+    result = TensorDict.__exit__(self, exc_type, exc_val, exc_tb)
+    if exc_type is None and last_op is not None:
+        dest = last_op[1][2]
+        if type(dest) is functools.partial and dest.func is _write_back_dest:
+            tc = dest.args[1]()
+            if tc is not None and tc.__dict__["_non_tensordict"]:
+                # The write-back keeps the None placeholders of tc for the
+                # fields it writes. Drop them, as update() does. The fields
+                # unset in self are not written, so only the others need a check.
+                non_tensordict = tc.__dict__["_non_tensordict"]
+                source_non_tensordict = self.__dict__["_non_tensordict"]
+                maybe_written = [
+                    key for key in non_tensordict if key not in source_non_tensordict
+                ]
+                if maybe_written:
+                    keys = tc.__dict__["_tensordict"].keys()
+                    for key in maybe_written:
+                        if key in keys:
+                            del non_tensordict[key]
+    return result
 
 
 def _wrap_td_method(
@@ -2452,6 +3036,11 @@ def _wrap_td_method(
             if copy_non_tensor and non_tensordict:
                 # use tree_map to copy
                 non_tensordict = tree_map(_identity, non_tensordict)
+            if non_tensordict:
+                # self has unset fields, whose placeholders _exit may drop
+                last_op = result._last_op
+                if last_op is not None:
+                    _record_tensorclass(self, result, last_op)
             return self._from_tensordict(result, non_tensordict, safe=False)
         return result
 
@@ -2535,6 +3124,42 @@ def _wrap_method(self, attr, func, nowarn=False):
     return wrapped_func
 
 
+def _dict_none_keys(self, input_dict: dict) -> list[str]:
+    # The fields of a tensor_only instance that a dict passed to update() sets
+    # to None. from_dict() leaves them out of its result: a None field is a
+    # missing key.
+    if not type(self)._tensor_only:
+        return []
+    return [
+        key
+        for key, value in input_dict.items()
+        if value is None and key in type(self).__expected_keys__
+    ]
+
+
+def _add_none_entries(tc, keys: list[str]) -> None:
+    # Write the None values left out by from_dict() as NonTensorData(None)
+    # entries, which the update methods of the TensorDict check and write as
+    # they did before None fields became missing keys.
+    for key in keys:
+        tc._tensordict.set_non_tensor(key, None)
+
+
+def _clear_none_entries(self, keys: list[str], keys_to_update=None) -> None:
+    # Remove the NonTensorData(None) entries that _add_none_entries() made
+    # update() write: a None field of a tensor_only instance is a missing key.
+    if keys_to_update is not None:
+        first_keys = {
+            key if isinstance(key, str) else _unravel_key_to_tuple(key)[0]
+            for key in keys_to_update
+        }
+        keys = [key for key in keys if key in first_keys]
+    for key in keys:
+        self.del_(key)
+        # in a custom __init__, record that the field was set
+        _set_none_tensor_only(self, key)
+
+
 def _update(
     self,
     input_dict_or_td: dict[str, CompatibleType] | T | None = None,
@@ -2548,6 +3173,8 @@ def _update(
     is_leaf: Callable[[Type], bool] | None = None,
     **kwargs,
 ):
+    if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
+        ignore_lock = _warn_update_ignore_lock()
     if kwargs:
         if input_dict_or_td is None:
             input_dict_or_td = kwargs
@@ -2571,7 +3198,23 @@ def _update(
     if is_leaf is None:
         is_leaf = _is_leaf_nontensor
     if isinstance(input_dict_or_td, dict):
+        none_keys = _dict_none_keys(self, input_dict_or_td)
         input_dict_or_td = type(self).from_dict(input_dict_or_td, auto_batch_size=False)
+        if none_keys:
+            _add_none_entries(input_dict_or_td, none_keys)
+            _update(
+                self,
+                input_dict_or_td,
+                clone=clone,
+                inplace=inplace,
+                keys_to_update=keys_to_update,
+                non_blocking=non_blocking,
+                update_batch_size=update_batch_size,
+                ignore_lock=ignore_lock,
+                is_leaf=is_leaf,
+            )
+            _clear_none_entries(self, none_keys, keys_to_update)
+            return self
 
     if is_tensorclass(input_dict_or_td):
         non_tensordict = {
@@ -2589,6 +3232,20 @@ def _update(
             ignore_lock=ignore_lock,
             is_leaf=is_leaf,
         )
+        # Drop the placeholders of the fields just written, as the TensorDict
+        # branch below does. The fields in the source's _non_tensordict are
+        # unset there, so only the other keys need a check.
+        self_non_tensordict = self._non_tensordict
+        if self_non_tensordict:
+            source_non_tensordict = input_dict_or_td.__dict__["_non_tensordict"]
+            maybe_written = [
+                key for key in self_non_tensordict if key not in source_non_tensordict
+            ]
+            if maybe_written:
+                keys = self._tensordict.keys()
+                for key in maybe_written:
+                    if key in keys:
+                        del self_non_tensordict[key]
         self._non_tensordict.update(non_tensordict)
         return self
 
@@ -2639,9 +3296,12 @@ def _update_(
     elif input_dict_or_td is None:
         return self
     if isinstance(input_dict_or_td, dict):
+        none_keys = _dict_none_keys(self, input_dict_or_td)
         input_dict_or_td = type(self).from_dict(
             input_dict_or_td, batch_size=self.batch_size
         )
+        # update_() raises for them, as it did before
+        _add_none_entries(input_dict_or_td, none_keys)
 
     if is_tensorclass(input_dict_or_td):
         non_tensordict = {
@@ -2669,25 +3329,72 @@ def _update_at_(
     keys_to_update: Sequence[NestedKey] | None = None,
     non_blocking: bool = False,
 ):
+    # A source that update() accepts still goes to update(), which replaces the
+    # entries whatever the index, as writing it at the index could raise.
+    # Sources that update() rejects for their batch size are written at the index.
+    none_keys = ()
     if isinstance(input_dict_or_td, dict):
-        input_dict_or_td = type(self).from_dict(
-            input_dict_or_td, batch_size=self.batch_size
-        )
+        try:
+            none_keys = _dict_none_keys(self, input_dict_or_td)
+            input_dict_or_td = type(self).from_dict(
+                input_dict_or_td, batch_size=self.batch_size
+            )
+            _add_none_entries(input_dict_or_td, none_keys)
+        except RuntimeError:
+            # write the dict at the index only if its values do not have the
+            # batch size of self
+            batch_size = self.batch_size
+            if not any(
+                isinstance(value, torch.Tensor)
+                and value.shape[: len(batch_size)] != batch_size
+                for value in input_dict_or_td.values()
+            ):
+                raise
 
     if is_tensorclass(input_dict_or_td):
         non_tensordict = {
             k: v for k, v in input_dict_or_td._non_tensordict.items() if v is not None
         }
-        self._tensordict.update(input_dict_or_td._tensordict)
-        self._non_tensordict.update(non_tensordict)
-        return self
+        source = input_dict_or_td._tensordict
+        dest = self._tensordict
+        if (
+            source.batch_dims < dest.batch_dims
+            and isinstance(dest, TensorDict)
+            and not is_non_tensor(input_dict_or_td)
+            and any(
+                isinstance(value, torch.Tensor)
+                and not value.is_nested
+                and not _is_unbatched(value)
+                and value.shape[: dest.batch_dims] != dest.batch_size
+                for value in source.values()
+            )
+        ):
+            # update() would raise for this source, possibly after replacing
+            # some entries: write it at the index instead
+            input_dict_or_td = source
+        else:
+            try:
+                self._tensordict.update(source)
+            except RuntimeError:
+                # TensorDict.update checks the batch size before it changes anything
+                batch_size = self.batch_size
+                if (
+                    not isinstance(self._tensordict, TensorDict)
+                    or is_non_tensor(input_dict_or_td)
+                    or batch_size[: source.batch_dims]
+                    == source.batch_size[: len(batch_size)]
+                ):
+                    raise
+                input_dict_or_td = source
+            else:
+                self._non_tensordict.update(non_tensordict)
+                _clear_none_entries(self, none_keys)
+                return self
 
+    # LazyStackedTensorDict.update_at_ takes no keys_to_update
+    kwargs = {} if keys_to_update is None else {"keys_to_update": keys_to_update}
     self._tensordict.update_at_(
-        input_dict_or_td,
-        index=index,
-        clone=clone,
-        keys_to_update=keys_to_update,
-        non_blocking=non_blocking,
+        input_dict_or_td, index, clone=clone, non_blocking=non_blocking, **kwargs
     )
     return self
 
@@ -2718,7 +3425,11 @@ def _getitem(self, item: NestedKey) -> Tensor | TensorCollection | Any:
     if isinstance(item, str) or (
         isinstance(item, tuple) and all(isinstance(_item, str) for _item in item)
     ):
-        raise ValueError(f"Invalid indexing arguments: {item}.")
+        raise ValueError(
+            f"Invalid indexing arguments: {item!r}. A tensorclass is indexed along "
+            f"its batch dimensions; to read a field, use the attribute or "
+            f"get({item!r})."
+        )
     # tensor_res = super(type(self), self).__getattribute__("_tensordict")[item]
     tensor_res = self.__dict__["_tensordict"][item]
     return _from_tensordict_with_copy(self, tensor_res)  # device=res.device)
@@ -2737,7 +3448,11 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
         # _unravel_key_to_tuple will return an empty tuple if the index isn't a NestedKey
         idx_unravel = _unravel_key_to_tuple(item)
         if idx_unravel:
-            raise ValueError(f"Invalid indexing arguments: {item}.")
+            raise ValueError(
+                f"Invalid indexing arguments: {item!r}. A tensorclass is indexed "
+                f"along its batch dimensions; to write a field, use the attribute "
+                f"or set({item!r}, value)."
+            )
 
     if istuple and len(item) == 1:
         return _setitem(self, item[0], value)
@@ -2763,8 +3478,8 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
 
     if is_tensorclass(value):
         if not isinstance(value, type(self)):
-            self_keys = set().union(self._non_tensordict, self._tensordict.keys())
-            value_keys = set().union(value._non_tensordict, value._tensordict.keys())
+            self_keys = set().union(_non_tensor_keys(self), self._tensordict.keys())
+            value_keys = set().union(_non_tensor_keys(value), value._tensordict.keys())
             if self_keys != value_keys:
                 # if tensorclass but different class ensure that all keys are equal
                 raise ValueError(
@@ -2804,6 +3519,8 @@ def _repr(self) -> str:
     fields = _td_fields(self._tensordict, sep="=")
     field_str = [fields] if fields else []
     non_tensor_fields = _all_non_td_fields_as_str(self._non_tensordict)
+    if type(self)._tensor_only:
+        non_tensor_fields += [f"{key}=None" for key in _none_fields(self)]
 
     metadata_fields = []
 
@@ -2844,6 +3561,8 @@ def _to_dict(self, *, retain_none: bool = True, convert_tensors: bool = False) -
     td_dict = self._tensordict.to_dict(
         retain_none=retain_none, convert_tensors=convert_tensors
     )
+    if retain_none and type(self)._tensor_only:
+        td_dict.update(dict.fromkeys(_none_fields(self)))
     if self._non_tensordict:
         if retain_none:
             td_dict.update(self._non_tensordict)
@@ -2877,6 +3596,13 @@ def _from_dict(
             ),
             non_tensordict=input_dict,
         )
+    if cls._tensor_only:
+        # A None field is a missing key, not a NonTensorData(None) entry.
+        input_dict = {
+            key: value
+            for key, value in input_dict.items()
+            if value is not None or key not in cls.__expected_keys__
+        }
     td = TensorDict.from_dict(
         input_dict,
         batch_size=batch_size,
@@ -2949,15 +3675,32 @@ def _to_tensordict(self, *, retain_none: bool | None = None) -> TensorDict:
     Makes a copy of all entries. Memmap and shared memory tensors are converted to
     regular tensors.
 
-    Args:
-        retain_none (bool): if ``True``, the ``None`` values will be written in the
-            tensordict. Otherwise they will be discrarded. Default: ``True``.
+    Keyword Args:
+        retain_none (bool, optional): if ``True``, fields set to ``None`` are
+            written as ``None`` entries. Defaults to ``None``, which drops
+            them.
 
     Returns:
         A new TensorDict object containing the same values as the tensorclass.
 
+    Examples:
+        >>> from typing import Any
+        >>> import torch
+        >>> from tensordict import TensorClass
+        >>> class Foo(TensorClass):
+        ...     x: torch.Tensor
+        ...     y: Any = None
+        >>> foo = Foo(x=torch.zeros(3))
+        >>> sorted(foo.to_tensordict().keys())
+        ['x']
+        >>> sorted(foo.to_tensordict(retain_none=True).keys())
+        ['x', 'y']
+
     """
     td = self._tensordict.to_tensordict(retain_none=retain_none)
+    if retain_none and type(self)._tensor_only:
+        for key in _none_fields(self):
+            td.set_non_tensor(key, None)
     for key, val in self._non_tensordict.items():
         if val is None:
             if retain_none is None:
@@ -3027,7 +3770,8 @@ def _set(
         expected_keys = cls.__expected_keys__
         if key not in expected_keys:
             raise AttributeError(
-                f"Cannot set the attribute '{key}', expected attributes are {expected_keys}."
+                f"Cannot set the attribute {key!r}: {cls.__name__} has no such "
+                f"field. Its fields are {sorted(expected_keys)}."
             )
 
         self_is_non_tensor = self._is_non_tensor
@@ -3085,15 +3829,21 @@ def _set(
                     return self
                 elif type_hints is None:
                     warnings.warn(type(self)._set_dict_warn_msg)
-            elif value is not None and issubclass(
-                target_cls, tuple(tensordict_lib.base._ACCEPTED_CLASSES)
+            elif (
+                isinstance(value, TensorDictBase)
+                and _tensorclass_annotation(target_cls) is not None
             ):
+                # A tensordict with keys that the class does not declare is kept.
+                if _fits_tensorclass(target_cls, value):
+                    value = target_cls.from_tensordict(value)
+                return set_tensor(value=value)
+            elif value is not None and _is_accepted_class(target_cls):
                 try:
                     if not issubclass(value_type, target_cls):
                         if issubclass(target_cls, torch.Tensor):
                             # first convert to tensor to make sure that the dtype is preserved
                             value = torch.as_tensor(value)
-                        cast_val = _cast_funcs[target_cls](value)
+                        cast_val = _cast_func(target_cls)(value)
                     else:
                         cast_val = value
                 except TypeError:
@@ -3102,13 +3852,12 @@ def _set(
                     )
                 return set_tensor(value=cast_val)
             elif value is not None and target_cls is not _AnyType:
-                cast_val = _cast_funcs[target_cls](value)
+                cast_val = _cast_func(target_cls)(value)
                 return set_tensor(value=cast_val, non_tensor=True)
             elif target_cls is _AnyType and _is_castable(value_type):
                 return set_tensor()
             non_tensor = not (
-                isinstance(value, _ACCEPTED_CLASSES)
-                or _is_tensor_collection(value_type)
+                _is_accepted_class(value_type) or _is_tensor_collection(value_type)
             )
         elif (
             issubclass(value_type, torch.Tensor)
@@ -3133,7 +3882,10 @@ def _set(
                         f"Cannot update an existing entry of type {type(self._tensordict.get(key))} with a value of type {value_type}."
                     )
                 self._tensordict.del_(key)
-            self._non_tensordict[key] = value
+            if cls._tensor_only:
+                _set_none_tensor_only(self, key)
+            else:
+                self._non_tensordict[key] = value
         else:
             if inplace:
                 if key in self._tensordict.keys():
@@ -3219,23 +3971,29 @@ def _del_(self, key):
     if len(key) > 1:
         td = self.get(key[0])
         td.del_(key[1:])
-        return
+        return self
     if key[0] in self._tensordict.keys():
         self._tensordict.del_(key[0])
         # self.set(key[0], None)
+    elif type(self)._tensor_only and key[0] in self.__expected_keys__:
+        # A None field of a tensor_only class is a missing key
+        _set_none_tensor_only(self, key[0])
     elif key[0] in self._non_tensordict.keys():
         self._non_tensordict[key[0]] = None
     else:
         raise KeyError(f"Key {key} could not be found in tensorclass {self}.")
-    return
+    return self
 
 
 def _set_at_(
     self, key: NestedKey, value: Any, idx: IndexType, non_blocking: bool = False
 ):
-    if key in self._non_tensordict:
+    in_non_tensordict = key in self._non_tensordict
+    self._tensordict.set_at_(key, value, idx, non_blocking=non_blocking)
+    # Drop the non-tensor value only after the write succeeded
+    if in_non_tensordict:
         del self._non_tensordict[key]
-    return self._tensordict.set_at_(key, value, idx, non_blocking=non_blocking)
+    return self
 
 
 def _get(self, key: NestedKey, *args, **kwargs):
@@ -3264,7 +4022,7 @@ def _get(self, key: NestedKey, *args, **kwargs):
         default = kwargs.pop("default")
         if args:
             raise TypeError("'default' arg was passed twice.")
-    elif _GET_DEFAULTS_TO_NONE:
+    elif _td_base._GET_DEFAULTS_TO_NONE:
         default = None
     else:
         default = NO_DEFAULT
@@ -3306,7 +4064,7 @@ def _get_at(self, key: NestedKey, *args, **kwargs):
         default = kwargs.pop("default")
         if args or kwargs:
             raise TypeError("only one (keyword) argument is allowed.")
-    elif _GET_DEFAULTS_TO_NONE:
+    elif _td_base._GET_DEFAULTS_TO_NONE:
         default = None
     else:
         default = NO_DEFAULT
@@ -3343,7 +4101,9 @@ def _grad(self):
     grad = self._tensordict._grad
     if grad is None:
         return None
-    return self._from_tensordict(self._tensordict.grad, self._non_tensordict)
+    # Pass a copy: _from_tensordict writes None into it for each field
+    # without a grad, and that None must not reach self.
+    return self._from_tensordict(self._tensordict.grad, dict(self._non_tensordict))
 
 
 def _state_dict(
@@ -3367,6 +4127,8 @@ def _state_dict(
     _non_tensordict = super(type(self), self).__getattribute__("_non_tensordict")
 
     non_tensor = dict(_non_tensordict)
+    if type(self)._tensor_only:
+        non_tensor.update(dict.fromkeys(_none_fields(self)))
     for key, item in td.items():
         if is_non_tensor(item):
             non_tensor[key] = item.data
@@ -3445,6 +4207,10 @@ def _load_state_dict(
                 raise KeyError(f"Key '{key}' wasn't expected in the state-dict.")
             if key in _non_tensordict:
                 _non_tensordict[key] = value
+            elif value is None and type(self)._tensor_only and key not in td.keys():
+                # A None field of a tensor_only class is a missing key
+                _set_none_tensor_only(self, key)
+                continue
             else:
                 td.set(
                     key,
@@ -3508,6 +4274,9 @@ def _load_state_dict_legacy(
                         raise KeyError(
                             f"Key '{sub_key}' wasn't expected in the state-dict."
                         )
+                    if sub_item is None and type(self)._tensor_only:
+                        # A None field of a tensor_only class is a missing key
+                        continue
                     super(type(self), self).__getattribute__("_non_tensordict")[
                         sub_key
                     ] = sub_item
@@ -3586,7 +4355,7 @@ def _eq(self, other: object) -> bool:
         tensor = self._tensordict == other._tensordict
     else:
         tensor = self._tensordict == (
-            other.exclude(*self._non_tensordict.keys())
+            other.exclude(*_non_tensor_keys(self))
             if _is_tensor_collection(type(other))
             else other
         )
@@ -3650,7 +4419,7 @@ def _ne(self, other: object) -> bool:
         tensor = self._tensordict != other._tensordict
     else:
         tensor = self._tensordict != (
-            other.exclude(*self._non_tensordict.keys())
+            other.exclude(*_non_tensor_keys(self))
             if _is_tensor_collection(type(other))
             else other
         )
@@ -3681,7 +4450,7 @@ def _or(self, other: object) -> bool:
         tensor = self._tensordict | other._tensordict
     else:
         tensor = self._tensordict | (
-            other.exclude(*self._non_tensordict.keys())
+            other.exclude(*_non_tensor_keys(self))
             if _is_tensor_collection(type(other))
             else other
         )
@@ -3712,7 +4481,7 @@ def _xor(self, other: object) -> bool:
         tensor = self._tensordict ^ other._tensordict
     else:
         tensor = self._tensordict ^ (
-            other.exclude(*self._non_tensordict.keys())
+            other.exclude(*_non_tensor_keys(self))
             if _is_tensor_collection(type(other))
             else other
         )
@@ -3728,7 +4497,11 @@ def _non_tensor_items(self, include_nested=False):
             include_nested=True
         )
     elif is_tensorclass(self):
-        return list(self._non_tensordict.items())
+        items = list(self._non_tensordict.items())
+        if type(self)._tensor_only:
+            # A None field of a tensor_only class is a missing key
+            items.extend((key, None) for key in _none_fields(self))
+        return items
     else:
         return self._tensordict.non_tensor_items()
 
@@ -3800,7 +4573,7 @@ def _patch_tc(cls):
     cls.grad = property(_grad)
 
     cls._from_tensordict = classmethod(_from_tensordict)
-    cls.from_tensordict = _from_tensordict
+    cls.from_tensordict = _from_tensordict_public
     cls._new_unsafe = classmethod(_new_unsafe)
     cls._load_memmap = classmethod(_load_memmap)
     cls.from_dict = classmethod(_from_dict)
@@ -3824,9 +4597,11 @@ def _patch_tc(cls):
     cls.load_memmap_ = _load_memmap_
     cls.from_dict_instance = _from_dict_instance
 
+    cls.__exit__ = _exit
+
     # # Methods from lists
     for method_name in _METHOD_FROM_TD:
-        setattr(cls, method_name, getattr(TensorDict, method_name))
+        setattr(cls, method_name, _unchecked_copy(getattr(TensorDict, method_name)))
     for method_name in _FALLBACK_METHOD_FROM_TD:
         setattr(cls, method_name, _wrap_td_method(method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD_FORCE:
@@ -3954,13 +4729,24 @@ class _TensorClassMeta(abc.ABCMeta):
 
 
 class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
-    """TensorClass is the inheritance-based version of the :func:`~tensordict.tensorclass` decorator.
+    """A base class for dataclass-like containers of tensors.
 
-    TensorClass lets you write dataclass-like containers that benefit from all the TensorDict
-    machinery (indexing, reshaping, ``to(device)``, ``stack``/``cat``, memmap serialization, ...)
-    while remaining pythonic and friendly to static type-checkers. It is the recommended entry
-    point for new code; the :func:`~tensordict.tensorclass` decorator is kept for backwards
-    compatibility and dataclass-style ergonomics.
+    Subclass :class:`TensorClass` and annotate fields, as with
+    :func:`dataclasses.dataclass`. The instances behave like a
+    :class:`~tensordict.TensorDict`: they have a batch size, and they support
+    indexing, reshaping, ``to(device)``, :func:`torch.stack`,
+    :func:`torch.cat` and memory-mapping. A field can hold a tensor, a
+    tensordict, another tensorclass, or any Python object (stored as
+    :class:`~tensordict.NonTensorData`). This class replaces the
+    :func:`~tensordict.tensorclass` decorator, which is kept for existing code.
+
+    Use a tensorclass instead of a :class:`~tensordict.TensorDict` when the
+    data has a fixed set of named fields, when you want editors and type
+    checkers to know the fields, or when you want to add methods. Use a
+    :class:`~tensordict.TypedTensorDict` instead if you need a
+    :class:`~tensordict.TensorDictBase` subclass (``state["key"]``,
+    ``**state`` unpacking). :ref:`choosing-a-container` compares the
+    containers, and :ref:`tensorclass-guide` is the user guide.
 
     Examples:
         >>> from typing import Any
@@ -3979,102 +4765,118 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
+        >>> foo[0].non_tensor
+        'a string!'
+        >>> foo.reshape(1, 3).batch_size
+        torch.Size([1, 3])
+
+    Instances support the methods of :class:`~tensordict.TensorDictBase`
+    (``apply``, ``reshape``, ``to``, ``memmap``, ...). The pages of these
+    methods are under :class:`~tensordict.TensorDictBase`, because the
+    tensorclass forwards the call to the tensordict that holds its fields.
 
     Keyword Args:
-        batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to ``None``.
-        device (torch.device, optional): The device on which the TensorDict will be created. Defaults to ``None``.
-        frozen (bool, optional): If ``True``, the resulting class or instance will be immutable. Defaults to ``False``.
-        autocast (bool, optional): If ``True``, values are coerced to the field's type annotation when
-            set (e.g. an ``int`` annotation keeps Python ints as ints rather than wrapping them in a
-            tensor). Mutually exclusive with ``nocast`` and ``tensor_only``. Defaults to ``False``.
-        nocast (bool, optional): If ``True``, tensor-compatible scalar types (``int``, ``float``,
-            ``np.ndarray``, ...) are stored as-is instead of being cast to a tensor. Mutually exclusive
-            with ``autocast`` and ``tensor_only``. Defaults to ``False``.
-        tensor_only (bool, optional): If ``True``, every field is expected to hold a tensor (or
-            tensor-compatible value, which will be cast). Lookups skip the non-tensor data path,
-            which can yield significant speed-ups at the cost of losing non-tensor support.
-            Mutually exclusive with ``autocast`` and ``nocast``. Defaults to ``False``.
-        shadow (bool, optional): Disables the validation of field names against TensorDict's reserved
-            attributes (e.g. allowing a field named ``device`` or ``batch_size``). Use with caution,
-            as this can lead to surprising behaviour. Defaults to ``False``.
+        batch_size (torch.Size, optional): The batch size of the instance.
+            Defaults to ``torch.Size([])``.
+        device (torch.device, optional): The device of the instance. Defaults
+            to ``None``.
+        names (list of str, optional): The names of the batch dimensions.
+            Defaults to ``None``.
+        lock (bool, optional): If ``True``, the instance is locked: writing a
+            field raises a ``RuntimeError``. Defaults to ``False``.
 
-    **The bracket form** ``TensorClass[...]`` is sugar for "build a parametrized subclass with the
-    given flags turned on". The three forms below are equivalent:
+    These keyword arguments go to the constructor, with the fields:
+    ``Foo(tensor=..., batch_size=[3])``. The class flags below go to the
+    class definition instead.
 
-    Examples:
+    .. rubric:: Class flags
+
+    A flag changes the behavior of every instance of the class. Set it in
+    one of three equivalent forms:
+
+        >>> from tensordict import tensorclass
         >>> class Foo(TensorClass["autocast"]):     # bracket form
         ...     integer: int
-        >>> class Foo(TensorClass, autocast=True):  # metaclass kwargs form
+        >>> class Foo(TensorClass, autocast=True):  # keyword form
         ...     integer: int
         >>> @tensorclass(autocast=True)             # legacy decorator form
         ... class Foo:
         ...     integer: int
 
-    The bracket form is usually the most readable when you stack several flags and it is the form
-    static type-checkers (mypy/pyright) understand via :meth:`~object.__class_getitem__`. The kwargs
-    form is convenient if the flag value is computed; the decorator form is best when migrating
-    plain ``@dataclass`` code.
+    To combine flags, list them in the brackets:
 
-    Several flags can be combined inside the brackets:
-
-    Examples:
         >>> class Foo(TensorClass["nocast", "frozen"]):
         ...     integer: int
 
-    **Per-flag semantics.** The flags fall into three families — casting (``autocast``, ``nocast``,
-    ``tensor_only``, which are mutually exclusive), mutability (``frozen``) and name shadowing
-    (``shadow``).
+    The flags are:
 
-    Default behaviour (no flags) — tensor-compatible values are wrapped as tensors and non-tensor
-    values are stored as :class:`~tensordict.NonTensorData`:
+    - No flag: tensor-compatible values (``int``, ``float``, ``np.ndarray``)
+      are cast to tensors. Other values are stored as
+      :class:`~tensordict.NonTensorData`.
 
-        >>> class Foo(TensorClass):
-        ...     x: int
-        >>> Foo(x=1).x
-        tensor(1)
+          >>> class Foo(TensorClass):
+          ...     x: int
+          >>> Foo(x=1).x
+          tensor(1)
 
-    ``autocast`` — coerce values back to the field's annotated type when reading them. Useful when
-    a field is conceptually a scalar/string/enum but should still travel through the TensorDict
-    machinery as a leaf:
+    - ``autocast``: when a field is set, the value is converted to the
+      annotated type. For example, an ``int`` field set to
+      ``torch.ones(())`` holds ``1``.
 
-        >>> class Foo(TensorClass["autocast"]):
-        ...     x: int
-        >>> Foo(x=torch.ones(())).x
-        1
+          >>> class Foo(TensorClass["autocast"]):
+          ...     x: int
+          >>> Foo(x=torch.ones(())).x
+          1
 
-    ``nocast`` — opt out of tensor casting entirely; tensor-compatible scalars are stored as-is:
+    - ``nocast``: tensor-compatible values are stored as they are, not cast
+      to tensors.
 
-        >>> class Foo(TensorClass["nocast"]):
-        ...     x: int
-        >>> Foo(x=1).x
-        1
+          >>> class Foo(TensorClass["nocast"]):
+          ...     x: int
+          >>> Foo(x=1).x
+          1
 
-    ``tensor_only`` — the strict, fast path. Every field must be (or convert to) a tensor; the
-    non-tensor storage is bypassed, which makes attribute access cheaper. Reach for this on
-    performance-sensitive containers (e.g. RL trajectories, batched model I/O) where you control
-    every field:
+    - ``tensor_only``: every field annotation must be a tensor type, a tensor
+      collection, or an optional or union of these. Other annotations raise
+      a ``TypeError`` when the class is defined. Values that can be cast to
+      a tensor (Python scalars, numpy arrays) are cast. Reading a field then
+      skips the lookup in the non-tensor storage.
 
-        >>> class Foo(TensorClass["tensor_only"]):
-        ...     x: torch.Tensor
+          >>> class Foo(TensorClass["tensor_only"]):
+          ...     x: torch.Tensor
+          >>> Foo(x=1).x
+          tensor(1)
 
-    ``frozen`` — make the class immutable, mirroring ``@dataclass(frozen=True)``. Frozen instances
-    play well with ``torch.compile`` and functional code paths where in-place mutation would be a
-    foot-gun. Note that ``frozen`` propagates to subclasses: a non-frozen subclass cannot inherit
-    from a frozen base, and vice versa.
+    - ``frozen``: assigning a field raises ``FrozenInstanceError``, as with
+      ``@dataclass(frozen=True)``. Subclasses of a frozen class are frozen
+      too. A frozen class cannot subclass a non-frozen tensorclass: this
+      raises a ``TypeError``.
 
-        >>> class Foo(TensorClass["frozen"]):
-        ...     x: torch.Tensor
-        >>> foo = Foo(x=torch.zeros(3))
-        >>> foo.x = torch.ones(3)  # raises FrozenInstanceError
+          >>> class Foo(TensorClass["frozen"]):
+          ...     x: torch.Tensor
+          >>> foo = Foo(x=torch.zeros(3))
+          >>> foo.x = torch.ones(3)
+          Traceback (most recent call last):
+            ...
+          dataclasses.FrozenInstanceError: cannot assign to field 'x'
 
-    ``shadow`` — by default, field names that collide with TensorDict's reserved attributes
-    (``batch_size``, ``device``, ``names``, ``data``, ...) raise an ``AttributeError`` at class
-    construction. ``shadow=True`` opts out of that check so you can use those names anyway:
+    - ``shadow``: by default, a field whose name is a tensorclass member
+      (``batch_size``, ``device``, ``names``, ``sum``, ``apply`` and the
+      other TensorDict methods) raises an ``AttributeError`` when the class
+      is defined. ``shadow=True`` allows these names. The field then hides
+      the member of the same name.
 
-        >>> class Foo(TensorClass["shadow"]):
-        ...     data: torch.Tensor
+          >>> class Foo(TensorClass["shadow"]):
+          ...     sum: torch.Tensor
+          >>> Foo(sum=torch.ones(3), batch_size=[3]).sum
+          tensor([1., 1., 1.])
 
-    **Subclassing.** A parametrized class is just a class — you can subclass it and stack more
+    ``autocast``, ``nocast`` and ``tensor_only`` are exclusive: combining two
+    of them raises a ``TypeError``.
+
+    .. rubric:: Subclassing
+
+    A class with flags is a regular class. You can subclass it and add
     flags:
 
         >>> class Base(TensorClass["autocast"]):
@@ -4082,14 +4884,19 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
         >>> class Sub(Base, shadow=True):   # autocast inherited, shadow added
         ...     y: float
 
-    **Type-checking.** ``TensorClass[...]`` is implemented via :meth:`~object.__class_getitem__`,
-    so mypy and pyright resolve it to the (parametrized) class itself rather than to a generic
-    parameter. Annotated fields propagate as expected and editors offer attribute completion on
-    instances.
+    .. rubric:: Type checking
 
-    .. note:: ``TensorClass`` itself is *not* decorated as a tensorclass — the dataclass machinery
-        only fires on subclasses. This is intentional: we cannot anticipate whether ``frozen`` will
-        be requested, and a non-frozen base cannot have a frozen subclass.
+    ``TensorClass[...]`` is implemented with :meth:`~object.__class_getitem__`,
+    so pyright resolves it to the class with flags, not to a generic
+    parameter. Mypy does not evaluate ``__class_getitem__`` in a list of base
+    classes and rejects the bracket form. In code that mypy checks, use the
+    keyword form: ``class Foo(TensorClass, autocast=True)``. Editors complete
+    the annotated fields on instances.
+
+    .. note:: ``TensorClass`` itself is not a tensorclass: only its
+        subclasses become dataclasses. The reason is that a non-frozen base
+        cannot have a frozen subclass, and the base cannot know whether a
+        subclass sets ``frozen``.
 
     .. seealso::
 
@@ -4115,11 +4922,16 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
         return _TensorClassMeta.__getitem__(cls, item)
 
 
+# _TensorClassMeta does not pass the base class itself to tensorclass(), which
+# registers every subclass.
+_register_tensor_class(TensorClass)
+
+
 def _check_equal(a, b):
     # A util to check that two non-tensor data match
     #  We're replacing this by an identity match, not a value check (which will be faster and easier to handle).
     try:
-        if isinstance(a, _ACCEPTED_CLASSES) or isinstance(b, _ACCEPTED_CLASSES):
+        if _is_accepted_class(type(a)) or _is_accepted_class(type(b)):
             iseq = (a == b).all() and a.shape == b.shape
         elif isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
             iseq = (a == b).all() and a.shape == b.shape
@@ -4130,19 +4942,34 @@ def _check_equal(a, b):
     return iseq
 
 
+def _compares_by_element(non_tensor, other) -> bool:
+    # Whether a NonTensorDataBase is compared with `other` element by element,
+    # as two non-tensor stacks are
+    return (
+        isinstance(other, NonTensorStack)
+        and other.batch_size == non_tensor.batch_size
+        # the stack comparison needs at least one element
+        and non_tensor.batch_size.numel() > 0
+        # arrays and tensors are left out: they may hold one value per element
+        # (from_struct_array makes such data), which maybe_to_stack ignores
+        and not isinstance(non_tensor.data, (np.ndarray, torch.Tensor))
+    )
+
+
 class NonTensorDataBase(TensorClass):
-    """A base class to carry non-tensor data.
+    """A base class for tensordict entries that hold a Python object instead of a tensor.
 
-    There are two main `NonTensorDataBase` subclasses: :class:`~tensordict.NonTensorData` which behaves
-    mostly as a regular tensordict when shape operations are applied, and :class:`~tensordict.MetaData`
-    which is more specific.
+    There are two subclasses:
 
-    The main difference between the two classes is their behavior during expansion or stacking. The
-    :class:`~tensordict.MetaData` class will keep a single copy of the data for the entire tensordict.
-    As the name suggests, the intended usage is to carry data that provides additional information about
-    the batch of data stored in a `TensorDict`. On the other hand, the :class:`~tensordict.NontensorData`
-    class will carry data in a batch-size compliant manner: the batch-size of the tensorclass is indicative
-    of different batch elements within it.
+    - :class:`~tensordict.NonTensorData` holds one value per batch element.
+      Stacking or ``unsqueeze`` gives a :class:`~tensordict.NonTensorStack`.
+    - :class:`~tensordict.MetaData` holds one value for the whole batch.
+      Stacking items that hold the same object (checked with ``is``) gives
+      one :class:`~tensordict.MetaData` with the new batch size. Other items
+      give a :class:`~tensordict.NonTensorStack`. ``unsqueeze`` and indexing
+      keep a :class:`~tensordict.MetaData`.
+
+    See :ref:`non-tensor-data`.
 
     """
 
@@ -4200,6 +5027,13 @@ class NonTensorDataBase(TensorClass):
                         bool(eqval),
                         device=self.device,
                     )
+                if _compares_by_element(self, other):
+                    try:
+                        return self.maybe_to_stack() == other
+                    except Exception:
+                        # values that cannot be compared (dicts holding
+                        # arrays, data frames) keep the empty result
+                        pass
                 # # Handle comparison with scalar values (like 0, 1, etc.)
                 # # For non-tensor data, we should return a boolean tensor
                 # if isinstance(other, (int, float, bool)) or (isinstance(other, torch.Tensor) and other.numel() == 1):
@@ -4232,6 +5066,13 @@ class NonTensorDataBase(TensorClass):
                         bool(neqval),
                         device=self.device,
                     )
+                if _compares_by_element(self, other):
+                    try:
+                        return self.maybe_to_stack() != other
+                    except Exception:
+                        # values that cannot be compared (dicts holding
+                        # arrays, data frames) keep the empty result
+                        pass
                 # # Handle comparison with scalar values (like 0, 1, etc.)
                 # # For non-tensor data, we should return a boolean tensor
                 # if isinstance(other, (int, float, bool)) or (isinstance(other, torch.Tensor) and other.numel() == 1):
@@ -4318,6 +5159,8 @@ class NonTensorDataBase(TensorClass):
         ignore_lock: bool = False,
         **kwargs,
     ) -> T:
+        if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
+            ignore_lock = _warn_update_ignore_lock()
         if kwargs:
             raise TypeError(
                 f"{type(self).__name__}.update() does not accept keyword-argument "
@@ -4527,8 +5370,12 @@ class NonTensorDataBase(TensorClass):
             issubclass(t, (NonTensorData, NonTensorStack)) for t in types
         ):
             return NonTensorData._cat_non_tensor(*args, **(kwargs or {}))
-        if func not in _TD_PASS_THROUGH or not all(
-            issubclass(t, (Tensor, cls)) for t in types
+        # NonTensorData.where does not select elementwise, so torch.where is
+        # not passed through
+        if (
+            func not in _TD_PASS_THROUGH
+            or func is torch.where
+            or not all(issubclass(t, (Tensor, cls)) for t in types)
         ):
             from torch._ops import HigherOrderOperator
 
@@ -4671,6 +5518,17 @@ class NonTensorDataBase(TensorClass):
             _metadata["memmap_prefix"] = prefix
             _metadata["memmaped"] = memmaped
 
+        # memmap_prefix, memmaped and _share_non_tensor describe the current
+        # memmap, not the data: leave them out of meta.json (memmap_prefix is
+        # a Path, which would be pickled into other.pickle).
+        non_tensordict = dict(self._non_tensordict)
+        if self._metadata is not None:
+            non_tensordict["_metadata"] = {
+                key: value
+                for key, value in self._metadata.items()
+                if key not in ("memmap_prefix", "memmaped", "_share_non_tensor")
+            } or None
+
         out = _memmap_(
             self,
             prefix=prefix,
@@ -4683,6 +5541,7 @@ class NonTensorDataBase(TensorClass):
             share_non_tensor=share_non_tensor,
             existsok=existsok,
             robust_key=robust_key,
+            non_tensordict=non_tensordict,
         )
         _metadata["_share_non_tensor"] = share_non_tensor
         out._non_tensordict["_metadata"] = _metadata
@@ -4702,72 +5561,71 @@ class NonTensorDataBase(TensorClass):
 
 
 class NonTensorData(NonTensorDataBase):
-    """A carrier for non-tensordict data.
+    """A tensordict entry that holds a Python object instead of a tensor.
 
-    This class can be used whenever non-tensor data needs to be carried at
-    any level of a tensordict instance.
+    Use it to keep strings, numbers that must not become tensors, or any
+    other object next to the tensors of a tensordict: a task name, a file
+    path, a configuration. Each batch element has the value: indexing a
+    tensordict keeps the value in every element, and stacking gives a
+    :class:`~tensordict.NonTensorStack` with one value per element. To keep
+    one value for the whole batch through stacking and unsqueezing, use
+    :class:`~tensordict.MetaData` instead. :ref:`non-tensor-data` explains
+    the non-tensor classes.
 
-    :class:`~tensordict.tensorclass.NonTensorData` instances can be created
-    explicitly or using :meth:`~tensordict.TensorDictBase.set_non_tensor`.
+    You rarely build a :class:`NonTensorData` yourself. Assigning a value
+    that is not a tensor to a key creates one, and reading the key returns
+    the value. :meth:`~tensordict.TensorDictBase.get` returns the
+    :class:`NonTensorData` itself:
 
-    This class is serializable using :meth:`tensordict.TensorDictBase.memmap`
-    and related methods, and can be loaded through :meth:`~tensordict.TensorDictBase.load_memmap`.
-    If the content of the object is JSON-serializable, it will be serializsed in
-    the `meta.json` file in the directory pointed by the parent key of the `NoneTensorData`
-    object. If it isn't, serialization will fall back on pickle. This implies
-    that we assume that the content of this class is either json-serializable or
-    pickable, and it is the user responsibility to make sure that one of these
-    holds. We try to avoid pickling/unpickling objects for performance and security
-    reasons (as pickle can execute arbitrary code during loading).
+        >>> import torch
+        >>> from tensordict import NonTensorData, NonTensorStack, TensorDict
+        >>> td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
+        >>> td["b"] = "a string!"
+        >>> td["b"]
+        'a string!'
+        >>> td[0]["b"]
+        'a string!'
+        >>> td.get("b")
+        NonTensorData(data=a string!, batch_size=torch.Size([3]), device=None)
 
-    .. note::
-        If the data passed to :class:`NonTensorData` is a :class:`NonTensorData`
-        itself, the data from the nested object will be gathered.
+    You can also build one explicitly, or with
+    :meth:`~tensordict.TensorDictBase.set_non_tensor`:
 
-        >>> non_tensor = NonTensorData("a string!")
-        >>> non_tensor = NonTensorData(non_tensor)
+        >>> non_tensor = NonTensorData("a string!", batch_size=[])
+        >>> data = TensorDict({}, batch_size=[3])
+        >>> _ = data.set_non_tensor(("nested", "key"), "a string!")
+        >>> assert isinstance(data.get(("nested", "key")), NonTensorData)
+        >>> assert data.get_non_tensor(("nested", "key")) == "a string!"
+
+    If the data passed to :class:`NonTensorData` is a :class:`NonTensorData`
+    itself, the data from the nested object is used:
+
+        >>> non_tensor = NonTensorData(NonTensorData("a string!"))
         >>> assert non_tensor.data == "a string!"
 
     .. note::
-        To faciliate ``NonTensorData`` integration in tensordict, the
-        :meth:`~tensordict.TensorDictBase.__getitem__` and :meth:`~tensordict.TensorDictBase.__setitem__`
-        are overloaded to set non-tensor data appropriately (unlike :meth:`~tensordict.TensorDictBase.set`
-        and :meth:`~tensordict.TensorDictBase.get` which are reserved for tensor-like
-        objects):
+        If you assign a list to a key, each element of the list becomes the
+        value of one batch element, in a :class:`~tensordict.NonTensorStack`.
+        Reading the key returns a :class:`~tensordict.utils.LinkedList` of
+        the values:
 
-        >>> td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
-        >>> td["a"]  # gets a tensor
-        >>> td["b"] = "a string!"
-        >>> assert td["b"] == "a string!"
-        >>> # indexing preserves the meta-data
-        >>> assert td[0]["b"] == "a string!"
-        >>> td.get("b")  # returns the NonTensorData
-
-        One can uses lists to set multiple `NonTensorData` at the same time (if :class:`~tensordict.set_list_to_stack`
-        is set to `True`):
-
-        >>> from tensordict import TensorDict, set_list_to_stack
-        >>> set_list_to_stack(True).set()
         >>> td = TensorDict(batch_size=(3,))
         >>> td["foo"] = ["a", "b", "c"]
-        >>> print(td)
-        TensorDict(
-            fields={
-                foo: NonTensorStack(
-                    ['a', 'b', 'c'],
-                    batch_size=torch.Size([3]),
-                    device=None)},
-            batch_size=torch.Size([3]),
-            device=None,
-            is_shared=False)
+        >>> td["foo"]
+        LinkedList(['a', 'b', 'c'])
+        >>> td.get("foo").tolist()
+        ['a', 'b', 'c']
 
     .. note::
         Unlike other tensorclass classes, :class:`NonTensorData` supports
         comparisons of two non-tensor data through :meth:`~.__eq__`, :meth:`~.__ne__`,
         :meth:`~.__xor__` or :meth:`~.__or__`. These operations return a tensor
-        of shape `batch_size`. For compatibility with `<a tensordict> == <float_number>`,
-        comparison with non-:class:`NonTensorData` will always return an empty
-        :class:`NonTensorData`.
+        of shape `batch_size`. :meth:`~.__eq__` and :meth:`~.__ne__` also compare
+        with a :class:`~tensordict.NonTensorStack` of the same batch size, element
+        by element when their values can be compared, unless the data is an array
+        or a tensor. For compatibility with ``<a tensordict> == <float_number>``,
+        a comparison with any other object returns an empty
+        :class:`~tensordict.TensorDict`.
 
         >>> a = NonTensorData(True)
         >>> b = NonTensorData(True)
@@ -4782,15 +5640,13 @@ class NonTensorData(NonTensorDataBase):
         tensor([True, True, True])
 
     .. note::
-        Stacking :class:`NonTensorData` instances results
-        in a :class:`~tensordict.NonTensorStack` instance.
-        The data is not copied during stacking / expansion etc., so that
-        the memory footprint of these operations is negligeable.
-        If you're willing to keep a single non-tensor copy during these operations,
-        the :class:`~tensordict.MetaData` class can be used instead.
+        Stacking :class:`NonTensorData` instances gives a
+        :class:`~tensordict.NonTensorStack` instance. The data is not copied
+        during stacking, expansion and similar operations. To keep a single
+        value instead of a stack, use :class:`~tensordict.MetaData`.
 
-        >>> data = torch.stack([NonTensorData(1) for _ in range(10)])
-        >>> data
+        >>> stack = torch.stack([NonTensorData(1) for _ in range(10)])
+        >>> stack
         NonTensorStack(
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             batch_size=torch.Size([10]),
@@ -4800,56 +5656,39 @@ class NonTensorData(NonTensorDataBase):
         Non-tensor data can be filtered out from a tensordict using
         :meth:`~tensordict.TensorDictBase.filter_non_tensor`.
 
-    Examples:
-        >>> # create an instance explicitly
-        >>> non_tensor = NonTensorData("a string!", batch_size=[]) # batch-size can be anything
-        >>> data = TensorDict({}, batch_size=[3])
-        >>> data.set_non_tensor(("nested", "key"), "a string!")
-        >>> assert isinstance(data.get(("nested", "key")), NonTensorData)
-        >>> assert data.get_non_tensor(("nested", "key")) == "a string!"
-        >>> # serialization
-        >>> class MyPickableClass:
-        ...     value = 10
-        >>> data.set_non_tensor("pickable", MyPickableClass())
-        >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as tmpdir:
-        ...     data.memmap(tmpdir)
-        ...     loaded = TensorDict.load_memmap(tmpdir)
-        ...     # print directory path
-        ...     print_directory_tree(tmpdir)
-        Directory size: 511.00 B
-        tmp2cso9og_/
-            pickable/
-                _tensordict/
-                    meta.json
-                other.pickle
-                meta.json
-            nested/
-                key/
-                    _tensordict/
-                        meta.json
-                    meta.json
-                meta.json
-            meta.json
-        >>> assert loaded.get_non_tensor("pickable").value == 10
+    .. rubric:: Saving
 
-    .. note::
-        __Preallocation__ is also possible with ``NonTensorData``.
-        This class can handle conversion from ``NonTensorData`` to
-        ``NonTensorStack`` where appropriate, as the following example
-        demonstrates:
+    :meth:`~tensordict.TensorDictBase.memmap` and the related methods save
+    a :class:`NonTensorData`, and :meth:`~tensordict.TensorDictBase.load_memmap`
+    loads it. If JSON can encode the value, it goes to the ``meta.json``
+    file of the entry (a tuple is loaded back as a list). Other values, such
+    as a ``set`` or an instance of another class, are pickled to an
+    ``other.pickle`` file. Pickle can execute arbitrary code when it loads,
+    so :meth:`~tensordict.TensorDictBase.load_memmap` warns when it loads a
+    pickled value. Pass ``allow_pickle=True`` for data that you trust. From
+    TensorDict 0.16, the default is ``allow_pickle=False``, which raises a
+    ``RuntimeError`` for pickled values.
+
+        >>> import tempfile
+        >>> from fractions import Fraction
+        >>> _ = data.set_non_tensor("picklable", Fraction(1, 3))
+        >>> with tempfile.TemporaryDirectory() as tmpdir:
+        ...     _ = data.memmap(tmpdir)
+        ...     loaded = TensorDict.load_memmap(tmpdir, allow_pickle=True)
+        >>> loaded.get_non_tensor("picklable")
+        Fraction(1, 3)
+
+    .. rubric:: Preallocation
+
+    A tensordict can hold one :class:`NonTensorData` with a batch size, then
+    receive different values for some batch elements. The entry then
+    becomes a :class:`~tensordict.NonTensorStack`:
 
         >>> td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
         >>> print(td)
         TensorDict(
             fields={
-                val: NonTensorData(
-                    data=0,
-                    _metadata=None,
-                    _is_non_tensor=True,
-                    batch_size=torch.Size([10]),
-                    device=None,
-                    is_shared=False)},
+                val: NonTensorData(data=0, batch_size=torch.Size([10]), device=None)},
             batch_size=torch.Size([10]),
             device=None,
             is_shared=False)
@@ -4867,82 +5706,92 @@ class NonTensorData(NonTensorDataBase):
             batch_size=torch.Size([10]),
             device=None,
             is_shared=False)
-        >>> print(td["val"])  # the stack is automatically converted to a list
-        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1]
+        >>> td["val"]
+        LinkedList([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
 
-      If the value is unique, the ``NonTensorData`` container is kept and
-      retrieving the value only returns this value. If a ``NonTensorStack``
-      is used, ``__getitem__`` will return the list of values instead.
-      This makes the two operations not exactly interchangeable. The reason
-      for this inconsistency is that a single ``NonTensorData`` with a non-empty
-      batch-size is intended to be used as a metadata carrier for bigger
-      tensordicts, whereas ``NonTensorStack`` usage is aimed at allocating
-      one metadata atom to each corresponding batch element.
+    If the value is the same for every element, ``td[key]`` returns that
+    value. If the entry is a :class:`~tensordict.NonTensorStack`,
+    ``td[key]`` returns the values as a :class:`~tensordict.utils.LinkedList`.
+    The reason is that a single :class:`NonTensorData` with a batch size
+    carries metadata for the whole tensordict, and a
+    :class:`~tensordict.NonTensorStack` carries one value per batch element.
 
-    .. note::
-      ``NonTensorData`` can be shared between processes. In fact, both
-      :meth:`~tensordict.TensorDict.memmap_` (and the likes) and
-      :meth:`~tensordict.TensorDict.share_memory_` will produce sharable
-      instances.
+    .. rubric:: Sharing between processes
 
-      Valid methods to write data are :meth:`~tensordict.TensorDictBase.update`
-      with the `inplace=True` flag and :meth:`~tensordict.TensorDictBase.update_`
-      or :meth:`~tensordict.TensorDictBase.update_at_`.
+    :meth:`~tensordict.TensorDictBase.memmap_` and
+    :meth:`~tensordict.TensorDictBase.share_memory_` make a
+    :class:`NonTensorData` that other processes can read. To write a new
+    value, use :meth:`~tensordict.TensorDictBase.update` with
+    ``inplace=True``, :meth:`~tensordict.TensorDictBase.update_` or
+    :meth:`~tensordict.TensorDictBase.update_at_`. Assigning the key raises
+    an error, because the shared tensordict is locked:
 
-        >>> if __name__ == "__main__":
-        ...     td = TensorDict({"val": NonTensorData(data=0, batch_size=[])}, [])
-        ...     td.share_memory_()
-        ...     td.update_(TensorDict({"val": NonTensorData(data=1, batch_size=[])}, []))  # works
-        ...     td.update(TensorDict({"val": NonTensorData(data=1, batch_size=[])}, []), inplace=True)  # works
-        ...     td["val"] = 1  # breaks
+        >>> td = TensorDict({"val": NonTensorData(data=0, batch_size=[])}, [])
+        >>> _ = td.share_memory_()
+        >>> _ = td.update_(TensorDict({"val": NonTensorData(data=1, batch_size=[])}, []))
+        >>> _ = td.update(TensorDict({"val": NonTensorData(data=1, batch_size=[])}, []), inplace=True)
+        >>> td["val"] = 1
+        Traceback (most recent call last):
+            ...
+        RuntimeError: Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method and make sure the key is present.
 
-      A shared ``NonTensorData`` is writable whenever its content is a ``str``,
-      ``int``, ``float``, ``bool``, ``dict`` or ``list`` instance. Other types
-      (e.g., dataclasses) will not raise an exception during the call to
-      ``memmap_`` or ``share_memory_`` but they will cause the code to break
-      when the data is overwritten.
+    A shared :class:`NonTensorData` is writable if its value is a ``str``,
+    ``int``, ``float``, ``bool``, ``dict`` or ``list``. Other values (a
+    dataclass instance, for example) do not raise an error in ``memmap_`` or
+    ``share_memory_``, but writing a new value raises a
+    ``NotImplementedError``:
 
+        >>> from dataclasses import dataclass
         >>> @dataclass
         ... class MyClass:
         ...     string: str
-        ...
-        >>> if __name__ == "__main__":
-        ...     td = TensorDict({"val": MyClass("a string!")}, [])
-        ...     td.share_memory_()  # works and can be shared between processes
-        ...     td.update_(TensorDict({"val": MyClass("another string!")}, []))  # breaks!
+        >>> td = TensorDict({"val": MyClass("a string!")}, [])
+        >>> _ = td.share_memory_()
+        >>> _ = td.update_(TensorDict({"val": MyClass("another string!")}, []))
+        Traceback (most recent call last):
+            ...
+        NotImplementedError: Updating MyClass within a shared/memmaped structure is not supported.
 
-      :class:`~tensordict.tensorclass.TensorStack` instances are also sharable
-      in a similar way. Crucially, preallocation must be properly handled for
-      this to work.
+    A shared :class:`~tensordict.NonTensorStack` is writable too, if it was
+    preallocated: the entry must be a stack before the tensordict is
+    shared.
 
         >>> td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
-        >>> newdata = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
-        >>> td[1::2] = newdata
-        >>> # If TD is properly preallocated, we can share it and change its content
-        >>> td.share_memory_()
-        >>> newdata = TensorDict({"val": NonTensorData(data=2, batch_size=[5])}, [5])
-        >>> td[1::2] = newdata  # Works!
-        >>> # In contrast, not preallocating the tensordict properly will break when assigning values
+        >>> td[1::2] = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
+        >>> _ = td.share_memory_()
+        >>> td[1::2] = TensorDict({"val": NonTensorData(data=2, batch_size=[5])}, [5])
+        >>> td["val"]
+        LinkedList([0, 2, 0, 2, 0, 2, 0, 2, 0, 2])
+
+    If the entry is still a single :class:`NonTensorData` when the
+    tensordict is shared, writing different values to some elements raises
+    an error:
+
         >>> td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
-        >>> td.share_memory_()
-        >>> newdata = TensorDict({"val": NonTensorData(data=2, batch_size=[5])}, [5])
-        >>> td[1::2] = newdata  # breaks!
+        >>> _ = td.share_memory_()
+        >>> td[1::2] = TensorDict({"val": NonTensorData(data=2, batch_size=[5])}, [5])
+        Traceback (most recent call last):
+            ...
+        RuntimeError: You're attempting to update a leaf in-place with a shared tensordict, but the new value does not match the previous. If you're using NonTensorData, see the class documentation to see how to properly pre-allocate memory in shared contexts.
 
-      Writable memmapped-``NonTensorData`` instances will update the underlying
-      metadata if required. This involves writing in a JSON file, which can
-      introduce some overhead. We advise against this usage whenever one seeks
-      performance and long-lasting data sharing isn't required (``share_memory_``
-      should be preferred in these cases).
+    A memory-mapped :class:`NonTensorData` writes the new value to its JSON
+    file on disk at each update, which takes time. If the data does not need
+    to stay on disk, use ``share_memory_`` instead. A value that JSON can
+    encode stays in the JSON file, so the directory loads with
+    ``allow_pickle=False``:
 
-        >>> if __name__ == "__main__":
+        >>> with tempfile.TemporaryDirectory() as tmpdir:
         ...     td = TensorDict({"val": NonTensorData(data=0, batch_size=[])}, [])
-        ...     td.memmap_(dest_folder)
-        ...     td.update_(TensorDict({"val": NonTensorData(data=1, batch_size=[])}, []))
-        ...     # The underlying metadata on disk is updated during calls to update_
-        ...     td_load = TensorDict.load_memmap(dest_folder)
-        ...     assert (td == td_load).all()
+        ...     _ = td.memmap_(tmpdir)
+        ...     _ = td.update_(TensorDict({"val": NonTensorData(data=1, batch_size=[])}, []))
+        ...     td_load = TensorDict.load_memmap(tmpdir, allow_pickle=False)
+        ...     print(td_load["val"])
+        1
 
-    ``NonTensorData`` can store callables. If called, it will fallback on the `__call__` of `.data`:
+    .. rubric:: Callables
+
+    A :class:`NonTensorData` can hold a callable. Calling the
+    :class:`NonTensorData` calls its ``data``:
 
         >>> td0 = TensorDict({"a": 0, "b": 0})
         >>> td1 = TensorDict({"a": 1, "b": 1})
@@ -5002,7 +5851,7 @@ class NonTensorData(NonTensorDataBase):
             if out.batch_size != result.batch_size:
                 raise RuntimeError("out.batch_size and cat batch size must match.")
             if isinstance(out, NonTensorData) and isinstance(result, NonTensorStack):
-                with set_capture_non_tensor_stack(True):
+                with _set_capture_non_tensor_stack(True):
                     result = cls._stack_non_tensor(values, dim=dim)
             out.update_(result)
             return out
@@ -5011,6 +5860,8 @@ class NonTensorData(NonTensorDataBase):
     def expand(self, *args, **kwargs) -> T:
         # tensordict_dims = self.batch_dims
         shape = _get_shape_from_args(*args, **kwargs)
+        if -1 in shape:
+            shape = _resolve_expand_shape(shape, self.batch_size)
 
         # Replicate self until we have the appropriate batch size
         out = self
@@ -5152,18 +6003,42 @@ class _MetaDataMeta(_TensorClassMeta):
 
 
 class MetaData(NonTensorDataBase, metaclass=_MetaDataMeta):
-    """A non-tensor, metadata carrier class for `TensorDict`.
+    """A tensordict entry that holds one Python object for the whole batch.
 
-    This class mainly behaves as :class:`~tensordict.NonTensorData`, except for indexing,
-    stacking, squeezing/unsqueezing and similar operations.
+    Use it for information about the batch as a whole, such as a
+    configuration dict or the name of a dataset. It behaves as
+    :class:`~tensordict.NonTensorData`, except for indexing, stacking,
+    squeezing, unsqueezing and similar operations:
 
-    During __stacking__, `MetaData` will check if the content of the various items match
-    in identity (i.e., using `is` and not `==`). If so, a single `MetaData` instance will be
-    returned with the shape adapted to the stack operations. If not, a :class:`~tensordict.NonTensorStack`
-    instance will be returned.
+    - When stacking, :class:`MetaData` checks whether the items hold the same
+      object (with ``is``, not ``==``). If they do, the result is one
+      :class:`MetaData` with the stacked batch size. If they do not, the
+      result is a :class:`~tensordict.NonTensorStack`.
+      :meth:`~tensordict.TensorDictBase.clone` copies the value, so a clone
+      and its source hold different objects.
+    - :func:`~torch.unsqueeze` and indexing return a :class:`MetaData`, not a
+      stack.
 
-    Similarly, :func:`~torch.unsqueeze` will return a `MetaData` instance and not a stack (as it does for
-    :class:`~tensordict.NonTensorData`).
+    ``MetaData[cls]`` makes a subclass that raises a ``TypeError`` if the
+    value is not an instance of ``cls``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import MetaData, TensorDict
+        >>> config = {"lr": 0.1}
+        >>> td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        >>> td["config"] = MetaData(config, batch_size=[3])
+        >>> td["config"] is config
+        True
+        >>> stacked = torch.stack([td, td])
+        >>> type(stacked.get("config")).__name__
+        'MetaData'
+        >>> stacked["config"] is config
+        True
+        >>> MetaData[str](1)
+        Traceback (most recent call last):
+            ...
+        TypeError: Expected data of type str, got int
 
     """
 
@@ -5270,14 +6145,34 @@ _BREAK_ON_MEMMAP = True
 
 
 class NonTensorStack(LazyStackedTensorDict):
-    """A thin wrapper around LazyStackedTensorDict to make stack on non-tensor data easily recognizable.
+    """A lazy stack of :class:`~tensordict.NonTensorData`, one value per batch element.
 
-    A ``NonTensorStack`` is returned whenever :func:`~torch.stack` is called on
-    a list of :class:`~tensordict.NonTensorData` or ``NonTensorStack``.
+    You get a :class:`NonTensorStack` when you stack
+    :class:`~tensordict.NonTensorData` (or :class:`NonTensorStack`) instances
+    with :func:`torch.stack`, or when you assign a list to a key:
+    ``td["names"] = ["a", "b", "c"]``. You can also build one with
+    ``NonTensorStack("a", "b")`` or ``NonTensorStack.from_list(["a", "b"])``.
+
+    To read the values, call :meth:`tolist`. ``td["names"]`` returns a
+    :class:`~tensordict.utils.LinkedList` of the values, and
+    ``td.get("names")`` returns the :class:`NonTensorStack` itself. If every
+    element holds the same value, :attr:`data` returns it. To keep one shared
+    value for the whole batch, use :class:`~tensordict.MetaData`. See
+    :ref:`non-tensor-data`.
 
     Examples:
-        >>> from tensordict import NonTensorData
         >>> import torch
+        >>> from tensordict import NonTensorData, NonTensorStack, TensorDict
+        >>> NonTensorStack("a", "b").tolist()
+        ['a', 'b']
+        >>> td = TensorDict(batch_size=[3])
+        >>> td["names"] = ["a", "b", "c"]
+        >>> td["names"]
+        LinkedList(['a', 'b', 'c'])
+        >>> td[1]["names"]
+        'b'
+        >>> type(td.get("names")).__name__
+        'NonTensorStack'
         >>> data = torch.stack([
         ...     torch.stack([NonTensorData(data=(i, j), batch_size=[]) for i in range(2)])
         ...    for j in range(3)])
@@ -5286,8 +6181,6 @@ class NonTensorStack(LazyStackedTensorDict):
             [[(0, 0), (1, 0)], [(0, 1), (1, 1)], [(0, 2), (1, ...,
             batch_size=torch.Size([3, 2]),
             device=None)
-
-    To obtain the values stored in a ``NonTensorStack``, call :class:`~.tolist`.
 
     """
 
@@ -5367,7 +6260,25 @@ class NonTensorStack(LazyStackedTensorDict):
     _stack_non_tensor = NonTensorData._stack_non_tensor
 
     @classmethod
+    @deprecated(
+        "NonTensorStack.from_nontensordata()",
+        removal="0.17",
+        replacement="NonTensorData.maybe_to_stack()",
+    )
     def from_nontensordata(cls, non_tensor: NonTensorData):
+        """Expands a :class:`NonTensorData` into a stack of copies of it.
+
+        .. deprecated:: 0.15
+            Use :meth:`NonTensorData.maybe_to_stack` instead. It differs in
+            two ways: its elements share the data object of ``non_tensor``,
+            whereas this method copies it into every element; and when
+            ``non_tensor`` has an empty batch size, it returns ``non_tensor``
+            itself, whereas this method returns a copy.
+        """
+        return cls._from_nontensordata(non_tensor)
+
+    @classmethod
+    def _from_nontensordata(cls, non_tensor: NonTensorData):
         data = non_tensor.data
         prev = NonTensorData(data=data, batch_size=[], device=non_tensor.device)
         for dim in reversed(non_tensor.shape):
@@ -5652,6 +6563,8 @@ class NonTensorStack(LazyStackedTensorDict):
         ignore_lock: bool = False,
         **kwargs,
     ) -> T:
+        if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
+            ignore_lock = _warn_update_ignore_lock()
         if kwargs:
             raise TypeError(
                 f"{type(self).__name__}.update() does not accept keyword-argument "
@@ -5833,12 +6746,20 @@ class NonTensorStack(LazyStackedTensorDict):
 
     @property
     def data(self) -> Self:
-        """Attempts to return the unique value in the stack.
+        """Returns the value of the stack, if every element holds the same value.
 
-        Raises a ValueError if there is more than one unique value.
+        Raises:
+            AttributeError: if the elements hold different values. Use
+                :meth:`tolist` to read them.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import NonTensorData
+            >>> torch.stack([NonTensorData("x"), NonTensorData("x")]).data
+            'x'
         """
         try:
-            with set_capture_non_tensor_stack(True):
+            with _set_capture_non_tensor_stack(True):
                 nt = NonTensorData._stack_non_tensor(
                     self.tensordicts, raise_if_non_unique=True
                 )
@@ -5855,27 +6776,27 @@ _register_tensor_class(NonTensorStack)
 
 
 def _share_memory_nontensor(data, manager: Manager):
-    if isinstance(data, int):
-        return mp.Value(ctypes.c_int, data)
-    if isinstance(data, float):
-        return mp.Value(ctypes.c_double, data)
+    # bool is a subclass of int: check it first so that it stays a bool.
     if isinstance(data, bool):
         return mp.Value(ctypes.c_bool, data)
-    if isinstance(data, bytes):
-        return mp.Value(ctypes.c_byte, data)
+    if isinstance(data, int):
+        return mp.Value(ctypes.c_longlong, data)
+    if isinstance(data, float):
+        return mp.Value(ctypes.c_double, data)
     if isinstance(data, dict):
         result = manager.dict()
         result.update(data)
         return result
     if isinstance(data, str):
-        result = mp.Array(ctypes.c_char, 100)
         data = data.encode("utf-8")
+        result = mp.Array(ctypes.c_char, max(100, len(data)))
         result[: len(data)] = data
         return result
     if isinstance(data, list):
         result = manager.list()
         result.extend(data)
         return result
+    # bytes also end up here: a c_char array would be read back as a str.
     # In all other cases, we just return the tensor. It's ok because the content
     # will be passed to the remote process using regular serialization. We will
     # lock the update in _update_shared_nontensor though.
@@ -5907,9 +6828,17 @@ def _update_shared_nontensor(nontensor, val):
         nontensor.clear()
         nontensor.update(val)
     elif isinstance(nontensor, multiprocessing.sharedctypes.Synchronized):
+        if isinstance(nontensor.get_obj(), ctypes.c_bool):
+            # c_bool stores the truth value of any object: take only what an
+            # int slot takes
+            val = operator.index(val)
         nontensor.value = val
     elif isinstance(nontensor, multiprocessing.sharedctypes.SynchronizedArray):
         val = val.encode("utf-8")
+        if len(val) > len(nontensor):
+            # The array has a fixed size. Cut on a character boundary so that
+            # the stored bytes stay valid UTF-8 and can be read back.
+            val = val[: len(nontensor)].decode("utf-8", "ignore").encode("utf-8")
         for i, byte in enumerate(nontensor):
             if i < len(val):
                 v = val[i]
