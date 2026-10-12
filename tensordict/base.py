@@ -4527,7 +4527,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Renames a key with a new string and returns the same tensordict with the updated key name.
 
         The value is not copied. A locked tensordict raises ``RuntimeError``
-        (see :meth:`~.lock_`).
+        (see :meth:`~.lock_`). Until 0.17, a locked
+        :class:`~tensordict.PersistentTensorDict` or store renames the key and
+        warns instead.
 
         Args:
             old_key (NestedKey): key to be renamed. A missing key raises
