@@ -567,6 +567,42 @@ class TestLazyStackedTensorDict:
         expected = list(_TensorDictKeysView(stack, True, False))
         assert list(stack.keys(True)) == expected
 
+    @pytest.mark.parametrize("filter_empty", [True, None])
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_apply_member_without_result(self, filter_empty, num_threads):
+        # A member for which fn gives no result becomes an empty member, as
+        # with filter_empty=False, when other members give a result (#2136).
+        a0 = torch.zeros(3, requires_grad=True)
+        a1 = torch.zeros(3, requires_grad=True)
+        a0.sum().backward()
+        stack = lazy_stack(
+            [
+                TensorDict(w=a0, batch_size=[3], names=["n"]),
+                TensorDict(w=a1, batch_size=[3], names=["n"]),
+            ]
+        )
+
+        def check(out):
+            assert isinstance(out, LazyStackedTensorDict)
+            assert out.batch_size == stack.batch_size
+            assert out.names == [None, "n"]
+            assert (out.tensordicts[0]["w"] == 1).all()
+            assert out.tensordicts[1].is_empty()
+            assert out.tensordicts[1].batch_size == torch.Size([3])
+
+        check(
+            stack.apply(
+                lambda x: x.grad, filter_empty=filter_empty, num_threads=num_threads
+            )
+        )
+        check(stack.grad)
+        check(TensorDict(s=stack).grad["s"])
+        # All members without a result still give None
+        assert (
+            stack.apply(lambda x: None, filter_empty=True, num_threads=num_threads)
+            is None
+        )
+
     @pytest.mark.parametrize("ragged", [False, True])
     def test_arithmetic_ops(self, ragged):
         td0 = LazyStackedTensorDict(
