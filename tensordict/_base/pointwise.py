@@ -35,6 +35,7 @@ from tensordict.utils import (
     _maybe_correct_neg_dim,
     _mismatch_keys,
     _unravel_key_to_tuple,
+    expand_as_right,
     is_tensorclass,
 )
 from torch import Tensor
@@ -2598,4 +2599,97 @@ class _PointwiseOps:
                 updated to match the batch size of the condition. Defaults to ``False``.
 
         """
-        ...
+        if self._masking_on_dense_copy:
+            return self.to_tensordict().where(
+                condition=condition,
+                other=other,
+                out=out,
+                pad=pad,
+                update_batch_size=update_batch_size,
+            )
+        if _is_tensor_collection(type(other)):
+
+            def func(tensor, _other, key):
+                if tensor is None:
+                    if pad is not None:
+                        tensor = _other
+                        _other = torch.tensor(
+                            pad, dtype=_other.dtype, device=_other.device
+                        )
+                    else:
+                        raise KeyError(
+                            f"Key {key} not found and no pad value provided."
+                        )
+                    cond = expand_as_right(~condition, tensor)
+                elif _other is None:
+                    if pad is not None:
+                        _other = torch.tensor(
+                            pad, dtype=tensor.dtype, device=tensor.device
+                        )
+                    else:
+                        raise KeyError(
+                            f"Key {key} not found and no pad value provided."
+                        )
+                    cond = expand_as_right(condition, tensor)
+                else:
+                    cond = expand_as_right(condition, tensor)
+                return torch.where(
+                    condition=cond,
+                    input=tensor,
+                    other=_other,
+                )
+
+            result = self.empty() if out is None else out
+            other_keys = set(other.keys())
+            # we turn into a list because out could be = to self!
+            for key in list(self.keys()):
+                tensor = self._get_str(key, default=NO_DEFAULT)
+                _other = other._get_str(key, default=None)
+                if _is_tensor_collection(type(tensor)):
+                    _out = None if out is None else out._get_str(key, None)
+                    if _other is None:
+                        _other = tensor.empty()
+                    val = tensor.where(
+                        condition=condition, other=_other, out=_out, pad=pad
+                    )
+                else:
+                    val = func(tensor, _other, key)
+                result._set_str(
+                    key, val, inplace=False, validated=True, non_blocking=False
+                )
+                other_keys.discard(key)
+            for key in other_keys:
+                tensor = None
+                _other = other._get_str(key, default=NO_DEFAULT)
+                if _is_tensor_collection(type(_other)):
+                    try:
+                        tensor = _other.empty()
+                    except NotImplementedError:
+                        # H5 tensordicts do not support select()
+                        tensor = _other.to_tensordict().empty()
+                    val = _other.where(
+                        condition=~condition, other=tensor, out=None, pad=pad
+                    )
+                else:
+                    val = func(tensor, _other, key)
+                result._set_str(
+                    key, val, inplace=False, validated=True, non_blocking=False
+                )
+            return result
+        else:
+
+            def func(tensor):
+                return torch.where(
+                    condition=expand_as_right(condition, tensor),
+                    input=tensor,
+                    other=other,
+                )
+
+            result = self._fast_apply(func, propagate_lock=True)
+            if out is not None:
+                # As in LazyStackedTensorDict.where. A result without leaves
+                # has nothing to write, and out may be locked.
+                if not result.is_empty():
+                    out.update(result, update_batch_size=update_batch_size)
+                return out
+            return result

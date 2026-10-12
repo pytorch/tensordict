@@ -101,6 +101,7 @@ class _StoreStackElementView(TensorDictBase):
     """
 
     _td_dim_names = None
+    _masking_on_dense_copy = True
 
     def __init__(self, parent, element_idx: int):
         self._parent = parent
@@ -460,9 +461,8 @@ class _StoreStackElementView(TensorDictBase):
             names=self.names if names is None and self._has_names() else names,
         )
 
-    def masked_fill(self, mask, value):
-        return self.to_tensordict().masked_fill(mask, value)
-
+    # Override: reads give copies, so each filled entry is written back with
+    # set_.
     def masked_fill_(self, mask, value):
         for key in self.keys(include_nested=True, leaves_only=True):
             tensor = self.get(key)
@@ -470,17 +470,9 @@ class _StoreStackElementView(TensorDictBase):
             self.set_(key, tensor)
         return self
 
+    # Override: to_tensordict reads all the entries in one round trip.
     def masked_select(self, mask):
         return self.to_tensordict().masked_select(mask)
-
-    def where(self, condition, other, *, out=None, pad=None, update_batch_size=False):
-        return self.to_tensordict().where(
-            condition=condition,
-            other=other,
-            out=out,
-            pad=pad,
-            update_batch_size=update_batch_size,
-        )
 
     # ---- pickling: materialize, don't try to serialize the view ----
 
@@ -718,6 +710,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
     """
 
     _td_dim_names = None
+    _masking_on_dense_copy = True
 
     def __init__(
         self,
@@ -2231,9 +2224,8 @@ class LazyStackedTensorDictStore(TensorDictBase):
             names=self.names if names is None and self._has_names() else names,
         )
 
-    def masked_fill(self, mask, value):
-        return self.to_tensordict().masked_fill(mask, value)
-
+    # Override: reads give copies, so each filled entry is written back with
+    # set_.
     def masked_fill_(self, mask, value):
         # A batch-shaped mask is aligned with the leading dims of each entry,
         # as in TensorDict.masked_fill_. Other masks keep torch's broadcasting
@@ -2246,17 +2238,9 @@ class LazyStackedTensorDictStore(TensorDictBase):
             self.set_(key, tensor)
         return self
 
+    # Override: to_tensordict reads all the entries in one round trip.
     def masked_select(self, mask):
         return self.to_tensordict().masked_select(mask)
-
-    def where(self, condition, other, *, out=None, pad=None, update_batch_size=False):
-        return self.to_tensordict().where(
-            condition=condition,
-            other=other,
-            out=out,
-            pad=pad,
-            update_batch_size=update_batch_size,
-        )
 
     # ---- Pickling ----
 

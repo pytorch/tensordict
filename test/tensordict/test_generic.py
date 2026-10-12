@@ -6368,6 +6368,14 @@ class TestGeneric:
         td.update({"y": value})
         assert (td["x"] == 1).all() and (td["y"] == 1).all()
 
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_where_out_without_leaves(self, nested):
+        # A result without leaves leaves out alone, even if it is locked
+        td = TensorDict({"a": TensorDict(batch_size=[3])} if nested else {}, [3])
+        mask = torch.tensor([True, False, True])
+        out = td.clone().lock_()
+        assert td.where(mask, 0, out=out) is out
+
     def test_zero_grad_module(self):
         x = torch.randn(3, 3)
         linear = nn.Linear(3, 4)

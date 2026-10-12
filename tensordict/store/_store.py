@@ -305,6 +305,7 @@ class TensorDictStore(TensorDictBase):
     """
 
     _td_dim_names = None
+    _masking_on_dense_copy = True
     # Set on the shallow copies that _clone(recurse=False) returns: they share
     # the data and the metadata keys of the store, but not its batch size.
     _is_shallow_copy = False
@@ -2579,9 +2580,8 @@ class TensorDictStore(TensorDictBase):
             names=self.names if names is None and self._has_names() else names,
         )
 
-    def masked_fill(self, mask, value):
-        return self.to_tensordict().masked_fill(mask, value)
-
+    # Override: reads give copies, so each filled entry is written back with
+    # set_.
     def masked_fill_(self, mask, value):
         for key in self.keys(include_nested=True, leaves_only=True):
             tensor = self.get(key)
@@ -2589,17 +2589,9 @@ class TensorDictStore(TensorDictBase):
             self.set_(key, tensor)
         return self
 
+    # Override: to_tensordict reads all the entries in one round trip.
     def masked_select(self, mask):
         return self.to_tensordict().masked_select(mask)
-
-    def where(self, condition, other, *, out=None, pad=None, update_batch_size=False):
-        return self.to_tensordict().where(
-            condition=condition,
-            other=other,
-            out=out,
-            pad=pad,
-            update_batch_size=update_batch_size,
-        )
 
     # ---- Pickling ----
 
