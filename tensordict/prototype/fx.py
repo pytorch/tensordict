@@ -19,7 +19,21 @@ __all__ = ["TDGraphModule", "symbolic_trace"]
 
 
 class TDGraphModule(nn.Module):
-    """A graph module for TensorDict."""
+    """The module that :func:`symbolic_trace` returns: an FX graph that reads and writes a tensordict.
+
+    A call reads the ``in_keys`` of the traced module from the input
+    tensordict, runs the graph, and writes the outputs at ``out_keys``, into
+    ``tensordict_out`` if given, else into the input. The ``graph`` and
+    ``code`` attributes are those of the underlying
+    :class:`torch.fx.GraphModule`.
+
+    This class is a prototype: its API can change without a deprecation
+    period.
+
+    Args:
+        graph_module (torch.fx.GraphModule): the traced graph.
+        out_keys (list of NestedKey): the keys where the outputs are written.
+    """
 
     def __init__(
         self,
@@ -57,7 +71,44 @@ class TDGraphModule(nn.Module):
 
 
 def symbolic_trace(td_module: TensorDictModuleBase) -> TDGraphModule:
-    """A symbolic tracer for TensorDictModule."""
+    """Traces a TensorDictModule or a TensorDictSequential into an FX graph.
+
+    This function is a prototype: its API can change without a deprecation
+    period. See :ref:`fx` for a guide.
+
+    It supports a :class:`~tensordict.nn.TensorDictModule` that wraps an
+    :class:`~torch.nn.Module` that :func:`torch.fx.symbolic_trace` can trace,
+    and a :class:`~tensordict.nn.TensorDictSequential` of such modules. A
+    module that wraps a plain function or a lambda raises a ``RuntimeError``
+    ("Unsupported type ... passed for root!"). Other module types, such as
+    :class:`~tensordict.nn.ProbabilisticTensorDictModule`, raise a
+    ``TypeError``.
+
+    Args:
+        td_module (TensorDictModuleBase): the module to trace.
+
+    Returns:
+        a :class:`TDGraphModule` with the same inputs and outputs as
+        ``td_module``.
+
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictModule, TensorDictSequential
+        >>> from tensordict.prototype.fx import symbolic_trace
+        >>> seq = TensorDictSequential(
+        ...     TensorDictModule(nn.Linear(3, 4), in_keys=["x"], out_keys=["hidden"]),
+        ...     TensorDictModule(nn.ReLU(), in_keys=["hidden"], out_keys=["y"]),
+        ... )
+        >>> graph_module = symbolic_trace(seq)
+        >>> td = graph_module(TensorDict(x=torch.ones(2, 3), batch_size=[2]))
+        >>> sorted(td.keys())
+        ['hidden', 'x', 'y']
+        >>> expected = seq(TensorDict(x=torch.ones(2, 3), batch_size=[2]))["y"]
+        >>> torch.equal(td["y"], expected)
+        True
+    """
     if isinstance(td_module, TensorDictSequential):
         return _trace_tensordictsequential(td_module)
     elif isinstance(td_module, TensorDictModule):

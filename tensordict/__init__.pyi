@@ -79,7 +79,6 @@ from tensordict.utils import (
     assert_close,
     capture_non_tensor_stack,
     get_printoptions,
-    is_batchedtensor,
     is_non_tensor,
     is_tensorclass,
     lazy_legacy,
@@ -149,7 +148,6 @@ __all__ = [
     "pad_sequence",
     # Utility functions
     "is_tensor_collection",
-    "is_batchedtensor",
     "is_non_tensor",
     "is_tensorclass",
     "assert_close",

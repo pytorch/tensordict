@@ -21,11 +21,19 @@
 
 
 # -- Project information -----------------------------------------------------
+import ast
+import importlib
+import inspect
 import os
+import pathlib
+import re
 import sys
 
-import pytorch_sphinx_theme
+import pytorch_sphinx_theme2
 import tensordict
+from sphinx import addnodes
+from sphinx.domains.python import ObjectEntry
+from sphinx.util.inspect import stringify_signature
 
 project = "tensordict"
 copyright = "2022, Meta"
@@ -36,7 +44,8 @@ author = "Torch Contributors"
 # built documents.
 # version: The short X.Y version.
 # release: The full version, including alpha/beta/rc tags.
-if os.environ.get("TENSORDICT_SANITIZE_VERSION_STR_IN_DOCS", None):
+RELEASE = bool(os.environ.get("TENSORDICT_SANITIZE_VERSION_STR_IN_DOCS", None))
+if RELEASE:
     # Turn 1.11.0aHASH into 1.11 (major.minor only)
     version = release = ".".join(tensordict.__version__.split(".")[:2])
     html_title = " ".join((project, version, "documentation"))
@@ -66,7 +75,13 @@ extensions = [
     "sphinx_gallery.gen_gallery",
     "sphinxcontrib.aafig",
     "myst_parser",
+    "sphinx_copybutton",
 ]
+
+# The copy button copies the code of a ">>>" example without the prompts and
+# without the output lines, so the copied text runs as it is.
+copybutton_prompt_text = r">>> |\.\.\. "
+copybutton_prompt_is_regexp = True
 
 sphinx_gallery_conf = {
     "examples_dirs": "reference/generated/tutorials/",  # path to your example scripts
@@ -76,6 +91,11 @@ sphinx_gallery_conf = {
     "filename_pattern": "reference/generated/tutorials/",  # files to parse
     "notebook_images": "reference/generated/tutorials/media/",  # images to parse
     "download_all_examples": True,
+    # The teaching order of index.rst (docs/source/gallery_order.py).
+    "within_subsection_order": "gallery_order.TutorialOrder",
+    # The first cell of each notebook installs tensordict, so that the notebook
+    # runs in Google Colab.
+    "first_notebook_cell": "%pip install tensordict",
 }
 
 # The zarr tutorial needs zarr>=3, which requires Python>=3.11; skip it (with a
@@ -94,8 +114,17 @@ napoleon_numpy_docstring = False
 napoleon_google_docstring = True
 autosectionlabel_prefix_document = True
 
+# Signatures: "NestedKey" instead of "tensordict._nestedkey.NestedKey".
+autodoc_typehints_format = "short"
+python_use_unqualified_type_names = True
+
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ["_templates"]
+# The theme keeps its templates (layout, header, footer, tutorial buttons) in
+# a "templates" directory that Sphinx does not search by itself.
+templates_path = [
+    "_templates",
+    os.path.join(os.path.dirname(pytorch_sphinx_theme2.__file__), "templates"),
+]
 
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
@@ -117,17 +146,88 @@ exclude_patterns = ["reference/generated/tutorials/README.rst"]
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = "pytorch_sphinx_theme"
-html_theme_path = [pytorch_sphinx_theme.get_html_theme_path()]
+html_theme = "pytorch_sphinx_theme2"
+html_theme_path = [pytorch_sphinx_theme2.get_html_theme_path()]
+
+# The version switcher reads the list of versions from this URL. The source
+# of the file is docs/source/_static/versions.json. After each build of main,
+# the upload job of docs.yml copies the _static directory to the root of
+# gh-pages, and that copy is the published file. Add each new minor release
+# to the file on main.
+switcher_json_url = "https://docs.pytorch.org/tensordict/_static/versions.json"
+
+html_baseurl = "https://docs.pytorch.org/tensordict/stable/"
 html_theme_options = {
-    # "pytorch_project": "tensordict",
-    "collapse_navigation": False,
-    "display_version": True,
-    "logo_only": True,
-    "pytorch_project": "docs",
-    "navigation_with_keys": True,
     "analytics_id": "GTM-T8XT4PS",
+    "pytorch_project": "tensordict",
+    "canonical_url": html_baseurl,
+    "logo": {"text": "tensordict"},
+    "switcher": {
+        "json_url": switcher_json_url,
+        "version_match": version if RELEASE else "main",
+    },
+    # Do not download the version list during the build. The build then needs
+    # no network access, and it gives no warning before the file is published.
+    "check_switcher": False,
+    "show_version_warning_banner": True,
+    "navbar_start": ["navbar-logo", "version-switcher"],
+    "header_links_before_dropdown": 6,
+    "icon_links": [
+        {
+            "name": "GitHub",
+            "url": "https://github.com/pytorch/tensordict",
+            "icon": "fa-brands fa-github",
+        },
+        {
+            "name": "PyPI",
+            "url": "https://pypi.org/project/tensordict/",
+            "icon": "fa-brands fa-python",
+        },
+        {
+            "name": "PyTorch Forum",
+            "url": "https://discuss.pytorch.org/",
+            "icon": "fa-brands fa-discourse",
+        },
+    ],
+    "use_edit_page_button": True,
+    "show_toc_level": 2,
+    # The sidebar lists every page (see _templates/sidebar-nav-bs.html), down
+    # to the pages of the API reference, and opens only the branch of the
+    # current page. The method pages are one level deeper: listing them would
+    # add 400 links to every page.
+    "collapse_navigation": True,
+    "navigation_depth": 2,
+    "navigation_with_keys": False,
+    # The summary of llms.txt and of the page metadata (the PyPI summary).
+    "llm_description": "A dict[str, torch.Tensor] that behaves like one tensor.",
 }
+
+theme_variables = pytorch_sphinx_theme2.get_theme_variables()
+
+# ``github_*`` and ``doc_path`` build the "Edit on GitHub" links and the
+# tutorial buttons (Run in Google Colab, Download Notebook, View on GitHub).
+html_context = {
+    "theme_variables": theme_variables,
+    "library_links": theme_variables.get("library_links", []),
+    # Show the tutorial buttons on the sphinx-gallery pages.
+    "has_sphinx_gallery": True,
+    "github_url": "https://github.com",
+    "github_user": "pytorch",
+    "github_repo": "tensordict",
+    "github_version": "main",
+    "doc_path": "docs/source",
+    # The "Send Feedback" button opens an issue in this repository.
+    "feedback_url": "https://github.com/pytorch/tensordict",
+    # Colab opens the notebooks that gh-pages serves for this version.
+    "colab_branch": f"gh-pages/{version if RELEASE else 'main'}",
+    # Follow the light or dark setting of the reader's system.
+    "default_mode": "auto",
+}
+html_css_files = ["css/custom.css"]
+html_js_files = [
+    # Links the "View on GitHub" button of a tutorial to its source file.
+    "js/tutorial_links.js",
+]
 
 # Output file base name for HTML help builder.
 htmlhelp_basename = "PyTorchdoc"
@@ -193,3 +293,294 @@ from content_generation import generate_tutorial_references
 generate_tutorial_references("../../tutorials/sphinx_tuto", "tutorial")
 generate_tutorial_references("../../tutorials/src/", "src")
 generate_tutorial_references("../../tutorials/media/", "media")
+
+
+# -- Reference layout hooks ---------------------------------------------------
+#
+# The methods shared by all tensordicts are documented once, on one page per
+# method of ``TensorDictBase`` (see reference/td.rst). The hooks below keep
+# that layout consistent: subclass pages do not repeat the shared methods, and
+# links to ``TensorDict.<method>`` (or any other tensordict class) still reach
+# the page of the shared method.
+
+_SELF_RE = re.compile(r"\bSelf\b")
+_PRIVATE_PATH_RE = re.compile(r"\btensordict\.(?:\w+\.)*_\w+\.")
+_documented_class = [None]
+
+
+def _shares_tensordict_api(cls) -> bool:
+    return inspect.isclass(cls) and (
+        issubclass(cls, tensordict.TensorDictBase) or tensordict.is_tensorclass(cls)
+    )
+
+
+def _own_doc(obj) -> str:
+    doc = getattr(obj, "__doc__", None)
+    return inspect.cleandoc(doc) if isinstance(doc, str) else ""
+
+
+def _without_slice_annotations(sig: inspect.Signature) -> inspect.Signature:
+    # Sphinx cannot render an annotation with a slice, such as
+    # ``Dict[NestedKey:str]``: drop such annotations.
+    params = []
+    for param in sig.parameters.values():
+        annotation = param.annotation
+        if isinstance(annotation, str):
+            try:
+                tree = ast.parse(annotation, mode="eval")
+            except SyntaxError:
+                tree = None
+            if tree is None or any(isinstance(n, ast.Slice) for n in ast.walk(tree)):
+                param = param.replace(annotation=inspect.Parameter.empty)
+        params.append(param)
+    return sig.replace(parameters=params)
+
+
+def _clean_signature_text(text):
+    # "tensordict._tensorcollection.TensorCollection" -> "TensorCollection",
+    # and the NO_DEFAULT sentinel as users write it.
+    if not text:
+        return text
+    text = _PRIVATE_PATH_RE.sub("", text)
+    return text.replace("_NoDefault.ZERO", "NO_DEFAULT")
+
+
+def _process_signature(app, what, name, obj, options, signature, return_annotation):
+    new_signature, new_return = signature, return_annotation
+    if what == "class":
+        _documented_class[0] = obj
+        # Classes that forward ``__new__(cls, *args, **kwargs)`` (the nn
+        # modules) hide the real constructor signature: read ``__init__``.
+        if signature == "(*args, **kwargs)":
+            try:
+                init_sig = inspect.signature(obj.__init__)
+            except (TypeError, ValueError):
+                init_sig = None
+            if init_sig is not None:
+                params = list(init_sig.parameters.values())[1:]
+                init_sig = init_sig.replace(
+                    parameters=params, return_annotation=inspect.Signature.empty
+                )
+                init_sig = _without_slice_annotations(init_sig)
+                new_signature = stringify_signature(
+                    init_sig, unqualified_typehints=True
+                )
+    elif return_annotation:
+        # ``Self`` is an alias of ``Any`` at run time (it is imported only
+        # under TYPE_CHECKING), so autodoc renders "-> Any". Show the
+        # annotation that the source writes instead.
+        func = obj.fget if isinstance(obj, property) else obj
+        func = getattr(func, "__func__", func)
+        returned = getattr(func, "__annotations__", {}).get("return")
+        if isinstance(returned, str) and _SELF_RE.search(returned):
+            new_return = returned
+    new_signature = _clean_signature_text(new_signature)
+    new_return = _clean_signature_text(new_return)
+    if (new_signature, new_return) != (signature, return_annotation):
+        return new_signature, new_return
+    return None
+
+
+def _skip_shared_member(app, what, name, obj, skip, options):
+    # On the page of a TensorDictBase subclass or a tensorclass, skip the
+    # members that only repeat a TensorDictBase method: overrides with no
+    # docstring, or with the same docstring.
+    cls = _documented_class[0]
+    if skip or what != "class" or not options or not _shares_tensordict_api(cls):
+        return None
+    if cls is tensordict.TensorDictBase or not hasattr(tensordict.TensorDictBase, name):
+        return None
+    doc = _own_doc(obj)
+    if not doc or doc == _own_doc(getattr(tensordict.TensorDictBase, name)):
+        return True
+    return None
+
+
+def _find_class(path: str):
+    for candidate in (path, "tensordict." + path):
+        module_name, _, attr = candidate.rpartition(".")
+        if not module_name:
+            continue
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError:
+            continue
+        obj = getattr(module, attr, None)
+        if inspect.isclass(obj):
+            return obj
+    return None
+
+
+def _resolve_shared_method(app, env, node, contnode):
+    # ``:meth:`TensorDict.select``` has no page of its own: send it to the
+    # page of ``TensorDictBase.select``.
+    if node.get("refdomain") != "py":
+        return None
+    owner, _, member = node["reftarget"].lstrip(".").rpartition(".")
+    if not owner or not hasattr(tensordict.TensorDictBase, member):
+        return None
+    cls = _find_class(owner)
+    if cls is None or not _shares_tensordict_api(cls):
+        return None
+    return env.get_domain("py").resolve_xref(
+        env,
+        node["refdoc"],
+        app.builder,
+        node["reftype"],
+        f"tensordict.TensorDictBase.{member}",
+        node,
+        contnode,
+    )
+
+
+def _alias_shared_methods(app, env):
+    # The shared methods are documented once, on TensorDictBase. Give every
+    # documented subclass and tensorclass an inventory alias
+    # (``tensordict.TensorDict.select`` -> the TensorDictBase.select page), so
+    # that intersphinx links from other projects, such as TorchRL, keep
+    # resolving. Sphinx keeps aliased entries out of the search index.
+    objects = env.get_domain("py").objects
+    base = "tensordict.TensorDictBase."
+    shared = {
+        name[len(base) :]: entry
+        for name, entry in objects.items()
+        if name.startswith(base) and "." not in name[len(base) :]
+    }
+    for name, entry in list(objects.items()):
+        if entry.objtype != "class" or name == "tensordict.TensorDictBase":
+            continue
+        cls = _find_class(name)
+        if cls is None or not _shares_tensordict_api(cls):
+            continue
+        for member, target in shared.items():
+            alias = f"{name}.{member}"
+            if alias not in objects and hasattr(cls, member):
+                objects[alias] = ObjectEntry(
+                    target.docname, target.node_id, target.objtype, True
+                )
+
+
+# -- Header navigation ---------------------------------------------------------
+#
+# The theme puts each page of the toctrees of index.rst in the header. These
+# toctrees list every page of the site, so the header shows one menu per
+# toctree caption instead: "Get started", "User guide", "How-to guides",
+# "Tutorials" and "API reference". The captions "Tutorials: basics",
+# "Tutorials: storage", ... share the "Tutorials" menu.
+
+_header_sections = {}
+
+
+def _doc_title(env, docname):
+    title = env.titles.get(docname)
+    return title.astext() if title is not None else docname
+
+
+def _docs_under(env, docname):
+    # The page and every page that its toctrees include, at any depth.
+    found, todo = set(), [docname]
+    while todo:
+        doc = todo.pop()
+        if doc not in found:
+            found.add(doc)
+            todo.extend(env.toctree_includes.get(doc, []))
+    return found
+
+
+def _build_header_sections(app):
+    env = app.env
+    sections = {}
+    for toctree in env.get_doctree(app.config.root_doc).findall(addnodes.toctree):
+        caption = toctree.get("caption") or ""
+        name = caption.split(":")[0].strip()
+        docnames = [ref for _, ref in toctree["entries"] if ref in env.all_docs]
+        if name and docnames:
+            sections.setdefault(name, []).extend(docnames)
+    result = []
+    for name, docnames in sections.items():
+        if len(docnames) == 1:
+            # A section with one page, such as reference/index: its menu lists
+            # the pages of its toctree.
+            url = docnames[0]
+            children = env.toctree_includes.get(url, [])
+        else:
+            # Open the index page of the folder, such as the gallery index
+            # tutorials/index, if all the pages are in one folder that has one.
+            folders = {doc.rpartition("/")[0] for doc in docnames}
+            folder_index = f"{folders.pop()}/index" if len(folders) == 1 else ""
+            url = folder_index if folder_index in env.all_docs else docnames[0]
+            children = docnames
+        members = set()
+        for doc in [url, *docnames]:
+            members |= _docs_under(env, doc)
+        result.append(
+            {
+                "title": name,
+                "url": url,
+                "children": [
+                    {"title": _doc_title(env, doc), "url": doc} for doc in children
+                ],
+                "members": members,
+            }
+        )
+    return result
+
+
+def _set_header_nav(app, pagename, templatename, context, doctree):
+    # This handler runs after the handler of the theme, and replaces the list
+    # that the theme builds.
+    if app.builder.name not in _header_sections:
+        _header_sections[app.builder.name] = _build_header_sections(app)
+    context["hierarchical_header_nav"] = [
+        {
+            "title": section["title"],
+            "url": section["url"],
+            "current": pagename in section["members"],
+            "children": section["children"],
+            "external": False,
+        }
+        for section in _header_sections[app.builder.name]
+    ]
+
+
+def _keep_sidebar(app, pagename, templatename, context, doctree):
+    # The theme drops the sidebar of a page that it cannot place under a
+    # top-level page: the home page, and the gallery index, which no toctree
+    # lists. The sidebar of this site lists every page from the root, so it is
+    # never empty.
+    context["suppress_sidebar_toctree"] = lambda **kwargs: False
+
+
+# Three numbers in the SVG paths of Font Awesome's minified JavaScript, such as
+# "...-163.028.159-16...", have the form of a Brazilian tax ID, and GitHub
+# push protection rejects the gh-pages upload for them ("BII - CPF"). In SVG
+# path data, "163.028.159" reads as 163.028 and .159, so a space between the
+# two numbers draws the same icon and breaks the false match.
+_CPF_LIKE = re.compile(r"(\d{3}\.\d{3})(\.\d{3}-\d{2})")
+
+
+def _unflag_fontawesome_js(app, exception):
+    if exception is not None or app.builder.format != "html":
+        return
+    for script in pathlib.Path(app.outdir).glob(
+        "_static/vendor/fontawesome/*/js/all.min.js"
+    ):
+        text = script.read_text(encoding="utf-8")
+        new_text = text
+        while True:
+            patched = _CPF_LIKE.sub(r"\1 \2", new_text)
+            if patched == new_text:
+                break
+            new_text = patched
+        if new_text != text:
+            script.write_text(new_text, encoding="utf-8")
+
+
+def setup(app):
+    app.connect("html-page-context", _set_header_nav, priority=600)
+    app.connect("html-page-context", _keep_sidebar, priority=600)
+    app.connect("autodoc-process-signature", _process_signature)
+    app.connect("autodoc-skip-member", _skip_shared_member)
+    app.connect("missing-reference", _resolve_shared_method)
+    app.connect("env-updated", _alias_shared_methods)
+    app.connect("build-finished", _unflag_fontawesome_js)

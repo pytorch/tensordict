@@ -1,334 +1,35 @@
 .. currentmodule:: tensordict
 
+.. _api-typed-tensordict:
+
 TypedTensorDict
 ===============
 
-:class:`~tensordict.TypedTensorDict` is a :class:`~tensordict.TensorDictBase` subclass
-with typed field declarations and backend composition.  It brings ``TypedDict``-style
-class definitions to ``TensorDict``: you declare fields as class annotations and get
-typed construction, typed attribute access, inheritance, optional fields,
-``**state`` spreading, and the ability to wrap any ``TensorDictBase`` backend
-(H5, Redis, lazy stacks, etc.) via ``from_tensordict``.
+.. warning::
 
-.. code-block:: python
+    ``TypedTensorDict`` is experimental: its API can change in a minor release
+    without a deprecation cycle.
 
-  >>> import torch
-  >>> from tensordict import TypedTensorDict
-  >>> from torch import Tensor
-  >>>
-  >>> class PredictorState(TypedTensorDict):
-  ...     eta: Tensor
-  ...     X: Tensor
-  ...     beta: Tensor
-  >>>
-  >>> state = PredictorState(
-  ...     eta=torch.randn(5, 3),
-  ...     X=torch.randn(5, 4),
-  ...     beta=torch.randn(5, 1),
-  ...     batch_size=[5],
-  ... )
-  >>> state.eta.shape
-  torch.Size([5, 3])
-  >>> state["X"].shape
-  torch.Size([5, 4])
+This page lists :class:`~tensordict.TypedTensorDict`, a
+:class:`~tensordict.TensorDictBase` subclass whose fields you declare as
+class annotations, as in a ``TypedDict``. A subclass adds fields to the
+fields of its parent, and :meth:`~tensordict.TypedTensorDict.from_tensordict`
+wraps any tensordict (H5, Redis, lazy stacks) without a copy. For a guide
+with examples, see :ref:`typed-tensordict-guide`.
 
-Why TypedTensorDict?
---------------------
-
-Typed pipelines often build up state one step at a time:
-
-.. code-block:: python
-
-  class PredictorState(TypedTensorDict):
-      eta: Tensor
-      X: Tensor
-      beta: Tensor
-
-  class ObservedState(PredictorState):
-      y: Tensor
-      mu: Tensor
-
-  def gaussian(state: PredictorState, std: float) -> ObservedState:
-      eta = state.eta
-      y = eta + torch.randn_like(eta) * std
-      return ObservedState(**state, y=y, mu=eta, batch_size=state.batch_size)
-
-Each stage inherits the previous one's fields and adds new ones. The
-``**state`` spreading pattern lets transition functions stay short regardless
-of how many fields the state has. And because ``TypedTensorDict`` inherits
-from ``TensorDictBase``, every operation -- ``.to(device)``, ``.clone()``,
-slicing, ``torch.stack``, ``memmap`` -- works at every stage.
-
-TypedTensorDict vs TensorClass
-------------------------------
-
-Both ``TypedTensorDict`` and ``TensorClass`` provide typed tensor containers.
-They share the same class-option syntax (``["shadow"]``, ``["frozen"]``, etc.),
-although some options behave differently (see `Class options`_). Both use
-``@dataclass_transform()`` for IDE support. The key difference is in the
-underlying model:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 35 30 30
-
-   * - Feature
-     - ``TypedTensorDict``
-     - ``TensorClass``
-   * - Inherits from
-     - ``TensorDictBase`` (delegates to ``_source``)
-     - ``TensorCollection`` (wraps a ``TensorDict`` internally)
-   * - Can wrap any backend
-     - Yes (``from_tensordict``)
-     - Yes (``from_tensordict``)
-   * - Inheritance
-     - Standard Python (``class Child(Parent): ...``)
-     - Standard Python (``class Child(Parent): ...``); subclasses add fields
-   * - ``**state`` spreading
-     - Works natively (``MutableMapping``)
-     - Requires manual field-by-field repacking
-   * - ``state["key"]``
-     - Works natively (``TensorDictBase.__getitem__``)
-     - Raises ``ValueError`` -- use ``state.key`` or ``state.get("key")``
-   * - Optional fields
-     - Supported
-     - Supported (``Optional[Tensor] = None``; absent from ``keys()`` if not set)
-   * - Non-tensor fields
-     - Accepted but annotations are not validated; non-tensor values are stored
-       as ``NonTensorData`` and attribute access returns the wrapper
-     - Supported (strings, arbitrary objects); attribute access returns the
-       plain value (Python scalars are cast to tensors unless ``nocast``)
-   * - Custom methods
-     - Supported (regular class methods)
-     - Supported (regular class methods)
-   * - ``@tensorclass`` decorator
-     - Not needed (uses metaclass via inheritance)
-     - Required (or ``class Foo(TensorClass): ...``)
-
-**When to use which:**
-
-- Use ``TypedTensorDict`` when you have a typed pipeline with progressive state
-  accumulation, need ``**state`` spreading, or need to wrap persistent
-  backends while keeping full ``TensorDictBase`` API compatibility.
-
-- Use ``TensorClass`` when you need non-tensor fields (strings, metadata)
-  returned as plain values, custom ``__init__`` logic, or your codebase
-  already uses ``@tensorclass`` extensively.
-
-Inheritance and field accumulation
-----------------------------------
-
-Fields accumulate through the MRO. Each subclass adds its own fields while
-inheriting all parent fields:
-
-.. code-block:: python
-
-  >>> class PredictorState(TypedTensorDict):
-  ...     eta: Tensor
-  ...     X: Tensor
-  ...     beta: Tensor
-  >>>
-  >>> class ObservedState(PredictorState):
-  ...     y: Tensor
-  ...     mu: Tensor
-  ...     noise: Tensor | None = None
-  >>>
-  >>> class SurvivalState(ObservedState):
-  ...     event_time: Tensor
-  ...     indicator: Tensor
-  ...     observed_time: Tensor
-
-  >>> sorted(ObservedState.__required_keys__)
-  ['X', 'beta', 'eta', 'mu', 'y']
-  >>> sorted(ObservedState.__optional_keys__)
-  ['noise']
-
-Inheritance works as standard Python: ``isinstance(obs, PredictorState)``
-returns ``True`` for an ``ObservedState`` instance, and a function typed as
-``f(state: PredictorState)`` accepts any subclass.
-
-Optional fields
----------------
-
-For portable static typing, mark fields as optional with a ``None`` default:
-
-.. code-block:: python
-
-  >>> class ObservedState(PredictorState):
-  ...     y: Tensor
-  ...     mu: Tensor
-  ...     noise: Tensor | None = None
-
-  >>> obs = ObservedState(
-  ...     eta=torch.randn(5, 3), X=torch.randn(5, 4), beta=torch.randn(5, 1),
-  ...     y=torch.randn(5, 3), mu=torch.randn(5, 3),
-  ...     batch_size=[5],
-  ... )
-  >>> "noise" in obs
-  False
-
-If the field is not provided, it is absent from the underlying ``TensorDict``
-and attribute access returns the declared default. ``NotRequired[Tensor]``
-remains supported for compatibility, but mypy only accepts ``NotRequired``
-inside a ``TypedDict`` definition; a default is therefore the portable form.
-
-Spreading (``**state``)
------------------------
-
-Because ``TypedTensorDict`` is a ``MutableMapping``, the ``**`` operator
-unpacks it into keyword arguments. This makes state transitions concise:
-
-.. code-block:: python
-
-  >>> state = PredictorState(
-  ...     eta=torch.randn(5, 3), X=torch.randn(5, 4), beta=torch.randn(5, 1),
-  ...     batch_size=[5],
-  ... )
-  >>> obs = ObservedState(
-  ...     **state,
-  ...     y=torch.randn(5, 3),
-  ...     mu=torch.randn(5, 3),
-  ...     batch_size=state.batch_size,
-  ... )
-  >>> set(obs.keys()) == {"eta", "X", "beta", "y", "mu"}
-  True
-
-Adding a new field to a pipeline stage is one line in the class definition --
-no transition function needs updating.
-
-Class options
--------------
-
-``TypedTensorDict`` supports the ``"shadow"`` and ``"frozen"`` bracket-syntax
-options of ``TensorClass``:
-
-.. code-block:: python
-
-  class MyModel(TypedTensorDict["shadow"]):
-      data: Tensor      # "data" shadows TensorDict.data -- allowed
-
-  class Immutable(TypedTensorDict["frozen"]):
-      x: Tensor         # locked after construction
-
-  class Combined(TypedTensorDict["shadow", "frozen"]):
-      data: Tensor
-
-- ``"shadow"`` -- Allow field names that clash with ``TensorDictBase`` attributes.
-  Without this, conflicting names raise ``AttributeError`` at class definition
-  time.
-- ``"frozen"`` -- Lock the ``TensorDict`` after construction. Attribute
-  assignment and adding keys raise ``RuntimeError``, but in-place writes such as
-  ``set_()`` or ``state.x.add_(1)`` still succeed, so the instance is not
-  read-only. This differs from ``TensorClass["frozen"]``, where attribute
-  assignment raises ``dataclasses.FrozenInstanceError``.
-- ``"autocast"``, ``"nocast"``, ``"tensor_only"`` -- Deprecated in 0.15, to be
-  removed in 0.17. They are accepted with the same syntax as ``TensorClass``
-  and inherited by subclasses, but they have no effect on ``TypedTensorDict``:
-  values are stored as a regular ``TensorDict`` would store them (for example,
-  ``x=1`` is stored as a tensor even with ``"nocast"``). Using one of them
-  emits a ``DeprecationWarning``. Use ``TensorClass`` if you need them.
-
-Options propagate through inheritance: a subclass of a ``"frozen"`` class is
-also frozen.
-
-Backend composition (``from_tensordict``)
------------------------------------------
-
-``TypedTensorDict`` can wrap any ``TensorDictBase`` backend via
-``from_tensordict(td)``.  The backend is stored live (zero-copy); mutations
-through the typed wrapper go directly to the underlying storage:
-
-.. code-block:: python
-
-  >>> from tensordict import TensorDict
-  >>>
-  >>> td = TensorDict(
-  ...     eta=torch.randn(5, 3), X=torch.randn(5, 4), beta=torch.randn(5, 1),
-  ...     batch_size=[5],
-  ... )
-  >>> state = PredictorState.from_tensordict(td)
-  >>> state.eta.shape
-  torch.Size([5, 3])
-  >>> state.eta = torch.ones(5, 3)  # writes to td
-  >>> (td["eta"] == 1).all()
-  tensor(True)
-
-This works with any backend: ``PersistentTensorDict`` (H5),
-``TensorDictStore`` (Redis), ``LazyStackedTensorDict``, memory-mapped
-``TensorDict``, etc.  See the :doc:`../compatibility` page for full
-details and examples.
-
-Pass ``check=False`` to wrap an empty or partially-filled backend (e.g. a
-pre-allocated ``TensorDictStore``).  Missing fields will raise at access
-time rather than at wrap time:
-
-.. code-block:: python
-
-  >>> store = TensorDictStore(batch_size=[100_000], host="redis-node")
-  >>> state = PredictorState.from_tensordict(store, check=False)
-
-See :ref:`pre-allocating on Redis <compat-redis-prealloc>` in the
-compatibility guide for the full workflow.
-
-TensorDict operations
----------------------
-
-Every ``TensorDictBase`` operation works on ``TypedTensorDict`` instances:
-
-.. code-block:: python
-
-  >>> state = PredictorState(
-  ...     eta=torch.randn(5, 3), X=torch.randn(5, 4), beta=torch.randn(5, 1),
-  ...     batch_size=[5],
-  ... )
-  >>> state.to("cpu").device
-  device(type='cpu')
-  >>> state.clone()["eta"].shape
-  torch.Size([5, 3])
-  >>> state[0:3].batch_size
-  torch.Size([3])
-  >>> torch.stack([state, state], dim=0).batch_size
-  torch.Size([2, 5])
-
-This includes ``.memmap()``, ``.apply()``, ``torch.cat``, ``torch.stack``,
-``.unbind()``, ``.select()``, ``.exclude()``, ``.update()``, and all other
-``TensorDictBase`` methods.
-
-Schema declarations describe the fields available on a valid typed instance;
-they do not change the mutation semantics of ``TensorDictBase``. Operations
-such as ``pop``, in-place ``select``, or ``rename_key_`` can invalidate that
-assumption. Prefer ``TypedTensorDict["frozen"]`` when the declared key set must
-remain invariant.
-
-Type checking
--------------
-
-``TypedTensorDict`` uses ``@dataclass_transform()`` (PEP 681) on its metaclass.
-This means type checkers (pyright, mypy) understand:
-
-- **Constructor signatures** -- missing or extra fields are flagged.
-- **Attribute access** -- ``state.eta`` is typed as ``Tensor``, and typos like
-  ``state.etta`` produce errors.
-- **Inheritance** -- subclass fields include parent fields.
-
-String-key access (``state["eta"]``) works at runtime but does not get type
-narrowing without a dedicated type checker plugin. For typed access, prefer
-dot notation (``state.eta``).
-
-Performance
------------
-
-Schema collection and property generation happen once, when a
-``TypedTensorDict`` subclass is defined. Regular ``TensorDict`` construction
-and access do not execute any typed-schema code. Typed instances add a thin
-property dispatch for attribute access and validate required keys only at
-construction or when ``from_tensordict(check=True)`` is called. Eager
-construction and access benchmarks live in
-``benchmarks/tensorclass/test_tensorclass_speed.py``; full-graph attribute
-access is covered in ``benchmarks/compile/compile_td_test.py``.
+``TypedTensorDict`` has the methods of :class:`~tensordict.TensorDictBase`,
+listed by task in :ref:`api-tensordict-methods`.
 
 .. autosummary::
     :toctree: generated/
-    :template: td_template.rst
+    :template: tensordict_class.rst
 
     TypedTensorDict
+
+See also
+--------
+
+- :ref:`typed-tensordict-guide`: declare and use a ``TypedTensorDict``.
+- :ref:`choosing-a-container`: tensorclass, ``TypedTensorDict``, or
+  ``TensorDict``.
+- :ref:`compatibility`: which containers work on which storage backends.
