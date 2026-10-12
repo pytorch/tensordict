@@ -13,7 +13,6 @@ import os
 import pickle
 import tempfile
 import warnings
-import weakref
 from functools import wraps
 from numbers import Number
 from pathlib import Path
@@ -44,7 +43,6 @@ from tensordict.utils import (
     _as_context_manager,
     _cache_while_locked,
     _CloudpickleWrapper,
-    _erase_cache_first,
     _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
@@ -189,6 +187,9 @@ class _PersistentBackend:
         raise NotImplementedError
 
     def write_masked(self, node, mask, value) -> None:
+        raise NotImplementedError
+
+    def is_read_only(self, file) -> bool:
         raise NotImplementedError
 
     def try_create_dataset(self, file, key, value, kwargs) -> bool:
@@ -377,6 +378,9 @@ class _H5Backend(_PersistentBackend):
             if old_key not in file and new_key not in file:
                 raise KeyError(f"key {old_key} not found in TensorDict.") from err
             raise KeyError(f"key {new_key} already present in TensorDict.") from err
+
+    def is_read_only(self, file) -> bool:
+        return file.file.mode == "r"
 
     def getstate(self, file) -> dict:
         return {"filename": file.file.filename, "group_name": file.name}
@@ -730,6 +734,9 @@ class _ZarrBackend(_PersistentBackend):
             for subkey in node.keys():
                 self._copy_node(file, f"{new_key}/{subkey}", node[subkey])
 
+    def is_read_only(self, file) -> bool:
+        return file.read_only
+
     def getstate(self, file) -> dict:
         # zarr v3 groups (and their stores) are natively picklable
         return {"zarr_group": file}
@@ -767,7 +774,9 @@ class PersistentTensorDict(TensorDictBase):
     (``backend="zarr"``) needs ``zarr>=3.0``. Each read of an entry loads it
     from the file into a new tensor, so ``ptd["a"] is ptd["a"]`` is
     ``False``, and in-place changes to the tensor that you read do not reach
-    the file. Writes (``ptd["a"] = value``) go to the file.
+    the file. Writes (``ptd["a"] = value``) go to the file, and so do the
+    in-place methods of the tensordict, such as ``ptd.add_(1)`` and
+    ``ptd.update_(other)``.
 
     Use it to read or write existing HDF5 or Zarr data. To keep tensordict
     data on disk for fast reloads, use :meth:`~tensordict.TensorDictBase.memmap`
@@ -839,6 +848,8 @@ class PersistentTensorDict(TensorDictBase):
     _td_dim_names = None
     _masking_on_dense_copy = True
     LOCKING = None
+    # each read loads the entry from the file into a new tensor
+    _reads_return_copies = True
 
     @property
     @deprecated("PersistentTensorDict.kwargs", removal="0.17")
@@ -1419,6 +1430,7 @@ class PersistentTensorDict(TensorDictBase):
                 td_names = list(names) + list(item.names)[self.ndim :]
                 item.rename_(*td_names)
 
+    # Override: materializes with one read of the file.
     def contiguous(self, *, canonical: bool = False):
         """Materializes a PersistentTensorDict on a regular TensorDict."""
         out = self.to_tensordict()
@@ -1444,6 +1456,7 @@ class PersistentTensorDict(TensorDictBase):
             )
         return self
 
+    # Override: a file holds no gradients.
     def detach_(self):
         # PersistentTensorDict do not carry gradients. This is a no-op
         return self
@@ -1478,47 +1491,18 @@ class PersistentTensorDict(TensorDictBase):
             names=self.names if names is None and self._has_names() else names,
         )
 
-    def _propagate_lock(self, lock_parents_weakrefs=None, *, is_compiling):
-        """Registers the parent tensordict that handles the lock."""
-        self._is_locked = True
-        if lock_parents_weakrefs is not None:
-            lock_parents_weakrefs = [
-                ref
-                for ref in lock_parents_weakrefs
-                if not any(refref is ref for refref in self._lock_parents_weakrefs)
-            ]
-        if not is_compiling:
-            is_root = lock_parents_weakrefs is None
-            if is_root:
-                lock_parents_weakrefs = []
-            else:
-                self._lock_parents_weakrefs = (
-                    self._lock_parents_weakrefs + lock_parents_weakrefs
-                )
-            lock_parents_weakrefs = list(lock_parents_weakrefs)
-            lock_parents_weakrefs.append(weakref.ref(self))
-
-        for _td in self._nested_tensordicts.values():
-            _td._propagate_lock(lock_parents_weakrefs, is_compiling=is_compiling)
-
-    @_erase_cache_first
-    def _propagate_unlock(self):
-        # if we end up here, we can clear the graph associated with this td
-        self._is_locked = False
-
-        self._is_shared = False
-        self._is_memmap = False
-
-        sub_tds = []
-        for _td in self._nested_tensordicts.values():
-            sub_tds.extend(_td._propagate_unlock())
-            sub_tds.append(_td)
-        return sub_tds
+    # Override: walk the cached sub-tensordicts, without reading the file.
+    def _lock_sub_tensordicts(self):
+        return list(self._nested_tensordicts.values())
 
     def zero_(self) -> Self:
+        # Override: fill_ writes each array without reading it first
         for key in self.keys():
             self.fill_(key, 0)
         return self
+
+    def _storage_is_read_only(self) -> bool:
+        return self._backend.is_read_only(self.file)
 
     def entry_class(self, key: NestedKey) -> type:
         # Inspects the node only: no data is read from storage.
@@ -1531,6 +1515,7 @@ class PersistentTensorDict(TensorDictBase):
             return NonTensorData
         return torch.Tensor
 
+    # Override: entries live in a file.
     def is_contiguous(self):
         return False
 
@@ -1731,6 +1716,7 @@ class PersistentTensorDict(TensorDictBase):
 
     _load_memmap = TensorDict._load_memmap
 
+    # Override: file-backed entries cannot be pinned.
     def pin_memory(self, *args, **kwargs):
         raise RuntimeError(
             f"Cannot pin memory of a {type(self).__name__}. Call to_tensordict() before making this call."
@@ -1958,12 +1944,6 @@ class PersistentTensorDict(TensorDictBase):
             )
         return self.to_tensordict().unflatten_keys(separator=separator)
 
-    def share_memory_(self):
-        raise NotImplementedError(
-            "Cannot call share_memory_ on a PersistentTensorDict. "
-            "Create a regular tensordict first using the `to_tensordict` method."
-        )
-
     def to(self, *args, **kwargs: Any) -> PersistentTensorDict:
         (
             device,
@@ -1985,6 +1965,8 @@ class PersistentTensorDict(TensorDictBase):
             )
         result = self
         if device is not None and dtype is None and device == self.device:
+            if batch_size is not None and torch.Size(batch_size) != result.batch_size:
+                result.batch_size = batch_size
             return result
         if dtype is not None:
             return self.to_tensordict().to(*args, **kwargs)

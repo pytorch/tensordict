@@ -38,6 +38,7 @@ from tensordict.base import (
     _flatten_nested_dicts,
     _foreach_copy_,
     _foreach_copy_compiled,
+    _holds_its_tensors,
     _is_accepted_class,
     _is_leaf_nontensor,
     _is_tensor_collection,
@@ -235,8 +236,6 @@ class TensorDict(TensorDictBase):
     """
 
     _td_dim_names = None
-    _is_shared = False
-    _is_memmap = False
     _has_exclusive_keys = False
 
     def __init__(
@@ -1650,6 +1649,7 @@ class TensorDict(TensorDictBase):
         except KeyError:
             return self._default_get(key, default)
 
+    # Override: shares the dense leaves and marks the tensordict shared.
     def share_memory_(self) -> Self:
         if self.is_memmap():
             raise RuntimeError(
@@ -1667,11 +1667,6 @@ class TensorDict(TensorDictBase):
                 value.share_memory_()
         self._is_shared = True
         self.lock_()
-        return self
-
-    def detach_(self) -> Self:
-        for value in self.values():
-            value.detach_()
         return self
 
     def _memmap_(
@@ -2184,9 +2179,6 @@ class TensorDict(TensorDictBase):
 
         return memmap_tensor
 
-    def is_contiguous(self) -> bool:
-        return all([value.is_contiguous() for _, value in self.items()])
-
     def _build_lock_schema(self) -> None:
         # Snapshot the current top-level key set as a Python tuple so
         # locked-fast-paths can iterate it without hitting Dynamo
@@ -2238,42 +2230,22 @@ class TensorDict(TensorDictBase):
         #     self._maybe_set_shared_attributes(result)
         return result
 
-    def contiguous(self, *, canonical: bool = False, inplace: bool = False) -> Self:
-        if inplace:
-            if canonical:
-
-                def leaf_fn(value):
-                    return _canonicalize_tensor(value.contiguous())
-
-            else:
-
-                def leaf_fn(value):
-                    return value.contiguous()
-
-            def nested_fn(nested):
-                nested.contiguous(canonical=canonical, inplace=True)
-
-            return self._inplace_rebind_leaves(leaf_fn, nested_fn, None)
+    # Override: rebinds each leaf to a contiguous copy.
+    def _contiguous_inplace(self, canonical: bool) -> Self:
         if canonical:
-            source = {
-                key: (
-                    value.contiguous(canonical=True)
-                    if is_tensor_collection(value)
-                    else _canonicalize_tensor(value.contiguous())
-                )
-                for key, value in self.items()
-            }
+
+            def leaf_fn(value):
+                return _canonicalize_tensor(value.contiguous())
+
         else:
-            source = {key: value.contiguous() for key, value in self.items()}
-        batch_size = self.batch_size
-        device = self.device
-        out = self._new_unsafe(
-            source=source,
-            batch_size=batch_size,
-            device=device,
-            names=self.names if self._has_names() else None,
-        )
-        return out
+
+            def leaf_fn(value):
+                return value.contiguous()
+
+        def nested_fn(nested):
+            nested.contiguous(canonical=canonical, inplace=True)
+
+        return self._inplace_rebind_leaves(leaf_fn, nested_fn, None)
 
     # Override: fast path for the dense root, which many operations call.
     def empty(
@@ -2573,13 +2545,31 @@ class _SubTensorDict(TensorDictBase):
             raise RuntimeError("batch_size does not match self.batch_size.")
 
     # These attributes should never be set
+    # Override: the flag lives on the source.
     @property
     def _is_shared(self):
         return self._source._is_shared
 
+    # Override: the flag lives on the source.
     @property
     def _is_memmap(self):
         return self._source._is_memmap
+
+    @property
+    def _reads_return_copies(self):
+        # the entries are views only for a basic index of the tensors that the
+        # source holds: an index tensor or a mask, or a source that builds its
+        # entries on each read (a lazy stack, a file), gives copies
+        return not (
+            _holds_its_tensors(self._source)
+            and all(
+                (type(idx) is int) or idx is None or isinstance(idx, slice)
+                for idx in self.idx
+            )
+        )
+
+    def _storage_is_read_only(self) -> bool:
+        return self._source._storage_is_read_only()
 
     # Override: the names come from the source, at the index of the view.
     @TensorDictBase.names.getter
@@ -2848,6 +2838,7 @@ class _SubTensorDict(TensorDictBase):
             and dtype is None
             and convert_to_format is None
             and device == self.device
+            and (batch_size is None or torch.Size(batch_size) == self.batch_size)
         ):
             return result
         return self.to_tensordict().to(*args, **kwargs)
@@ -3132,34 +3123,6 @@ class _SubTensorDict(TensorDictBase):
             )
         return self.to_tensordict()
 
-    def is_contiguous(self) -> bool:
-        return all(value.is_contiguous() for value in self.values())
-
-    def contiguous(self, *, canonical: bool = False, inplace: bool = False) -> Self:
-        if inplace:
-            raise NotImplementedError(
-                "contiguous(inplace=True) is not supported on _SubTensorDict "
-                "(view over another tensordict). Call .to_tensordict() first "
-                "or use inplace=False."
-            )
-        if canonical:
-            source = {
-                key: (
-                    value.contiguous(canonical=True)
-                    if is_tensor_collection(value)
-                    else _canonicalize_tensor(value.contiguous())
-                )
-                for key, value in self.items()
-            }
-        else:
-            source = {key: value.contiguous() for key, value in self.items()}
-        return self._new_unsafe(
-            batch_size=self.batch_size,
-            source=source,
-            device=self.device,
-            names=self.names if self._has_names() else None,
-        )
-
     def expand(self, *args: int, inplace: bool = False) -> Self:
         if len(args) == 1 and isinstance(args[0], Sequence):
             shape = tuple(args[0])
@@ -3190,9 +3153,11 @@ class _SubTensorDict(TensorDictBase):
     ):
         raise NotImplementedError(f"from_dict not implemented for {cls.__name__}.")
 
+    # Override: defers to the source.
     def is_shared(self) -> bool:
         return self._source.is_shared()
 
+    # Override: defers to the source.
     def is_memmap(self) -> bool:
         return self._source.is_memmap()
 
@@ -3202,11 +3167,13 @@ class _SubTensorDict(TensorDictBase):
         self._source.rename_key_(old_key, new_key, safe=safe)
         return self
 
+    # Override: a view over another tensordict cannot be pinned.
     def pin_memory(self, *args, **kwargs) -> Self:
         raise RuntimeError(
             f"Cannot pin memory of a {type(self).__name__}. Call to_tensordict() before making this call."
         )
 
+    # Override: a view over another tensordict cannot detach in place.
     def detach_(self) -> Self:
         raise RuntimeError("Detaching a sub-tensordict in-place cannot be done.")
 
@@ -3354,21 +3321,16 @@ class _SubTensorDict(TensorDictBase):
             "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
         )
 
+    # Override: a view over another tensordict cannot be shared.
     def share_memory_(self) -> Self:
         raise RuntimeError(
             "Casting a sub-tensordict values to shared memory cannot be done."
         )
 
-    @property
+    # Override: the lock state lives on the source.
+    @TensorDictBase.is_locked.getter
     def is_locked(self) -> bool:
         return self._source.is_locked
-
-    @is_locked.setter
-    def is_locked(self, value) -> bool:
-        if value:
-            self.lock_()
-        else:
-            self.unlock_()
 
     @_as_context_manager("is_locked")
     def lock_(self) -> Self:
@@ -3393,6 +3355,7 @@ class _SubTensorDict(TensorDictBase):
             "Cannot unlock a _SubTensorDict. Unlock the parent tensordict instead."
         )
 
+    # Override: only the parent tensordict can be locked.
     def _propagate_lock(self, lock_ids=None, *, is_compiling):
         raise RuntimeError(
             "Cannot lock a _SubTensorDict. Lock the parent tensordict instead."

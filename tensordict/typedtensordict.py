@@ -11,6 +11,7 @@ from collections.abc import Callable, Sequence
 from typing import Any, ClassVar
 
 import torch
+from tensordict._lazy import LazyStackedTensorDict
 from tensordict._pytree import _register_td_node
 from tensordict._td import TensorDict
 from tensordict.base import _register_tensor_class, NO_DEFAULT, TensorDictBase
@@ -473,6 +474,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
 
     _source: TensorDictBase
 
+    # Override: the flag lives on the source.
     @property
     def _is_shared(self):
         return self._source._is_shared
@@ -481,6 +483,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     def _is_shared(self, value):
         self._source._is_shared = value
 
+    # Override: the flag lives on the source.
     @property
     def _is_memmap(self):
         return self._source._is_memmap
@@ -488,6 +491,13 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     @_is_memmap.setter
     def _is_memmap(self, value):
         self._source._is_memmap = value
+
+    @property
+    def _reads_return_copies(self):
+        # a lazy stack builds each entry that _get_str returns by stacking
+        return self._source._reads_return_copies or isinstance(
+            self._source, LazyStackedTensorDict
+        )
 
     # ------------------------------------------------------------------
     # Internal helper: wrap a TensorDictBase without key validation
@@ -618,13 +628,10 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._source._change_batch_size(new_size)
 
-    @property
+    # Override: the lock state lives on the source.
+    @TensorDictBase.is_locked.getter
     def is_locked(self) -> bool:
         return self._source.is_locked
-
-    @is_locked.setter
-    def is_locked(self, value: bool) -> None:
-        self._source.is_locked = value
 
     @_as_context_manager("is_locked")
     def lock_(self, *args, **kwargs):
@@ -983,6 +990,7 @@ _DIRECT_DELEGATES = [
     "entry_class",
     "_check_is_shared",
     "_check_device",
+    "_storage_is_read_only",
     "is_contiguous",
     "popitem",
     "_cast_reduction",

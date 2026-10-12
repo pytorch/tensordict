@@ -24,6 +24,7 @@ from tensordict.base import (
     _is_tensor_collection,
     _maybe_broadcast_other,
     _NESTED_TENSORS_AS_LISTS,
+    _write_back_inplace,
     CompatibleType,
     is_tensor_collection,
     NO_DEFAULT,
@@ -42,6 +43,15 @@ from torch import Tensor
 
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
+
+
+def _values_by_key(other: TensorCollection, keys: list) -> list:
+    """The tensor leaves of ``other`` under ``keys``, in that order."""
+    other_keys, values = other._items_list(True, True)
+    if other_keys == keys:
+        # same keys in the same order, the common case: no reordering
+        return values
+    return other._values_list(True, True, sorting_keys=keys)
 
 
 class _PointwiseOps:
@@ -582,6 +592,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def abs_(self) -> Self:
         """Computes the absolute value of each element of the TensorDict in-place."""
         _foreach("abs_", self._values_list(True, True))
@@ -604,6 +615,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def acos_(self) -> Self:
         """Computes the :func:`~torch.acos` value of each element of the TensorDict in-place."""
         _foreach("acos_", self._values_list(True, True))
@@ -626,6 +638,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def exp_(self) -> Self:
         """Computes the :func:`~torch.exp` value of each element of the TensorDict in-place."""
         _foreach("exp_", self._values_list(True, True))
@@ -653,6 +666,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def neg_(self) -> Self:
         """Computes the :func:`~torch.neg` value of each element of the TensorDict in-place."""
         vals = self._values_list(True, True)
@@ -682,6 +696,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def reciprocal_(self) -> Self:
         """Computes the :func:`~torch.reciprocal` value of each element of the TensorDict in-place."""
         _foreach("reciprocal_", self._values_list(True, True))
@@ -704,6 +719,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def sigmoid_(self) -> Self:
         """Computes the :func:`~torch.sigmoid` value of each element of the TensorDict in-place."""
         _foreach("sigmoid_", self._values_list(True, True))
@@ -726,6 +742,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def sign_(self) -> Self:
         """Computes the :func:`~torch.sign` value of each element of the TensorDict in-place."""
         _foreach("sign_", self._values_list(True, True))
@@ -748,6 +765,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def sin_(self) -> Self:
         """Computes the :func:`~torch.sin` value of each element of the TensorDict in-place."""
         _foreach("sin_", self._values_list(True, True))
@@ -770,6 +788,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def sinh_(self) -> Self:
         """Computes the :func:`~torch.sinh` value of each element of the TensorDict in-place."""
         _foreach("sinh_", self._values_list(True, True))
@@ -792,6 +811,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def tan_(self) -> Self:
         """Computes the :func:`~torch.tan` value of each element of the TensorDict in-place."""
         _foreach("tan_", self._values_list(True, True))
@@ -814,6 +834,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def tanh_(self) -> Self:
         """Computes the :func:`~torch.tanh` value of each element of the TensorDict in-place."""
         _foreach("tanh_", self._values_list(True, True))
@@ -836,6 +857,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def trunc_(self) -> Self:
         """Computes the :func:`~torch.trunc` value of each element of the TensorDict in-place."""
         _foreach("trunc_", self._values_list(True, True))
@@ -858,6 +880,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def lgamma_(self) -> Self:
         """Computes the :func:`~torch.lgamma` value of each element of the TensorDict in-place."""
         _foreach("lgamma_", self._values_list(True, True))
@@ -880,6 +903,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def frac_(self) -> Self:
         """Computes the :func:`~torch.frac` value of each element of the TensorDict in-place."""
         _foreach("frac_", self._values_list(True, True))
@@ -902,6 +926,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def expm1_(self) -> Self:
         """Computes the :func:`~torch.expm1` value of each element of the TensorDict in-place."""
         _foreach("expm1_", self._values_list(True, True))
@@ -924,6 +949,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def log_(self) -> Self:
         """Computes the :func:`~torch.log` value of each element of the TensorDict in-place."""
         _foreach("log_", self._values_list(True, True))
@@ -964,6 +990,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def log10_(self) -> Self:
         """Computes the :func:`~torch.log10` value of each element of the TensorDict in-place."""
         _foreach("log10_", self._values_list(True, True))
@@ -986,6 +1013,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def log1p_(self) -> Self:
         """Computes the :func:`~torch.log1p` value of each element of the TensorDict in-place."""
         _foreach("log1p_", self._values_list(True, True))
@@ -1008,6 +1036,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def log2_(self) -> Self:
         """Computes the :func:`~torch.log2` value of each element of the TensorDict in-place."""
         _foreach("log2_", self._values_list(True, True))
@@ -1030,6 +1059,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def ceil_(self) -> Self:
         """Computes the :func:`~torch.ceil` value of each element of the TensorDict in-place."""
         _foreach("ceil_", self._values_list(True, True))
@@ -1052,6 +1082,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def floor_(self) -> Self:
         """Computes the :func:`~torch.floor` value of each element of the TensorDict in-place."""
         _foreach("floor_", self._values_list(True, True))
@@ -1074,6 +1105,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def round_(self) -> Self:
         """Computes the :func:`~torch.round` value of each element of the TensorDict in-place."""
         _foreach("round_", self._values_list(True, True))
@@ -1096,6 +1128,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def erf_(self) -> Self:
         """Computes the :func:`~torch.erf` value of each element of the TensorDict in-place."""
         _foreach("erf_", self._values_list(True, True))
@@ -1118,6 +1151,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def erfc_(self) -> Self:
         """Computes the :func:`~torch.erfc` value of each element of the TensorDict in-place."""
         _foreach("erfc_", self._values_list(True, True))
@@ -1140,6 +1174,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def asin_(self) -> Self:
         """Computes the :func:`~torch.asin` value of each element of the TensorDict in-place."""
         _foreach("asin_", self._values_list(True, True))
@@ -1162,6 +1197,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def atan_(self) -> Self:
         """Computes the :func:`~torch.atan` value of each element of the TensorDict in-place."""
         _foreach("atan_", self._values_list(True, True))
@@ -1184,6 +1220,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def cos_(self) -> Self:
         """Computes the :func:`~torch.cos` value of each element of the TensorDict in-place."""
         _foreach("cos_", self._values_list(True, True))
@@ -1206,6 +1243,7 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def cosh_(self) -> Self:
         """Computes the :func:`~torch.cosh` value of each element of the TensorDict in-place."""
         _foreach("cosh_", self._values_list(True, True))
@@ -1391,6 +1429,7 @@ class _PointwiseOps:
             result.update(items)
         return result
 
+    @_write_back_inplace
     @_maybe_broadcast_other("add_")
     def add_(
         self,
@@ -1475,23 +1514,26 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     def lerp_(
         self,
         end: TensorDictBase | torch.Tensor | float,
         weight: TensorDictBase | torch.Tensor | float,
     ):
         """In-place version of :meth:`~.lerp`."""
+        # the leaves of the tensordict operands are paired by key, as in add_
+        keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(end)):
-            end_val = end._values_list(True, True)
+            end_val = _values_by_key(end, keys)
         else:
             end_val = end
         if isinstance(weight, (float, torch.Tensor)):
             weight_val = weight
         elif _is_tensor_collection(type(weight)):
-            weight_val = weight._values_list(True, True)
+            weight_val = _values_by_key(weight, keys)
         else:
             weight_val = weight
-        _foreach("lerp_", self._values_list(True, True), end_val, weight_val)
+        _foreach("lerp_", vals, end_val, weight_val)
         return self
 
     @_maybe_broadcast_other("addcdiv", 2)
@@ -1542,20 +1584,23 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     @_maybe_broadcast_other("addcdiv_", 2)
     def addcdiv_(self, other1, other2, *, value: float | None = 1):
         """The in-place version of :meth:`~.addcdiv`."""
+        # the leaves of the tensordict operands are paired by key, as in add_
+        keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other1)):
-            other1_val = other1._values_list(True, True)
+            other1_val = _values_by_key(other1, keys)
         else:
             other1_val = other1
         if _is_tensor_collection(type(other2)):
-            other2_val = other2._values_list(True, True)
+            other2_val = _values_by_key(other2, keys)
         else:
             other2_val = other2
         _foreach(
             "addcdiv_",
-            self._values_list(True, True),
+            vals,
             other1_val,
             other2_val,
             value=value,
@@ -1611,20 +1656,23 @@ class _PointwiseOps:
             propagate_lock=True,
         )
 
+    @_write_back_inplace
     @_maybe_broadcast_other("addcmul_", 2)
     def addcmul_(self, other1, other2, *, value: float | None = 1):
         """The in-place version of :meth:`~.addcmul`."""
+        # the leaves of the tensordict operands are paired by key, as in add_
+        keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other1)):
-            other1_val = other1._values_list(True, True)
+            other1_val = _values_by_key(other1, keys)
         else:
             other1_val = other1
         if _is_tensor_collection(type(other2)):
-            other2_val = other2._values_list(True, True)
+            other2_val = _values_by_key(other2, keys)
         else:
             other2_val = other2
         _foreach(
             "addcmul_",
-            self._values_list(True, True),
+            vals,
             other1_val,
             other2_val,
             value=value,
@@ -1694,6 +1742,7 @@ class _PointwiseOps:
             result.update(items)
         return result
 
+    @_write_back_inplace
     @_maybe_broadcast_other("sub_")
     def sub_(
         self, other: TensorDictBase | torch.Tensor | float, alpha: float | None = None
@@ -1834,6 +1883,7 @@ class _PointwiseOps:
             result.update(items)
         return result
 
+    @_write_back_inplace
     @_maybe_broadcast_other("mul_")
     def mul_(self, other: TensorCollection | torch.Tensor) -> Self:
         """In-place version of :meth:`~.mul`.
@@ -1925,6 +1975,7 @@ class _PointwiseOps:
             result.update(items)
         return result
 
+    @_write_back_inplace
     def maximum_(self, other: TensorCollection | torch.Tensor) -> Self:
         """In-place version of :meth:`~.maximum`.
 
@@ -2010,6 +2061,7 @@ class _PointwiseOps:
             result.update(items)
         return result
 
+    @_write_back_inplace
     def minimum_(self, other: TensorCollection | torch.Tensor) -> Self:
         """In-place version of :meth:`~.minimum`.
 
@@ -2095,6 +2147,7 @@ class _PointwiseOps:
             result.update(items)
         return result
 
+    @_write_back_inplace
     def clamp_max_(self, other: TensorCollection | torch.Tensor) -> Self:
         """In-place version of :meth:`~.clamp_max`.
 
@@ -2196,6 +2249,7 @@ class _PointwiseOps:
             result.update(items)
         return result
 
+    @_write_back_inplace
     def clamp_min_(self, other: TensorDictBase | torch.Tensor) -> Self:
         """In-place version of :meth:`~.clamp_min`.
 
@@ -2363,6 +2417,7 @@ class _PointwiseOps:
         with out.unlock_() if out.is_locked else contextlib.nullcontext():
             return out.update(result)
 
+    @_write_back_inplace
     @_maybe_broadcast_other("pow_")
     def pow_(self, other: TensorDictBase | torch.Tensor) -> Self:
         """In-place version of :meth:`~.pow`.
@@ -2437,6 +2492,7 @@ class _PointwiseOps:
             result.update(items)
         return result
 
+    @_write_back_inplace
     @_maybe_broadcast_other("div_")
     def div_(self, other: TensorDictBase | torch.Tensor) -> Self:
         """In-place version of :meth:`~.div`.
@@ -2512,6 +2568,7 @@ class _PointwiseOps:
             result.update(items)
         return result
 
+    @_write_back_inplace
     def sqrt_(self) -> Self:
         """In-place version of :meth:`~.sqrt`."""
         _foreach("sqrt_", self._values_list(True, True))
@@ -2535,6 +2592,7 @@ class _PointwiseOps:
         )
 
     # Filling
+    @_write_back_inplace
     def zero_(self) -> Self:
         """Zeros all tensors in the tensordict in-place."""
 

@@ -838,10 +838,12 @@ class LazyStackedTensorDict(TensorDictBase):
         return self
 
     # These attributes should never be set
+    # Override: the flag holds when it holds for every member.
     @property
     def _is_shared(self):
         return all(td._is_shared for td in self.tensordicts)
 
+    # Override: the flag holds when it holds for every member.
     @property
     def _is_memmap(self):
         return all(td._is_memmap for td in self.tensordicts)
@@ -1154,6 +1156,7 @@ class LazyStackedTensorDict(TensorDictBase):
             else:
                 raise err
 
+    # Override: the members must agree.
     def is_shared(self) -> bool:
         are_shared = [td.is_shared() for td in self.tensordicts]
         are_shared = [value for value in are_shared if value is not None]
@@ -1167,6 +1170,7 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return all(are_shared)
 
+    # Override: the members must agree.
     def is_memmap(self) -> bool:
         are_memmap = [td.is_memmap() for td in self.tensordicts]
         if any(are_memmap) and not all(are_memmap):
@@ -2512,9 +2516,11 @@ class LazyStackedTensorDict(TensorDictBase):
             return default
         return torch.nested.nested_tensor(tensors, layout=layout)
 
+    # Override: a lazy stack is never one contiguous block.
     def is_contiguous(self) -> bool:
         return False
 
+    # Override: returns a dense TensorDict, locked like the stack.
     def contiguous(self, *, canonical: bool = False, inplace: bool = False) -> Self:
         if inplace:
             raise NotImplementedError(
@@ -2866,6 +2872,11 @@ class LazyStackedTensorDict(TensorDictBase):
         if _is_tensor_collection(data_type):
             return LazyStackedTensorDict
         return data_type
+
+    def _storage_is_read_only(self) -> bool:
+        # a TypedTensorDict or a sub-tensordict over this stack writes back
+        # through the members, such as rows of a file opened read-only
+        return any(td._storage_is_read_only() for td in self.tensordicts)
 
     def apply_(self, fn: Callable, *others, **kwargs):
         others = (other.unbind(self.stack_dim) for other in others)
@@ -3625,12 +3636,14 @@ class LazyStackedTensorDict(TensorDictBase):
                 return default
         return super().pop(key, default)
 
+    # Override: shares each member.
     def share_memory_(self) -> Self:
         for td in self.tensordicts:
             td.share_memory_()
         self.lock_()
         return self
 
+    # Override: detaches each member.
     def detach_(self) -> Self:
         for td in self.tensordicts:
             td.detach_()
@@ -4296,7 +4309,8 @@ class LazyStackedTensorDict(TensorDictBase):
         N = len(self.tensordicts)
         self._batch_size = self._compute_batch_size(batch_size, self.stack_dim, N)
 
-    @property
+    # Override: a stack is locked when all its members are.
+    @TensorDictBase.is_locked.getter
     def is_locked(self) -> bool:
         if self._is_locked is not None:
             # if tensordicts have been locked through this Lazy stack, then we can
@@ -4319,13 +4333,6 @@ class LazyStackedTensorDict(TensorDictBase):
             # Calling self.lock_() here could however speed things up.
             return True
 
-    @is_locked.setter
-    def is_locked(self, value: bool) -> None:
-        if value:
-            self.lock_()
-        else:
-            self.unlock_()
-
     @property
     def _lock_parents_weakrefs(self):
         """Weakrefs of all tensordicts that need to be unlocked for this to be unlocked."""
@@ -4339,6 +4346,7 @@ class LazyStackedTensorDict(TensorDictBase):
         ]
         return _lock_parents_weakrefs
 
+    # Override: walks the members; a stack keeps no parent list of its own.
     def _propagate_lock(self, lock_parents_weakrefs=None, *, is_compiling):
         """Registers the parent tensordict that handles the lock."""
         self._is_locked = True
@@ -4351,6 +4359,7 @@ class LazyStackedTensorDict(TensorDictBase):
         for dest in self.tensordicts:
             dest._propagate_lock(lock_parents_weakrefs, is_compiling=is_compiling)
 
+    # Override: resets _is_locked to None, so that the members decide again.
     @_erase_cache_first
     def _propagate_unlock(self):
         # we can't set _is_locked to False because after it's unlocked, anything
@@ -5047,9 +5056,6 @@ class _CustomOpTensorDict(TensorDictBase):
             )
         return self.to_tensordict()
 
-    def is_contiguous(self) -> bool:
-        return all([value.is_contiguous() for _, value in self.items()])
-
     def contiguous(self, *, canonical: bool = False, inplace: bool = False) -> Self:
         if inplace:
             raise NotImplementedError(
@@ -5287,16 +5293,9 @@ class _CustomOpTensorDict(TensorDictBase):
             return None
         return self.names
 
-    @property
+    @TensorDictBase.is_locked.getter
     def is_locked(self) -> bool:
         return self._source.is_locked
-
-    @is_locked.setter
-    def is_locked(self, value) -> bool:
-        if value:
-            self.lock_()
-        else:
-            self.unlock_()
 
     @_as_context_manager("is_locked")
     def lock_(self) -> Self:

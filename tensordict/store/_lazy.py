@@ -15,7 +15,6 @@ import json
 import struct
 import threading
 import uuid
-import weakref
 from numbers import Number
 from typing import Any, Callable, Sequence, Tuple, Type
 
@@ -63,7 +62,6 @@ from tensordict.store._utils import (
 )
 from tensordict.utils import (
     _as_context_manager,
-    _erase_cache_first,
     _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
@@ -103,6 +101,8 @@ class _StoreStackElementView(TensorDictBase):
 
     _td_dim_names = None
     _masking_on_dense_copy = True
+    # each read fetches the entry from the server into a new tensor
+    _reads_return_copies = True
 
     def __init__(self, parent, element_idx: int):
         self._parent = parent
@@ -380,14 +380,12 @@ class _StoreStackElementView(TensorDictBase):
 
     # ---- locking ----
 
+    # Override: a view records no lock parents.
     def _propagate_lock(self, lock_parents_weakrefs=None, *, is_compiling):
         self._is_locked = True
 
-    @_erase_cache_first
-    def _propagate_unlock(self):
-        self._is_locked = False
-        self._is_shared = False
-        self._is_memmap = False
+    # Override: a view holds no sub-tensordicts to lock.
+    def _lock_sub_tensordicts(self):
         return []
 
     # ---- materialization ----
@@ -403,6 +401,7 @@ class _StoreStackElementView(TensorDictBase):
             d[parts[-1]] = tensor
         return TensorDict(source, batch_size=self._batch_size, device=self._device)
 
+    # Override: deprecated alias of to_tensordict(), removed in 0.17.
     @deprecated(
         "LazyStackedTensorDictStore[i].to_local()",
         removal="0.17",
@@ -411,15 +410,18 @@ class _StoreStackElementView(TensorDictBase):
     def to_local(self) -> TensorDict:
         return self.to_tensordict()
 
+    # Override: materializes in one round trip.
     def contiguous(self, *, canonical: bool = False) -> TensorDict:
         out = self.to_tensordict()
         if canonical:
             out = out.contiguous(canonical=True)
         return out
 
+    # Override: entries live on the server.
     def is_contiguous(self) -> bool:
         return False
 
+    # Override: the server holds no gradients.
     def detach_(self) -> Self:
         return self
 
@@ -427,11 +429,6 @@ class _StoreStackElementView(TensorDictBase):
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         raise RuntimeError("Cannot popitem from a stack element view.")
-
-    def zero_(self) -> Self:
-        for key in self.keys():
-            self.fill_(key, 0)
-        return self
 
     def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
         existing = self.get(key)
@@ -513,11 +510,6 @@ class _StoreStackElementView(TensorDictBase):
     def _chunk(self, chunks, dim):
         return self.to_tensordict()._chunk(chunks, dim)
 
-    def share_memory_(self):
-        raise NotImplementedError(
-            f"Cannot call share_memory_ on a {type(self).__name__}."
-        )
-
     def _memmap_(self, **kw):
         if kw["inplace"]:
             raise RuntimeError(f"Cannot call memmap on a {type(self).__name__}.")
@@ -546,6 +538,7 @@ class _StoreStackElementView(TensorDictBase):
         """
         raise RuntimeError(f"Cannot call memmap_ on a {type(self).__name__}.")
 
+    # Override: server-side entries cannot be pinned.
     def pin_memory(self, *a, **kw):
         raise RuntimeError(f"Cannot pin memory of a {type(self).__name__}.")
 
@@ -711,6 +704,8 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     _td_dim_names = None
     _masking_on_dense_copy = True
+    # each read fetches the entry from the server into a new tensor
+    _reads_return_copies = True
 
     def __init__(
         self,
@@ -1908,27 +1903,13 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     # ---- Locking ----
 
-    def _propagate_lock(self, lock_parents_weakrefs=None, *, is_compiling):
-        self._is_locked = True
-        if not is_compiling:
-            if lock_parents_weakrefs is None:
-                lock_parents_weakrefs = []
-            else:
-                self._lock_parents_weakrefs = (
-                    self._lock_parents_weakrefs + lock_parents_weakrefs
-                )
-            lock_parents_weakrefs = list(lock_parents_weakrefs)
-            lock_parents_weakrefs.append(weakref.ref(self))
-
-    @_erase_cache_first
-    def _propagate_unlock(self):
-        self._is_locked = False
-        self._is_shared = False
-        self._is_memmap = False
+    # Override: the stack holds no sub-tensordicts to lock.
+    def _lock_sub_tensordicts(self):
         return []
 
     # ---- Materialization ----
 
+    # Override: deprecated alias of to_tensordict(), removed in 0.17.
     @deprecated(
         "LazyStackedTensorDictStore.to_local()",
         removal="0.17",
@@ -1942,6 +1923,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
         """
         return self.to_tensordict()
 
+    # Override: materializes in one round trip.
     def contiguous(self, *, canonical: bool = False) -> TensorDict:
         out = self.to_tensordict()
         if canonical:
@@ -2166,16 +2148,27 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     # ---- Misc required overrides ----
 
+    # Override: entries live on the server.
     def is_contiguous(self) -> bool:
         return False
 
+    # Override: the server holds no gradients.
     def detach_(self) -> Self:
         return self
 
-    def zero_(self) -> Self:
-        for key in self.keys():
-            self.fill_(key, 0)
-        return self
+    def _write_back(self, keys, values, method: str) -> None:
+        # Override: a key whose elements differ in shape is read with the shape
+        # of the first element, and writing it back would lose the others: it
+        # is left unchanged, as fill_ does.
+        keys = [_unravel_key_to_tuple(key) for key in keys]
+        homogeneous = self._run_sync(
+            self._ais_homogeneous([_KEY_SEP.join(key) for key in keys])
+        )
+        super()._write_back(
+            [key for key, keep in zip(keys, homogeneous) if keep],
+            [value for value, keep in zip(values, homogeneous) if keep],
+            method,
+        )
 
     def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
         existing = self.get(key)
@@ -2394,11 +2387,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     # ---- Memory ops: not supported ----
 
-    def share_memory_(self):
-        raise NotImplementedError(
-            f"Cannot call share_memory_ on a {type(self).__name__}."
-        )
-
     def _memmap_(
         self,
         *,
@@ -2459,6 +2447,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
             f"Cannot build a memmap TensorDict in-place from a {type(self).__name__}."
         )
 
+    # Override: server-side entries cannot be pinned.
     def pin_memory(self, *args, **kwargs):
         raise RuntimeError(f"Cannot pin memory of a {type(self).__name__}.")
 
