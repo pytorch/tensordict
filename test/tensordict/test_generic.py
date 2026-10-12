@@ -1915,7 +1915,7 @@ class TestGeneric:
         def key_types(pytree):
             return {repr(key): type(key) for key in pytree}
 
-        keys = [0, 1.5, True, (0, 1), "a"]
+        keys = [0, 1.5, True, None, (0, 1), ("a", 0), "a"]
         pytree = {key: torch.full((3,), float(i)) for i, key in enumerate(keys)}
         td = TensorDict.from_pytree(pytree)
         pytree_recon = td.to_pytree()
