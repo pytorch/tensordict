@@ -859,7 +859,8 @@ class TestNonTensorData:
     @pytest.mark.parametrize(
         "index", [1, slice(0, 2), torch.tensor([0, 2])], ids=["int", "slice", "tensor"]
     )
-    def test_lazy_set_at_scalar(self, value, index):
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    def test_lazy_set_at_scalar(self, value, index, device):
         # A scalar written into a non-tensor entry of a lazy stack gives what a
         # dense tensordict gives. Each member writes it at the index (), which
         # used to raise AttributeError: stack_dim.
@@ -868,6 +869,7 @@ class TestNonTensorData:
                 a=NonTensorData("s0", batch_size=[3]),
                 b=torch.zeros(3),
                 batch_size=[3],
+                device=device,
             )
 
         dense = make()
@@ -884,6 +886,10 @@ class TestNonTensorData:
             else:
                 assert x == y == "s0"
         assert lazy["b"].tolist() == [0.0, 0.0, 0.0]
+        # each member keeps the device of its entries
+        for member in lazy.tensordicts:
+            assert member.get("a").device == member.device
+        assert lazy.to_tensordict().get("a").tolist() == result
 
     def test_set_at_scalar_no_batch_dims(self):
         # A member of a lazy stack writes a scalar into its non-tensor entry
