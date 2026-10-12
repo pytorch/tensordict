@@ -2524,8 +2524,16 @@ _FOREACH_PER_TENSOR_OPS = {
 }
 
 
+def _any_unbatched(tensors) -> bool:
+    # A loop is faster than any() over a generator for short lists.
+    for tensor in tensors:
+        if type(tensor) is not Tensor and _is_unbatched(tensor):
+            return True
+    return False
+
+
 def _foreach(name: str, tensors, *args, **kwargs):
-    """Calls ``torch._foreach_<name>(tensors, *args, **kwargs)``, one tensor at a time under torch.func.
+    """Calls ``torch._foreach_<name>(tensors, *args, **kwargs)``, one tensor at a time under torch.func or with an unbatched tensor.
 
     functorch has no batching rule for the ``_foreach`` ops, so inside any
     ``torch.func`` transform (``vmap``, ``grad``, ``jacrev``, ``functionalize``,
@@ -2533,10 +2541,18 @@ def _foreach(name: str, tensors, *args, **kwargs):
     without ``vmap``, such as ``grad`` alone, the ``_foreach`` ops would work,
     but they also run one op per tensor. A list or tuple in ``args`` gives one
     value per tensor; any other value is used for every tensor.
+
+    The same per-tensor path is taken when ``tensors`` or a list in ``args``
+    holds an unbatched tensor (e.g. :class:`~tensordict.UnbatchedTensor`): its
+    ``__torch_dispatch__`` would handle the whole ``_foreach`` call and wrap
+    every output in an unbatched tensor of one batch size.
     """
     # Dynamo folds the depth to a guarded constant. Do not test
     # ``peek_interpreter_stack() is None``: Dynamo evaluates it as False.
-    if torch._C._functorch.get_dynamic_layer_stack_depth() == 0:
+    if torch._C._functorch.get_dynamic_layer_stack_depth() == 0 and not (
+        _any_unbatched(tensors)
+        or any(isinstance(arg, (list, tuple)) and _any_unbatched(arg) for arg in args)
+    ):
         return getattr(torch, "_foreach_" + name)(tensors, *args, **kwargs)
     op = _FOREACH_PER_TENSOR_OPS.get(name) or getattr(torch.Tensor, name)
     per_tensor_args = [
