@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from typing import Sequence
+
 import torch
 from tensordict.base import TensorDictBase
 
@@ -136,6 +138,7 @@ def from_dict(
     batch_dims: int | None = None,
     device: torch.device | None = None,
     batch_size: torch.Size | None = None,
+    names: Sequence[str] | None = None,
 ) -> "TensorDictBase":
     """Converts a dictionary to a TensorDict.
 
@@ -193,15 +196,16 @@ def from_dict(
         batch_dims=batch_dims,
         device=device,
         batch_size=batch_size,
+        names=names,
     )
 
 
 def from_h5(
     h5_file,
     *,
+    mode: str = "r",
     auto_batch_size: bool = False,
     batch_dims: int | None = None,
-    device: torch.device | None = None,
     batch_size: torch.Size | None = None,
 ) -> "TensorDictBase":
     """Converts an HDF5 file to a TensorDict.
@@ -212,9 +216,9 @@ def from_h5(
 
     return TensorDict.from_h5(
         h5_file,
+        mode=mode,
         auto_batch_size=auto_batch_size,
         batch_dims=batch_dims,
-        device=device,
         batch_size=batch_size,
     )
 

@@ -43,14 +43,14 @@ def from_module(
     as_module: bool = False,
     lock: bool = True,
     use_state_dict: bool = False,
+    filter_empty: bool = True,
 ):
     """Puts the parameters and buffers of a module in a tensordict.
 
     Same as :meth:`tensordict.TensorDict.from_module`, except for the default
     of ``lock``: this function locks the result by default, and the method
-    does not (see #1954). This function does not take ``filter_empty``. The
-    entries are the parameters and buffers of the module
-    themselves, not copies. Submodules become nested tensordicts.
+    does not (see #1954). The entries are the parameters and buffers of the
+    module themselves, not copies. Submodules become nested tensordicts.
 
     Args:
         module (nn.Module): the module to get the parameters from.
@@ -64,6 +64,10 @@ def from_module(
             module is used and unflattened into a TensorDict with the tree
             structure of the model. Use it when the module has state-dict
             hooks. Defaults to ``False``.
+        filter_empty (bool, optional): if ``True``, submodules without
+            parameters or buffers (``nn.ReLU``, for example) get no entry.
+            If ``False``, they get an empty tensordict. Defaults to
+            ``True``.
 
     Returns:
         a :class:`~tensordict.TensorDict`, or a
@@ -81,7 +85,11 @@ def from_module(
 
     """
     return _tensordict_cls().from_module(
-        module=module, as_module=as_module, lock=lock, use_state_dict=use_state_dict
+        module=module,
+        as_module=as_module,
+        lock=lock,
+        use_state_dict=use_state_dict,
+        filter_empty=filter_empty,
     )
 
 
@@ -240,18 +248,16 @@ def stack(input: Sequence["T"], dim: int = 0, *, out=None) -> "T":
     return torch.stack(input, dim=dim, out=out)
 
 
-def lazy_stack(input: Sequence["T"], dim: int = 0, *, out=None) -> "T":
+def lazy_stack(input: Sequence["T"], dim: int = 0, *, out=None, **kwargs) -> "T":
     """Stacks tensordicts in a :class:`~tensordict.LazyStackedTensorDict`.
 
     The result keeps each input as a separate tensordict, so the inputs can
     have different keys, entry shapes and batch sizes. Use it for data whose
     size changes from one sample to the next. :ref:`stacking` compares this
     function with :func:`~tensordict.stack` and
-    :func:`~tensordict.maybe_dense_stack`.
-
-    This function takes only ``dim`` and ``out``. For the other arguments
-    (``stack_dim_name``, ``strict_shape``), call
-    :meth:`tensordict.LazyStackedTensorDict.lazy_stack` (see #1954).
+    :func:`~tensordict.maybe_dense_stack`. Same as
+    :meth:`tensordict.LazyStackedTensorDict.lazy_stack`, which takes the same
+    arguments.
 
     Args:
         input (sequence of TensorDictBase or tensorclass instances): the
@@ -263,6 +269,10 @@ def lazy_stack(input: Sequence["T"], dim: int = 0, *, out=None) -> "T":
     Keyword Args:
         out (TensorDictBase, optional): a lazy stack to write the result
             into. Its batch size must be the stacked batch size.
+        stack_dim_name (str, optional): a name for the stacked dimension.
+        strict_shape (bool, optional): if ``True``, the batch sizes of the
+            inputs must be equal, or a ``RuntimeError`` is raised. Defaults
+            to ``False``.
 
     Returns:
         a :class:`~tensordict.LazyStackedTensorDict`. Tensorclass inputs give
@@ -284,7 +294,7 @@ def lazy_stack(input: Sequence["T"], dim: int = 0, *, out=None) -> "T":
         torch.Size([4])
 
     """
-    return _tensordict_cls().lazy_stack(input, dim=dim, out=out)
+    return _tensordict_cls().lazy_stack(input, dim=dim, out=out, **kwargs)
 
 
 def cat(input: Sequence["T"], dim: int = 0, *, out=None) -> "T":
@@ -431,15 +441,15 @@ def load(
     *,
     out: TensorCollection | None = None,
     robust_key: bool | None = True,
-    allow_pickle: bool | None = None,
+    subpath: NestedKey | None = None,
     mode: str | None = None,
+    num_threads: int = 0,
+    allow_pickle: bool | None = None,
 ) -> TensorCollection:
     """Loads a tensordict that :func:`~tensordict.save` wrote.
 
     Same as :func:`~tensordict.load_memmap`, which takes the same arguments.
-    Unlike :meth:`tensordict.TensorDict.load_memmap`, it does not take
-    ``subpath`` or ``num_threads`` (see #1954). See
-    :meth:`tensordict.TensorDict.load_memmap` for every argument, and
+    See :meth:`tensordict.TensorDict.load_memmap` for every argument, and
     :ref:`saving` for the ways to save and load a tensordict.
 
     Args:
@@ -454,13 +464,19 @@ def load(
         out (TensorDictBase, optional): a tensordict to load the data into.
         robust_key (bool, optional): must match the value used to save.
             Defaults to ``True``.
-        allow_pickle (bool, optional): if ``True``, non-tensor entries that
-            were pickled are unpickled. Only load pickles from trusted
-            sources.
+        subpath (NestedKey or str, optional): the nested tensordict to load,
+            as a nested key (``("module", "0")``) or a ``"/"``-separated path
+            (``"module/0"``). Only that subtree is read.
         mode (str, optional): ``"r"`` maps the files copy-on-write (in-place
             writes stay in memory), ``"r+"`` maps them shared (in-place writes
             reach the files). See :meth:`tensordict.TensorDict.load_memmap`
             for the default.
+        num_threads (int, optional): the number of threads that decompress
+            the leaves of a compressed archive. It has no effect on other
+            data. Defaults to ``0``.
+        allow_pickle (bool, optional): if ``True``, non-tensor entries that
+            were pickled are unpickled. Only load pickles from trusted
+            sources.
 
     Returns:
         the saved tensordict, of the class it had when it was saved. Its
@@ -485,8 +501,10 @@ def load(
         non_blocking=non_blocking,
         out=out,
         robust_key=robust_key,
-        allow_pickle=allow_pickle,
+        subpath=subpath,
         mode=mode,
+        num_threads=num_threads,
+        allow_pickle=allow_pickle,
     )
 
 
@@ -497,16 +515,17 @@ def load_memmap(
     *,
     out: TensorCollection | None = None,
     robust_key: bool | None = True,
-    allow_pickle: bool | None = None,
+    subpath: NestedKey | None = None,
     mode: str | None = None,
+    num_threads: int = 0,
+    allow_pickle: bool | None = None,
 ) -> TensorCollection:
     """Loads a memory-mapped tensordict from disk.
 
     Same as :func:`~tensordict.load`, and as
     :meth:`tensordict.TensorDict.load_memmap`, which holds the full text of
-    every argument. That method also takes ``subpath`` and ``num_threads``,
-    which this function does not take (see #1954).
-    See :ref:`saving` for the ways to save and load a tensordict.
+    every argument. See :ref:`saving` for the ways to save and load a
+    tensordict.
 
     Args:
         prefix (str or Path): the directory, or the ``.tdz`` archive file,
@@ -520,13 +539,19 @@ def load_memmap(
         out (TensorDictBase, optional): a tensordict to load the data into.
         robust_key (bool, optional): must match the value used to save.
             Defaults to ``True``.
-        allow_pickle (bool, optional): if ``True``, non-tensor entries that
-            were pickled are unpickled. Only load pickles from trusted
-            sources.
+        subpath (NestedKey or str, optional): the nested tensordict to load,
+            as a nested key (``("module", "0")``) or a ``"/"``-separated path
+            (``"module/0"``). Only that subtree is read.
         mode (str, optional): ``"r"`` maps the files copy-on-write (in-place
             writes stay in memory), ``"r+"`` maps them shared (in-place writes
             reach the files). See :meth:`tensordict.TensorDict.load_memmap`
             for the default.
+        num_threads (int, optional): the number of threads that decompress
+            the leaves of a compressed archive. It has no effect on other
+            data. Defaults to ``0``.
+        allow_pickle (bool, optional): if ``True``, non-tensor entries that
+            were pickled are unpickled. Only load pickles from trusted
+            sources.
 
     Returns:
         the saved tensordict, of the class it had when it was saved. Its
@@ -551,8 +576,10 @@ def load_memmap(
         non_blocking=non_blocking,
         out=out,
         robust_key=robust_key,
-        allow_pickle=allow_pickle,
+        subpath=subpath,
         mode=mode,
+        num_threads=num_threads,
+        allow_pickle=allow_pickle,
     )
 
 
@@ -565,16 +592,18 @@ def save(
     return_early: bool = False,
     share_non_tensor: bool = False,
     robust_key: bool | None = True,
+    archive: bool | None = None,
+    compression: str | int | None = None,
 ) -> TensorCollection:
     """Saves a tensordict to disk, as memory-mapped files.
 
     Same as :func:`~tensordict.memmap`, and as
     :meth:`~tensordict.TensorDictBase.memmap`, which holds the full text of
-    every argument. That method also takes ``archive`` and ``compression``,
-    which this function does not take (see #1954). The directory mirrors the key structure of the tensordict: one file per
-    tensor and one metadata file per nested tensordict. If ``prefix`` ends
-    with ``".tdz"``, a single archive file is written instead. Load the
-    result with :func:`~tensordict.load`. See :ref:`saving`.
+    every argument. The directory mirrors the key structure of the
+    tensordict: one file per tensor and one metadata file per nested
+    tensordict. If ``prefix`` ends with ``".tdz"``, a single archive file is
+    written instead. Load the result with :func:`~tensordict.load`. See
+    :ref:`saving`.
 
     Args:
         data (TensorDictBase or tensorclass instance): the tensordict to save.
@@ -595,6 +624,16 @@ def save(
         robust_key (bool, optional): if ``True``, keys that hold path
             separators or special characters are encoded in the file names.
             Defaults to ``True``.
+        archive (bool, optional): if ``True``, ``prefix`` is a file and the
+            tensordict is written as a single zip archive that
+            :func:`~tensordict.load` can memory-map. If ``None``, an archive
+            is written when ``prefix`` ends with ``".tdz"``. Defaults to
+            ``None``.
+        compression (str or int, optional): the compression of the archive
+            entries: ``"stored"``, ``"deflate"``, ``"bzip2"``, ``"lzma"`` or a
+            :mod:`zipfile` constant. Only valid for an archive. Defaults to
+            ``None``, which stores them uncompressed. Only uncompressed
+            entries load without a copy.
 
     Returns:
         a new, locked tensordict whose leaves are
@@ -621,6 +660,8 @@ def save(
         return_early=return_early,
         share_non_tensor=share_non_tensor,
         robust_key=robust_key,
+        archive=archive,
+        compression=compression,
     )
 
 
@@ -632,14 +673,16 @@ def memmap(
     num_threads: int = 0,
     return_early: bool = False,
     share_non_tensor: bool = False,
+    existsok: bool = True,
     robust_key: bool | None = True,
+    archive: bool | None = None,
+    compression: str | int | None = None,
 ) -> TensorCollection:
     """Writes all tensors onto memory-mapped tensors in a new tensordict.
 
     Same as :func:`~tensordict.save`, and as
     :meth:`~tensordict.TensorDictBase.memmap`, which holds the full text of
-    every argument and also takes ``archive`` and ``compression`` (see
-    #1954). Use it to share a tensordict between processes without
+    every argument. Use it to share a tensordict between processes without
     copies, or to keep data that is larger than RAM on disk. To convert the
     tensordict in place, use :meth:`~tensordict.TensorDictBase.memmap_`.
     See :ref:`saving` and :ref:`data-loading`.
@@ -660,9 +703,21 @@ def memmap(
             a future of the result is returned. Defaults to ``False``.
         share_non_tensor (bool, optional): if ``True``, non-tensor entries are
             shared between the processes of a node. Defaults to ``False``.
+        existsok (bool, optional): if ``False``, a tensor file that already
+            exists under ``prefix`` raises an error. Defaults to ``True``.
         robust_key (bool, optional): if ``True``, keys that hold path
             separators or special characters are encoded in the file names.
             Defaults to ``True``.
+        archive (bool, optional): if ``True``, ``prefix`` is a file and the
+            tensordict is written as a single zip archive that
+            :func:`~tensordict.load` can memory-map. If ``None``, an archive
+            is written when ``prefix`` ends with ``".tdz"``. Defaults to
+            ``None``.
+        compression (str or int, optional): the compression of the archive
+            entries: ``"stored"``, ``"deflate"``, ``"bzip2"``, ``"lzma"`` or a
+            :mod:`zipfile` constant. Only valid for an archive. Defaults to
+            ``None``, which stores them uncompressed. Only uncompressed
+            entries load without a copy.
 
     Returns:
         a new, locked tensordict whose leaves are
@@ -686,7 +741,10 @@ def memmap(
         num_threads=num_threads,
         return_early=return_early,
         share_non_tensor=share_non_tensor,
+        existsok=existsok,
         robust_key=robust_key,
+        archive=archive,
+        compression=compression,
     )
 
 

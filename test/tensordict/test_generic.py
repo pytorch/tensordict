@@ -1606,17 +1606,108 @@ class TestGeneric:
         assert (out == td).all()
 
     @pytest.mark.skipif(not _has_h5py, reason="h5py not installed")
-    @pytest.mark.xfail(
-        strict=True,
-        raises=TypeError,
-        reason="tensordict.from_h5 passes device to TensorDict.from_h5 (#1942)",
-    )
     def test_module_level_from_h5(self, tmp_path):
+        # https://github.com/pytorch/tensordict/issues/1942
         path = tmp_path / "data.h5"
         with h5py.File(path, "w") as file:
             file["a"] = np.arange(3)
         out = tensordict.from_h5(path)
         assert (out["a"] == torch.arange(3)).all()
+        out.close()
+        out = tensordict.from_h5(path, mode="r+", batch_size=[3])
+        assert out.batch_size == (3,)
+        out["a"] = torch.zeros(3, dtype=torch.long)
+        out.close()
+        out = tensordict.from_h5(path)
+        assert (out["a"] == 0).all()
+        out.close()
+
+    # Module-level function -> (the TensorDict method it forwards to, the
+    # parameters whose default may differ). The two defaults that differ are
+    # left to https://github.com/pytorch/tensordict/issues/1954.
+    _MODULE_FUNCTION_TARGETS = {
+        "from_any": ("from_any", ()),
+        "from_consolidated": ("from_consolidated", ()),
+        "from_csv": ("from_csv", ()),
+        "from_dict": ("from_dict", ("auto_batch_size",)),
+        "from_h5": ("from_h5", ()),
+        "from_json": ("from_json", ()),
+        "from_module": ("from_module", ("lock",)),
+        "from_modules": ("from_modules", ()),
+        "from_namedtuple": ("from_namedtuple", ()),
+        "from_pandas": ("from_pandas", ()),
+        "from_parquet": ("from_parquet", ()),
+        "from_pytree": ("from_pytree", ()),
+        "from_struct_array": ("from_struct_array", ()),
+        "from_tuple": ("from_tuple", ()),
+        "from_zarr": ("from_zarr", ()),
+        "fromkeys": ("fromkeys", ()),
+        "lazy_stack": ("lazy_stack", ()),
+        # TensorDict.load takes (prefix, *args, **kwargs) and calls load_memmap.
+        "load": ("load_memmap", ()),
+        "load_memmap": ("load_memmap", ()),
+        "maybe_dense_stack": ("maybe_dense_stack", ()),
+        "memmap": ("memmap", ()),
+        "save": ("save", ()),
+    }
+
+    @pytest.mark.parametrize("name", sorted(_MODULE_FUNCTION_TARGETS))
+    def test_module_level_signature(self, name):
+        # https://github.com/pytorch/tensordict/issues/1954
+        target_name, defaults_may_differ = self._MODULE_FUNCTION_TARGETS[name]
+        # The first parameter is the input (``data`` where the method has
+        # ``self``), and some functions name it differently.
+        function_params = list(
+            inspect.signature(getattr(tensordict, name)).parameters.values()
+        )[1:]
+        target_params = list(
+            inspect.signature(getattr(TensorDict, target_name)).parameters.values()
+        )[1:]
+        function_params = {p.name: p for p in function_params}
+        target_params = {p.name: p for p in target_params}
+        function_var_kw = any(p.kind is p.VAR_KEYWORD for p in function_params.values())
+        target_var_kw = any(p.kind is p.VAR_KEYWORD for p in target_params.values())
+        assert function_var_kw or not target_var_kw
+        for param_name, param in target_params.items():
+            if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
+                continue
+            if param_name not in function_params:
+                assert function_var_kw, param_name
+                continue
+            assert function_params[param_name].kind == param.kind, param_name
+            if param_name not in defaults_may_differ:
+                assert function_params[param_name].default == param.default, param_name
+        for param_name, param in function_params.items():
+            if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
+                continue
+            assert param_name in target_params or target_var_kw, param_name
+
+    def test_module_level_forwards_arguments(self, tmp_path):
+        # https://github.com/pytorch/tensordict/issues/1954
+        td = TensorDict(a=torch.arange(3), nested={"b": torch.ones(3)}, batch_size=[3])
+        stacked = tensordict.lazy_stack([td, td], stack_dim_name="time")
+        assert stacked.names[0] == "time"
+
+        saved = tensordict.save(td, tmp_path / "saved.tdz", archive=True)
+        assert (saved == td).all()
+        nested = tensordict.load_memmap(
+            tmp_path / "saved.tdz", subpath="nested", num_threads=2
+        )
+        assert (nested["b"] == 1).all()
+        nested = tensordict.load(tmp_path / "saved.tdz", subpath=("nested",))
+        assert (nested["b"] == 1).all()
+
+        tensordict.memmap(td, tmp_path / "memmap")
+        with pytest.raises(RuntimeError, match="already exists"):
+            tensordict.memmap(td, tmp_path / "memmap", existsok=False)
+
+        module = nn.Sequential(nn.Linear(2, 3), nn.ReLU())
+        assert "1" not in tensordict.from_module(module).keys()
+        assert "1" in tensordict.from_module(module, filter_empty=False).keys()
+        out = tensordict.from_dict(
+            {"a": torch.zeros(3)}, batch_size=[3], names=["time"]
+        )
+        assert out.names == ["time"]
 
     def test_from_dataclass(self):
         @dataclass
