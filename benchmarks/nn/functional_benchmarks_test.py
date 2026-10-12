@@ -6,7 +6,6 @@
 
 # we use deepcopy as our implementation modifies the modules in-place
 import argparse
-import warnings
 from copy import deepcopy
 
 import pytest
@@ -375,12 +374,6 @@ def test_to_module_plain_tensor_speed(benchmark, preserve_module_state):
         if preserve_module_state is None
         else {"preserve_module_state": preserve_module_state}
     )
-    if preserve_module_state is None:
-        warnings.filterwarnings(
-            "ignore",
-            message="TensorDict.to_module\\(\\) is replacing an existing nn.Parameter",
-            category=FutureWarning,
-        )
 
     def func(params=params, module=module, kwargs=kwargs):
         with params.to_module(module, **kwargs):
