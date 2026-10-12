@@ -1,10 +1,10 @@
 """
-Slicing, indexing and masking
-=============================
+Slicing, indexing, and masking
+==============================
 **Author**: `Tom Begley <https://github.com/tcbegley>`_
 
 One index on a :class:`~tensordict.TensorDict` indexes every tensor in it in
-the same way. If you now index the images, the labels and the weights of a
+the same way. If you now index the images, the labels, and the weights of a
 batch one by one, one index replaces these lines. This tutorial is for
 readers who know how to index a :class:`torch.Tensor`.
 
@@ -110,7 +110,7 @@ assert masked_tensordict["a"].shape == torch.Size([6, 5])
 # Conclusion
 # ----------
 #
-# You can now index, slice and mask a :class:`~tensordict.TensorDict` as you
+# You can now index, slice, and mask a :class:`~tensordict.TensorDict` as you
 # do a tensor, and write a tensordict into another one with an index. An index
 # or a mask applies to the batch dimensions of every entry, and keeps the
 # other dimensions. The same indexing works on a
@@ -120,7 +120,7 @@ assert masked_tensordict["a"].shape == torch.Size([6, 5])
 # Further reading
 # ---------------
 #
-# - :ref:`batch-size` explains batch sizes, shapes and indexing.
+# - :ref:`batch-size` explains batch sizes, shapes, and indexing.
 # - :ref:`sphx_glr_tutorials_tensordict_shapes.py` shows the other shape
 #   operations: reshape, split, stack, permute.
 # - :ref:`sphx_glr_tutorials_tensordict_preallocation.py` fills an empty

@@ -209,7 +209,7 @@ assert (loaded == tensordict).all()
 # Further reading
 # ---------------
 #
-# - :ref:`devices` explains devices, dtypes and memory.
+# - :ref:`devices` explains devices, dtypes, and memory.
 # - :ref:`saving` explains all the ways to save and load tensordicts.
 # - :ref:`storage` explains how to work with datasets that do not fit in RAM.
 # - :ref:`sphx_glr_tutorials_tensorclass_imagenet.py` loads an image dataset
