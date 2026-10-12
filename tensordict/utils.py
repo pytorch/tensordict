@@ -2525,9 +2525,12 @@ _FOREACH_PER_TENSOR_OPS = {
 
 
 def _any_unbatched(tensors) -> bool:
-    # A loop is faster than any() over a generator for short lists.
+    # A loop is faster than any() over a generator for short lists. The class
+    # attribute is read directly, as in _is_unbatched, which is slower per call
+    # for the nn.Parameter leaves of TensorDictParams.
     for tensor in tensors:
-        if type(tensor) is not Tensor and _is_unbatched(tensor):
+        cls = type(tensor)
+        if cls is not Tensor and getattr(cls, "_pass_through", False):
             return True
     return False
 
