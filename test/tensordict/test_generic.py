@@ -695,6 +695,28 @@ class TestGeneric:
             td.to("meta", batch_size=[5])
         assert td.batch_size == (2,)
 
+    def test_to_device_batch_size_nested_only(self):
+        # When the device changes and the root holds only nested tensordicts,
+        # their leaves are checked against the new batch size too (#2324)
+        td = TensorDict(
+            nested=TensorDict(a=torch.zeros(2, 3), batch_size=[2]), batch_size=[2]
+        )
+        with pytest.raises(RuntimeError, match="incompatible with the batch-size"):
+            td.to("meta", batch_size=[5])
+        result = td.to("meta", batch_size=[2, 3])
+        assert result.batch_size == (2, 3)
+        assert result["nested"].batch_size == (2, 3)
+        assert result["nested", "a"].device == torch.device("meta")
+        td = TensorDict(
+            nested=lazy_stack(
+                [TensorDict(a=torch.zeros(3)), TensorDict(a=torch.zeros(3))]
+            ),
+            batch_size=[2],
+        )
+        result = td.to("meta", batch_size=[2, 3])
+        assert result.batch_size == (2, 3)
+        assert result["nested"].batch_size == (2, 3)
+
     @pytest.mark.parametrize("consolidated", [False, True])
     def test_to_batch_size_unchanged(self, consolidated, monkeypatch):
         td = TensorDict(a=torch.zeros(2, 3), batch_size=[2], device="cpu")

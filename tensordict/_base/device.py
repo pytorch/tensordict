@@ -40,10 +40,25 @@ from tensordict.utils import (
     _PIN_MEM_TIMEOUT,
     _zip_strict,
     DeviceType,
+    is_non_tensor,
+    is_tensorclass,
 )
 from torch import Tensor
 from torch._utils import _get_available_device_type, _get_device_module
 from torch.nn.parameter import Parameter
+
+
+def _check_nested_batch_size(td) -> None:
+    # Checks the leaves of td and of its nested tensordicts against their batch
+    # sizes. Lazy stacks take their batch size from their parts.
+    if is_tensorclass(td):
+        td = td._tensordict
+    if td._lazy:
+        return
+    td._check_new_batch_size(td.batch_size)
+    for value in td.values():
+        if _is_tensor_collection(type(value)) and not is_non_tensor(value):
+            _check_nested_batch_size(value)
 
 
 class _DeviceOps:
@@ -709,6 +724,10 @@ class _DeviceOps:
                         propagate_lock=True,
                         **apply_kwargs,
                     )
+                if batch_size is not None:
+                    # _fast_apply gives every nested tensordict the new batch
+                    # size without checking its leaves
+                    _check_nested_batch_size(result)
 
         if batch_size is not None:
             result.batch_size = batch_size

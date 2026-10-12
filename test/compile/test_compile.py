@@ -827,6 +827,24 @@ class TestTD:
         assert result.batch_size == torch.Size(batch_size)
         torch.testing.assert_close(result["a"], torch.zeros(2, 3))
 
+    @pytest.mark.parametrize("batch_size", [[2], [2, 3], [5]])
+    def test_to_batch_size_new_device(self, mode, batch_size):
+        def to_meta(td):
+            return td.to("meta", batch_size=batch_size)
+
+        td = TensorDict(
+            nested=TensorDict(a=torch.zeros(2, 3), batch_size=[2]), batch_size=[2]
+        )
+        to_meta_c = torch.compile(to_meta, fullgraph=True, mode=mode)
+        if batch_size == [5]:
+            with pytest.raises(RuntimeError, match="incompatible with the batch-size"):
+                to_meta_c(td)
+            return
+        result = to_meta_c(td)
+        assert result.batch_size == torch.Size(batch_size)
+        assert result["nested"].batch_size == torch.Size(batch_size)
+        assert result["nested", "a"].device == torch.device("meta")
+
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="cuda required")
     def test_to_cpu_from_cuda(self, mode):
         def to_cpu(td):
