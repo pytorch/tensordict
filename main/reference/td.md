@@ -345,7 +345,7 @@ Arithmetic
 | [`TensorDictBase.add_`](generated/tensordict.TensorDictBase.add_.html#tensordict.TensorDictBase.add_)(other, *[, alpha]) | In-place version of [`add()`](generated/tensordict.TensorDictBase.add.html#tensordict.TensorDictBase.add). |
 | [`TensorDictBase.sub`](generated/tensordict.TensorDictBase.sub.html#tensordict.TensorDictBase.sub)(other, *[, alpha, default]) | Subtracts `other`, scaled by `alpha`, from `self`. |
 | [`TensorDictBase.sub_`](generated/tensordict.TensorDictBase.sub_.html#tensordict.TensorDictBase.sub_)(other[, alpha]) | In-place version of [`sub()`](generated/tensordict.TensorDictBase.sub.html#tensordict.TensorDictBase.sub). |
-| [`TensorDictBase.rsub`](generated/tensordict.TensorDictBase.rsub.html#tensordict.TensorDictBase.rsub)(other, *[, alpha, default]) | Subtracts `self` from `other` scaled by `alpha`, leaf by leaf. |
+| [`TensorDictBase.rsub`](generated/tensordict.TensorDictBase.rsub.html#tensordict.TensorDictBase.rsub)(other, *[, alpha, default]) | Subtracts `self`, scaled by `alpha`, from `other`, leaf by leaf. |
 | [`TensorDictBase.mul`](generated/tensordict.TensorDictBase.mul.html#tensordict.TensorDictBase.mul)(other, *[, default]) | Multiplies `other` to `self`. |
 | [`TensorDictBase.mul_`](generated/tensordict.TensorDictBase.mul_.html#tensordict.TensorDictBase.mul_)(other) | In-place version of [`mul()`](generated/tensordict.TensorDictBase.mul.html#tensordict.TensorDictBase.mul). |
 | [`TensorDictBase.div`](generated/tensordict.TensorDictBase.div.html#tensordict.TensorDictBase.div)(other, *[, default]) | Divides each element of the input `self` by the corresponding element of `other`. |
