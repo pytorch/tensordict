@@ -2122,6 +2122,39 @@ class TestUnbatchedTensor:
         assert u.data_ptr() == data.data_ptr()
         assert (u == 7).all()
 
+    @pytest.mark.parametrize(
+        "index",
+        [
+            0,
+            slice(0, 2),
+            (slice(None), slice(0, 2)),
+            ...,
+            torch.tensor([0, 2]),
+            torch.tensor([True, False, True, False]),
+        ],
+    )
+    def test_unbatched_setitem_partial_index(self, index):
+        # #2251: the whole batch shares the payload, so td[index] = value
+        # writes it whole, as td[:] = value does
+        data = torch.zeros(5)
+        td = TensorDict(
+            a=torch.zeros(4, 3),
+            u=UnbatchedTensor(data),
+            nested=TensorDict(u=UnbatchedTensor(torch.zeros(2)), batch_size=[4, 3]),
+            batch_size=[4, 3],
+        )
+        value = td[index].clone()
+        value["a"] += 1
+        value["u"] += 7
+        value["nested", "u"] += 3
+        td[index] = value
+        assert (td["a"][index] == 1).all()
+        u = td.get("u")
+        assert isinstance(u, UnbatchedTensor)
+        assert u.data_ptr() == data.data_ptr()
+        assert (u == 7).all()
+        assert (td["nested", "u"] == 3).all()
+
     @pytest.mark.parametrize("nested", [False, True])
     @pytest.mark.parametrize(
         "method", ["memmap", "memmap_", "memmap_threads", "save", "consolidate"]

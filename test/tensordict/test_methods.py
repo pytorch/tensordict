@@ -447,12 +447,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_broadcast(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if td_name == "td_with_unbatched":
-            # UnbatchedTensor indexed assignment not yet implemented
-            pytest.skip(
-                "UnbatchedTensor broadcast/indexed assignment not yet implemented"
-            )
-            return
         sub_td = td[:, :2].to_tensordict(retain_none=True)
         sub_td.zero_()
         sub_dict = sub_td.to_dict()
@@ -3268,14 +3262,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_setitem(self, td_name, device, idx):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if td_name == "td_with_unbatched":
-            # UnbatchedTensor indexed assignment requires special handling:
-            # the internal _tensordict has batch_size=[] which mismatches during assignment
-            pytest.skip(
-                "UnbatchedTensor indexed assignment not yet implemented "
-                "(internal _tensordict batch_size mismatch)"
-            )
-            return
         if isinstance(idx, torch.Tensor) and idx.numel() > 1 and td.shape[0] == 1:
             pytest.skip("cannot index tensor with desired index")
 
