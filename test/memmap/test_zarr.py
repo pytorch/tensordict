@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import pickle
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -339,6 +340,26 @@ class TestZarrWriteOps:
     def test_del(self, ztd):
         ztd.del_("a")
         assert "a" not in ztd.keys()
+
+    @pytest.mark.parametrize("key", ["a", "b", ("b", "c")])
+    def test_del_existing_key_does_not_warn(self, ztd, key):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            ztd.del_(key)
+        assert key not in ztd.keys(True)
+
+    @pytest.mark.parametrize("key", ["missing", ("b", "missing")])
+    def test_del_missing_key_warns(self, ztd, key):
+        # https://github.com/pytorch/tensordict/issues/2062
+        with pytest.warns(
+            FutureWarning,
+            match=r"del_ of a missing key .* Starting with TensorDict 0\.17, the "
+            r"default will change to raising a KeyError",
+        ) as record:
+            assert ztd.del_(key) is ztd
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert set(ztd.keys(True, True)) == {"a", ("b", "c")}
 
     def test_rename_key(self, ztd):
         ztd.rename_key_("a", "a2")

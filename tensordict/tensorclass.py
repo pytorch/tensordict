@@ -78,6 +78,8 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _td_fields,
     _TENSORCLASS_MEMO,
     _unravel_key_to_tuple,
+    _UPDATE_IGNORE_LOCK_WARNED,
+    _warn_update_ignore_lock,
     _zip_strict,
     capture_non_tensor_stack,
     DeviceType,
@@ -3171,6 +3173,8 @@ def _update(
     is_leaf: Callable[[Type], bool] | None = None,
     **kwargs,
 ):
+    if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
+        ignore_lock = _warn_update_ignore_lock()
     if kwargs:
         if input_dict_or_td is None:
             input_dict_or_td = kwargs
@@ -5151,6 +5155,8 @@ class NonTensorDataBase(TensorClass):
         ignore_lock: bool = False,
         **kwargs,
     ) -> T:
+        if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
+            ignore_lock = _warn_update_ignore_lock()
         if kwargs:
             raise TypeError(
                 f"{type(self).__name__}.update() does not accept keyword-argument "
@@ -6553,6 +6559,8 @@ class NonTensorStack(LazyStackedTensorDict):
         ignore_lock: bool = False,
         **kwargs,
     ) -> T:
+        if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
+            ignore_lock = _warn_update_ignore_lock()
         if kwargs:
             raise TypeError(
                 f"{type(self).__name__}.update() does not accept keyword-argument "

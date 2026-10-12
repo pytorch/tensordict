@@ -1314,7 +1314,10 @@ class _Serialization:
             # This archive was created by this process from the in-memory
             # object, so reloading its arbitrary non-tensor fields is trusted.
             return TensorDictBase.load_memmap(prefix, mode="r+", allow_pickle=True)
-        prefix = Path(prefix) if prefix is not None else self._memmap_prefix
+        # Without a prefix, the result lives in new anonymous memory: falling
+        # back to self._memmap_prefix would reopen the source's files.
+        if prefix is not None:
+            prefix = Path(prefix)
         if num_threads > 1:
             executor = _get_shared_executor(num_threads)
             futures = []

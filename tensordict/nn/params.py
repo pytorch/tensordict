@@ -48,6 +48,8 @@ from tensordict.utils import (
     _erase_cache_first,
     _lock_blocked,
     _LOCK_ERROR,
+    _UPDATE_IGNORE_LOCK_WARNED,
+    _warn_update_ignore_lock,
     _zip_strict,
     IndexType,
     is_batchedtensor,
@@ -592,6 +594,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         update_batch_size: bool = False,
         ignore_lock: bool = False,
     ) -> TensorDictBase:
+        if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
+            _warn_update_ignore_lock(stacklevel=3)
         # Deprecating this since _set_tuple will do it thx to the decorator
         # if not self.no_convert:
         #     func = _maybe_make_param
@@ -808,8 +812,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
         return TensorDictParams(self._param_td.apply(_clone), no_convert="skip")
 
+    # Override: TensorDict._chunk is faster than the generic split
     @_fallback
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]: ...
+    def _chunk(self, chunks: int, dim: int) -> tuple[TensorDictBase, ...]: ...
 
     @_fallback
     def _unbind(self, dim: int) -> tuple[TensorDictBase, ...]: ...
@@ -1377,7 +1382,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_apply_on_data
     def _stack_onto_at_(
         self,
-        key: NestedKey,
         list_item: list[CompatibleType],
         dim: int,
         idx: IndexType,

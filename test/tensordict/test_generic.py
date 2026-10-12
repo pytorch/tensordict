@@ -4554,6 +4554,21 @@ class TestGeneric:
         td.rename_key_(("a", "b", "c"), ("a", "b"))
         assert td["a", "b"] == 0
 
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_memmap_like_no_prefix_new_files(self, tmpdir, num_threads):
+        # Without a prefix, memmap_like must not reuse the files of a source
+        # memory-mapped under a prefix.
+        td = TensorDict(
+            a=torch.ones(3), nested=TensorDict(b=torch.ones(3, 2), batch_size=[3])
+        ).memmap(tmpdir)
+        like = td.memmap_like(num_threads=num_threads)
+        assert like.is_memmap()
+        assert (like == 0).all()
+        like["a"].fill_(5)
+        like["nested", "b"].fill_(5)
+        assert (td == 1).all()
+        assert (TensorDict.load_memmap(tmpdir) == 1).all()
+
     @set_list_to_stack(True)
     @set_capture_non_tensor_stack(False)
     @pytest.mark.parametrize("like", [True, False])
@@ -5116,6 +5131,26 @@ class TestGeneric:
                     ]
                     for piece in pieces:
                         assert piece["a"].shape == (*piece.batch_size, 4)
+
+    def test_chunk_arguments(self):
+        # every class shares one chunk: same checks, and numpy integers work
+        big = TensorDict({"a": torch.zeros(2, 5, 4)}, [2, 5])
+        cases = [
+            big[0],
+            big._get_sub_tensordict(0),
+            lazy_stack([big[0], big[1]]),
+            lazy_stack([big[0], big[1]], 1),
+        ]
+        for td in cases:
+            for chunks in (0, -1):
+                with pytest.raises(ValueError, match="strictly positive"):
+                    td.chunk(chunks)
+            pieces = td.chunk(np.int64(2), -1)
+            assert [p.batch_size for p in pieces] == [
+                r.shape for r in torch.zeros(td.batch_size).chunk(2, -1)
+            ]
+            for piece in pieces:
+                assert all(type(s) is int for s in piece.batch_size)
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_squeeze(self, device):
@@ -6330,6 +6365,52 @@ class TestGeneric:
         assert t["a", "b"].shape == torch.Size([2, 3, 1])
         t.update({"a": {"d": [[[1]] * 3] * 2}})
 
+    @pytest.mark.parametrize("lazy", [False, True])
+    def test_update_ignore_lock_deprecated(self, lazy):
+        # #2260: ignore_lock=True warns once per call, not once per nested
+        # tensordict, and otherwise behaves as before.
+        td = TensorDict({"a": torch.zeros(3), "n": {"b": {"c": torch.zeros(3)}}}, [3])
+        if lazy:
+            td = LazyStackedTensorDict(*td.unbind(0))
+        source = TensorDict({"a": torch.ones(3), "n": {"b": {"c": torch.ones(3)}}}, [3])
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^update\(ignore_lock=True\) is deprecated and will be removed in "
+            r"TensorDict 0\.17\. Use 'with td\.unlock_\(\): td\.update\(\.\.\.\)' instead\.$",
+        ) as record:
+            assert td.update(source, ignore_lock=True) is td
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert (td == source).all()
+
+        # On a locked tensordict, the call still raises for a new entry
+        td.lock_()
+        with (
+            pytest.warns(DeprecationWarning, match=r"ignore_lock=True") as record,
+            pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"),
+        ):
+            td.update({"d": torch.ones(3)}, ignore_lock=True)
+        assert len(record) == 1
+        with pytest.warns(DeprecationWarning, match=r"ignore_lock=True") as record:
+            td.update(source.zero_(), inplace=True, ignore_lock=True)
+        assert len(record) == 1
+        assert (td == 0).all()
+
+    @pytest.mark.parametrize("lazy", [False, True])
+    @pytest.mark.parametrize("ignore_lock", [None, False])
+    def test_update_ignore_lock_not_deprecated(self, lazy, ignore_lock):
+        td = TensorDict({"a": torch.zeros(3), "n": {"b": {"c": torch.zeros(3)}}}, [3])
+        if lazy:
+            td = LazyStackedTensorDict(*td.unbind(0))
+        source = TensorDict({"a": torch.ones(3), "n": {"b": {"c": torch.ones(3)}}}, [3])
+        kwargs = {} if ignore_lock is None else {"ignore_lock": ignore_lock}
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            td.update(source, **kwargs)
+            td.lock_()
+            td.update(source.zero_(), inplace=True, **kwargs)
+        assert (td == 0).all()
+
     @pytest.mark.parametrize("method", ["set", "update", "update_td", "update_kwargs"])
     @pytest.mark.parametrize("nested", [False, True])
     @pytest.mark.parametrize("device", [None, "cpu", "meta"])
@@ -6390,6 +6471,14 @@ class TestGeneric:
         td.set("x", value)
         td.update({"y": value})
         assert (td["x"] == 1).all() and (td["y"] == 1).all()
+
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_where_out_without_leaves(self, nested):
+        # A result without leaves leaves out alone, even if it is locked
+        td = TensorDict({"a": TensorDict(batch_size=[3])} if nested else {}, [3])
+        mask = torch.tensor([True, False, True])
+        out = td.clone().lock_()
+        assert td.where(mask, 0, out=out) is out
 
     def test_zero_grad_module(self):
         x = torch.randn(3, 3)

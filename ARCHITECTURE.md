@@ -170,7 +170,7 @@ are `torch.Tensor` subclasses that a tensordict can store as entries.
 `TensorDictBase` marks its backend-specific methods with
 `@abc.abstractmethod`: the storage hooks (`_get_str`, `_set_str`, ...),
 the shape operations (`_view`, `_permute`, `_unsqueeze`, ...), `keys`,
-`_clone` and others, 39 in all. A class that lacks one
+`_clone` and others. A class that lacks one
 cannot be instantiated. The rest of `TensorDictBase` (`base.py` and the mixins in
 `_base/`) is written on top of these methods, and all the implementations
 share it, including generic
@@ -279,6 +279,11 @@ touches these places:
      torch. Its known failures are listed in
      `test/tensordict/indexing_known_failures.json`. When a change fixes one,
      set `TENSORDICT_UPDATE_KNOWN_FAILURES=1` to rewrite that file.
+   - Other operations: `test/tensordict/test_conformance.py` runs a set of
+     operations on each type and on its dense copy and compares the
+     results. Its known failures are in
+     `test/tensordict/conformance_known_failures.json`, rewritten the same
+     way.
 9. `benchmarks/` when the operation is on a hot path.
 
 ## Where things live

@@ -59,6 +59,7 @@ from tensordict.store._utils import (
     _prepare_indexed_value,
     _str_to_dtype,
     _tensor_to_bytes,
+    _warn_missing_key,
 )
 from tensordict.utils import (
     _as_context_manager,
@@ -101,6 +102,7 @@ class _StoreStackElementView(TensorDictBase):
     """
 
     _td_dim_names = None
+    _masking_on_dense_copy = True
     # each read fetches the entry from the server into a new tensor
     _reads_return_copies = True
 
@@ -429,6 +431,7 @@ class _StoreStackElementView(TensorDictBase):
     def detach_(self) -> Self:
         return self
 
+    # Override: not supported on a view of one element.
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         raise RuntimeError("Cannot popitem from a stack element view.")
@@ -447,6 +450,7 @@ class _StoreStackElementView(TensorDictBase):
         self.set_(key, existing)
         return self
 
+    # Override: a TensorDict skeleton, built from the stored keys without reading data.
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> T:
@@ -457,9 +461,8 @@ class _StoreStackElementView(TensorDictBase):
             names=self.names if names is None and self._has_names() else names,
         )
 
-    def masked_fill(self, mask, value):
-        return self.to_tensordict().masked_fill(mask, value)
-
+    # Override: reads give copies, so each filled entry is written back with
+    # set_.
     def masked_fill_(self, mask, value):
         for key in self.keys(include_nested=True, leaves_only=True):
             tensor = self.get(key)
@@ -467,17 +470,9 @@ class _StoreStackElementView(TensorDictBase):
             self.set_(key, tensor)
         return self
 
+    # Override: to_tensordict reads all the entries in one round trip.
     def masked_select(self, mask):
         return self.to_tensordict().masked_select(mask)
-
-    def where(self, condition, other, *, out=None, pad=None, update_batch_size=False):
-        return self.to_tensordict().where(
-            condition=condition,
-            other=other,
-            out=out,
-            pad=pad,
-            update_batch_size=update_batch_size,
-        )
 
     # ---- pickling: materialize, don't try to serialize the view ----
 
@@ -519,8 +514,10 @@ class _StoreStackElementView(TensorDictBase):
     def _unsqueeze(self, dim):
         raise RuntimeError(f"Cannot call `unsqueeze` on a {type(self).__name__}.")
 
-    def chunk(self, chunks, dim=0):
-        return self.to_tensordict().chunk(chunks, dim)
+    # Override: one batched read of the element, where the generic split reads
+    # one key at a time
+    def _chunk(self, chunks, dim):
+        return self.to_tensordict()._chunk(chunks, dim)
 
     def share_memory_(self):
         raise NotImplementedError(
@@ -565,12 +562,15 @@ class _StoreStackElementView(TensorDictBase):
 
     def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim): ...
 
+    # Override: not supported: it would read the store.
     def _select(self, *keys, inplace=False, strict=True, set_shared=True):
         raise NotImplementedError(f"Cannot call select on a {type(self).__name__}.")
 
+    # Override: not supported: it would read the store.
     def _exclude(self, *keys, inplace=False, set_shared=True):
         raise NotImplementedError(f"Cannot call exclude on a {type(self).__name__}.")
 
+    # Override: works on an in-memory copy.
     @_as_context_manager()
     def flatten_keys(self, separator=".", inplace=False):
         """Returns an in-memory copy where the nested keys are joined by ``separator``.
@@ -586,6 +586,7 @@ class _StoreStackElementView(TensorDictBase):
         """
         return self.to_tensordict().flatten_keys(separator=separator)
 
+    # Override: works on an in-memory copy.
     @_as_context_manager()
     def unflatten_keys(self, separator=".", inplace=False):
         return self.to_tensordict().unflatten_keys(separator=separator)
@@ -715,6 +716,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
     """
 
     _td_dim_names = None
+    _masking_on_dense_copy = True
     # each read fetches the entry from the server into a new tensor
     _reads_return_copies = True
 
@@ -1800,12 +1802,17 @@ class LazyStackedTensorDictStore(TensorDictBase):
             key_path = _KEY_SEP.join(key)
 
         all_keys = self._get_all_keys()
-        if key_path in all_keys:
+        found = key_path in all_keys
+        if found:
             self._run_sync(self._adel_key(key_path))
         prefix_check = key_path + _KEY_SEP
         for k in all_keys:
             if k.startswith(prefix_check):
+                found = True
                 self._run_sync(self._adel_key(k))
+        if not found:
+            # stacklevel 3: skip the _lock_blocked wrapper
+            _warn_missing_key(self, "del_", key, stacklevel=3)
         return self
 
     async def _adel_key(self, key_path: str):
@@ -1840,7 +1847,10 @@ class LazyStackedTensorDictStore(TensorDictBase):
             else:
                 renames = self._sub_td_renames(all_keys, old_path, new_path)
             if not renames:
-                return renames
+                # a sub-tensordict at old_path may still exist, with a
+                # destination that is not free
+                old_prefix = old_path + _KEY_SEP
+                return renames, any(k.startswith(old_prefix) for k in all_keys)
             moves = []
             for src_kp, dst_kp in renames:
                 moves += [
@@ -1866,15 +1876,17 @@ class LazyStackedTensorDictStore(TensorDictBase):
                 pipe.srem(self._keys_registry_key, src_kp)
                 pipe.sadd(self._keys_registry_key, dst_kp)
             await pipe.execute()
-            return renames
+            return renames, True
 
-        renamed = self._run_sync(_arename())
+        renamed, found = self._run_sync(_arename())
         if self._meta_cache is not None:
             # the old paths are gone, and a leaf at new_path may have been
             # replaced
             for src_kp, dst_kp in renamed:
                 self._meta_cache.pop(src_kp, None)
                 self._meta_cache.pop(dst_kp, None)
+        if not found:
+            _warn_missing_key(self, "rename_key_", old_key, stacklevel=2)
         return self
 
     @staticmethod
@@ -2180,16 +2192,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
     def detach_(self) -> Self:
         return self
 
-    @_lock_blocked
-    def popitem(self) -> Tuple[NestedKey, CompatibleType]:
-        keys_list = list(self.keys())
-        if not keys_list:
-            raise KeyError(f"popitem(): {type(self).__name__} is empty")
-        key = keys_list[-1]
-        value = self.get(key)
-        self.del_(key)
-        return key, value
-
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._batch_size = new_size
 
@@ -2229,6 +2231,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
             self.set_(key, existing)
         return self
 
+    # Override: a TensorDict skeleton, built from the stored keys without reading data.
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> T:
@@ -2239,9 +2242,8 @@ class LazyStackedTensorDictStore(TensorDictBase):
             names=self.names if names is None and self._has_names() else names,
         )
 
-    def masked_fill(self, mask, value):
-        return self.to_tensordict().masked_fill(mask, value)
-
+    # Override: reads give copies, so each filled entry is written back with
+    # set_.
     def masked_fill_(self, mask, value):
         # A batch-shaped mask is aligned with the leading dims of each entry,
         # as in TensorDict.masked_fill_. Other masks keep torch's broadcasting
@@ -2254,17 +2256,9 @@ class LazyStackedTensorDictStore(TensorDictBase):
             self.set_(key, tensor)
         return self
 
+    # Override: to_tensordict reads all the entries in one round trip.
     def masked_select(self, mask):
         return self.to_tensordict().masked_select(mask)
-
-    def where(self, condition, other, *, out=None, pad=None, update_batch_size=False):
-        return self.to_tensordict().where(
-            condition=condition,
-            other=other,
-            out=out,
-            pad=pad,
-            update_batch_size=update_batch_size,
-        )
 
     # ---- Pickling ----
 
@@ -2430,13 +2424,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
             "Call `to_tensordict()` first."
         )
 
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
-        splits = -(self.batch_size[dim] // -chunks)
-        if splits == 0 and type(chunks) is int and chunks > 0:
-            # torch.chunk returns `chunks` empty pieces along a zero-size dim
-            return self.split([0] * chunks, dim)
-        return self.split(splits, dim)
-
     # ---- Memory ops: not supported ----
 
     def share_memory_(self):
@@ -2514,12 +2501,15 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim): ...
 
+    # Override: not supported: it would read the store.
     def _select(self, *keys, inplace=False, strict=True, set_shared=True):
         raise NotImplementedError(f"Cannot call select on a {type(self).__name__}.")
 
+    # Override: not supported: it would read the store.
     def _exclude(self, *keys, inplace=False, set_shared=True):
         raise NotImplementedError(f"Cannot call exclude on a {type(self).__name__}.")
 
+    # Override: works on an in-memory copy; inplace would rename in the store.
     @_as_context_manager()
     def flatten_keys(self, separator=".", inplace=False):
         """Returns an in-memory copy where the nested keys are joined by ``separator``.
@@ -2539,6 +2529,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
             )
         return self.to_tensordict().flatten_keys(separator=separator)
 
+    # Override: works on an in-memory copy; inplace would rename in the store.
     @_as_context_manager()
     def unflatten_keys(self, separator=".", inplace=False):
         if inplace:

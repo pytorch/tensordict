@@ -87,6 +87,8 @@ from tensordict.utils import (
     _strtobool,
     _td_fields,
     _unravel_key_to_tuple,
+    _UPDATE_IGNORE_LOCK_WARNED,
+    _warn_update_ignore_lock,
     _zip_strict,
     capture_non_tensor_stack,
     DeviceType,
@@ -1066,6 +1068,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Class-level default for the dim-name methods: no names until
     # _set_names stores them on the instance.
     _td_dim_names = None
+    # Set by the backends on which ``where`` and ``masked_fill`` work on a
+    # ``to_tensordict()`` copy: the stores read it in one round trip, and on
+    # all of them the result is a new, unlocked TensorDict.
+    _masking_on_dense_copy: bool = False
     # Whether the tensors that items() returns are copies of the stored data,
     # as for an h5 or zarr file or a store. The in-place methods then write
     # their results back (see _write_back_inplace and _write_back).
@@ -2196,35 +2202,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return tds
 
     @abc.abstractmethod
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
-        """Splits a tensordict into the specified number of chunks, if possible.
-
-        Each chunk is a view of the input tensordict.
-
-        Args:
-            chunks (int): number of chunks to return
-            dim (int, optional): dimension along which to split the
-                tensordict. Default is 0.
-
-        Examples:
-            >>> import torch
-            >>> from tensordict import TensorDict
-            >>> td = TensorDict({
-            ...     'x': torch.arange(24).reshape(3, 4, 2),
-            ... }, batch_size=[3, 4])
-            >>> td0, td1 = td.chunk(dim=-1, chunks=2)
-            >>> td0['x']
-            tensor([[[ 0,  1],
-                     [ 2,  3]],
-                    [[ 8,  9],
-                     [10, 11]],
-                    [[16, 17],
-                     [18, 19]]])
-
-        """
-        raise NotImplementedError
-
-    @abc.abstractmethod
     def _unsqueeze(self, dim: int):
         raise NotImplementedError
 
@@ -2551,13 +2528,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             del self[key]
         return self
 
-    @abc.abstractmethod
+    @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         """Removes the item that was last inserted into the TensorDict.
 
         ``popitem`` will only return non-nested values.
         """
-        raise NotImplementedError
+        # Generic: pop the last key of keys(). A comprehension walks the keys
+        # once: list() would call the view's __len__, which walks them too.
+        keys = [key for key in self.keys()]  # noqa: C416
+        if not keys:
+            raise KeyError(f"popitem(): {type(self).__name__} is empty")
+        key = keys[-1]
+        return key, self.pop(key)
 
     @property
     def is_cuda(self):
@@ -3126,28 +3109,32 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         )
 
     # Stack functionality
-    @abc.abstractmethod
     def _stack_onto_(
         self,
         list_item: list[CompatibleType],
         dim: int,
     ) -> Self:
-        """Stacks a list of values onto an existing key while keeping the original storage.
+        """Stacks a list of tensordicts and writes the result in place into ``self``.
+
+        This is the hook behind ``torch.stack(list_item, dim, out=self)``.
 
         Args:
-            key (str): name of the value
-            list_item (list of torch.Tensor): value to be stacked and stored in the tensordict.
-            dim (int): dimension along which the tensors should be stacked.
+            list_item (list of TensorDictBase): the tensordicts to stack.
+            dim (int): dimension along which the tensordicts are stacked.
 
         Returns:
             self
 
         """
-        raise NotImplementedError
+        for key in self.keys():
+            vals = [td._get_str(key, None) for td in list_item]
+            if all(v is None for v in vals):
+                continue
+            self.set_(key, torch.stack(vals, dim=dim))
+        return self
 
     def _stack_onto_at_(
         self,
-        key: NestedKey,
         list_item: list[CompatibleType],
         dim: int,
         idx: IndexType,
@@ -3404,6 +3391,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 ``inplace=True``, or unlock the tensordict with
                 :meth:`~.unlock_` first.
 
+                .. deprecated:: 0.15
+                    ``ignore_lock=True`` warns, and the argument will be
+                    removed in TensorDict 0.17. Unlock the tensordict with
+                    :meth:`~.unlock_` instead, for instance
+                    ``with td.unlock_(): td.update(other)``.
+
             **kwargs: additional key-value pairs to write into ``self`` as top-level entries. When both
                 ``input_dict_or_td`` and ``kwargs`` are provided, kwargs win on key conflict.
 
@@ -3449,6 +3442,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             ['x', 'y']
 
         """
+        if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
+            ignore_lock = _warn_update_ignore_lock(stacklevel=3)
         if kwargs:
             if input_dict_or_td is None:
                 input_dict_or_td = kwargs
@@ -4627,8 +4622,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     )
                 )
             return default
+        out = self._popped_value(out)
         self.del_(key_tuple)
         return out
+
+    def _popped_value(self, value: Any) -> Any:
+        """Returns what pop returns for ``value``, an entry that del_ will delete.
+
+        A class whose sub-tensordicts are views over storage that del_ deletes
+        overrides this to return a copy.
+        """
+        return value
 
     @property
     @_cache_while_locked  # noqa: B019
@@ -6702,7 +6706,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             result.lock_()
         return result
 
-    @abc.abstractmethod
     def _select(
         self,
         *keys: NestedKey,
@@ -6710,7 +6713,31 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         strict: bool = True,
         set_shared: bool = True,
     ) -> Self:
-        raise NotImplementedError
+        # Generic: select in a TensorDict copy (see to_tensordict). Only the
+        # entries that the keys name are copied, unless one is missing and
+        # the KeyError must list all the keys.
+        if inplace:
+            raise RuntimeError("Cannot call select inplace on a lazy tensordict.")
+        roots = dict.fromkeys(key if isinstance(key, str) else key[0] for key in keys)
+        present = [root for root in roots if root in self.keys()]
+        if strict and len(present) < len(roots):
+            present = None
+        return self._copy_entries(present)._select(
+            *keys, inplace=False, strict=strict, set_shared=set_shared
+        )
+
+    def _copy_entries(self, keys: list[str] | None):
+        """A to_tensordict() copy of the top-level entries ``keys`` (all if ``None``)."""
+        if keys is None:
+            return self.to_tensordict()
+        from tensordict._td import TensorDict
+
+        return TensorDict._new_unsafe(
+            {key: self._get_str(key, NO_DEFAULT) for key in keys},
+            batch_size=self.batch_size,
+            device=self.device,
+            names=self._maybe_names(),
+        ).to_tensordict()
 
     def exclude(self, *keys: NestedKey, inplace: bool = False) -> Self:
         """Excludes the keys of the tensordict and returns a new tensordict without these entries.
@@ -6761,14 +6788,21 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             result.lock_()
         return result
 
-    @abc.abstractmethod
     def _exclude(
         self,
         *keys: NestedKey,
         inplace: bool = False,
         set_shared: bool = True,
     ) -> Self:
-        raise NotImplementedError
+        # Generic: exclude in a TensorDict copy of the entries that are kept
+        # (see _select).
+        if inplace:
+            raise RuntimeError("Cannot call exclude inplace on a lazy tensordict.")
+        excluded = {key for key in map(unravel_key, keys) if isinstance(key, str)}
+        kept = [key for key in self.keys() if key not in excluded]
+        return self._copy_entries(kept)._exclude(
+            *keys, inplace=False, set_shared=set_shared
+        )
 
     def _maybe_set_shared_attributes(self, result, lock=False):
         # We must use _is_shared to avoid having issues with CUDA tensordicts
@@ -6884,7 +6918,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return result
 
     # Masking
-    @abc.abstractmethod
     def masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
         """Fills the values corresponding to the mask with the desired value.
 
@@ -6911,9 +6944,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     [0., 0., 0., 0.],
                     [0., 0., 0., 0.]])
         """
-        raise NotImplementedError
+        for item in self.values():
+            mask_expand = expand_as_right(mask, item)
+            item.masked_fill_(mask_expand, value)
+        return self
 
-    @abc.abstractmethod
     def masked_fill(self, mask: Tensor, value: float | bool) -> Self:
         """Out-of-place version of masked_fill.
 
@@ -6937,7 +6972,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     [0., 0., 0., 0.],
                     [0., 0., 0., 0.]])
         """
-        raise NotImplementedError
+        if self._masking_on_dense_copy:
+            td_copy = self.to_tensordict()
+        else:
+            td_copy = self.clone()
+        return td_copy.masked_fill_(mask, value)
 
     @abc.abstractmethod
     def _change_batch_size(self, new_size: torch.Size) -> None:
@@ -7236,11 +7275,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 result.lock_()
             return result
         else:
-            if not is_compiling():
-                key_list = list(self.keys())
-            else:
-                key_list = [k for k in self.keys()]  # noqa
-
+            # a comprehension, which also traces under torch.compile
+            key_list = [k for k in self.keys()]  # noqa: C416
             for key in key_list:
                 if separator in key:
                     new_key = tuple(key.split(separator))

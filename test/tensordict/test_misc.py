@@ -642,6 +642,28 @@ class TestPointwiseOps:
                     result[key], torch.rsub(leaf, other_leaf, **kwargs)
                 )
 
+    @pytest.mark.parametrize("alpha", [None, 1, 2, -0.3])
+    @pytest.mark.parametrize("other_kind", ["tensordict", "number", "0-dim tensor"])
+    def test_rsub_alpha_scales_self(self, other_kind, alpha):
+        # Like torch.rsub, rsub computes other - alpha * self (#1950)
+        torch.manual_seed(0)
+        td = TensorDict(
+            a=torch.randn(3, 4), b={"c": torch.randn(3, 4, 5)}, batch_size=(3, 4)
+        )
+        if other_kind == "tensordict":
+            other = td.apply(torch.randn_like)
+        elif other_kind == "number":
+            other = 1.5
+        else:
+            other = torch.tensor(1.5)
+        kwargs = {} if alpha is None else {"alpha": alpha}
+        result = td.rsub(other, **kwargs)
+        for key in ("a", ("b", "c")):
+            other_leaf = other[key] if other_kind == "tensordict" else other
+            torch.testing.assert_close(
+                result[key], torch.rsub(td[key], other_leaf, **kwargs)
+            )
+
     @pytest.mark.parametrize("shape", [(4,), (3, 4), (2, 3, 4)])
     def test_broadcast_tensordict(self, shape):
         torch.manual_seed(0)
