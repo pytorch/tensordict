@@ -5468,6 +5468,69 @@ class TestGeneric:
             assert getattr(td, reduction)(reduce=True, dim="feature").shape == (3, 4)
             assert getattr(td, reduction)(reduce=True, dim=1).shape == (3, 5)
 
+    @pytest.mark.parametrize(
+        "reduction", ["sum", "mean", "std", "amax", "prod", "quantile"]
+    )
+    def test_reduction_negative_dim_reduce_warns(self, reduction):
+        # With reduce=True, a negative dim counts from the end of the leaves. It
+        # warns, and will count from the end of the batch dims in 0.17 (#2044).
+        x = torch.rand(3, 4, 5)
+        td = TensorDict(
+            a=x, b=TensorDict(c=x + 1, batch_size=(3, 4)), batch_size=(3, 4)
+        )
+        args = (0.5,) if reduction == "quantile" else ()
+        leaves = torch.cat([x, x + 1], -1)
+        for dim in (-1, (0, -1)) if reduction in ("sum", "mean", "std") else (-1,):
+            with pytest.warns(
+                FutureWarning,
+                match="Starting with TensorDict 0.17, the default will change to "
+                "counting it from the end of the batch dims",
+            ) as record:
+                result = getattr(td, reduction)(*args, dim=dim, reduce=True)
+            assert record[0].filename == __file__
+            torch.testing.assert_close(
+                result, getattr(torch, reduction)(leaves, *args, dim=dim)
+            )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            # a non-negative dim, and a negative dim without feature dims
+            getattr(td, reduction)(*args, dim=1, reduce=True)
+            td_flat = TensorDict(a=x[..., 0], batch_size=(3, 4))
+            getattr(td_flat, reduction)(*args, dim=-1, reduce=True)
+            getattr(td, reduction)(*args, dim=-1)
+
+    @pytest.mark.parametrize("reduction", ["amax", "amin", "max", "min", "prod"])
+    def test_reduction_tuple_dim_warns(self, reduction):
+        # amax, amin, max, min and prod reduce only the first dim of a tuple. amax
+        # and amin will reduce every dim in 0.17, max, min and prod reject a
+        # tuple, as torch does (#2044).
+        x = torch.rand(3, 4, 5)
+        td = TensorDict(a=x, batch_size=(3, 4))
+        category, match = (
+            (FutureWarning, "the default will change to reducing every dim")
+            if reduction in ("amax", "amin")
+            else (DeprecationWarning, "will be removed in TensorDict 0.17")
+        )
+        kwargs = {"return_indices": False} if reduction in ("max", "min") else {}
+        tuples = [(0, 1), (-1,)]
+        if reduction in ("max", "min", "prod"):
+            tuples.append((1,))
+        for dim in tuples:
+            with pytest.warns(category, match=match) as record:
+                result = getattr(td, reduction)(dim=dim, **kwargs)
+            assert record[0].filename == __file__
+            torch_reduction = {"max": "amax", "min": "amin"}.get(reduction, reduction)
+            expected = getattr(torch, torch_reduction)(x, dim=dim[0])
+            # the first dim of the tuple, not checked against the batch dims
+            torch.testing.assert_close(result["a"], expected)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            getattr(td, reduction)(dim=1, **kwargs)
+            getattr(td, reduction)(dim=-1, **kwargs)
+            if reduction in ("amax", "amin"):
+                # one dim inside the batch dims: the same result as torch
+                assert getattr(td, reduction)(dim=(1,)).batch_size == (3,)
+
     @pytest.mark.parametrize("dim", [0, 1, -2, -1])
     def test_prod_keepdim(self, dim):
         # keepdim=True keeps the reduced batch dim with size 1, as torch.prod does
