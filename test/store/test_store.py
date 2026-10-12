@@ -303,6 +303,17 @@ class TestTensorDictStore:
         assert isinstance(local, TensorDict)
         assert torch.allclose(local["x"], tensor)
 
+    def test_chunk_zero_size_dim(self, store_kwargs):
+        # torch.chunk gives `chunks` empty pieces along a zero-size dim
+        td = TensorDictStore(batch_size=[0, 3], **store_kwargs)
+        try:
+            for dim in (0, -2):
+                pieces = td.chunk(2, dim)
+                assert [p.batch_size for p in pieces] == [torch.Size([0, 3])] * 2
+        finally:
+            td.clear_redis()
+            td.close()
+
     def test_keys_view(self, store_td):
         """Test keys iteration."""
         store_td["a"] = torch.randn(10, 2)

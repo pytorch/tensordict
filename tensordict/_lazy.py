@@ -4737,13 +4737,6 @@ class LazyStackedTensorDict(TensorDictBase):
             for tds in _zip_strict(*tds)
         )
 
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
-        splits = -(self.batch_size[dim] // -chunks)
-        if splits == 0 and type(chunks) is int and chunks > 0:
-            # torch.chunk returns `chunks` empty pieces along a zero-size dim
-            return self.split([0] * chunks, dim)
-        return self.split(splits, dim)
-
     lock_ = TensorDictBase.lock_
 
     unlock_ = TensorDictBase.unlock_
@@ -5419,13 +5412,6 @@ class _CustomOpTensorDict(TensorDictBase):
             tuple_ok=tuple_ok,
             **kwargs,
         )
-
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
-        splits = -(self.batch_size[dim] // -chunks)
-        if splits == 0 and type(chunks) is int and chunks > 0:
-            # torch.chunk returns `chunks` empty pieces along a zero-size dim
-            return self.split([0] * chunks, dim)
-        return self.split(splits, dim)
 
     _add_batch_dim = TensorDict._add_batch_dim
 

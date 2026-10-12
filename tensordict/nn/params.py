@@ -809,9 +809,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         return TensorDictParams(self._param_td.apply(_clone), no_convert="skip")
 
     @_fallback
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]: ...
-
-    @_fallback
     def _unbind(self, dim: int) -> tuple[TensorDictBase, ...]: ...
 
     @classmethod

@@ -2120,35 +2120,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return tds
 
     @abc.abstractmethod
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
-        """Splits a tensordict into the specified number of chunks, if possible.
-
-        Each chunk is a view of the input tensordict.
-
-        Args:
-            chunks (int): number of chunks to return
-            dim (int, optional): dimension along which to split the
-                tensordict. Default is 0.
-
-        Examples:
-            >>> import torch
-            >>> from tensordict import TensorDict
-            >>> td = TensorDict({
-            ...     'x': torch.arange(24).reshape(3, 4, 2),
-            ... }, batch_size=[3, 4])
-            >>> td0, td1 = td.chunk(dim=-1, chunks=2)
-            >>> td0['x']
-            tensor([[[ 0,  1],
-                     [ 2,  3]],
-                    [[ 8,  9],
-                     [10, 11]],
-                    [[16, 17],
-                     [18, 19]]])
-
-        """
-        raise NotImplementedError
-
-    @abc.abstractmethod
     def _unsqueeze(self, dim: int):
         raise NotImplementedError
 
