@@ -713,9 +713,81 @@ class TestGeneric:
             ),
             batch_size=[2],
         )
-        result = td.to("meta", batch_size=[2, 3])
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            result = td.to("meta", batch_size=[2, 3])
         assert result.batch_size == (2, 3)
         assert result["nested"].batch_size == (2, 3)
+
+    @pytest.mark.parametrize("dest", ["meta", torch.float64])
+    def test_to_device_batch_size_inplace(self, dest):
+        # to(device, inplace=True, batch_size=...) moves the tensordict and
+        # sets its batch size as the setter does (#2374)
+        td = TensorDict(
+            a=torch.zeros(2, 3),
+            nested=TensorDict(b=torch.zeros(2, 3, 4), batch_size=[2, 3, 4]),
+            batch_size=[2],
+            names=["r"],
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert td.to(dest, inplace=True, batch_size=[2, 3]) is td
+        assert td.batch_size == (2, 3)
+        assert td.names == ["r", None]
+        assert td["nested"].batch_size == (2, 3, 4)
+        for leaf in (td["a"], td["nested", "b"]):
+            if dest == "meta":
+                assert leaf.device == torch.device("meta")
+            else:
+                assert leaf.dtype == torch.float64
+        with pytest.raises(RuntimeError, match="incompatible with the batch-size"):
+            td.to(dest, inplace=True, batch_size=[5])
+
+    @pytest.mark.parametrize(
+        "names,nested_batch_size,batch_size,result_nested_batch_size,warns",
+        [
+            # nested batch sizes that the setter would keep and names warn
+            (None, [2, 3, 4], [2, 3], [2, 3], True),
+            (["r"], [2], [2, 3], [2, 3], True),
+            (["r"], [2], [2], [2], True),
+            (None, [2, 3], [2], [2], True),
+            # the result stays the same in 0.17
+            (None, [2], [2, 3], [2, 3], False),
+            (None, [2, 3], [2, 3], [2, 3], False),
+            (None, [2], [2], [2], False),
+        ],
+    )
+    @pytest.mark.parametrize("dest", ["meta", torch.float64])
+    def test_to_device_batch_size_future_warning(
+        self,
+        names,
+        nested_batch_size,
+        batch_size,
+        result_nested_batch_size,
+        warns,
+        dest,
+    ):
+        # When the device or dtype changes, to(batch_size=...) will keep the
+        # nested batch sizes and the names in 0.17 (#2374)
+        td = TensorDict(
+            a=torch.zeros(2, 3, 4),
+            nested=TensorDict(b=torch.zeros(2, 3, 4), batch_size=nested_batch_size),
+            batch_size=[2],
+            names=names,
+        )
+        if warns:
+            with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+                result = td.to(dest, batch_size=batch_size)
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                result = td.to(dest, batch_size=batch_size)
+        assert result.batch_size == torch.Size(batch_size)
+        assert result["nested"].batch_size == torch.Size(result_nested_batch_size)
+        assert result.names == [None] * len(batch_size)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            td.to(dest)
+            td.to(dest, inplace=True, batch_size=batch_size)
 
     @pytest.mark.parametrize("consolidated", [False, True])
     def test_to_batch_size_unchanged(self, consolidated, monkeypatch):
