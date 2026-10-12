@@ -83,11 +83,12 @@ or wrap the list in :class:`~tensordict.NonTensorData`:
     >>> td[0]["labels"]
     ['cat', 'dog', 'bird']
 
-A number or a boolean written over an existing
-:class:`~tensordict.NonTensorData` entry also becomes a tensor, and the write
-emits a :class:`FutureWarning`. Starting with TensorDict 0.17, the default will
-change to keeping it as :class:`~tensordict.NonTensorData`, like the entry it
-replaces (`#1199 <https://github.com/pytorch/tensordict/issues/1199>`_).
+In a tensordict without batch dimensions, a number or a boolean written over
+an existing :class:`~tensordict.NonTensorData` entry also becomes a tensor, and
+the write emits a :class:`FutureWarning`. Starting with TensorDict 0.17, the
+default will change to keeping it as :class:`~tensordict.NonTensorData`, like
+the entry it replaces
+(`#1199 <https://github.com/pytorch/tensordict/issues/1199>`_).
 
 Read a non-tensor entry
 ~~~~~~~~~~~~~~~~~~~~~~~
