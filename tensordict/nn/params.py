@@ -943,6 +943,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback_property
     def batch_size(self) -> torch.Size: ...
 
+    # Override: forwards to _param_td so that results keep their nn.Parameters.
     @_fallback
     def contiguous(self, *args, **kwargs): ...
 
@@ -950,6 +951,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_unlock_and_set
     def del_(self, *args, **kwargs): ...
 
+    # Override: forwards to _param_td so that results keep their nn.Parameters.
     @_fallback
     def detach_(self, *args, **kwargs): ...
 
@@ -959,6 +961,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback
     def entry_class(self, *args, **kwargs): ...
 
+    # Override: forwards to _param_td.
     @_fallback
     def is_contiguous(self, *args, **kwargs): ...
 
@@ -1021,6 +1024,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback_property
     def names(self): ...
 
+    # Override: forwards to _param_td; in-place pinning would replace the parameters.
     def pin_memory(self, *args, **kwargs):
         if kwargs.get("inplace", False):
             raise RuntimeError(
@@ -1031,6 +1035,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_unlock_and_set
     def _select(self, *args, **kwargs): ...
 
+    # Override: shares the parameters of _param_td in place.
     @_fallback
     def share_memory_(self, *args, **kwargs): ...
 
@@ -1039,16 +1044,20 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     def is_locked(self, value):
         self._is_locked = bool(value)
 
+    # Override: the flag lives on _param_td.
     @_fallback_property
     def is_shared(self) -> bool: ...
 
+    # Override: the flag lives on _param_td.
     @_fallback_property
     def is_memmap(self) -> bool: ...
 
+    # Override: the flag lives on _param_td.
     @property
     def _is_shared(self) -> bool:
         return self._param_td._is_shared
 
+    # Override: the flag lives on _param_td.
     @property
     def _is_memmap(self) -> bool:
         return self._param_td._is_memmap
@@ -1056,6 +1065,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback_property
     def shape(self) -> torch.Size: ...
 
+    # Override: locks _param_td only if it is not locked already.
     def _propagate_lock(self, _lock_parents_weakrefs=None, *, is_compiling):
         """Registers the parent tensordict that handles the lock."""
         self._is_locked = True
@@ -1070,6 +1080,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 _lock_parents_weakrefs, is_compiling=is_compiling
             )
 
+    # Override: unlocks _param_td only if the parameters' lock is not kept.
     @_erase_cache_first
     def _propagate_unlock(self):
         # if we end up here, we can clear the graph associated with this td

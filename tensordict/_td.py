@@ -2655,10 +2655,12 @@ class _SubTensorDict(TensorDictBase):
             raise RuntimeError("batch_size does not match self.batch_size.")
 
     # These attributes should never be set
+    # Override: the flag lives on the source.
     @property
     def _is_shared(self):
         return self._source._is_shared
 
+    # Override: the flag lives on the source.
     @property
     def _is_memmap(self):
         return self._source._is_memmap
@@ -3272,10 +3274,11 @@ class _SubTensorDict(TensorDictBase):
     ):
         raise NotImplementedError(f"from_dict not implemented for {cls.__name__}.")
 
-    # Override: defers to the source (also is_memmap).
+    # Override: defers to the source.
     def is_shared(self) -> bool:
         return self._source.is_shared()
 
+    # Override: defers to the source.
     def is_memmap(self) -> bool:
         return self._source.is_memmap()
 

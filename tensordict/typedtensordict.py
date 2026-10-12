@@ -469,6 +469,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
 
     _source: TensorDictBase
 
+    # Override: the flag lives on the source.
     @property
     def _is_shared(self):
         return self._source._is_shared
@@ -477,6 +478,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     def _is_shared(self, value):
         self._source._is_shared = value
 
+    # Override: the flag lives on the source.
     @property
     def _is_memmap(self):
         return self._source._is_memmap

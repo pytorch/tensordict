@@ -1945,6 +1945,7 @@ class TensorDictStore(TensorDictBase):
             names=self._maybe_names(),
         )
 
+    # Override: deprecated alias of to_tensordict(), removed in 0.17.
     @deprecated(
         "TensorDictStore.to_local()", removal="0.17", replacement="to_tensordict()"
     )

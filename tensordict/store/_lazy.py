@@ -403,6 +403,7 @@ class _StoreStackElementView(TensorDictBase):
             d[parts[-1]] = tensor
         return TensorDict(source, batch_size=self._batch_size, device=self._device)
 
+    # Override: deprecated alias of to_tensordict(), removed in 0.17.
     @deprecated(
         "LazyStackedTensorDictStore[i].to_local()",
         removal="0.17",
@@ -1914,6 +1915,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     # ---- Materialization ----
 
+    # Override: deprecated alias of to_tensordict(), removed in 0.17.
     @deprecated(
         "LazyStackedTensorDictStore.to_local()",
         removal="0.17",

@@ -836,10 +836,12 @@ class LazyStackedTensorDict(TensorDictBase):
         return self
 
     # These attributes should never be set
+    # Override: the flag holds when it holds for every member.
     @property
     def _is_shared(self):
         return all(td._is_shared for td in self.tensordicts)
 
+    # Override: the flag holds when it holds for every member.
     @property
     def _is_memmap(self):
         return all(td._is_memmap for td in self.tensordicts)
