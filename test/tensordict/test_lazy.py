@@ -702,11 +702,14 @@ class TestLazyStackedTensorDict:
     @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize("out_stack_dim", [0, 1])
     @pytest.mark.parametrize("cat_dim", [0, 1])
-    def test_cat_lazy_stack_out(self, num_inputs, stack_dim, out_stack_dim, cat_dim):
+    @pytest.mark.parametrize("batch_dims", [2, 3])
+    def test_cat_lazy_stack_out(
+        self, num_inputs, stack_dim, out_stack_dim, cat_dim, batch_dims
+    ):
         # The members of out have the same shapes, so they could be stacked densely
         inputs = []
         for i in range(num_inputs):
-            batch_size = [2, 3]
+            batch_size = [2, 3, 2][:batch_dims]
             batch_size[cat_dim] = i + 1
             td = TensorDict(
                 {
