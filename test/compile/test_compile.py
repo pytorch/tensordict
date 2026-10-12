@@ -44,7 +44,6 @@ from tensordict.nn import (
     TensorDictSequential as Seq,
 )
 from tensordict.nn.functional_modules import (
-    _exclude_td_from_pytree,
     PYTREE_REGISTERED_LAZY_TDS,
     PYTREE_REGISTERED_TDS,
 )
@@ -92,17 +91,16 @@ def test_cudagraph_module_is_released_without_gc(is_tensordict_module):
         def module(x):
             return x
 
-    with _exclude_td_from_pytree():
-        with (
-            pytest.warns(UserWarning)
-            if not torch.cuda.is_available()
-            else contextlib.nullcontext()
-        ):
-            wrapper = CudaGraphModule(module)
+    with (
+        pytest.warns(UserWarning)
+        if not torch.cuda.is_available()
+        else contextlib.nullcontext()
+    ):
+        wrapper = CudaGraphModule(module)
 
-        wrapper_ref = weakref.ref(wrapper)
-        del wrapper
-        assert wrapper_ref() is None
+    wrapper_ref = weakref.ref(wrapper)
+    del wrapper
+    assert wrapper_ref() is None
 
 
 @pytest.fixture(autouse=True)
@@ -2445,19 +2443,38 @@ class TestCudaGraphs:
     @pytest.fixture(scope="class", autouse=True)
     def _set_cuda_device(self):
         device = torch.get_default_device()
-        do_unset = False
-        for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
-            if tdtype in SUPPORTED_NODES:
-                do_unset = True
-                excluder = _exclude_td_from_pytree()
-                excluder.set()
-                break
         if torch.cuda.is_available():
             torch.set_default_device("cuda:0")
         yield
-        if do_unset:
-            excluder.unset()
         torch.set_default_device(device)
+
+    def test_cudagraphs_keeps_pytree_registry(self, compiled):
+        # pytorch/tensordict#2076: creating and calling a CudaGraphModule used to
+        # remove the tensordict classes from the pytree registry for the whole
+        # process, which broke torch.export and torch.func on tensordicts.
+        td_types = PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS
+        assert all(tdtype in SUPPORTED_NODES for tdtype in td_types)
+
+        def func(td, x):
+            return td["a"] + x, td.apply(lambda t: t * 2)
+
+        tdmodule = self._make_cudagraph(
+            TensorDictModule(lambda a: a + 1, in_keys=["a"], out_keys=["b"]),
+            compiled,
+        )
+        graphed_func = self._make_cudagraph(func, compiled)
+        for i in range(4):
+            td = TensorDict(a=torch.full((3,), float(i)), batch_size=[3])
+            assert (tdmodule(td.clone())["b"] == i + 1).all()
+            y, td_out = graphed_func(td, torch.ones(3))
+            assert (y == i + 1).all()
+            assert (td_out["a"] == 2 * i).all()
+        assert all(tdtype in SUPPORTED_NODES for tdtype in td_types)
+        td = TensorDict(a=torch.ones(3), batch_size=[3])
+        leaves = tree_leaves(td)
+        assert len(leaves) == 1 and leaves[0] is td["a"]
+        grad = torch.func.grad(lambda td: (td["a"] ** 2).sum())(td)
+        torch.testing.assert_close(grad["a"], 2 * td["a"])
 
     def test_cudagraphs_random(self, compiled):
         def func(x):

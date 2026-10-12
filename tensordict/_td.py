@@ -131,49 +131,55 @@ _add_batch_dim, _remove_batch_dim = _import_and_wrap_functorch(
 
 
 class TensorDict(TensorDictBase):
-    """A batched dictionary of tensors.
+    """A dictionary of tensors that share a batch size.
 
-    TensorDict is a tensor container where all tensors are stored in a
-    key-value pair fashion and where each element shares the same first ``N``
-    leading dimensions shape, where is an arbitrary number with ``N >= 0``.
+    The batch size is the leading part of the shape that every entry has in
+    common. With ``batch_size=[3, 4]``, every entry has a shape that starts
+    with ``(3, 4)``. Shape operations (indexing, ``reshape``, ``view``,
+    ``unsqueeze``, ``permute``, masking) act on the batch dimensions of every
+    entry at once. Pointwise operations (``td + other``, ``td * 2``),
+    ``td.to(device)`` and ``td.to(dtype)`` apply to every entry. An entry can
+    be another tensordict, so keys can be nested: ``td["a", "b"]`` reads the
+    entry ``"b"`` of the nested tensordict ``"a"``. :ref:`batch-size` and
+    :ref:`keys` explain these ideas.
 
-    Additionally, if the tensordict has a specified device, then each element
-    must share that device.
+    Use :class:`TensorDict` for most data. To stack tensordicts whose keys or
+    entry shapes differ, use :class:`~tensordict.LazyStackedTensorDict`. To
+    declare a fixed set of fields with types, use
+    :class:`~tensordict.TensorClass` or :class:`~tensordict.TypedTensorDict`.
+    :ref:`choosing-a-container` compares the containers.
 
-    TensorDict instances support many regular tensor operations with the notable
-    exception of algebraic operations:
+    Build a tensordict from a dict, or from keyword arguments as with
+    ``dict(...)``:
 
-    - operations on shape: when a shape operation is called (indexing,
-      reshape, view, expand, transpose, permute,
-      unsqueeze, squeeze, masking etc), the operations is done as if it
-      was executed on a tensor of the same shape as the batch size then
-      expended to the right, e.g.:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> td = TensorDict(
+        ...     {"obs": torch.zeros(3, 4, 5), "reward": torch.zeros(3, 4)},
+        ...     batch_size=[3, 4],
+        ... )
+        >>> td[0]["obs"].shape
+        torch.Size([4, 5])
+        >>> td.view(-1)["obs"].shape
+        torch.Size([12, 5])
+        >>> (td + 1)["reward"].sum()
+        tensor(12.)
+        >>> td.to(torch.float64)["obs"].dtype
+        torch.float64
+        >>> td = TensorDict(a=torch.zeros(3), b={"c": torch.ones(3, 2)}, batch_size=[3])
+        >>> td["b", "c"].shape
+        torch.Size([3, 2])
 
-        >>> td = TensorDict({'a': torch.zeros(3, 4, 5)}, batch_size=[3, 4])
-        >>> # returns a TensorDict of batch size [3, 4, 1]:
-        >>> td_unsqueeze = td.unsqueeze(-1)
-        >>> # returns a TensorDict of batch size [12]
-        >>> td_view = td.view(-1)
-        >>> # returns a tensor of batch size [12, 4]
-        >>> a_view = td.view(-1).get("a")
+    A tensordict has these constraints:
 
-    - casting operations: a TensorDict can be cast on a different device using
-
-        >>> td_cpu = td.to("cpu")
-        >>> dictionary = td.to_dict()
-
-      A call of the `.to()` method with a dtype will return an error.
-
-    - Cloning (:meth:`~TensorDictBase.clone`), contiguous (:meth:`~TensorDictBase.contiguous`);
-
-    - Reading: `td.get(key)`, `td.get_at(key, index)`
-
-    - Content modification: :obj:`td.set(key, value)`, :obj:`td.set_(key, value)`,
-      :obj:`td.update(td_or_dict)`, :obj:`td.update_(td_or_dict)`, :obj:`td.fill_(key,
-      value)`, :obj:`td.rename_key_(old_name, new_name)`, etc.
-
-    - Operations on multiple tensordicts: `torch.cat(tensordict_list, dim)`,
-      `torch.stack(tensordict_list, dim)`, `td1 == td2`, `td.apply(lambda x+y, other_td)` etc.
+    - The batch size is not inferred from the data: it defaults to ``[]``.
+      Call :meth:`~tensordict.TensorDictBase.auto_batch_size_` to set it to
+      the largest leading shape that all entries share.
+    - The shape of every entry must start with the batch size. If it does
+      not, setting the entry raises a ``RuntimeError``.
+    - If ``device`` is set, every entry is moved to that device. If it is
+      not set, the entries can be on different devices.
+    - A key is a string, or a tuple of strings for a nested entry.
 
     Args:
         source (TensorDict or Dict[NestedKey, Union[Tensor, TensorDictBase]]): a
@@ -183,24 +189,22 @@ class TensorDict(TensorDictBase):
         batch_size (iterable of int, optional): a batch size for the
             tensordict. The batch size can be modified subsequently as long
             as it is compatible with its content.
-            If not batch-size is provided, an empty batch-size is assumed (it
+            If no batch size is provided, an empty batch size is assumed (it
             is not inferred automatically from the data). To automatically set
-            the batch-size, refer to :meth:`~.auto_batch_size_`.
+            the batch size, refer to :meth:`~.auto_batch_size_`.
         device (torch.device or compatible type, optional): a device for the
             TensorDict. If provided, all tensors will be stored on that device.
             If not, tensors on different devices are allowed.
-        names (lsit of str, optional): the names of the dimensions of the
+        names (list of str, optional): the names of the dimensions of the
             tensordict. If provided, its length must match the one of the
             ``batch_size``. Defaults to ``None`` (no dimension name, or ``None``
             for every dimension).
-        non_blocking (bool, optional): if ``True`` and a device is passed, the tensordict
-            is delivered without synchronization. This is the fastest option but is only
-            safe when casting from cpu to cuda (otherwise a synchronization call must be
-            implemented by the user).
-            If ``False`` is passed, every tensor movement will be done synchronously.
-            If ``None`` (default), the device casting will be done asynchronously but
-            a synchronization will be executed after creation if required. This option
-            should generally be faster than ``False`` and potentially slower than ``True``.
+        non_blocking (bool, optional): if ``True`` and a device is passed, the
+            entries are moved to the device without synchronization. This is
+            safe only from CPU to CUDA. In other cases, you must synchronize
+            yourself. If ``False``, every move is synchronous. If ``None``
+            (default), the moves are asynchronous, and the constructor
+            synchronizes after them if required.
         lock (bool, optional): if ``True``, the resulting tensordict will be
             locked.
 
@@ -213,15 +217,18 @@ class TensorDict(TensorDictBase):
         >>> td = TensorDict(source, batch_size=batch_size)
         >>> print(td.shape)  # equivalent to td.batch_size
         torch.Size([3])
-        >>> td_unqueeze = td.unsqueeze(-1)
-        >>> print(td_unqueeze.get("zeros").shape)
+        >>> td_unsqueeze = td.unsqueeze(-1)
+        >>> print(td_unsqueeze.get("zeros").shape)
         torch.Size([3, 1, 4, 5])
-        >>> print(td_unqueeze[0].shape)
+        >>> print(td_unsqueeze[0].shape)
         torch.Size([1])
-        >>> print(td_unqueeze.view(-1).shape)
+        >>> print(td_unsqueeze.view(-1).shape)
         torch.Size([3])
         >>> print((td.clone()==td).all())
         True
+        >>> td_add = td.apply(lambda x, y: x + y, td)
+        >>> (td_add["random"] == 2 * td["random"]).all()
+        tensor(True)
 
     """
 
@@ -418,6 +425,49 @@ class TensorDict(TensorDictBase):
         use_state_dict: bool = False,
         filter_empty: bool = True,
     ):
+        """Puts the parameters and buffers of a module in a tensordict.
+
+        The entries are the parameters and buffers of the module themselves,
+        not copies. Submodules become nested tensordicts.
+
+        .. note::
+            This method does not lock the result by default (``lock=False``).
+            The function :func:`tensordict.from_module` locks it by default
+            (``lock=True``).
+
+        Args:
+            module (nn.Module): the module to get the parameters from.
+            as_module (bool, optional): if ``True``, a :class:`~tensordict.nn.TensorDictParams`
+                instance is returned, which can be used to store parameters
+                within a :class:`torch.nn.Module`. Defaults to ``False``.
+            lock (bool, optional): if ``True``, the resulting tensordict is
+                locked. Defaults to ``False``.
+            use_state_dict (bool, optional): if ``True``, the state-dict from the
+                module is used and unflattened into a TensorDict with
+                the tree structure of the model. Use it when the module has
+                state-dict hooks. Defaults to ``False``.
+            filter_empty (bool, optional): if ``True``, submodules without
+                parameters or buffers (``nn.ReLU``, for example) get no
+                entry. If ``False``, they get an empty tensordict.
+                Defaults to ``True``.
+
+        Returns:
+            a :class:`~tensordict.TensorDict`, or a
+            :class:`~tensordict.nn.TensorDictParams` if ``as_module=True``.
+
+        Examples:
+            >>> from torch import nn
+            >>> from tensordict import TensorDict
+            >>> module = nn.Sequential(nn.Linear(3, 4), nn.ReLU())
+            >>> params = TensorDict.from_module(module)
+            >>> params["0", "weight"] is module[0].weight
+            True
+            >>> list(params.keys())
+            ['0']
+            >>> params.is_locked
+            False
+
+        """
         result = cls._from_module(
             module=module,
             as_module=as_module,

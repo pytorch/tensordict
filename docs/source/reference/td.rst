@@ -1,387 +1,816 @@
 .. currentmodule:: tensordict
 
-tensordict package
-==================
+.. _api-tensordict:
 
-The :class:`~tensordict.TensorDict` class simplifies the process of passing multiple tensors
-from module to module by packing them in a dictionary-like object that inherits features from
-regular pytorch tensors.
+tensordict: containers and functions
+====================================
 
+.. module:: tensordict
+
+This page lists the tensordict containers, and the methods that they all
+share, grouped by task. Each group also lists the functions of the
+``tensordict`` module for its task. A :class:`~tensordict.TensorDict` is a
+``dict[str, torch.Tensor]`` that behaves like one tensor. Its entries share
+their leading dimensions, the *batch size*, and an operation such as
+indexing, reshaping or :meth:`~tensordict.TensorDictBase.to` applies to every
+entry. For an introduction, see :ref:`overview`.
+
+Containers
+----------
+
+:class:`TensorDictBase` is the abstract base class of all tensordicts.
+Its subclasses keep their entries in different places:
+
+- :class:`TensorDict` keeps its tensors in memory. It is the default
+  container.
+- :class:`LazyStackedTensorDict` is a stack of tensordicts that keeps each
+  tensordict separate, so that their entries can have different shapes.
+  See :ref:`stacking`.
+- :class:`PersistentTensorDict` reads and writes its entries in an HDF5 or
+  zarr file. See :ref:`storage`.
+- :class:`TensorDictParams` is a tensordict and a :class:`torch.nn.Module`.
+  If a module holds one, the parameters and buffers of the module include
+  its tensors.
+
+:class:`MemoryMappedTensor` is not a tensordict. It is a tensor whose data
+is in a file, and the type of the entries of a memory-mapped tensordict.
+
+Other containers have their own pages: :class:`TensorClass`, the class
+form with typed fields and methods, and non-tensor data
+(:ref:`api-tensorclass`), :class:`TypedTensorDict`
+(:ref:`api-typed-tensordict`), and the key-value stores
+(:ref:`api-storage`). To choose one, see :ref:`choosing-a-container`.
 
 .. autosummary::
     :toctree: generated/
-    :template: td_template.rst
+    :template: tensordict_class.rst
 
     TensorDictBase
     TensorDict
     LazyStackedTensorDict
     PersistentTensorDict
     TensorDictParams
-    get_defaults_to_none
-    set_get_defaults_to_none
-
-Constructors and handlers
--------------------------
-
-The library offers a few method to interact with other data structures such as numpy structured arrays, namedtuples or
-h5 files. The library also exposes dedicated functions to manipulate tensordicts such as ``save``, ``load``, ``stack``
-or ``cat``.
 
 .. autosummary::
     :toctree: generated/
-    :template: td_template.rst
-
-    cat
-    default_is_leaf
-    from_any
-    from_consolidated
-    from_csv
-    from_dict
-    from_h5
-    from_json
-    from_module
-    from_modules
-    from_namedtuple
-    from_pandas
-    from_parquet
-    from_pytree
-    from_struct_array
-    from_tuple
-    from_zarr
-    fromkeys
-    is_leaf_nontensor
-    is_memmap_archive
-    lazy_stack
-    load
-    load_memmap
-    maybe_dense_stack
-    memmap
-    pack_memmap
-    refresh_archive_checksums
-    save
-    stack
-    unpack_memmap
-
-TensorDict as a context manager
--------------------------------
-
-:class:`~tensordict.TensorDict` can be used as a context manager in situations
-where an action has to be done and then undone. This include temporarily
-locking/unlocking a tensordict
-
-    >>> data.lock_()  # data.set will result in an exception
-    >>> with data.unlock_():
-    ...     data.set("key", value)
-    >>> assert data.is_locked
-
-or to execute functional calls with a TensorDict instance containing the
-parameters and buffers of a model:
-
-    >>> params = TensorDict.from_module(module).clone()
-    >>> params.zero_()
-    >>> with params.to_module(module):
-    ...     y = module(x)
-
-In the first example, we can modify the tensordict `data` because we have
-temporarily unlocked it. In the second example, we populate the module with the
-parameters and buffers contained in the `params` tensordict instance, and reset
-the original parameters after this call is completed.
-
-Memory-mapped tensors
----------------------
-
-`tensordict` offers the :class:`~tensordict.MemoryMappedTensor` primitive which
-allows you to work with tensors stored in files on disk in a handy way.
-The main advantages of :class:`~tensordict.MemoryMappedTensor`
-are its ease of construction (no need to handle the storage of a tensor),
-the possibility to work with big contiguous data that would not fit in memory,
-an efficient (de)serialization across processes and efficient indexing of
-stored tensors.
-
-If all workers have access to the same storage (both in multiprocess and distributed
-settings), passing a :class:`~tensordict.MemoryMappedTensor`
-will just consist in passing a reference to a file on disk plus a bunch of
-extra meta-data for reconstructing it. The same goes with indexed memory-mapped
-tensors as long as the data-pointer of their storage is the same as the original
-one.
-
-Indexing memory-mapped tensors is much faster than loading several independent files from
-the disk and does not require to load the full content of the array in memory.
-Apart from the file that backs it, a memory-mapped tensor is created and indexed like a regular
-PyTorch tensor:
-
-.. code-block:: Python
-
-  >>> my_images = MemoryMappedTensor.empty(
-  ...     (100, 3, 64, 64), dtype=torch.uint8, filename="images.memmap"
-  ... )
-  >>> mini_batch = my_images[:10]  # a MemoryMappedTensor view on the first 10 images
-  >>> # the file can be opened again later, or from another process
-  >>> my_images = MemoryMappedTensor.from_filename(
-  ...     "images.memmap", dtype=torch.uint8, shape=(100, 3, 64, 64)
-  ... )
-
-.. autosummary::
-    :toctree: generated/
-    :template: td_template_noinherit.rst
+    :template: class.rst
 
     MemoryMappedTensor
 
-Key-value stores
-----------------
+.. _api-tensordict-methods:
 
-.. currentmodule:: tensordict.store
+Methods by task
+---------------
 
-:class:`~tensordict.store.TensorDictStore` and :class:`~tensordict.store.LazyStackedTensorDictStore`
-are tensordicts whose entries are kept in a Redis-compatible key-value store (Redis, Dragonfly, KeyDB, ...).
-See :ref:`storage` for their usage.
+The tables below list the methods of :class:`TensorDictBase`, with one
+page for each method. Every tensordict class and every tensorclass has
+these methods. A class page lists only the methods that the class adds,
+and the overrides that have their own documentation. When the
+``tensordict`` module has a function for the same task, the function is
+in the same group.
+
+.. _api-methods-construction:
+
+Construction and conversion
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Create a tensordict from Python, numpy or pandas data, and convert a
+tensordict to other types. Most ``from_*`` class methods have a function
+of the same name in the ``tensordict`` module. To read a tensordict from a
+file, see :ref:`api-methods-saving`. For the arguments of the constructor,
+see :class:`TensorDict`.
+
+.. rubric:: Methods
 
 .. autosummary::
     :toctree: generated/
-    :template: td_template.rst
+    :template: method.rst
 
-    TensorDictStore
-    LazyStackedTensorDictStore
-    STORE_BACKENDS
+    TensorDictBase.from_any
+    TensorDictBase.from_dict
+    TensorDictBase.from_dict_instance
+    TensorDictBase.from_namedtuple
+    TensorDictBase.from_pandas
+    TensorDictBase.from_struct_array
+    TensorDictBase.from_tuple
+    TensorDictBase.from_pytree
+    TensorDictBase.from_dataclass
+    TensorDictBase.from_list
+    TensorDictBase.from_schema
+    TensorDictBase.fromkeys
+    TensorDictBase.empty
+    TensorDictBase.new_empty
+    TensorDictBase.new_full
+    TensorDictBase.new_ones
+    TensorDictBase.new_tensor
+    TensorDictBase.new_zeros
+    TensorDictBase.copy
+    TensorDictBase.clone
+    TensorDictBase.to_dict
+    TensorDictBase.to_namedtuple
+    TensorDictBase.to_pandas
+    TensorDictBase.to_pytree
+    TensorDictBase.to_struct_array
+    TensorDictBase.to_tensordict
+    TensorDictBase.tolist
+    TensorDictBase.numpy
+    TensorDictBase.as_tensor
 
-.. currentmodule:: tensordict
+.. rubric:: Functions
 
-Pointwise Operations
---------------------
+.. autosummary::
+    :toctree: generated/
+    :template: function.rst
 
-Tensordict supports various pointwise operations, allowing you to perform element-wise computations on the tensors
-stored within it. These operations are similar to those performed on regular PyTorch tensors.
+    from_any
+    from_dict
+    from_namedtuple
+    from_pandas
+    from_struct_array
+    from_tuple
+    from_pytree
+    fromkeys
+    make_tensordict
 
-Supported Operations
-~~~~~~~~~~~~~~~~~~~~
+.. _api-methods-keys:
 
-The following pointwise operations are currently supported:
-
-- Left and right addition (`+`)
-- Left and right subtraction (`-`)
-- Left and right multiplication (`*`)
-- Left and right division (`/`)
-- Left power (`**`)
-
-Many other ops, like :meth:`~tensordict.TensorDict.clamp`, :meth:`~tensordict.TensorDict.sqrt` etc. are supported.
-
-Performing Pointwise Operations
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-You can perform pointwise operations between two Tensordicts or between a Tensordict and a tensor/scalar value.
-
-Example 1: Tensordict-Tensordict Operation
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-    >>> import torch
-    >>> from tensordict import TensorDict
-    >>> td1 = TensorDict(
-    ...     a=torch.randn(3, 4),
-    ...     b=torch.zeros(3, 4, 5),
-    ...     c=torch.ones(3, 4, 5, 6),
-    ...     batch_size=(3, 4),
-    ... )
-    >>> td2 = TensorDict(
-    ...     a=torch.randn(3, 4),
-    ...     b=torch.zeros(3, 4, 5),
-    ...     c=torch.ones(3, 4, 5, 6),
-    ...     batch_size=(3, 4),
-    ... )
-    >>> result = td1 * td2
-
-In this example, the * operator is applied element-wise to the corresponding tensors in td1 and td2.
-
-Example 2: Tensordict-Tensor Operation
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-    >>> import torch
-    >>> from tensordict import TensorDict
-    >>> td = TensorDict(
-    ...     a=torch.randn(3, 4),
-    ...     b=torch.zeros(3, 4, 5),
-    ...     c=torch.ones(3, 4, 5, 6),
-    ...     batch_size=(3, 4),
-    ... )
-    >>> tensor = torch.randn(4)
-    >>> result = td * tensor
-
-Here, the * operator is applied element-wise to each tensor in td and the provided tensor. The tensor is broadcasted to match the shape of each tensor in the Tensordict.
-
-Example 3: Tensordict-Scalar Operation
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-    >>> import torch
-    >>> from tensordict import TensorDict
-    >>> td = TensorDict(
-    ...     a=torch.randn(3, 4),
-    ...     b=torch.zeros(3, 4, 5),
-    ...     c=torch.ones(3, 4, 5, 6),
-    ...     batch_size=(3, 4),
-    ... )
-    >>> scalar = 2.0
-    >>> result = td * scalar
-
-In this case, the * operator is applied element-wise to each tensor in td and the provided scalar.
-
-Broadcasting Rules
-~~~~~~~~~~~~~~~~~~
-
-When performing pointwise operations between a Tensordict and a tensor/scalar, the tensor/scalar is broadcasted to match
-the shape of each tensor in the Tensordict: the tensor is broadcast on the left to match the tensordict shape, then
-individually broadcast on the right to match the tensors shapes. This follows the standard broadcasting rules used in
-PyTorch if one thinks of the ``TensorDict`` as a single tensor instance.
-
-For example, if you have a Tensordict with tensors of shape ``(3, 4)`` and you multiply it by a tensor of shape ``(4,)``,
-the tensor will be broadcasted to shape (3, 4) before the operation is applied. If the tensordict contains a tensor of
-shape ``(3, 4, 5)``, the tensor used for the multiplication will be broadcast to ``(3, 4, 5)`` on the right for that
-multiplication.
-
-If the pointwise operation is executed across multiple tensordicts and their batch-size differ, they will be
-broadcasted to a common shape.
-
-Efficiency of pointwise operations
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-When possible, ``torch._foreach_<op>`` fused kernels will be used to speed up the computation of the pointwise
-operation. Inside a ``torch.func`` transform such as :func:`torch.vmap`, which has no batching rule for the
-``_foreach`` ops, the operation is applied to one tensor at a time instead.
-
-Handling Missing Entries
+Keys, values and entries
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-When performing pointwise operations between two Tensordicts, they must have the same keys.
-Some operations, like :meth:`~tensordict.TensorDict.add`, have a ``default`` keyword argument that can be used
-to operate with tensordict with exclusive entries.
-If ``default=None`` (the default), the two Tensordicts must have exactly matching key sets.
-If ``default="intersection"``, only the intersecting key sets will be considered, and other keys will be ignored.
-In all other cases, ``default`` must be a tensor (e.g. ``default=torch.tensor(0.0)``, not ``default=0``), which
-will be used for all missing entries on both sides of the operation.
+Read, write, select and rename the entries of a tensordict. A key is a
+string, or a tuple of strings that points to an entry of a nested
+tensordict. :class:`NestedKey` is the type of these keys. For the rules,
+see :ref:`keys`. For values that are not tensors, see
+:ref:`non-tensor-data`.
 
-Gradient computation with ``torch.autograd.grad``
--------------------------------------------------
-
-Tensordict extends :func:`torch.autograd.grad` so that gradients can be
-computed directly on (nested) ``TensorDict`` structures.  All tensors are
-extracted into tuples, the underlying PyTorch op is executed and the
-result is packed back into a new ``TensorDict`` with the same key structure.
-This makes differentiating through complex pipelines that manipulate multiple
-tensors at once straightforward.
-
-Simple example
-~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-    >>> from tensordict import TensorDict
-    >>> import torch
-    >>> # Build input TensorDict with requires_grad
-    >>> inputs = TensorDict(a=torch.randn(2, 3, requires_grad=True))
-    >>> outputs = inputs + 1.0
-    >>> grads = torch.autograd.grad(outputs, inputs, torch.ones_like(outputs))
-    >>> print(grads)
-    TensorDict(
-        fields={
-            a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([]),
-        device=None,
-        is_shared=False)
-
-End-to-end modules
-~~~~~~~~~~~~~~~~~~
-
-The feature shines when dealing with functional modules that take a tensordict
-and return another one (for instance via :func:`tensordict.nn.TensorDictModule`):
-
-.. code-block:: python
-
-    >>> td_in = TensorDict(a=torch.randn(2, 3, requires_grad=True))
-    >>> td_out = td_module(td_in)
-    >>> td_out = td_out.select(*td_module.out_keys)  # keep only out keys
-    >>> grads = torch.autograd.grad(td_out, td_in,
-    ...                             torch.ones_like(td_out))
-
-Backpropagation with ``TensorDict.backward``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-:meth:`~tensordict.TensorDictBase.backward` mirrors :meth:`torch.Tensor.backward`
-for tensordicts: it recursively collects the differentiable leaves and
-backpropagates through all of them in a single :func:`torch.autograd.backward`
-call. When every leaf is scalar, no gradient is needed — this is the typical
-case of a tensordict of losses:
-
-.. code-block:: python
-
-    >>> loss_td.backward()  # equivalent to loss_td.sum(reduce=True).backward()
-
-For non-scalar leaves, or to weight each loss term, pass a gradient tensordict
-whose entries match the differentiable leaves by nested key:
-
-.. code-block:: python
-
-    >>> loss_td.backward(torch.ones_like(loss_td))
-    >>> # weighted losses
-    >>> weights = TensorDict(
-    ...     actor_loss=torch.tensor(0.5),
-    ...     critic_loss=torch.tensor(1.0),
-    ... )
-    >>> loss_td.backward(weights)
-
-UCXX transport
---------------
-
-.. currentmodule:: tensordict._ucxx
-
-:class:`~tensordict._ucxx.TensorDictPipe` and :class:`~tensordict._ucxx.TensorDictServer` stream tensordicts
-over UCXX. They are imported from ``tensordict._ucxx`` and need the optional ``ucxx`` package.
-See :ref:`distributed` for their usage.
+.. rubric:: Methods
 
 .. autosummary::
     :toctree: generated/
-    :template: td_template.rst
+    :template: method.rst
 
-    TensorDictPipe
-    TensorDictServer
+    TensorDictBase.keys
+    TensorDictBase.values
+    TensorDictBase.items
+    TensorDictBase.sorted_keys
+    TensorDictBase.get
+    TensorDictBase.get_at
+    TensorDictBase.set
+    TensorDictBase.set_
+    TensorDictBase.set_at_
+    TensorDictBase.setdefault
+    TensorDictBase.update
+    TensorDictBase.update_
+    TensorDictBase.update_at_
+    TensorDictBase.copy_
+    TensorDictBase.copy_at_
+    TensorDictBase.replace
+    TensorDictBase.pop
+    TensorDictBase.popitem
+    TensorDictBase.del_
+    TensorDictBase.clear
+    TensorDictBase.select
+    TensorDictBase.exclude
+    TensorDictBase.split_keys
+    TensorDictBase.separates
+    TensorDictBase.rename_key_
+    TensorDictBase.flatten_keys
+    TensorDictBase.unflatten_keys
+    TensorDictBase.create_nested
+    TensorDictBase.depth
+    TensorDictBase.entry_class
+    TensorDictBase.get_item_shape
+    TensorDictBase.is_empty
+    TensorDictBase.fill_
+    TensorDictBase.set_non_tensor
+    TensorDictBase.get_non_tensor
+    TensorDictBase.is_non_tensor
+    TensorDictBase.non_tensor_items
+    TensorDictBase.filter_non_tensor_data
+    TensorDictBase.filter_empty_
+    TensorDictBase.cat_tensors
+    TensorDictBase.stack_tensors
+    TensorDictBase.cat_from_tensordict
+    TensorDictBase.stack_from_tensordict
 
-.. currentmodule:: tensordict
-
-Utils
------
+.. rubric:: Classes and functions
 
 .. autosummary::
     :toctree: generated/
-    :template: td_template.rst
+    :template: class.rst
 
-    utils.expand_as_right
-    utils.expand_right
-    utils.isin
-    utils.remove_duplicates
-    utils.Buffer
-    utils.DeviceType
-    utils.IndexType
-    utils.LinkedList
-    utils.TensorDictFuture
-    utils.print_directory_tree
-    utils.timeit
     NestedKey
-    assert_allclose_td
-    assert_close
-    capture_non_tensor_stack
-    dense_stack_tds
-    is_tensor_collection
-    lazy_legacy
-    make_tensordict
-    merge_tensordicts
-    pad
-    pad_sequence
-    parse_tensor_dict_string
-    set_capture_non_tensor_stack
-    set_lazy_legacy
-    set_list_to_stack
-    set_printoptions
-    get_printoptions
-    list_to_stack
+
+.. autosummary::
+    :toctree: generated/
+    :template: function.rst
+
     unravel_key
     unravel_key_list
+    merge_tensordicts
+
+.. _api-methods-indexing:
+
+Indexing, masking and splitting
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Index every entry along the batch dimensions at once, and split a
+tensordict into several tensordicts. ``td[0]`` and ``td[mask]`` index the
+batch dimensions. ``td["key"]`` returns an entry: see
+:ref:`api-methods-keys`. For the rules, see :ref:`batch-size`.
+
+.. autosummary::
+    :toctree: generated/
+    :template: method.rst
+
+    TensorDictBase.__getitem__
+    TensorDictBase.__iter__
+    TensorDictBase.gather
+    TensorDictBase.masked_fill
+    TensorDictBase.masked_fill_
+    TensorDictBase.masked_select
+    TensorDictBase.where
+    TensorDictBase.split
+    TensorDictBase.chunk
+    TensorDictBase.tensor_split
+    TensorDictBase.unbind
+    TensorDictBase.narrow
+
+.. _api-methods-shape:
+
+Shape, batch dimensions and stacking
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Read and change the batch size and the dimension names, reshape and expand
+a tensordict, and stack or concatenate several tensordicts. These methods
+change the batch dimensions. The dimensions of each entry after the batch
+dimensions do not change. See :ref:`batch-size` and :ref:`stacking`.
+
+.. rubric:: Methods
+
+.. autosummary::
+    :toctree: generated/
+    :template: method.rst
+
+    TensorDictBase.batch_size
+    TensorDictBase.batch_dims
+    TensorDictBase.shape
+    TensorDictBase.ndim
+    TensorDictBase.ndimension
+    TensorDictBase.dim
+    TensorDictBase.size
+    TensorDictBase.numel
+    TensorDictBase.__len__
+    TensorDictBase.names
+    TensorDictBase.refine_names
+    TensorDictBase.rename
+    TensorDictBase.rename_
+    TensorDictBase.auto_batch_size_
+    TensorDictBase.reshape
+    TensorDictBase.view
+    TensorDictBase.flatten
+    TensorDictBase.unflatten
+    TensorDictBase.permute
+    TensorDictBase.transpose
+    TensorDictBase.swapaxes
+    TensorDictBase.swapdims
+    TensorDictBase.moveaxis
+    TensorDictBase.movedim
+    TensorDictBase.squeeze
+    TensorDictBase.unsqueeze
+    TensorDictBase.expand
+    TensorDictBase.expand_as
+    TensorDictBase.broadcast_to
+    TensorDictBase.repeat
+    TensorDictBase.repeat_interleave
+    TensorDictBase.tile
+    TensorDictBase.flip
+    TensorDictBase.fliplr
+    TensorDictBase.flipud
+    TensorDictBase.roll
+    TensorDictBase.rot90
+    TensorDictBase.pad
+    TensorDictBase.atleast_1d
+    TensorDictBase.atleast_2d
+    TensorDictBase.atleast_3d
+    TensorDictBase.contiguous
+    TensorDictBase.is_contiguous
+    TensorDictBase.stack
+    TensorDictBase.cat
+    TensorDictBase.lazy_stack
+    TensorDictBase.maybe_dense_stack
+    TensorDictBase.to_lazystack
+    TensorDictBase.densify
+    TensorDictBase.to_padded_tensor
+
+.. rubric:: Functions
+
+.. autosummary::
+    :toctree: generated/
+    :template: function.rst
+
+    stack
+    cat
+    lazy_stack
+    maybe_dense_stack
+    dense_stack_tds
+    pad
+    pad_sequence
+
+.. _api-methods-device:
+
+Device, dtype and memory
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Move a tensordict to a device, cast its entries to another dtype, and
+control the memory that holds them. See :ref:`devices`.
+
+.. rubric:: Device and memory
+
+.. autosummary::
+    :toctree: generated/
+    :template: method.rst
+
+    TensorDictBase.to
+    TensorDictBase.cpu
+    TensorDictBase.cuda
+    TensorDictBase.device
+    TensorDictBase.auto_device_
+    TensorDictBase.clear_device_
+    TensorDictBase.is_cpu
+    TensorDictBase.is_cuda
+    TensorDictBase.pin_memory
+    TensorDictBase.share_memory_
+    TensorDictBase.is_shared
+    TensorDictBase.record_stream
+    TensorDictBase.consolidate
+    TensorDictBase.is_consolidated
+    TensorDictBase.from_consolidated
+    TensorDictBase.bytes
+    TensorDictBase.data_ptr
+    TensorDictBase.param_count
+    TensorDictBase.attrs
+    TensorDictBase.clear_refs_for_compile_
+
+.. rubric:: Dtype
+
+.. autosummary::
+    :toctree: generated/
+    :template: method.rst
+
+    TensorDictBase.dtype
+    TensorDictBase.type
+    TensorDictBase.is_floating_point
+    TensorDictBase.bool
+    TensorDictBase.half
+    TensorDictBase.float
+    TensorDictBase.double
+    TensorDictBase.int
+    TensorDictBase.bfloat16
+    TensorDictBase.float16
+    TensorDictBase.float32
+    TensorDictBase.float64
+    TensorDictBase.int8
+    TensorDictBase.int16
+    TensorDictBase.int32
+    TensorDictBase.int64
+    TensorDictBase.uint8
+    TensorDictBase.uint16
+    TensorDictBase.uint32
+    TensorDictBase.uint64
+    TensorDictBase.complex32
+    TensorDictBase.complex64
+    TensorDictBase.complex128
+    TensorDictBase.qint8
+    TensorDictBase.qint32
+    TensorDictBase.quint8
+    TensorDictBase.quint4x2
+
+.. rubric:: Functions
+
+.. autosummary::
+    :toctree: generated/
+    :template: function.rst
+
+    from_consolidated
+
+.. _api-methods-pointwise:
+
+Pointwise math
+~~~~~~~~~~~~~~
+
+Apply arithmetic and elementwise functions to every entry. The Python
+operators (``+``, ``-``, ``*``, ``/``, ``**``, ``==``, ``&``, ...) call
+these methods. A method whose name ends with an underscore, such as
+``add_``, writes into the existing tensors: see
+:ref:`inplace-conventions`. For broadcasting and for tensordicts with
+different keys, see :ref:`operations`.
+
+.. rubric:: Arithmetic
+
+.. autosummary::
+    :toctree: generated/
+    :template: method.rst
+
+    TensorDictBase.add
+    TensorDictBase.add_
+    TensorDictBase.sub
+    TensorDictBase.sub_
+    TensorDictBase.rsub
+    TensorDictBase.mul
+    TensorDictBase.mul_
+    TensorDictBase.div
+    TensorDictBase.div_
+    TensorDictBase.pow
+    TensorDictBase.pow_
+    TensorDictBase.mod
+    TensorDictBase.lerp
+    TensorDictBase.lerp_
+    TensorDictBase.addcdiv
+    TensorDictBase.addcdiv_
+    TensorDictBase.addcmul
+    TensorDictBase.addcmul_
+    TensorDictBase.clamp
+    TensorDictBase.clamp_min
+    TensorDictBase.clamp_min_
+    TensorDictBase.clamp_max
+    TensorDictBase.clamp_max_
+    TensorDictBase.maximum
+    TensorDictBase.maximum_
+    TensorDictBase.minimum
+    TensorDictBase.minimum_
+    TensorDictBase.zero_
+
+.. rubric:: Elementwise functions
+
+.. autosummary::
+    :toctree: generated/
+    :template: method.rst
+
+    TensorDictBase.abs
+    TensorDictBase.abs_
+    TensorDictBase.neg
+    TensorDictBase.neg_
+    TensorDictBase.reciprocal
+    TensorDictBase.reciprocal_
+    TensorDictBase.sqrt
+    TensorDictBase.sqrt_
+    TensorDictBase.exp
+    TensorDictBase.exp_
+    TensorDictBase.expm1
+    TensorDictBase.expm1_
+    TensorDictBase.log
+    TensorDictBase.log_
+    TensorDictBase.log10
+    TensorDictBase.log10_
+    TensorDictBase.log1p
+    TensorDictBase.log1p_
+    TensorDictBase.log2
+    TensorDictBase.log2_
+    TensorDictBase.sin
+    TensorDictBase.sin_
+    TensorDictBase.cos
+    TensorDictBase.cos_
+    TensorDictBase.tan
+    TensorDictBase.tan_
+    TensorDictBase.asin
+    TensorDictBase.asin_
+    TensorDictBase.acos
+    TensorDictBase.acos_
+    TensorDictBase.atan
+    TensorDictBase.atan_
+    TensorDictBase.sinh
+    TensorDictBase.sinh_
+    TensorDictBase.cosh
+    TensorDictBase.cosh_
+    TensorDictBase.tanh
+    TensorDictBase.tanh_
+    TensorDictBase.sigmoid
+    TensorDictBase.sigmoid_
+    TensorDictBase.erf
+    TensorDictBase.erf_
+    TensorDictBase.erfc
+    TensorDictBase.erfc_
+    TensorDictBase.lgamma
+    TensorDictBase.lgamma_
+    TensorDictBase.ceil
+    TensorDictBase.ceil_
+    TensorDictBase.floor
+    TensorDictBase.floor_
+    TensorDictBase.round
+    TensorDictBase.round_
+    TensorDictBase.trunc
+    TensorDictBase.trunc_
+    TensorDictBase.frac
+    TensorDictBase.frac_
+    TensorDictBase.sign
+    TensorDictBase.sign_
+    TensorDictBase.softmax
+
+.. rubric:: Comparisons and logical operations
+
+.. autosummary::
+    :toctree: generated/
+    :template: method.rst
+
+    TensorDictBase.__eq__
+    TensorDictBase.__ne__
+    TensorDictBase.__lt__
+    TensorDictBase.__le__
+    TensorDictBase.__gt__
+    TensorDictBase.__ge__
+    TensorDictBase.__and__
+    TensorDictBase.__or__
+    TensorDictBase.__xor__
+    TensorDictBase.__invert__
+    TensorDictBase.bitwise_and
+    TensorDictBase.logical_and
+    TensorDictBase.isfinite
+    TensorDictBase.isnan
+    TensorDictBase.isneginf
+    TensorDictBase.isposinf
+    TensorDictBase.isreal
+
+.. _api-methods-reductions:
+
+Reductions
+~~~~~~~~~~
+
+Reduce each entry over all its elements, or along batch dimensions with
+``dim``. With ``reduce=True``, most reductions return one tensor for the
+whole tensordict. See :ref:`operations`.
+
+.. autosummary::
+    :toctree: generated/
+    :template: method.rst
+
+    TensorDictBase.all
+    TensorDictBase.any
+    TensorDictBase.amax
+    TensorDictBase.amin
+    TensorDictBase.max
+    TensorDictBase.min
+    TensorDictBase.cummax
+    TensorDictBase.cummin
+    TensorDictBase.mean
+    TensorDictBase.nanmean
+    TensorDictBase.sum
+    TensorDictBase.nansum
+    TensorDictBase.prod
+    TensorDictBase.std
+    TensorDictBase.var
+    TensorDictBase.quantile
+    TensorDictBase.logsumexp
+    TensorDictBase.norm
+
+.. _api-methods-functional:
+
+Apply, modules and gradients
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Apply a function to every entry, and map a function over the batch. Put
+the parameters of a module in a tensordict and back, and compute
+gradients.
+See :ref:`operations`, :ref:`modules-guide` and :ref:`compile`.
+
+.. rubric:: Methods
+
+.. autosummary::
+    :toctree: generated/
+    :template: method.rst
+
+    TensorDictBase.apply
+    TensorDictBase.apply_
+    TensorDictBase.named_apply
+    TensorDictBase.map
+    TensorDictBase.map_iter
+    TensorDictBase.from_module
+    TensorDictBase.from_modules
+    TensorDictBase.to_module
+    TensorDictBase.backward
+    TensorDictBase.requires_grad
+    TensorDictBase.requires_grad_
+    TensorDictBase.detach
+    TensorDictBase.detach_
+    TensorDictBase.grad
+    TensorDictBase.data
+    TensorDictBase.zero_grad
+
+.. rubric:: Functions
+
+.. autosummary::
+    :toctree: generated/
+    :template: function.rst
+
+    from_module
+    from_modules
+    default_is_leaf
+    is_leaf_nontensor
+
+.. _api-methods-saving:
+
+Saving, loading and file formats
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Save a tensordict to disk and load it again, and write its entries to
+memory-mapped files. Other methods read and write HDF5, zarr, CSV, JSON,
+Parquet and MDS files, and key-value stores.
+``memmap(return_early=True)`` returns a
+:class:`~tensordict.utils.TensorDictFuture`. See :ref:`saving` and
+:ref:`storage`.
+
+.. rubric:: Methods
+
+.. autosummary::
+    :toctree: generated/
+    :template: method.rst
+
+    TensorDictBase.save
+    TensorDictBase.load
+    TensorDictBase.dumps
+    TensorDictBase.memmap
+    TensorDictBase.memmap_
+    TensorDictBase.memmap_like
+    TensorDictBase.memmap_refresh_
+    TensorDictBase.load_memmap
+    TensorDictBase.load_memmap_
+    TensorDictBase.make_memmap
+    TensorDictBase.make_memmap_from_storage
+    TensorDictBase.make_memmap_from_tensor
+    TensorDictBase.is_memmap
+    TensorDictBase.saved_path
+    TensorDictBase.state_dict
+    TensorDictBase.load_state_dict
+    TensorDictBase.from_h5
+    TensorDictBase.to_h5
+    TensorDictBase.from_zarr
+    TensorDictBase.to_zarr
+    TensorDictBase.from_csv
+    TensorDictBase.to_csv
+    TensorDictBase.from_json
+    TensorDictBase.to_json
+    TensorDictBase.from_parquet
+    TensorDictBase.to_parquet
+    TensorDictBase.to_mds
+    TensorDictBase.to_store
+
+.. rubric:: Functions
+
+.. autosummary::
+    :toctree: generated/
+    :template: function.rst
+
+    save
+    load
+    memmap
+    load_memmap
+    pack_memmap
+    unpack_memmap
+    is_memmap_archive
+    refresh_archive_checksums
+    from_h5
+    from_zarr
+    from_csv
+    from_json
+    from_parquet
+
+.. _api-methods-locking:
+
+Locking
+~~~~~~~
+
+A locked tensordict raises an error if you add, replace, rename or delete
+an entry. In-place writes with ``set_`` still work, except for non-tensor
+entries (`#2288 <https://github.com/pytorch/tensordict/issues/2288>`_). ``unlock_`` also works
+in a ``with`` block: the tensordict is locked again at the end of the
+block. See :ref:`keys`.
+
+.. autosummary::
+    :toctree: generated/
+    :template: method.rst
+
+    TensorDictBase.lock_
+    TensorDictBase.unlock_
+    TensorDictBase.is_locked
+
+.. _api-methods-distributed:
+
+Distributed and remote
+~~~~~~~~~~~~~~~~~~~~~~
+
+Send and receive tensordicts between processes with
+:mod:`torch.distributed`, run collective operations on them, and stream
+them over UCXX (see :ref:`api-storage`). See :ref:`distributed`.
+
+.. autosummary::
+    :toctree: generated/
+    :template: method.rst
+
+    TensorDictBase.send
+    TensorDictBase.recv
+    TensorDictBase.isend
+    TensorDictBase.irecv
+    TensorDictBase.all_reduce
+    TensorDictBase.reduce
+    TensorDictBase.broadcast
+    TensorDictBase.scatter
+    TensorDictBase.all_gather
+    TensorDictBase.gather_and_stack
+    TensorDictBase.init_remote
+    TensorDictBase.from_remote_init
+    TensorDictBase.asend
+    TensorDictBase.arecv
+
+.. _api-methods-deprecated:
+
+Deprecated methods
+~~~~~~~~~~~~~~~~~~
+
+These methods still work, and each call raises a ``DeprecationWarning``.
+Their pages name the replacement and the release that removes them.
+
+.. autosummary::
+    :toctree: generated/
+    :template: method.rst
+
+    TensorDictBase.load_
+    TensorDictBase.pin_memory_
+
+Other functions
+---------------
+
+.. _api-functions-checks:
+
+Type checks and testing
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Test whether an object is a tensordict, a tensorclass or non-tensor data,
+and compare two tensordicts in tests.
+
+.. autosummary::
+    :toctree: generated/
+    :template: function.rst
+
+    is_tensor_collection
+    is_tensorclass
+    is_non_tensor
+    assert_close
+    assert_allclose_td
+
+.. _api-functions-printing:
+
+Printing
+~~~~~~~~
+
+Choose what the representation of a tensordict shows, and rebuild a
+tensordict from its printed form. See :ref:`printing`.
+
+.. autosummary::
+    :toctree: generated/
+    :template: function.rst
+
+    set_printoptions
+    get_printoptions
+    parse_tensor_dict_string
+
+.. _api-functions-settings:
+
+Global settings
+~~~~~~~~~~~~~~~
+
+These functions read or change a behavior of tensordict, for the whole
+process or inside a ``with`` block. ``set_list_to_stack(False)`` and
+``set_capture_non_tensor_stack(True)`` are deprecated, and their pages say
+what to use instead.
+
+.. autosummary::
+    :toctree: generated/
+    :template: function.rst
+
+    list_to_stack
+    set_list_to_stack
+    capture_non_tensor_stack
+    set_capture_non_tensor_stack
+
+.. _api-functions-deprecated:
+
+Deprecated functions
+~~~~~~~~~~~~~~~~~~~~
+
+These functions still work, and each call raises a ``DeprecationWarning``.
+Their pages name the replacement and the release that removes them.
+
+.. autosummary::
+    :toctree: generated/
+    :template: function.rst
+
+    get_defaults_to_none
+    set_get_defaults_to_none
+    lazy_legacy
+    set_lazy_legacy
+
+Package constants
+-----------------
 
 .. py:data:: NO_DEFAULT
     :module: tensordict.base
@@ -391,16 +820,19 @@ Utils
     or ``device`` in :meth:`~tensordict.TensorDictBase.new_zeros`. It can also
     be imported from ``tensordict.tensordict``.
 
-.. py:data:: logger
-    :module: tensordict.utils
-
-    The :class:`logging.Logger` named ``"tensordict"``, which tensordict uses
-    for its own messages. It does not propagate to the root logger. Its level
-    is read from the ``TD_LOGGING_LEVEL`` environment variable at import time
-    (``"DEBUG"`` if unset).
-
 .. py:data:: __version__
+    :module: tensordict
 
     The version string of the installed tensordict package, or ``None`` if it
     cannot be determined, for example when tensordict is imported from a source
     tree that is not installed.
+
+See also
+--------
+
+- :ref:`overview`, :ref:`batch-size`, :ref:`keys`, :ref:`stacking`,
+  :ref:`operations` and :ref:`devices`: the user guide pages that explain
+  these methods.
+- :ref:`saving`, :ref:`storage`, :ref:`data-loading` and
+  :ref:`distributed`: the how-to guides.
+- :ref:`api-utils`: the helpers of ``tensordict.utils``.
