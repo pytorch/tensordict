@@ -1065,6 +1065,19 @@ class TestTDModule:
                 with set_dispatch_off:
                     pass
                 assert not _dispatch_td_nn_modules()
+
+            # An instance nested in itself restores the mode of the outer block.
+            with set_dispatch_off:
+                with set_dispatch_off:
+                    assert not _dispatch_td_nn_modules()
+                assert not _dispatch_td_nn_modules()
+            assert _dispatch_td_nn_modules()
+
+            # The mode is restored when the block raises.
+            with pytest.raises(RuntimeError, match="inside"):
+                with set_dispatch_off:
+                    raise RuntimeError("inside")
+            assert _dispatch_td_nn_modules()
         assert _dispatch_td_nn_modules() == mode
 
     def test_dispatch_deactivate_function(self):
