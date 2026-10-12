@@ -1,6 +1,6 @@
 # TensorDictBase.contiguous
 
-*abstract*TensorDictBase.contiguous(***, *canonical: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
+TensorDictBase.contiguous(***, *canonical: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
 
 Returns a new tensordict of the same type with contiguous values (or self if values are already contiguous).
 

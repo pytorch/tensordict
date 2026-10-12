@@ -1,6 +1,6 @@
 # TensorDictBase.detach
 
-*abstract*TensorDictBase.detach_() → Self
+TensorDictBase.detach_() → Self
 
 Detach the tensors in the tensordict in-place.
 

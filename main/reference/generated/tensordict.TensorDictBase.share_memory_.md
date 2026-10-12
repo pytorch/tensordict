@@ -1,6 +1,6 @@
 # TensorDictBase.share_memory
 
-*abstract*TensorDictBase.share_memory_() → Self
+TensorDictBase.share_memory_() → Self
 
 Places all the tensors in shared memory.
 

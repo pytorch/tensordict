@@ -1,6 +1,6 @@
 # TensorDictBase.is_contiguous
 
-*abstract*TensorDictBase.is_contiguous() → [bool](https://docs.python.org/3/builtins/functions.html#bool)
+TensorDictBase.is_contiguous() → [bool](https://docs.python.org/3/builtins/functions.html#bool)
 
 Returns a boolean indicating if all the tensors are contiguous.
 
