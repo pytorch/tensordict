@@ -1724,19 +1724,10 @@ class _PointwiseOps:
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
     ) -> Self:  # noqa: D417
-        r"""Subtracts ``self`` from ``other`` scaled by ``alpha``, leaf by leaf.
+        r"""Subtracts ``self``, scaled by ``alpha``, from ``other``, leaf by leaf.
 
         .. math::
-            \text{out}_i = \text{alpha} \times \text{other}_i - \text{self}_i
-
-        .. warning::
-            This formula differs from :func:`torch.rsub`, which computes
-            ``other - alpha * self``
-            (`#1950 <https://github.com/pytorch/tensordict/issues/1950>`_).
-            The two results are the same only if ``alpha`` is 1. If
-            ``other`` is a :class:`torch.Tensor`, each leaf calls
-            :func:`torch.rsub`, so the result is ``other - alpha * self``.
-            A number with ``alpha`` raises ``TypeError``.
+            \text{out}_i = \text{other}_i - \text{alpha} \times \text{self}_i
 
         Supports broadcasting,
         type promotion, and integer, float, and complex inputs.
@@ -1748,7 +1739,7 @@ class _PointwiseOps:
                 over the other dimensions.
 
         Keyword Args:
-            alpha (Number): the multiplier for ``other``.
+            alpha (Number): the multiplier for ``self``.
             default (torch.Tensor or str, optional): the value to use for an
                 entry that only one of the two tensordicts has. If ``None``
                 (default), the two tensordicts must have the same keys, and a
@@ -1764,8 +1755,8 @@ class _PointwiseOps:
             >>> other = TensorDict(a=torch.ones(2), batch_size=[2])
             >>> td.rsub(other)["a"]
             tensor([-9., -9.])
-            >>> td.rsub(other, alpha=2)["a"]  # 2 * 1 - 10
-            tensor([-8., -8.])
+            >>> td.rsub(other, alpha=2)["a"]  # 1 - 2 * 10
+            tensor([-19., -19.])
             >>> td.rsub(torch.tensor([1.0, 2.0]))["a"]
             tensor([-9., -8.])
 
@@ -1782,7 +1773,12 @@ class _PointwiseOps:
         else:
             other_val = other
         if alpha is not None:
-            vals = _foreach("neg", _foreach("sub", vals, other_val, alpha=alpha))
+            if _is_tensor_collection(type(other)):
+                # torch.rsub(input, other, alpha=a) is torch.sub(other, input, alpha=a)
+                vals = _foreach("sub", other_val, vals, alpha=alpha)
+            else:
+                # No _foreach op computes number - alpha * tensor in one kernel
+                vals = _foreach("add", _foreach("mul", vals, -alpha), other_val)
         else:
             vals = _foreach("neg", _foreach("sub", vals, other_val))
         items = dict(zip(keys, vals))
