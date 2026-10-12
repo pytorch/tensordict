@@ -59,6 +59,7 @@ from tensordict.store._utils import (
     _prepare_indexed_value,
     _str_to_dtype,
     _tensor_to_bytes,
+    _warn_missing_key,
 )
 from tensordict.utils import (
     _as_context_manager,
@@ -1796,12 +1797,17 @@ class LazyStackedTensorDictStore(TensorDictBase):
             key_path = _KEY_SEP.join(key)
 
         all_keys = self._get_all_keys()
-        if key_path in all_keys:
+        found = key_path in all_keys
+        if found:
             self._run_sync(self._adel_key(key_path))
         prefix_check = key_path + _KEY_SEP
         for k in all_keys:
             if k.startswith(prefix_check):
+                found = True
                 self._run_sync(self._adel_key(k))
+        if not found:
+            # stacklevel 3: skip the _lock_blocked wrapper
+            _warn_missing_key(self, "del_", key, stacklevel=3)
         return self
 
     async def _adel_key(self, key_path: str):
@@ -1836,7 +1842,10 @@ class LazyStackedTensorDictStore(TensorDictBase):
             else:
                 renames = self._sub_td_renames(all_keys, old_path, new_path)
             if not renames:
-                return renames
+                # a sub-tensordict at old_path may still exist, with a
+                # destination that is not free
+                old_prefix = old_path + _KEY_SEP
+                return renames, any(k.startswith(old_prefix) for k in all_keys)
             moves = []
             for src_kp, dst_kp in renames:
                 moves += [
@@ -1862,15 +1871,17 @@ class LazyStackedTensorDictStore(TensorDictBase):
                 pipe.srem(self._keys_registry_key, src_kp)
                 pipe.sadd(self._keys_registry_key, dst_kp)
             await pipe.execute()
-            return renames
+            return renames, True
 
-        renamed = self._run_sync(_arename())
+        renamed, found = self._run_sync(_arename())
         if self._meta_cache is not None:
             # the old paths are gone, and a leaf at new_path may have been
             # replaced
             for src_kp, dst_kp in renamed:
                 self._meta_cache.pop(src_kp, None)
                 self._meta_cache.pop(dst_kp, None)
+        if not found:
+            _warn_missing_key(self, "rename_key_", old_key, stacklevel=2)
         return self
 
     @staticmethod

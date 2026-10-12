@@ -1441,8 +1441,20 @@ class PersistentTensorDict(TensorDictBase):
 
     @_lock_blocked
     def del_(self, key):
-        key = self._process_key(key)
-        self._backend.delete(self.file, key)
+        path = self._process_key(key)
+        # h5py raises a KeyError for a missing key, zarr does not
+        missing = self.backend == "zarr" and not self._backend.contains(self.file, path)
+        self._backend.delete(self.file, path)
+        if missing:
+            # stacklevel 3: skip the _lock_blocked wrapper
+            warnings.warn(
+                f"{type(self).__name__}.del_ of a missing key {key!r} does "
+                "nothing today with the zarr backend. Starting with TensorDict "
+                "0.17, the default will change to raising a KeyError, as "
+                "TensorDict does.",
+                FutureWarning,
+                stacklevel=3,
+            )
         return self
 
     def detach_(self):
