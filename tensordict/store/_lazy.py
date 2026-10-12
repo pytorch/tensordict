@@ -2193,7 +2193,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._batch_size = new_size
 
-    def _write_back(self, keys, values, method: str, stacklevel: int = 2) -> None:
+    def _write_back(self, keys, values, method: str) -> None:
         # Override: a key whose elements differ in shape is read with the shape
         # of the first element, and writing it back would lose the others: it
         # is left unchanged, as fill_ does.
@@ -2205,7 +2205,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
             [key for key, keep in zip(keys, homogeneous) if keep],
             [value for value, keep in zip(values, homogeneous) if keep],
             method,
-            stacklevel + 1,
         )
 
     def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:

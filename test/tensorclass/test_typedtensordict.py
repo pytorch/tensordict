@@ -18,11 +18,18 @@ import warnings
 
 import pytest
 import torch
-from tensordict import lazy_stack, TensorDict, TypedTensorDict
+from tensordict import (
+    lazy_stack,
+    LazyStackedTensorDict,
+    PersistentTensorDict,
+    TensorDict,
+    TypedTensorDict,
+)
 from tensordict.base import _default_is_leaf, TensorDictBase
 from torch import Tensor
 
 _has_mypy = importlib.util.find_spec("mypy") is not None
+_has_h5py = importlib.util.find_spec("h5py") is not None
 
 # ---------------------------------------------------------------------------
 # Fixture classes
@@ -831,6 +838,21 @@ class TestFromTensordict:
         torch.testing.assert_close(state.to_tensordict(), expected)
         state.copy_(other)
         torch.testing.assert_close(state.to_tensordict(), other)
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+    def test_from_tensordict_lazy_stack_read_only_inplace(self, tmp_path):
+        # A stack of files opened read-only stays unchanged, and warns
+        files = []
+        for i in range(2):
+            self._make_td().to_h5(tmp_path / f"{i}.h5").close()
+            files.append(PersistentTensorDict.from_h5(tmp_path / f"{i}.h5"))
+        state = PredictorState.from_tensordict(LazyStackedTensorDict(*files))
+        before = state.to_tensordict()
+        with pytest.warns(FutureWarning, match="leaves the file unchanged"):
+            state.add_(1.0)
+        with pytest.warns(FutureWarning, match="leaves the file unchanged"):
+            state.update_(before + 1)
+        torch.testing.assert_close(state.to_tensordict(), before)
 
     def test_from_tensordict_memmap(self):
         with tempfile.TemporaryDirectory() as tmpdir:

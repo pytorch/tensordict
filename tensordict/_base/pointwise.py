@@ -44,6 +44,15 @@ if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
 
 
+def _values_by_key(other: TensorCollection, keys: list) -> list:
+    """The tensor leaves of ``other`` under ``keys``, in that order."""
+    other_keys, values = other._items_list(True, True)
+    if other_keys == keys:
+        # same keys in the same order, the common case: no reordering
+        return values
+    return other._values_list(True, True, sorting_keys=keys)
+
+
 class _PointwiseOps:
     """Elementwise arithmetic, comparison and logical operations."""
 
@@ -1511,17 +1520,19 @@ class _PointwiseOps:
         weight: TensorDictBase | torch.Tensor | float,
     ):
         """In-place version of :meth:`~.lerp`."""
+        # the leaves of the tensordict operands are paired by key, as in add_
+        keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(end)):
-            end_val = end._values_list(True, True)
+            end_val = _values_by_key(end, keys)
         else:
             end_val = end
         if isinstance(weight, (float, torch.Tensor)):
             weight_val = weight
         elif _is_tensor_collection(type(weight)):
-            weight_val = weight._values_list(True, True)
+            weight_val = _values_by_key(weight, keys)
         else:
             weight_val = weight
-        _foreach("lerp_", self._values_list(True, True), end_val, weight_val)
+        _foreach("lerp_", vals, end_val, weight_val)
         return self
 
     @_maybe_broadcast_other("addcdiv", 2)
@@ -1576,17 +1587,19 @@ class _PointwiseOps:
     @_maybe_broadcast_other("addcdiv_", 2)
     def addcdiv_(self, other1, other2, *, value: float | None = 1):
         """The in-place version of :meth:`~.addcdiv`."""
+        # the leaves of the tensordict operands are paired by key, as in add_
+        keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other1)):
-            other1_val = other1._values_list(True, True)
+            other1_val = _values_by_key(other1, keys)
         else:
             other1_val = other1
         if _is_tensor_collection(type(other2)):
-            other2_val = other2._values_list(True, True)
+            other2_val = _values_by_key(other2, keys)
         else:
             other2_val = other2
         _foreach(
             "addcdiv_",
-            self._values_list(True, True),
+            vals,
             other1_val,
             other2_val,
             value=value,
@@ -1646,17 +1659,19 @@ class _PointwiseOps:
     @_maybe_broadcast_other("addcmul_", 2)
     def addcmul_(self, other1, other2, *, value: float | None = 1):
         """The in-place version of :meth:`~.addcmul`."""
+        # the leaves of the tensordict operands are paired by key, as in add_
+        keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other1)):
-            other1_val = other1._values_list(True, True)
+            other1_val = _values_by_key(other1, keys)
         else:
             other1_val = other1
         if _is_tensor_collection(type(other2)):
-            other2_val = other2._values_list(True, True)
+            other2_val = _values_by_key(other2, keys)
         else:
             other2_val = other2
         _foreach(
             "addcmul_",
-            self._values_list(True, True),
+            vals,
             other1_val,
             other2_val,
             value=value,

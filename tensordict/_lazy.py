@@ -2866,6 +2866,11 @@ class LazyStackedTensorDict(TensorDictBase):
             return LazyStackedTensorDict
         return data_type
 
+    def _storage_is_read_only(self) -> bool:
+        # a TypedTensorDict or a sub-tensordict over this stack writes back
+        # through the members, such as rows of a file opened read-only
+        return any(td._storage_is_read_only() for td in self.tensordicts)
+
     def apply_(self, fn: Callable, *others, **kwargs):
         others = (other.unbind(self.stack_dim) for other in others)
         for td, *_others in _zip_strict(self.tensordicts, *others):

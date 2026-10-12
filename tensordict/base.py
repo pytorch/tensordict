@@ -830,8 +830,20 @@ _NESTED_TENSORS_AS_LISTS = _NestedTensorsAsLists()
 _NESTED_TENSORS_AS_LISTS_NONTENSOR = _NestedTensorsAsListsNonTensor()
 
 
-def _warn_read_only(method: str, stacklevel: int) -> None:
+# Set while an in-place method runs on a tensordict whose file is opened
+# read-only, so that the nested calls it makes do not warn again.
+_READ_ONLY_CALL = local()
+_PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__)) + os.sep
+
+
+def _warn_read_only(method: str) -> None:
     """Warns that the in-place ``method`` leaves a file opened read-only unchanged."""
+    if getattr(_READ_ONLY_CALL, "running", False):
+        return
+    # point to the first frame outside tensordict: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
     warnings.warn(
         deprecation_message(
             f"Calling {method}() on a tensordict stored in a file opened "
@@ -847,13 +859,20 @@ def _warn_read_only(method: str, stacklevel: int) -> None:
 
 
 def _has_lazy_stack(td: TensorDictBase) -> bool:
-    """Whether ``td`` or one of its nested tensordicts is a lazy stack."""
+    """Whether ``td`` or one of its nested tensordicts is a lazy stack.
+
+    Only the classes of the entries are read, not their data.
+    """
     from tensordict._lazy import LazyStackedTensorDict
 
-    return isinstance(td, LazyStackedTensorDict) or any(
-        isinstance(value, LazyStackedTensorDict)
-        for value in td.values(True, is_leaf=_is_leaf_nontensor)
-    )
+    if isinstance(td, LazyStackedTensorDict):
+        return True
+    for key in td.keys():
+        cls = td.entry_class(key)
+        if _is_tensor_collection(cls) and not _is_non_tensor(cls):
+            if issubclass(cls, LazyStackedTensorDict) or _has_lazy_stack(td.get(key)):
+                return True
+    return False
 
 
 def _write_back_inplace(method: Callable) -> Callable:
@@ -3697,17 +3716,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_dims=self.batch_dims
             )
-        # The tensor leaves of self that the copy_ calls below change, to write
-        # back where they are copies of the stored data. A lazy stack in the
-        # input splits self into its elements: those leaves are not recorded,
-        # and stay unchanged.
+        # The tensor leaves of self that the copy_ calls of _apply_nest below
+        # change, to write back where they are copies of the stored data. A
+        # lazy stack in the input splits self into its elements: those leaves
+        # are not recorded, and stay unchanged.
         written = None
-        if self._reads_return_copies and not _has_lazy_stack(input_dict_or_td):
-            written = []
 
         if keys_to_update is not None:
             if len(keys_to_update) == 0:
                 return self
+            if self._reads_return_copies and not _has_lazy_stack(input_dict_or_td):
+                written = []
             keys_to_update = [_unravel_key_to_tuple(key) for key in keys_to_update]
 
             named = True
@@ -3766,6 +3785,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         dest.copy_(source, non_blocking=non_blocking)
 
             else:
+                if self._reads_return_copies and not _has_lazy_stack(input_dict_or_td):
+                    written = []
 
                 def inplace_update(name, source, dest):
                     if source is None:
@@ -4326,17 +4347,32 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         if self._storage_is_read_only():
             # the method runs on self, which writes nothing
-            result = method(self, *args, **kwargs)
-            _warn_read_only(method.__name__, stacklevel=4)
+            running = getattr(_READ_ONLY_CALL, "running", False)
+            _READ_ONLY_CALL.running = True
+            try:
+                result = method(self, *args, **kwargs)
+            finally:
+                _READ_ONLY_CALL.running = running
+            _warn_read_only(method.__name__)
             return result
         try:
-            items = dict(self.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS))
+            items = list(self.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS))
         except RuntimeError:
             # The members of a lazy stack that differ in shape cannot be read
             # as one tensor: the method runs on self, which writes nothing
             # unless it broadcasts self over its members.
             return method(self, *args, **kwargs)
-        leaves = TensorDict(items, batch_size=self.batch_size, device=self.device)
+        # The leaves are set in the order of self, as in to_tensordict():
+        # lerp_, addcdiv_ and addcmul_ pair their operands by position.
+        leaves = TensorDict(batch_size=self.batch_size, device=self.device)
+        for key, value in items:
+            leaves._set_tuple(
+                _unravel_key_to_tuple(key),
+                value,
+                inplace=False,
+                validated=True,
+                non_blocking=False,
+            )
         result = method(leaves, *args, **kwargs)
         if result is not leaves:
             # broadcasting self returns a new tensordict and writes nothing
@@ -4345,17 +4381,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         self._write_back(keys, values, method.__name__)
         return self
 
-    def _write_back(self, keys, values, method: str, stacklevel: int = 2) -> None:
+    def _write_back(self, keys, values, method: str) -> None:
         """Writes the leaves that the in-place method ``method`` changed back to storage.
 
         Only called when ``_reads_return_copies`` is set. ``values`` are the
-        changed copies of the leaves under ``keys``. ``stacklevel`` counts the
-        frames to the user's call, as in :func:`warnings.warn`.
+        changed copies of the leaves under ``keys``.
         """
         if not keys:
             return
         if self._storage_is_read_only():
-            _warn_read_only(method, stacklevel=stacklevel + 2)
+            _warn_read_only(method)
             return
         for key, value in zip(keys, values):
             self._set_tuple(
