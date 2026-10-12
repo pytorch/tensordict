@@ -1611,7 +1611,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 key, value, index, validated=False, non_blocking=non_blocking
             )
             return self
+        converted = False
         if not validated:
+            converted = not is_tensor_collection(value)
             value = self._validate_value(
                 value, check_shape=False, non_blocking=non_blocking
             )
@@ -1622,7 +1624,12 @@ class LazyStackedTensorDict(TensorDictBase):
         # it broadcasts
         batch_size = _getitem_batch_size(self.batch_size, index)
         if is_tensor_collection(value):
-            if value.batch_size[: len(batch_size)] != batch_size:
+            if converted and is_tensorclass(value) and is_non_tensor(value):
+                # the data was converted to a NonTensorData with the batch
+                # size of self: give it the batch size of the index, which
+                # expand cannot reach from there
+                value = value.empty(batch_size=batch_size)
+            elif value.batch_size[: len(batch_size)] != batch_size:
                 value = value.expand(batch_size)
         else:
             entry, entry_batch_dims = self._member_entry(key)

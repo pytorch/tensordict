@@ -11,6 +11,7 @@ import os
 import pickle
 import platform
 import sys
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -20,6 +21,7 @@ from tensordict import (
     is_leaf_nontensor,
     lazy_stack,
     LazyStackedTensorDict,
+    NonTensorData,
     NonTensorStack,
     TensorClass,
     TensorDict,
@@ -3286,6 +3288,41 @@ class TestLazyStackedTensorDict:
         lazy.set_at_("a", "s1", index)
         dense.set_at_("a", "s1", index)
         assert lazy.get("a").tolist() == dense.get("a").tolist()
+
+    @pytest.mark.parametrize(
+        "index",
+        [1, slice(0, 2), torch.tensor([0, 2]), (slice(None), 0), (Ellipsis, 1)],
+    )
+    @pytest.mark.parametrize("entry_dims", [(), (5,)])
+    def test_set_at_non_tensor_expand(self, index, entry_dims):
+        # The string is converted to a NonTensorData with the batch size of
+        # the tensordict, which must not be expanded to the indexed batch
+        # size, a shape that torch.Tensor.expand rejects (#2175)
+        batch_size = (3, 4, 2)
+        tds = [
+            TensorDict(
+                a=NonTensorData("s0", batch_size=(*batch_size, *entry_dims)),
+                batch_size=batch_size,
+            )
+        ]
+        if not entry_dims:
+            tds.append(
+                LazyStackedTensorDict.lazy_stack(
+                    [TensorDict(a="s0", batch_size=batch_size[1:]) for _ in range(3)]
+                )
+            )
+        expected = np.full((*batch_size, *entry_dims), "s0", dtype=object)
+        expected[
+            tuple(
+                idx.numpy() if isinstance(idx, torch.Tensor) else idx
+                for idx in (index if isinstance(index, tuple) else (index,))
+            )
+        ] = "s1"
+        for td in tds:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                td.set_at_("a", "s1", index)
+            assert td.get("a").tolist() == expected.tolist()
 
 
 if __name__ == "__main__":

@@ -1339,6 +1339,7 @@ class TensorDict(TensorDictBase):
 
     def _set_at_str(self, key, value, idx, *, validated, non_blocking: bool):
         tensor_in = self._get_str(key, NO_DEFAULT)
+        converted = False
         if not validated:
             if (
                 isinstance(value, Number)
@@ -1349,6 +1350,7 @@ class TensorDict(TensorDictBase):
                 tensor_in[idx] = value
                 return self
             value = _cast_scalar(value, tensor_in)
+            converted = not is_tensor_collection(value)
             value = self._validate_value(
                 value, check_shape=False, non_blocking=non_blocking
             )
@@ -1412,6 +1414,11 @@ class TensorDict(TensorDictBase):
                         device=dest.device,
                     )
                 else:
+                    if converted and is_tensorclass(value):
+                        # The data was converted to a NonTensorData with the
+                        # batch size of self: drop its batch dims, so that it
+                        # broadcasts to dest[idx]
+                        value = value.empty(batch_size=())
                     dest_val[idx] = value
                 if dest_val is not dest:
                     self._set_str(
