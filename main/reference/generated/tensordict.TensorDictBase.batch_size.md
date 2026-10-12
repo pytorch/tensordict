@@ -1,6 +1,6 @@
 # TensorDictBase.batch_size
 
-*abstract property*TensorDictBase.batch_size*: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*
+*property*TensorDictBase.batch_size*: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*
 
 The batch size of the tensordict, as a [`torch.Size`](https://docs.pytorch.org/docs/stable/size.html#torch.Size). `shape` is the same attribute.
 

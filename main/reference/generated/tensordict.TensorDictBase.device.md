@@ -1,6 +1,6 @@
 # TensorDictBase.device
 
-*abstract property*TensorDictBase.device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None)*
+*property*TensorDictBase.device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None)*
 
 Device of a TensorDict.
 

@@ -114,13 +114,6 @@ True
 tensor(True)
 ```
 
-*property*device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None)*
-
-Device of the tensordict.
-
-Returns None if device hasn't been provided in the constructor or set via tensordict.to(device).
-The to() method can also be used as a context manager for temporary device changes.
-
 *classmethod*from_module(*module: [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)*, *as_module: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *lock: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *use_state_dict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *filter_empty: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*)
 
 Puts the parameters and buffers of a module in a tensordict.

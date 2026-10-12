@@ -99,7 +99,7 @@ True
 
 ## The device of a tensordict
 
-A tensordict has a [`device`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.device) attribute. By
+A tensordict has a [`device`](../reference/generated/tensordict.TensorDictBase.device.html#tensordict.TensorDictBase.device) attribute. By
 default, it is `None`, also if all the leaves are on the same device:
 
 ```
