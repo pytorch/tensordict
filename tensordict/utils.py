@@ -11,6 +11,7 @@ import itertools
 import logging
 import math
 import os
+import queue
 import re
 import threading
 import time
@@ -18,7 +19,6 @@ import warnings
 import weakref
 from collections import defaultdict
 from collections.abc import KeysView
-from contextlib import nullcontext
 from dataclasses import is_dataclass
 from functools import wraps
 from numbers import Number
@@ -39,7 +39,7 @@ import numpy as np
 import torch
 from pyvers import implement_for  # noqa: F401
 from tensordict import _indexing, _utils_key_json
-from tensordict._deprecation import deprecated_attributes
+from tensordict._deprecation import deprecated_attributes, warn_deprecated
 from tensordict._indexing import _getitem_batch_size  # noqa: F401
 from tensordict._nestedkey import NestedKey
 from torch import Tensor
@@ -291,6 +291,8 @@ def expand_as_right(
          a tensor with shape matching the dest input tensor shape.
 
     Examples:
+        >>> import torch
+        >>> from tensordict.utils import expand_as_right
         >>> tensor = torch.zeros(3,4)
         >>> dest = torch.zeros(3,4,5)
         >>> print(expand_as_right(tensor, dest).shape)
@@ -328,6 +330,8 @@ def expand_right(tensor: Tensor, shape: Sequence[int]) -> Tensor:
          a tensor with shape matching the target shape.
 
     Examples:
+        >>> import torch
+        >>> from tensordict.utils import expand_right
         >>> tensor = torch.zeros(3,4)
         >>> shape = (3,4,5)
         >>> print(expand_right(tensor, shape).shape)
@@ -467,6 +471,13 @@ def _get_item(tensor: Tensor, index: IndexType) -> Tensor:
         raise err
 
 
+def _cast_scalar(value, tensor):
+    """Return a Python scalar ``value`` as torch writes it into ``tensor``: in its dtype and on its device."""
+    if isinstance(value, Number) and isinstance(tensor, Tensor):
+        return torch.tensor(value, dtype=tensor.dtype, device=tensor.device)
+    return value
+
+
 def _set_item(
     tensor: Tensor, index: IndexType, value: Tensor, *, validated, non_blocking
 ) -> Tensor:
@@ -479,14 +490,17 @@ def _set_item(
     from tensordict.tensorclass import NonTensorData, NonTensorStack
 
     if is_non_tensor(tensor):
-        if (
-            isinstance(value, NonTensorData)
-            and isinstance(tensor, NonTensorData)
-            and tensor.data == value.data
-        ):
-            return tensor
-        elif isinstance(tensor, NonTensorData):
-            tensor = NonTensorStack.from_nontensordata(tensor)
+        if isinstance(value, NonTensorData) and isinstance(tensor, NonTensorData):
+            try:
+                is_same = bool(tensor.data == value.data)
+            except Exception:
+                # Arrays, tensors and data frames compare elementwise, and the
+                # result has no single truth value: write the value anyway.
+                is_same = False
+            if is_same:
+                return tensor
+        if isinstance(tensor, NonTensorData):
+            tensor = NonTensorStack._from_nontensordata(tensor)
         if tensor.stack_dim != 0:
             tensor = NonTensorStack(*tensor.unbind(0), stack_dim=0)
         tensor[index] = value
@@ -497,7 +511,28 @@ def _set_item(
 
 
 class timeit:
-    """A dirty but easy to use decorator for profiling code."""
+    """Measures the time spent in a function or a block of code, by name.
+
+    Use it as a decorator or as a context manager. Each name accumulates
+    its call count, its total time and its mean time.
+    :meth:`timeit.print` logs them with the tensordict logger, and
+    :meth:`timeit.erase` resets them.
+
+    Args:
+        name (str): the name under which the time is recorded.
+
+    Examples:
+        >>> from tensordict.utils import timeit
+        >>> @timeit("step")
+        ... def step():
+        ...     return 1
+        >>> _ = step()
+        >>> with timeit("block"):
+        ...     _ = step()
+        >>> timeit.print()  # logs "block took ... msec" and "step took ... msec"
+        >>> timeit.erase()
+
+    """
 
     _REG = {}
 
@@ -596,10 +631,15 @@ _TENSORCLASS_MEMO = {}
 
 
 def _is_tensorclass(cls: type) -> bool:
-    out = _TENSORCLASS_MEMO.get(cls)
+    # Under Dynamo the memo is not read: a lookup that misses guards on all the
+    # keys of the memo, so any class memoized later in eager would recompile.
+    is_dynamo = is_compiling()
+    out = None
+    if not is_dynamo:
+        out = _TENSORCLASS_MEMO.get(cls)
     if out is None:
         out = getattr(cls, "_is_tensorclass", False)
-        if not is_compiling():
+        if not is_dynamo:
             _TENSORCLASS_MEMO[cls] = out
     return out
 
@@ -705,7 +745,7 @@ class _StringKeys(KeysView):
         return self.keys.__getitem__(key)
 
     def __iter__(self):
-        yield from self.keys
+        return iter(self.keys)
 
     def __repr__(self):
         return f"{type(self).__name__}({self.keys})"
@@ -765,6 +805,42 @@ def _lock_blocked(func):
         return func(self, *args, **kwargs)
 
     return new_func
+
+
+class _UpdateIgnoreLockWarned:
+    """The type of :data:`_UPDATE_IGNORE_LOCK_WARNED`."""
+
+    __slots__ = ()
+
+    def __bool__(self) -> bool:
+        return True
+
+    def __repr__(self) -> str:
+        return "_UPDATE_IGNORE_LOCK_WARNED"
+
+
+# A truthy ``ignore_lock`` value. A public ``update`` method that warns about
+# ``ignore_lock=True`` passes it down instead of ``True``, so that the nested
+# ``update`` calls behave the same but do not warn again.
+_UPDATE_IGNORE_LOCK_WARNED = _UpdateIgnoreLockWarned()
+
+
+def _warn_update_ignore_lock(stacklevel: int = 2) -> _UpdateIgnoreLockWarned:
+    """Warns that ``update(ignore_lock=True)`` is deprecated.
+
+    Call it from a public ``update`` method only when ``ignore_lock`` is truthy
+    and is not :data:`_UPDATE_IGNORE_LOCK_WARNED`, and pass the returned value
+    down as ``ignore_lock``. ``stacklevel`` counts as in :func:`warnings.warn`
+    from that ``update`` method: ``2`` points to its caller, ``3`` to the
+    caller of a decorated ``update``.
+    """
+    warn_deprecated(
+        "update(ignore_lock=True)",
+        removal="0.17",
+        replacement="'with td.unlock_(): td.update(...)'",
+        stacklevel=stacklevel + 1,
+    )
+    return _UPDATE_IGNORE_LOCK_WARNED
 
 
 def _strong_ref(obj):
@@ -965,8 +1041,16 @@ def _parse_to(*args, **kwargs):
         )
     else:
         non_blocking = kwargs.get("non_blocking", False)
-        convert_to_format = kwargs.get("convert_to_format")
-        if len(args) > 0:
+        convert_to_format = kwargs.get("memory_format")
+        if len(args) > 0 and isinstance(args[0], torch.dtype):
+            # td.to(dtype)
+            device = kwargs.get("device")
+            dtype = args[0]
+        elif len(args) > 0 and isinstance(args[0], torch.Tensor):
+            # td.to(tensor)
+            device = args[0].device
+            dtype = args[0].dtype
+        elif len(args) > 0:
             device = torch.device(args[0])
             if len(args) > 1:
                 dtype = args[1]
@@ -1783,10 +1867,13 @@ def _check_keys(
 
     if not len(list_of_tensordicts):
         return set()
+    # is_leaf only filters nested or leaf keys: without it, TensorDict.keys()
+    # returns its cheap view of the dict keys.
+    is_leaf = _is_leaf_nontensor if include_nested or leaves_only else None
     keys = list_of_tensordicts[0].keys(
         include_nested=include_nested,
         leaves_only=leaves_only,
-        is_leaf=_is_leaf_nontensor,
+        is_leaf=is_leaf,
     )
     # TODO: compile doesn't like set() over an arbitrary object
     is_comp = is_compiling()
@@ -1794,11 +1881,11 @@ def _check_keys(
         keys_set = {k for k in keys}  # noqa: C416
     else:
         keys_set: set[str] = set(keys)
-    for td in list_of_tensordicts[1:]:
+    for i, td in enumerate(list_of_tensordicts[1:], 1):
         k = td.keys(
             include_nested=include_nested,
             leaves_only=leaves_only,
-            is_leaf=_is_leaf_nontensor,
+            is_leaf=is_leaf,
         )
         if not strict:
             keys_set = keys_set.intersection(k)
@@ -1809,7 +1896,9 @@ def _check_keys(
                 k = set(k)
             if k != keys_set:
                 raise KeyError(
-                    f"got keys {keys} and {set(td.keys())} which are incompatible"
+                    f"tensordict {i} has keys {sorted(k, key=str)} but tensordict 0 "
+                    f"has keys {sorted(keys_set, key=str)}; all tensordicts must have "
+                    f"the same keys"
                 )
     if strict:
         if is_comp:
@@ -1901,6 +1990,33 @@ def _get_shape_from_args(*args, kwarg_name="size", **kwargs):
                 f"Either the kwarg `{kwarg_name}`, a single shape argument or a sequence of integers can be passed. Got args={args} and kwargs={kwargs}."
             )
     return size
+
+
+def _resolve_expand_shape(shape: Sequence[int], batch_size: torch.Size) -> torch.Size:
+    """Replaces the ``-1`` sizes of an ``expand`` shape and checks the shape, as :meth:`torch.Tensor.expand` does.
+
+    The shapes are aligned on the right. A ``-1`` keeps the size of the matching dim of
+    ``batch_size``. The other sizes must match the existing size, or expand a dim of size
+    1. The sizes of new leading dims are left as they are.
+    """
+    num_new_dims = len(shape) - len(batch_size)
+    if num_new_dims < 0:
+        # too few sizes: left to the caller, which raises
+        return shape
+    resolved = list(shape)
+    for i, size in enumerate(shape):
+        if i < num_new_dims:
+            continue
+        existing = batch_size[i - num_new_dims]
+        if size == -1:
+            resolved[i] = existing
+        elif size != existing and existing != 1:
+            raise RuntimeError(
+                f"The expanded size of the tensor ({size}) must match the existing size "
+                f"({existing}) at non-singleton dimension {i}.  Target sizes: "
+                f"{list(shape)}.  Tensor sizes: {list(batch_size)}"
+            )
+    return torch.Size(resolved)
 
 
 # Imports of ``tensordict.utils.Buffer`` resolve to this empty placeholder,
@@ -2054,7 +2170,8 @@ def _is_json_serializable(item):
                 return False
         else:
             return True
-    if isinstance(item, (list, tuple, set)):
+    # a set is not a JSON type: leave it to pickle
+    if isinstance(item, (list, tuple)):
         for val in item:
             if not _is_json_serializable(val):
                 return False
@@ -2140,6 +2257,9 @@ def isin(
             the ``input`` ``key`` tensor that are also present in the ``reference``.
 
     Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.utils import isin
         >>> td = TensorDict(
         ...     {
         ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
@@ -2202,7 +2322,8 @@ def _index_preserve_data_ptr(index):
     # we can't use a list comprehension here because it fails with tensor indices
     if index is None or index is Ellipsis:
         return True
-    if isinstance(index, int):
+    # torch reads a bool as a 0-d mask, which copies
+    if isinstance(index, int) and not isinstance(index, bool):
         return True
     if isinstance(index, slice) and (index.start == 0 or index.start is None):
         return True
@@ -2238,7 +2359,10 @@ def remove_duplicates(
         unique_indices (torch.Tensor, optional): The indices of the first occurrences of the unique elements in the
             input tensordict for the specified `key` along the specified `dim`. Only provided if `return_indices` is True.
 
-    Example:
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.utils import remove_duplicates
         >>> td = TensorDict(
         ...     {
         ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
@@ -2373,6 +2497,8 @@ def _is_unbatched(data) -> bool:
     this only matches types that explicitly set ``_pass_through = True``.
     """
     cls = type(data)
+    if cls is Tensor:
+        return False
     is_dynamo = is_compiling()
     if not is_dynamo:
         out = _UNBATCHED_MEMO.get(cls)
@@ -2382,6 +2508,44 @@ def _is_unbatched(data) -> bool:
     if not is_dynamo:
         _UNBATCHED_MEMO[cls] = out
     return out
+
+
+# The _foreach ops whose per-tensor op is not ``torch.Tensor.<name>``:
+# _foreach_maximum and _foreach_minimum dispatch to clamp_min and clamp_max
+# (torch.maximum takes no Python scalar), and _foreach_norm takes the
+# arguments of torch.linalg.vector_norm.
+_FOREACH_PER_TENSOR_OPS = {
+    "maximum": torch.clamp_min,
+    "maximum_": torch.Tensor.clamp_min_,
+    "minimum": torch.clamp_max,
+    "minimum_": torch.Tensor.clamp_max_,
+    "norm": torch.linalg.vector_norm,
+}
+
+
+def _foreach(name: str, tensors, *args, **kwargs):
+    """Calls ``torch._foreach_<name>(tensors, *args, **kwargs)``, one tensor at a time under torch.func.
+
+    functorch has no batching rule for the ``_foreach`` ops, so inside any
+    ``torch.func`` transform (``vmap``, ``grad``, ``jacrev``, ``functionalize``,
+    ...) each tensor goes through ``torch.Tensor.<name>``. Under a transform
+    without ``vmap``, such as ``grad`` alone, the ``_foreach`` ops would work,
+    but they also run one op per tensor. A list or tuple in ``args`` gives one
+    value per tensor; any other value is used for every tensor.
+    """
+    # Dynamo folds the depth to a guarded constant. Do not test
+    # ``peek_interpreter_stack() is None``: Dynamo evaluates it as False.
+    if torch._C._functorch.get_dynamic_layer_stack_depth() == 0:
+        return getattr(torch, "_foreach_" + name)(tensors, *args, **kwargs)
+    op = _FOREACH_PER_TENSOR_OPS.get(name) or getattr(torch.Tensor, name)
+    per_tensor_args = [
+        arg if isinstance(arg, (list, tuple)) else [arg] * len(tensors) for arg in args
+    ]
+    results = [
+        op(tensor, *tensor_args, **kwargs)
+        for tensor, *tensor_args in _zip_strict(tensors, *per_tensor_args)
+    ]
+    return None if name.endswith("_") else results
 
 
 # Set the TD_CHECK_INVARIANTS environment variable (as the CI does) to check the
@@ -2516,9 +2680,17 @@ def _unravel_key_to_tuple(key):
     else:
         # A flat tuple of str, the most common nested key.
         return key if type(key) is tuple else tuple(key)
+    # _append_key_parts(key, result), inline to save a call.
     result = []
-    if not _append_key_parts(key, result):
-        return ()
+    for subkey in key:
+        if isinstance(subkey, str):
+            result.append(subkey)
+        elif (
+            not isinstance(subkey, tuple)
+            or not subkey
+            or not _append_key_parts(subkey, result)
+        ):
+            return ()
     return tuple(result)
 
 
@@ -2546,6 +2718,7 @@ def unravel_key(key):
     ``()``. A key that is neither a str nor a tuple raises a ``RuntimeError``.
 
     Examples:
+        >>> from tensordict import unravel_key
         >>> unravel_key("a")
         'a'
         >>> unravel_key(("a",))
@@ -2560,10 +2733,25 @@ def unravel_key(key):
         return key
     if not isinstance(key, tuple):
         raise RuntimeError("key should be a Sequence<NestedKey>")
-    key = _unravel_key_to_tuple(key)
-    if len(key) == 1:
-        return key[0]
-    return key
+    # The code of _unravel_key_to_tuple, inline to save a call.
+    for subkey in key:
+        if not isinstance(subkey, str):
+            break
+    else:
+        if type(key) is not tuple:
+            key = tuple(key)
+        return key[0] if len(key) == 1 else key
+    result = []
+    for subkey in key:
+        if isinstance(subkey, str):
+            result.append(subkey)
+        elif (
+            not isinstance(subkey, tuple)
+            or not subkey
+            or not _append_key_parts(subkey, result)
+        ):
+            return ()
+    return result[0] if len(result) == 1 else tuple(result)
 
 
 def _unravel_keys(*keys):
@@ -2574,7 +2762,24 @@ def _unravel_keys(*keys):
 
 
 def unravel_key_list(keys):
-    """Unravels a list of keys."""
+    """Unravels every key of a list, as :func:`~tensordict.unravel_key` does.
+
+    Args:
+        keys (list or tuple of NestedKey): the keys to unravel.
+
+    Returns:
+        a list of keys: strings, or flat tuples of strings.
+
+    Raises:
+        TypeError: if ``keys`` is not a list or a tuple.
+        RuntimeError: if a key is not a valid nested key.
+
+    Examples:
+        >>> from tensordict import unravel_key_list
+        >>> unravel_key_list(["a", ("b",), ("c", ("d",))])
+        ['a', 'b', ('c', 'd')]
+
+    """
     if not isinstance(keys, (list, tuple)):
         # pybind11's wording when this was a C++ function, which TorchRL's
         # tests match.
@@ -2584,6 +2789,23 @@ def unravel_key_list(keys):
         )
     result = []
     for key in keys:
+        if isinstance(key, str):
+            result.append(key)
+            continue
+        if type(key) is tuple:
+            # A flat tuple of str unravels to itself, or to its only part. A
+            # single str subclass part takes the path below, whose comparison
+            # with () calls the subclass's __eq__.
+            for subkey in key:
+                if not isinstance(subkey, str):
+                    break
+            else:
+                if len(key) > 1:
+                    result.append(key)
+                    continue
+                if key and type(key[0]) is str:
+                    result.append(key[0])
+                    continue
         key = unravel_key(key)
         if key == ():
             raise RuntimeError("key should be a Sequence<NestedKey>")
@@ -2633,21 +2855,19 @@ def _lock_warn():
 _lock_warn = assume_constant_result(_lock_warn)
 
 
-def _check_inbuild():
-    if not torch._dynamo.config.inline_inbuilt_nn_modules:
-        raise RuntimeError(
-            "to_module requires torch._dynamo.config.inline_inbuilt_nn_modules to be set to True."
-        )
-
-
-_check_inbuild = assume_constant_result(_check_inbuild)
-
 _zip_strict = functools.partial(zip, strict=True)
 
 
 def _pin_mem(q_in, q_out):
-    while not q_in.empty():
-        input = q_in.get(timeout=_PIN_MEM_TIMEOUT)
+    # All the inputs are queued before the threads start, so an empty queue means
+    # that the other threads took the rest. Checking q_in.empty() before a
+    # blocking get() would race with them: two threads could see the last input,
+    # and the one that lost would raise queue.Empty after _PIN_MEM_TIMEOUT.
+    while True:
+        try:
+            input = q_in.get_nowait()
+        except queue.Empty:
+            return
         try:
             key, val = input[0], input[1].pin_memory()
         except Exception as err:
@@ -2658,23 +2878,29 @@ def _pin_mem(q_in, q_out):
 
 
 def _infer_size_impl(shape: List[int], numel: int) -> List[int]:
-    # A local copy of  torch.jit._shape_functions.infer_size_impl which is skipped by torch.compile
+    # A local copy of torch.jit._shape_functions.infer_size_impl, which is skipped
+    # by torch.compile. It raises RuntimeError, as torch.Tensor.view does, where
+    # the original raises AssertionError.
     newsize = 1
     infer_dim: int | None = None
     for dim in range(len(shape)):
         if shape[dim] == -1:
             if infer_dim is not None:
-                raise AssertionError("only one dimension can be inferred")
+                raise RuntimeError("only one dimension can be inferred")
             infer_dim = dim
         elif shape[dim] >= 0:
             newsize *= shape[dim]
         else:
-            raise AssertionError("invalid shape dimensions")
+            raise RuntimeError(
+                f"invalid shape dimensions in {list(shape)}: sizes must be non-negative or -1"
+            )
     if not (
-        numel == newsize
+        (infer_dim is None and numel == newsize)
         or (infer_dim is not None and newsize > 0 and numel % newsize == 0)
     ):
-        raise AssertionError("invalid shape")
+        raise RuntimeError(
+            f"invalid shape {list(shape)} for a batch of {numel} elements"
+        )
     out = _copy(shape)
     if infer_dim is not None:
         out[infer_dim] = numel // newsize
@@ -2688,21 +2914,33 @@ def parse_tensor_dict_string(s: str):
         This functions is intended to be used for debugging, to reproduce a tensordict
         given its printed version, and should not be used in real applications.
 
+    Raises:
+        ValueError: if a field is not a ``Tensor`` or a ``TensorDict`` printed
+            with the default print options.
+
     """
     from tensordict import TensorDict
 
-    # Regular expression patterns
-    field_pattern = r"(\w+): Tensor\(shape=torch.Size\((\[(.*?)\])\), device=(\w+), dtype=torch.(\w+), is_shared=(\w+)\)"
-    nested_field_pattern = r"(\w+): TensorDict\("
+    # Regular expression patterns. A field line is "<indent><key>: <value>", and a
+    # key can contain any character.
+    field_line_pattern = re.compile(r"^[ \t]*(.*?): \w+\(", re.MULTILINE)
+    field_pattern = re.compile(
+        r"^[ \t]*(.*?): Tensor\(shape=torch.Size\((\[(.*?)\])\), device=(\w+(?::\d+)?), dtype=torch.(\w+), is_shared=(\w+)\)",
+        re.MULTILINE,
+    )
+    nested_field_pattern = re.compile(r"^[ \t]*(.*?): TensorDict\(", re.MULTILINE)
     batch_size_pattern = r"batch_size=torch.Size\((\[(.*?)\])\)"
-    device_pattern = r"device=(\w+)(?=,|$)"
+    device_pattern = r"device=(\w+(?::\d+)?)(?=,|$)"
 
-    # Find all nested TensorDicts first
-    nested_dict_ranges = []
-    for match in re.finditer(nested_field_pattern, s):
-        start_idx = match.start()
+    # Find the nested TensorDicts of this level first. A match inside a nested
+    # TensorDict already found is a field of that TensorDict.
+    nested_dicts = []
+    for match in nested_field_pattern.finditer(s):
+        start_idx = match.start(1)
+        if any(start <= start_idx <= end for _, start, _, end in nested_dicts):
+            continue
         depth = 1
-        for i in range(start_idx + len(match.group(0)), len(s)):
+        for i in range(match.end(), len(s)):
             if s[i] == "(":
                 depth += 1
             elif s[i] == ")":
@@ -2710,38 +2948,43 @@ def parse_tensor_dict_string(s: str):
             if depth == 0:
                 end_idx = i
                 break
-        nested_dict_ranges.append((start_idx, end_idx))
+        nested_dicts.append((match.group(1), start_idx, match.end(), end_idx))
+    nested_dict_ranges = [(start, end) for _, start, _, end in nested_dicts]
 
     # Find all fields in the string that are not part of a nested TensorDict
     fields = {}
-    for match in re.finditer(field_pattern, s):
+    tensor_field_starts = set()
+    for match in field_pattern.finditer(s):
         name, _, shape, device, dtype, is_shared = match.groups()
-        field_start = match.start()
+        field_start = match.start(1)
         field_end = match.end()
         if any(
             field_start >= start and field_end <= end
             for start, end in nested_dict_ranges
         ):
             continue  # skip if this field is inside a nested TensorDict
+        tensor_field_starts.add(field_start)
         shape = [int(x) for x in shape.split(", ")] if shape else []
         fields[name] = torch.zeros(
             tuple(shape), device=torch.device(device), dtype=getattr(torch, dtype)
         )
 
-    # Now find nested TensorDicts and add them to the fields
-    for match in re.finditer(nested_field_pattern, s):
-        name = match.group(1)
-        start_idx = match.end()
-        depth = 1
-        for i in range(start_idx, len(s)):
-            if s[i] == "(":
-                depth += 1
-            elif s[i] == ")":
-                depth -= 1
-            if depth == 0:
-                end_idx = i
-                break
-        content = s[start_idx:end_idx]
+    # Every other field line of this level is a field that cannot be parsed
+    for match in field_line_pattern.finditer(s):
+        line_start = match.start(1)
+        if line_start in tensor_field_starts or any(
+            start <= line_start <= end for start, end in nested_dict_ranges
+        ):
+            continue
+        line = s[line_start:].split("\n", 1)[0].rstrip(",}")
+        raise ValueError(
+            f"Cannot parse the field {line!r}: parse_tensor_dict_string reads "
+            "Tensor and TensorDict fields printed with the default print options."
+        )
+
+    # Now add the nested TensorDicts to the fields
+    for name, _, content_start, end_idx in nested_dicts:
+        content = s[content_start:end_idx]
         nested_fields = parse_tensor_dict_string(f"TensorDict({content})")
         fields[name] = nested_fields
 
@@ -2869,19 +3112,16 @@ def _is_list_tensor_compatible(t) -> Tuple[bool, tuple | None, type | None]:
 
 
 class _ContextManager:
+    # Reading or writing one attribute is atomic, so no lock is needed: the
+    # mode is read on every call of a tensordict.nn module.
     def __init__(self, default=None):
         self._mode: Any | None = default
-        self._lock = threading.Lock()
 
     def get_mode(self) -> Any | None:
-        cm = self._lock if not is_compiling() else nullcontext()
-        with cm:
-            return self._mode
+        return self._mode
 
     def set_mode(self, type: Any | None) -> None:
-        cm = self._lock if not is_compiling() else nullcontext()
-        with cm:
-            self._mode = type
+        self._mode = type
 
 
 def _maybe_correct_neg_dim(
@@ -2983,7 +3223,23 @@ from tensordict._utils_key_json import _json_dumps  # noqa: F401
 
 
 class LinkedList(list):
-    """A thin wrapper around a list that automatically updates a tensordict when the list is modified."""
+    """A list of the values of a non-tensor entry that writes item assignments back to the tensordict.
+
+    ``td[key]`` returns a :class:`LinkedList` when the entry is a
+    :class:`~tensordict.NonTensorStack`. Setting an item
+    (``values[0] = "z"``) writes the value to the tensordict. ``append`` and
+    ``extend`` change the list only, and unlink it from the tensordict.
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> td = TensorDict(batch_size=[3])
+        >>> td["names"] = ["a", "b", "c"]
+        >>> values = td["names"]
+        >>> values[0] = "z"
+        >>> td.get("names").tolist()
+        ['z', 'b', 'c']
+
+    """
 
     def __init__(self, *args, td: TensorDictBase, **kwargs):
         super().__init__(*args, **kwargs)

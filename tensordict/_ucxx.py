@@ -98,14 +98,33 @@ def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
 def _run_coroutine_sync(coro):
     """Run an async coroutine synchronously.
 
-    If there is already a running event loop, schedules on it via
-    run_coroutine_threadsafe. Otherwise creates a new loop.
+    Runs ``coro`` on a new event loop. If an event loop is already running
+    in this thread, raises a ``RuntimeError`` instead: blocking that thread
+    until ``coro`` finishes would stop the loop from ever running it.
     """
     loop = _get_or_create_event_loop()
     if loop is not None and loop.is_running():
-        future = asyncio.run_coroutine_threadsafe(coro, loop)
-        return future.result()
+        qualname, name = coro.__qualname__, coro.__name__
+        coro.close()
+        raise RuntimeError(
+            f"{qualname}() cannot run synchronously inside a running event "
+            f"loop: waiting for it would block the loop forever. Await it "
+            f"instead, e.g. `await pipe.{name}()`."
+        )
     return asyncio.run(coro)
+
+
+# Close tasks scheduled by TensorDictPipe.__del__, kept here so that they
+# are not garbage collected before they finish.
+_PENDING_CLOSE_TASKS: set[asyncio.Task] = set()
+
+
+def _on_close_task_done(task: asyncio.Task) -> None:
+    _PENDING_CLOSE_TASKS.discard(task)
+    if not task.cancelled():
+        # Retrieve the exception so that asyncio does not log it:
+        # __del__ ignores errors raised while closing.
+        task.exception()
 
 
 @_check_ucxx
@@ -116,6 +135,10 @@ async def send_tensordict(
     consolidated: bool = True,
 ) -> None:
     """Send a TensorDict over a UCXX endpoint (stateless, always sends metadata).
+
+    .. warning::
+        ``send_tensordict`` is experimental: its API can change in a minor
+        release without a deprecation cycle.
 
     Args:
         endpoint: a UCXX endpoint object.
@@ -156,6 +179,10 @@ async def recv_tensordict(
     device: torch.device | str | None = None,
 ) -> TensorDictBase:
     """Receive a TensorDict from a UCXX endpoint (stateless, always expects metadata).
+
+    .. warning::
+        ``recv_tensordict`` is experimental: its API can change in a minor
+        release without a deprecation cycle.
 
     Args:
         endpoint: a UCXX endpoint object.
@@ -252,25 +279,66 @@ def _compute_total_bytes(metadata: dict) -> int:
 class TensorDictPipe:
     """A persistent point-to-point channel for streaming TensorDicts over UCXX.
 
+    .. warning::
+        ``TensorDictPipe`` is experimental: its API can change in a minor
+        release without a deprecation cycle.
+
+    It needs the optional ``ucxx`` package. Import it from
+    ``tensordict._ucxx``: there is no public import path.
+
     Implements a two-phase protocol:
 
-    - **Handshake** (first send): transmits consolidation metadata and data.
+    - Handshake (first send): transmits consolidation metadata and data.
       The receiver allocates a buffer and builds a TensorDict whose leaves
       are views into the consolidated storage.
-    - **Steady-state** (subsequent sends with same schema): transmits only
+    - Steady state (subsequent sends with same schema): transmits only
       the raw storage buffer. The receiver overwrites its pre-allocated
-      buffer in-place — zero allocation, zero metadata parsing.
+      buffer in place, without a new allocation and without metadata parsing.
+
+    .. warning::
+        With ``consolidated=True`` (the default), every receive with the same
+        schema writes into the same TensorDict, and returns it. The next
+        receive overwrites the values of the previous one. Call ``clone()``
+        on a received TensorDict to keep it.
+
+    .. warning::
+        ``async for td in pipe`` stops at the first error, without raising
+        it. To see the error, call :meth:`arecv` or :meth:`recv` in a loop.
 
     Examples:
-        >>> # sender
-        >>> pipe = await TensorDictPipe.connect("node-b", 13337)
-        >>> await pipe.asend(td)
-        >>> # receiver
-        >>> pipe = await TensorDictPipe.listen(13337)
-        >>> td = await pipe.arecv()
-        >>> # steady-state loop (zero-alloc after first iteration)
-        >>> async for td in pipe:
-        ...     train(td)
+        The sender and the receiver run in two processes, on the same or
+        on two machines. This example is not tested: it needs ``ucxx`` and
+        two processes.
+
+        .. code-block:: python
+
+            # receiver, on host "node-b"
+            import asyncio
+            from tensordict._ucxx import TensorDictPipe
+
+            async def main():
+                pipe = await TensorDictPipe.listen(13337)
+                td = await pipe.arecv()  # first receive: allocates the buffer
+                async for td in pipe:  # same schema: overwrites td in place
+                    print(td["obs"].sum())
+
+            asyncio.run(main())
+
+        .. code-block:: python
+
+            # sender
+            import asyncio
+            import torch
+            from tensordict import TensorDict
+            from tensordict._ucxx import TensorDictPipe
+
+            async def main():
+                pipe = await TensorDictPipe.connect("node-b", 13337)
+                for _ in range(10):
+                    await pipe.asend(TensorDict(obs=torch.randn(64, 84)))
+                await pipe.aclose()
+
+            asyncio.run(main())
     """
 
     def __init__(
@@ -419,14 +487,17 @@ class TensorDictPipe:
     ) -> TensorDictBase:
         """Receive a TensorDict from this pipe (async).
 
-        On the first call, builds a new TensorDict from received metadata.
+        On the first call, receives into ``td`` if its consolidated layout
+        matches, otherwise builds a new TensorDict from the received metadata.
         On subsequent calls with the same schema, overwrites the existing
         storage in-place (zero allocation).
 
         Args:
-            td: if provided and consolidated, receives into its storage.
-                If ``None``, uses the internally cached TensorDict from
-                the previous receive (if any).
+            td: if provided and consolidated, receives into its storage
+                when its layout matches the received data. Otherwise a new
+                TensorDict is returned, so use the return value. If
+                ``None``, uses the internally cached TensorDict from the
+                previous receive (if any).
 
         Keyword Args:
             device: device for storage allocation on first receive.
@@ -470,6 +541,18 @@ class TensorDictPipe:
                 effective_device = torch.device(device)
             else:
                 effective_device = torch.device(sender_device)
+
+            if td is not None and self._can_recv_into(
+                td, total_bytes, effective_device
+            ):
+                storage = td._consolidated["storage"]
+                if storage.is_cuda:
+                    await self._endpoint.recv(storage)
+                else:
+                    await self._endpoint.recv(_tensor_to_numpy(storage))
+                self._recv_td = td
+                return td
+
             storage = torch.empty(
                 total_bytes, dtype=torch.uint8, device=effective_device
             )
@@ -501,6 +584,26 @@ class TensorDictPipe:
             await self._endpoint.recv(storage_np)
 
         return recv_target
+
+    def _can_recv_into(
+        self,
+        td: TensorDictBase,
+        total_bytes: int,
+        device: torch.device,
+    ) -> bool:
+        """Whether the consolidated storage of ``td`` matches the incoming schema."""
+        if not td.is_consolidated():
+            return False
+        storage = td._consolidated["storage"]
+        if storage.numel() != total_bytes or storage.device != device:
+            return False
+        try:
+            schema_hash = _metadata_hash(td._consolidated["metadata"])
+        except (TypeError, ValueError):
+            # The metadata of td cannot be serialized, so it cannot match
+            # the metadata that the sender serialized.
+            return False
+        return schema_hash == self._recv_schema_hash
 
     async def _arecv_uncollated(
         self,
@@ -551,7 +654,10 @@ class TensorDictPipe:
         Blocking wrapper around :meth:`arecv`.
 
         Args:
-            td: if provided, receives into this TensorDict in-place.
+            td: if provided, receives into this TensorDict in-place when
+                it is consolidated and its layout matches the received data.
+                Otherwise a new TensorDict is returned, so use the return
+                value.
 
         Keyword Args:
             device: device for storage allocation on first receive.
@@ -603,7 +709,15 @@ class TensorDictPipe:
     def __del__(self):
         if not self._closed:
             try:
-                self.close()
+                loop = _get_or_create_event_loop()
+                if loop is not None and loop.is_running():
+                    # close() cannot block the thread of a running loop:
+                    # schedule the close on the loop instead.
+                    task = loop.create_task(self.aclose())
+                    _PENDING_CLOSE_TASKS.add(task)
+                    task.add_done_callback(_on_close_task_done)
+                else:
+                    self.close()
             except Exception:
                 pass
 
@@ -611,15 +725,33 @@ class TensorDictPipe:
 class TensorDictServer:
     """A one-to-many listener that accepts connections and yields TensorDictPipe instances.
 
+    .. warning::
+        ``TensorDictServer`` is experimental: its API can change in a minor
+        release without a deprecation cycle.
+
     Wraps ``ucxx.create_listener`` to provide a server that can handle
     multiple clients, each getting their own :class:`TensorDictPipe`.
+    It needs the optional ``ucxx`` package. Import it from
+    ``tensordict._ucxx``.
 
     Examples:
-        >>> server = TensorDictServer(port=13337)
-        >>> async def handler(pipe):
-        ...     async for td in pipe:
-        ...         process(td)
-        >>> await server.serve(handler)
+        Each client connects with :meth:`TensorDictPipe.connect`. This
+        example is not tested: it needs ``ucxx`` and client processes.
+
+        .. code-block:: python
+
+            import asyncio
+            from tensordict._ucxx import TensorDictServer
+
+            async def handler(pipe):
+                async for td in pipe:
+                    print(td["obs"].shape)
+
+            async def main():
+                server = TensorDictServer(port=13337)
+                await server.serve(handler)  # runs until server.close()
+
+            asyncio.run(main())
     """
 
     @_check_ucxx

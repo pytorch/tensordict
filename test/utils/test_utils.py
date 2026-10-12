@@ -10,6 +10,7 @@ import importlib
 import inspect
 import os
 import pkgutil
+import queue
 import random
 import re
 import subprocess
@@ -29,6 +30,7 @@ from _utils_internal import get_available_devices
 from tensordict import (
     _deprecation,
     lazy_stack,
+    set_printoptions,
     tensorclass,
     TensorDict,
     UnbatchedTensor,
@@ -41,6 +43,7 @@ from tensordict.utils import (
     _get_shared_executor,
     _getitem_batch_size,
     _make_cache_key,
+    _pin_mem,
     _TensorDictPropertyError,
     _unravel_key_to_tuple,
     _unravel_keys,
@@ -530,6 +533,50 @@ def test_unravel_key_matches_reference():
                 unravel_key(key)
 
 
+def _reference_unravel_key_list(keys):
+    result = []
+    for key in keys:
+        if isinstance(key, str):
+            result.append(key)
+            continue
+        if not isinstance(key, tuple):
+            raise RuntimeError("key should be a Sequence<NestedKey>")
+        parts = _reference_unravel_key_to_tuple(key)
+        if not parts:
+            raise RuntimeError("key should be a Sequence<NestedKey>")
+        result.append(parts[0] if len(parts) == 1 else parts)
+    return result
+
+
+def _key_types(key):
+    if isinstance(key, tuple):
+        return (type(key), [type(part) for part in key])
+    return type(key)
+
+
+def test_unravel_key_list_matches_reference():
+    rng = random.Random(1)
+    for _ in range(2000):
+        keys = [_random_key(rng) for _ in range(rng.randint(0, 4))]
+        # flat tuples of str, including single ones
+        keys += [
+            tuple(rng.choice(_VALID_LEAVES) for _ in range(rng.randint(1, 3)))
+            for _ in range(rng.randint(0, 4))
+        ]
+        rng.shuffle(keys)
+        try:
+            expected = _reference_unravel_key_list(keys)
+        except RuntimeError:
+            with pytest.raises(RuntimeError, match="Sequence<NestedKey>"):
+                unravel_key_list(keys)
+            continue
+        result = unravel_key_list(keys)
+        assert result == expected, keys
+        assert [_key_types(key) for key in result] == [
+            _key_types(key) for key in expected
+        ], keys
+
+
 def test_unravel_key_tuple_subclass():
     key = _KeyPair("a", ("b", "c"))
     assert _unravel_key_to_tuple(key) == ("a", "b", "c")
@@ -725,6 +772,21 @@ class TestDeprecationHelpers:
             )
         assert record[0].filename == __file__
 
+    def test_warn_deprecated_env_var(self):
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            _deprecation.warn_deprecated_env_var(
+                "OLD", "0", removal="0.17", replacement="new()"
+            )
+        assert len(record) == 1
+        # A FutureWarning, which Python's default filters show
+        assert record[0].category is FutureWarning
+        assert str(record[0].message) == (
+            "OLD=0 is deprecated and will be removed in TensorDict 0.17. "
+            "Use new() instead."
+        )
+        assert record[0].filename == __file__
+
     def test_deprecated(self):
         @_deprecation.deprecated("old()", removal="0.17")
         def old(x):
@@ -763,18 +825,62 @@ def _version_tuple(version):
     return tuple(int(part) for part in version.split(".")[:2])
 
 
+# The phrases that name the release of a removal or of a default change, in
+# messages, docstrings and docs. Line breaks and indentation may split them.
+_DEADLINE_PATTERNS = (
+    re.compile(r"removed\s+in\s+TensorDict\s+(\d+\.\d+)"),
+    re.compile(r"TensorDict\s+(\d+\.\d+),\s+the\s+default\s+will\s+change"),
+    re.compile(
+        r"default\s+(?:will\s+change|will\s+become|becomes)\b[^.]*?\bin\s+"
+        r"(?:TensorDict\s+)?(\d+\.\d+)"
+    ),
+)
+
+
+def _deadlines(text):
+    # Yields the offset and the version of each deadline phrase in text.
+    for pattern in _DEADLINE_PATTERNS:
+        for match in pattern.finditer(text):
+            yield match.start(), match.group(1)
+
+
+@pytest.mark.parametrize(
+    "text,versions",
+    [
+        ("x is deprecated and will be removed in TensorDict 0.17.", ["0.17"]),
+        ("is deprecated and will be removed in\n        TensorDict 0.17", ["0.17"]),
+        (
+            "Starting with TensorDict 0.16, the default will change to "
+            "allow_pickle=False.",
+            ["0.16"],
+        ),
+        ("the default will change to ``False`` in 0.16. Saves", ["0.16"]),
+        ("the default becomes\n``x=False`` (which raises) in 0.16.", ["0.16"]),
+        ("The default\nwill become ``False`` in TensorDict 0.16.", ["0.16"]),
+        (".. deprecated:: 0.15", []),
+        ("Since 0.15, the default is False. Set it in 0.16.", []),
+    ],
+)
+def test_deprecation_deadline_phrases(text, versions):
+    assert [version for _, version in _deadlines(text)] == versions
+
+
 def test_deprecation_deadlines():
     # Every deprecation names the release that removes it, either as the
     # removal= argument of a tensordict._deprecation helper or as "removed in
-    # TensorDict X.Y" in a message or docstring. Once version.txt reaches that
-    # release, the deprecated code has to go.
+    # TensorDict X.Y" in a message or docstring. Every announced default change
+    # names the release that makes it, as "Starting with TensorDict X.Y, the
+    # default will change" or "the default will change ... in X.Y". Once
+    # version.txt reaches that release, the deprecated code has to go, the
+    # default has to change, and the docs have to follow.
     package = Path(tensordict.__file__).parent
-    version_file = package.parent / "version.txt"
+    root = package.parent
+    version_file = root / "version.txt"
     if not version_file.exists():
         pytest.skip("version.txt is only available in a source checkout")
     current = _version_tuple(version_file.read_text().strip())
-    overdue = []
-    for path in sorted(package.rglob("*.py")):
+    deadlines = []
+    for path in sorted([*package.rglob("*.py"), *package.rglob("*.pyi")]):
         for node in ast.walk(ast.parse(path.read_text())):
             if (
                 isinstance(node, ast.keyword)
@@ -784,16 +890,27 @@ def test_deprecation_deadlines():
             ):
                 versions = [node.value.value]
             elif isinstance(node, ast.Constant) and isinstance(node.value, str):
-                versions = re.findall(r"removed in TensorDict (\d+\.\d+)", node.value)
+                versions = [version for _, version in _deadlines(node.value)]
             else:
                 continue
-            overdue.extend(
-                f"{path.relative_to(package.parent)}:{node.lineno}: {version}"
-                for version in versions
-                if _version_tuple(version) <= current
-            )
+            location = f"{path.relative_to(root)}:{node.lineno}"
+            deadlines.extend((location, version) for version in versions)
+    for path in [
+        root / "README.md",
+        *sorted((root / "docs" / "source").rglob("*.rst")),
+    ]:
+        text = path.read_text()
+        for offset, version in _deadlines(text):
+            line = text.count("\n", 0, offset) + 1
+            deadlines.append((f"{path.relative_to(root)}:{line}", version))
+    overdue = [
+        f"{location}: {version}"
+        for location, version in deadlines
+        if _version_tuple(version) <= current
+    ]
     assert not overdue, (
-        f"version.txt is {'.'.join(map(str, current))}; remove these deprecations:\n"
+        f"version.txt is {'.'.join(map(str, current))}; remove these "
+        "deprecations, or make these default changes and update their docs:\n"
         + "\n".join(overdue)
     )
 
@@ -999,6 +1116,71 @@ def test_parse_tensor_dict_string():
     assert str(td) == str(parse_tensor_dict_string(str(td)))
 
 
+def test_parse_tensor_dict_string_nested_twice():
+    td = TensorDict(
+        a=torch.zeros(2),
+        b=TensorDict(
+            c=TensorDict(e=torch.zeros(2, 3), batch_size=[2]),
+            d=torch.zeros(2),
+            batch_size=[2],
+        ),
+        batch_size=[2],
+    )
+    out = parse_tensor_dict_string(repr(td))
+    assert set(out.keys(True, True)) == {"a", ("b", "c", "e"), ("b", "d")}
+    assert str(out) == str(td)
+
+
+@pytest.mark.parametrize("key", ["my-key", "a.b", "a b", "x:y"])
+def test_parse_tensor_dict_string_key_characters(key):
+    td = TensorDict(
+        {key: torch.zeros(2), f"{key}-td": TensorDict({key: torch.zeros(3)})}
+    )
+    out = parse_tensor_dict_string(repr(td))
+    assert set(out.keys(True, True)) == {key, (f"{key}-td", key)}
+    assert str(out) == str(td)
+
+
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu:0",
+        pytest.param(
+            "cuda:0",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="CUDA not available"
+            ),
+        ),
+    ],
+)
+def test_parse_tensor_dict_string_device_index(device):
+    text = repr(TensorDict(a=torch.zeros(2), device="cpu"))
+    out = parse_tensor_dict_string(text.replace("device=cpu", f"device={device}"))
+    assert out.device == torch.device(device)
+    assert set(out.keys()) == {"a"}
+
+
+@pytest.mark.parametrize("kind", ["plain", "non_tensor", "nested_non_tensor", "lazy"])
+def test_parse_tensor_dict_string_unparsable_field(kind):
+    if kind == "plain":
+        with set_printoptions(plain=True):
+            text = repr(TensorDict(a=torch.zeros(2, 3), batch_size=[2]))
+    elif kind == "non_tensor":
+        text = repr(TensorDict(a=torch.zeros(2), s="hello", batch_size=[2]))
+    elif kind == "nested_non_tensor":
+        text = repr(TensorDict(a=torch.zeros(2), b=TensorDict(s="hello")))
+    else:
+        lazy = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(2), b=torch.zeros(())),
+                TensorDict(a=torch.zeros(2)),
+            ]
+        )
+        text = repr(TensorDict(x=lazy, batch_size=[2]))
+    with pytest.raises(ValueError, match="Cannot parse the field"):
+        parse_tensor_dict_string(text)
+
+
 def test_get_shared_executor():
     executor = _get_shared_executor(2)
     # repeated calls with the same thread count reuse the pool
@@ -1040,6 +1222,28 @@ def test_logging_level_env_var(level, expected_level, shows_debug):
     assert result.stdout.strip() == str(expected_level)
     assert "[tensordict][INFO] info message" in result.stderr
     assert ("[tensordict][DEBUG] debug message" in result.stderr) is shows_debug
+
+
+def test_pin_mem_stops_when_another_thread_took_the_last_input(monkeypatch):
+    # to(device, non_blocking_pin=True) runs _pin_mem in several threads on one
+    # input queue. A thread that saw an input left must stop, not wait, when
+    # another thread takes that input first.
+    class TakenQueue(queue.SimpleQueue):
+        # Still reports the input that another thread has taken
+        def empty(self):
+            return False
+
+    class Pinnable:
+        def pin_memory(self):
+            return "pinned"
+
+    monkeypatch.setattr(tensordict.utils, "_PIN_MEM_TIMEOUT", 0.1)
+    q_in = TakenQueue()
+    q_in.put_nowait(("a", Pinnable()))
+    q_out = queue.SimpleQueue()
+    _pin_mem(q_in, q_out)
+    assert q_out.get_nowait() == ("a", "pinned")
+    assert q_out.empty()
 
 
 # Modules that another change turns into deprecated shims over private modules.
@@ -1109,6 +1313,36 @@ def test_public_module_all(module_name):
     assert not missing, f"{module_name}.__all__ misses public names: {missing}"
 
 
+def _is_no_default(node):
+    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+        return any(_is_no_default(elt) for elt in node.elts)
+    return (isinstance(node, ast.Name) and node.id == "NO_DEFAULT") or (
+        isinstance(node, ast.Attribute) and node.attr == "NO_DEFAULT"
+    )
+
+
+def test_no_default_compared_by_identity():
+    # NO_DEFAULT is an IntEnum equal to 0, so ==, != and in also match dim=0
+    package = Path(tensordict.__file__).parent
+    root = package.parent
+    offenders = []
+    for path in sorted(package.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if not isinstance(node, ast.Compare):
+                continue
+            operands = [node.left, *node.comparators]
+            for op, left, right in zip(node.ops, operands, operands[1:]):
+                if isinstance(op, (ast.Is, ast.IsNot)):
+                    continue
+                if _is_no_default(left) or _is_no_default(right):
+                    offenders.append(
+                        f"{path.relative_to(root)}:{node.lineno}: {ast.unparse(node)}"
+                    )
+    assert not offenders, "compare NO_DEFAULT with is / is not:\n" + "\n".join(
+        offenders
+    )
+
+
 def test_public_module_names():
     module_names = set(_public_module_names())
     for module_name in (
@@ -1122,6 +1356,21 @@ def test_public_module_names():
     assert not any(
         part.startswith("_") for name in module_names for part in name.split(".")
     )
+
+
+def test_testing_module_is_deprecated():
+    import tensordict._testing
+    import tensordict.testing
+
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"^tensordict\.testing\.MyDistData is deprecated and will be removed "
+        r"in TensorDict 0\.17\.$",
+    ) as record:
+        from tensordict.testing import MyDistData
+    assert record[0].filename == __file__
+    assert MyDistData is tensordict._testing.MyDistData
+    assert MyDistData.__module__ == "tensordict._testing"
 
 
 if __name__ == "__main__":
