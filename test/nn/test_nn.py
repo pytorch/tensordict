@@ -2967,27 +2967,6 @@ class TestProbabilisticTensorDictModule:
         assert std.entropy().shape == std.batch_shape == (3,)
 
     @set_composite_lp_aggregate(False)
-    def test_truncated_normal_composite_entropy(self):
-        params = TensorDict(
-            x=TensorDict(
-                loc=torch.zeros(3),
-                scale=torch.ones(3),
-                a=-torch.ones(3),
-                b=torch.ones(3),
-                batch_size=[3],
-            ),
-            batch_size=[3],
-        )
-        dist = CompositeDistribution(params, distribution_map={"x": TruncatedNormal})
-        entropy = dist.entropy()
-        torch.testing.assert_close(
-            entropy["x_entropy"],
-            TruncatedNormal(
-                torch.zeros(3), torch.ones(3), -torch.ones(3), torch.ones(3)
-            ).entropy(),
-        )
-
-    @set_composite_lp_aggregate(False)
     @pytest.mark.parametrize("inplace", [True, False, None])
     @pytest.mark.parametrize("module_inplace", [True, False])
     def test_tdprobseq_inplace(self, inplace, module_inplace):
@@ -4667,7 +4646,6 @@ class TestCompositeDist:
 
     @pytest.mark.parametrize("lp_aggregate", [True, False])
     def test_entropy_truncated_normal(self, lp_aggregate):
-        # TruncatedNormal.entropy is a property, not a method (#2103)
         params = TensorDict(
             x=TensorDict(
                 loc=torch.zeros(3),
@@ -4681,7 +4659,7 @@ class TestCompositeDist:
         dist = CompositeDistribution(params, distribution_map={"x": TruncatedNormal})
         expected = TruncatedNormal(
             torch.zeros(3), torch.ones(3), -torch.ones(3), torch.ones(3)
-        ).entropy
+        ).entropy()
         with set_composite_lp_aggregate(lp_aggregate):
             ent = dist.entropy()
         if lp_aggregate:
