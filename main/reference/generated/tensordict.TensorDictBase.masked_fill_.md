@@ -1,6 +1,6 @@
 # TensorDictBase.masked_fill
 
-*abstract*TensorDictBase.masked_fill_(*mask: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *value: [float](https://docs.python.org/3/builtins/functions.html#float) | [bool](https://docs.python.org/3/builtins/functions.html#bool)*) → Self
+TensorDictBase.masked_fill_(*mask: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *value: [float](https://docs.python.org/3/builtins/functions.html#float) | [bool](https://docs.python.org/3/builtins/functions.html#bool)*) → Self
 
 Fills the values corresponding to the mask with the desired value.
 
