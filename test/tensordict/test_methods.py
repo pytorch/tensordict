@@ -5067,6 +5067,24 @@ class TestTensorDicts(TestTensorDictsBase):
         with pytest.raises(KeyError, match="not found and no pad value provided"):
             td_full.empty().where(mask, td)
 
+    def test_where_out_scalar(self, td_name, device):
+        # A scalar or tensor ``other`` with ``out`` used to raise a TypeError
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        if td_name == "td_with_unbatched":
+            pytest.skip(
+                "UnbatchedTensor where() has expand_as_right dimension mismatch"
+            )
+        mask = torch.zeros(td.shape, dtype=torch.bool, device=device).bernoulli_()
+        expected = td.where(mask, -1)
+        for other in (-1, torch.tensor(-1, device=device)):
+            td_out = td.to_tensordict()
+            result = td.where(mask, other, out=td_out)
+            assert result is td_out
+            for key, value in expected.items(True, True):
+                if isinstance(value, torch.Tensor):
+                    assert (result.get(key) == value).all()
+
     def test_write_on_subtd(self, td_name, device):
         td = getattr(self, td_name)(device)
         sub_td = td._get_sub_tensordict(0)

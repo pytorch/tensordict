@@ -2677,25 +2677,17 @@ class _PointwiseOps:
                 )
             return result
         else:
-            if out is None:
 
-                def func(tensor):
-                    return torch.where(
-                        condition=expand_as_right(condition, tensor),
-                        input=tensor,
-                        other=other,
-                    )
+            def func(tensor):
+                return torch.where(
+                    condition=expand_as_right(condition, tensor),
+                    input=tensor,
+                    other=other,
+                )
 
-                return self._fast_apply(func, propagate_lock=True)
-            else:
-
-                def func(tensor, _out):
-                    return torch.where(
-                        condition=expand_as_right(condition, tensor),
-                        input=tensor,
-                        other=other,
-                        out=_out,
-                        update_batch_size=update_batch_size,
-                    )
-
-                return self._fast_apply(func, out, propagate_lock=True)
+            result = self._fast_apply(func, propagate_lock=True)
+            if out is not None:
+                # As in LazyStackedTensorDict.where
+                out.update(result, update_batch_size=update_batch_size)
+                return out
+            return result
