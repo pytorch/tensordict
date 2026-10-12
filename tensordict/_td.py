@@ -1128,37 +1128,6 @@ class TensorDict(TensorDictBase):
             else:
                 renames.append((item, td_names))
 
-    @property
-    def device(self) -> torch.device | None:
-        """Device of the tensordict.
-
-        Returns `None` if device hasn't been provided in the constructor or set via `tensordict.to(device)`.
-        The `to()` method can also be used as a context manager for temporary device changes.
-
-        """
-        return self._device
-
-    @device.setter
-    def device(self, value: DeviceType) -> None:
-        raise RuntimeError(
-            "device cannot be set using tensordict.device = device, "
-            "because device cannot be updated in-place. To update device, use "
-            "tensordict.to(new_device), which will return a new tensordict "
-            "on the new device. You can also use tensordict.to(new_device) as a "
-            "context manager for temporary device changes."
-        )
-
-    @property
-    def batch_size(self) -> torch.Size:
-        return self._batch_size
-
-    @batch_size.setter
-    def batch_size(self, new_size: torch.Size) -> None:
-        self._batch_size_setter(new_size)
-
-    def _change_batch_size(self, new_size: torch.Size) -> None:
-        self._batch_size = new_size
-
     # Override: O(1) on the dict of entries, which keeps the insertion order.
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
@@ -2696,25 +2665,15 @@ class _SubTensorDict(TensorDictBase):
     def _is_memmap(self):
         return self._source._is_memmap
 
-    @property
-    def batch_size(self) -> torch.Size:
-        return self._batch_size
-
-    @batch_size.setter
-    def batch_size(self, new_size: torch.Size) -> None:
-        self._batch_size_setter(new_size)
-
-    @property
+    # Override: the names come from the source, at the index of the view.
+    @TensorDictBase.names.getter
     def names(self):
         names = self._source._get_names_idx(self.idx)
         if names is None:
             return [None] * self.batch_dims
         return names
 
-    @names.setter
-    def names(self, value):
-        self._set_names(value)
-
+    # Override: a view cannot rename the dims of its source.
     def _set_names(self, names: Sequence[str] | None):
         if names is None:
             names = [None] * self.batch_dims
@@ -2724,9 +2683,11 @@ class _SubTensorDict(TensorDictBase):
             "Names of a subtensordict cannot be modified. Instantiate it as a TensorDict first."
         )
 
+    # Override: the names are the source's.
     def _has_names(self):
         return self._source._has_names()
 
+    # Override: a view cannot erase the names of its source.
     def _erase_names(self):
         raise RuntimeError(
             "Cannot erase names of a _SubTensorDict. Erase source TensorDict's names instead."
@@ -2737,6 +2698,7 @@ class _SubTensorDict(TensorDictBase):
             if _is_tensor_collection(self.entry_class(key)):
                 raise RuntimeError("Cannot rename nested sub-tensordict dimensions.")
 
+    # Override: the device is the source's.
     @property
     def device(self) -> None | torch.device:
         return self._source.device
@@ -2972,9 +2934,6 @@ class _SubTensorDict(TensorDictBase):
         ):
             return result
         return self.to_tensordict().to(*args, **kwargs)
-
-    def _change_batch_size(self, new_size: torch.Size) -> None:
-        self._batch_size = new_size
 
     def _get_non_tensor(self, key: NestedKey, default=NO_DEFAULT):
         out = super()._get_non_tensor(key, default=default)

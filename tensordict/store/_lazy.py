@@ -124,19 +124,13 @@ class _StoreStackElementView(TensorDictBase):
 
     # ---- TensorDictBase interface ----
 
-    @property
-    def batch_size(self) -> torch.Size:
-        return self._batch_size
-
-    @batch_size.setter
+    # Override: sets the batch size without checking it against the entries.
+    @TensorDictBase.batch_size.setter
     def batch_size(self, value):
         self._batch_size = torch.Size(value)
 
-    @property
-    def device(self) -> torch.device | None:
-        return self._device
-
-    @device.setter
+    # Override: the device can be set.
+    @TensorDictBase.device.setter
     def device(self, value):
         self._device = torch.device(value) if value is not None else None
 
@@ -431,9 +425,6 @@ class _StoreStackElementView(TensorDictBase):
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         raise RuntimeError("Cannot popitem from a stack element view.")
-
-    def _change_batch_size(self, new_size: torch.Size) -> None:
-        self._batch_size = new_size
 
     def zero_(self) -> Self:
         for key in self.keys():
@@ -1480,21 +1471,9 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     # ---- TensorDictBase interface ----
 
-    @property
-    def batch_size(self) -> torch.Size:
-        return self._batch_size
-
-    @batch_size.setter
-    def batch_size(self, value):
-        self._batch_size = torch.Size(value)
-
-    @property
-    def device(self) -> torch.device | None:
-        return self._device
-
-    @device.setter
-    def device(self, value):
-        self._device = torch.device(value) if value is not None else None
+    # Override: assigns batch_size and device without checks, like a stack element.
+    batch_size = _StoreStackElementView.batch_size
+    device = _StoreStackElementView.device
 
     def _rename_subtds(self, names):
         pass
@@ -2182,9 +2161,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     def detach_(self) -> Self:
         return self
-
-    def _change_batch_size(self, new_size: torch.Size) -> None:
-        self._batch_size = new_size
 
     def zero_(self) -> Self:
         for key in self.keys():

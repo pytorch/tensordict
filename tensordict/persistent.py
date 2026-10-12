@@ -1394,6 +1394,8 @@ class PersistentTensorDict(TensorDictBase):
         for key in self.keys(include_nested, leaves_only):
             yield (key, self._get_metadata(key))
 
+    # Override: the batch size changes only through the batch_size setter,
+    # which checks it against the file.
     def _change_batch_size(self, value):
         raise NotImplementedError
 
@@ -1408,11 +1410,9 @@ class PersistentTensorDict(TensorDictBase):
             self.set_(key, stacked)
         return self
 
-    @property
-    def batch_size(self):
-        return self._batch_size
-
-    @batch_size.setter
+    # Override: checks the batch size against the file, and keeps the old
+    # one if it does not fit.
+    @TensorDictBase.batch_size.setter
     def batch_size(self, value):
         _batch_size = self._batch_size
         try:
@@ -1445,10 +1445,6 @@ class PersistentTensorDict(TensorDictBase):
     def detach_(self):
         # PersistentTensorDict do not carry gradients. This is a no-op
         return self
-
-    @property
-    def device(self):
-        return self._device
 
     # Override: a TensorDict skeleton, built without reading the data.
     def empty(
