@@ -2452,13 +2452,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             del self[key]
         return self
 
-    @abc.abstractmethod
+    @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         """Removes the item that was last inserted into the TensorDict.
 
         ``popitem`` will only return non-nested values.
         """
-        raise NotImplementedError
+        # Generic: pop the last key of keys(). A comprehension walks the keys
+        # once: list() would call the view's __len__, which walks them too.
+        keys = [key for key in self.keys()]  # noqa: C416
+        if not keys:
+            raise KeyError(f"popitem(): {type(self).__name__} is empty")
+        key = keys[-1]
+        return key, self.pop(key)
 
     @property
     def is_cuda(self):
@@ -4448,8 +4454,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     )
                 )
             return default
+        out = self._popped_value(out)
         self.del_(key_tuple)
         return out
+
+    def _popped_value(self, value: Any) -> Any:
+        """Returns what pop returns for ``value``, an entry that del_ will delete.
+
+        A class whose sub-tensordicts are views over storage that del_ deletes
+        overrides this to return a copy.
+        """
+        return value
 
     @property
     @_cache_while_locked  # noqa: B019
@@ -6523,7 +6538,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             result.lock_()
         return result
 
-    @abc.abstractmethod
     def _select(
         self,
         *keys: NestedKey,
@@ -6531,7 +6545,31 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         strict: bool = True,
         set_shared: bool = True,
     ) -> Self:
-        raise NotImplementedError
+        # Generic: select in a TensorDict copy (see to_tensordict). Only the
+        # entries that the keys name are copied, unless one is missing and
+        # the KeyError must list all the keys.
+        if inplace:
+            raise RuntimeError("Cannot call select inplace on a lazy tensordict.")
+        roots = dict.fromkeys(key if isinstance(key, str) else key[0] for key in keys)
+        present = [root for root in roots if root in self.keys()]
+        if strict and len(present) < len(roots):
+            present = None
+        return self._copy_entries(present)._select(
+            *keys, inplace=False, strict=strict, set_shared=set_shared
+        )
+
+    def _copy_entries(self, keys: list[str] | None):
+        """A to_tensordict() copy of the top-level entries ``keys`` (all if ``None``)."""
+        if keys is None:
+            return self.to_tensordict()
+        from tensordict._td import TensorDict
+
+        return TensorDict._new_unsafe(
+            {key: self._get_str(key, NO_DEFAULT) for key in keys},
+            batch_size=self.batch_size,
+            device=self.device,
+            names=self._maybe_names(),
+        ).to_tensordict()
 
     def exclude(self, *keys: NestedKey, inplace: bool = False) -> Self:
         """Excludes the keys of the tensordict and returns a new tensordict without these entries.
@@ -6582,14 +6620,21 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             result.lock_()
         return result
 
-    @abc.abstractmethod
     def _exclude(
         self,
         *keys: NestedKey,
         inplace: bool = False,
         set_shared: bool = True,
     ) -> Self:
-        raise NotImplementedError
+        # Generic: exclude in a TensorDict copy of the entries that are kept
+        # (see _select).
+        if inplace:
+            raise RuntimeError("Cannot call exclude inplace on a lazy tensordict.")
+        excluded = {key for key in map(unravel_key, keys) if isinstance(key, str)}
+        kept = [key for key in self.keys() if key not in excluded]
+        return self._copy_entries(kept)._exclude(
+            *keys, inplace=False, set_shared=set_shared
+        )
 
     def _maybe_set_shared_attributes(self, result, lock=False):
         # We must use _is_shared to avoid having issues with CUDA tensordicts
@@ -7062,11 +7107,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 result.lock_()
             return result
         else:
-            if not is_compiling():
-                key_list = list(self.keys())
-            else:
-                key_list = [k for k in self.keys()]  # noqa
-
+            # a comprehension, which also traces under torch.compile
+            key_list = [k for k in self.keys()]  # noqa: C416
             for key in key_list:
                 if separator in key:
                     new_key = tuple(key.split(separator))

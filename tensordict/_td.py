@@ -1152,6 +1152,7 @@ class TensorDict(TensorDictBase):
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._batch_size = new_size
 
+    # Override: O(1) on the dict of entries, which keeps the insertion order.
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         return self._tensordict.popitem()
@@ -2273,6 +2274,7 @@ class TensorDict(TensorDictBase):
         )
         return out
 
+    # Override: fast path for the dense root, which many operations call.
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=NO_DEFAULT
     ) -> Self:
@@ -2291,6 +2293,7 @@ class TensorDict(TensorDictBase):
             )
         return super().empty(recurse=recurse)
 
+    # Override: dense fast path that shares the leaves and supports inplace.
     def _select(
         self,
         *keys: NestedKey,
@@ -2347,6 +2350,7 @@ class TensorDict(TensorDictBase):
         #     self._maybe_set_shared_attributes(result)
         return result
 
+    # Override: dense fast path that shares the leaves and supports inplace.
     def _exclude(
         self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
     ) -> Self:
@@ -3080,6 +3084,7 @@ class _SubTensorDict(TensorDictBase):
         self._source = self._source.del_(key)
         return self
 
+    # Override: not supported on a sub-tensordict.
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         raise NotImplementedError(
@@ -3161,28 +3166,6 @@ class _SubTensorDict(TensorDictBase):
             source=source,
             device=self.device,
             names=self.names if self._has_names() else None,
-        )
-
-    def _select(
-        self,
-        *keys: NestedKey,
-        inplace: bool = False,
-        strict: bool = True,
-        set_shared: bool = True,
-    ) -> Self:
-        if inplace:
-            raise RuntimeError("Cannot call select inplace on a lazy tensordict.")
-        return self.to_tensordict()._select(
-            *keys, inplace=False, strict=strict, set_shared=set_shared
-        )
-
-    def _exclude(
-        self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
-    ) -> Self:
-        if inplace:
-            raise RuntimeError("Cannot call exclude inplace on a lazy tensordict.")
-        return self.to_tensordict()._exclude(
-            *keys, inplace=False, set_shared=set_shared
         )
 
     def expand(self, *args: int, inplace: bool = False) -> Self:
