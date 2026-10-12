@@ -2776,6 +2776,11 @@ class TestTensorDicts(TestTensorDictsBase):
             getattr(td, red)(reduce=True),
             equal_nan=True,
         )
+        # a NumPy integer dim is not compared with ()
+        assert (
+            getattr(td, red)(dim=np.int64(0)).batch_size
+            == getattr(td, red)(dim=0).batch_size
+        )
         if red == "prod":
             return
         tdr = getattr(td, red)(dim=(), keepdim=True)

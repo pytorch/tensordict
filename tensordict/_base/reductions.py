@@ -1890,7 +1890,11 @@ class _Reductions:
     ):
         from tensordict._td import TensorDict
 
-        if dim == () and reduction_name not in _NO_EMPTY_DIM_REDUCTIONS:
+        if (
+            isinstance(dim, tuple)
+            and not dim
+            and reduction_name not in _NO_EMPTY_DIM_REDUCTIONS
+        ):
             # dim=() reduces over all the elements, as in torch
             dim = None
         if dim is None and not keepdim:
