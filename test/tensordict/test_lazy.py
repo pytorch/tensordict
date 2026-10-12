@@ -11,6 +11,7 @@ import os
 import pickle
 import platform
 import sys
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -2568,28 +2569,42 @@ class TestLazyStackedTensorDict:
         assert self.recursively_check_key(res2[index], 1)  # check all 1
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
-    def test_split_chunk_stack_dim_invalid_sizes(self, stack_dim):
-        # Along the stack dim, split and chunk check their sizes as TensorDict does,
-        # instead of dropping members or returning short pieces.
+    def test_split_stack_dim_invalid_sizes(self, stack_dim):
+        # Along the stack dim, sizes that are negative or do not add up to the
+        # stack size warn: they will raise in 0.17, as in TensorDict.split.
+        # The pieces stay as they are until then.
         td = lazy_stack(
             [TensorDict({"a": torch.full((2,), float(i))}, [2]) for i in range(3)],
             stack_dim,
         )
-        for split_size in ([1, 1], [2, 2], [4], []):
-            with pytest.raises(RuntimeError, match="expects split_size to sum exactly"):
-                td.split(split_size, stack_dim)
-        with pytest.raises(RuntimeError, match="only non-negative entries"):
-            td.split([-1, 4], stack_dim)
-        with pytest.raises(ValueError, match="split_size must be positive, got 0."):
-            td.split(0, stack_dim)
-        with pytest.raises(ValueError, match="split_size must be positive, got -1."):
-            td.split(-1, stack_dim)
-        for dim in range(td.ndim):
-            with pytest.raises(ValueError, match="chunks must be a strictly positive"):
-                td.chunk(0, dim)
-        pieces = td.split([1, 0, 2], stack_dim)
-        assert [piece.shape[stack_dim] for piece in pieces] == [1, 0, 2]
-        assert (torch.cat(pieces, stack_dim) == td).all()
+        for split_size, sizes in (
+            ([1, 1], [1, 1]),
+            ([2, 2], [2, 1]),
+            ([4], [3]),
+            ([], []),
+            ([-1, 4], [2, 1]),
+            ([1, -1, 3], [1, None, 3]),
+            ((s for s in (1, 1)), [1, 1]),
+        ):
+            with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+                pieces = td.split(split_size, stack_dim)
+            # None marks the malformed piece of batch size [0]
+            assert [piece.batch_size for piece in pieces] == [
+                torch.Size([0])
+                if size is None
+                else torch.Size([size, 2] if stack_dim == 0 else [2, size])
+                for size in sizes
+            ]
+        assert (pieces[0] == td[(slice(None),) * stack_dim + (slice(0, 1),)]).all()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            for split_size in ([1, 0, 2], [3], (s for s in (1, 2)), 1, 2, 4):
+                pieces = td.split(split_size, stack_dim)
+                assert (torch.cat(pieces, stack_dim) == td).all()
+            td.split([1, 1], 1 - stack_dim)
+            td.chunk(2, stack_dim)
+            with pytest.raises(ZeroDivisionError):
+                td.split(0, stack_dim)
 
     def test_split_lazy(self):
         td = LazyStackedTensorDict(

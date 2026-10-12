@@ -10,6 +10,7 @@ import operator
 import os
 import re
 import textwrap
+import warnings
 import weakref
 from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -4702,31 +4703,14 @@ class LazyStackedTensorDict(TensorDictBase):
         dim = _maybe_correct_neg_dim(dim, shape=self.shape)
         if dim == self.stack_dim:
             if isinstance(split_size, int):
-                if split_size <= 0:
-                    raise ValueError(
-                        f"TensorDict.split: split_size must be positive, got {split_size}."
-                    )
                 split_size = [split_size] * -(len(self.tensordicts) // -split_size)
                 split_size[-1] = len(self.tensordicts) - sum(split_size[:-1])
-            else:
-                # the sizes are read twice, so read an iterable only once
-                split_size = list(split_size)
-                if sum(split_size) != len(self.tensordicts):
-                    raise RuntimeError(
-                        "Split method expects split_size to sum exactly to "
-                        f"{len(self.tensordicts)}, but got sum({split_size}) = "
-                        f"{sum(split_size)}"
-                    )
 
             def iter_across_tds():
                 start = 0
+                negative = False
                 for s in split_size:
-                    if s <= 0:
-                        if s < 0:
-                            raise RuntimeError(
-                                "Split method expects split_size to have only "
-                                f"non-negative entries, but got {split_size}"
-                            )
+                    if s == 0:
                         batch_size = list(self._batch_size)
                         batch_size.pop(self.stack_dim)
                         yield LazyStackedTensorDict(
@@ -4735,11 +4719,25 @@ class LazyStackedTensorDict(TensorDictBase):
                             stack_dim=self.stack_dim,
                         )
                         continue
+                    if s < 0:
+                        negative = True
                     stop = start + s
                     yield self._new_lazy_unsafe(
                         *self.tensordicts[slice(start, stop)], stack_dim=self.stack_dim
                     )
                     start = stop
+                if negative or start != len(self.tensordicts):
+                    # stacklevel 3: skip split, which runs this generator
+                    warnings.warn(
+                        f"LazyStackedTensorDict.split got the sizes {split_size} "
+                        "along the stack dim, which are negative or do not add up "
+                        f"to the stack size {len(self.tensordicts)}. Today the "
+                        "pieces miss members or have a wrong batch size. Starting "
+                        "with TensorDict 0.17, the default will change to raising "
+                        "a RuntimeError, as TensorDict.split and torch.split do.",
+                        FutureWarning,
+                        stacklevel=3,
+                    )
 
             return tuple(iter_across_tds())
         tds = []
