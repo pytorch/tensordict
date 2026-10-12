@@ -69,7 +69,6 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _get_shape_from_args,
     _is_dataclass as is_dataclass,
     _is_json_serializable,
-    _is_namedtuple,
     _is_tensorclass,
     _is_unbatched,
     _LOCK_ERROR,
@@ -3030,16 +3029,16 @@ _TD_RETURN_TYPES = (
 
 
 def _tuple_like(result: tuple, items: list) -> tuple:
-    """Returns ``items`` in a tuple of the type of ``result``.
+    """Returns ``items`` in a plain tuple, or in a tuple of the type of ``result``.
 
-    The ``torch.return_types`` of ``max``, ``min``, ``cummax`` and ``cummin``
-    and namedtuples keep their fields. Other tuples become plain tuples.
+    The ``torch.return_types`` of ``max``, ``min``, ``cummax`` and ``cummin`` keep
+    their type. ``torch.load(weights_only=True)`` accepts them, see
+    ``tensordict/_reductions.py``. Other tuples stay plain tuples, such as the
+    namedtuples of ``to_namedtuple``: their classes are made at call time and
+    cannot be pickled.
     """
-    if type(result) is not tuple:
-        if isinstance(result, _TD_RETURN_TYPES):
-            return type(result)(items)
-        if _is_namedtuple(result):
-            return result._make(items)
+    if isinstance(result, _TD_RETURN_TYPES):
+        return type(result)(items)
     return tuple(items)
 
 

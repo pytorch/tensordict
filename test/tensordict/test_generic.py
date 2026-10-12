@@ -2765,6 +2765,36 @@ class TestGeneric:
         assert (td_load == td).all()
 
     @pytest.mark.parametrize(
+        "method,kwargs",
+        [
+            ("max", {"dim": 0}),
+            ("min", {"dim": 0}),
+            ("cummax", {"dim": 0}),
+            ("cummin", {"dim": 0}),
+            ("cummax", {"dim": 0, "reduce": True}),
+        ],
+    )
+    @pytest.mark.parametrize("non_tensor", [False, True])
+    def test_torch_load_weights_only_return_types(
+        self, method, kwargs, non_tensor, tmpdir
+    ):
+        # tensordict allowlists the torch.return_types of these reductions
+        if non_tensor:
+            if kwargs.get("reduce"):
+                pytest.skip("reduce=True needs tensor leaves")
+            td = NonTensorData("text", batch_size=[3])
+        else:
+            td = TensorDict(a=torch.randn(3, 4), batch_size=[3])
+        result = getattr(td, method)(**kwargs)
+        filename = Path(tmpdir) / "result.pt"
+        torch.save(result, filename)
+        result_load = torch.load(filename, weights_only=True)
+        assert type(result_load) is type(result)
+        for value, value_load in zip(result, result_load):
+            assert type(value_load) is type(value)
+            assert (value_load == value).all()
+
+    @pytest.mark.parametrize(
         "payload", [np.zeros(2), DummyPicklableClass(0)], ids=["numpy", "custom_class"]
     )
     def test_torch_load_weights_only_unlisted_payload(self, payload, tmpdir):

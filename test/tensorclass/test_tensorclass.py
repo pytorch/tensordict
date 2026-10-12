@@ -3597,8 +3597,8 @@ class TestTensorClass:
         assert (tc.a[:, 0] == torch.tensor([0.0, 1.0, 1.0, 0.0])).all()
 
     # max(dim=...), min(dim=...), cummax and cummin return the torch.return_types
-    # that TensorDict returns, and to_namedtuple returns a namedtuple. Other
-    # tuples, such as the output of split, stay plain tuples.
+    # that TensorDict returns. Other tuples, such as the output of split, stay
+    # plain tuples, and so does to_namedtuple, whose namedtuple cannot be pickled.
     @pytest.mark.parametrize("subclass", [False, True])
     def test_tuple_results(self, subclass):
         if subclass:
@@ -3631,9 +3631,7 @@ class TestTensorClass:
             assert (result.indices.to_tensordict() == expected.indices).all()
         assert type(data.cummax(0, reduce=True)) is torch.return_types.cummax
 
-        namedtuple = data.to_namedtuple()
-        assert namedtuple._fields == ("x", "y")
-        assert torch.equal(namedtuple.x, data.x)
+        assert type(data.to_namedtuple()) is tuple
 
         splits = data.split(2, dim=1)
         assert type(splits) is tuple
