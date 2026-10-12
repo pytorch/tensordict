@@ -1292,12 +1292,16 @@ class _ShapeOps:
                     f"Cannot gather tensordict with shape {self.shape} along dim {dim}."
                 )
             new_batch_size = torch.Size(index.shape)
+            # as torch.gather does, keep the size of the index on the batch dims
+            # where it is smaller than the tensordict
+            target_batch_shape = list(map(min, index.shape, self.batch_size))
 
             def expand_index(shape):
                 index_expand = index
                 while index_expand.ndim < len(shape):
                     index_expand = index_expand.unsqueeze(-1)
                 target_shape = list(shape)
+                target_shape[: len(target_batch_shape)] = target_batch_shape
                 target_shape[dim_corrected] = index_expand.shape[dim_corrected]
                 return index_expand.expand(target_shape)
 
