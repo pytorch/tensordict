@@ -4788,6 +4788,26 @@ class TestShadow:
         assert dst._tensordict.batch_size == torch.Size(shape)
         assert dst._tensordict.device is None
 
+    def test_shadow_update_dict(self):
+        # update_ and update_at_ with a dict must use the batch size of the
+        # TensorDict, not the shadowed batch_size field.
+        @tensorclass(shadow=True)
+        class MyClass:
+            x: torch.Tensor
+            batch_size: Any
+            device: Any
+
+        c = MyClass(torch.zeros(10, 4), batch_size="abc", device="cpu")
+        c._tensordict.batch_size = [10]
+        c.update_({"x": torch.ones(10, 4)})
+        assert (c.x == 1).all()
+        c.update_at_({"x": torch.full((4,), 2.0)}, 0)
+        assert (c.x[0] == 2).all()
+        assert (c.x[1:] == 1).all()
+        assert c.batch_size == "abc"
+        assert c.device == "cpu"
+        assert c._tensordict.batch_size == torch.Size([10])
+
     def test_shadow_values_dec_subcls(self):
         @tensorclass(shadow=True)
         class MyClass:
