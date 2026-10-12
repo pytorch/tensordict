@@ -591,6 +591,17 @@ class TestTensorDictOps:
         exc = state.exclude("beta")
         assert set(exc.keys()) == {"eta", "X"}
 
+    def test_is_locked_setter_erases_cache(self, state):
+        # ``is_locked = False`` must drop the results cached while locked,
+        # as ``unlock_()`` does.
+        state.is_locked = True
+        state.detach()
+        state.is_locked = False
+        assert state._cache is None
+        state.set("eta", torch.ones(5, 3))
+        state.is_locked = True
+        assert (state.detach()["eta"] == 1).all()
+
 
 # ---------------------------------------------------------------------------
 # Class options

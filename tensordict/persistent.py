@@ -13,7 +13,6 @@ import os
 import pickle
 import tempfile
 import warnings
-import weakref
 from functools import wraps
 from numbers import Number
 from pathlib import Path
@@ -45,7 +44,6 @@ from tensordict.utils import (
     _as_context_manager,
     _cache_while_locked,
     _CloudpickleWrapper,
-    _erase_cache_first,
     _GENERIC_NESTED_ERR,
     _KEY_ERROR,
     _lock_blocked,
@@ -1431,6 +1429,7 @@ class PersistentTensorDict(TensorDictBase):
                 td_names = list(names) + list(item.names)[self.ndim :]
                 item.rename_(*td_names)
 
+    # Override: materializes with one read of the file.
     def contiguous(self, *, canonical: bool = False):
         """Materializes a PersistentTensorDict on a regular TensorDict."""
         out = self.to_tensordict()
@@ -1444,6 +1443,7 @@ class PersistentTensorDict(TensorDictBase):
         self._backend.delete(self.file, key)
         return self
 
+    # Override: a file holds no gradients.
     def detach_(self):
         # PersistentTensorDict do not carry gradients. This is a no-op
         return self
@@ -1481,42 +1481,9 @@ class PersistentTensorDict(TensorDictBase):
             names=self.names if names is None and self._has_names() else names,
         )
 
-    def _propagate_lock(self, lock_parents_weakrefs=None, *, is_compiling):
-        """Registers the parent tensordict that handles the lock."""
-        self._is_locked = True
-        if lock_parents_weakrefs is not None:
-            lock_parents_weakrefs = [
-                ref
-                for ref in lock_parents_weakrefs
-                if not any(refref is ref for refref in self._lock_parents_weakrefs)
-            ]
-        if not is_compiling:
-            is_root = lock_parents_weakrefs is None
-            if is_root:
-                lock_parents_weakrefs = []
-            else:
-                self._lock_parents_weakrefs = (
-                    self._lock_parents_weakrefs + lock_parents_weakrefs
-                )
-            lock_parents_weakrefs = list(lock_parents_weakrefs)
-            lock_parents_weakrefs.append(weakref.ref(self))
-
-        for _td in self._nested_tensordicts.values():
-            _td._propagate_lock(lock_parents_weakrefs, is_compiling=is_compiling)
-
-    @_erase_cache_first
-    def _propagate_unlock(self):
-        # if we end up here, we can clear the graph associated with this td
-        self._is_locked = False
-
-        self._is_shared = False
-        self._is_memmap = False
-
-        sub_tds = []
-        for _td in self._nested_tensordicts.values():
-            sub_tds.extend(_td._propagate_unlock())
-            sub_tds.append(_td)
-        return sub_tds
+    # Override: walk the cached sub-tensordicts, without reading the file.
+    def _lock_sub_tensordicts(self):
+        return list(self._nested_tensordicts.values())
 
     def zero_(self) -> Self:
         for key in self.keys():
@@ -1534,6 +1501,7 @@ class PersistentTensorDict(TensorDictBase):
             return NonTensorData
         return torch.Tensor
 
+    # Override: entries live in a file.
     def is_contiguous(self):
         return False
 
@@ -1752,6 +1720,7 @@ class PersistentTensorDict(TensorDictBase):
 
     _load_memmap = TensorDict._load_memmap
 
+    # Override: file-backed entries cannot be pinned.
     def pin_memory(self, *args, **kwargs):
         raise RuntimeError(
             f"Cannot pin memory of a {type(self).__name__}. Call to_tensordict() before making this call."
@@ -1988,12 +1957,6 @@ class PersistentTensorDict(TensorDictBase):
                 "Cannot call unflatten_keys in_place with a PersistentTensorDict."
             )
         return self.to_tensordict().unflatten_keys(separator=separator)
-
-    def share_memory_(self):
-        raise NotImplementedError(
-            "Cannot call share_memory_ on a PersistentTensorDict. "
-            "Create a regular tensordict first using the `to_tensordict` method."
-        )
 
     def to(self, *args, **kwargs: Any) -> PersistentTensorDict:
         (

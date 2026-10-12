@@ -1034,12 +1034,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback
     def share_memory_(self, *args, **kwargs): ...
 
-    @property
-    def is_locked(self) -> bool:
-        # Cannot be locked
-        return self._is_locked
-
-    @is_locked.setter
+    # Override: setting the flag does not lock the parameters.
+    @TensorDictBase.is_locked.setter
     def is_locked(self, value):
         self._is_locked = bool(value)
 

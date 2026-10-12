@@ -13,7 +13,6 @@ import json
 import pickle
 import threading
 import uuid
-import weakref
 from numbers import Number
 from typing import Any, Callable, Literal, Sequence, Tuple, Type, TYPE_CHECKING
 
@@ -37,7 +36,6 @@ from tensordict.base import (
 )
 from tensordict.utils import (
     _as_context_manager,
-    _erase_cache_first,
     _GENERIC_NESTED_ERR,
     _is_tensorclass,
     _KEY_ERROR,
@@ -1899,37 +1897,9 @@ class TensorDictStore(TensorDictBase):
 
     # ---- Locking ----
 
-    def _propagate_lock(self, lock_parents_weakrefs=None, *, is_compiling):
-        self._is_locked = True
-        if lock_parents_weakrefs is not None:
-            lock_parents_weakrefs = [
-                ref
-                for ref in lock_parents_weakrefs
-                if not any(refref is ref for refref in self._lock_parents_weakrefs)
-            ]
-        if not is_compiling:
-            is_root = lock_parents_weakrefs is None
-            if is_root:
-                lock_parents_weakrefs = []
-            else:
-                self._lock_parents_weakrefs = (
-                    self._lock_parents_weakrefs + lock_parents_weakrefs
-                )
-            lock_parents_weakrefs = list(lock_parents_weakrefs)
-            lock_parents_weakrefs.append(weakref.ref(self))
-        for _td in self._nested_tensordicts.values():
-            _td._propagate_lock(lock_parents_weakrefs, is_compiling=is_compiling)
-
-    @_erase_cache_first
-    def _propagate_unlock(self):
-        self._is_locked = False
-        self._is_shared = False
-        self._is_memmap = False
-        sub_tds = []
-        for _td in self._nested_tensordicts.values():
-            sub_tds.extend(_td._propagate_unlock())
-            sub_tds.append(_td)
-        return sub_tds
+    # Override: walk the cached sub-tensordicts, without a server read.
+    def _lock_sub_tensordicts(self):
+        return list(self._nested_tensordicts.values())
 
     # ---- Materialization ----
 
@@ -1988,6 +1958,7 @@ class TensorDictStore(TensorDictBase):
         """
         return self.to_tensordict()
 
+    # Override: materializes in one round trip.
     def contiguous(self, *, canonical: bool = False) -> TensorDict:
         """Materialize into a regular TensorDict (see :meth:`to_tensordict`).
 
@@ -2486,9 +2457,11 @@ class TensorDictStore(TensorDictBase):
 
     # ---- Misc required overrides ----
 
+    # Override: entries live on the server.
     def is_contiguous(self) -> bool:
         return False
 
+    # Override: the server holds no gradients.
     def detach_(self) -> Self:
         return self
 
@@ -2795,12 +2768,6 @@ class TensorDictStore(TensorDictBase):
 
     # ---- Memory ops: not supported ----
 
-    def share_memory_(self):
-        raise NotImplementedError(
-            f"Cannot call share_memory_ on a {type(self).__name__}. "
-            "Call `to_tensordict()` first."
-        )
-
     def _memmap_(
         self,
         *,
@@ -2865,6 +2832,7 @@ class TensorDictStore(TensorDictBase):
             "Use `td.memmap()` instead."
         )
 
+    # Override: server-side entries cannot be pinned.
     def pin_memory(self, *args, **kwargs):
         raise RuntimeError(
             f"Cannot pin memory of a {type(self).__name__}. "
