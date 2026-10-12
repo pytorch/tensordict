@@ -419,7 +419,7 @@ Stream between nodes with UCXX
 
 .. warning::
 
-    ``TensorDictPipe``, ``TensorDictServer``, ``send_tensordict`` and
+    ``TensorDictPipe``, ``TensorDictServer``, ``send_tensordict``, and
     ``recv_tensordict`` are experimental: their API can change in a minor
     release without a deprecation cycle.
 
