@@ -1059,6 +1059,19 @@ class TestNestedTensor:
         with pytest.raises(NotImplementedError, match="jagged"):
             MemoryMappedTensor.from_tensor(tensor, filename=filename)
 
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    @pytest.mark.parametrize("prefix", [None, "dir", "data.tdz"])
+    def test_memmap_like_td_jagged_raises(self, num_threads, prefix, tmpdir):
+        # https://github.com/pytorch/tensordict/issues/1924
+        lazy = TensorDict.from_list(
+            [{"tokens": torch.arange(n)} for n in (3, 5, 2)], lazy=True
+        )
+        td = lazy.densify(layout=torch.jagged)
+        if prefix is not None:
+            prefix = Path(tmpdir) / prefix
+        with pytest.raises(NotImplementedError, match="jagged.*'tokens'"):
+            td.memmap_like(prefix, num_threads=num_threads)
+        assert os.listdir(tmpdir) == []
 
     @pytest.mark.parametrize("fn", ["empty", "zeros", "ones"])
     def test_complex_with_handler(self, fn):

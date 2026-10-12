@@ -35,6 +35,7 @@ from tensordict._nestedkey import NestedKey
 from tensordict.base import (
     _is_tensor_collection,
     _load_metadata,
+    _NESTED_TENSORS_AS_LISTS,
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
     _sync_cuda_transfer,
     _unflatten_state_dict,
@@ -43,7 +44,7 @@ from tensordict.base import (
     NO_DEFAULT,
     Self,
 )
-from tensordict.memmap import MemoryMappedTensor
+from tensordict.memmap import _raise_if_jagged, MemoryMappedTensor
 from tensordict.utils import (
     _DTYPE_TO_STR_DTYPE,
     _encode_key_for_filesystem,
@@ -1291,6 +1292,9 @@ class _Serialization:
         """
         from tensordict.base import TensorDictBase
 
+        for key, value in self.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+            if isinstance(value, torch.Tensor):
+                _raise_if_jagged(value, key)
         if archive is None:
             archive = (
                 prefix is not None and Path(prefix).suffix == TENSORDICT_ARCHIVE_SUFFIX
