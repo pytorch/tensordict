@@ -256,10 +256,12 @@ add, remove, or replace an entry:
     >>> td["a"]
     tensor([5., 1., 1.])
 
-``share_memory_()`` can change non-tensor entries: large integers
-become 0, booleans become integers, and bytes and strings longer than 100
-bytes raise an error
-(`#2163 <https://github.com/pytorch/tensordict/issues/2163>`_).
+``share_memory_()`` keeps the values and types of non-tensor entries. Two
+cases still lose data
+(`#2163 <https://github.com/pytorch/tensordict/issues/2163>`_). A shared
+string has a fixed size, the size of its first value and at least 100
+bytes: ``update_`` with a longer string stores only its first bytes. An
+integer outside the 64-bit range wraps: ``2**64`` reads back as 0.
 :ref:`data-loading` shows how to share tensordicts between processes.
 
 Consolidation
