@@ -2613,6 +2613,33 @@ class TestLazyStackedTensorDict:
         assert out.batch_size == torch.Size([2, 0, 3])
         assert out["a"].shape == torch.Size([2, 0, 3, 4])
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_reshape_view_lazy_zero_size_dim(self, stack_dim):
+        # Unbinding a zero-size dim leaves no members to stack, so these
+        # calls build a dense tensordict with the shared keys
+        td = LazyStackedTensorDict(
+            *[
+                TensorDict({"a": torch.zeros(0, 4), "n": {"b": torch.zeros(0)}}, [0])
+                for _ in range(3)
+            ],
+            stack_dim=stack_dim,
+        )
+        ref = torch.zeros(td.batch_size)
+        calls = {
+            "reshape(-1)": (lambda x: x.reshape(-1)),
+            "view(-1)": (lambda x: x.view(-1)),
+            "flatten()": (lambda x: x.flatten()),
+            "reshape(3, -1)": (lambda x: x.reshape(3, -1)),
+            "reshape(-1, 2)": (lambda x: x.reshape(-1, 2)),
+        }
+        for name, call in calls.items():
+            out = call(td)
+            assert out.batch_size == call(ref).shape, name
+            assert out["a"].shape == (*out.batch_size, 4), name
+            assert out["n", "b"].shape == out.batch_size, name
+        # A shape that matches the batch size returns the stack itself
+        assert td.reshape([size or -1 for size in td.batch_size]) is td
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_stack(self, device):
         torch.manual_seed(1)
