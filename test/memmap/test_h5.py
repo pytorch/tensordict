@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import itertools
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -99,6 +100,55 @@ class TestH5Serialization:
         assert is_non_tensor(td_recover.get(("d", "e")))
         assert is_non_tensor(td_recover.get("f"))
         assert is_non_tensor(td_recover.get(("g", "h")))
+
+    def test_h5_str_read_as_bytes_warns(self, tmp_path):
+        # strings that tensordict writes are marked; reading one still gives
+        # bytes and warns that it will give str
+        td = TensorDict(
+            {
+                "label": "cat",
+                "a": torch.zeros(3),
+                ("n", "s"): "dog",
+                "i": NonTensorData(1, batch_size=[3]),
+            },
+            [3],
+        )
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        match = (
+            r"Starting with TensorDict 0\.17, the default will change to "
+            r"reading it as str"
+        )
+        for call, expected in (
+            (lambda: h5td["label"], b"cat"),
+            (lambda: h5td.get("label").data, b"cat"),
+            (lambda: h5td["n", "s"], b"dog"),
+            (lambda: h5td.to_tensordict()["label"], b"cat"),
+            (lambda: h5td.clone(newfile=tmp_path / "copy.h5")["label"], b"cat"),
+        ):
+            with pytest.warns(FutureWarning, match=match) as record:
+                assert call() == expected
+            # one warning per string read, which points to the caller
+            assert {r.filename for r in record} == {__file__}
+        # other entries do not warn
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert (h5td["a"] == 0).all()
+            assert h5td["i"] == 1
+            h5td["label"] = "pig"
+        with pytest.warns(FutureWarning, match=match):
+            assert h5td["label"] == b"pig"
+        h5td.close()
+
+        # strings that another writer stored stay bytes, without a warning
+        with h5py.File(tmp_path / "other.h5", "w") as f:
+            f["s"] = "dog"
+            f["x"] = np.zeros(3)
+        h5td = PersistentTensorDict.from_h5(tmp_path / "other.h5")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert h5td["s"] == b"dog"
+            assert h5td.to_tensordict()["s"] == b"dog"
+        h5td.close()
 
     def test_rename_key_missing(self, tmp_path):
         # the error names the missing source key, not the free destination
