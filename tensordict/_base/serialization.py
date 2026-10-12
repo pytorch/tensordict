@@ -35,7 +35,6 @@ from tensordict._nestedkey import NestedKey
 from tensordict.base import (
     _is_tensor_collection,
     _load_metadata,
-    _NESTED_TENSORS_AS_LISTS,
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
     _sync_cuda_transfer,
     _unflatten_state_dict,
@@ -1292,9 +1291,6 @@ class _Serialization:
         """
         from tensordict.base import TensorDictBase
 
-        for key, value in self.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
-            if isinstance(value, torch.Tensor):
-                _raise_if_jagged(value, key)
         if archive is None:
             archive = (
                 prefix is not None and Path(prefix).suffix == TENSORDICT_ARCHIVE_SUFFIX
@@ -1329,10 +1325,11 @@ class _Serialization:
             # we create an empty copy of self
             # This is because calling MMapTensor.from_tensor(mmap_tensor) does nothing
             # if both are in filesystem
-            def empty(x):
+            def empty(key, x):
+                _raise_if_jagged(x, key)
                 return torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
 
-            input = self.apply(empty)
+            input = self.apply(empty, named=True, nested_keys=True)
             result = input._memmap_(
                 prefix=prefix,
                 copy_existing=copy_existing,
@@ -1349,10 +1346,11 @@ class _Serialization:
                 return result
             return TensorDictFuture(futures, result)
 
-        def empty_expand(x):
+        def empty_expand(key, x):
+            _raise_if_jagged(x, key)
             return torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
 
-        input = self.apply(empty_expand)
+        input = self.apply(empty_expand, named=True, nested_keys=True)
         return input._memmap_(
             prefix=prefix,
             copy_existing=copy_existing,
