@@ -1002,6 +1002,7 @@ class LazyStackedTensorDict(TensorDictBase):
         flatten=True,
     ) -> OrderedDict[str, Any]: ...
 
+    # Override: raises for keys that are not in every member.
     @_fails_exclusive_keys
     def flatten_keys(
         self,
@@ -1010,6 +1011,7 @@ class LazyStackedTensorDict(TensorDictBase):
         is_leaf: Callable[[Type], bool] | None = None,
     ) -> Self: ...
 
+    # Override: raises for keys that are not in every member.
     @_fails_exclusive_keys
     def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> Self: ...
 
@@ -2621,6 +2623,7 @@ class LazyStackedTensorDict(TensorDictBase):
             result._set_str(key, tensor, validated=True, inplace=False)
         return result
 
+    # Override: a lazy stack of the members' empty tensordicts.
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> Self:
@@ -2831,6 +2834,7 @@ class LazyStackedTensorDict(TensorDictBase):
         # so that keys(), values() and items() agree.
         return [key for key in first_keys if key in keys]
 
+    # Override: pops the key from each member and stacks the values.
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         key, val = self.tensordicts[0].popitem()
@@ -3132,6 +3136,7 @@ class LazyStackedTensorDict(TensorDictBase):
             out.names = names
         return out
 
+    # Override: selects in each member, so a heterogeneous stack stays heterogeneous.
     def _select(
         self,
         *keys: NestedKey,
@@ -3151,6 +3156,7 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         return result
 
+    # Override: excludes in each member, so a heterogeneous stack stays heterogeneous.
     def _exclude(
         self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
     ) -> LazyStackedTensorDict:
@@ -3611,34 +3617,6 @@ class LazyStackedTensorDict(TensorDictBase):
         if not is_deleted:
             raise KeyError(f"Key {key} not found in any of the stacked tensordicts.")
         return self
-
-    def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
-        # using try/except for get/del is suboptimal, but
-        # this is faster that checkink if key in self keys
-        key = _unravel_key_to_tuple(key)
-        if len(key) == 1:
-            key = key[0]
-        present = False
-        if isinstance(key, tuple):
-            if key in self.keys(True):
-                present = True
-                value = self._get_tuple(key, NO_DEFAULT)
-        elif key in self.keys():
-            present = True
-            value = self._get_str(key, NO_DEFAULT)
-        if present:
-            self.del_(key)
-        elif default is not NO_DEFAULT:
-            value = default
-        else:
-            raise KeyError(
-                _KEY_ERROR.format(
-                    key,
-                    type(self).__name__,
-                    sorted(self.keys(include_nested=isinstance(key, tuple)), key=str),
-                )
-            )
-        return value
 
     def share_memory_(self) -> Self:
         for td in self.tensordicts:
@@ -5025,6 +5003,7 @@ class _CustomOpTensorDict(TensorDictBase):
             sort=sort,
         )
 
+    # Override: keeps the None fields of tensorclasses (retain_none=True).
     def _select(
         self,
         *keys: NestedKey,
@@ -5036,15 +5015,6 @@ class _CustomOpTensorDict(TensorDictBase):
             raise RuntimeError("Cannot call select inplace on a lazy tensordict.")
         return self.to_tensordict(retain_none=True)._select(
             *keys, inplace=False, strict=strict, set_shared=set_shared
-        )
-
-    def _exclude(
-        self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
-    ) -> _CustomOpTensorDict:
-        if inplace:
-            raise RuntimeError("Cannot call exclude inplace on a lazy tensordict.")
-        return self.to_tensordict()._exclude(
-            *keys, inplace=False, set_shared=set_shared
         )
 
     def _clone(self, recurse: bool = True) -> Self:
@@ -5142,6 +5112,7 @@ class _CustomOpTensorDict(TensorDictBase):
             )
         return self
 
+    # Override: pops from the source and transforms the value.
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         key, val = self._source.popitem()

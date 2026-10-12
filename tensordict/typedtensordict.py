@@ -639,6 +639,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     # ------------------------------------------------------------------
     # _select / _exclude: special handling for inplace
     # ------------------------------------------------------------------
+    # Override: selects in _source and wraps the result.
     def _select(
         self,
         *keys,
@@ -656,6 +657,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
         )
         return type(self)._wrap_td(result)
 
+    # Override: excludes in _source and wraps the result.
     def _exclude(self, *keys, inplace: bool = False, set_shared: bool = True):
         if inplace:
             self._source._exclude(*keys, inplace=True, set_shared=set_shared)

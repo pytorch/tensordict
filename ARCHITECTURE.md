@@ -170,13 +170,19 @@ are `torch.Tensor` subclasses that a tensordict can store as entries.
 `TensorDictBase` marks its backend-specific methods with
 `@abc.abstractmethod`: the storage hooks (`_get_str`, `_set_str`, ...),
 the shape operations (`_view`, `_permute`, `_unsqueeze`, ...), `keys`,
-`_clone` and others, 39 in all. A class that lacks one
+`_clone` and others, 36 in all. A class that lacks one
 cannot be instantiated. The rest of `TensorDictBase` (`base.py` and the mixins in
 `_base/`) is written on top of these methods, and all the implementations
 share it, including generic
 implementations of operations such as `reshape`, `split`, `__setitem__`,
 `_index_tensordict`, `_apply_nest` and the comparison operators, which a class
-overrides only when it can do better.
+overrides only when it can do better. For example, the generic `_select` and
+`_exclude` return a `TensorDict` copy of the entries they keep, and
+`TensorDict` and `LazyStackedTensorDict` override them to share the values.
+Some generic methods call a small hook for the part that depends on the
+storage: `pop` and `popitem` pass the value they remove through
+`_popped_value`, which a store overrides to copy a nested view before `del_`
+deletes its data.
 
 The implementations also reuse code in two ways:
 

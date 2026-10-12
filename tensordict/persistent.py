@@ -35,7 +35,6 @@ from tensordict.base import (
     _default_is_leaf,
     _is_leaf_nontensor,
     _register_tensor_class,
-    _UNSET,
     is_tensor_collection,
     T,
     TensorDictBase,
@@ -46,7 +45,6 @@ from tensordict.utils import (
     _cache_while_locked,
     _CloudpickleWrapper,
     _erase_cache_first,
-    _GENERIC_NESTED_ERR,
     _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
@@ -1452,6 +1450,7 @@ class PersistentTensorDict(TensorDictBase):
     def device(self):
         return self._device
 
+    # Override: a TensorDict skeleton, built without reading the data.
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> T:
@@ -1757,31 +1756,17 @@ class PersistentTensorDict(TensorDictBase):
             f"Cannot pin memory of a {type(self).__name__}. Call to_tensordict() before making this call."
         )
 
-    def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
-        key_tuple = _unravel_key_to_tuple(key)
-        if not key_tuple:
-            raise KeyError(_GENERIC_NESTED_ERR.format(key))
-        out = self.get(key_tuple, _UNSET)
-        if out is _UNSET:
-            if default is NO_DEFAULT:
-                raise KeyError(
-                    _KEY_ERROR.format(
-                        key_tuple[0] if len(key_tuple) == 1 else key_tuple,
-                        type(self).__name__,
-                        sorted(self.keys(include_nested=len(key_tuple) > 1), key=str),
-                    )
-                )
-            return default
+    def _popped_value(self, value):
+        # Override: a zarr group reads from the store: copy it before deleting it
         if (
             self.backend == "zarr"
             and not self.is_locked
-            and isinstance(out, PersistentTensorDict)
+            and isinstance(value, PersistentTensorDict)
         ):
-            # A zarr group reads from the store: copy it before deleting it
-            out = out.to_tensordict()
-        self.del_(key_tuple)
-        return out
+            return value.to_tensordict()
+        return value
 
+    # Override: not supported.
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         raise NotImplementedError(
@@ -1946,6 +1931,7 @@ class PersistentTensorDict(TensorDictBase):
         target_td = self._get_str(key, default=NO_DEFAULT)
         return target_td
 
+    # Override: not supported: it would load the file.
     def _select(
         self, *keys: NestedKey, inplace: bool = False, strict: bool = True
     ) -> PersistentTensorDict:
@@ -1954,6 +1940,7 @@ class PersistentTensorDict(TensorDictBase):
             "Create a regular tensordict first using the `to_tensordict` method."
         )
 
+    # Override: not supported: it would load the file.
     def _exclude(
         self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
     ) -> PersistentTensorDict:
@@ -1962,6 +1949,7 @@ class PersistentTensorDict(TensorDictBase):
             "Create a regular tensordict first using the `to_tensordict` method."
         )
 
+    # Override: works on an in-memory copy; inplace would rename in the file.
     @_as_context_manager()
     def flatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
         """Returns an in-memory copy where the nested keys are joined by ``separator``.
@@ -1981,6 +1969,7 @@ class PersistentTensorDict(TensorDictBase):
             )
         return self.to_tensordict().flatten_keys(separator=separator)
 
+    # Override: works on an in-memory copy; inplace would rename in the file.
     @_as_context_manager()
     def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
         if inplace:

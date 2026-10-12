@@ -15,7 +15,7 @@ import threading
 import uuid
 import weakref
 from numbers import Number
-from typing import Any, Callable, Literal, Sequence, Tuple, Type, TYPE_CHECKING
+from typing import Any, Callable, Literal, Sequence, Type, TYPE_CHECKING
 
 import torch
 from tensordict._deprecation import deprecated
@@ -23,14 +23,12 @@ from tensordict._indexing import _as_tuple, _getitem_batch_size, convert_ellipsi
 from tensordict._td import (
     _TensorDictKeysView,
     _unravel_key_to_tuple,
-    CompatibleType,
     NO_DEFAULT,
     TensorDict,
 )
 from tensordict.base import (
     _is_leaf_nontensor,
     _register_tensor_class,
-    _UNSET,
     is_tensor_collection,
     T,
     TensorDictBase,
@@ -38,7 +36,6 @@ from tensordict.base import (
 from tensordict.utils import (
     _as_context_manager,
     _erase_cache_first,
-    _GENERIC_NESTED_ERR,
     _is_tensorclass,
     _KEY_ERROR,
     _lock_blocked,
@@ -1800,27 +1797,12 @@ class TensorDictStore(TensorDictBase):
 
         return self
 
-    def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
-        key_tuple = _unravel_key_to_tuple(key)
-        if not key_tuple:
-            raise KeyError(_GENERIC_NESTED_ERR.format(key))
-        out = self.get(key_tuple, _UNSET)
-        if out is _UNSET:
-            if default is NO_DEFAULT:
-                raise KeyError(
-                    _KEY_ERROR.format(
-                        key_tuple[0] if len(key_tuple) == 1 else key_tuple,
-                        type(self).__name__,
-                        sorted(self.keys(include_nested=len(key_tuple) > 1), key=str),
-                    )
-                )
-            return default
-        if isinstance(out, TensorDictStore):
-            # A nested entry is a view that reads from the store, and del_
-            # deletes its data: return a copy of it.
-            out = out.to_tensordict()
-        self.del_(key_tuple)
-        return out
+    def _popped_value(self, value):
+        # Override: a nested entry is a view that reads from the store, and
+        # del_ deletes its data: return a copy of it.
+        if isinstance(value, TensorDictStore):
+            return value.to_tensordict()
+        return value
 
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
@@ -2492,20 +2474,6 @@ class TensorDictStore(TensorDictBase):
     def detach_(self) -> Self:
         return self
 
-    @_lock_blocked
-    def popitem(self) -> Tuple[NestedKey, CompatibleType]:
-        keys_list = list(self.keys())
-        if not keys_list:
-            raise KeyError(f"popitem(): {type(self).__name__} is empty")
-        key = keys_list[-1]
-        value = self.get(key)
-        if isinstance(value, TensorDictStore):
-            # A nested entry is a view that reads from the store, and del_
-            # deletes its data: return a copy of it.
-            value = value.to_tensordict()
-        self.del_(key)
-        return key, value
-
     def _check_new_batch_size(self, new_size: torch.Size) -> None:
         # Check the stored shapes of the tensors instead of fetching them. A
         # non-tensor value stored once fits any batch size; one written per
@@ -2550,6 +2518,7 @@ class TensorDictStore(TensorDictBase):
             self.set_(key, existing)
         return self
 
+    # Override: a TensorDict skeleton, built without reading the data.
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> T:
@@ -2878,18 +2847,21 @@ class TensorDictStore(TensorDictBase):
 
     def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim): ...
 
+    # Override: not supported: it would read the store.
     def _select(self, *keys, inplace=False, strict=True, set_shared=True):
         raise NotImplementedError(
             f"Cannot call select on a {type(self).__name__}. "
             "Call `to_tensordict()` first."
         )
 
+    # Override: not supported: it would read the store.
     def _exclude(self, *keys, inplace=False, set_shared=True):
         raise NotImplementedError(
             f"Cannot call exclude on a {type(self).__name__}. "
             "Call `to_tensordict()` first."
         )
 
+    # Override: works on an in-memory copy; inplace would rename in the store.
     @_as_context_manager()
     def flatten_keys(self, separator=".", inplace=False):
         """Returns an in-memory copy where the nested keys are joined by ``separator``.
@@ -2909,6 +2881,7 @@ class TensorDictStore(TensorDictBase):
             )
         return self.to_tensordict().flatten_keys(separator=separator)
 
+    # Override: works on an in-memory copy; inplace would rename in the store.
     @_as_context_manager()
     def unflatten_keys(self, separator=".", inplace=False):
         if inplace:

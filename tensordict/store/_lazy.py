@@ -427,6 +427,7 @@ class _StoreStackElementView(TensorDictBase):
     def detach_(self) -> Self:
         return self
 
+    # Override: not supported on a view of one element.
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         raise RuntimeError("Cannot popitem from a stack element view.")
@@ -450,6 +451,7 @@ class _StoreStackElementView(TensorDictBase):
         self.set_(key, existing)
         return self
 
+    # Override: a TensorDict skeleton, built from the stored keys without reading data.
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> T:
@@ -568,12 +570,15 @@ class _StoreStackElementView(TensorDictBase):
 
     def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim): ...
 
+    # Override: not supported: it would read the store.
     def _select(self, *keys, inplace=False, strict=True, set_shared=True):
         raise NotImplementedError(f"Cannot call select on a {type(self).__name__}.")
 
+    # Override: not supported: it would read the store.
     def _exclude(self, *keys, inplace=False, set_shared=True):
         raise NotImplementedError(f"Cannot call exclude on a {type(self).__name__}.")
 
+    # Override: works on an in-memory copy.
     @_as_context_manager()
     def flatten_keys(self, separator=".", inplace=False):
         """Returns an in-memory copy where the nested keys are joined by ``separator``.
@@ -589,6 +594,7 @@ class _StoreStackElementView(TensorDictBase):
         """
         return self.to_tensordict().flatten_keys(separator=separator)
 
+    # Override: works on an in-memory copy.
     @_as_context_manager()
     def unflatten_keys(self, separator=".", inplace=False):
         return self.to_tensordict().unflatten_keys(separator=separator)
@@ -2177,16 +2183,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
     def detach_(self) -> Self:
         return self
 
-    @_lock_blocked
-    def popitem(self) -> Tuple[NestedKey, CompatibleType]:
-        keys_list = list(self.keys())
-        if not keys_list:
-            raise KeyError(f"popitem(): {type(self).__name__} is empty")
-        key = keys_list[-1]
-        value = self.get(key)
-        self.del_(key)
-        return key, value
-
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._batch_size = new_size
 
@@ -2217,6 +2213,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
             self.set_(key, existing)
         return self
 
+    # Override: a TensorDict skeleton, built from the stored keys without reading data.
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> T:
@@ -2502,12 +2499,15 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim): ...
 
+    # Override: not supported: it would read the store.
     def _select(self, *keys, inplace=False, strict=True, set_shared=True):
         raise NotImplementedError(f"Cannot call select on a {type(self).__name__}.")
 
+    # Override: not supported: it would read the store.
     def _exclude(self, *keys, inplace=False, set_shared=True):
         raise NotImplementedError(f"Cannot call exclude on a {type(self).__name__}.")
 
+    # Override: works on an in-memory copy; inplace would rename in the store.
     @_as_context_manager()
     def flatten_keys(self, separator=".", inplace=False):
         """Returns an in-memory copy where the nested keys are joined by ``separator``.
@@ -2527,6 +2527,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
             )
         return self.to_tensordict().flatten_keys(separator=separator)
 
+    # Override: works on an in-memory copy; inplace would rename in the store.
     @_as_context_manager()
     def unflatten_keys(self, separator=".", inplace=False):
         if inplace:
