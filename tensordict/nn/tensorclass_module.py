@@ -1,9 +1,8 @@
 from __future__ import annotations
 
+import dataclasses
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
-from dataclasses import Field
-from typing import Any, cast, Generic, get_args, get_origin, TypeVar, Union
+from typing import cast, Generic, get_args, get_origin, TypeVar, Union
 
 from tensordict._td import TensorDict
 from tensordict.nn.common import dispatch, TensorDictModuleBase
@@ -23,7 +22,7 @@ def _tensor_class_keys(tensorclass_type: type[TensorClass]) -> list[tuple[str, .
         list[tuple[str, ...]]: A list of key tuples representing all fields in the TensorClass.
 
     """
-    fields = cast("Iterable[Field[Any]]", tensorclass_type.fields())
+    fields = dataclasses.fields(tensorclass_type)
     # field.type is a string under postponed annotations: use the resolved hints
     type_hints = getattr(tensorclass_type, "_type_hints", None) or {}
     keys: list[tuple[str, ...]] = []
@@ -46,10 +45,15 @@ OutputTensorClass = TypeVar("OutputTensorClass", bound=TensorClass)
 class TensorClassModuleWrapper(TensorDictModuleBase):
     """Wrapper class for TensorClassModuleBase objects.
 
-    This wrapper allows TensorClassModuleBase instances to be used in TensorDict-based
-    workflows by handling the conversion between TensorDict and TensorClass representations.
-    When called with a TensorDict, the wrapper converts it to a TensorClass, passes it through
-    the wrapped module, and converts the output back to a TensorDict.
+    The wrapper takes a TensorDict, converts it to the input TensorClass of the
+    module, calls the module, and converts the output TensorClass back to a
+    TensorDict. :meth:`TensorClassModuleBase.as_td_module` returns one.
+
+    The wrapper returns a new TensorDict that holds only the output fields. It
+    does not write into the input. In a
+    :class:`~tensordict.nn.TensorDictSequential`, the modules after it cannot
+    read the input keys, and by default the sequence returns only the
+    outputs.
 
     Args:
         module (TensorClassModuleBase): The TensorClassModuleBase instance to wrap.
@@ -74,7 +78,10 @@ class TensorClassModuleWrapper(TensorDictModuleBase):
         >>> td_module = module.as_td_module()
         >>> td = TensorDict({"x": torch.zeros(3)}, batch_size=[3])
         >>> result = td_module(td)
-        >>> assert "y" in result
+        >>> list(result.keys())
+        ['y']
+        >>> "y" in td
+        False
 
     """
 
@@ -91,7 +98,8 @@ class TensorClassModuleWrapper(TensorDictModuleBase):
         """Forward pass converting TensorDict to TensorClass and back.
 
         Args:
-            tensordict (TensorDict): Input tensordict.
+            tensordict (TensorDict): Input tensordict. Its entries that are not
+                fields of the input class are ignored.
             *args: Additional positional arguments.
             **kwargs: Additional keyword arguments.
 
@@ -99,9 +107,14 @@ class TensorClassModuleWrapper(TensorDictModuleBase):
             TensorDict: Output tensordict.
 
         """
-        return self.tc_module(
-            self.tc_module.input_type.from_tensordict(tensordict)
-        ).to_tensordict()
+        input_type = self.tc_module.input_type
+        # from_tensordict rejects the keys that are not fields of the input class
+        extra_keys = [
+            key for key in tensordict.keys() if key not in input_type.__expected_keys__
+        ]
+        if extra_keys:
+            tensordict = tensordict.exclude(*extra_keys)
+        return self.tc_module(input_type.from_tensordict(tensordict)).to_tensordict()
 
 
 InputClass = TypeVar("InputClass", bound=Union[TensorClass, Tensor])
@@ -195,10 +208,14 @@ class TensorClassModuleBase(Generic[InputClass, OutputClass], ABC, nn.Module):
         return cast("OutputClass", super().__call__(x))
 
     def as_td_module(self) -> TensorClassModuleWrapper:
-        """Convert this module to a TensorDictModule.
+        """Convert this module to a module that takes and returns a TensorDict.
 
-        This method wraps the TensorClassModuleBase in a TensorClassModuleWrapper,
-        allowing it to be used with TensorDict inputs and outputs.
+        This method wraps the TensorClassModuleBase in a
+        :class:`TensorClassModuleWrapper`, a
+        :class:`~tensordict.nn.TensorDictModuleBase` subclass. Its ``in_keys``
+        and ``out_keys`` are the fields of the input and output classes. It
+        returns a new TensorDict with only the output fields (see
+        :class:`TensorClassModuleWrapper`).
 
         Returns:
             TensorClassModuleWrapper: A wrapper that converts between TensorDict
