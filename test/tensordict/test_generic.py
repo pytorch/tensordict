@@ -1052,6 +1052,8 @@ class TestGeneric:
         [
             (None, torch.device("cuda")),
             (1, torch.device("cuda", 1)),
+            (torch.tensor(1), torch.device("cuda", 1)),
+            ("1", torch.device("cuda", 1)),
             ("cuda", torch.device("cuda")),
             ("cuda:1", torch.device("cuda", 1)),
             (torch.device("cuda", 1), torch.device("cuda", 1)),

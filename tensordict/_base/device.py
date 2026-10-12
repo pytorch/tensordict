@@ -320,12 +320,14 @@ class _DeviceOps:
         """
         if device is None:
             device = torch.device("cuda")
-        elif isinstance(device, int):
-            device = torch.device("cuda", device)
-        else:
+        elif isinstance(device, torch.device) or (
+            isinstance(device, str) and not device.isdigit()
+        ):
             device = torch.device(device)
             if device.type != "cuda":
                 raise RuntimeError(f"Invalid device {device}, must be a cuda device.")
+        else:
+            device = f"cuda:{device}"
         return self.to(device, **kwargs)
 
     def is_shared(self) -> bool:
