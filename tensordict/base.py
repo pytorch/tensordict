@@ -1079,6 +1079,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # as for an h5 or zarr file or a store. The in-place methods then write
     # their results back (see _write_back_inplace and _write_back).
     _reads_return_copies = False
+    # Whether a sub-tensordict read with _get_str is a new TensorDict filled
+    # from the stored data, as in the lazy stores. update() then writes the
+    # leaves it merges into the sub-tensordict back (see _update_write_back).
+    _nested_reads_return_copies = False
 
     @classmethod
     def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
@@ -3554,6 +3558,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                             update_batch_size=update_batch_size,
                             ignore_lock=ignore_lock,
                         )
+                        if self._nested_reads_return_copies:
+                            self._update_write_back(
+                                firstkey,
+                                target,
+                                subkey,
+                                value,
+                                sub_keys_to_update,
+                                is_leaf=is_leaf,
+                                inplace=inplace,
+                                non_blocking=non_blocking,
+                            )
                         continue
                     elif isinstance(value, (dict,)) or _is_tensor_collection(
                         type(value)
@@ -3598,6 +3613,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                                 update_batch_size=update_batch_size,
                                 ignore_lock=ignore_lock,
                             )
+                            if self._nested_reads_return_copies:
+                                self._update_write_back(
+                                    firstkey,
+                                    target,
+                                    (),
+                                    value,
+                                    sub_keys_to_update,
+                                    is_leaf=is_leaf,
+                                    inplace=inplace,
+                                    non_blocking=non_blocking,
+                                )
                         continue
                 # A tensor collection may still be a leaf so we need to duplicate the logic here
                 if (
@@ -3640,6 +3666,42 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # self.batch_size = ()
             self.auto_batch_size_(bd, keep_compliant_size=True)
         return self
+
+    def _update_write_back(
+        self,
+        firstkey,
+        target,
+        subkey,
+        value,
+        keys_to_update,
+        *,
+        is_leaf,
+        inplace,
+        non_blocking,
+    ):
+        """Writes the leaves that update() merged into the copy ``target`` back to self.
+
+        ``target`` is a copy of ``self[firstkey]`` and ``value`` was merged
+        into it at ``subkey``. Only the leaves of ``value`` are written, so the
+        other leaves of ``target``, which may have been read with the shape of
+        the first element of a stack, are left as they are.
+        """
+        if not _is_tensor_collection(type(value)):
+            from tensordict._td import TensorDict
+
+            value = TensorDict(value, batch_size=[])
+        keys_to_update = [_unravel_key_to_tuple(k) for k in keys_to_update or ()]
+        for key in value.keys(True, True, is_leaf=is_leaf):
+            key = (*subkey, *_unravel_key_to_tuple(key))
+            if keys_to_update and not any(key[: len(k)] == k for k in keys_to_update):
+                continue
+            self._set_tuple(
+                (firstkey, *key),
+                target._get_tuple(key, NO_DEFAULT),
+                inplace=BEST_ATTEMPT_INPLACE if inplace else False,
+                validated=True,
+                non_blocking=non_blocking,
+            )
 
     def update_(
         self,
