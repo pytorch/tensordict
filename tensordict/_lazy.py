@@ -943,6 +943,9 @@ class LazyStackedTensorDict(TensorDictBase):
             if batch_size is not None and len(names) == len(batch_size) + 1:
                 member_names = list(names)
                 del member_names[stack_dim]
+                # the stack inserts its dimension and name at stack_dim
+                if stack_dim < 0:
+                    stack_dim += len(names)
 
         return cls._new_lazy_unsafe(
             *(

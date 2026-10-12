@@ -1232,7 +1232,7 @@ class TestLazyStackedTensorDict:
         assert ragged.batch_size == (2, -1)
 
     @pytest.mark.parametrize("auto_batch_size", [False, True])
-    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("stack_dim", [0, 1, -1])
     @pytest.mark.parametrize("as_list", [False, True])
     def test_from_dict_names(self, auto_batch_size, stack_dim, as_list):
         # names includes the stack dimension: names[stack_dim] names the stack
