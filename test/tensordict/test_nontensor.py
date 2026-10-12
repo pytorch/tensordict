@@ -1761,6 +1761,9 @@ class TestNonTensorData:
         td.where(condition, other, out=td, pad=0, update_batch_size=True)
         assert td["x"].tolist() == [0.0, 1.0, 0.0, 1.0]
         assert td.get("s").tolist() == ["a", "b", "a", "b"]
+        # an other that does not expand to the batch size raises
+        with pytest.raises(ValueError):
+            a.where(condition, NonTensorData("b", batch_size=(3, 4)))
 
     def test_linked_list_str(self):
         td = TensorDict(a=NonTensorStack("foo", "bar"), batch_size=(2,))

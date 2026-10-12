@@ -5925,7 +5925,7 @@ class NonTensorData(NonTensorDataBase):
         def pick(cond, other_values):
             if isinstance(cond, bool):
                 return self.data if cond else other_values
-            return [pick(c, o) for c, o in zip(cond, other_values)]
+            return [pick(c, o) for c, o in _zip_strict(cond, other_values)]
 
         values = pick(expand_as_right(condition, self).tolist(), other.tolist())
         flat = [values]
