@@ -788,7 +788,7 @@ def _flatten_keys_leaves(
             and not _pass_through(val)
         ):
             result.extend(
-                (_unravel_key_to_tuple((key, subkey)), subval)
+                ((key, *subkey), subval)
                 for subkey, subval in _flatten_keys_leaves(val, is_leaf)
             )
     return result
@@ -7904,12 +7904,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         def _is_attrs_leaf(cls):
             return issubclass(cls, TensorAttrs) or _default_is_leaf(cls)
 
+        # _flatten_keys_leaves keeps each TensorAttrs whole; items() would also
+        # search it for entries
         spec: dict = {}
-        for key, val in attrs_td.items(
-            include_nested=True, leaves_only=True, is_leaf=_is_attrs_leaf
-        ):
+        for key, val in _flatten_keys_leaves(attrs_td, _is_attrs_leaf):
             if isinstance(val, TensorAttrs):
-                spec[key] = val
+                spec[unravel_key(key)] = val
 
         # D2H (device-to-host) is the only transfer direction that needs an explicit
         # sync after an async copy: host memory is outside the source device's stream
