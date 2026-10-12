@@ -136,6 +136,10 @@ async def send_tensordict(
 ) -> None:
     """Send a TensorDict over a UCXX endpoint (stateless, always sends metadata).
 
+    .. warning::
+        ``send_tensordict`` is experimental: its API can change in a minor
+        release without a deprecation cycle.
+
     Args:
         endpoint: a UCXX endpoint object.
         td: the TensorDict to send.
@@ -175,6 +179,10 @@ async def recv_tensordict(
     device: torch.device | str | None = None,
 ) -> TensorDictBase:
     """Receive a TensorDict from a UCXX endpoint (stateless, always expects metadata).
+
+    .. warning::
+        ``recv_tensordict`` is experimental: its API can change in a minor
+        release without a deprecation cycle.
 
     Args:
         endpoint: a UCXX endpoint object.
@@ -270,6 +278,10 @@ def _compute_total_bytes(metadata: dict) -> int:
 
 class TensorDictPipe:
     """A persistent point-to-point channel for streaming TensorDicts over UCXX.
+
+    .. warning::
+        ``TensorDictPipe`` is experimental: its API can change in a minor
+        release without a deprecation cycle.
 
     It needs the optional ``ucxx`` package. Import it from
     ``tensordict._ucxx``: there is no public import path.
@@ -712,6 +724,10 @@ class TensorDictPipe:
 
 class TensorDictServer:
     """A one-to-many listener that accepts connections and yields TensorDictPipe instances.
+
+    .. warning::
+        ``TensorDictServer`` is experimental: its API can change in a minor
+        release without a deprecation cycle.
 
     Wraps ``ucxx.create_listener`` to provide a server that can handle
     multiple clients, each getting their own :class:`TensorDictPipe`.

@@ -225,7 +225,7 @@ See [torch.compile, torch.func, torch.export and CUDA graphs](https://docs.pytor
 | Can I get plain tensors back? | Yes. `batch["images"]` is a `torch.Tensor`, `to_dict()` returns a nested `dict`, and `numpy()`, `to_pandas()`, `to_h5()` and `to_zarr()` export. |
 | What does it depend on? | PyTorch, NumPy, cloudpickle, packaging and pyvers, plus orjson before Python 3.13 and typing_extensions on Python 3.10. |
 | What is tested? | Python 3.10 to 3.14 (with free-threaded 3.14t) and PyTorch 2.13 to nightly, on Linux (CPU and GPU) and macOS. Each pull request also runs the TorchRL test suite. |
-| Is the API stable? | It is pre-1.0. A breaking change comes after two minor releases of warnings that name the version of the change. |
+| Is the API stable? | It is pre-1.0. A breaking change comes after two minor releases of warnings that name the version of the change. APIs that the docs mark as experimental (TypedTensorDict, UnbatchedTensor, the UCXX pipes, LazyStackedTensorDictStore) can change in a minor release. |
 | Who maintains it? | The [PyTorch organization](https://github.com/pytorch), with 40+ releases since 2022 ([release notes](https://github.com/pytorch/tensordict/releases)). |
 | When should I use something else? | For tables that you filter, group and join (use pandas or Polars), or outside PyTorch. |
 
