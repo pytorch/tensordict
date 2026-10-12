@@ -934,10 +934,15 @@ class LazyStackedTensorDict(TensorDictBase):
             torch.Size([4])
 
         """
+        member_names = names
         if names is not None:
             if stack_dim_name is not None:
                 raise ValueError("names and stack_dim_name are exclusive.")
             stack_dim_name = list(names).pop(stack_dim)
+            # names includes the stack dimension: the members get the others
+            if batch_size is not None and len(names) == len(batch_size) + 1:
+                member_names = list(names)
+                del member_names[stack_dim]
 
         return cls._new_lazy_unsafe(
             *(
@@ -952,7 +957,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     device=device,
                     batch_dims=batch_dims,
                     batch_size=batch_size,
-                    names=names,
+                    names=member_names,
                 )
                 for i in range(len(input_dict))
             ),

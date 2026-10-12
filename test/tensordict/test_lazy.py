@@ -1231,6 +1231,49 @@ class TestLazyStackedTensorDict:
         ragged.update_at_(TensorDict({}, []), 0)
         assert ragged.batch_size == (2, -1)
 
+    @pytest.mark.parametrize("auto_batch_size", [False, True])
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("as_list", [False, True])
+    def test_from_dict_names(self, auto_batch_size, stack_dim, as_list):
+        # names includes the stack dimension: names[stack_dim] names the stack
+        # and the other entries name the member dimensions
+        members = [{"a": torch.zeros(3)}, {"a": torch.ones(3)}]
+        if not as_list:
+            members = {str(i): member for i, member in enumerate(members)}
+        names = ["x", "s"] if stack_dim else ["s", "x"]
+        td = LazyStackedTensorDict.from_dict(
+            members,
+            auto_batch_size=auto_batch_size,
+            batch_size=[3],
+            stack_dim=stack_dim,
+            names=names,
+        )
+        assert td.batch_size == torch.Size([3, 2] if stack_dim else [2, 3])
+        assert td.names == names
+        assert all(member.names == ["x"] for member in td.tensordicts)
+
+    @pytest.mark.parametrize("auto_batch_size", [False, True])
+    def test_from_dict_member_names(self, auto_batch_size):
+        # names with one entry per member dimension keeps its current meaning:
+        # the members get all of it and names[stack_dim] names the stack
+        members = [{"a": torch.zeros(3, 4)}, {"a": torch.ones(3, 4)}]
+        td = LazyStackedTensorDict.from_dict(
+            members,
+            auto_batch_size=auto_batch_size,
+            batch_size=[3, 4],
+            names=[None, None],
+        )
+        assert td.names == [None, None, None]
+        td = LazyStackedTensorDict.from_dict(
+            members,
+            auto_batch_size=auto_batch_size,
+            batch_size=[3, 4],
+            stack_dim=1,
+            names=["s", None],
+        )
+        assert td.batch_size == torch.Size([3, 2, 4])
+        assert td.names == ["s", None, None]
+
     def test_lazy_get(self):
         inner_td = lazy_stack(
             [
