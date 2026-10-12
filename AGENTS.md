@@ -109,12 +109,15 @@ a module attribute (it returns the module's `__getattr__`), and
 the message, and `test_deprecation_deadlines` fails once `version.txt`
 reaches the removal release.
 
-A deprecated value of an environment variable warns with
-`warn_deprecated_env_var`, which emits a `FutureWarning`: tensordict reads
-the variable at import time, where Python's default filters hide a
-`DeprecationWarning`. Announce a default change as "Starting with TensorDict
-0.X, the default will change to ...", which `test_deprecation_deadlines` also
-checks, in the code, docstrings, `README.md` and `docs/source`.
+Environment variables are the exception to `DeprecationWarning` for
+removals. Warn about a deprecated value with `warn_deprecated_env_var`, which
+emits a `FutureWarning`. tensordict reads these variables at import time, and
+Python's default filters hide a `DeprecationWarning` raised there.
+
+Announce a default change with the phrase "Starting with TensorDict 0.X, the
+default will change to ...". `test_deprecation_deadlines` finds such
+announcements in the code, the docstrings, `README.md` and `docs/source`, and
+fails once `version.txt` reaches 0.X.
 
 ## PR labels
 
