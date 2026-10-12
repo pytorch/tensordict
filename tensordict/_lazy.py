@@ -3618,6 +3618,16 @@ class LazyStackedTensorDict(TensorDictBase):
             raise KeyError(f"Key {key} not found in any of the stacked tensordicts.")
         return self
 
+    # Override: with a default, a key three or more levels deep that
+    # keys(True) does not hold returns the default, even when its path runs
+    # through a tensor (get raises there).
+    def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
+        if default is not NO_DEFAULT:
+            key_tuple = _unravel_key_to_tuple(key)
+            if len(key_tuple) > 2 and key_tuple not in self.keys(True):
+                return default
+        return super().pop(key, default)
+
     def share_memory_(self) -> Self:
         for td in self.tensordicts:
             td.share_memory_()

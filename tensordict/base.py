@@ -2481,7 +2481,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         ``popitem`` will only return non-nested values.
         """
-        # Generic: pop the last key of keys().
+        # Generic: pop the last key of keys(). A comprehension walks the keys
+        # once: list() would call the view's __len__, which walks them too.
         keys = [key for key in self.keys()]  # noqa: C416
         if not keys:
             raise KeyError(f"popitem(): {type(self).__name__} is empty")

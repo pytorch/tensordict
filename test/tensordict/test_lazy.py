@@ -2299,6 +2299,15 @@ class TestLazyStackedTensorDict:
         assert (val == torch.tensor([[0.0, 0.0], [1.0, 1.0]])).all()
         assert all(td.is_empty() for td in tds)
 
+    def test_pop_default_under_tensor(self):
+        td = TensorDict(a=torch.zeros(2), n=TensorDict(x=torch.ones(2)))
+        lazy = lazy_stack([td.clone(), td.clone()])
+        assert lazy.pop(("n", "x", "deeper"), "D") == "D"
+        assert lazy.pop(("n", "x", "deeper", "z"), None) is None
+        assert lazy.pop(("n", "y"), 0) == 0
+        assert (lazy.pop(("n", "x"), None) == 1).all()
+        assert list(lazy.keys(True)) == ["a", "n"]
+
     @pytest.mark.parametrize("failure", ["ragged", "missing"])
     def test_popitem_error_keeps_entries(self, failure):
         # popitem takes "a" from the first member; the error must leave every
