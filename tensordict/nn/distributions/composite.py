@@ -334,9 +334,15 @@ class CompositeDistribution(d.Distribution, Mapping):
                     raise RuntimeError(
                         f"InteractionType {interaction_type} is unaccounted for."
                     )
+                # A registered dist's AttributeError propagates, as before
+                errors = (
+                    (AttributeError, NotImplementedError)
+                    if interaction_type is None
+                    else NotImplementedError
+                )
                 try:
                     result = dist.mean if fallback == "mean" else dist.mode
-                except (AttributeError, NotImplementedError) as err:
+                except errors as err:
                     raise NotImplementedError(
                         f"{type(dist)} has no deterministic_sample, and its {fallback} "
                         f"is not implemented, so {type(self).__name__} cannot compute "
