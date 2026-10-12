@@ -6776,6 +6776,7 @@ def _share_memory_nontensor(data, manager: Manager):
     if isinstance(data, bool):
         return mp.Value(ctypes.c_bool, data)
     if isinstance(data, int):
+        _warn_if_int_wraps(data)
         return mp.Value(ctypes.c_longlong, data)
     if isinstance(data, float):
         return mp.Value(ctypes.c_double, data)
@@ -6797,6 +6798,15 @@ def _share_memory_nontensor(data, manager: Manager):
     # will be passed to the remote process using regular serialization. We will
     # lock the update in _update_shared_nontensor though.
     return data
+
+
+def _warn_if_int_wraps(val: int) -> None:
+    if not -(2**63) <= val < 2**63:
+        warnings.warn(
+            "An integer outside the signed 64-bit range was written to a shared "
+            f"non-tensor entry: it is stored as {ctypes.c_longlong(val).value}.",
+            UserWarning,
+        )
 
 
 def _from_shared_nontensor(nontensor):
@@ -6824,17 +6834,26 @@ def _update_shared_nontensor(nontensor, val):
         nontensor.clear()
         nontensor.update(val)
     elif isinstance(nontensor, multiprocessing.sharedctypes.Synchronized):
-        if isinstance(nontensor.get_obj(), ctypes.c_bool):
+        obj = nontensor.get_obj()
+        if isinstance(obj, ctypes.c_bool):
             # c_bool stores the truth value of any object: take only what an
             # int slot takes
             val = operator.index(val)
+        elif isinstance(obj, ctypes.c_longlong) and isinstance(val, int):
+            _warn_if_int_wraps(val)
         nontensor.value = val
     elif isinstance(nontensor, multiprocessing.sharedctypes.SynchronizedArray):
         val = val.encode("utf-8")
         if len(val) > len(nontensor):
             # The array has a fixed size. Cut on a character boundary so that
             # the stored bytes stay valid UTF-8 and can be read back.
+            n_bytes = len(val)
             val = val[: len(nontensor)].decode("utf-8", "ignore").encode("utf-8")
+            warnings.warn(
+                f"A shared non-tensor string holds at most {len(nontensor)} bytes: "
+                f"the new {n_bytes}-byte value was cut to its first {len(val)} bytes.",
+                UserWarning,
+            )
         for i, byte in enumerate(nontensor):
             if i < len(val):
                 v = val[i]
