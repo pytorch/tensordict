@@ -836,6 +836,7 @@ class PersistentTensorDict(TensorDictBase):
 
     _td_dim_names = None
     _masking_on_dense_copy = True
+    _rename_key_lenient = True
     LOCKING = None
 
     @property
@@ -1846,13 +1847,22 @@ class PersistentTensorDict(TensorDictBase):
                 out = torch.cat(imaplist, dim)
         return out
 
-    def rename_key_(
-        self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
-    ) -> PersistentTensorDict:
-        old_key = self._process_key(old_key)
-        new_key = self._process_key(new_key)
-        self._backend.move(self.file, old_key, new_key)
-        return self
+    # Override: moves the node in the file, without reading the data.
+    def _rename_key(self, old_key: NestedKey, new_key: NestedKey) -> None:
+        old_path = self._process_key(old_key)
+        new_path = self._process_key(new_key)
+        if (
+            old_path
+            and new_path
+            and old_path != new_path
+            and not old_path.startswith(new_path + "/")
+            and self._backend.contains(self.file, new_path)
+            and self._backend.contains(self.file, old_path)
+        ):
+            # the backends refuse to move onto an existing node (rename_key_
+            # has checked safe): overwrite it, as TensorDict does
+            self._backend.delete(self.file, new_path)
+        self._backend.move(self.file, old_path, new_path)
 
     def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
         """Fills a tensor pointed by the key with the a given value.

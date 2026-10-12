@@ -715,6 +715,30 @@ class TestTensorDictStore:
         assert "new_name" in store_td.keys()
         assert torch.allclose(store_td["new_name"], tensor)
 
+    def test_rename_key_locked_warns(self, store_td):
+        # a locked store renamed its keys without a check: it still does, with
+        # a warning, until 0.17
+        store_td["obs"] = torch.randn(10, 3)
+        store_td.lock_()
+        with pytest.warns(
+            FutureWarning,
+            match=r"^TensorDictStore\.rename_key_ renames keys of a locked "
+            r"tensordict today\. Starting with TensorDict 0\.17",
+        ) as record:
+            assert store_td.rename_key_("obs", "renamed") is store_td
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert set(store_td.keys()) == {"renamed"}
+
+    def test_rename_key_safe_nested_destination(self, store_td):
+        # safe=True checks the sub-tensordicts too: the store renamed "obs" to
+        # "nested", which then was both a leaf and a sub-tensordict
+        store_td["obs"] = torch.randn(10, 3)
+        store_td["nested", "a"] = torch.randn(10, 2)
+        with pytest.raises(KeyError, match="key nested already present"):
+            store_td.rename_key_("obs", "nested", safe=True)
+        assert set(store_td.keys(True, True)) == {"obs", ("nested", "a")}
+
     def test_from_tensordict(self, store_kwargs):
         """Test from_tensordict classmethod."""
 
@@ -1848,6 +1872,21 @@ class TestLazyStackedTensorDictStore:
         store_td.rename_key_("c", "b")
         assert set(store_td.keys()) == {"b"}
         torch.testing.assert_close(store_td["b"], lazy_td["a"])
+
+    def test_rename_key_locked_warns(self, store_stack):
+        # a locked store renamed its keys without a check: it still does, with
+        # a warning, until 0.17
+        store_td, tds, lazy_td = store_stack
+        store_td.lock_()
+        with pytest.warns(
+            FutureWarning,
+            match=r"^LazyStackedTensorDictStore\.rename_key_ renames keys of a "
+            r"locked tensordict today\. Starting with TensorDict 0\.17",
+        ) as record:
+            assert store_td.rename_key_("a", "c") is store_td
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert set(store_td.keys()) == {"b", "c"}
 
     def test_rename_key_leaf_kinds(self, store_kwargs):
         tds = [

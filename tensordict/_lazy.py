@@ -4096,6 +4096,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 tds.append(td)
         return tds
 
+    # Override: renames in each member, once per member; the members check
+    # their lock and the keys.
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> Self:
@@ -5066,6 +5068,7 @@ class _CustomOpTensorDict(TensorDictBase):
 
         return self._fast_apply(contiguous, propagate_lock=True)
 
+    # Override: the source checks its lock and the keys, and renames.
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> _CustomOpTensorDict:

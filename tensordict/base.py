@@ -1001,6 +1001,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # ``to_tensordict()`` copy: the stores read it in one round trip, and on
     # all of them the result is a new, unlocked TensorDict.
     _masking_on_dense_copy: bool = False
+    # Set by PersistentTensorDict and the stores, whose rename_key_ did not
+    # check the lock or the type of the old key before 0.15: until 0.17 they
+    # rename in a locked tensordict with a warning, and pass an old key that is
+    # not a str or tuple to _rename_key (which raises or warns as before).
+    _rename_key_lenient: bool = False
 
     @classmethod
     def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
@@ -4516,7 +4521,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             new_td[new_key] = value
         return new_td
 
-    @abc.abstractmethod
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> Self:
@@ -4547,7 +4551,65 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             [('b', 'y'), 'x']
 
         """
-        raise NotImplementedError
+        lenient = self._rename_key_lenient
+        if self.is_locked:
+            if not lenient:
+                raise RuntimeError(_LOCK_ERROR)
+            warnings.warn(
+                f"{type(self).__name__}.rename_key_ renames keys of a locked "
+                "tensordict today. Starting with TensorDict 0.17, the default "
+                "will change to raising a RuntimeError, as TensorDict does.",
+                FutureWarning,
+                stacklevel=2,
+            )
+        # these checks are not perfect, tuples that are not tuples of strings or empty
+        # tuples could go through but (1) it will raise an error anyway and (2)
+        # those checks are expensive when repeated often.
+        if not isinstance(old_key, (str, tuple)):
+            if lenient:
+                self._rename_key(old_key, new_key)
+                return self
+            raise TypeError(
+                f"Expected old_name to be a string or a tuple of strings but found {type(old_key)}"
+            )
+        if not isinstance(new_key, (str, tuple)):
+            raise TypeError(
+                f"Expected new_name to be a string or a tuple of strings but found {type(new_key)}"
+            )
+        old_key = unravel_key(old_key)
+        new_key = unravel_key(new_key)
+        if safe and old_key != new_key and new_key in self.keys(include_nested=True):
+            raise KeyError(f"key {new_key} already present in TensorDict.")
+        self._rename_key(old_key, new_key)
+        return self
+
+    def _rename_key(self, old_key: NestedKey, new_key: NestedKey) -> None:
+        """Moves the entry at ``old_key`` to ``new_key``: the storage part of :meth:`rename_key_`.
+
+        :meth:`rename_key_` has checked the lock, the key types and ``safe``,
+        and unravelled both keys (see ``_rename_key_lenient`` for the
+        exceptions). ``old_key == new_key`` only checks that the key exists.
+        """
+        if old_key == new_key:
+            if old_key not in self.keys(include_nested=isinstance(old_key, tuple)):
+                raise KeyError(f"Key {old_key} not found in tensordict.")
+            return
+        value = self.get(old_key, default=NO_DEFAULT)
+        if isinstance(new_key, str):
+            self._set_str(
+                new_key, value, inplace=False, validated=True, non_blocking=False
+            )
+        else:
+            self._set_tuple(
+                new_key, value, inplace=False, validated=True, non_blocking=False
+            )
+        new_key_tuple = (new_key,) if isinstance(new_key, str) else new_key
+        if not (
+            isinstance(old_key, tuple)
+            and old_key[: len(new_key_tuple)] == new_key_tuple
+        ):
+            # eg: td.rename_(("0", "1", "2"), ("0", "1")), then ("0", "1", "2") should not be deleted
+            self.del_(old_key)
 
     @abc.abstractmethod
     def del_(self, key: NestedKey) -> Self:
