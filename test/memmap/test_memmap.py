@@ -1032,6 +1032,21 @@ class TestNestedTensor:
         assert loaded["n"].is_nested
         assert (loaded["n"]._nested_tensor_size() == nt._nested_tensor_size()).all()
 
+    @pytest.mark.parametrize("existing", [False, True])
+    def test_memmap_like_archive_with_nested_raises(self, tmpdir, existing):
+        nt = torch.nested.nested_tensor([torch.ones(2), torch.ones(3)])
+        td = TensorDict({"n": nt}, batch_size=[2])
+        path = Path(tmpdir) / "data.tdz"
+        if existing:
+            path.write_bytes(b"old")
+        with pytest.raises(NotImplementedError, match="archive mode"):
+            td.memmap_like(path)
+        if existing:
+            assert path.read_bytes() == b"old"
+        else:
+            assert not path.exists()
+        assert os.listdir(tmpdir) == (["data.tdz"] if existing else [])
+
     @pytest.mark.parametrize("fn", ["empty", "zeros", "ones"])
     def test_complex_with_handler(self, fn):
         tensor = getattr(MemoryMappedTensor, fn)(self.shape, dtype=torch.complex64)

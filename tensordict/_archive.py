@@ -795,6 +795,18 @@ def _write_archive_from_td(
 
     leaves = list(td.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS))
     has_nested = any(getattr(v, "is_nested", False) for v in leaves)
+    if like and has_nested:
+        # memmap_like reloads the archive with load_memmap(mode="r+"), which
+        # cannot map a nested tensor: fail before anything is written
+        key = next(
+            key
+            for key, value in td.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+            if getattr(value, "is_nested", False)
+        )
+        raise NotImplementedError(
+            f"memmap_like does not support nested tensors in archive mode "
+            f"(key {key!r} is a nested tensor). Pass a directory prefix instead."
+        )
     staging = tempfile.mkdtemp(dir=archive_path.parent, prefix=f".{archive_path.name}.")
     try:
         file_to_source = None
