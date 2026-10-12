@@ -1179,6 +1179,26 @@ def test_parse_tensor_dict_string_unparsable_field(kind):
         parse_tensor_dict_string(text)
 
 
+@pytest.mark.parametrize("exclusive", ["tensor", "nested", "same_shape"])
+def test_parse_tensor_dict_string_lazy_exclusive_keys(exclusive):
+    # The exclusive keys must not be read as fields of the whole stack, even when
+    # their shape fits its batch size ("same_shape")
+    if exclusive == "tensor":
+        td0 = TensorDict(a=torch.zeros(2), b=torch.zeros(()))
+    elif exclusive == "nested":
+        td0 = TensorDict(a=torch.zeros(2), b=TensorDict(c=torch.zeros(())))
+    else:
+        td0 = TensorDict(a=torch.zeros(2), b=torch.zeros(2))
+    lazy = lazy_stack([td0, TensorDict(a=torch.zeros(2))])
+    with pytest.raises(ValueError, match="exclusive_fields of a lazy stack"):
+        parse_tensor_dict_string(repr(lazy))
+    # Without exclusive keys, the repr of a lazy stack still parses
+    lazy = lazy_stack([TensorDict(a=torch.zeros(2)), TensorDict(a=torch.zeros(2))])
+    out = parse_tensor_dict_string(repr(lazy))
+    assert set(out.keys()) == {"a"}
+    assert out.batch_size == torch.Size([2])
+
+
 def test_get_shared_executor():
     executor = _get_shared_executor(2)
     # repeated calls with the same thread count reuse the pool

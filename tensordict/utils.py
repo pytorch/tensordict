@@ -2917,7 +2917,8 @@ def parse_tensor_dict_string(s: str):
 
     Raises:
         ValueError: if a field is not a ``Tensor`` or a ``TensorDict`` printed
-            with the default print options.
+            with the default print options, or if ``s`` is the repr of a lazy
+            stack with exclusive keys.
 
     """
     from tensordict import TensorDict
@@ -2930,6 +2931,10 @@ def parse_tensor_dict_string(s: str):
         re.MULTILINE,
     )
     nested_field_pattern = re.compile(r"^[ \t]*(.*?): TensorDict\(", re.MULTILINE)
+    # A lazy stack prints its exclusive keys in a block that is empty otherwise
+    exclusive_fields_pattern = re.compile(
+        r"^[ \t]*exclusive_fields=\{\n(?![ \t]*\})", re.MULTILINE
+    )
     batch_size_pattern = r"batch_size=torch.Size\((\[(.*?)\])\)"
     device_pattern = r"device=(\w+(?::\d+)?)(?=,|$)"
 
@@ -2981,6 +2986,13 @@ def parse_tensor_dict_string(s: str):
         raise ValueError(
             f"Cannot parse the field {line!r}: parse_tensor_dict_string reads "
             "Tensor and TensorDict fields printed with the default print options."
+        )
+    for match in exclusive_fields_pattern.finditer(s):
+        if any(start <= match.start() <= end for start, end in nested_dict_ranges):
+            continue
+        raise ValueError(
+            "Cannot parse the exclusive_fields of a lazy stack: "
+            "parse_tensor_dict_string does not rebuild lazy stacks with exclusive keys."
         )
 
     # Now add the nested TensorDicts to the fields
