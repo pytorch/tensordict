@@ -1649,11 +1649,16 @@ class TensorDict(TensorDictBase):
                     raise RuntimeError(
                         f"Cannot call _stack_onto_at_ with an entry of type {type(v).__name__}."
                     )
+                if not all(_is_tensor_collection(type(val)) for val in vals):
+                    raise RuntimeError(
+                        f"Cannot stack non-tensordict values into the tensordict entry {key!r}."
+                    )
                 v._stack_onto_at_(vals, dim=dim, idx=idx)
                 continue
             v_idx = v[idx]
             # A copy (advanced index) is not a view: writing into it would be lost.
-            if not v_idx._is_view():
+            # Empty and meta tensors have no data (data_ptr() is 0 for both).
+            if not v_idx._is_view() and v_idx.data_ptr() != v.data_ptr():
                 raise IndexError(
                     f"Index {idx} is incompatible with stack(..., out=data) as the storages of the indexed tensors differ."
                 )

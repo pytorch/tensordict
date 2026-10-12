@@ -5352,6 +5352,24 @@ class TestSubTensorDictStack:
         assert (td["a"][0] == 0).all() and (td["a"][2] == 0).all()
         assert (td["c"] == 0).all()
 
+    @pytest.mark.parametrize(
+        "shape,device", [((3, 0), "cpu"), ((3, 2), "meta")], ids=["empty", "meta"]
+    )
+    def test_stack_out_sub_td_copy_index_no_data(self, shape, device):
+        # Leaves without data have nothing to write: an index that copies is accepted.
+        td = TensorDict(a=torch.zeros(shape, device=device), batch_size=[3])
+        sub = td._get_sub_tensordict(torch.tensor([0, 2]))
+        item = TensorDict(a=torch.zeros(shape[1:], device=device), batch_size=[])
+        assert torch.stack([item] * 2, 0, out=sub) is sub
+
+    def test_stack_out_sub_td_nested_mismatch(self):
+        td = TensorDict(
+            nested=TensorDict(b=torch.zeros(3, 2), batch_size=[3, 2]), batch_size=[3, 2]
+        )
+        sub = td._get_sub_tensordict(0)
+        with pytest.raises(RuntimeError, match="non-tensordict values"):
+            torch.stack([TensorDict(nested=torch.ones(()))] * 2, 0, out=sub)
+
     def test_stack_out_sub_td_copy_index(self):
         td = TensorDict(a=torch.zeros(3, 2), batch_size=[3, 2])
         sub = td._get_sub_tensordict(torch.tensor([0, 2]))
