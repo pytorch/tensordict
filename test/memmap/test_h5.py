@@ -261,8 +261,8 @@ def test_inplace_read_only_warns(tmp_path):
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_inplace_methods_keep_key_order(tmp_path):
-    # lerp_, addcdiv_ and addcmul_ pair their operands by position: the leaves
-    # that they change are in the order of the file, as in to_tensordict()
+    # lerp_ pairs the leaves of its operand with those of the file by key, also
+    # when a nested key comes first
     td = TensorDict(
         nested=TensorDict(d=torch.zeros(4, 3), batch_size=[4]),
         a=torch.zeros(4, 2),

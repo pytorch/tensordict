@@ -859,20 +859,25 @@ def _warn_read_only(method: str) -> None:
 
 
 def _has_lazy_stack(td: TensorDictBase) -> bool:
-    """Whether ``td`` or one of its nested tensordicts is a lazy stack.
+    """Whether ``td`` or one of its nested tensordicts is a lazy stack, which ``_apply_nest`` splits.
 
-    Only the classes of the entries are read, not their data.
+    No data of a file or a store is read: they cannot hold a lazy stack.
     """
     from tensordict._lazy import LazyStackedTensorDict
+    from tensordict.typedtensordict import TypedTensorDict
 
+    # these apply their functions through the tensordict that they wrap
+    while isinstance(td, TypedTensorDict) or _is_tensorclass(type(td)):
+        td = td._source if isinstance(td, TypedTensorDict) else td._tensordict
     if isinstance(td, LazyStackedTensorDict):
         return True
-    for key in td.keys():
-        cls = td.entry_class(key)
-        if _is_tensor_collection(cls) and not _is_non_tensor(cls):
-            if issubclass(cls, LazyStackedTensorDict) or _has_lazy_stack(td.get(key)):
-                return True
-    return False
+    if td._reads_return_copies:
+        return False
+    return any(
+        _has_lazy_stack(value)
+        for value in td.values()
+        if _is_tensor_collection(type(value)) and not _is_non_tensor(type(value))
+    )
 
 
 def _write_back_inplace(method: Callable) -> Callable:
@@ -4366,6 +4371,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         # lerp_, addcdiv_ and addcmul_ pair their operands by position.
         leaves = TensorDict(batch_size=self.batch_size, device=self.device)
         for key, value in items:
+            if not isinstance(value, Tensor):
+                # a non-tensor leaf, such as the str that a store reads: the
+                # in-place methods leave it unchanged
+                continue
             leaves._set_tuple(
                 _unravel_key_to_tuple(key),
                 value,

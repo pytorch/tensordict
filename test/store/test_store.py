@@ -537,6 +537,60 @@ class TestTensorDictStore:
         store_td.copy_(other)
         assert_allclose_td(store_td.to_tensordict(), other)
 
+    def test_inplace_methods_non_tensor(self, store_td):
+        """The in-place methods skip a non-tensor entry, as on a TensorDict."""
+        source = TensorDict(
+            a=torch.randn(10, 3),
+            nested=TensorDict(b=torch.randn(10, 2), batch_size=[10]),
+            batch_size=[10],
+        )
+        store_td.update(source.clone().set_non_tensor("s", "hello"))
+        expected = source.clone()
+        other = source.apply(lambda x: torch.rand_like(x) + 1)
+        for td in (store_td, expected):
+            assert td.add_(1.0) is td
+            assert td.abs_() is td
+            assert td.lerp_(other, 0.5) is td
+            assert td.mul_(other) is td
+        assert_allclose_td(store_td.to_tensordict().exclude("s"), expected)
+        assert store_td.zero_() is store_td
+        assert (store_td["a"] == 0).all()
+        assert (store_td["nested", "b"] == 0).all()
+        assert store_td["s"] == "hello"
+
+    def test_update_from_store_round_trips(self, store_td, store_kwargs):
+        """update_ from a store reads it as often as a TensorDict destination does."""
+        td = TensorDict(
+            {
+                **{f"k{i}": torch.ones(10, 3) for i in range(5)},
+                "nested": TensorDict(b=torch.ones(10, 2), batch_size=[10]),
+            },
+            batch_size=[10],
+        )
+        store_td.update(td * 0)
+        source = TensorDictStore.from_tensordict(td, **store_kwargs)
+        try:
+            calls = []
+            run_sync = source._run_sync
+
+            def counting_run_sync(coro):
+                calls.append(None)
+                return run_sync(coro)
+
+            source._run_sync = counting_run_sync
+            for keys_to_update in (None, ["k0"]):
+                calls.clear()
+                (td * 0).update_(source, keys_to_update=keys_to_update)
+                expected = len(calls)
+                calls.clear()
+                store_td.update_(source, keys_to_update=keys_to_update)
+                assert len(calls) == expected
+            assert (store_td["k0"] == 1).all()
+        finally:
+            del source._run_sync
+            source.clear_redis()
+            source.close()
+
     def test_masked_fill_(self, store_td):
         """masked_fill_ fills the masked batch elements, as on a TensorDict."""
         source = TensorDict(
