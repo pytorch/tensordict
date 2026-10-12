@@ -151,12 +151,28 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
             ]
         return result
 
+    def _entry_class(self, key: NestedKey) -> type:
+        # entry_class() reads every member for non-tensor and tensorclass
+        # entries. The default is_leaf rejects every tensor collection, so with
+        # it the entry of the first member decides.
+        if self.is_leaf is _default_is_leaf:
+            data_type = type(self.tensordict.tensordicts[0].get(key))
+            if _is_tensor_collection(data_type):
+                return LazyStackedTensorDict
+            return data_type
+        return self.tensordict.entry_class(key)
+
+    def _iter_leaves(self) -> Iterator[str]:
+        for key in self._keys():
+            if self.is_leaf(self._entry_class(key)):
+                yield key
+
     def __contains__(self, item):
         item = _unravel_key_to_tuple(item)
         if item[0] in self.tensordict._key_list():
             if self.leaves_only:
                 if len(item) == 1:
-                    return self.is_leaf(self.tensordict.entry_class(item[0]))
+                    return self.is_leaf(self._entry_class(item[0]))
                 # keys(include_nested=False) has no nested key
                 if not self.include_nested:
                     return False
@@ -171,7 +187,7 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
                             return False
                     if item[-1] not in sub.keys():
                         return False
-                return self.is_leaf(self.tensordict.entry_class(item))
+                return self.is_leaf(self._entry_class(item))
             has_first_key = True
         else:
             has_first_key = False
@@ -2869,9 +2885,32 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def entry_class(self, key: NestedKey) -> type:
         data_type = type(self.tensordicts[0].get(key))
-        if _is_tensor_collection(data_type):
-            return LazyStackedTensorDict
-        return data_type
+        if not _is_tensor_collection(data_type):
+            return data_type
+        # The class that get() builds with lazy_stack(): non-tensor data and
+        # tensorclasses keep their type only if every member holds one.
+        non_tensor = getattr(data_type, "_is_non_tensor", False)
+        if non_tensor or getattr(data_type, "_is_tensorclass", False):
+            if isinstance(key, str):
+                entries = (
+                    td._tensordict.get(key)
+                    if type(td) is TensorDict
+                    else td._get_str(key, None)
+                    for td in self.tensordicts[1:]
+                )
+            else:
+                entries = (td.get(key, None) for td in self.tensordicts[1:])
+            if non_tensor:
+                if all(
+                    type(entry) is data_type or is_non_tensor(entry)
+                    for entry in entries
+                ):
+                    from tensordict.tensorclass import NonTensorStack
+
+                    return NonTensorStack
+            elif all(type(entry) is data_type for entry in entries):
+                return data_type
+        return LazyStackedTensorDict
 
     def _storage_is_read_only(self) -> bool:
         # a TypedTensorDict or a sub-tensordict over this stack writes back

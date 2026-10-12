@@ -20,6 +20,7 @@ from tensordict import (
     is_leaf_nontensor,
     lazy_stack,
     LazyStackedTensorDict,
+    NonTensorData,
     NonTensorStack,
     TensorClass,
     TensorDict,
@@ -2023,6 +2024,58 @@ class TestLazyStackedTensorDict:
         assert list(x["b"].keys()) == ["a"]
         assert set(x.keys(include_nested=True)) == {"b", ("b", "a")}
         assert set(x.keys(include_nested=True, leaves_only=True)) == {("b", "a")}
+
+    @pytest.mark.parametrize(
+        "entries",
+        ["nt", "nt_stack", "nt_td", "tc", "tc_other", "tc_td", "td_tc"],
+    )
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_lazy_stack_entry_class(self, entries, nested):
+        # entry_class() gives the class of get(), which keeps non-tensor data
+        # and tensorclasses only if every member holds one
+        class MC(TensorClass):
+            x: torch.Tensor
+
+        class Other(TensorClass):
+            x: torch.Tensor
+
+        values = {
+            "nt": lambda i: NonTensorData(str(i), batch_size=[3]),
+            "nt_stack": lambda i: NonTensorStack(
+                *[NonTensorData(str(i)) for _ in range(3)]
+            ),
+            "td": lambda i: TensorDict(x=torch.zeros(3), batch_size=[3]),
+            "tc": lambda i: MC(x=torch.zeros(3), batch_size=[3]),
+            "other": lambda i: Other(x=torch.zeros(3), batch_size=[3]),
+        }
+        first, second = {
+            "nt": ("nt", "nt"),
+            "nt_stack": ("nt", "nt_stack"),
+            "nt_td": ("nt", "td"),
+            "tc": ("tc", "tc"),
+            "tc_other": ("tc", "other"),
+            "tc_td": ("tc", "td"),
+            "td_tc": ("td", "tc"),
+        }[entries]
+        tds = [
+            TensorDict(a=torch.zeros(3), v=values[name](i), batch_size=[3])
+            for i, name in enumerate((first, second))
+        ]
+        key = "v"
+        if nested:
+            tds = [TensorDict(n=td, batch_size=[3]) for td in tds]
+            key = ("n", "v")
+        lstd = lazy_stack(tds)
+        assert lstd.entry_class(key) is type(lstd.get(key))
+        for is_leaf in (_default_is_leaf, is_leaf_nontensor, lambda cls: cls is MC):
+            keys = lstd.keys(True, True, is_leaf=is_leaf)
+            assert (key in keys) == (key in list(keys))
+            if not nested:
+                # the keys view of leaves tests the class of each entry
+                keys = lstd.keys(False, True, is_leaf=is_leaf)
+                expected = [k for k in lstd.keys() if is_leaf(type(lstd.get(k)))]
+                assert list(keys) == expected
+                assert (key in keys) == (key in expected)
 
     @pytest.mark.parametrize("dim", range(2))
     @pytest.mark.parametrize("index", range(2))
