@@ -5,3 +5,6 @@ STORE_BACKENDS
 ==============
 
 .. autodata:: STORE_BACKENDS
+
+.. minigallery:: tensordict.store.STORE_BACKENDS
+    :add-heading: Tutorials that use ``STORE_BACKENDS``

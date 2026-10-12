@@ -5,3 +5,6 @@ from_pandas
 ===========
 
 .. autofunction:: from_pandas
+
+.. minigallery:: tensordict.from_pandas
+    :add-heading: Tutorials that use ``from_pandas``

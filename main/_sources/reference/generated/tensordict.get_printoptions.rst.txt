@@ -5,3 +5,6 @@ get_printoptions
 ================
 
 .. autofunction:: get_printoptions
+
+.. minigallery:: tensordict.get_printoptions
+    :add-heading: Tutorials that use ``get_printoptions``

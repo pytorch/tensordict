@@ -6,4 +6,7 @@ LinkedList
 
 .. autoclass:: LinkedList
     :members:
-    :inherited-members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.utils.LinkedList
+    :add-heading: Tutorials that use ``LinkedList``

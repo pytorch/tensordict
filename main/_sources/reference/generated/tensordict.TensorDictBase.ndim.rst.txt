@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.ndim
+===================
+
+.. autoproperty:: TensorDictBase.ndim
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.ndim tensordict.TensorDictBase.ndim
+    :add-heading: Tutorials that use ``ndim``

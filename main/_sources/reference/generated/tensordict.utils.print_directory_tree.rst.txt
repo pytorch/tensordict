@@ -5,3 +5,6 @@ print_directory_tree
 ====================
 
 .. autofunction:: print_directory_tree
+
+.. minigallery:: tensordict.utils.print_directory_tree
+    :add-heading: Tutorials that use ``print_directory_tree``

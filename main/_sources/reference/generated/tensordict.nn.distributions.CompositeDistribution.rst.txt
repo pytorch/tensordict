@@ -6,3 +6,7 @@ CompositeDistribution
 
 .. autoclass:: CompositeDistribution
     :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.nn.distributions.CompositeDistribution
+    :add-heading: Tutorials that use ``CompositeDistribution``

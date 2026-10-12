@@ -6,3 +6,7 @@ Delta
 
 .. autoclass:: Delta
     :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.nn.distributions.Delta
+    :add-heading: Tutorials that use ``Delta``

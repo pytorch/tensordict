@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.filter_empty_
+============================
+
+.. automethod:: TensorDictBase.filter_empty_
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.filter_empty_ tensordict.TensorDictBase.filter_empty_
+    :add-heading: Tutorials that use ``filter_empty_``

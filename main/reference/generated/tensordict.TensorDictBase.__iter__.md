@@ -1,0 +1,13 @@
+# TensorDictBase.__iter__
+
+TensorDictBase.__iter__() → [Iterator](https://docs.python.org/3/library/typing.html#typing.Iterator)[[TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)]
+
+Iterates over the first batch dimension of the tensordict.
+
+Raises:
+
+[**TypeError**](https://docs.python.org/3/builtins/exceptions.html#TypeError) - if the tensordict has no batch dimensions, as `iter()`
+ does for a 0-d tensor.
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see [Methods by task](../td.html#api-tensordict-methods).

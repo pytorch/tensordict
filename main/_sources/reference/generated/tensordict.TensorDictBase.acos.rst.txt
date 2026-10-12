@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.acos
+===================
+
+.. automethod:: TensorDictBase.acos
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.acos tensordict.TensorDictBase.acos
+    :add-heading: Tutorials that use ``acos``

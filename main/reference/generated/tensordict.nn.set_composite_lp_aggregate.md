@@ -1,0 +1,65 @@
+# set_composite_lp_aggregate
+
+*class*tensordict.nn.set_composite_lp_aggregate(*mode: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*)
+
+Bases: `_DecoratorContextManager`
+
+Controls whether [`CompositeDistribution`](tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution) log-probabilities and entropies will be aggregated in a single tensor.
+
+When [`composite_lp_aggregate()`](tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate) returns `True`, the log-probs / entropies of [`CompositeDistribution`](tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution)
+will be summed into a single tensor with the shape of the root tensordict.
+When it returns `False` (the default), they are returned as a
+TensorDict with one `<name>_log_prob` (or `<name>_entropy`) entry per
+sampled key. The value also decides the keys where probabilistic modules
+write their log-probabilities: see the [log-probability key table](tensordict.nn.ProbabilisticTensorDictModule.html#log-prob-keys) of
+[`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule), and
+[Modules: TensorDictModule and tensordict.nn](../../modules.html#modules-guide).
+
+The value of composite_lp_aggregate can also be controlled through the COMPOSITE_LP_AGGREGATE environment variable.
+It works as a context manager and as a decorator, and `set()` and
+`unset()` change it outside of a block.
+
+Parameters:
+
+**mode** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - the value that
+[`composite_lp_aggregate()`](tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate) returns inside the
+block. Defaults to `True`.
+
+Example
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from tensordict.nn import CompositeDistribution, set_composite_lp_aggregate
+>>> from torch import distributions as d
+>>> _ = torch.manual_seed(0)
+>>> params = TensorDict({
+... "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
+... ("nested", "disc"): {"logits": torch.randn(3, 10)}
+... }, [3])
+>>> dist = CompositeDistribution(params,
+... distribution_map={"cont": d.Normal, ("nested", "disc"): d.Categorical})
+>>> sample = dist.sample((4,))
+>>> with set_composite_lp_aggregate(False):
+... lp = dist.log_prob(sample)
+... print(lp)
+TensorDict(
+ fields={
+ cont_log_prob: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+ nested: TensorDict(
+ fields={
+ disc_log_prob: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+ batch_size=torch.Size([4, 3]),
+ device=None,
+ is_shared=False)},
+ batch_size=torch.Size([4, 3]),
+ device=None,
+ is_shared=False)
+>>> with set_composite_lp_aggregate(True):
+... lp = dist.log_prob(sample)
+... print(lp)
+tensor([[-2.0886, -1.2155, -0.0414],
+ [-2.8973, -5.5165, 2.4402],
+ [-0.2806, -1.2799, 3.1733],
+ [-3.0407, -4.3593, 0.5763]])
+```

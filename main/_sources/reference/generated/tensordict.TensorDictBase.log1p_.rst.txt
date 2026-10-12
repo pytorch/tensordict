@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.log1p_
+=====================
+
+.. automethod:: TensorDictBase.log1p_
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.log1p_ tensordict.TensorDictBase.log1p_
+    :add-heading: Tutorials that use ``log1p_``

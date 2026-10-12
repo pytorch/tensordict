@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.tanh_
+====================
+
+.. automethod:: TensorDictBase.tanh_
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.tanh_ tensordict.TensorDictBase.tanh_
+    :add-heading: Tutorials that use ``tanh_``

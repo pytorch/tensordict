@@ -6,3 +6,7 @@ InteractionType
 
 .. autoclass:: InteractionType
     :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.nn.InteractionType
+    :add-heading: Tutorials that use ``InteractionType``

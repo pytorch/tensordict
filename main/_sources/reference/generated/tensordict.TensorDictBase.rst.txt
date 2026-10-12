@@ -4,6 +4,11 @@
 TensorDictBase
 ==============
 
+The methods of ``TensorDictBase`` are shared by every tensordict class and
+by tensorclasses. They are listed by task in :ref:`api-tensordict-methods`,
+with one page for each method.
+
 .. autoclass:: TensorDictBase
-    :members:
-    :inherited-members:
+
+.. minigallery:: tensordict.TensorDictBase
+    :add-heading: Tutorials that use ``TensorDictBase``

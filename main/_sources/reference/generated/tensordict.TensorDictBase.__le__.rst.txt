@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.__le__
+=====================
+
+.. automethod:: TensorDictBase.__le__
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.__le__ tensordict.TensorDictBase.__le__
+    :add-heading: Tutorials that use ``__le__``

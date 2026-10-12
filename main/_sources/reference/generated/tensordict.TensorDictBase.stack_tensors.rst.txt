@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.stack_tensors
+============================
+
+.. automethod:: TensorDictBase.stack_tensors
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.stack_tensors tensordict.TensorDictBase.stack_tensors
+    :add-heading: Tutorials that use ``stack_tensors``

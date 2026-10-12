@@ -6,4 +6,7 @@ UnbatchedTensor
 
 .. autoclass:: UnbatchedTensor
     :members:
-    :inherited-members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.UnbatchedTensor
+    :add-heading: Tutorials that use ``UnbatchedTensor``

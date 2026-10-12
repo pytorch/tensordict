@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.abs_
+===================
+
+.. automethod:: TensorDictBase.abs_
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.abs_ tensordict.TensorDictBase.abs_
+    :add-heading: Tutorials that use ``abs_``

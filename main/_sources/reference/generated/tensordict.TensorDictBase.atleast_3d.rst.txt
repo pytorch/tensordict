@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.atleast_3d
+=========================
+
+.. automethod:: TensorDictBase.atleast_3d
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.atleast_3d tensordict.TensorDictBase.atleast_3d
+    :add-heading: Tutorials that use ``atleast_3d``

@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.__len__
+======================
+
+.. automethod:: TensorDictBase.__len__
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.__len__ tensordict.TensorDictBase.__len__
+    :add-heading: Tutorials that use ``__len__``

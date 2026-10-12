@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.pad
+==================
+
+.. automethod:: TensorDictBase.pad
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.pad tensordict.TensorDictBase.pad
+    :add-heading: Tutorials that use ``pad``

@@ -5,3 +5,6 @@ unravel_key
 ===========
 
 .. autofunction:: unravel_key
+
+.. minigallery:: tensordict.unravel_key
+    :add-heading: Tutorials that use ``unravel_key``

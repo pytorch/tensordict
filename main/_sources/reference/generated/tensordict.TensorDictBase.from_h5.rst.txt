@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.from_h5
+======================
+
+.. automethod:: TensorDictBase.from_h5
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.from_h5 tensordict.TensorDictBase.from_h5
+    :add-heading: Tutorials that use ``from_h5``

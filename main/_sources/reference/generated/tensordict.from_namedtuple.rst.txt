@@ -5,3 +5,6 @@ from_namedtuple
 ===============
 
 .. autofunction:: from_namedtuple
+
+.. minigallery:: tensordict.from_namedtuple
+    :add-heading: Tutorials that use ``from_namedtuple``

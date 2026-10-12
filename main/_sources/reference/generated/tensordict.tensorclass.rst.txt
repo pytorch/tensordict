@@ -5,3 +5,6 @@ tensorclass
 ===========
 
 .. autofunction:: tensorclass
+
+.. minigallery:: tensordict.tensorclass
+    :add-heading: Tutorials that use ``tensorclass``

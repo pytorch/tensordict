@@ -5,3 +5,6 @@ cat
 ===
 
 .. autofunction:: cat
+
+.. minigallery:: tensordict.cat
+    :add-heading: Tutorials that use ``cat``

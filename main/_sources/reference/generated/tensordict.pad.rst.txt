@@ -5,3 +5,6 @@ pad
 ===
 
 .. autofunction:: pad
+
+.. minigallery:: tensordict.pad
+    :add-heading: Tutorials that use ``pad``

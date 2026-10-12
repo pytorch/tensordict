@@ -5,3 +5,6 @@ load_memmap
 ===========
 
 .. autofunction:: load_memmap
+
+.. minigallery:: tensordict.load_memmap
+    :add-heading: Tutorials that use ``load_memmap``

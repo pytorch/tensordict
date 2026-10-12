@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.cat_tensors
+==========================
+
+.. automethod:: TensorDictBase.cat_tensors
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.cat_tensors tensordict.TensorDictBase.cat_tensors
+    :add-heading: Tutorials that use ``cat_tensors``

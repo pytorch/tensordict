@@ -4,6 +4,14 @@
 TensorClass
 ===========
 
+``TensorClass`` has the methods of :class:`~tensordict.TensorDictBase`,
+listed by task in :ref:`api-tensordict-methods`. This page lists only the
+methods that ``TensorClass`` adds, and the overrides that have their own
+documentation.
+
 .. autoclass:: TensorClass
     :members:
-    :inherited-members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.TensorClass
+    :add-heading: Tutorials that use ``TensorClass``

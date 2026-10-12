@@ -4,6 +4,14 @@
 NonTensorData
 =============
 
+``NonTensorData`` has the methods of :class:`~tensordict.TensorDictBase`,
+listed by task in :ref:`api-tensordict-methods`. This page lists only the
+methods that ``NonTensorData`` adds, and the overrides that have their own
+documentation.
+
 .. autoclass:: NonTensorData
     :members:
-    :inherited-members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.NonTensorData
+    :add-heading: Tutorials that use ``NonTensorData``

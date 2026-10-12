@@ -5,3 +5,6 @@ from_pytree
 ===========
 
 .. autofunction:: from_pytree
+
+.. minigallery:: tensordict.from_pytree
+    :add-heading: Tutorials that use ``from_pytree``

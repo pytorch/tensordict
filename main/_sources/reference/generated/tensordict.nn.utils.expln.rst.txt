@@ -5,3 +5,6 @@ expln
 =====
 
 .. autofunction:: expln
+
+.. minigallery:: tensordict.nn.utils.expln
+    :add-heading: Tutorials that use ``expln``

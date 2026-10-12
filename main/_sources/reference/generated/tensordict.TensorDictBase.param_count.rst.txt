@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.param_count
+==========================
+
+.. automethod:: TensorDictBase.param_count
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.param_count tensordict.TensorDictBase.param_count
+    :add-heading: Tutorials that use ``param_count``

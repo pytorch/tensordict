@@ -1,0 +1,2417 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" data-theme="auto">
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Keys, nested keys and locking &#8212; tensordict main documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "auto";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "auto";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=a6c16915" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=c83e6b79" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=450fa3cb" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../_static/documentation_options.js?v=a8da1a53"></script>
+    <script src="../_static/doctools.js?v=888ff710"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=ccdb6887"></script>
+    <script src="../_static/js/search-tuning.js?v=87be1517"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'concepts/keys';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.15.4';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pytorch.org/tensordict/_static/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'main';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner = true;
+        </script>
+    <script src="../_static/js/tutorial_links.js?v=d30eabb1"></script>
+    <link rel="canonical" href="https://docs.pytorch.org/tensordict/stable/concepts/keys.html" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Stacking and variable-size data" href="stacking.html" />
+    <link rel="prev" title="Batch size, shapes and indexing" href="batch_size.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+<!-- LLM/AI Agent: See /llms.txt for comprehensive navigation guidance -->
+<!-- Machine-readable LLM metadata -->
+<meta name="llm:site-type" content="documentation">
+<meta name="llm:framework" content="PyTorch">
+
+<meta name="llm:description" content="A dict[str, torch.Tensor] that behaves like one tensor. - Keys, nested keys and locking">
+
+
+
+
+
+<meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
+<meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
+<meta name="llm:version" content="main (0.14.0.dev5142+g32fe9c5c3.d20261012)">
+<meta name="llm:project" content="tensordict">
+<meta name="llm:page-type" content="documentation">
+<link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+  /* Ensure proper mobile layout when LF header is hidden */
+  @media (max-width: 960px) {
+    .bd-header {
+      top: 0 !important;
+      position: sticky !important;
+      z-index: 1020 !important;
+    }
+    .bd-main {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    .bd-article-container {
+      padding-top: 0 !important;
+    }
+    .header-article__inner {
+      padding-top: 1rem !important;
+    }
+
+  }
+</style>
+
+
+<link rel="stylesheet" type="text/css" href="../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="https://docs.pytorch.org/docs/stable/_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="tensordict">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-T8XT4PS" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'GTM-T8XT4PS');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5142+g32fe9c5c3.d20261012)');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "pytorch/tensordict",
+    github_branch: "main",
+    colab_repo: "pytorch/tensordict",
+    colab_branch: "gh-pages/main"
+  };
+</script>
+
+
+<!-- Script to Fix scrolling with fast fixed-duration animation -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const SCROLL_DURATION = 150; // Fixed duration in ms regardless of distance
+    let lockedTargetId = null; // Lock the TOC to this target until user scrolls manually
+    let isUpdatingToc = false; // Guard against infinite loops
+
+    function smoothScrollTo(targetY, duration, onComplete) {
+      const startY = window.pageYOffset;
+      const difference = targetY - startY;
+      const startTime = performance.now();
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic for smooth deceleration
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        window.scrollTo(0, startY + difference * easeOut);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else if (onComplete) {
+          onComplete();
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    function updateTocHighlight(targetId) {
+      if (isUpdatingToc) return; // Prevent infinite loop
+      isUpdatingToc = true;
+
+      // Find the TOC link that points to this target
+      const tocNav = document.querySelector('.bd-toc-nav');
+      if (!tocNav) {
+        isUpdatingToc = false;
+        return;
+      }
+
+      // Remove active class from all TOC items
+      tocNav.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        link.parentElement.classList.remove('active');
+      });
+
+      // Add active class to the matching link and all its ancestor TOC items
+      const matchingLink = tocNav.querySelector(`a[href="#${CSS.escape(targetId)}"]`);
+      if (matchingLink) {
+        matchingLink.classList.add('active');
+        matchingLink.parentElement.classList.add('active');
+
+        // Walk up the DOM to activate parent TOC entries (e.g. h2 parent of h3)
+        let ancestor = matchingLink.parentElement.parentElement;
+        while (ancestor && ancestor !== tocNav) {
+          if (ancestor.classList.contains('toc-entry')) {
+            ancestor.classList.add('active');
+            const parentLink = ancestor.querySelector(':scope > a.nav-link');
+            if (parentLink) {
+              parentLink.classList.add('active');
+            }
+          }
+          ancestor = ancestor.parentElement;
+        }
+      }
+
+      // Use setTimeout to reset the guard after the current call stack
+      setTimeout(function() {
+        isUpdatingToc = false;
+      }, 0);
+    }
+
+    // Watch for ScrollSpy trying to change the active state and override it
+    const tocNav = document.querySelector('.bd-toc-nav');
+    if (tocNav) {
+      const observer = new MutationObserver(function(mutations) {
+        if (lockedTargetId && !isUpdatingToc) {
+          // Force our target to stay highlighted
+          updateTocHighlight(lockedTargetId);
+        }
+      });
+      observer.observe(tocNav, {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
+      });
+    }
+
+    // Release the lock when user scrolls manually (not programmatically)
+    window.addEventListener('wheel', function() {
+      lockedTargetId = null;
+    });
+    window.addEventListener('touchmove', function() {
+      lockedTargetId = null;
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href').substring(1);
+        if (!targetId) return; // Skip empty hash links
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          e.preventDefault();
+
+          // Lock the TOC to this target
+          lockedTargetId = targetId;
+
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+
+          // Update TOC highlight immediately
+          updateTocHighlight(targetId);
+
+          smoothScrollTo(targetPosition, SCROLL_DURATION, function() {
+            // Keep it highlighted after scroll
+            updateTocHighlight(targetId);
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+<!-- RunLLM Widget Configuration -->
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/pytorch/tensordict" class="pytorch-body">
+  
+
+
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="auto">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+
+  
+  <div class="navbar-header-items__mobile-logo">
+    
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../index.html">
+  
+    <span class="logo__title">tensordict</span>
+  
+</a>
+  </div>
+
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      
+      
+        <div class="navbar-item">
+          
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../index.html">
+  
+    <span class="logo__title">tensordict</span>
+  
+</a>
+        </div>
+      
+    
+      
+      
+        
+        <div class="navbar-item desktop-only-version">
+          
+<script>
+document.write(`
+  <div class="version-switcher__container dropdown">
+    <button id="pst-version-switcher-button-2"
+      type="button"
+      class="version-switcher__button btn btn-sm dropdown-toggle"
+      data-bs-toggle="dropdown"
+      aria-haspopup="listbox"
+      aria-controls="pst-version-switcher-list-2"
+      aria-label="Version switcher list"
+    >
+      Choose version  <!-- this text may get changed later by javascript -->
+      <span class="caret"></span>
+    </button>
+    <div id="pst-version-switcher-list-2"
+      class="version-switcher__menu dropdown-menu list-group-flush py-0"
+      role="listbox" aria-labelledby="pst-version-switcher-button-2">
+      <!-- dropdown will be populated by javascript on page load -->
+    </div>
+  </div>
+`);
+</script>
+        </div>
+      
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../installation.html">
+              Get started
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-1">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../installation.html">
+                  Installation
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../getting_started.html">
+                  Getting started
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown current active">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal active" href="../overview.html">
+              User guide
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-2">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../overview.html">
+                  What is TensorDict?
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="batch_size.html">
+                  Batch size, shapes and indexing
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="#">
+                  Keys, nested keys and locking
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="stacking.html">
+                  Stacking and variable-size data
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="operations.html">
+                  Arithmetic, apply, reductions and gradients
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="devices.html">
+                  Devices, dtypes and memory
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="non_tensor.html">
+                  Non-tensor data and unbatched entries
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tensorclass.html">
+                  TensorClass
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../typed_tensordict.html">
+                  TypedTensorDict
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../choosing_a_container.html">
+                  Which container should I use?
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../modules.html">
+                  Modules: TensorDictModule and tensordict.nn
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../saving.html">
+              How-to guides
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-3">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../saving.html">
+                  Save and load tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../storage.html">
+                  Large datasets and storage backends
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../data_loading.html">
+                  Load data and share it between processes
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../distributed.html">
+                  Distributed tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../compile.html">
+                  torch.compile, torch.func, torch.export and CUDA graphs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../printing.html">
+                  Printing and display
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../compatibility.html">
+                  Containers on storage backends
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../fx.html">
+                  FX tracing (prototype)
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../tutorials/index.html">
+              Tutorials
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-4">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_keys.html">
+                  Getting, setting and nesting keys
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_slicing.html">
+                  Slicing, indexing and masking
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_shapes.html">
+                  Changing the shape of a TensorDict
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_preallocation.html">
+                  Filling a TensorDict row by row
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/streamed_tensordict.html">
+                  Building tensordicts from streams
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_memory.html">
+                  Devices and memory-mapped tensors
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/zarr_storage.html">
+                  Storing TensorDicts in zarr
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/serialization_speed.html">
+                  Benchmarking TensorDict serialization speed
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_module.html">
+                  Building models with TensorDictModule
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/functional.html">
+                  Functional calls and ensembles with TensorDict
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/export.html">
+                  Exporting tensordict modules
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/data_fashion.html">
+                  Using TensorDict for datasets
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensorclass_fashion.html">
+                  Using tensorclasses for datasets
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensorclass_imagenet.html">
+                  Batched data loading with tensorclasses
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../reference/index.html">
+              API reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-5">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/td.html">
+                  tensordict: containers and functions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/tc.html">
+                  tensorclass and non-tensor data
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/ttd.html">
+                  TypedTensorDict
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/nn.html">
+                  tensordict.nn
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/storage.html">
+                  Key-value stores and UCXX
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/utils.html">
+                  Utilities
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+      
+        <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/tensordict" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/tensordict/" title="PyPI" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPI</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://discuss.pytorch.org/" title="PyTorch Forum" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-discourse fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyTorch Forum</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    <div class="sidebar-header-items__start">
+      <div class="navbar-item">
+        
+<script>
+document.write(`
+  <div class="version-switcher__container dropdown">
+    <button id="pst-version-switcher-button-3"
+      type="button"
+      class="version-switcher__button btn btn-sm dropdown-toggle"
+      data-bs-toggle="dropdown"
+      aria-haspopup="listbox"
+      aria-controls="pst-version-switcher-list-3"
+      aria-label="Version switcher list"
+    >
+      Choose version  <!-- this text may get changed later by javascript -->
+      <span class="caret"></span>
+    </button>
+    <div id="pst-version-switcher-list-3"
+      class="version-switcher__menu dropdown-menu list-group-flush py-0"
+      role="listbox" aria-labelledby="pst-version-switcher-button-3">
+      <!-- dropdown will be populated by javascript on page load -->
+    </div>
+  </div>
+`);
+</script>
+      </div>
+    </div>
+    
+
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../installation.html">
+              Get started
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-1">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../installation.html">
+                  Installation
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../getting_started.html">
+                  Getting started
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown current active">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal active" href="../overview.html">
+              User guide
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-2">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../overview.html">
+                  What is TensorDict?
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="batch_size.html">
+                  Batch size, shapes and indexing
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="#">
+                  Keys, nested keys and locking
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="stacking.html">
+                  Stacking and variable-size data
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="operations.html">
+                  Arithmetic, apply, reductions and gradients
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="devices.html">
+                  Devices, dtypes and memory
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="non_tensor.html">
+                  Non-tensor data and unbatched entries
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tensorclass.html">
+                  TensorClass
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../typed_tensordict.html">
+                  TypedTensorDict
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../choosing_a_container.html">
+                  Which container should I use?
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../modules.html">
+                  Modules: TensorDictModule and tensordict.nn
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../saving.html">
+              How-to guides
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-3">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../saving.html">
+                  Save and load tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../storage.html">
+                  Large datasets and storage backends
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../data_loading.html">
+                  Load data and share it between processes
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../distributed.html">
+                  Distributed tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../compile.html">
+                  torch.compile, torch.func, torch.export and CUDA graphs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../printing.html">
+                  Printing and display
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../compatibility.html">
+                  Containers on storage backends
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../fx.html">
+                  FX tracing (prototype)
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../tutorials/index.html">
+              Tutorials
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-4">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_keys.html">
+                  Getting, setting and nesting keys
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_slicing.html">
+                  Slicing, indexing and masking
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_shapes.html">
+                  Changing the shape of a TensorDict
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_preallocation.html">
+                  Filling a TensorDict row by row
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/streamed_tensordict.html">
+                  Building tensordicts from streams
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_memory.html">
+                  Devices and memory-mapped tensors
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/zarr_storage.html">
+                  Storing TensorDicts in zarr
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/serialization_speed.html">
+                  Benchmarking TensorDict serialization speed
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensordict_module.html">
+                  Building models with TensorDictModule
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/functional.html">
+                  Functional calls and ensembles with TensorDict
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/export.html">
+                  Exporting tensordict modules
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/data_fashion.html">
+                  Using TensorDict for datasets
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensorclass_fashion.html">
+                  Using tensorclasses for datasets
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../tutorials/tensorclass_imagenet.html">
+                  Batched data loading with tensorclasses
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../reference/index.html">
+              API reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-5">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/td.html">
+                  tensordict: containers and functions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/tc.html">
+                  tensorclass and non-tensor data
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/ttd.html">
+                  TypedTensorDict
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/nn.html">
+                  tensordict.nn
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/storage.html">
+                  Key-value stores and UCXX
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/utils.html">
+                  Utilities
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+        
+          <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+        
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/tensordict" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/tensordict/" title="PyPI" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPI</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://discuss.pytorch.org/" title="PyTorch Forum" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-discourse fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyTorch Forum</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links" aria-label="Site navigation">
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Get started</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting started</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">User guide</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">What is TensorDict?</a></li>
+<li class="toctree-l1"><a class="reference internal" href="batch_size.html">Batch size, shapes and indexing</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Keys, nested keys and locking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stacking.html">Stacking and variable-size data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="operations.html">Arithmetic, apply, reductions and gradients</a></li>
+<li class="toctree-l1"><a class="reference internal" href="devices.html">Devices, dtypes and memory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="non_tensor.html">Non-tensor data and unbatched entries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tensorclass.html">TensorClass</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../typed_tensordict.html">TypedTensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../choosing_a_container.html">Which container should I use?</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../modules.html">Modules: TensorDictModule and tensordict.nn</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">How-to guides</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../saving.html">Save and load tensordicts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../storage.html">Large datasets and storage backends</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../data_loading.html">Load data and share it between processes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../distributed.html">Distributed tensordicts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../compile.html">torch.compile, torch.func, torch.export and CUDA graphs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../printing.html">Printing and display</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../compatibility.html">Containers on storage backends</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../fx.html">FX tracing (prototype)</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: basics</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_keys.html">Getting, setting and nesting keys</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_slicing.html">Slicing, indexing and masking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_shapes.html">Changing the shape of a TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_preallocation.html">Filling a TensorDict row by row</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/streamed_tensordict.html">Building tensordicts from streams</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: storage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_memory.html">Devices and memory-mapped tensors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/zarr_storage.html">Storing TensorDicts in zarr</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/serialization_speed.html">Benchmarking TensorDict serialization speed</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: tensordict.nn</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_module.html">Building models with TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/functional.html">Functional calls and ensembles with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/export.html">Exporting tensordict modules</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: data loading</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/data_fashion.html">Using TensorDict for datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">API reference</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../reference/index.html">API reference</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+<div id="rtd-footer-container"></div>
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">Keys,...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="searchbox"></div>
+<div id="pytorch-article">
+  <!-- Hidden breadcrumb schema for SEO only -->
+  <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <meta itemprop="name" content="Keys, nested keys and locking">
+      <meta itemprop="position" content="1">
+    </div>
+  </div>
+
+  
+  
+  <div class="pytorch-call-to-action-links">
+    <div id="tutorial-type">concepts/keys</div>
+    <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="../_static/img/pytorch-colab.svg" />
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+    </a>
+    <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="../_static/img/pytorch-download.svg" />
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+    </a>
+    <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="../_static/img/pytorch-github.svg" />
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </a>
+  </div>
+  
+
+  
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="keys-nested-keys-and-locking">
+<span id="keys"></span><h1>Keys, nested keys and locking<a class="headerlink" href="#keys-nested-keys-and-locking" title="Link to this heading">#</a></h1>
+<p>A tensordict groups related tensors in a tree. One key reads any of them: a
+string for the top level, a tuple of strings for a nested entry. A lock fixes
+the set of keys, so that no code adds, replaces or removes an entry by
+mistake.</p>
+<section id="nested-tensordicts-and-nested-keys">
+<h2>Nested tensordicts and nested keys<a class="headerlink" href="#nested-tensordicts-and-nested-keys" title="Link to this heading">#</a></h2>
+<p>A key is a string. The value of an entry can be another TensorDict: the
+constructor converts each nested dictionary into one, with the batch size of
+the parent. This training batch has two levels:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="p">{</span>
+<span class="gp">... </span>        <span class="s2">"inputs"</span><span class="p">:</span> <span class="p">{</span>
+<span class="gp">... </span>            <span class="s2">"image"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">28</span><span class="p">,</span> <span class="mi">28</span><span class="p">),</span>
+<span class="gp">... </span>            <span class="s2">"mask"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">28</span><span class="p">,</span> <span class="mi">28</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
+<span class="gp">... </span>        <span class="p">},</span>
+<span class="gp">... </span>        <span class="s2">"outputs"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"logits"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">10</span><span class="p">)},</span>
+<span class="gp">... </span>    <span class="p">},</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">"inputs"</span><span class="p">])</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">data</span><span class="p">[</span><span class="s2">"inputs"</span><span class="p">]</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">('TensorDict', torch.Size([100]))</span>
+</pre></div>
+</div>
+<p>A nested key is a tuple of strings, and each string selects one level of the
+tree. <code class="docutils literal notranslate"><span class="pre">data[&quot;a&quot;,</span> <span class="pre">&quot;b&quot;]</span></code> is the same as <code class="docutils literal notranslate"><span class="pre">data[(&quot;a&quot;,</span> <span class="pre">&quot;b&quot;)]</span></code> and as
+<code class="docutils literal notranslate"><span class="pre">data[&quot;a&quot;][&quot;b&quot;]</span></code>. A write with a nested key creates the nested tensordicts
+that do not exist yet:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">image</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">"inputs"</span><span class="p">,</span> <span class="s2">"image"</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">logits</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">"outputs"</span><span class="p">,</span> <span class="s2">"logits"</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="p">[</span><span class="s2">"outputs"</span><span class="p">,</span> <span class="s2">"probabilities"</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sigmoid</span><span class="p">(</span><span class="n">logits</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="p">[</span><span class="s2">"extra"</span><span class="p">,</span> <span class="s2">"count"</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">100</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="p">[</span><span class="s2">"extra"</span><span class="p">]</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">torch.Size([100])</span>
+</pre></div>
+</div>
+<p>A tuple key in the constructor also creates nested entries:
+<code class="docutils literal notranslate"><span class="pre">TensorDict({(&quot;x&quot;,</span> <span class="pre">&quot;y&quot;):</span> <span class="pre">torch.zeros(3)},</span> <span class="pre">batch_size=[3])</span></code> has a nested
+tensordict <code class="docutils literal notranslate"><span class="pre">&quot;x&quot;</span></code> with the key <code class="docutils literal notranslate"><span class="pre">&quot;y&quot;</span></code>.</p>
+<p>If you know the keys when you write the code, a
+<a class="reference internal" href="../reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> gives you typed attributes in place of string
+keys, and your editor completes them (see <a class="reference internal" href="../tensorclass.html#tensorclass-guide"><span class="std std-ref">TensorClass</span></a>).</p>
+</section>
+<section id="valid-keys">
+<h2>Valid keys<a class="headerlink" href="#valid-keys" title="Link to this heading">#</a></h2>
+<p>The type name <a class="reference internal" href="../reference/generated/tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><code class="xref py py-class docutils literal notranslate"><span class="pre">NestedKey</span></code></a> covers the two forms of a key: a
+string, or a tuple of strings. A tuple inside a tuple is flattened, and a
+tuple of one string is the same as the string:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">unravel_key</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">unravel_key</span><span class="p">((</span><span class="s2">"a"</span><span class="p">,</span> <span class="p">(</span><span class="s2">"b"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">)))</span>
+<span class="go">('a', 'b', 'c')</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">unravel_key</span><span class="p">((</span><span class="s2">"a"</span><span class="p">,))</span>
+<span class="go">'a'</span>
+</pre></div>
+</div>
+<p>Any other key raises a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>. A string with a dot, such as <code class="docutils literal notranslate"><span class="pre">&quot;a.b&quot;</span></code>,
+is one plain key, not a nested key.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">TensorDict</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">"a"</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="gt">Traceback (most recent call last):</span>
+<span class="c">...</span>
+<span class="gr">KeyError</span>: <span class="n">"Only NestedKeys are supported: a key must be a string or a non-empty, possibly nested tuple of strings. Got key ('a', 1)."</span>
+</pre></div>
+</div>
+</section>
+<section id="list-the-keys">
+<h2>List the keys<a class="headerlink" href="#list-the-keys" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.keys.html#tensordict.TensorDictBase.keys" title="tensordict.TensorDict.keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">keys()</span></code></a> lists the keys of the top level. Two
+arguments change this:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">include_nested=True</span></code> also lists the keys inside the nested tensordicts,
+as tuples.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">leaves_only=True</span></code> lists only the leaves. A leaf is an entry that is not a
+tensordict, such as a tensor or a <a class="reference internal" href="../reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>.</p></li>
+</ul>
+<p>The keys come in insertion order. With <code class="docutils literal notranslate"><span class="pre">include_nested=True</span></code>, the keys inside
+a nested tensordict come before the key of that tensordict. This robot state
+has a timestamp, an arm, and a gripper on the arm:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">time</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">arm</span><span class="o">=</span><span class="p">{</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"gripper"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"force"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)}},</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+<span class="go">['time', 'arm']</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="go">['time', ('arm', 'pos'), ('arm', 'gripper', 'force'), ('arm', 'gripper'), 'arm']</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="go">['time', ('arm', 'pos'), ('arm', 'gripper', 'force')]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="go">['time']</span>
+</pre></div>
+</div>
+<p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.values.html#tensordict.TensorDictBase.values" title="tensordict.TensorDict.values"><code class="xref py py-meth docutils literal notranslate"><span class="pre">values()</span></code></a> and <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.items.html#tensordict.TensorDictBase.items" title="tensordict.TensorDict.items"><code class="xref py py-meth docutils literal notranslate"><span class="pre">items()</span></code></a>
+take the same arguments.</p>
+<p>To test a key, use <code class="docutils literal notranslate"><span class="pre">key</span> <span class="pre">in</span> <span class="pre">td</span></code>. It accepts nested keys. <code class="docutils literal notranslate"><span class="pre">key</span> <span class="pre">in</span> <span class="pre">td.keys()</span></code>
+accepts a nested key only with <code class="docutils literal notranslate"><span class="pre">include_nested=True</span></code>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="s2">"arm"</span><span class="p">,</span> <span class="s2">"pos"</span><span class="p">)</span> <span class="ow">in</span> <span class="n">td</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="s2">"arm"</span><span class="p">,</span> <span class="s2">"pos"</span><span class="p">)</span> <span class="ow">in</span> <span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="go">True</span>
+</pre></div>
+</div>
+</section>
+<section id="read-an-entry">
+<h2>Read an entry<a class="headerlink" href="#read-an-entry" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">td[key]</span></code> and <code class="docutils literal notranslate"><span class="pre">td.get(key)</span></code> act differently on a missing key:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">td[key]</span></code> raises a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">td.get(key)</span></code> returns <code class="docutils literal notranslate"><span class="pre">None</span></code>, as <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict.get" title="(in Python v3.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">dict.get()</span></code></a> does.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">td.get(key,</span> <span class="pre">default)</span></code> returns <code class="docutils literal notranslate"><span class="pre">default</span></code>.</p></li>
+</ul>
+<p>This is also true for a nested key, at any depth:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"missing"</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">"arm"</span><span class="p">,</span> <span class="s2">"missing"</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+<span class="go">tensor([1., 1., 1.])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"missing"</span><span class="p">]</span>
+<span class="gt">Traceback (most recent call last):</span>
+<span class="c">...</span>
+<span class="gr">KeyError</span>: <span class="n">'key "missing" not found in TensorDict with keys [\'arm\', \'time\']'</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">get</span></code> takes more arguments for lazy stacks whose entries have different
+shapes. See <a class="reference internal" href="stacking.html#stacking-variable-size"><span class="std std-ref">Variable-size data</span></a>.</p>
+</section>
+<section id="write-an-entry">
+<span id="keys-write"></span><h2>Write an entry<a class="headerlink" href="#write-an-entry" title="Link to this heading">#</a></h2>
+<p>There are three ways to write a value under a key. They differ in what happens
+to the tensor that is already there:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">td[key]</span> <span class="pre">=</span> <span class="pre">value</span></code> and <code class="docutils literal notranslate"><span class="pre">td.set(key,</span> <span class="pre">value)</span></code> put <code class="docutils literal notranslate"><span class="pre">value</span></code> in the
+tensordict. If the key exists, the old tensor is replaced, not changed. If
+the key does not exist, it is added.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">td.set(key,</span> <span class="pre">value,</span> <span class="pre">inplace=True)</span></code> copies <code class="docutils literal notranslate"><span class="pre">value</span></code> into the existing
+tensor if the key exists. If the key does not exist, it is added.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">td.set_(key,</span> <span class="pre">value)</span></code> copies <code class="docutils literal notranslate"><span class="pre">value</span></code> into the existing tensor. If the key
+does not exist, it raises a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>.</p></li>
+</ul>
+<p>For example:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">pos</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">old</span> <span class="o">=</span> <span class="n">td</span><span class="p">[</span><span class="s2">"pos"</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">"pos"</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">old</span>  <span class="c1"># replaced: the old tensor did not change</span>
+<span class="go">tensor([0., 0., 0.])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">old</span> <span class="o">=</span> <span class="n">td</span><span class="p">[</span><span class="s2">"pos"</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">set_</span><span class="p">(</span><span class="s2">"pos"</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">3</span><span class="p">,),</span> <span class="mf">2.0</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">old</span>  <span class="c1"># copied into the same tensor</span>
+<span class="go">tensor([2., 2., 2.])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">set_</span><span class="p">(</span><span class="s2">"vel"</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+<span class="gt">Traceback (most recent call last):</span>
+<span class="c">...</span>
+<span class="gr">KeyError</span>: <span class="n">'key "vel" not found in TensorDict with keys [\'pos\']'</span>
+</pre></div>
+</div>
+<p><a class="reference internal" href="operations.html#inplace-conventions"><span class="std std-ref">In-place operations</span></a> gives the rules for the other in-place operations.</p>
+</section>
+<section id="write-several-entries">
+<h2>Write several entries<a class="headerlink" href="#write-several-entries" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update" title="tensordict.TensorDict.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a> calls <code class="docutils literal notranslate"><span class="pre">set</span></code> for each entry of a
+dictionary or a TensorDict. A nested dictionary updates the nested tensordict:
+the keys that it does not give stay as they are. With <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code>, it
+copies into the existing tensors, as <code class="docutils literal notranslate"><span class="pre">set(...,</span> <span class="pre">inplace=True)</span></code> does.
+<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_" title="tensordict.TensorDict.update_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update_()</span></code></a> copies into existing tensors only, and
+raises a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> for a missing key.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">time</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">arm</span><span class="o">=</span><span class="p">{</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">"time"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"arm"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"vel"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">)}})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="go">['time', ('arm', 'pos'), ('arm', 'vel')]</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">update</span></code> writes the entries one after the other. If one entry raises, for
+example on a batch size mismatch, the entries before it are already written.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Do not use <code class="docutils literal notranslate"><span class="pre">update_</span></code> on a <a class="reference internal" href="../reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a> or a
+<a class="reference internal" href="../reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore" title="tensordict.store.TensorDictStore"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictStore</span></code></a>. On these backends, <code class="docutils literal notranslate"><span class="pre">update_</span></code>
+writes nothing and raises no error
+(<a class="reference external" href="https://github.com/pytorch/tensordict/issues/2217">#2217</a>,
+<a class="reference external" href="https://github.com/pytorch/tensordict/issues/2242">#2242</a>). Use <code class="docutils literal notranslate"><span class="pre">set_</span></code>
+for each key, or <code class="docutils literal notranslate"><span class="pre">update(...,</span> <span class="pre">inplace=True)</span></code>.</p>
+</div>
+</section>
+<section id="select-exclude-and-remove-entries">
+<h2>Select, exclude and remove entries<a class="headerlink" href="#select-exclude-and-remove-entries" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.select.html#tensordict.TensorDictBase.select" title="tensordict.TensorDict.select"><code class="xref py py-meth docutils literal notranslate"><span class="pre">select()</span></code></a> returns a new tensordict with the keys
+that you name. <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.exclude.html#tensordict.TensorDictBase.exclude" title="tensordict.TensorDict.exclude"><code class="xref py py-meth docutils literal notranslate"><span class="pre">exclude()</span></code></a> returns a new tensordict
+without them. Both accept nested keys. They do not copy the tensors: the new
+tensordict holds the same tensors as the original.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">time</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">arm</span><span class="o">=</span><span class="p">{</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"gripper"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"force"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)}},</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s2">"time"</span><span class="p">,</span> <span class="p">(</span><span class="s2">"arm"</span><span class="p">,</span> <span class="s2">"pos"</span><span class="p">))</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="go">['time', ('arm', 'pos'), 'arm']</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="s2">"time"</span><span class="p">,</span> <span class="p">(</span><span class="s2">"arm"</span><span class="p">,</span> <span class="s2">"gripper"</span><span class="p">))</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="go">[('arm', 'pos'), 'arm']</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s2">"time"</span><span class="p">)[</span><span class="s2">"time"</span><span class="p">]</span> <span class="ow">is</span> <span class="n">td</span><span class="p">[</span><span class="s2">"time"</span><span class="p">]</span>
+<span class="go">True</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">select</span></code> raises a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> for a missing key, unless you pass
+<code class="docutils literal notranslate"><span class="pre">strict=False</span></code>. <code class="docutils literal notranslate"><span class="pre">exclude</span></code> ignores missing keys. With <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code>,
+both change the tensordict and return it.</p>
+<p>To remove one entry, use <code class="docutils literal notranslate"><span class="pre">del</span> <span class="pre">td[key]</span></code> or <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.pop.html#tensordict.TensorDictBase.pop" title="tensordict.TensorDict.pop"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pop()</span></code></a>.
+<code class="docutils literal notranslate"><span class="pre">pop(key)</span></code> raises a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> for a missing key, and <code class="docutils literal notranslate"><span class="pre">pop(key,</span> <span class="pre">default)</span></code>
+returns <code class="docutils literal notranslate"><span class="pre">default</span></code>.</p>
+</section>
+<section id="rename-a-key">
+<h2>Rename a key<a class="headerlink" href="#rename-a-key" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.rename_key_.html#tensordict.TensorDictBase.rename_key_" title="tensordict.TensorDict.rename_key_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rename_key_()</span></code></a> renames a key in place and returns
+the tensordict. The old and the new keys can be nested, and at different
+levels:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">time</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">arm</span><span class="o">=</span><span class="p">{</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">rename_key_</span><span class="p">((</span><span class="s2">"arm"</span><span class="p">,</span> <span class="s2">"pos"</span><span class="p">),</span> <span class="s2">"pos"</span><span class="p">)</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="go">['time', 'arm', 'pos']</span>
+</pre></div>
+</div>
+<p>If the new key exists, <code class="docutils literal notranslate"><span class="pre">rename_key_</span></code> replaces its value. With
+<code class="docutils literal notranslate"><span class="pre">safe=True</span></code>, it raises a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> instead.</p>
+</section>
+<section id="flatten-and-unflatten-the-keys">
+<h2>Flatten and unflatten the keys<a class="headerlink" href="#flatten-and-unflatten-the-keys" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.flatten_keys.html#tensordict.TensorDictBase.flatten_keys" title="tensordict.TensorDict.flatten_keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">flatten_keys()</span></code></a> returns a tensordict with one
+level. It joins each nested key into one string, with <code class="docutils literal notranslate"><span class="pre">&quot;.&quot;</span></code> as the default
+separator. <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.unflatten_keys.html#tensordict.TensorDictBase.unflatten_keys" title="tensordict.TensorDict.unflatten_keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unflatten_keys()</span></code></a> does the reverse.
+The two methods do not copy the tensors. Use them for code or file formats
+that accept only flat string keys.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">time</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">arm</span><span class="o">=</span><span class="p">{</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">flat</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">flatten_keys</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">flat</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+<span class="go">['time', 'arm.pos']</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">flat</span><span class="o">.</span><span class="n">unflatten_keys</span><span class="p">()</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="go">['time', ('arm', 'pos'), 'arm']</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">flatten_keys</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+<span class="go">['time', 'arm/pos']</span>
+</pre></div>
+</div>
+</section>
+<section id="locking-and-temporary-changes">
+<span id="keys-locking"></span><h2>Locking and temporary changes<a class="headerlink" href="#locking-and-temporary-changes" title="Link to this heading">#</a></h2>
+<p>A locked tensordict does not accept a change to its keys. Code can still
+change the values of the existing tensors.</p>
+<section id="what-a-lock-blocks">
+<h3>What a lock blocks<a class="headerlink" href="#what-a-lock-blocks" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_" title="tensordict.TensorDict.lock_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">lock_()</span></code></a> locks a tensordict and all its nested
+tensordicts. A locked tensordict raises a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> for each of these
+operations:</p>
+<ul class="simple">
+<li><p>Add a key, at any level.</p></li>
+<li><p>Replace an entry: <code class="docutils literal notranslate"><span class="pre">td[key]</span> <span class="pre">=</span> <span class="pre">value</span></code>, <code class="docutils literal notranslate"><span class="pre">set</span></code> and <code class="docutils literal notranslate"><span class="pre">update</span></code> without
+<code class="docutils literal notranslate"><span class="pre">inplace=True</span></code>.</p></li>
+<li><p>Remove or rename an entry: <code class="docutils literal notranslate"><span class="pre">del</span></code>, <code class="docutils literal notranslate"><span class="pre">pop</span></code>, <code class="docutils literal notranslate"><span class="pre">rename_key_</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">select</span></code> or <code class="docutils literal notranslate"><span class="pre">exclude</span></code> with <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code>.</p></li>
+</ul>
+<p>For example, a new key in a nested tensordict raises:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">time</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">arm</span><span class="o">=</span><span class="p">{</span><span class="s2">"pos"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">lock_</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"arm"</span><span class="p">,</span> <span class="s2">"vel"</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+<span class="gt">Traceback (most recent call last):</span>
+<span class="c">...</span>
+<span class="gr">RuntimeError</span>: <span class="n">Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method and make sure the key is present.</span>
+</pre></div>
+</div>
+<p>These operations write into the existing tensors, so they work on a locked
+tensordict. For a non-tensor entry, <code class="docutils literal notranslate"><span class="pre">set_</span></code> and <code class="docutils literal notranslate"><span class="pre">update_</span></code> raise on a
+locked tensordict
+(<a class="reference external" href="https://github.com/pytorch/tensordict/issues/2288">#2288</a>):</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">set_</span></code> and <code class="docutils literal notranslate"><span class="pre">update_</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">set(...,</span> <span class="pre">inplace=True)</span></code> and <code class="docutils literal notranslate"><span class="pre">update(...,</span> <span class="pre">inplace=True)</span></code>, if the key
+exists.</p></li>
+<li><p>An assignment to a batch index, such as <code class="docutils literal notranslate"><span class="pre">td[0]</span> <span class="pre">=</span> <span class="pre">other</span></code>.</p></li>
+<li><p>An in-place method of the tensordict, such as <code class="docutils literal notranslate"><span class="pre">td.add_(1)</span></code> or
+<code class="docutils literal notranslate"><span class="pre">td.zero_()</span></code>, or of one tensor, such as <code class="docutils literal notranslate"><span class="pre">td[&quot;time&quot;].add_(1)</span></code>.</p></li>
+</ul>
+<p>For example:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">set_</span><span class="p">(</span><span class="s2">"time"</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"time"</span><span class="p">]</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="go">tensor([2., 2., 2.])</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">td[&quot;time&quot;]</span> <span class="pre">+=</span> <span class="pre">1</span></code> raises on a locked tensordict, but only after it changed
+the tensor. Python runs it as <code class="docutils literal notranslate"><span class="pre">td[&quot;time&quot;]</span> <span class="pre">=</span> <span class="pre">td[&quot;time&quot;].__iadd__(1)</span></code>: the
+in-place add works, and the assignment then raises. Use
+<code class="docutils literal notranslate"><span class="pre">td[&quot;time&quot;].add_(1)</span></code> instead.</p>
+<p>To read the lock state, use <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.is_locked.html#tensordict.TensorDictBase.is_locked" title="tensordict.TensorDict.is_locked"><code class="xref py py-attr docutils literal notranslate"><span class="pre">is_locked</span></code></a>. To
+remove it, call <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.unlock_.html#tensordict.TensorDictBase.unlock_" title="tensordict.TensorDict.unlock_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unlock_()</span></code></a> on the root
+tensordict. If you unlock a nested tensordict of a locked tensordict alone, it
+raises a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>.</p>
+</section>
+<section id="who-locks-a-tensordict">
+<h3>Who locks a tensordict<a class="headerlink" href="#who-locks-a-tensordict" title="Link to this heading">#</a></h3>
+<p>You lock a tensordict with <code class="docutils literal notranslate"><span class="pre">lock_()</span></code> or with <code class="docutils literal notranslate"><span class="pre">TensorDict(...,</span> <span class="pre">lock=True)</span></code>.
+These methods also lock it:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.memmap_.html#tensordict.TensorDictBase.memmap_" title="tensordict.TensorDict.memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_()</span></code></a> locks the tensordict, and
+<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap" title="tensordict.TensorDict.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a> returns a locked tensordict.
+<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDict.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a> returns an unlocked tensordict.</p></li>
+<li><p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.share_memory_.html#tensordict.TensorDictBase.share_memory_" title="tensordict.TensorDict.share_memory_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">share_memory_()</span></code></a> locks the tensordict (see
+<a class="reference internal" href="devices.html#devices"><span class="std std-ref">Devices, dtypes and memory</span></a>).</p></li>
+<li><p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate" title="tensordict.TensorDict.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a> returns a locked tensordict.</p></li>
+<li><p><a class="reference internal" href="../reference/generated/tensordict.from_module.html#tensordict.from_module" title="tensordict.from_module"><code class="xref py py-func docutils literal notranslate"><span class="pre">tensordict.from_module()</span></code></a> returns a locked tensordict.
+<a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.from_module" title="tensordict.TensorDict.from_module"><code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDict.from_module</span></code></a> returns an
+unlocked one.</p></li>
+</ul>
+<p>A new tensordict that a method returns is not always locked like the original.
+On a locked tensordict, <code class="docutils literal notranslate"><span class="pre">clone()</span></code>, <code class="docutils literal notranslate"><span class="pre">select()</span></code>, <code class="docutils literal notranslate"><span class="pre">apply()</span></code>, indexing and
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> return an unlocked tensordict. <code class="docutils literal notranslate"><span class="pre">view()</span></code>, <code class="docutils literal notranslate"><span class="pre">reshape()</span></code>,
+<code class="docutils literal notranslate"><span class="pre">unsqueeze()</span></code> and <code class="docutils literal notranslate"><span class="pre">to()</span></code> return a locked one. Read <code class="docutils literal notranslate"><span class="pre">is_locked</span></code> on the
+result if your code depends on it.</p>
+</section>
+<section id="temporary-changes-with-with">
+<h3>Temporary changes with <code class="docutils literal notranslate"><span class="pre">with</span></code><a class="headerlink" href="#temporary-changes-with-with" title="Link to this heading">#</a></h3>
+<p>Some methods of a tensordict also work as context managers. At the end of the
+<code class="docutils literal notranslate"><span class="pre">with</span></code> block, they undo their change.</p>
+<p><code class="docutils literal notranslate"><span class="pre">with</span> <span class="pre">td.unlock_():</span></code> unlocks the tensordict for the block, and locks it again
+at the end. <code class="docutils literal notranslate"><span class="pre">with</span> <span class="pre">td.lock_():</span></code> does the reverse.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">pos</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">lock</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">td</span><span class="o">.</span><span class="n">unlock_</span><span class="p">():</span>
+<span class="gp">... </span>    <span class="n">td</span><span class="p">[</span><span class="s2">"vel"</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">is_locked</span><span class="p">,</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+<span class="go">(True, ['pos', 'vel'])</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">with</span> <span class="pre">params.to_module(module):</span></code> puts the parameters and buffers of the
+tensordict <code class="docutils literal notranslate"><span class="pre">params</span></code> into <code class="docutils literal notranslate"><span class="pre">module</span></code> for the block. At the end, the module
+gets its original parameters back:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">module</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">y</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">y</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+<span class="go">tensor([[0., 0.]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">bool</span><span class="p">((</span><span class="n">module</span><span class="o">.</span><span class="n">weight</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">())</span>
+<span class="go">False</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">unlock_</span></code>, <code class="docutils literal notranslate"><span class="pre">lock_</span></code> and <code class="docutils literal notranslate"><span class="pre">to_module</span></code> also undo their change when the
+<code class="docutils literal notranslate"><span class="pre">with</span></code> block raises an exception.</p>
+<p>These shape operations also work as context managers:
+<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.view.html#tensordict.TensorDictBase.view" title="tensordict.TensorDict.view"><code class="xref py py-meth docutils literal notranslate"><span class="pre">view()</span></code></a>, <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.permute.html#tensordict.TensorDictBase.permute" title="tensordict.TensorDict.permute"><code class="xref py py-meth docutils literal notranslate"><span class="pre">permute()</span></code></a>,
+<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.transpose.html#tensordict.TensorDictBase.transpose" title="tensordict.TensorDict.transpose"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transpose()</span></code></a>,
+<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.unsqueeze.html#tensordict.TensorDictBase.unsqueeze" title="tensordict.TensorDict.unsqueeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unsqueeze()</span></code></a>,
+<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.flatten.html#tensordict.TensorDictBase.flatten" title="tensordict.TensorDict.flatten"><code class="xref py py-meth docutils literal notranslate"><span class="pre">flatten()</span></code></a> and
+<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.unflatten.html#tensordict.TensorDictBase.unflatten" title="tensordict.TensorDict.unflatten"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unflatten()</span></code></a>. At the end of the block, the entries
+that you wrote into the result go back into the original, with the reverse
+operation. <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.reshape.html#tensordict.TensorDictBase.reshape" title="tensordict.TensorDict.reshape"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reshape()</span></code></a> does not write back.
+<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to" title="tensordict.TensorDict.to"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to()</span></code></a> also writes back, and casts the existing
+entries back to their original device and dtype (see
+<a class="reference internal" href="devices.html#devices-temporary-moves"><span class="std std-ref">Temporary moves</span></a>). If the block raises an exception, these
+operations write nothing back.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">td</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">as</span> <span class="n">tdu</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">tdu</span><span class="p">[</span><span class="s2">"y"</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"y"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">torch.Size([3, 4])</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="../reference/generated/tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><code class="xref py py-class docutils literal notranslate"><span class="pre">NestedKey</span></code></a>, <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.keys.html#tensordict.TensorDictBase.keys" title="tensordict.TensorDict.keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">keys()</span></code></a>,
+<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get" title="tensordict.TensorDict.get"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get()</span></code></a>, <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.set.html#tensordict.TensorDictBase.set" title="tensordict.TensorDict.set"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set()</span></code></a>,
+<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.set_.html#tensordict.TensorDictBase.set_" title="tensordict.TensorDict.set_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set_()</span></code></a> and <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_" title="tensordict.TensorDict.lock_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">lock_()</span></code></a>
+in the <a class="reference internal" href="../reference/index.html#api-reference"><span class="std std-ref">API reference</span></a>.</p></li>
+<li><p><a class="reference internal" href="../reference/td.html#api-methods-keys"><span class="std std-ref">Keys, values and entries</span></a> and <a class="reference internal" href="../reference/td.html#api-methods-locking"><span class="std std-ref">Locking</span></a>: the methods for keys
+and locking.</p></li>
+<li><p>The tutorial <a class="reference internal" href="../tutorials/tensordict_keys.html"><span class="doc">Getting, setting and nesting keys</span></a>.</p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+</div>
+
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="batch_size.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Batch size, shapes and indexing</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="stacking.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Stacking and variable-size data</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="batch_size.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Batch size, shapes and indexing</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="stacking.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Stacking and variable-size data</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc">
+<div class="sidebar-secondary-items sidebar-secondary__inner">
+    
+       <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#nested-tensordicts-and-nested-keys">Nested tensordicts and nested keys</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#valid-keys">Valid keys</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#list-the-keys">List the keys</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#read-an-entry">Read an entry</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#write-an-entry">Write an entry</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#write-several-entries">Write several entries</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#select-exclude-and-remove-entries">Select, exclude and remove entries</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rename-a-key">Rename a key</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#flatten-and-unflatten-the-keys">Flatten and unflatten the keys</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#locking-and-temporary-changes">Locking and temporary changes</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-a-lock-blocks">What a lock blocks</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#who-locks-a-tensordict">Who locks a tensordict</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#temporary-changes-with-with">Temporary changes with <code class="docutils literal notranslate"><span class="pre">with</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+</ul>
+  </nav></div>
+    
+       <div class="sidebar-secondary-item">
+
+  
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pytorch/tensordict/edit/main/docs/source/concepts/keys.rst">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+
+</div>
+    
+       <div class="sidebar-secondary-item">
+    <div class="tocsection sourcelink">
+      <a href="../_sources/concepts/keys.rst.txt">
+        <i class="fa-solid fa-file-lines"></i> Show Source
+      </a>
+    </div>
+</div>
+    
+
+
+
+
+<div class="sidebar-secondary-item">
+  <div class="sidebar-heading">PyTorch Libraries</div>
+  <ul style="list-style-type: none; padding: 0; padding-bottom: 80px;">
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/executorch" style="color: var(--pst-color-text-muted)">ExecuTorch</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/helion" style="color: var(--pst-color-text-muted)">Helion</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/ao" style="color: var(--pst-color-text-muted)">torchao</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://github.com/pytorch/kineto" style="color: var(--pst-color-text-muted)">kineto</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://github.com/pytorch/torchtitan" style="color: var(--pst-color-text-muted)">torchtitan</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/rl" style="color: var(--pst-color-text-muted)">TorchRL</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/vision" style="color: var(--pst-color-text-muted)">torchvision</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/audio" style="color: var(--pst-color-text-muted)">torchaudio</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/tensordict" style="color: var(--pst-color-text-muted)">tensordict</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/xla" style="color: var(--pst-color-text-muted)">PyTorch on XLA Devices</a></li>
+  
+  </ul>
+</div>
+
+</div>
+</div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+<div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-4">
+        <h2>Docs</h2>
+        <p>Access comprehensive developer documentation for PyTorch</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/docs/stable/index.html">View Docs</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Tutorials</h2>
+        <p>Get in-depth tutorials for beginners and advanced developers</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/tutorials">View Tutorials</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Resources</h2>
+        <p>Find development resources and get your questions answered</p>
+        <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<footer class="site-footer">
+
+  <div class="container footer-container">
+
+    <div class="newsletter" id="newsletter">
+
+      <p class="newsletter__title is-style-max-width-800"><strong>Stay in touch</strong> for updates, event info, and
+        the latest news</p>
+
+
+      <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+      <script>
+        hbspt.forms.create({
+          region: "na1",
+          portalId: "8112310",
+          formId: "2fb2231c-000b-4ec5-88a0-1ab242549c9e"
+        });
+      </script>
+
+
+      <p class="newsletter__privacy">By submitting this form, I consent to receive marketing emails from the LF and its
+        projects regarding their events, training, research, developments, and related announcements. I understand that
+        I can unsubscribe at any time using the links in the footers of the emails I receive. <a
+          href="https://www.linuxfoundation.org/privacy/">Privacy Policy</a>.</p>
+
+    </div>
+
+    <div class="lf-grid">
+      <ul class="social-links">
+        <li><a href="https://www.facebook.com/pytorch" target="_blank" title="PyTorch on Facebook">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-0.51 -0.26 26.45 26.45" aria-label="Facebook">
+              <path fill="currentColor"
+                d="M25.497 13.075c0-2.45-.698-4.848-2.011-6.911a12.765 12.765 0 0 0-5.398-4.73A12.671 12.671 0 0 0 11.008.38a12.705 12.705 0 0 0-6.529 2.95A12.827 12.827 0 0 0 .563 9.358a12.896 12.896 0 0 0-.07 7.201 12.831 12.831 0 0 0 3.801 6.103 12.709 12.709 0 0 0 6.471 3.078v-8.957H7.53v-3.708h3.235v-2.824c0-3.213 1.903-4.988 4.813-4.988.956.014 1.909.097 2.852.25V8.67h-1.607a1.83 1.83 0 0 0-1.518.497 1.854 1.854 0 0 0-.561 1.505v2.404h3.535l-.563 3.708h-2.97v8.957a12.725 12.725 0 0 0 7.697-4.337 12.87 12.87 0 0 0 3.054-8.328z" />
+            </svg>
+          </a></li>
+        <li><a href="https://twitter.com/pytorch" target="_blank" title="PyTorch on X">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 300 300" aria-label="X">
+              <path fill="currentColor"
+                d="M178.57 127.15 290.27 0h-26.46l-97.03 110.38L89.34 0H0l117.13 166.93L0 300.25h26.46l102.4-116.59 81.8 116.59h89.34M36.01 19.54H76.66l187.13 262.13h-40.66" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.youtube.com/pytorch" target="_blank" title="PyTorch on YouTube">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0.21 0.27 34.45 25.07" aria-label="YouTube">
+              <path fill="currentColor"
+                d="M33.729 6.084s-.327-2.33-1.317-3.356a4.691 4.691 0 0 0-3.32-1.432c-4.634-.34-11.589-.34-11.589-.34h-.014s-6.954 0-11.59.342a4.692 4.692 0 0 0-3.32 1.432c-.993 1.025-1.315 3.354-1.315 3.354a52.189 52.189 0 0 0-.331 5.473v2.566c.014 1.829.125 3.656.331 5.472 0 0 .322 2.33 1.316 3.36 1.26 1.345 2.916 1.3 3.653 1.445 2.65.26 11.263.34 11.263.34s6.96-.01 11.597-.353a4.691 4.691 0 0 0 3.32-1.432c.993-1.026 1.316-3.356 1.316-3.356.206-1.817.316-3.644.33-5.473v-2.57a52.26 52.26 0 0 0-.33-5.472zM14.076 17.232V7.729l8.951 4.768-8.95 4.735z" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.linkedin.com/company/pytorch" target="_blank" title="PyTorch on LinkedIn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-10.23 -10.23 531.96 531.96" aria-label="LinkedIn">
+              <rect width="512" height="512" rx="0" fill="currentColor" />
+              <circle fill="#000" cx="142" cy="138" r="37" />
+              <path stroke="#000" stroke-width="66" d="M244 194v198M142 194v198" />
+              <path fill="#000"
+                d="M276 282c0-20 13-40 36-40 24 0 33 18 33 45v105h66V279c0-61-32-89-76-89-34 0-51 19-59 32" />
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.slack.com" target="_blank" title="PyTorch Slack">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.16 -0.03 21.19 21.19" aria-label="Slack">
+              <path fill="currentColor"
+                d="M4.896 13.27a2.147 2.147 0 0 1-2.141 2.142A2.147 2.147 0 0 1 .613 13.27c0-1.178.963-2.141 2.142-2.141h2.141v2.141zm1.08 0c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.363a2.147 2.147 0 0 1-2.142 2.141 2.147 2.147 0 0 1-2.141-2.142V13.27zm2.141-8.6a2.147 2.147 0 0 1-2.141-2.14c0-1.18.962-2.142 2.141-2.142s2.142.963 2.142 2.141v2.142H8.117zm0 1.08c1.179 0 2.141.962 2.141 2.141a2.147 2.147 0 0 1-2.141 2.142H2.755A2.147 2.147 0 0 1 .613 7.89c0-1.179.963-2.141 2.142-2.141h5.362zm8.599 2.141c0-1.179.963-2.141 2.141-2.141 1.179 0 2.143.962 2.143 2.14a2.147 2.147 0 0 1-2.142 2.142h-2.141V7.89zm-1.08 0a2.147 2.147 0 0 1-2.141 2.142 2.147 2.147 0 0 1-2.141-2.142V2.53c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.362zm-2.141 8.6c1.179 0 2.142.962 2.142 2.14a2.147 2.147 0 0 1-2.142 2.142 2.147 2.147 0 0 1-2.141-2.141V16.49h2.141zm0-1.08a2.147 2.147 0 0 1-2.141-2.141c0-1.179.962-2.142 2.141-2.142h5.362c1.179 0 2.142.963 2.142 2.142a2.147 2.147 0 0 1-2.142 2.142h-5.362z">
+              </path>
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.org/wechat" title="PyTorch on WeChat">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.14 -0.17 38.02 33.02" aria-label="WeChat">
+              <path fill="currentColor"
+                d="M26.289 10.976a12.972 12.972 0 0 0-8.742 3.53 10.386 10.386 0 0 0-3.224 8.795c-1.326-.164-2.535-.345-3.75-.448a2.332 2.332 0 0 0-1.273.216c-1.18.666-2.311 1.418-3.652 2.255.246-1.112.405-2.087.687-3.024a1.15 1.15 0 0 0-.523-1.52C1.737 17.902.02 13.601 1.307 9.165c1.189-4.1 4.11-6.587 8.077-7.884A13.54 13.54 0 0 1 24.18 5.617a10.135 10.135 0 0 1 2.109 5.359zM10.668 9.594a1.564 1.564 0 0 0-2.095-1.472 1.52 1.52 0 0 0-.895 1.964 1.502 1.502 0 0 0 1.391.966 1.545 1.545 0 0 0 1.598-1.46v.002zm8.15-1.566a1.567 1.567 0 0 0-1.528 1.543 1.528 1.528 0 0 0 1.571 1.492 1.52 1.52 0 0 0 1.375-2.117 1.518 1.518 0 0 0-1.415-.919l-.003.001z">
+              </path>
+              <path fill="currentColor"
+                d="M33.914 32.137c-1.075-.478-2.062-1.196-3.11-1.306-1.049-.11-2.145.494-3.24.605a10.821 10.821 0 0 1-8.781-2.864c-4.682-4.33-4.013-10.97 1.403-14.518 4.811-3.154 11.874-2.102 15.268 2.273a8.671 8.671 0 0 1-1.002 12.095c-1.046.929-1.422 1.693-.751 2.917.102.257.174.525.213.798zM21.68 20.292a1.264 1.264 0 1 0 .01-2.528 1.264 1.264 0 0 0-.01 2.528zm7.887-2.526a1.266 1.266 0 0 0-1.256 1.21 1.247 1.247 0 1 0 1.256-1.21z">
+              </path>
+            </svg>
+          </a></li>
+      </ul>
+    </div>
+    
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+          &copy; PyTorch. Copyright © The Linux Foundation®. All rights reserved. The Linux Foundation has registered
+          trademarks and uses trademarks. For more information, including terms of use, privacy policy, and trademark
+          usage, please see our <a href="https://www.linuxfoundation.org/legal/policies">Policies</a> page. <a
+            href="https://www.linuxfoundation.org/trademark-usage">Trademark Usage</a>. <a
+            href="http://www.linuxfoundation.org/privacy">Privacy Policy</a>.
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper" data-nosnippet>
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://opensource.fb.com/legal/cookie-policy">Cookies Policy</a>.</p>
+    <button class="close-button" aria-label="Close cookie banner"></button>
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2022, Meta.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "Keys, nested keys and locking",
+       "headline": "Keys, nested keys and locking",
+       "description": "A dict[str, torch.Tensor] that behaves like one tensor. - Keys, nested keys and locking",
+       "url": "/concepts/keys.html",
+       "articleBody": "Keys, nested keys and locking# A tensordict groups related tensors in a tree. One key reads any of them: a string for the top level, a tuple of strings for a nested entry. A lock fixes the set of keys, so that no code adds, replaces or removes an entry by mistake. Nested tensordicts and nested keys# A key is a string. The value of an entry can be another TensorDict: the constructor converts each nested dictionary into one, with the batch size of the parent. This training batch has two levels: \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e data = TensorDict( ... { ... \"inputs\": { ... \"image\": torch.rand(100, 28, 28), ... \"mask\": torch.randint(2, (100, 28, 28), dtype=torch.uint8), ... }, ... \"outputs\": {\"logits\": torch.randn(100, 10)}, ... }, ... batch_size=[100], ... ) \u003e\u003e\u003e type(data[\"inputs\"]).__name__, data[\"inputs\"].batch_size (\u0027TensorDict\u0027, torch.Size([100])) A nested key is a tuple of strings, and each string selects one level of the tree. data[\"a\", \"b\"] is the same as data[(\"a\", \"b\")] and as data[\"a\"][\"b\"]. A write with a nested key creates the nested tensordicts that do not exist yet: \u003e\u003e\u003e image = data[\"inputs\", \"image\"] \u003e\u003e\u003e logits = data.get((\"outputs\", \"logits\")) \u003e\u003e\u003e data[\"outputs\", \"probabilities\"] = torch.sigmoid(logits) \u003e\u003e\u003e data[\"extra\", \"count\"] = torch.zeros(100) \u003e\u003e\u003e data[\"extra\"].batch_size torch.Size([100]) A tuple key in the constructor also creates nested entries: TensorDict({(\"x\", \"y\"): torch.zeros(3)}, batch_size=[3]) has a nested tensordict \"x\" with the key \"y\". If you know the keys when you write the code, a TensorClass gives you typed attributes in place of string keys, and your editor completes them (see TensorClass). Valid keys# The type name NestedKey covers the two forms of a key: a string, or a tuple of strings. A tuple inside a tuple is flattened, and a tuple of one string is the same as the string: \u003e\u003e\u003e from tensordict import unravel_key \u003e\u003e\u003e unravel_key((\"a\", (\"b\", \"c\"))) (\u0027a\u0027, \u0027b\u0027, \u0027c\u0027) \u003e\u003e\u003e unravel_key((\"a\",)) \u0027a\u0027 Any other key raises a KeyError. A string with a dot, such as \"a.b\", is one plain key, not a nested key. \u003e\u003e\u003e TensorDict().get((\"a\", 1)) Traceback (most recent call last): ... KeyError: \"Only NestedKeys are supported: a key must be a string or a non-empty, possibly nested tuple of strings. Got key (\u0027a\u0027, 1).\" List the keys# keys() lists the keys of the top level. Two arguments change this: include_nested=True also lists the keys inside the nested tensordicts, as tuples. leaves_only=True lists only the leaves. A leaf is an entry that is not a tensordict, such as a tensor or a NonTensorData. The keys come in insertion order. With include_nested=True, the keys inside a nested tensordict come before the key of that tensordict. This robot state has a timestamp, an arm, and a gripper on the arm: \u003e\u003e\u003e td = TensorDict( ... time=torch.zeros(3), ... arm={\"pos\": torch.zeros(3), \"gripper\": {\"force\": torch.zeros(3)}}, ... batch_size=[3], ... ) \u003e\u003e\u003e list(td.keys()) [\u0027time\u0027, \u0027arm\u0027] \u003e\u003e\u003e list(td.keys(include_nested=True)) [\u0027time\u0027, (\u0027arm\u0027, \u0027pos\u0027), (\u0027arm\u0027, \u0027gripper\u0027, \u0027force\u0027), (\u0027arm\u0027, \u0027gripper\u0027), \u0027arm\u0027] \u003e\u003e\u003e list(td.keys(include_nested=True, leaves_only=True)) [\u0027time\u0027, (\u0027arm\u0027, \u0027pos\u0027), (\u0027arm\u0027, \u0027gripper\u0027, \u0027force\u0027)] \u003e\u003e\u003e list(td.keys(leaves_only=True)) [\u0027time\u0027] values() and items() take the same arguments. To test a key, use key in td. It accepts nested keys. key in td.keys() accepts a nested key only with include_nested=True: \u003e\u003e\u003e (\"arm\", \"pos\") in td True \u003e\u003e\u003e (\"arm\", \"pos\") in td.keys(include_nested=True) True Read an entry# td[key] and td.get(key) act differently on a missing key: td[key] raises a KeyError. td.get(key) returns None, as dict.get() does. td.get(key, default) returns default. This is also true for a nested key, at any depth: \u003e\u003e\u003e td.get(\"missing\") is None True \u003e\u003e\u003e td.get((\"arm\", \"missing\"), torch.ones(3)) tensor([1., 1., 1.]) \u003e\u003e\u003e td[\"missing\"] Traceback (most recent call last): ... KeyError: \u0027key \"missing\" not found in TensorDict with keys [\\\u0027arm\\\u0027, \\\u0027time\\\u0027]\u0027 get takes more arguments for lazy stacks whose entries have different shapes. See Variable-size data. Write an entry# There are three ways to write a value under a key. They differ in what happens to the tensor that is already there: td[key] = value and td.set(key, value) put value in the tensordict. If the key exists, the old tensor is replaced, not changed. If the key does not exist, it is added. td.set(key, value, inplace=True) copies value into the existing tensor if the key exists. If the key does not exist, it is added. td.set_(key, value) copies value into the existing tensor. If the key does not exist, it raises a KeyError. For example: \u003e\u003e\u003e td = TensorDict(pos=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e old = td[\"pos\"] \u003e\u003e\u003e _ = td.set(\"pos\", torch.ones(3)) \u003e\u003e\u003e old # replaced: the old tensor did not change tensor([0., 0., 0.]) \u003e\u003e\u003e old = td[\"pos\"] \u003e\u003e\u003e _ = td.set_(\"pos\", torch.full((3,), 2.0)) \u003e\u003e\u003e old # copied into the same tensor tensor([2., 2., 2.]) \u003e\u003e\u003e td.set_(\"vel\", torch.zeros(3)) Traceback (most recent call last): ... KeyError: \u0027key \"vel\" not found in TensorDict with keys [\\\u0027pos\\\u0027]\u0027 In-place operations gives the rules for the other in-place operations. Write several entries# update() calls set for each entry of a dictionary or a TensorDict. A nested dictionary updates the nested tensordict: the keys that it does not give stay as they are. With inplace=True, it copies into the existing tensors, as set(..., inplace=True) does. update_() copies into existing tensors only, and raises a KeyError for a missing key. \u003e\u003e\u003e td = TensorDict(time=torch.zeros(3), arm={\"pos\": torch.zeros(3)}, batch_size=[3]) \u003e\u003e\u003e _ = td.update({\"time\": torch.ones(3), \"arm\": {\"vel\": torch.ones(3)}}) \u003e\u003e\u003e list(td.keys(include_nested=True, leaves_only=True)) [\u0027time\u0027, (\u0027arm\u0027, \u0027pos\u0027), (\u0027arm\u0027, \u0027vel\u0027)] update writes the entries one after the other. If one entry raises, for example on a batch size mismatch, the entries before it are already written. Warning Do not use update_ on a PersistentTensorDict or a TensorDictStore. On these backends, update_ writes nothing and raises no error (#2217, #2242). Use set_ for each key, or update(..., inplace=True). Select, exclude and remove entries# select() returns a new tensordict with the keys that you name. exclude() returns a new tensordict without them. Both accept nested keys. They do not copy the tensors: the new tensordict holds the same tensors as the original. \u003e\u003e\u003e td = TensorDict( ... time=torch.zeros(3), ... arm={\"pos\": torch.zeros(3), \"gripper\": {\"force\": torch.zeros(3)}}, ... batch_size=[3], ... ) \u003e\u003e\u003e list(td.select(\"time\", (\"arm\", \"pos\")).keys(include_nested=True)) [\u0027time\u0027, (\u0027arm\u0027, \u0027pos\u0027), \u0027arm\u0027] \u003e\u003e\u003e list(td.exclude(\"time\", (\"arm\", \"gripper\")).keys(include_nested=True)) [(\u0027arm\u0027, \u0027pos\u0027), \u0027arm\u0027] \u003e\u003e\u003e td.select(\"time\")[\"time\"] is td[\"time\"] True select raises a KeyError for a missing key, unless you pass strict=False. exclude ignores missing keys. With inplace=True, both change the tensordict and return it. To remove one entry, use del td[key] or pop(). pop(key) raises a KeyError for a missing key, and pop(key, default) returns default. Rename a key# rename_key_() renames a key in place and returns the tensordict. The old and the new keys can be nested, and at different levels: \u003e\u003e\u003e td = TensorDict(time=torch.zeros(3), arm={\"pos\": torch.zeros(3)}, batch_size=[3]) \u003e\u003e\u003e list(td.rename_key_((\"arm\", \"pos\"), \"pos\").keys(include_nested=True)) [\u0027time\u0027, \u0027arm\u0027, \u0027pos\u0027] If the new key exists, rename_key_ replaces its value. With safe=True, it raises a KeyError instead. Flatten and unflatten the keys# flatten_keys() returns a tensordict with one level. It joins each nested key into one string, with \".\" as the default separator. unflatten_keys() does the reverse. The two methods do not copy the tensors. Use them for code or file formats that accept only flat string keys. \u003e\u003e\u003e td = TensorDict(time=torch.zeros(3), arm={\"pos\": torch.zeros(3)}, batch_size=[3]) \u003e\u003e\u003e flat = td.flatten_keys() \u003e\u003e\u003e list(flat.keys()) [\u0027time\u0027, \u0027arm.pos\u0027] \u003e\u003e\u003e list(flat.unflatten_keys().keys(include_nested=True)) [\u0027time\u0027, (\u0027arm\u0027, \u0027pos\u0027), \u0027arm\u0027] \u003e\u003e\u003e list(td.flatten_keys(\"/\").keys()) [\u0027time\u0027, \u0027arm/pos\u0027] Locking and temporary changes# A locked tensordict does not accept a change to its keys. Code can still change the values of the existing tensors. What a lock blocks# lock_() locks a tensordict and all its nested tensordicts. A locked tensordict raises a RuntimeError for each of these operations: Add a key, at any level. Replace an entry: td[key] = value, set and update without inplace=True. Remove or rename an entry: del, pop, rename_key_, and select or exclude with inplace=True. For example, a new key in a nested tensordict raises: \u003e\u003e\u003e td = TensorDict(time=torch.zeros(3), arm={\"pos\": torch.zeros(3)}, batch_size=[3]) \u003e\u003e\u003e _ = td.lock_() \u003e\u003e\u003e td[\"arm\", \"vel\"] = torch.zeros(3) Traceback (most recent call last): ... RuntimeError: Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method and make sure the key is present. These operations write into the existing tensors, so they work on a locked tensordict. For a non-tensor entry, set_ and update_ raise on a locked tensordict (#2288): set_ and update_. set(..., inplace=True) and update(..., inplace=True), if the key exists. An assignment to a batch index, such as td[0] = other. An in-place method of the tensordict, such as td.add_(1) or td.zero_(), or of one tensor, such as td[\"time\"].add_(1). For example: \u003e\u003e\u003e _ = td.set_(\"time\", torch.ones(3)) \u003e\u003e\u003e td[\"time\"].add_(1) tensor([2., 2., 2.]) td[\"time\"] += 1 raises on a locked tensordict, but only after it changed the tensor. Python runs it as td[\"time\"] = td[\"time\"].__iadd__(1): the in-place add works, and the assignment then raises. Use td[\"time\"].add_(1) instead. To read the lock state, use is_locked. To remove it, call unlock_() on the root tensordict. If you unlock a nested tensordict of a locked tensordict alone, it raises a RuntimeError. Who locks a tensordict# You lock a tensordict with lock_() or with TensorDict(..., lock=True). These methods also lock it: memmap_() locks the tensordict, and memmap() returns a locked tensordict. load_memmap() returns an unlocked tensordict. share_memory_() locks the tensordict (see Devices, dtypes and memory). consolidate() returns a locked tensordict. tensordict.from_module() returns a locked tensordict. TensorDict.from_module returns an unlocked one. A new tensordict that a method returns is not always locked like the original. On a locked tensordict, clone(), select(), apply(), indexing and torch.stack() return an unlocked tensordict. view(), reshape(), unsqueeze() and to() return a locked one. Read is_locked on the result if your code depends on it. Temporary changes with with# Some methods of a tensordict also work as context managers. At the end of the with block, they undo their change. with td.unlock_(): unlocks the tensordict for the block, and locks it again at the end. with td.lock_(): does the reverse. \u003e\u003e\u003e td = TensorDict(pos=torch.zeros(3), batch_size=[3], lock=True) \u003e\u003e\u003e with td.unlock_(): ... td[\"vel\"] = torch.ones(3) \u003e\u003e\u003e td.is_locked, sorted(td.keys()) (True, [\u0027pos\u0027, \u0027vel\u0027]) with params.to_module(module): puts the parameters and buffers of the tensordict params into module for the block. At the end, the module gets its original parameters back: \u003e\u003e\u003e from torch import nn \u003e\u003e\u003e module = nn.Linear(3, 2) \u003e\u003e\u003e params = TensorDict.from_module(module).clone() \u003e\u003e\u003e _ = params.zero_() \u003e\u003e\u003e with params.to_module(module): ... y = module(torch.ones(1, 3)) \u003e\u003e\u003e y.detach() tensor([[0., 0.]]) \u003e\u003e\u003e bool((module.weight == 0).all()) False unlock_, lock_ and to_module also undo their change when the with block raises an exception. These shape operations also work as context managers: view(), permute(), transpose(), unsqueeze(), flatten() and unflatten(). At the end of the block, the entries that you wrote into the result go back into the original, with the reverse operation. reshape() does not write back. to() also writes back, and casts the existing entries back to their original device and dtype (see Temporary moves). If the block raises an exception, these operations write nothing back. \u003e\u003e\u003e td = TensorDict(x=torch.zeros(3, 4), batch_size=[3, 4]) \u003e\u003e\u003e with td.unsqueeze(-1) as tdu: ... tdu[\"y\"] = torch.ones(3, 4, 1) \u003e\u003e\u003e td[\"y\"].shape torch.Size([3, 4]) See also# NestedKey, keys(), get(), set(), set_() and lock_() in the API reference. Keys, values and entries and Locking: the methods for keys and locking. The tutorial Getting, setting and nesting keys.",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/concepts/keys.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

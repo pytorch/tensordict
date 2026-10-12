@@ -5,3 +5,6 @@ lazy_stack
 ==========
 
 .. autofunction:: lazy_stack
+
+.. minigallery:: tensordict.lazy_stack
+    :add-heading: Tutorials that use ``lazy_stack``

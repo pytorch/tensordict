@@ -23,37 +23,32 @@ Building tensordicts from streams
 
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
-In many real-world applications, data is generated continuously and at varying frequencies.
+Sensors, robots and transaction logs produce streams of data, often at
+different rates. To process a stream in batches, you group the incoming values
+into buckets, one for each fixed time window. The buckets have different
+lengths, so they do not fit in one tensor. This tutorial groups two streams,
+at 7 Hz and 3 Hz, into one-second buckets with a lazy stack of tensordicts. It
+is for readers who batch data of variable size.
 
-For example, sensor readings from IoT devices, financial transactions, or social media updates can all produce streams
-of data that need to be processed and analyzed in real-time.
+What you will learn:
 
-When working with such data streams, it's often necessary to "bucketize" the incoming data into discrete chunks,
-allowing for efficient processing and analysis. However, this can be challenging when dealing with data streams that
-have different frequencies or formats.
+- How to stack tensordicts whose entries have different shapes, with
+  :func:`~tensordict.lazy_stack`.
+- How to read streams with ``asyncio`` and write them into a tensordict at
+  regular intervals.
+- How to convert a lazy stack into nested tensors with
+  :meth:`~tensordict.TensorDictBase.densify`.
 
-In this tutorial, we'll explore how to use TensorDict to build and manipulate data streams.
-We'll learn how to create lazy stacks of tensors, handle asynchronous data streams, and densify our data for efficient
-storage and processing.
+Before you start, read :ref:`sphx_glr_tutorials_tensordict_shapes.py`, which
+introduces lazy stacks.
 
-In this tutorial, you will learn:
-- How to read streams of data and write them at regular intervals within a tensordict;
-- How to build TensorDict that stack contents with heterogeneous shapes together;
-- How to densify these tensors in single storages using ``nested_tensor`` if required.
+Stacking tensordicts with different shapes
+------------------------------------------
 
-Stacking heterogeneous tensordicts together
--------------------------------------------
+One bucket can hold more values than another. For example, the first two
+buckets can be as follows:
 
-In many real-life scenarios, data come in streams that have different defined frequencies.
-
-Our goal in this tutorial is to "bucketize" the upcoming data such that it can be read and processed at a given
-slower frequency.
-The challenge in this scenario is that the data may not be representable in regular "rectangular" format (i.e., where
-each dimension of the tensor is well-defined), but it could be the case that one bucket of data has more element than
-another, in which case we cannot simply stack them together. Typically, consider the case where the first and second
-buckets of data are as follows:
-
-.. GENERATED FROM PYTHON SOURCE LINES 40-47
+.. GENERATED FROM PYTHON SOURCE LINES 35-42
 
 .. code-block:: Python
 
@@ -71,19 +66,21 @@ buckets of data are as follows:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 48-52
+.. GENERATED FROM PYTHON SOURCE LINES 43-47
 
-In principle, we cannot stack these two tensordict contiguously in memory as the shape of the two streams differ.
-Fortunately, TensorDict offers a tool to group instances with heterogeneous tensor shapes together:
-:class:`~tensordict.LazyStackedTensorDict`.
-To create a lazy stack, one can just call :meth:`~tensordict.TensorDict.lazy_stack`:
+You cannot stack these two tensordicts into one block of memory, because the
+shapes of the streams differ. A :class:`~tensordict.LazyStackedTensorDict`
+groups tensordicts with different tensor shapes. To create one, call
+:func:`~tensordict.lazy_stack`:
 
-.. GENERATED FROM PYTHON SOURCE LINES 52-56
+.. GENERATED FROM PYTHON SOURCE LINES 47-53
 
 .. code-block:: Python
 
 
-    data = TensorDict.lazy_stack([bucket0, bucket1], dim=0)
+    from tensordict import lazy_stack
+
+    data = lazy_stack([bucket0, bucket1], dim=0)
     print(data)
 
 
@@ -108,13 +105,15 @@ To create a lazy stack, one can just call :meth:`~tensordict.TensorDict.lazy_sta
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 57-60
+.. GENERATED FROM PYTHON SOURCE LINES 54-59
 
-The resulting data is just a representation of the two tensordicts as if they had been stacked together along
-dimension 0. :class:`~tensordict.LazyStackedTensorDict` supports most common operations of the
-:class:`~tensordict.TensorDictBase` class, here are some examples:
+The result presents the two tensordicts as if they were stacked along
+dimension 0. The shape ``-1`` in the printed output marks a dimension whose
+size differs between the stacked tensordicts.
+:class:`~tensordict.LazyStackedTensorDict` supports most operations of
+:class:`~tensordict.TensorDictBase`. Here are some examples:
 
-.. GENERATED FROM PYTHON SOURCE LINES 60-65
+.. GENERATED FROM PYTHON SOURCE LINES 59-64
 
 .. code-block:: Python
 
@@ -130,11 +129,11 @@ dimension 0. :class:`~tensordict.LazyStackedTensorDict` supports most common ope
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 66-67
+.. GENERATED FROM PYTHON SOURCE LINES 65-66
 
-Moreover, indexing it will return the original data we used to create the stack
+Indexing the stack returns the original tensordicts:
 
-.. GENERATED FROM PYTHON SOURCE LINES 67-70
+.. GENERATED FROM PYTHON SOURCE LINES 66-69
 
 .. code-block:: Python
 
@@ -148,37 +147,57 @@ Moreover, indexing it will return the original data we used to create the stack
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 71-74
+.. GENERATED FROM PYTHON SOURCE LINES 70-76
 
-Still, in some instances, one could wish to have a contiguous representation of the underlying data.
-To do this, :class:`~tensordict.TensorDictBase` offers a :meth:`~tensordict.TensorDictBase.densify` method that
-will stack the tensors that can be stacked, and attempt to represent the rest as ``nested_tensor`` instances:
+To store the data in contiguous memory, call
+:meth:`~tensordict.TensorDictBase.densify`. It stacks the tensors that have
+the same shape, and stores the others as nested tensors. A nested tensor
+holds tensors of different lengths in one tensor. With
+``layout=torch.jagged``, all the values of an entry are in one buffer, and
+``offsets()`` gives the start of each tensor in this buffer:
 
-.. GENERATED FROM PYTHON SOURCE LINES 74-77
+.. GENERATED FROM PYTHON SOURCE LINES 76-81
 
 .. code-block:: Python
 
 
-    data_cont = data.densify()
+    data_cont = data.densify(layout=torch.jagged)
+    print(data_cont)
+    print("lengths of stream0:", data_cont["stream0"].offsets().diff())
 
 
 
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    TensorDict(
+        fields={
+            stream0: NestedTensor(shape=torch.Size([2, j2]), device=cpu, dtype=torch.float32, is_shared=False),
+            stream1: NestedTensor(shape=torch.Size([2, j1]), device=cpu, dtype=torch.float32, is_shared=False)},
+        batch_size=torch.Size([2]),
+        device=None,
+        is_shared=False)
+    lengths of stream0: tensor([5, 4])
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 78-85
+
+.. GENERATED FROM PYTHON SOURCE LINES 82-91
 
 Asynchronous streams of data
 ----------------------------
 
-Let us now switch to a more concrete example, where we create a function that streams data (in this case, just
-integers incremented by 1 at each iteration) at a given frequency.
+Next, write a function that streams data at a given frequency. Here the data
+are integers that increase by 1 at each step.
 
-To pass the data across threads, the function will use a queue received as input:
+The function and its reader run as ``asyncio`` tasks, in one thread. To pass
+the data between tasks, the function puts each value into a queue that it
+receives as input:
 
-.. GENERATED FROM PYTHON SOURCE LINES 85-98
+.. GENERATED FROM PYTHON SOURCE LINES 91-104
 
 .. code-block:: Python
 
@@ -202,12 +221,12 @@ To pass the data across threads, the function will use a queue received as input
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 99-101
+.. GENERATED FROM PYTHON SOURCE LINES 105-107
 
-The ``collect_data`` function reads the data from the queue for a given amount of time.
-As soon as ``timeout`` has passed, the function returns:
+The ``collect_data`` function reads the data from the queue for ``timeout``
+seconds, then returns the values that it read:
 
-.. GENERATED FROM PYTHON SOURCE LINES 101-122
+.. GENERATED FROM PYTHON SOURCE LINES 107-128
 
 .. code-block:: Python
 
@@ -216,8 +235,8 @@ As soon as ``timeout`` has passed, the function returns:
     async def collect_data(queue: asyncio.Queue, timeout: float) -> List[int]:
         values = []
 
-        # We create a nested `collect` async function in order to be able to stop it as
-        #  soon as timeout is passed (see wait_for below).
+        # The nested `collect` task lets wait_for (below) stop the reads
+        # when the timeout ends.
         async def collect():
             nonlocal values
             while True:
@@ -239,12 +258,12 @@ As soon as ``timeout`` has passed, the function returns:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 123-125
+.. GENERATED FROM PYTHON SOURCE LINES 129-131
 
-The ``wait7hz`` function reads the data from the queue for a given amount of time.
+The ``wait7hz`` function runs a 7 Hz generator for one second and prints
+what ``collect_data`` received:
 
-
-.. GENERATED FROM PYTHON SOURCE LINES 125-141
+.. GENERATED FROM PYTHON SOURCE LINES 131-145
 
 .. code-block:: Python
 
@@ -255,14 +274,12 @@ The ``wait7hz`` function reads the data from the queue for a given amount of tim
         generate_task = asyncio.create_task(generate_numbers(7, queue))
         collect_data_task = asyncio.create_task(collect_data(queue, timeout=1))
         values = await collect_data_task
-        # The ``generate_task`` has not been terminated
+        # generate_task still runs: stop it
         generate_task.cancel()
         print(values)
 
 
     asyncio.run(wait7hz())
-
-    from typing import Callable, Dict
 
 
 
@@ -277,19 +294,22 @@ The ``wait7hz`` function reads the data from the queue for a given amount of tim
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 142-148
+.. GENERATED FROM PYTHON SOURCE LINES 146-153
 
-We can now design a class that inherits from :class:`~tensordict.LazyStackedTensorDict` and reads data coming
-from different streams and registers them in separate tensordicts.
-A nice feature of :class:`~tensordict.LazyStackedTensorDict` is that it can be built incrementally too, such that
-we can simply register the new data coming in by extending the lazy stack up until we have collected enough data.
-Here is an implementation of this ``StreamedTensorDict`` class:
+Next, write a class that inherits from
+:class:`~tensordict.LazyStackedTensorDict`. It reads the data of several
+streams and writes each bucket into a new tensordict. A
+:class:`~tensordict.LazyStackedTensorDict` can grow one tensordict at a time
+with ``append``, so the class appends each new bucket to the stack until it
+has enough buckets. Here is the ``StreamedTensorDict`` class:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 148-187
+.. GENERATED FROM PYTHON SOURCE LINES 153-194
 
 .. code-block:: Python
 
+
+    from typing import Callable, Dict
 
     from tensordict import LazyStackedTensorDict, NestedKey, TensorDictBase
 
@@ -307,7 +327,7 @@ Here is an implementation of this ``StreamedTensorDict`` class:
         ) -> TensorDictBase:
             td = cls(stack_dim=0)
 
-            # We construct a queue for each stream
+            # one queue for each stream
             queues = [asyncio.Queue() for _ in range(len(streams))]
             tasks = []
             for stream, queue in zip(streams.values(), queues):
@@ -325,7 +345,7 @@ Here is an implementation of this ``StreamedTensorDict`` class:
             for task in tasks:
                 task.cancel()
             if densify:
-                return td.densify(layout=torch.strided)
+                return td.densify(layout=torch.jagged)
             return td
 
 
@@ -336,13 +356,13 @@ Here is an implementation of this ``StreamedTensorDict`` class:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 188-191
+.. GENERATED FROM PYTHON SOURCE LINES 195-198
 
-Finally, the ``main`` function will compose the streaming functions ``stream0`` and ``stream1`` and pass them to the
-``StreamedTensorDict.from_streams`` method which will collect ``batch_size`` batches of data for ``timeout=1`` second
-each:
+Last, the ``main`` function passes the streaming functions ``stream0`` (7 Hz)
+and ``stream1`` (3 Hz) to ``StreamedTensorDict.from_streams``. This method
+collects ``batch_size`` buckets of data, for ``timeout=1`` second each:
 
-.. GENERATED FROM PYTHON SOURCE LINES 191-209
+.. GENERATED FROM PYTHON SOURCE LINES 198-217
 
 .. code-block:: Python
 
@@ -355,9 +375,9 @@ each:
         def stream1(queue):
             return generate_numbers(frequency=3, queue=queue)
 
-        # Running this should take about 10 seconds
+        # This takes about 5 seconds: 5 buckets of 1 second
         return await StreamedTensorDict.from_streams(
-            {"bucket0": stream0, "bucket1": stream1}, timeout=1, batch_size=10
+            {"bucket0": stream0, "bucket1": stream1}, timeout=1, batch_size=5
         )
 
 
@@ -368,33 +388,37 @@ each:
 
 
 
+
 .. rst-class:: sphx-glr-script-out
 
  .. code-block:: none
 
     TensorDict from stream TensorDict(
         fields={
-            bucket0: Tensor(shape=torch.Size([10, -1]), device=cpu, dtype=torch.int64, is_shared=False),
-            bucket1: Tensor(shape=torch.Size([10, -1]), device=cpu, dtype=torch.int64, is_shared=False)},
-        batch_size=torch.Size([10]),
+            bucket0: NestedTensor(shape=torch.Size([5, j4]), device=cpu, dtype=torch.int64, is_shared=False),
+            bucket1: NestedTensor(shape=torch.Size([5, j3]), device=cpu, dtype=torch.int64, is_shared=False)},
+        batch_size=torch.Size([5]),
         device=None,
         is_shared=False)
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 210-212
+.. GENERATED FROM PYTHON SOURCE LINES 218-222
 
-Let's represent the data from both streams - should be equal to torch.arange() for batch_size * timeout * Hz
- <=> 1 * 10 secs * 3 or 7
+Print the data of both streams. Each stream counts up from 0, so the values
+of each stream are ``0, 1, 2, ...``. In 5 buckets of 1 second, the 7 Hz
+stream gives about 35 values, and the 3 Hz stream about 15. The lengths of
+the buckets come from ``offsets()``:
 
-.. GENERATED FROM PYTHON SOURCE LINES 212-216
+.. GENERATED FROM PYTHON SOURCE LINES 222-227
 
 .. code-block:: Python
 
-    print("bucket0 (7Hz, around 70 values)", td["bucket0"].values())
-    print("bucket1 (3Hz, around 30 values)", td["bucket1"].values())
-    print("shapes of bucket0 (7Hz, around 70 values)", td["bucket0"]._nested_tensor_size())
+
+    print("bucket0 (7 Hz, about 35 values)", td["bucket0"].values())
+    print("bucket1 (3 Hz, about 15 values)", td["bucket1"].values())
+    print("values per bucket of bucket0 (about 7)", td["bucket0"].offsets().diff())
 
 
 
@@ -404,47 +428,40 @@ Let's represent the data from both streams - should be equal to torch.arange() f
 
  .. code-block:: none
 
-    bucket0 (7Hz, around 70 values) tensor([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17,
-            18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
-            36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
-            54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68])
-    bucket1 (3Hz, around 30 values) tensor([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17,
-            18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28])
-    shapes of bucket0 (7Hz, around 70 values) tensor([[6],
-            [7],
-            [7],
-            [7],
-            [7],
-            [7],
-            [7],
-            [7],
-            [7],
-            [7]])
+    bucket0 (7 Hz, about 35 values) tensor([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17,
+            18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33])
+    bucket1 (3 Hz, about 15 values) tensor([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13])
+    values per bucket of bucket0 (about 7) tensor([6, 7, 7, 7, 7])
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 217-231
+.. GENERATED FROM PYTHON SOURCE LINES 228-247
 
 Conclusion
 ----------
 
-In this tutorial, we've explored the basics of working with TensorDict and asynchronous data streams.
-We've learned how to create lazy stacks of tensors, handle asynchronous data streams using asyncio, and densify our
-data for efficient storage and processing.
+You can now batch data of variable size. Group the tensordicts with
+:func:`~tensordict.lazy_stack`, grow the
+:class:`~tensordict.LazyStackedTensorDict` one bucket at a time with
+``append``, and convert it into nested tensors with ``densify``. The same
+pattern works for any stream that you read in fixed time windows.
 
-We've also seen how :class:`~tensordict.TensorDict` and :class:`~tensordict.LazyStackedTensorDict` can be used to
-simplify complex data processing tasks, such as bucketizing data streams with different frequencies.
-By leveraging the power of TensorDict and asyncio, you can build scalable and efficient data processing pipelines
-that can handle even the most demanding real-world applications.
+Further reading
+---------------
 
-Thanks for following along with this tutorial! We hope you've found it helpful and informative.
-
+- :ref:`stacking` explains lazy stacks and data of different sizes.
+- :ref:`sphx_glr_tutorials_tensordict_shapes.py` compares lazy stacks and
+  dense stacks.
+- The :class:`~tensordict.LazyStackedTensorDict` reference lists the
+  operations of a lazy stack.
+- The `torch.nested documentation <https://pytorch.org/docs/stable/nested.html>`__
+  explains the jagged layout of nested tensors.
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 11.022 seconds)
+   **Total running time of the script:** (0 minutes 6.019 seconds)
 
 
 .. _sphx_glr_download_tutorials_streamed_tensordict.py:

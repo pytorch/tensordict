@@ -5,3 +5,6 @@ from_module
 ===========
 
 .. autofunction:: from_module
+
+.. minigallery:: tensordict.from_module
+    :add-heading: Tutorials that use ``from_module``

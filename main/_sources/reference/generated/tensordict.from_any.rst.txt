@@ -5,3 +5,6 @@ from_any
 ========
 
 .. autofunction:: from_any
+
+.. minigallery:: tensordict.from_any
+    :add-heading: Tutorials that use ``from_any``

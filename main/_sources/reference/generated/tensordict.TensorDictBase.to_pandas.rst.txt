@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.to_pandas
+========================
+
+.. automethod:: TensorDictBase.to_pandas
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.to_pandas tensordict.TensorDictBase.to_pandas
+    :add-heading: Tutorials that use ``to_pandas``

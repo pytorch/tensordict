@@ -5,3 +5,6 @@ unpack_memmap
 =============
 
 .. autofunction:: unpack_memmap
+
+.. minigallery:: tensordict.unpack_memmap
+    :add-heading: Tutorials that use ``unpack_memmap``

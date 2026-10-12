@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.is_cpu
+=====================
+
+.. autoproperty:: TensorDictBase.is_cpu
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.is_cpu tensordict.TensorDictBase.is_cpu
+    :add-heading: Tutorials that use ``is_cpu``

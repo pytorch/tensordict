@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.from_module
+==========================
+
+.. automethod:: TensorDictBase.from_module
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.from_module tensordict.TensorDictBase.from_module
+    :add-heading: Tutorials that use ``from_module``

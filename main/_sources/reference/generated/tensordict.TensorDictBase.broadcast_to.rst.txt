@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.broadcast_to
+===========================
+
+.. automethod:: TensorDictBase.broadcast_to
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.broadcast_to tensordict.TensorDictBase.broadcast_to
+    :add-heading: Tutorials that use ``broadcast_to``

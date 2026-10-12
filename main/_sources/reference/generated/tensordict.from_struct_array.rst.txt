@@ -5,3 +5,6 @@ from_struct_array
 =================
 
 .. autofunction:: from_struct_array
+
+.. minigallery:: tensordict.from_struct_array
+    :add-heading: Tutorials that use ``from_struct_array``

@@ -5,3 +5,6 @@ pad_sequence
 ============
 
 .. autofunction:: pad_sequence
+
+.. minigallery:: tensordict.pad_sequence
+    :add-heading: Tutorials that use ``pad_sequence``

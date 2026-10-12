@@ -6,3 +6,7 @@ OneHotCategorical
 
 .. autoclass:: OneHotCategorical
     :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.nn.distributions.OneHotCategorical
+    :add-heading: Tutorials that use ``OneHotCategorical``

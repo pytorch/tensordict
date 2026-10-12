@@ -15,10 +15,10 @@ How tensordicts compile
 and tensorclasses are registered as pytree nodes, so :mod:`torch.func` and
 :func:`torch.export.export` see their tensors as leaves. Inside
 :func:`torch.compile`, Dynamo traces the Python code of tensordict like user
-code: indexing, ``apply``, arithmetic, reductions, shape operations, stacking
-and construction all end up in the graph. Most operations compile with
-``fullgraph=True``. With that flag, a graph break raises an error instead of
-splitting the function into several graphs.
+code: indexing, ``apply``, arithmetic, reductions (see :ref:`operations`),
+shape operations, stacking and construction all end up in the graph. Most
+operations compile with ``fullgraph=True``. With that flag, a graph break
+raises an error instead of splitting the function into several graphs.
 
   >>> import torch
   >>> from tensordict import TensorDict, tensorclass
@@ -65,9 +65,9 @@ Another key set
 Writing into an input tensordict
   ``td["y"] = ...``, ``td.set``, ``td.update`` and a
   :class:`~tensordict.nn.TensorDictModule` (which writes its ``out_keys`` into
-  its input) recompile whenever the key set of the input changes, even when
-  the key written already exists. Dynamo guards on all the keys of a dict that
-  the function writes into
+  its input, see :ref:`modules-guide`) recompile whenever the key set of the
+  input changes, even when the key written already exists. Dynamo guards on
+  all the keys of a dict that the function writes into
   (`#1606 <https://github.com/pytorch/tensordict/issues/1606>`_,
   `pytorch/pytorch#175858 <https://github.com/pytorch/pytorch/issues/175858>`_).
   A write into a nested tensordict only depends on the keys of that nested
@@ -86,8 +86,7 @@ Another batch size
   ``torch.compile(fn, dynamic=True)`` avoids the second compilation.
   ``torch._dynamo.mark_dynamic`` on an entry does not: the batch size holds
   Python ints, and a function that builds a tensordict with
-  ``batch_size=td.batch_size`` then raises ``ConstraintViolationError``
-  (pytorch/tensordict#2077).
+  ``batch_size=td.batch_size`` then raises ``ConstraintViolationError``.
   ``split``, ``chunk``, ``unbind`` and ``tolist`` recompile for each batch
   size, also after that.
 
@@ -98,10 +97,11 @@ Lazy stacks of another length
 
 Strings in the output
   Each distinct ``str`` value of a tensorclass field or of a
-  :class:`~tensordict.NonTensorData` entry recompiles the function when the
-  function returns it, for instance through ``apply``, ``clone`` or the
-  constructor of a tensorclass. Dynamo specializes the graph on the value.
-  Reading only the tensors does not recompile. Return tensors from the
+  :class:`~tensordict.NonTensorData` entry (see :ref:`non-tensor-data`)
+  recompiles the function when the function returns it, for instance
+  through ``apply``, ``clone`` or the constructor of a tensorclass. Dynamo
+  specializes the graph on the value. Reading only the tensors does not
+  recompile. Return tensors from the
   compiled function and rebuild the tensorclass outside, or keep the strings
   out of the compiled function.
 
@@ -159,7 +159,7 @@ nightly. Other versions can word them differently.
    * - ``memmap``, ``memmap_like``, ``share_memory_``, ``to_namedtuple``,
        ``data_ptr``
      - Eager-only operations (files, shared memory, Python classes built at
-       run time).
+       run time). See :ref:`devices` and :ref:`saving`.
      - Call them outside the compiled function.
    * - ``loss.backward()`` or ``torch.autograd.grad`` inside the compiled
        function
@@ -197,6 +197,10 @@ inputs. The gradient is a tensordict with the structure of the input:
   >>> grads = torch.func.grad(lambda t: (t["a"] ** 2).sum())(td)
   >>> torch.testing.assert_close(grads["a"], 2 * td["a"])
 
+For Jacobians and Hessians of functions that take and return tensordicts,
+and for ``torch.autograd.grad`` and ``backward`` on tensordicts, see the
+"Gradients" section of :ref:`operations`.
+
 To call a module with other parameters, extract them with
 :meth:`~tensordict.TensorDict.from_module` and swap them in with
 :meth:`~tensordict.TensorDict.to_module`. This works in eager mode, compiled
@@ -221,9 +225,7 @@ gradients:
 
 :func:`torch.func.functional_call` only accepts a ``dict``: pass
 ``params.flatten_keys(".").to_dict()`` instead of the tensordict. See the
-:doc:`tutorials/functional` tutorial for more. If the process also creates a
-:class:`~tensordict.nn.CudaGraphModule`, see the warning in
-:ref:`compile-cudagraphs`.
+:doc:`tutorials/functional` tutorial for more.
 
 torch.export
 ------------
@@ -254,9 +256,7 @@ Without ``dynamic_shapes``, a call with another batch size fails a guard of
 the exported program (``AssertionError: Guard failed``). Both modes accept
 tensordicts with dimension names or non-tensor entries.
 To export a :class:`~tensordict.nn.TensorDictModule` so that it takes and
-returns plain tensors, see the :doc:`tutorials/export` tutorial. If the process
-also creates a :class:`~tensordict.nn.CudaGraphModule`, see the warning in
-:ref:`compile-cudagraphs`.
+returns plain tensors, see the :doc:`tutorials/export` tutorial.
 
 .. _compile-cudagraphs:
 
@@ -318,17 +318,6 @@ The replay follows these rules:
   tensordict, not a separate argument. If the function takes tensors, a
   changed value raises a ``ValueError``.
 
-.. warning::
-
-  Creating a :class:`~tensordict.nn.CudaGraphModule` removes
-  :class:`~tensordict.TensorDict`, :class:`~tensordict.LazyStackedTensorDict`
-  and :class:`~tensordict.PersistentTensorDict` from PyTorch's pytree registry
-  for the rest of the process, and warns about it (set
-  ``EXCLUDE_TD_FROM_PYTREE=1`` to silence the warning). After that,
-  :func:`torch.export.export` and :func:`torch.func.grad` no longer accept
-  these tensordicts. :func:`torch.vmap` still does, and tensorclasses stay
-  registered (pytorch/tensordict#2076).
-
 ``mode="reduce-overhead"``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -360,3 +349,13 @@ For example:
   ...     ]
   >>> outputs[0]["action"].shape
   torch.Size([8, 4])
+
+See also
+--------
+
+- :ref:`operations`: arithmetic, ``apply``, reductions and gradients with
+  tensordicts.
+- :ref:`modules-guide`: :class:`~tensordict.nn.TensorDictModule` and the
+  other modules of ``tensordict.nn``.
+- :ref:`devices`: ``to()``, pinned memory and shared memory.
+- :ref:`fx`: FX tracing of tensordict modules, a prototype.

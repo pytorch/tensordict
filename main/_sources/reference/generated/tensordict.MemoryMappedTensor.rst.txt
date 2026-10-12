@@ -6,3 +6,7 @@ MemoryMappedTensor
 
 .. autoclass:: MemoryMappedTensor
     :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.MemoryMappedTensor
+    :add-heading: Tutorials that use ``MemoryMappedTensor``

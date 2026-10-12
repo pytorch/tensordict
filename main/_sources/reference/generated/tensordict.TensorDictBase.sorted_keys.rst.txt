@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.sorted_keys
+==========================
+
+.. autoproperty:: TensorDictBase.sorted_keys
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.sorted_keys tensordict.TensorDictBase.sorted_keys
+    :add-heading: Tutorials that use ``sorted_keys``

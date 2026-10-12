@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.atleast_2d
+=========================
+
+.. automethod:: TensorDictBase.atleast_2d
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.atleast_2d tensordict.TensorDictBase.atleast_2d
+    :add-heading: Tutorials that use ``atleast_2d``

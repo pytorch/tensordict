@@ -6,4 +6,7 @@ TensorDictPipe
 
 .. autoclass:: TensorDictPipe
     :members:
-    :inherited-members:
+    :show-inheritance:
+
+.. minigallery:: tensordict._ucxx.TensorDictPipe
+    :add-heading: Tutorials that use ``TensorDictPipe``

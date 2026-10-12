@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.rename_key_
+==========================
+
+.. automethod:: TensorDictBase.rename_key_
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.rename_key_ tensordict.TensorDictBase.rename_key_
+    :add-heading: Tutorials that use ``rename_key_``

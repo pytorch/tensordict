@@ -5,3 +5,6 @@ composite_lp_aggregate
 ======================
 
 .. autofunction:: composite_lp_aggregate
+
+.. minigallery:: tensordict.nn.composite_lp_aggregate
+    :add-heading: Tutorials that use ``composite_lp_aggregate``

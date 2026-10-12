@@ -21,24 +21,38 @@
 Using tensorclasses for datasets
 ================================
 
-.. GENERATED FROM PYTHON SOURCE LINES 7-13
+A :class:`~tensordict.TensorClass` is the class form of a tensordict. You
+declare its fields with types, and you write methods that run on one sample or
+on a batch. This tutorial stores FashionMNIST in a tensorclass with an
+``images`` field, a ``targets`` field and a method that loads a dataset into
+memory-mapped tensors. Then it trains the model of the `PyTorch Quickstart
+Tutorial <https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html>`__
+from it. It is for readers who want named, typed fields and methods for their
+data.
 
-In this tutorial we demonstrate how tensorclasses can be used to
-efficiently and transparently load and manage data inside a training
-pipeline. The tutorial is based heavily on the `PyTorch Quickstart
-Tutorial <https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html>`__,
-but modified to demonstrate use of tensorclass. See the related tutorial using
-``TensorDict``.
+What you will learn:
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-26
+- How to define a :class:`~tensordict.TensorClass` with a typed field for each
+  part of a sample, and a method that loads a dataset into it.
+- How to pass a tensorclass to a ``DataLoader`` as a map-style dataset.
+- How to move a whole batch to the device with one call, and read its fields
+  as attributes.
+
+:ref:`sphx_glr_tutorials_data_fashion.py` does the same with a
+:class:`~tensordict.TensorDict`, and compares the loading time with the
+``torchvision`` data loader. Read it first.
+
+.. GENERATED FROM PYTHON SOURCE LINES 26-41
 
 .. code-block:: Python
 
 
+    import time
+
     import torch
     import torch.nn as nn
 
-    from tensordict import MemoryMappedTensor, tensorclass
+    from tensordict import MemoryMappedTensor, TensorClass
     from torch.utils.data import DataLoader
     from torchvision import datasets
     from torchvision.transforms import ToTensor
@@ -60,14 +74,13 @@ but modified to demonstrate use of tensorclass. See the related tutorial using
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 27-31
+.. GENERATED FROM PYTHON SOURCE LINES 42-45
 
-The ``torchvision.datasets`` module contains a number of convenient pre-prepared
-datasets. In this tutorial we'll use the relatively simple FashionMNIST dataset. Each
-image is an item of clothing, the objective is to classify the type of clothing in
-the image (e.g. "Bag", "Sneaker" etc.).
+This tutorial uses the FashionMNIST dataset of ``torchvision``. Each image
+shows an item of clothing, and the task is to classify the type of clothing
+in the image (for example "Bag" or "Sneaker").
 
-.. GENERATED FROM PYTHON SOURCE LINES 31-45
+.. GENERATED FROM PYTHON SOURCE LINES 45-59
 
 .. code-block:: Python
 
@@ -89,55 +102,51 @@ the image (e.g. "Bag", "Sneaker" etc.).
 
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-      0%|          | 0.00/26.4M [00:00<?, ?B/s]      0%|          | 32.8k/26.4M [00:00<01:53, 233kB/s]      0%|          | 65.5k/26.4M [00:00<01:53, 232kB/s]      0%|          | 131k/26.4M [00:00<01:17, 338kB/s]       1%|          | 197k/26.4M [00:00<01:07, 388kB/s]      1%|          | 262k/26.4M [00:00<01:02, 416kB/s]      2%|▏         | 426k/26.4M [00:00<00:38, 669kB/s]      3%|▎         | 754k/26.4M [00:00<00:21, 1.21MB/s]      5%|▌         | 1.41M/26.4M [00:01<00:10, 2.30MB/s]     10%|█         | 2.75M/26.4M [00:01<00:05, 4.56MB/s]     20%|██        | 5.41M/26.4M [00:01<00:02, 8.96MB/s]     33%|███▎      | 8.65M/26.4M [00:01<00:01, 13.2MB/s]     45%|████▍     | 11.9M/26.4M [00:01<00:00, 16.1MB/s]     57%|█████▋    | 15.1M/26.4M [00:01<00:00, 18.1MB/s]     69%|██████▉   | 18.3M/26.4M [00:01<00:00, 19.5MB/s]     81%|████████▏ | 21.5M/26.4M [00:02<00:00, 20.5MB/s]     94%|█████████▎| 24.7M/26.4M [00:02<00:00, 21.2MB/s]    100%|██████████| 26.4M/26.4M [00:02<00:00, 11.7MB/s]
-      0%|          | 0.00/29.5k [00:00<?, ?B/s]    100%|██████████| 29.5k/29.5k [00:00<00:00, 207kB/s]    100%|██████████| 29.5k/29.5k [00:00<00:00, 206kB/s]
-      0%|          | 0.00/4.42M [00:00<?, ?B/s]      1%|          | 32.8k/4.42M [00:00<00:18, 231kB/s]      1%|▏         | 65.5k/4.42M [00:00<00:18, 231kB/s]      2%|▏         | 98.3k/4.42M [00:00<00:18, 231kB/s]      4%|▍         | 197k/4.42M [00:00<00:10, 413kB/s]       7%|▋         | 295k/4.42M [00:00<00:08, 514kB/s]     11%|█         | 492k/4.42M [00:00<00:04, 810kB/s]     20%|██        | 885k/4.42M [00:00<00:02, 1.45MB/s]     38%|███▊      | 1.67M/4.42M [00:01<00:00, 2.75MB/s]     73%|███████▎  | 3.24M/4.42M [00:01<00:00, 5.36MB/s]    100%|██████████| 4.42M/4.42M [00:01<00:00, 3.45MB/s]
-      0%|          | 0.00/5.15k [00:00<?, ?B/s]    100%|██████████| 5.15k/5.15k [00:00<00:00, 51.0MB/s]
 
 
 
+.. GENERATED FROM PYTHON SOURCE LINES 60-73
 
-.. GENERATED FROM PYTHON SOURCE LINES 46-57
+Like a ``TensorDict``, a tensorclass has a batch size, and you can index it,
+move it to a device or memory-map it. Use a tensorclass when you know the
+fields of your data in advance. To define one, subclass
+:class:`~tensordict.TensorClass` and annotate its fields. The
+``@tensorclass`` decorator is the older form of the same thing.
 
-Tensorclasses are dataclasses that expose dedicated tensor methods over
-its contents much like ``TensorDict``. They are a good choice when the
-structure of the data you want to store is fixed and predictable.
+A tensorclass can also have methods. The ``from_dataset`` class method below
+takes a dataset and returns a tensorclass that holds all its data in
+memory-mapped tensors. ``MemoryMappedTensor.empty`` without a file name
+creates an anonymous memory map: on Linux, it is in shared memory under
+``/dev/shm`` when it has room. The method fills the tensors in batches of
+1000 images, so the ``ToTensor`` transform runs once per image, and not at
+each epoch.
 
-As well as specifying the contents, we can also encapsulate related
-logic as custom methods when defining the class. In this case we'll
-write a ``from_dataset`` classmethod that takes a dataset as input and
-creates a tensorclass containing the data from the dataset. We create
-memory-mapped tensors to hold the data. This will allow us to
-efficiently load batches of transformed data from disk rather than
-repeatedly load and transform individual images.
-
-.. GENERATED FROM PYTHON SOURCE LINES 57-79
+.. GENERATED FROM PYTHON SOURCE LINES 73-98
 
 .. code-block:: Python
 
 
 
-    @tensorclass
-    class FashionMNISTData:
+    class FashionMNISTData(TensorClass):
         images: torch.Tensor
         targets: torch.Tensor
 
         @classmethod
-        def from_dataset(cls, dataset, device=None):
+        def from_dataset(cls, dataset):
             data = cls(
                 images=MemoryMappedTensor.empty(
                     (len(dataset), *dataset[0][0].squeeze().shape), dtype=torch.float32
                 ),
                 targets=MemoryMappedTensor.empty((len(dataset),), dtype=torch.int64),
                 batch_size=[len(dataset)],
-                device=device,
             )
-            for i, (image, target) in enumerate(dataset):
-                data[i] = cls(images=image, targets=torch.tensor(target), batch_size=[])
+            i = 0
+            for images, targets in DataLoader(dataset, batch_size=1000):  # noqa: TOR401
+                n = images.shape[0]
+                data[i : i + n] = cls(
+                    images=images.squeeze(1), targets=targets, batch_size=[n]
+                )
+                i += n
             return data
 
 
@@ -148,50 +157,57 @@ repeatedly load and transform individual images.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 80-83
+.. GENERATED FROM PYTHON SOURCE LINES 99-103
 
-We will create two tensorclasses, one each for the training and test data. Note that
-we incur some overhead here as we are looping over the entire dataset, transforming
-and saving to disk.
+Create two tensorclasses, one for the training data and one for the test
+data. This step reads and converts every image once. The tensorclasses stay
+on the CPU, so that their fields stay memory-mapped tensors. The training
+loop moves each batch to the device.
 
-.. GENERATED FROM PYTHON SOURCE LINES 83-87
+.. GENERATED FROM PYTHON SOURCE LINES 103-108
 
 .. code-block:: Python
 
 
-    training_data_tc = FashionMNISTData.from_dataset(training_data, device=device)
-    test_data_tc = FashionMNISTData.from_dataset(test_data, device=device)
+    training_data_tc = FashionMNISTData.from_dataset(training_data)
+    test_data_tc = FashionMNISTData.from_dataset(test_data)
+    print(training_data_tc)
 
 
 
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    FashionMNISTData(
+        images=MemoryMappedTensor(shape=torch.Size([60000, 28, 28]), device=cpu, dtype=torch.float32, is_shared=False),
+        targets=MemoryMappedTensor(shape=torch.Size([60000]), device=cpu, dtype=torch.int64, is_shared=False),
+        batch_size=torch.Size([60000]),
+        device=None,
+        is_shared=False)
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 88-99
+
+.. GENERATED FROM PYTHON SOURCE LINES 109-117
 
 DataLoaders
-----------------
+-----------
 
-We'll create DataLoaders from the ``torchvision``-provided Datasets, as
-well as from our memory-mapped TensorDicts.
+A tensorclass implements ``__len__``, ``__getitem__`` and ``__getitems__``,
+so you can use it as a map-style dataset. The ``DataLoader`` then reads each
+batch with one batched index, and the result is already a
+``FashionMNISTData`` batch. Pass ``collate_fn=lambda x: x``: the default
+collate function cannot read a tensorclass.
 
-Since ``TensorDict`` implements ``__len__`` and ``__getitem__`` (and
-also ``__getitems__``) we can use it like a map-style Dataset and create
-a ``DataLoader`` directly from it. Note that because ``TensorDict`` can
-already handle batched indices, there is no need for collation, so we
-pass the identity function as ``collate_fn``.
-
-.. GENERATED FROM PYTHON SOURCE LINES 99-112
+.. GENERATED FROM PYTHON SOURCE LINES 117-127
 
 .. code-block:: Python
 
 
     batch_size = 64
-
-    train_dataloader = DataLoader(training_data, batch_size=batch_size)  # noqa: TOR401
-    test_dataloader = DataLoader(test_data, batch_size=batch_size)  # noqa: TOR401
 
     train_dataloader_tc = DataLoader(  # noqa: TOR401
         training_data_tc, batch_size=batch_size, collate_fn=lambda x: x
@@ -207,16 +223,45 @@ pass the identity function as ``collate_fn``.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 113-119
+.. GENERATED FROM PYTHON SOURCE LINES 128-129
+
+Each batch is a ``FashionMNISTData`` with ``batch_size=[64]``:
+
+.. GENERATED FROM PYTHON SOURCE LINES 129-132
+
+.. code-block:: Python
+
+
+    print(next(iter(train_dataloader_tc)))
+
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    FashionMNISTData(
+        images=Tensor(shape=torch.Size([64, 28, 28]), device=cpu, dtype=torch.float32, is_shared=False),
+        targets=Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int64, is_shared=False),
+        batch_size=torch.Size([64]),
+        device=None,
+        is_shared=False)
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 133-139
 
 Model
--------
+-----
 
-We use the same model from the
+The model is the same as in the
 `Quickstart Tutorial <https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html>`__.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 119-143
+.. GENERATED FROM PYTHON SOURCE LINES 139-162
 
 .. code-block:: Python
 
@@ -240,97 +285,34 @@ We use the same model from the
             return logits
 
 
-    model = Net().to(device)
+    torch.manual_seed(0)
     model_tc = Net().to(device)
-    model, model_tc
 
 
 
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-
-    (Net(
-      (flatten): Flatten(start_dim=1, end_dim=-1)
-      (linear_relu_stack): Sequential(
-        (0): Linear(in_features=784, out_features=512, bias=True)
-        (1): ReLU()
-        (2): Linear(in_features=512, out_features=512, bias=True)
-        (3): ReLU()
-        (4): Linear(in_features=512, out_features=10, bias=True)
-      )
-    ), Net(
-      (flatten): Flatten(start_dim=1, end_dim=-1)
-      (linear_relu_stack): Sequential(
-        (0): Linear(in_features=784, out_features=512, bias=True)
-        (1): ReLU()
-        (2): Linear(in_features=512, out_features=512, bias=True)
-        (3): ReLU()
-        (4): Linear(in_features=512, out_features=10, bias=True)
-      )
-    ))
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 144-150
+.. GENERATED FROM PYTHON SOURCE LINES 163-171
 
 Optimizing the parameters
----------------------------------
+-------------------------
 
-We'll optimise the parameters of the model using stochastic gradient descent and
-cross-entropy loss.
+Optimize the parameters of the model with stochastic gradient descent and
+the cross-entropy loss.
 
+The training loop moves the whole batch to the device with one ``.to()``
+call, then reads the images and the targets as attributes.
 
-.. GENERATED FROM PYTHON SOURCE LINES 150-175
+.. GENERATED FROM PYTHON SOURCE LINES 171-219
 
 .. code-block:: Python
 
 
     loss_fn = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
     optimizer_tc = torch.optim.SGD(model_tc.parameters(), lr=1e-3)
-
-
-    def train(dataloader, model, loss_fn, optimizer):
-        size = len(dataloader.dataset)
-        model.train()
-
-        for batch, (X, y) in enumerate(dataloader):
-            X, y = X.to(device), y.to(device)
-
-            pred = model(X)
-            loss = loss_fn(pred, y)
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            if batch % 100 == 0:
-                loss, current = loss.item(), batch * len(X)
-                print(f"loss: {loss:>7f} [{current:>5d}/{size:>5d}]")
-
-
-
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 176-180
-
-The training loop for our tensorclass-based DataLoader is very similar, we just
-adjust how we unpack the data to the more explicit attribute-based retrieval offered
-by the tensorclass. The ``.contiguous()`` method loads the data stored in the memmap
-tensor.
-
-.. GENERATED FROM PYTHON SOURCE LINES 180-266
-
-.. code-block:: Python
-
 
 
     def train_tc(dataloader, model, loss_fn, optimizer):
@@ -338,7 +320,8 @@ tensor.
         model.train()
 
         for batch, data in enumerate(dataloader):
-            X, y = data.images.contiguous(), data.targets.contiguous()
+            data = data.to(device)
+            X, y = data.images, data.targets
 
             pred = model(X)
             loss = loss_fn(pred, y)
@@ -347,31 +330,9 @@ tensor.
             loss.backward()
             optimizer.step()
 
-            if batch % 100 == 0:
+            if batch % 300 == 0:
                 loss, current = loss.item(), batch * len(X)
                 print(f"loss: {loss:>7f} [{current:>5d}/{size:>5d}]")
-
-
-    def test(dataloader, model, loss_fn):
-        size = len(dataloader.dataset)
-        num_batches = len(dataloader)
-        model.eval()
-        test_loss, correct = 0, 0
-        with torch.no_grad():
-            for X, y in dataloader:
-                X, y = X.to(device), y.to(device)
-
-                pred = model(X)
-
-                test_loss += loss_fn(pred, y).item()
-                correct += (pred.argmax(1) == y).type(torch.float).sum().item()
-
-        test_loss /= num_batches
-        correct /= size
-
-        print(
-            f"Test Error: \n Accuracy: {(100 * correct):>0.1f}%, Avg loss: {test_loss:>8f} \n"
-        )
 
 
     def test_tc(dataloader, model, loss_fn):
@@ -381,7 +342,8 @@ tensor.
         test_loss, correct = 0, 0
         with torch.no_grad():
             for batch in dataloader:
-                X, y = batch.images.contiguous(), batch.targets.contiguous()
+                batch = batch.to(device)
+                X, y = batch.images, batch.targets
 
                 pred = model(X)
 
@@ -396,27 +358,31 @@ tensor.
         )
 
 
-    for d in train_dataloader_tc:
-        print(d)
-        break
 
-    import time
 
-    t0 = time.time()
-    epochs = 5
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 220-221
+
+Train the model for one epoch, and test it once:
+
+.. GENERATED FROM PYTHON SOURCE LINES 221-231
+
+.. code-block:: Python
+
+
+    epochs = 1
+
+    t0 = time.perf_counter()
     for t in range(epochs):
         print(f"Epoch {t + 1}\n-------------------------")
         train_tc(train_dataloader_tc, model_tc, loss_fn, optimizer_tc)
         test_tc(test_dataloader_tc, model_tc, loss_fn)
-    print(f"Tensorclass training done! time: {time.time() - t0: 4.4f} s")
+    print(f"Tensorclass training done! time: {time.perf_counter() - t0: 4.4f} s")
 
-    t0 = time.time()
-    epochs = 5
-    for t in range(epochs):
-        print(f"Epoch {t + 1}\n-------------------------")
-        train(train_dataloader, model, loss_fn, optimizer)
-        test(test_dataloader, model, loss_fn)
-    print(f"Training done! time: {time.time() - t0: 4.4f} s")
 
 
 
@@ -425,172 +391,46 @@ tensor.
 
  .. code-block:: none
 
-    FashionMNISTData(
-        images=Tensor(shape=torch.Size([64, 28, 28]), device=cpu, dtype=torch.float32, is_shared=False),
-        targets=Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int64, is_shared=False),
-        batch_size=torch.Size([64]),
-        device=cpu,
-        is_shared=False)
     Epoch 1
     -------------------------
-    loss: 2.301818 [    0/60000]
-    loss: 2.293670 [ 6400/60000]
-    loss: 2.273226 [12800/60000]
-    loss: 2.270078 [19200/60000]
-    loss: 2.253918 [25600/60000]
-    loss: 2.213763 [32000/60000]
-    loss: 2.236921 [38400/60000]
-    loss: 2.198337 [44800/60000]
-    loss: 2.197331 [51200/60000]
-    loss: 2.163450 [57600/60000]
+    loss: 2.305311 [    0/60000]
+    loss: 2.275867 [19200/60000]
+    loss: 2.230498 [38400/60000]
+    loss: 2.172683 [57600/60000]
     Test Error: 
-     Accuracy: 29.3%, Avg loss: 2.160564 
+     Accuracy: 49.5%, Avg loss: 2.162513 
 
-    Epoch 2
-    -------------------------
-    loss: 2.168147 [    0/60000]
-    loss: 2.158427 [ 6400/60000]
-    loss: 2.103150 [12800/60000]
-    loss: 2.123132 [19200/60000]
-    loss: 2.067368 [25600/60000]
-    loss: 2.007379 [32000/60000]
-    loss: 2.044239 [38400/60000]
-    loss: 1.962785 [44800/60000]
-    loss: 1.970273 [51200/60000]
-    loss: 1.899965 [57600/60000]
-    Test Error: 
-     Accuracy: 58.8%, Avg loss: 1.894348 
-
-    Epoch 3
-    -------------------------
-    loss: 1.921983 [    0/60000]
-    loss: 1.888022 [ 6400/60000]
-    loss: 1.776308 [12800/60000]
-    loss: 1.824738 [19200/60000]
-    loss: 1.705040 [25600/60000]
-    loss: 1.663030 [32000/60000]
-    loss: 1.685703 [38400/60000]
-    loss: 1.586290 [44800/60000]
-    loss: 1.610473 [51200/60000]
-    loss: 1.508882 [57600/60000]
-    Test Error: 
-     Accuracy: 62.7%, Avg loss: 1.524383 
-
-    Epoch 4
-    -------------------------
-    loss: 1.584058 [    0/60000]
-    loss: 1.545514 [ 6400/60000]
-    loss: 1.401848 [12800/60000]
-    loss: 1.481119 [19200/60000]
-    loss: 1.351518 [25600/60000]
-    loss: 1.351646 [32000/60000]
-    loss: 1.361165 [38400/60000]
-    loss: 1.289871 [44800/60000]
-    loss: 1.322536 [51200/60000]
-    loss: 1.222663 [57600/60000]
-    Test Error: 
-     Accuracy: 64.1%, Avg loss: 1.252227 
-
-    Epoch 5
-    -------------------------
-    loss: 1.324317 [    0/60000]
-    loss: 1.301326 [ 6400/60000]
-    loss: 1.142752 [12800/60000]
-    loss: 1.255123 [19200/60000]
-    loss: 1.122014 [25600/60000]
-    loss: 1.146729 [32000/60000]
-    loss: 1.163659 [38400/60000]
-    loss: 1.106306 [44800/60000]
-    loss: 1.144295 [51200/60000]
-    loss: 1.059033 [57600/60000]
-    Test Error: 
-     Accuracy: 64.9%, Avg loss: 1.084639 
-
-    Tensorclass training done! time:  7.2262 s
-    Epoch 1
-    -------------------------
-    loss: 2.302145 [    0/60000]
-    loss: 2.292716 [ 6400/60000]
-    loss: 2.269172 [12800/60000]
-    loss: 2.264860 [19200/60000]
-    loss: 2.252838 [25600/60000]
-    loss: 2.208699 [32000/60000]
-    loss: 2.230408 [38400/60000]
-    loss: 2.183773 [44800/60000]
-    loss: 2.189723 [51200/60000]
-    loss: 2.147675 [57600/60000]
-    Test Error: 
-     Accuracy: 32.0%, Avg loss: 2.149271 
-
-    Epoch 2
-    -------------------------
-    loss: 2.157806 [    0/60000]
-    loss: 2.145506 [ 6400/60000]
-    loss: 2.085317 [12800/60000]
-    loss: 2.101961 [19200/60000]
-    loss: 2.047808 [25600/60000]
-    loss: 1.988049 [32000/60000]
-    loss: 2.014473 [38400/60000]
-    loss: 1.930066 [44800/60000]
-    loss: 1.940004 [51200/60000]
-    loss: 1.856405 [57600/60000]
-    Test Error: 
-     Accuracy: 55.2%, Avg loss: 1.863930 
-
-    Epoch 3
-    -------------------------
-    loss: 1.897058 [    0/60000]
-    loss: 1.861026 [ 6400/60000]
-    loss: 1.746970 [12800/60000]
-    loss: 1.785428 [19200/60000]
-    loss: 1.669177 [25600/60000]
-    loss: 1.638400 [32000/60000]
-    loss: 1.645088 [38400/60000]
-    loss: 1.555492 [44800/60000]
-    loss: 1.585996 [51200/60000]
-    loss: 1.469394 [57600/60000]
-    Test Error: 
-     Accuracy: 60.4%, Avg loss: 1.497842 
-
-    Epoch 4
-    -------------------------
-    loss: 1.565884 [    0/60000]
-    loss: 1.526718 [ 6400/60000]
-    loss: 1.384297 [12800/60000]
-    loss: 1.452142 [19200/60000]
-    loss: 1.333527 [25600/60000]
-    loss: 1.344113 [32000/60000]
-    loss: 1.344656 [38400/60000]
-    loss: 1.277206 [44800/60000]
-    loss: 1.319430 [51200/60000]
-    loss: 1.212138 [57600/60000]
-    Test Error: 
-     Accuracy: 62.8%, Avg loss: 1.242146 
-
-    Epoch 5
-    -------------------------
-    loss: 1.319270 [    0/60000]
-    loss: 1.294916 [ 6400/60000]
-    loss: 1.136679 [12800/60000]
-    loss: 1.241196 [19200/60000]
-    loss: 1.117766 [25600/60000]
-    loss: 1.150828 [32000/60000]
-    loss: 1.163843 [38400/60000]
-    loss: 1.103209 [44800/60000]
-    loss: 1.152035 [51200/60000]
-    loss: 1.061369 [57600/60000]
-    Test Error: 
-     Accuracy: 64.6%, Avg loss: 1.083515 
-
-    Training done! time:  18.7915 s
+    Tensorclass training done! time:  2.3343 s
 
 
 
+
+.. GENERATED FROM PYTHON SOURCE LINES 232-251
+
+Conclusion
+----------
+
+You can now define a :class:`~tensordict.TensorClass` with typed fields, and
+a ``from_dataset`` method that loads a dataset into memory-mapped tensors
+once. You can pass the tensorclass to a ``DataLoader`` with
+``collate_fn=lambda x: x``. One call moves each batch to the device, and you
+read its fields as attributes.
+
+Further reading
+---------------
+
+- :ref:`tensorclass-guide` explains how to define and use tensorclasses.
+- :ref:`choosing-a-container` compares ``TensorDict``, ``TensorClass`` and
+  ``TypedTensorDict``.
+- :ref:`data-loading` explains the ways to load data with tensordict and to
+  share it between processes.
+- :ref:`sphx_glr_tutorials_tensorclass_imagenet.py` applies random
+  transforms to whole batches, for a larger image dataset.
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 39.793 seconds)
+   **Total running time of the script:** (0 minutes 4.733 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensorclass_fashion.py:

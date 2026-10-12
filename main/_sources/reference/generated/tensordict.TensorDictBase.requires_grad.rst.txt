@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.requires_grad
+============================
+
+.. autoproperty:: TensorDictBase.requires_grad
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.requires_grad tensordict.TensorDictBase.requires_grad
+    :add-heading: Tutorials that use ``requires_grad``

@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.flatten_keys
+===========================
+
+.. automethod:: TensorDictBase.flatten_keys
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.flatten_keys tensordict.TensorDictBase.flatten_keys
+    :add-heading: Tutorials that use ``flatten_keys``

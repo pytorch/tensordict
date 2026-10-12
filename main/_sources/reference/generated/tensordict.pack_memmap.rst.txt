@@ -5,3 +5,6 @@ pack_memmap
 ===========
 
 .. autofunction:: pack_memmap
+
+.. minigallery:: tensordict.pack_memmap
+    :add-heading: Tutorials that use ``pack_memmap``

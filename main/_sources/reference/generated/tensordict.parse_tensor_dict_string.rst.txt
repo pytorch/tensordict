@@ -5,3 +5,6 @@ parse_tensor_dict_string
 ========================
 
 .. autofunction:: parse_tensor_dict_string
+
+.. minigallery:: tensordict.parse_tensor_dict_string
+    :add-heading: Tutorials that use ``parse_tensor_dict_string``

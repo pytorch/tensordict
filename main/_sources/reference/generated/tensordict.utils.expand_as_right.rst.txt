@@ -5,3 +5,6 @@ expand_as_right
 ===============
 
 .. autofunction:: expand_as_right
+
+.. minigallery:: tensordict.utils.expand_as_right
+    :add-heading: Tutorials that use ``expand_as_right``

@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.sin_
+===================
+
+.. automethod:: TensorDictBase.sin_
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.sin_ tensordict.TensorDictBase.sin_
+    :add-heading: Tutorials that use ``sin_``

@@ -5,3 +5,6 @@ remove_duplicates
 =================
 
 .. autofunction:: remove_duplicates
+
+.. minigallery:: tensordict.utils.remove_duplicates
+    :add-heading: Tutorials that use ``remove_duplicates``

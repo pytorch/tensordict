@@ -5,3 +5,6 @@ from_consolidated
 =================
 
 .. autofunction:: from_consolidated
+
+.. minigallery:: tensordict.from_consolidated
+    :add-heading: Tutorials that use ``from_consolidated``

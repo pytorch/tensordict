@@ -5,3 +5,6 @@ from_h5
 =======
 
 .. autofunction:: from_h5
+
+.. minigallery:: tensordict.from_h5
+    :add-heading: Tutorials that use ``from_h5``

@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.is_floating_point
+================================
+
+.. automethod:: TensorDictBase.is_floating_point
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.is_floating_point tensordict.TensorDictBase.is_floating_point
+    :add-heading: Tutorials that use ``is_floating_point``

@@ -5,3 +5,6 @@ from_tuple
 ==========
 
 .. autofunction:: from_tuple
+
+.. minigallery:: tensordict.from_tuple
+    :add-heading: Tutorials that use ``from_tuple``

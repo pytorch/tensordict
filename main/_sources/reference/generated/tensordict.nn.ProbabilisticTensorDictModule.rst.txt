@@ -6,3 +6,8 @@ ProbabilisticTensorDictModule
 
 .. autoclass:: ProbabilisticTensorDictModule
     :members:
+    :inherited-members: Module
+    :show-inheritance:
+
+.. minigallery:: tensordict.nn.ProbabilisticTensorDictModule
+    :add-heading: Tutorials that use ``ProbabilisticTensorDictModule``

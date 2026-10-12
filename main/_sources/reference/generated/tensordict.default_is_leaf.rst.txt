@@ -5,3 +5,6 @@ default_is_leaf
 ===============
 
 .. autofunction:: default_is_leaf
+
+.. minigallery:: tensordict.default_is_leaf
+    :add-heading: Tutorials that use ``default_is_leaf``

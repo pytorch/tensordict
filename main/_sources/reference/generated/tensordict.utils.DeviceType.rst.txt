@@ -5,3 +5,6 @@ DeviceType
 ==========
 
 .. autodata:: DeviceType
+
+.. minigallery:: tensordict.utils.DeviceType
+    :add-heading: Tutorials that use ``DeviceType``

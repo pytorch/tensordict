@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.is_locked
+========================
+
+.. autoproperty:: TensorDictBase.is_locked
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.is_locked tensordict.TensorDictBase.is_locked
+    :add-heading: Tutorials that use ``is_locked``

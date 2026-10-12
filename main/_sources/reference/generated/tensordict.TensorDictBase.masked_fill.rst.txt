@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.masked_fill
+==========================
+
+.. automethod:: TensorDictBase.masked_fill
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.masked_fill tensordict.TensorDictBase.masked_fill
+    :add-heading: Tutorials that use ``masked_fill``

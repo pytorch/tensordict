@@ -6,4 +6,7 @@ TensorDictFuture
 
 .. autoclass:: TensorDictFuture
     :members:
-    :inherited-members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.utils.TensorDictFuture
+    :add-heading: Tutorials that use ``TensorDictFuture``

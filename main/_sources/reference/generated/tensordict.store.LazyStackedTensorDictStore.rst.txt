@@ -4,6 +4,14 @@
 LazyStackedTensorDictStore
 ==========================
 
+``LazyStackedTensorDictStore`` has the methods of :class:`~tensordict.TensorDictBase`,
+listed by task in :ref:`api-tensordict-methods`. This page lists only the
+methods that ``LazyStackedTensorDictStore`` adds, and the overrides that have their own
+documentation.
+
 .. autoclass:: LazyStackedTensorDictStore
     :members:
-    :inherited-members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.store.LazyStackedTensorDictStore
+    :add-heading: Tutorials that use ``LazyStackedTensorDictStore``

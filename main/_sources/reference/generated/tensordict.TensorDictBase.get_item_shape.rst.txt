@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.get_item_shape
+=============================
+
+.. automethod:: TensorDictBase.get_item_shape
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.get_item_shape tensordict.TensorDictBase.get_item_shape
+    :add-heading: Tutorials that use ``get_item_shape``

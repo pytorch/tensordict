@@ -1,24 +1,34 @@
 """
-Simplifying PyTorch Memory Management with TensorDict
-=====================================================
+Devices and memory-mapped tensors
+=================================
 **Author**: `Tom Begley <https://github.com/tcbegley>`_
 
-In this tutorial you will learn how to control where the contents of a
-:class:`TensorDict` are stored in memory, either by sending those contents to a device,
-or by utilizing memory maps.
+One call moves all the tensors of a :class:`~tensordict.TensorDict` to a
+device, and one call stores them in memory-mapped files. This tutorial is for
+readers who move groups of tensors between the CPU and a GPU, or whose
+datasets do not fit in RAM.
+
+What you will learn:
+
+- How the ``device`` of a tensordict applies to its entries.
+- How to move a tensordict to another device, and how to remove its device.
+- How to convert a tensordict to memory-mapped tensors with ``memmap_``, and
+  how to allocate an empty memory-mapped buffer with ``memmap_like``.
+- How to save memory-mapped tensors to a directory and load them again.
 """
 
 ##############################################################################
 # Devices
 # -------
-# When you create a :class:`TensorDict`, you can specify a device with the ``device``
-# keyword argument. If the ``device`` is set, then all entries of the
-# :class:`TensorDict` will be placed on that device. If the ``device`` is not set, then
-# there is no requirement that entries in the :class:`TensorDict` must be on the same
-# device.
+# When you create a :class:`~tensordict.TensorDict`, you can give it a device
+# with the ``device`` keyword argument. If you set the ``device``, the
+# :class:`~tensordict.TensorDict` moves all its entries to this device. If you
+# do not set it, the entries can be on different devices.
 #
-# In this example we instantiate a :class:`TensorDict` with ``device="cuda:0"``. When
-# we print the contents we can see that they have been moved onto the device.
+# The examples of this section need a CUDA device, so this page shows them
+# with their output, and does not run them. This example creates a
+# :class:`~tensordict.TensorDict` with ``device="cuda:0"``. The printed
+# entries are on the device.
 #
 # .. code-block::
 #
@@ -33,8 +43,8 @@ or by utilizing memory maps.
 #        device=cuda:0,
 #        is_shared=True)
 #
-# If the device of the :class:`TensorDict` is not ``None``, new entries are also moved
-# onto the device.
+# If the device of the :class:`~tensordict.TensorDict` is not ``None``, it also
+# moves the new entries to the device.
 #
 # .. code-block::
 #
@@ -48,19 +58,19 @@ or by utilizing memory maps.
 #        device=cuda:0,
 #        is_shared=True)
 #
-# You can check the current device of the :class:`TensorDict` with the ``device``
-# attribute.
+# The ``device`` attribute gives the device of the
+# :class:`~tensordict.TensorDict`.
 #
 # .. code-block::
 #
 #    >>> print(tensordict.device)
 #    cuda:0
 #
-# The contents of the :class:`TensorDict` can be sent to a device like a PyTorch tensor
-# with :meth:`TensorDict.cuda() <tensordict.TensorDict.cuda>` or
-# :meth:`TensorDict.to(device) <tensordict.TensorDict.to>` with ``device``
-# being the desired device. Like their PyTorch counterparts, these methods return the
-# result rather than modifying the :class:`TensorDict` in place.
+# To send the contents of the :class:`~tensordict.TensorDict` to a device, use
+# :meth:`TensorDict.cuda() <tensordict.TensorDict.cuda>` or
+# :meth:`TensorDict.to(device) <tensordict.TensorDict.to>`, as for a PyTorch
+# tensor. Like the tensor methods, they return a new tensordict and do not
+# change the original one.
 #
 # .. code-block::
 #
@@ -83,10 +93,11 @@ or by utilizing memory maps.
 #        device=cuda:0,
 #        is_shared=True)
 #
-# The :meth:`TensorDict.to <tensordict.TensorDict.to>` method requires a valid
-# device to be passed as the argument. If you want to remove the device from the
-# :class:`TensorDict` to allow values with different devices, you should use the
-# :meth:`TensorDict.clear_device_ <tensordict.TensorDict.clear_device_>` method.
+# :meth:`TensorDict.to <tensordict.TensorDict.to>` needs a device as its
+# argument. To remove the device of the :class:`~tensordict.TensorDict`, so
+# that its entries can be on different devices, use
+# :meth:`TensorDict.clear_device_ <tensordict.TensorDict.clear_device_>`. The
+# entries stay where they are.
 #
 # .. code-block::
 #
@@ -100,40 +111,42 @@ or by utilizing memory maps.
 #        device=None,
 #        is_shared=False)
 #
-# Memory-mapped Tensors
+# Memory-mapped tensors
 # ---------------------
-# ``tensordict`` provides a class :class:`~tensordict.MemoryMappedTensor`
-# which allows us to store the contents of a tensor on disk, while still
-# supporting fast indexing and loading of the contents in batches.
-# See the `ImageNet Tutorial <./tensorclass_imagenet.html>`_ for an
-# example of this in action.
+# A :class:`~tensordict.MemoryMappedTensor` is a tensor whose values are stored
+# in a file. The operating system reads the parts of the file that you index,
+# so you can read batches from a dataset that does not fit in RAM. The
+# :ref:`sphx_glr_tutorials_tensorclass_imagenet.py` tutorial uses memory-mapped
+# tensors to load a dataset.
 #
-# To convert the :class:`TensorDict` to a collection of memory-mapped tensors, use the
-# :meth:`TensorDict.memmap_ <tensordict.TensorDict.memmap_>`.
+# To convert the entries of a :class:`~tensordict.TensorDict` to memory-mapped
+# tensors, use :meth:`TensorDict.memmap_ <tensordict.TensorDict.memmap_>`. It
+# copies the values into the memory maps, and locks the tensordict: you can
+# write into its tensors, but you cannot add or remove keys.
 
-# sphinx_gallery_start_ignore
-import warnings
+import tempfile
+from pathlib import Path
 
 import torch
 from tensordict import TensorDict
 
-warnings.filterwarnings("ignore")
-# sphinx_gallery_end_ignore
+torch.manual_seed(0)
 
 tensordict = TensorDict({"a": torch.rand(10), "b": {"c": torch.rand(10)}}, [10])
 tensordict.memmap_()
 
 print(tensordict)
+assert tensordict.is_locked
 
 ##############################################################################
-# Alternatively one can use the
-# :meth:`TensorDict.memmap_like <tensordict.TensorDict.memmap_like>` method. This will
-# create a new :class:`~.TensorDict` of the same structure with
-# :class:`~tensordict.MemoryMappedTensor` values, however it will not copy the
-# contents of the original tensors to the
-# memory-mapped tensors. This allows you to create the memory-mapped
-# :class:`~.TensorDict` and then populate it slowly, and hence should generally be
-# preferred to ``memmap_``.
+# :meth:`TensorDict.memmap_like <tensordict.TensorDict.memmap_like>` creates a
+# new tensordict with the same keys and shapes, with
+# :class:`~tensordict.MemoryMappedTensor` values. It does not copy the values:
+# the output below shows zeros. The new tensordict is also locked.
+#
+# - Use ``memmap_`` to move existing data into memory maps.
+# - Use ``memmap_like`` to allocate a buffer that you fill later, for example
+#   a dataset that does not fit in RAM.
 
 tensordict = TensorDict({"a": torch.rand(10), "b": {"c": torch.rand(10)}}, [10])
 mm_tensordict = tensordict.memmap_like()
@@ -141,16 +154,25 @@ mm_tensordict = tensordict.memmap_like()
 print(mm_tensordict["a"].contiguous())
 
 ##############################################################################
-# By default the contents of the :class:`TensorDict` are stored in anonymous
-# temporary memory maps (on Linux, in shared memory under ``/dev/shm`` when it has
-# room; otherwise in an unlinked temporary file, or a shared-memory block on Windows),
-# which do not persist and cannot be reloaded from disk. If you would like to control
-# where they are saved you can use the keyword argument ``prefix="/path/to/root"``.
+# Write into the buffer with an index, or with an in-place operation:
+
+mm_tensordict[:5] = tensordict[:5]
+assert (mm_tensordict["a"][:5] == tensordict["a"][:5]).all()
+
+##############################################################################
+# Saving to a directory and loading again
+# ---------------------------------------
 #
-# The contents of the :class:`TensorDict` are saved in a directory structure that mimics
-# the structure of the :class:`TensorDict` itself. The contents of each tensor are
-# saved as a raw memory-mapped ``.memmap`` file, and the metadata in ``meta.json``
-# files. For example, the above :class:`TensorDict` is saved as follows:
+# By default, the memory maps are anonymous and temporary. On Linux, they are
+# in shared memory under ``/dev/shm`` when it has room. Otherwise, they are in
+# an unlinked temporary file, or in a shared-memory block on Windows. They
+# disappear when the process ends, and you cannot load them again. To save
+# the memory maps to a directory, pass ``prefix="/path/to/root"``.
+#
+# The directory has the structure of the :class:`~tensordict.TensorDict`. Each
+# tensor is a raw ``.memmap`` file, and the metadata is in ``meta.json``
+# files. For example, the :class:`~tensordict.TensorDict` above is saved as
+# follows:
 #
 # ::
 #
@@ -159,3 +181,36 @@ print(mm_tensordict["a"].contiguous())
 #    │ ├── c.memmap
 #    │ └── meta.json
 #    └── meta.json
+
+prefix = Path(tempfile.mkdtemp())
+tensordict.memmap_(prefix=prefix)
+print(sorted(str(path.relative_to(prefix)) for path in prefix.rglob("*")))
+
+##############################################################################
+# :meth:`TensorDict.load_memmap <tensordict.TensorDict.load_memmap>` loads the
+# directory again, in this process or in another one. The entries of the
+# result are memory-mapped tensors that read from the files:
+
+loaded = TensorDict.load_memmap(prefix)
+print(loaded)
+assert (loaded == tensordict).all()
+
+##############################################################################
+# Conclusion
+# ----------
+#
+# You can now set the device of a :class:`~tensordict.TensorDict`, move it to
+# another device, and remove its device. You can convert a tensordict to
+# memory-mapped tensors with ``memmap_``, or allocate an empty memory-mapped
+# buffer with ``memmap_like``. With ``prefix=``, the memory maps go to a
+# directory, and ``load_memmap`` loads them again, in this process or in
+# another one.
+#
+# Further reading
+# ---------------
+#
+# - :ref:`devices` explains devices, dtypes and memory.
+# - :ref:`saving` explains all the ways to save and load tensordicts.
+# - :ref:`storage` explains how to work with datasets that do not fit in RAM.
+# - :ref:`sphx_glr_tutorials_tensorclass_imagenet.py` loads an image dataset
+#   from memory-mapped tensors.

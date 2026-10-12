@@ -6,4 +6,7 @@ NestedKey
 
 .. autoclass:: NestedKey
     :members:
-    :inherited-members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.NestedKey
+    :add-heading: Tutorials that use ``NestedKey``

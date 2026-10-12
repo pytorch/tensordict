@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.data_ptr
+=======================
+
+.. automethod:: TensorDictBase.data_ptr
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.data_ptr tensordict.TensorDictBase.data_ptr
+    :add-heading: Tutorials that use ``data_ptr``

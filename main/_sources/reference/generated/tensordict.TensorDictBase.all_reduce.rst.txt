@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.all_reduce
+=========================
+
+.. automethod:: TensorDictBase.all_reduce
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.all_reduce tensordict.TensorDictBase.all_reduce
+    :add-heading: Tutorials that use ``all_reduce``

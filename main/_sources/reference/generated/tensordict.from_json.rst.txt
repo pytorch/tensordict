@@ -5,3 +5,6 @@ from_json
 =========
 
 .. autofunction:: from_json
+
+.. minigallery:: tensordict.from_json
+    :add-heading: Tutorials that use ``from_json``

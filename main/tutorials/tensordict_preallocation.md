@@ -1,0 +1,150 @@
+Note
+
+Go to the end
+to download the full example code.
+
+# Filling a TensorDict row by row
+
+**Author**: [Tom Begley](https://github.com/tcbegley)
+
+A simulation loop often stores results at each step, such as the positions
+and the velocities of its particles. To collect them, you usually allocate one
+tensor per quantity in advance, then write each step into it. A
+[`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) does the allocation for you: the first write
+with an index creates every tensor at its full size. This tutorial is for
+readers who fill a buffer one step at a time.
+
+What you will learn:
+
+- How to create an empty tensordict with a batch size and no keys.
+- What tensordict allocates when you write the first row with an index.
+- How the later rows are written into the same tensors.
+
+Here is a function that returns a [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) with a
+batch size of `[3]`:
+
+```
+import torch
+from tensordict import TensorDict
+
+torch.manual_seed(0)
+
+def make_tensordict():
+ return TensorDict({"a": torch.rand(3), "b": torch.rand(3, 4)}, [3])
+```
+
+Call this function `N` times, and write the results into one
+[`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) with `batch_size=[N, 3]`:
+
+```
+N = 10
+tensordict = TensorDict({}, batch_size=[N, 3])
+
+for i in range(N):
+ tensordict[i] = make_tensordict()
+
+print(tensordict)
+```
+
+```
+TensorDict(
+ fields={
+ a: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+ b: Tensor(shape=torch.Size([10, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+ batch_size=torch.Size([10, 3]),
+ device=None,
+ is_shared=False)
+```
+
+`tensordict` has `batch_size=[N, 3]` and no keys. When the first
+iteration writes `tensordict[0]`, tensordict creates each missing key as a
+zero-filled tensor. Its shape is the batch size `[N, 3]` followed by the
+other dimensions of the value from `make_tensordict`. Here `"a"` gets
+shape `torch.Size([10, 3])` and `"b"` gets shape
+`torch.Size([10, 3, 4])`. The later iterations write into these tensors in
+place. Rows that the loop does not write stay zero.
+
+The steps below go through the loop one iteration at a time. First, create
+an empty [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict):
+
+```
+N = 10
+tensordict = TensorDict({}, batch_size=[N, 3])
+print(tensordict)
+```
+
+```
+TensorDict(
+ fields={
+ },
+ batch_size=torch.Size([10, 3]),
+ device=None,
+ is_shared=False)
+```
+
+After the first iteration, `tensordict` has tensors for `"a"` and
+`"b"`. These tensors are zero, except for the first row, which holds the
+random values that you wrote.
+
+```
+random_tensordict = make_tensordict()
+tensordict[0] = random_tensordict
+
+assert (tensordict[1:] == 0).all()
+assert (tensordict[0] == random_tensordict).all()
+
+print(tensordict)
+```
+
+```
+TensorDict(
+ fields={
+ a: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+ b: Tensor(shape=torch.Size([10, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+ batch_size=torch.Size([10, 3]),
+ device=None,
+ is_shared=False)
+```
+
+The next iterations write into the same tensors, in place.
+
+```
+a = tensordict["a"]
+random_tensordict = make_tensordict()
+tensordict[1] = random_tensordict
+
+# the same tensor is stored under "a", but its values changed
+assert tensordict["a"] is a
+assert (tensordict[:2] != 0).all()
+```
+
+## Conclusion
+
+You can now fill a [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) one row at a time,
+without allocating its tensors yourself. Create it with a batch size and no
+keys. The first write allocates a zero-filled tensor for each key, at the
+full batch size. The later writes go into the same tensors.
+
+To allocate all the keys in advance, from their shapes and dtypes, without a
+first row, use [`from_schema()`](../reference/generated/tensordict.TensorDictBase.from_schema.html#tensordict.TensorDictBase.from_schema). It can also
+allocate the tensors on disk.
+
+## Further reading
+
+- [Batch size, shapes and indexing](../concepts/batch_size.html#batch-size) explains batch sizes and indexing.
+- [Large datasets and storage backends](../storage.html#storage) shows how to pre-allocate a tensordict on disk or on a
+storage backend.
+- [Devices and memory-mapped tensors](tensordict_memory.html#sphx-glr-tutorials-tensordict-memory-py) allocates memory-mapped
+tensors with `memmap_like`.
+- [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) fills a memory-mapped
+dataset batch by batch.
+
+**Total running time of the script:** (0 minutes 0.003 seconds)
+
+[`Download Jupyter notebook: tensordict_preallocation.ipynb`](../_downloads/87e90875c043c2567fac8ec8a049a261/tensordict_preallocation.ipynb)
+
+[`Download Python source code: tensordict_preallocation.py`](../_downloads/e0699c896d4545cae2895110e76d207d/tensordict_preallocation.py)
+
+[`Download zipped: tensordict_preallocation.zip`](../_downloads/a3a53a08487286803e7e9713be78fb54/tensordict_preallocation.zip)
+
+[Gallery generated by Sphinx-Gallery](https://sphinx-gallery.github.io)

@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.values
+=====================
+
+.. automethod:: TensorDictBase.values
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.values tensordict.TensorDictBase.values
+    :add-heading: Tutorials that use ``values``

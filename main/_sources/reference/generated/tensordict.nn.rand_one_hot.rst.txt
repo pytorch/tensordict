@@ -5,3 +5,6 @@ rand_one_hot
 ============
 
 .. autofunction:: rand_one_hot
+
+.. minigallery:: tensordict.nn.rand_one_hot
+    :add-heading: Tutorials that use ``rand_one_hot``

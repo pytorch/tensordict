@@ -5,3 +5,6 @@ save
 ====
 
 .. autofunction:: save
+
+.. minigallery:: tensordict.save
+    :add-heading: Tutorials that use ``save``

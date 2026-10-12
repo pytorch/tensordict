@@ -4,6 +4,14 @@
 PersistentTensorDict
 ====================
 
+``PersistentTensorDict`` has the methods of :class:`~tensordict.TensorDictBase`,
+listed by task in :ref:`api-tensordict-methods`. This page lists only the
+methods that ``PersistentTensorDict`` adds, and the overrides that have their own
+documentation.
+
 .. autoclass:: PersistentTensorDict
     :members:
-    :inherited-members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.PersistentTensorDict
+    :add-heading: Tutorials that use ``PersistentTensorDict``

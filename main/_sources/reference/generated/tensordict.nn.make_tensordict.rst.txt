@@ -1,7 +1,0 @@
-﻿.. currentmodule:: tensordict.nn
-
-
-make_tensordict
-===============
-
-.. autofunction:: make_tensordict

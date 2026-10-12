@@ -5,3 +5,6 @@ lazy_legacy
 ===========
 
 .. autofunction:: lazy_legacy
+
+.. minigallery:: tensordict.lazy_legacy
+    :add-heading: Tutorials that use ``lazy_legacy``

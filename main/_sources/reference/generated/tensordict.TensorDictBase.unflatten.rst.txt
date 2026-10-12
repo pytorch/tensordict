@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.unflatten
+========================
+
+.. automethod:: TensorDictBase.unflatten
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.unflatten tensordict.TensorDictBase.unflatten
+    :add-heading: Tutorials that use ``unflatten``

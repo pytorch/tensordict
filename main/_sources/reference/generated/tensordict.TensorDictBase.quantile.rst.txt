@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.quantile
+=======================
+
+.. automethod:: TensorDictBase.quantile
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.quantile tensordict.TensorDictBase.quantile
+    :add-heading: Tutorials that use ``quantile``

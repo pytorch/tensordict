@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.depth
+====================
+
+.. autoproperty:: TensorDictBase.depth
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.depth tensordict.TensorDictBase.depth
+    :add-heading: Tutorials that use ``depth``

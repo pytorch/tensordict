@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.ceil_
+====================
+
+.. automethod:: TensorDictBase.ceil_
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.ceil_ tensordict.TensorDictBase.ceil_
+    :add-heading: Tutorials that use ``ceil_``

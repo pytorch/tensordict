@@ -5,3 +5,6 @@ is_leaf_nontensor
 =================
 
 .. autofunction:: is_leaf_nontensor
+
+.. minigallery:: tensordict.is_leaf_nontensor
+    :add-heading: Tutorials that use ``is_leaf_nontensor``

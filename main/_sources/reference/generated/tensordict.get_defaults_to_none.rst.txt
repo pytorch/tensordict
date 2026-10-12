@@ -5,3 +5,6 @@ get_defaults_to_none
 ====================
 
 .. autofunction:: get_defaults_to_none
+
+.. minigallery:: tensordict.get_defaults_to_none
+    :add-heading: Tutorials that use ``get_defaults_to_none``

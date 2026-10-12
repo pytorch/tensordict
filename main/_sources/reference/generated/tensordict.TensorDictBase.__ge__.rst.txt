@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.__ge__
+=====================
+
+.. automethod:: TensorDictBase.__ge__
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.__ge__ tensordict.TensorDictBase.__ge__
+    :add-heading: Tutorials that use ``__ge__``

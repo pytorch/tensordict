@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.from_pytree
+==========================
+
+.. automethod:: TensorDictBase.from_pytree
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.from_pytree tensordict.TensorDictBase.from_pytree
+    :add-heading: Tutorials that use ``from_pytree``

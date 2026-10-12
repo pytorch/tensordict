@@ -5,3 +5,6 @@ mappings
 ========
 
 .. autofunction:: mappings
+
+.. minigallery:: tensordict.nn.mappings
+    :add-heading: Tutorials that use ``mappings``

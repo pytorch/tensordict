@@ -5,3 +5,6 @@ IndexType
 =========
 
 .. autodata:: IndexType
+
+.. minigallery:: tensordict.utils.IndexType
+    :add-heading: Tutorials that use ``IndexType``

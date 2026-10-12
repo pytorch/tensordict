@@ -6,3 +6,7 @@ NormalParamExtractor
 
 .. autoclass:: NormalParamExtractor
     :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.nn.distributions.NormalParamExtractor
+    :add-heading: Tutorials that use ``NormalParamExtractor``

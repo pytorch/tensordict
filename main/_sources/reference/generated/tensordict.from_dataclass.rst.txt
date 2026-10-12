@@ -5,3 +5,6 @@ from_dataclass
 ==============
 
 .. autofunction:: from_dataclass
+
+.. minigallery:: tensordict.from_dataclass
+    :add-heading: Tutorials that use ``from_dataclass``

@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.to_store
+=======================
+
+.. automethod:: TensorDictBase.to_store
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.to_store tensordict.TensorDictBase.to_store
+    :add-heading: Tutorials that use ``to_store``

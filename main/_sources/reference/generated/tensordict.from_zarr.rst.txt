@@ -5,3 +5,6 @@ from_zarr
 =========
 
 .. autofunction:: from_zarr
+
+.. minigallery:: tensordict.from_zarr
+    :add-heading: Tutorials that use ``from_zarr``

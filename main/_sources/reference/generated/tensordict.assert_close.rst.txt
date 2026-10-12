@@ -5,3 +5,6 @@ assert_close
 ============
 
 .. autofunction:: assert_close
+
+.. minigallery:: tensordict.assert_close
+    :add-heading: Tutorials that use ``assert_close``

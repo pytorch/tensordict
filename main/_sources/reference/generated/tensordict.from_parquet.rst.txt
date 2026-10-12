@@ -5,3 +5,6 @@ from_parquet
 ============
 
 .. autofunction:: from_parquet
+
+.. minigallery:: tensordict.from_parquet
+    :add-heading: Tutorials that use ``from_parquet``

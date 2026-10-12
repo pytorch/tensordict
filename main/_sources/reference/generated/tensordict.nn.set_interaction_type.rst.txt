@@ -6,3 +6,7 @@ set_interaction_type
 
 .. autoclass:: set_interaction_type
     :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.nn.set_interaction_type
+    :add-heading: Tutorials that use ``set_interaction_type``

@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.mul_
+===================
+
+.. automethod:: TensorDictBase.mul_
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.mul_ tensordict.TensorDictBase.mul_
+    :add-heading: Tutorials that use ``mul_``

@@ -5,3 +5,6 @@ stack
 =====
 
 .. autofunction:: stack
+
+.. minigallery:: tensordict.stack
+    :add-heading: Tutorials that use ``stack``

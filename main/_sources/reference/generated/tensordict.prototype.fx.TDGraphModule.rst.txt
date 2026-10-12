@@ -6,3 +6,7 @@ TDGraphModule
 
 .. autoclass:: TDGraphModule
     :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.prototype.fx.TDGraphModule
+    :add-heading: Tutorials that use ``TDGraphModule``

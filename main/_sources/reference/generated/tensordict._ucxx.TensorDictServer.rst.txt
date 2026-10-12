@@ -6,4 +6,7 @@ TensorDictServer
 
 .. autoclass:: TensorDictServer
     :members:
-    :inherited-members:
+    :show-inheritance:
+
+.. minigallery:: tensordict._ucxx.TensorDictServer
+    :add-heading: Tutorials that use ``TensorDictServer``

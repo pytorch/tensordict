@@ -5,3 +5,6 @@ add_custom_mapping
 ==================
 
 .. autofunction:: add_custom_mapping
+
+.. minigallery:: tensordict.nn.add_custom_mapping
+    :add-heading: Tutorials that use ``add_custom_mapping``

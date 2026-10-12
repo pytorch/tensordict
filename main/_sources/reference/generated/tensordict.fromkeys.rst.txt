@@ -5,3 +5,6 @@ fromkeys
 ========
 
 .. autofunction:: fromkeys
+
+.. minigallery:: tensordict.fromkeys
+    :add-heading: Tutorials that use ``fromkeys``

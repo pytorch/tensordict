@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.copy_
+====================
+
+.. automethod:: TensorDictBase.copy_
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.copy_ tensordict.TensorDictBase.copy_
+    :add-heading: Tutorials that use ``copy_``

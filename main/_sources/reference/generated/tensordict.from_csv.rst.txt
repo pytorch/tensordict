@@ -5,3 +5,6 @@ from_csv
 ========
 
 .. autofunction:: from_csv
+
+.. minigallery:: tensordict.from_csv
+    :add-heading: Tutorials that use ``from_csv``

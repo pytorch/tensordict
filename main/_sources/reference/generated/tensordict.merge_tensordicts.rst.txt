@@ -5,3 +5,6 @@ merge_tensordicts
 =================
 
 .. autofunction:: merge_tensordicts
+
+.. minigallery:: tensordict.merge_tensordicts
+    :add-heading: Tutorials that use ``merge_tensordicts``

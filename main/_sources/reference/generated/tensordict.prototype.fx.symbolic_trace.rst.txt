@@ -1,7 +1,0 @@
-﻿.. currentmodule:: tensordict.prototype.fx
-
-
-symbolic_trace
-==============
-
-.. autofunction:: symbolic_trace

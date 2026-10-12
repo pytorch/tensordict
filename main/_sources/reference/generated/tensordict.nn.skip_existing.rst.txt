@@ -5,3 +5,6 @@ skip_existing
 =============
 
 .. autofunction:: skip_existing
+
+.. minigallery:: tensordict.nn.skip_existing
+    :add-heading: Tutorials that use ``skip_existing``

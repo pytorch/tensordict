@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.is_memmap
+========================
+
+.. automethod:: TensorDictBase.is_memmap
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.is_memmap tensordict.TensorDictBase.is_memmap
+    :add-heading: Tutorials that use ``is_memmap``

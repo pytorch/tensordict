@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.log_
+===================
+
+.. automethod:: TensorDictBase.log_
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.log_ tensordict.TensorDictBase.log_
+    :add-heading: Tutorials that use ``log_``

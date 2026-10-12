@@ -1,0 +1,121 @@
+# tensorclass
+
+tensordict.tensorclass(*cls: T = None*, */*, ***, *autocast: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *frozen: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *nocast: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *shadow: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *tensor_only: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → T | [None](https://docs.python.org/3/builtins/constants.html#None)
+
+A decorator that turns a class with annotated fields into a tensorclass.
+
+A tensorclass is a dataclass whose instances behave like a
+[`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict): they have a batch size, and they support
+indexing, reshaping, `to(device)`, stacking and memory-mapping. For new
+code, subclass [`TensorClass`](tensordict.TensorClass.html#tensordict.TensorClass) instead. It takes the same
+flags, and type checkers understand it without a plugin. This decorator
+is kept for existing code and for code that moves from
+`@dataclass`. See [TensorClass](../../tensorclass.html#tensorclass-guide).
+
+Keyword Arguments:
+
+- **autocast** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, when a field is set, the value
+is converted to the annotated type. Exclusive with `nocast` and
+`tensor_only`. Defaults to `False`.
+- **frozen** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, assigning a field raises
+`dataclasses.FrozenInstanceError`, as with
+`@dataclass(frozen=True)`. To block writes on one instance only,
+call `lock_()` on it or pass `lock=True` to the constructor:
+writes then raise a `RuntimeError`. Defaults to `False`.
+- **nocast** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, Tensor-compatible types such as
+`int`, `np.ndarray` and the like are not cast to a tensor
+type. Exclusive with `autocast` and `tensor_only`. Defaults
+to `False`.
+- **shadow** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, fields can have the name of a
+tensorclass member (`batch_size`, `sum`, ...), and hide that
+member. If `False`, such a name raises an `AttributeError`
+when the class is defined. Defaults to `False`.
+- **tensor_only** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, every field annotation must
+be a tensor type or a tensor collection. Values that can be cast
+to a tensor are cast. Reading a field then skips the lookup in the
+non-tensor storage. Exclusive with `autocast` and `nocast`.
+Defaults to `False`.
+
+Returns:
+
+the tensorclass, or a decorator if the flags are given without a
+class (`@tensorclass(autocast=True)`).
+
+Examples
+
+tensorclass can be used with or without arguments:
+
+```
+>>> from typing import Any
+>>> import torch
+>>> from tensordict import tensorclass
+>>> @tensorclass
+... class X:
+... y: int
+>>> X(torch.ones(())).y
+tensor(1.)
+>>> @tensorclass(autocast=False)
+... class X:
+... y: int
+>>> X(torch.ones(())).y
+tensor(1.)
+>>> @tensorclass(autocast=True)
+... class X:
+... y: int
+>>> X(torch.ones(())).y
+1
+>>> @tensorclass(nocast=True)
+... class X:
+... y: Any
+>>> X(1).y
+1
+>>> @tensorclass(nocast=False)
+... class X:
+... y: Any
+>>> X(1).y
+tensor(1)
+```
+
+A tensorclass can have methods. Fields that are not tensors are stored
+as [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData):
+
+```
+>>> @tensorclass
+... class MyData:
+... X: torch.Tensor
+... y: torch.Tensor
+... z: str
+... def expand_and_mask(self):
+... X = self.X.unsqueeze(-1).expand_as(self.y)
+... X = X[self.y]
+... return X
+...
+>>> data = MyData(
+... X=torch.ones(3, 4, 1),
+... y=torch.zeros(3, 4, 2, 2, dtype=torch.bool),
+... z="test",
+... batch_size=[3, 4])
+>>> print(data)
+MyData(
+ X=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+ y=Tensor(shape=torch.Size([3, 4, 2, 2]), device=cpu, dtype=torch.bool, is_shared=False),
+ z=NonTensorData(data=test, batch_size=torch.Size([3, 4]), device=None),
+ batch_size=torch.Size([3, 4]),
+ device=None,
+ is_shared=False)
+>>> print(data.expand_and_mask())
+tensor([])
+```
+
+A tensorclass instance can be a field of another tensorclass:
+
+```
+>>> @tensorclass
+... class NestingMyData:
+... nested: MyData
+...
+>>> nesting_data = NestingMyData(nested=data, batch_size=[3, 4])
+>>> # although the data is stored as a TensorDict, the type hint helps us
+>>> # to appropriately cast the data to the right type
+>>> assert isinstance(nesting_data.nested, type(data))
+```

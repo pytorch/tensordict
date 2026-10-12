@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.asend
+====================
+
+.. automethod:: TensorDictBase.asend
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.asend tensordict.TensorDictBase.asend
+    :add-heading: Tutorials that use ``asend``

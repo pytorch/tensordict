@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.record_stream
+============================
+
+.. automethod:: TensorDictBase.record_stream
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.record_stream tensordict.TensorDictBase.record_stream
+    :add-heading: Tutorials that use ``record_stream``

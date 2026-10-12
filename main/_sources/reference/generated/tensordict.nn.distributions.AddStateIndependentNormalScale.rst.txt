@@ -6,3 +6,7 @@ AddStateIndependentNormalScale
 
 .. autoclass:: AddStateIndependentNormalScale
     :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.nn.distributions.AddStateIndependentNormalScale
+    :add-heading: Tutorials that use ``AddStateIndependentNormalScale``

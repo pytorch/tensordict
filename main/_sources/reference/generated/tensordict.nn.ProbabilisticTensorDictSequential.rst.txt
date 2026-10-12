@@ -6,3 +6,8 @@ ProbabilisticTensorDictSequential
 
 .. autoclass:: ProbabilisticTensorDictSequential
     :members:
+    :inherited-members: Module
+    :show-inheritance:
+
+.. minigallery:: tensordict.nn.ProbabilisticTensorDictSequential
+    :add-heading: Tutorials that use ``ProbabilisticTensorDictSequential``

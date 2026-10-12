@@ -5,3 +5,6 @@ from_dict
 =========
 
 .. autofunction:: from_dict
+
+.. minigallery:: tensordict.from_dict
+    :add-heading: Tutorials that use ``from_dict``

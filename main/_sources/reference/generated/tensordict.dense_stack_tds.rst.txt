@@ -5,3 +5,6 @@ dense_stack_tds
 ===============
 
 .. autofunction:: dense_stack_tds
+
+.. minigallery:: tensordict.dense_stack_tds
+    :add-heading: Tutorials that use ``dense_stack_tds``

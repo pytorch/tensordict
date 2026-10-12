@@ -5,3 +5,6 @@ isin
 ====
 
 .. autofunction:: isin
+
+.. minigallery:: tensordict.utils.isin
+    :add-heading: Tutorials that use ``isin``

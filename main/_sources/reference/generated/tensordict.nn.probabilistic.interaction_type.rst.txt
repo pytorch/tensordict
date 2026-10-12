@@ -5,3 +5,6 @@ interaction_type
 ================
 
 .. autofunction:: interaction_type
+
+.. minigallery:: tensordict.nn.probabilistic.interaction_type
+    :add-heading: Tutorials that use ``interaction_type``
