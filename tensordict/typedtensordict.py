@@ -423,6 +423,10 @@ class _TypedTensorDictMeta(type(TensorDictBase)):
 class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     """A TensorDictBase subclass with typed field declarations and backend composition.
 
+    .. warning::
+        ``TypedTensorDict`` is experimental: its API can change in a minor
+        release without a deprecation cycle.
+
     TypedTensorDict combines TensorDict's tensor operations with TypedDict-style
     field declarations. Subclasses declare fields as class annotations and get:
 

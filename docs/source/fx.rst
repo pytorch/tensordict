@@ -13,7 +13,7 @@ object is not subscriptable`` on a :class:`~tensordict.nn.TensorDictModule`.
 .. warning::
 
     ``tensordict.prototype.fx`` is a prototype. Its API can change without a
-    deprecation period. To make a module faster or to export it, use
+    deprecation cycle. To make a module faster or to export it, use
     :func:`torch.compile` or :func:`torch.export.export` (see
     :ref:`compile`). If you find a problem, open an issue.
 

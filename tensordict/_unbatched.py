@@ -231,6 +231,10 @@ if _HAS_WRAPPER_SUBCLASS_FIX:
     class UnbatchedTensor(_UnbatchedTensorMixin, torch.Tensor):
         """A torch.Tensor subclass whose shape is ignored during batch operations on a TensorDict.
 
+        .. warning::
+            ``UnbatchedTensor`` is experimental: its API can change in a minor
+            release without a deprecation cycle.
+
         Use it for an entry that belongs to the whole batch and does not have
         the batch dimensions: a lookup table, the parameters of a model, a
         mask shared by every element. A plain tensor entry must have a shape
@@ -396,6 +400,10 @@ else:
 
     class UnbatchedTensor(_UnbatchedTensorMixin, torch.Tensor):  # type: ignore[no-redef]
         """A torch.Tensor subclass whose shape is ignored during batch operations on a TensorDict.
+
+        .. warning::
+            ``UnbatchedTensor`` is experimental: its API can change in a minor
+            release without a deprecation cycle.
 
         Use it for an entry that belongs to the whole batch and does not have
         the batch dimensions: a lookup table, the parameters of a model, a

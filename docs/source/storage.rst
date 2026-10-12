@@ -303,7 +303,9 @@ reads the list of keys from the server each time.
 
 See :class:`~tensordict.store.TensorDictStore` for the other arguments, and
 :class:`~tensordict.store.LazyStackedTensorDictStore` for a stack of
-tensordicts with different shapes.
+tensordicts with different shapes. ``LazyStackedTensorDictStore`` is
+experimental: its API can change in a minor release without a deprecation
+cycle.
 
 .. _compat-redis-prealloc:
 

@@ -82,7 +82,9 @@ The containers
    * - :class:`~tensordict.TypedTensorDict`
      - Declared fields on a class that is a ``TensorDictBase``, with
        ``**state`` unpacking and the full tensordict API.
-     - Attribute access returns a string field as a
+     - Experimental: its API can change in a minor release without a
+       deprecation cycle (see :ref:`typed-tensordict-guide`). Attribute
+       access returns a string field as a
        :class:`~tensordict.NonTensorData` wrapper. No custom ``__init__``
        and no ``__post_init__``.
    * - A plain ``dict`` of tensors
@@ -125,6 +127,10 @@ Choose by need
 
 TensorClass or TypedTensorDict?
 -------------------------------
+
+``TypedTensorDict`` is experimental: its API can change in a minor release
+without a deprecation cycle (see :ref:`typed-tensordict-guide`).
+``TensorClass`` follows the normal deprecation rules.
 
 Both declare typed fields with class annotations, and both can wrap a
 tensordict of any backend. A :class:`~tensordict.TensorClass` holds a
