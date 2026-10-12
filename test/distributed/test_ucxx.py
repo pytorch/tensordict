@@ -462,6 +462,37 @@ class TestTensorDictSendRecvOverload:
         torch.testing.assert_close(result["a"], td_src["a"])
         torch.testing.assert_close(td_dest.to_dict(), expected)
 
+    @pytest.mark.parametrize(
+        "td_dest",
+        [
+            TensorDict({"a": torch.zeros(4)}, batch_size=[4]),
+            TensorDict({"a": torch.zeros(5)}, batch_size=[5]).consolidate(
+                metadata=True
+            ),
+            # Another key and dtype, with the storage size of the message
+            TensorDict(
+                {"b": torch.zeros(4, dtype=torch.int32)}, batch_size=[4]
+            ).consolidate(metadata=True),
+        ],
+        ids=["not-consolidated", "shape", "key-dtype"],
+    )
+    def test_recv_same_schema_layout_mismatch(self, td_dest):
+        # https://github.com/pytorch/tensordict/issues/2244
+        # https://github.com/pytorch/tensordict/issues/2377
+        ep = _FakeEndpoint()
+        pipe_send = TensorDictPipe(ep, consolidated=True)
+        pipe_send.send(TensorDict({"a": torch.ones(4)}, batch_size=[4]))
+        pipe_send.send(TensorDict({"a": torch.full((4,), 2.0)}, batch_size=[4]))
+
+        pipe_recv = TensorDictPipe(ep, consolidated=True)
+        expected = td_dest.to_dict()
+        first = td_dest.recv(pipe_recv)
+        result = td_dest.recv(pipe_recv)
+        assert result is first
+        assert result is not td_dest
+        torch.testing.assert_close(result["a"], torch.full((4,), 2.0))
+        torch.testing.assert_close(td_dest.to_dict(), expected)
+
 
 # ---------------------------------------------------------------------------
 # Integration tests — require ucxx
