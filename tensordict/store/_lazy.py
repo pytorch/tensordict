@@ -1465,7 +1465,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     # ---- TensorDictBase interface ----
 
-    # Override: the same setters as a stack element.
+    # Override: assigns batch_size and device without checks, like a stack element.
     batch_size = _StoreStackElementView.batch_size
     device = _StoreStackElementView.device
 
