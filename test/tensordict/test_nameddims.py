@@ -1124,6 +1124,26 @@ class TestNamedDims(TestTensorDictsBase):
             assert result_keepdim.names == ["x", "y"]
             assert result_keepdim.batch_size == td.sum(dim, keepdim=True).batch_size
 
+    @pytest.mark.parametrize("dim", [0, 1, -1, (0, 1)])
+    @pytest.mark.parametrize("keepdim", [False, True])
+    def test_logsumexp_names(self, dim, keepdim):
+        # logsumexp must keep the names of the dims that survive the reduction,
+        # like the reductions that go through _cast_reduction do
+        td = TensorDict(a=torch.rand(2, 3), batch_size=[2, 3], names=["x", "y"])
+        result = td.logsumexp(dim, keepdim=keepdim)
+        assert result.names == td.sum(dim, keepdim=keepdim).names
+        assert result.batch_size == td.sum(dim, keepdim=keepdim).batch_size
+
+        # on a lazy stack, logsumexp used to keep every name, which then no
+        # longer matched the reduced batch_size
+        stacked = LazyStackedTensorDict.lazy_stack(
+            [TensorDict(a=torch.rand(3), batch_size=[3]) for _ in range(2)]
+        )
+        stacked.names = ["x", "y"]
+        result = stacked.logsumexp(0, keepdim=keepdim)
+        assert result.names == stacked.sum(0, keepdim=keepdim).names
+        assert result.batch_size == stacked.sum(0, keepdim=keepdim).batch_size
+
     @pytest.mark.parametrize("reduction", ["cummax", "cummin"])
     @pytest.mark.parametrize("dim", [0, 1, -1])
     def test_cumulative_reduction_names(self, reduction, dim):
