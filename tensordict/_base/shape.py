@@ -52,11 +52,20 @@ class _ShapeOps:
     def expand(self, shape: torch.Size) -> Self: ...
 
     def expand(self, *args, **kwargs) -> Self:
-        """Expands each tensor of the tensordict according to the :func:`~torch.expand` function, ignoring the feature dimensions.
+        """Expands each tensor of the tensordict according to :meth:`torch.Tensor.expand`, ignoring the feature dimensions.
+
+        The new shape is the new batch size. As for :meth:`torch.Tensor.expand`,
+        it can add leading dimensions and expand the dimensions of size 1. The
+        other dimensions must keep their size. The result holds views of the
+        original tensors: no memory is allocated, and the expanded leaves are
+        not contiguous. Call :meth:`~.clone` or :meth:`~.contiguous` before
+        you write into them.
 
         Supports iterables to specify the shape.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({
             ...     'a': torch.zeros(3, 4, 5),
             ...     'b': torch.zeros(3, 4, 10)}, batch_size=[3, 4])
@@ -155,7 +164,15 @@ class _ShapeOps:
     def unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
         """Returns a tuple of indexed tensordicts, unbound along the indicated dimension.
 
+        The tensordicts of the result hold views of the original tensors.
+
+        Args:
+            dim (int): the batch dimension to remove. The result has
+                ``self.batch_size[dim]`` tensordicts.
+
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({
             ...     'x': torch.arange(12).reshape(3, 4),
             ... }, batch_size=[3, 4])
@@ -195,6 +212,8 @@ class _ShapeOps:
             dim (int, optional): dimension along which to split the tensor. Default: 0
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({
             ...     'x': torch.arange(24).reshape(3, 4, 2),
             ... }, batch_size=[3, 4])
@@ -283,12 +302,17 @@ class _ShapeOps:
 
     @_as_context_manager()
     def unsqueeze(self, *args, **kwargs):
-        """Unsqueezes all tensors for a dimension comprised in between `-td.batch_dims` and `td.batch_dims` and returns them in a new tensordict.
+        """Inserts a batch dimension of size 1 in every tensor, and returns them in a new tensordict.
+
+        The tensors of the result are views of the original tensors.
 
         Args:
-            dim (int): dimension along which to unsqueeze
+            dim (int): the position of the new dimension, in
+                ``[-batch_dims - 1, batch_dims]`` as for :func:`torch.unsqueeze`.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({
             ...     'x': torch.arange(24).reshape(3, 4, 2),
             ... }, batch_size=[3, 4])
@@ -298,16 +322,19 @@ class _ShapeOps:
             >>> td.get("x").shape
             torch.Size([3, 1, 4, 2])
 
-        This operation can be used as a context manager too. Changes to the original
-        tensordict will occur out-place, i.e. the content of the original tensors
-        will not be altered. This also assumes that the tensordict is not locked
-        (otherwise, unlocking the tensordict is necessary).
+        This operation can be used as a context manager too. Inside the
+        ``with`` block, you work on the unsqueezed tensordict. When the block
+        exits, the inverse operation (:meth:`~.squeeze`) runs, and the entries
+        of the block are written back to the original tensordict. They replace
+        the original tensors instead of being copied into them. The original
+        tensordict must not be locked. If the block raises an exception,
+        nothing is written back.
 
             >>> td = TensorDict({
             ...     'x': torch.arange(24).reshape(3, 4, 2),
             ... }, batch_size=[3, 4])
             >>> with td.unsqueeze(-2) as tds:
-            ...     tds.set("y", torch.zeros(3, 1, 4))
+            ...     _ = tds.set("y", torch.zeros(3, 1, 4))
             >>> assert td.get("y").shape == (3, 4)
 
         """
@@ -346,14 +373,20 @@ class _ShapeOps:
 
     @_as_context_manager()
     def squeeze(self, *args, **kwargs):
-        """Squeezes all tensors for a dimension in between `-self.batch_dims+1` and `self.batch_dims-1` and returns them in a new tensordict.
+        """Removes batch dimensions of size 1 from every tensor, and returns them in a new tensordict.
+
+        The tensors of the result are views of the original tensors. Feature
+        dimensions of size 1 are kept.
 
         Args:
-            dim (int | None): dimension along which to squeeze. If dim is
-                ``None``, all singleton dimensions will be squeezed.
+            dim (int | None): the batch dimension to remove, in
+                ``[-batch_dims, batch_dims - 1]``. If dim is
+                ``None``, all singleton batch dimensions will be squeezed.
                 Defaults to ``None``.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({
             ...     'x': torch.arange(24).reshape(3, 1, 4, 2),
             ... }, batch_size=[3, 1, 4])
@@ -363,17 +396,21 @@ class _ShapeOps:
             >>> td.get("x").shape
             torch.Size([3, 4, 2])
 
-        This operation can be used as a context manager too. Changes to the original
-        tensordict will occur out-place, i.e. the content of the original tensors
-        will not be altered. This also assumes that the tensordict is not locked
-        (otherwise, unlocking the tensordict is necessary). This functionality is
-        *not* compatible with implicit squeezing.
+        This operation can be used as a context manager too. Inside the
+        ``with`` block, you work on the squeezed tensordict. When the block
+        exits, the inverse operation (:meth:`~.unsqueeze`) runs, and the
+        entries of the block are written back to the original tensordict. They
+        replace the original tensors instead of being copied into them. The
+        original tensordict must not be locked. If the block raises an
+        exception, nothing is written back. Pass ``dim``: ``with td.squeeze():``
+        raises ``RuntimeError``, because the inverse operation needs the
+        dimension.
 
             >>> td = TensorDict({
             ...     'x': torch.arange(24).reshape(3, 1, 4, 2),
             ... }, batch_size=[3, 1, 4])
             >>> with td.squeeze(1) as tds:
-            ...     tds.set("y", torch.zeros(3, 4))
+            ...     _ = tds.set("y", torch.zeros(3, 4))
             >>> assert td.get("y").shape == (3, 1, 4)
 
         """
@@ -437,10 +474,18 @@ class _ShapeOps:
         *args,
         **kwargs,
     ) -> Self:
-        """Returns a contiguous, reshaped tensor of the desired shape.
+        """Returns a tensordict whose batch dimensions are reshaped to ``shape``.
+
+        Each leaf is reshaped with :meth:`torch.Tensor.reshape`, and keeps its
+        feature dimensions. As with :meth:`torch.Tensor.reshape`, a leaf of
+        the result is a view of the original leaf when the memory layout
+        allows it, and a copy otherwise.
 
         Args:
-            *shape (int): new shape of the resulting tensordict.
+            *shape (int): new batch size of the resulting tensordict, as
+                integers or as one list, tuple or ``torch.Size``. One
+                dimension can be ``-1``. The shape is positional only:
+                ``reshape(shape=...)`` raises ``TypeError``.
 
         Keyword Args:
             inplace (bool, optional): If ``True``, this tensordict's identity
@@ -456,6 +501,8 @@ class _ShapeOps:
             ``self``.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({
             ...     'x': torch.arange(12).reshape(3, 4),
             ... }, batch_size=[3, 4])
@@ -795,8 +842,10 @@ class _ShapeOps:
         Returns: self
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict(a=torch.zeros(1), b=torch.ones(1))
-            >>> td.cat_tensors("a", "b", out_key="c")
+            >>> _ = td.cat_tensors("a", "b", out_key="c")
             >>> assert "a" not in td
             >>> assert (td["c"] == torch.tensor([0, 1])).all()
 
@@ -829,8 +878,10 @@ class _ShapeOps:
         Returns: self
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict(a=torch.zeros(()), b=torch.ones(()))
-            >>> td.stack_tensors("a", "b", out_key="c")
+            >>> _ = td.stack_tensors("a", "b", out_key="c")
             >>> assert "a" not in td
             >>> assert (td["c"] == torch.tensor([0, 1])).all()
 
@@ -912,6 +963,26 @@ class _ShapeOps:
         """Stacks tensordicts into a single tensordict along the given dimension.
 
         This call is equivalent to calling :func:`torch.stack` but is compatible with torch.compile.
+        The tensordicts must have the same batch size and the same keys.
+        Otherwise, the call raises ``RuntimeError``. To stack tensordicts with
+        different keys or shapes, use :meth:`~.lazy_stack`. See
+        :ref:`stacking`.
+
+        Args:
+            input (sequence of TensorDictBase): the tensordicts to stack.
+            dim (int, optional): the new batch dimension. Defaults to ``0``.
+
+        Keyword Args:
+            out (TensorDictBase, optional): a tensordict to write the result
+                into.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> a = TensorDict(x=torch.zeros(3), batch_size=[3])
+            >>> b = TensorDict(x=torch.ones(3), batch_size=[3])
+            >>> TensorDict.stack([a, b]).batch_size
+            torch.Size([2, 3])
 
         """
         from tensordict._torch_func import _stack
@@ -925,6 +996,25 @@ class _ShapeOps:
         """Concatenates tensordicts into a single tensordict along the given dimension.
 
         This call is equivalent to calling :func:`torch.cat` but is compatible with torch.compile.
+        The tensordicts must have the same keys, and the same batch size
+        except along ``dim``.
+
+        Args:
+            input (sequence of TensorDictBase): the tensordicts to concatenate.
+            dim (int, optional): the batch dimension to concatenate along.
+                Defaults to ``0``.
+
+        Keyword Args:
+            out (TensorDictBase, optional): a tensordict to write the result
+                into.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> a = TensorDict(x=torch.zeros(3), batch_size=[3])
+            >>> b = TensorDict(x=torch.ones(3), batch_size=[3])
+            >>> TensorDict.cat([a, b]).batch_size
+            torch.Size([6])
 
         """
         from tensordict._torch_func import _cat
@@ -937,7 +1027,19 @@ class _ShapeOps:
     def lazy_stack(cls, input, dim: int = 0, *, out=None, **kwargs):
         """Creates a lazy stack of tensordicts.
 
-        See :meth:`~tensordict.LazyStackTensorDict.lazy_stack` for details.
+        A lazy stack keeps the tensordicts as they are and stacks their values
+        only when you read them. The tensordicts can have different keys and
+        different feature shapes. See :ref:`stacking`, and
+        :func:`tensordict.lazy_stack` for the arguments.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> a = TensorDict(x=torch.zeros(3), batch_size=[3])
+            >>> b = TensorDict(y=torch.ones(3), batch_size=[3])
+            >>> stack = TensorDict.lazy_stack([a, b])
+            >>> type(stack).__name__, stack.batch_size
+            ('LazyStackedTensorDict', torch.Size([2, 3]))
         """
         from tensordict._lazy import LazyStackedTensorDict
 
@@ -945,9 +1047,24 @@ class _ShapeOps:
 
     @classmethod
     def maybe_dense_stack(cls, input, dim: int = 0, *, out=None, **kwargs):
-        """Attempts to make a dense stack of tensordicts, and falls back on lazy stack when required..
+        """Attempts to make a dense stack of tensordicts, and falls back on lazy stack when required.
 
-        See :meth:`~tensordict.LazyStackTensorDict.maybe_dense_stack` for details.
+        The result is a :class:`~tensordict.TensorDict` if the tensordicts
+        have the same keys and shapes, and a
+        :class:`~tensordict.LazyStackedTensorDict` otherwise. See
+        :ref:`stacking`, and :func:`tensordict.maybe_dense_stack` for the
+        arguments.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> a = TensorDict(x=torch.zeros(3), batch_size=[3])
+            >>> b = TensorDict(x=torch.ones(3), batch_size=[3])
+            >>> c = TensorDict(y=torch.ones(3), batch_size=[3])
+            >>> type(TensorDict.maybe_dense_stack([a, b])).__name__
+            'TensorDict'
+            >>> type(TensorDict.maybe_dense_stack([a, c])).__name__
+            'LazyStackedTensorDict'
         """
         from tensordict._lazy import LazyStackedTensorDict
 
@@ -970,6 +1087,8 @@ class _ShapeOps:
             A list of TensorDict with specified size in given dimension.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({
             ...     'x': torch.arange(12).reshape(3, 4),
             ... }, batch_size=[3, 4])
@@ -1058,7 +1177,7 @@ class _ShapeOps:
         Args:
             dim (int): the dimension along which collect the elements
             index (torch.Tensor): a long tensor which number of dimension matches
-                the one of the tensordict with only one dimension differring between
+                the one of the tensordict with only one dimension differing between
                 the two (the gathering dimension). Its elements refer to the
                 index to be gathered along the required dimension.
             out (TensorDictBase, optional): a destination tensordict. It must
@@ -1075,6 +1194,8 @@ class _ShapeOps:
                 Defaults to ``False``.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict(
             ...     {"a": torch.randn(3, 4, 5),
             ...      "b": TensorDict({"c": torch.zeros(3, 4, 5)}, [3, 4, 5])},
@@ -1160,16 +1281,23 @@ class _ShapeOps:
     ):
         """Returns a tensordict with views of the tensors according to a new shape, compatible with the tensordict batch_size.
 
+        Each leaf keeps its feature dimensions, and is a view of the original
+        leaf: they share storage. As for :meth:`torch.Tensor.view`, the
+        leaves must have a compatible memory layout. Otherwise, use
+        :meth:`~.reshape`.
+
         Alternatively, a dtype can be provided as a first unnamed argument. In that case, all tensors will be viewed
         with the according dtype. Note that this assume that the new shapes will be compatible with the provided dtype.
-        See :meth:`~torch.view` for more information on dtype views.
+        See :meth:`torch.Tensor.view` for more information on dtype views.
 
         Args:
-            *shape (int): new shape of the resulting tensordict.
+            *shape (int): new batch size of the resulting tensordict, as
+                integers or as one ``torch.Size``.
             dtype (torch.dtype): alternatively, a dtype to use to represent the tensor content.
-            size: iterable
 
         Keyword Args:
+            size (list, tuple or torch.Size, optional): the new batch size,
+                as a keyword argument instead of ``*shape``.
             batch_size (torch.Size, optional): if a dtype is provided, the batch-size can be reset using this
                 keyword argument. If the ``view`` is called with a shape, this is without effect.
 
@@ -1177,14 +1305,20 @@ class _ShapeOps:
             a new tensordict with the desired batch_size.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict(source={'a': torch.zeros(3,4,5),
             ...    'b': torch.zeros(3,4,10,1)}, batch_size=torch.Size([3, 4]))
             >>> td_view = td.view(12)
-            >>> print(td_view.get("a").shape)  # torch.Size([12, 5])
-            >>> print(td_view.get("b").shape)  # torch.Size([12, 10, 1])
+            >>> print(td_view.get("a").shape)
+            torch.Size([12, 5])
+            >>> print(td_view.get("b").shape)
+            torch.Size([12, 10, 1])
             >>> td_view = td.view(-1, 4, 3)
-            >>> print(td_view.get("a").shape)  # torch.Size([1, 4, 3, 5])
-            >>> print(td_view.get("b").shape)  # torch.Size([1, 4, 3, 10, 1])
+            >>> print(td_view.get("a").shape)
+            torch.Size([1, 4, 3, 5])
+            >>> print(td_view.get("b").shape)
+            torch.Size([1, 4, 3, 10, 1])
 
         """
         if len(shape) == 1 and isinstance(shape[0], torch.dtype):
@@ -1233,7 +1367,13 @@ class _ShapeOps:
         modifications (such as new entries) back on the original tensordict,
         use the transposed tensordict as a context manager.
 
+        Args:
+            dim0 (int): the first batch dimension to swap.
+            dim1 (int): the second batch dimension to swap.
+
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> tensordict = TensorDict({"a": torch.randn(3, 4, 5)}, [3, 4])
             >>> tensordict_transpose = tensordict.transpose(0, 1)
             >>> print(tensordict_transpose.shape)
@@ -1300,6 +1440,8 @@ class _ShapeOps:
             a new tensordict with the axes swapped.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({"a": torch.randn(3, 4, 5)}, batch_size=[3, 4])
             >>> print(td.swapaxes(0, 1).shape)
             torch.Size([4, 3])
@@ -1319,7 +1461,7 @@ class _ShapeOps:
         """Returns a view of a tensordict with the batch dimensions permuted according to dims.
 
         Args:
-            *dims_list (int): the new ordering of the batch dims of the tensordict. Alternatively,
+            *dims (int): the new ordering of the batch dims of the tensordict. Alternatively,
                 a single iterable of integers can be provided.
             dims (list of int): alternative way of calling permute(...).
 
@@ -1327,6 +1469,8 @@ class _ShapeOps:
             a new tensordict with the batch dimensions in the desired order.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> tensordict = TensorDict({"a": torch.randn(3, 4, 5)}, [3, 4])
             >>> print(tensordict.permute([1, 0]))
             TensorDict(
@@ -1418,6 +1562,8 @@ class _ShapeOps:
             a new tensordict with the batch dimensions moved to the desired positions.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({"a": torch.randn(3, 4, 5)}, batch_size=[3, 4])
             >>> print(td.movedim(0, 1).shape)
             torch.Size([4, 3])
@@ -1496,6 +1642,8 @@ class _ShapeOps:
             a new tensordict with the dimensions flipped.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
             >>> print(td["a"])
             tensor([[0, 1, 2],
@@ -1545,6 +1693,8 @@ class _ShapeOps:
             a new tensordict with the second dimension flipped.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
             >>> print(td["a"])
             tensor([[0, 1, 2],
@@ -1570,6 +1720,8 @@ class _ShapeOps:
             a new tensordict with the first dimension flipped.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
             >>> print(td["a"])
             tensor([[0, 1, 2],
@@ -1615,6 +1767,8 @@ class _ShapeOps:
             is ``self``.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
             >>> print(td["a"])
             tensor([[0, 1, 2],
@@ -1694,6 +1848,8 @@ class _ShapeOps:
             a new tensordict rotated by 90 degrees.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
             >>> print(td["a"])
             tensor([[0, 1, 2],
@@ -1760,6 +1916,8 @@ class _ShapeOps:
             a new tensordict narrowed along the specified dimension.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
             >>> print(td["a"])
             tensor([[0, 1, 2],
@@ -1806,6 +1964,8 @@ class _ShapeOps:
             a new tensordict with elements repeated.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
             >>> print(td["a"])
             tensor([[0, 1, 2],
@@ -1863,6 +2023,8 @@ class _ShapeOps:
             a new tensordict with the shape broadcast.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({"a": torch.arange(3)}, batch_size=[3])
             >>> print(td.broadcast_to((2, 3)).shape)
             torch.Size([2, 3])
@@ -1897,6 +2059,8 @@ class _ShapeOps:
             a tensordict with at least 1 batch dimension.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({"a": torch.randn(3)}, batch_size=[])
             >>> print(td.atleast_1d().shape)
             torch.Size([1])
@@ -1916,6 +2080,8 @@ class _ShapeOps:
             a tensordict with at least 2 batch dimensions.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({"a": torch.randn(3)}, batch_size=[3])
             >>> print(td.atleast_2d().shape)
             torch.Size([1, 3])
@@ -1938,6 +2104,8 @@ class _ShapeOps:
             a tensordict with at least 3 batch dimensions.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({"a": torch.randn(3)}, batch_size=[3])
             >>> print(td.atleast_3d().shape)
             torch.Size([1, 1, 3])
@@ -1999,6 +2167,8 @@ class _ShapeOps:
                 ``False``.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({
             ...     "a": torch.arange(60).view(3, 4, 5),
             ...     "b": torch.arange(12).view(3, 4)}, batch_size=[3, 4])
@@ -2097,6 +2267,8 @@ class _ShapeOps:
                 dimension of the tensordict.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({
             ...     "a": torch.arange(60).view(3, 4, 5),
             ...     "b": torch.arange(12).view(3, 4)},
@@ -2307,6 +2479,8 @@ class _ShapeOps:
                 Shape must match the TensorDict ``batch_size``.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict(source={'a': torch.zeros(3, 4)},
             ...    batch_size=[3])
             >>> mask = torch.tensor([True, False, False])

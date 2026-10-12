@@ -34,7 +34,7 @@ class NormalParamExtractor(nn.Module):
             default = ``"biased_softplus_1.0"`` (i.e. softplus map with bias such that fn(0.0) = 1.0)
             choices: ``"softplus"``, ``"exp"``, ``"relu"``, ``"biased_softplus_1"`` or ``"none"`` (no mapping).
             See :func:`~tensordict.nn.mappings` for more details.
-        scale_lb (Number, optional): The minimum value that the variance can take. Default is 1e-4.
+        scale_lb (Number, optional): The minimum value of the scale (the standard deviation). Default is 1e-4.
 
     Examples:
         >>> import torch
@@ -86,7 +86,7 @@ class AddStateIndependentNormalScale(torch.nn.Module):
         scale_mapping (str, optional): positive mapping function to be used with the std.
             Defaults to ``"exp"``,
             choices: ``"softplus"``, ``"exp"``, ``"relu"``, ``"biased_softplus_1"``.
-        scale_lb (Number, optional): The minimum value that the variance can take.
+        scale_lb (Number, optional): The minimum value of the scale (the standard deviation).
             Defaults to ``1e-4``.
         device (torch.device, optional): the device of the module.
         make_param (bool, optional): whether the scale should be a parameter (``True``)
@@ -98,6 +98,7 @@ class AddStateIndependentNormalScale(torch.nn.Module):
     Examples:
         >>> from torch import nn
         >>> import torch
+        >>> from tensordict.nn.distributions import AddStateIndependentNormalScale
         >>> num_outputs = 4
         >>> module = nn.Linear(3, num_outputs)
         >>> module_normal = AddStateIndependentNormalScale(num_outputs)
@@ -181,6 +182,13 @@ class AddStateIndependentNormalScale(torch.nn.Module):
 class Delta(D.Distribution):
     """Delta distribution.
 
+    A distribution with all its mass on ``param``. :meth:`sample`,
+    :meth:`rsample`, :attr:`mean`, :attr:`mode` and
+    :attr:`deterministic_sample` return ``param``. :meth:`log_prob` returns
+    ``inf`` for a value equal to ``param`` (within ``atol`` and ``rtol``) and
+    ``-inf`` otherwise. It is the default ``distribution_class`` of
+    :class:`~tensordict.nn.ProbabilisticTensorDictModule`.
+
     Args:
         param (torch.Tensor): parameter of the delta distribution;
         atol (number, optional): absolute tolerance to consider that a tensor matches the distribution parameter;
@@ -189,6 +197,21 @@ class Delta(D.Distribution):
             Default is 1e-6
         batch_shape (torch.Size, optional): batch shape;
         event_shape (torch.Size, optional): shape of the outcome.
+            If neither ``batch_shape`` nor ``event_shape`` is given, the last
+            dimension of ``param`` is the event shape and the others are the
+            batch shape.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict.nn.distributions import Delta
+        >>> dist = Delta(torch.zeros(4, 2))
+        >>> dist.batch_shape, dist.event_shape
+        (torch.Size([4]), torch.Size([2]))
+        >>> dist = Delta(torch.tensor([1.0, 2.0]))
+        >>> dist.sample()
+        tensor([1., 2.])
+        >>> dist.log_prob(torch.tensor([1.0, 2.0])), dist.log_prob(torch.tensor([1.0, 3.0]))
+        (tensor(inf), tensor(-inf))
 
     """
 
