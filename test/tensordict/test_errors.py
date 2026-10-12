@@ -198,6 +198,17 @@ class TestErrorMessage:
             td.pop("zz")
 
     @staticmethod
+    @pytest.mark.parametrize("lazy", [False, True])
+    def test_pop_invalid_key(lazy):
+        td = TensorDict(a=torch.zeros(2), batch_size=[2])
+        if lazy:
+            td = LazyStackedTensorDict(td, td.clone())
+        with pytest.raises(KeyError, match=re.escape(_GENERIC_NESTED_ERR.format(()))):
+            td.pop(())
+        with pytest.raises(ValueError, match="'a' is a Tensor, not a tensordict"):
+            td.pop(("a", "b"), None)
+
+    @staticmethod
     @pytest.mark.parametrize(
         "shape,match",
         [

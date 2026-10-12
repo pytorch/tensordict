@@ -1095,6 +1095,46 @@ class TestNamedDims(TestTensorDictsBase):
         stacked = LazyStackedTensorDict.lazy_stack([td.prod(0, keepdim=True), td[:1]])
         assert stacked.to_tensordict().names == [None, *names]
 
+    @pytest.mark.parametrize(
+        "reduction", ["amax", "amin", "nansum", "nanmean", "std", "var", "quantile"]
+    )
+    def test_reduction_keepdim_no_dim_names(self, reduction):
+        # https://github.com/pytorch/tensordict/issues/2326: with no dim, keepdim=True
+        # keeps every batch dim, so every name
+        td = TensorDict(a=torch.rand(2, 3), batch_size=[2, 3], names=["x", "y"])
+        args = (0.5,) if reduction == "quantile" else ()
+        result = getattr(td, reduction)(*args, keepdim=True)
+        assert result.batch_size == torch.Size([1, 1])
+        assert result.names == ["x", "y"]
+
+    @pytest.mark.parametrize("reduction", ["amax", "amin", "max", "min"])
+    @pytest.mark.parametrize("dim", [0, 1, -1])
+    def test_reduction_dim_names(self, reduction, dim):
+        td = TensorDict(a=torch.rand(2, 3), batch_size=[2, 3], names=["x", "y"])
+        kept = [name for i, name in enumerate(td.names) if i != dim % 2]
+        result = getattr(td, reduction)(dim)
+        result_keepdim = getattr(td, reduction)(dim, keepdim=True)
+        if reduction in ("max", "min"):
+            for res in result:
+                assert res.names == kept
+            for res in result_keepdim:
+                assert res.names == ["x", "y"]
+        else:
+            assert result.names == kept
+            assert result_keepdim.names == ["x", "y"]
+            assert result_keepdim.batch_size == td.sum(dim, keepdim=True).batch_size
+
+    @pytest.mark.parametrize("reduction", ["cummax", "cummin"])
+    @pytest.mark.parametrize("dim", [0, 1, -1])
+    def test_cumulative_reduction_names(self, reduction, dim):
+        # cummax and cummin keep every batch dim, so every name
+        td = TensorDict(a=torch.rand(2, 3), batch_size=[2, 3], names=["x", "y"])
+        result = getattr(td, reduction)(dim)
+        for res in result:
+            assert res.batch_size == td.batch_size
+            assert res.names == ["x", "y"]
+        assert getattr(td, reduction)(dim, return_indices=False).names == ["x", "y"]
+
     def test_unsqueeze_td(self):
         td = self.unsqueezed_td("cpu")
         with pytest.raises(

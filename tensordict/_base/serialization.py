@@ -105,12 +105,13 @@ class _Serialization:
                 Defaults to ``True``.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> data = TensorDict({"1": 1, "2": 2, "3": {"3": 3}}, [])
             >>> sd = data.state_dict()
-            >>> print(sd)
-            OrderedDict([('1', tensor(1)), ('2', tensor(2)), ('3.3', tensor(3))])
-            >>> print(sd._metadata)
-            OrderedDict([('', {'batch_size': torch.Size([]), 'device': None}), ('3', {'batch_size': torch.Size([]), 'device': None})])
+            >>> print(dict(sd))
+            {'1': tensor(1), '2': tensor(2), '3.3': tensor(3)}
+            >>> print(dict(sd._metadata))
+            {'': {'batch_size': torch.Size([]), 'device': None}, '3': {'batch_size': torch.Size([]), 'device': None}}
 
         """
         if destination is None:
@@ -182,10 +183,11 @@ class _Serialization:
                 key comparison.
 
         Examples:
+            >>> from tensordict import TensorDict
             >>> data = TensorDict({"1": 1, "2": 2, "3": {"3": 3}}, [])
             >>> data_zeroed = TensorDict({"1": 0, "2": 0, "3": {"3": 0}}, [])
             >>> sd = data.state_dict()
-            >>> data_zeroed.load_state_dict(sd)
+            >>> _ = data_zeroed.load_state_dict(sd)
             >>> print(data_zeroed["3", "3"])
             tensor(3)
 
@@ -524,7 +526,12 @@ class _Serialization:
         pin_memory: bool = False,
         metadata: bool = False,
     ) -> None:
-        """Consolidates the tensordict content in a single storage for fast serialization.
+        """Copies all the leaves into one contiguous storage, and returns a tensordict of views of it.
+
+        A consolidated tensordict pickles and moves between devices faster,
+        because its leaves are one block of memory. The result is locked (see
+        :meth:`~.lock_`): you can write into its leaves in place, but you
+        cannot add or remove entries.
 
         Args:
             filename (Path, optional): an optional file path for a memory-mapped tensor
@@ -558,7 +565,7 @@ class _Serialization:
                 Defaults to ``False``.
             pin_memory (bool, optional): whether the consolidated data should be placed in pinned
                 memory. Defaults to ``False``.
-            metadata (bool, optional): if ``True``, the metadata will be stored alongisde the
+            metadata (bool, optional): if ``True``, the metadata will be stored alongside the
                 common storage. If a filename is provided, this is without effect.
                 Storing the metadata can be useful when one wants to control how serialization
                 is achieved, as TensorDict handles the pickling/unpickling of consolidated TDs
@@ -570,23 +577,20 @@ class _Serialization:
 
         Examples:
             >>> import pickle
-            >>> import tempfile
             >>> import torch
-            >>> import tqdm
-            >>> from torch.utils.benchmark import Timer
             >>> from tensordict import TensorDict
             >>> data = TensorDict({"a": torch.zeros(()), "b": {"c": torch.zeros(())}})
             >>> data_consolidated = data.consolidate()
-            >>> # check that the data has a single data_ptr()
+            >>> # All the leaves share one storage.
             >>> assert torch.tensor([
             ...     v.untyped_storage().data_ptr() for v in data_consolidated.values(True, True)
             ... ]).unique().numel() == 1
-            >>> # Serializing the tensordict will be faster with data_consolidated
-            >>> with open("data.pickle", "wb") as f:
-            ...    print("regular", Timer("pickle.dump(data, f)", globals=globals()).adaptive_autorange())
-            >>> with open("data_c.pickle", "wb") as f:
-            ...     print("consolidated", Timer("pickle.dump(data_consolidated, f)", globals=globals()).adaptive_autorange())
-
+            >>> data_consolidated.is_consolidated(), data_consolidated.is_locked
+            (True, True)
+            >>> # A consolidated tensordict pickles as one buffer.
+            >>> restored = pickle.loads(pickle.dumps(data_consolidated))
+            >>> (restored == data).all()
+            True
 
         """
         if self.is_consolidated():
@@ -1004,9 +1008,36 @@ class _Serialization:
         archive: bool | None = None,
         compression: str | int | None = None,
     ) -> Self:
-        """Saves the tensordict to disk.
+        """Saves the tensordict to disk, and returns a memory-mapped copy of it.
 
-        This function is a proxy to :meth:`~.memmap`.
+        ``save`` (and its alias ``dumps``) is :meth:`~.memmap`: it takes the
+        same arguments. ``self`` is not changed. Read the result back with
+        :meth:`~.load`. See :ref:`saving`.
+
+        Args:
+            prefix (str or Path): the directory where the tensordict is
+                written, one file per leaf. If ``prefix`` ends with ``".tdz"``
+                or ``archive=True``, a single archive file is written instead.
+
+        Keyword Args:
+            archive (bool, optional): if ``True``, write a single archive file.
+                Defaults to ``None``, which writes an archive if ``prefix``
+                ends with ``".tdz"``.
+            compression (str or int, optional): the compression of the
+                archive. See :meth:`~.memmap`.
+
+        All the other arguments are those of :meth:`~.memmap`.
+
+        Examples:
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3), nested=TensorDict(b=torch.ones(3), batch_size=[3]), batch_size=[3])
+            >>> with tempfile.TemporaryDirectory() as path:
+            ...     _ = td.save(path)
+            ...     loaded = TensorDict.load(path)
+            ...     print((loaded == td).all())
+            True
         """
         return self.memmap(
             prefix=prefix,
@@ -1184,7 +1215,10 @@ class _Serialization:
         robust_key: bool | None = True,
         archive: bool | None = None,
     ) -> Self:
-        """Creates a contentless Memory-mapped tensordict with the same shapes as the original one.
+        """Creates a memory-mapped tensordict with the same keys, shapes and dtypes, without copying the values.
+
+        The files are filled with zeros. Write the values into the result
+        afterwards, for example with :meth:`~.update_` or indexing.
 
         Args:
             prefix (str): directory prefix where the memory-mapped tensors will
@@ -1242,11 +1276,17 @@ class _Serialization:
             be slow for large content.
 
         Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
             >>> td = TensorDict({
             ...     "a": torch.zeros((3, 64, 64), dtype=torch.uint8),
             ...     "b": torch.zeros(1, dtype=torch.int64),
-            ... }, batch_size=[]).expand(1_000_000)  # expand does not allocate new memory
-            >>> buffer = td.memmap_like("/path/to/dataset")
+            ... }, batch_size=[]).expand(1_000)  # expand does not allocate new memory
+            >>> import tempfile
+            >>> with tempfile.TemporaryDirectory() as path:
+            ...     buffer = td.memmap_like(path)
+            ...     print(buffer.is_memmap(), buffer["a"].shape)
+            True torch.Size([1000, 3, 64, 64])
 
         """
         from tensordict.base import TensorDictBase
@@ -1274,7 +1314,10 @@ class _Serialization:
             # This archive was created by this process from the in-memory
             # object, so reloading its arbitrary non-tensor fields is trusted.
             return TensorDictBase.load_memmap(prefix, mode="r+", allow_pickle=True)
-        prefix = Path(prefix) if prefix is not None else self._memmap_prefix
+        # Without a prefix, the result lives in new anonymous memory: falling
+        # back to self._memmap_prefix would reopen the source's files.
+        if prefix is not None:
+            prefix = Path(prefix)
         if num_threads > 1:
             executor = _get_shared_executor(num_threads)
             futures = []
@@ -1320,9 +1363,16 @@ class _Serialization:
 
     @classmethod
     def load(cls, prefix: str | Path, *args, **kwargs) -> Self:
-        """Loads a tensordict from disk.
+        """Loads a tensordict that :meth:`~.save` or :meth:`~.memmap` wrote to disk.
 
-        This class method is a proxy to :meth:`~.load_memmap`.
+        ``load`` is :meth:`~.load_memmap`: it takes the same arguments,
+        including ``allow_pickle``, ``device`` and ``mode``. The leaves of the
+        result are memory-mapped tensors that read the files. See
+        :ref:`saving` and the example of :meth:`~.save`.
+
+        Args:
+            prefix (str or Path): the directory, or the ``".tdz"`` archive
+                file, to read.
         """
         return cls.load_memmap(prefix, *args, **kwargs)
 
@@ -1330,7 +1380,7 @@ class _Serialization:
     def load_(self, prefix: str | Path, *args, **kwargs):
         """Loads a tensordict from disk within the current tensordict.
 
-        This class method is a proxy to :meth:`~.load_memmap_`.
+        This method is a proxy to :meth:`~.load_memmap_`.
 
         .. deprecated:: 0.15
             Use :meth:`~.load_memmap_` instead.
@@ -1431,9 +1481,10 @@ class _Serialization:
                 a pickle sidecar do not require this option.
 
         Examples:
+            >>> import torch
             >>> from tensordict import TensorDict
             >>> td = TensorDict.fromkeys(["a", "b", "c", ("nested", "e")], 0)
-            >>> td.memmap("./saved_td")
+            >>> _ = td.memmap("./saved_td")
             >>> td_load = TensorDict.load_memmap("./saved_td")
             >>> assert (td == td_load).all()
 
@@ -1450,7 +1501,7 @@ class _Serialization:
             >>> import tempfile
             >>> td = TensorDict({"a": torch.zeros(()), "b": {"c": torch.zeros(())}})
             >>> with tempfile.TemporaryDirectory() as path:
-            ...     td.save(path)
+            ...     _ = td.save(path)
             ...     td_load = TensorDict.load_memmap(path, device="meta")
             ...     print("meta:", td_load)
             ...     from torch._subclasses import FakeTensorMode
@@ -1608,6 +1659,22 @@ class _Serialization:
         data into the existing storage, use
         ``td.update_(TensorDict.load_memmap(prefix, device=td.device))``
         instead.
+
+        Args:
+            prefix (str or Path): the directory, or the ``".tdz"`` archive
+                file, to read.
+            robust_key (bool, optional): the key encoding used when the data
+                was saved. See :meth:`~.memmap`. Defaults to ``True``.
+
+        Keyword Args:
+            allow_pickle (bool, optional): whether pickled non-tensor fields
+                may be loaded. Pickle can execute arbitrary code, so pass
+                ``True`` only for data from a trusted source and ``False``
+                for untrusted data. As in :meth:`~.load_memmap`, omitting
+                this option loads pickle with a ``FutureWarning`` in 0.14
+                and 0.15, and the default changes to ``False`` in 0.16.
+            mode (str, optional): the mode of the memory maps. See
+                :meth:`~.load_memmap`.
 
         See :meth:`~tensordict.TensorDictBase.load_memmap` for more info.
         """

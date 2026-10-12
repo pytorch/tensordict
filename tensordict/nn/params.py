@@ -48,6 +48,8 @@ from tensordict.utils import (
     _erase_cache_first,
     _lock_blocked,
     _LOCK_ERROR,
+    _UPDATE_IGNORE_LOCK_WARNED,
+    _warn_update_ignore_lock,
     _zip_strict,
     IndexType,
     is_batchedtensor,
@@ -304,20 +306,25 @@ def _apply_on_data(func):
 
 
 class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc,attr-defined]
-    r"""A Wrapper for TensorDictBase with Parameter Exposure.
+    r"""A TensorDict whose entries are registered as the parameters and buffers of an :class:`~torch.nn.Module`.
 
-    This class is designed to hold a `TensorDictBase` instance that contains parameters, making them accessible to a
-    parent :class:`~torch.nn.Module`. This allows for seamless integration of tensordict parameters into PyTorch modules,
-    enabling operations like parameter iteration and optimization.
+    Use it to keep a TensorDict of parameters on a module, for example the
+    stacked weights of an ensemble or a copy of the weights for a target
+    network. A plain TensorDict attribute is not seen by ``module.parameters()``,
+    ``module.state_dict()`` or ``module.to()``. A TensorDictParams attribute is
+    seen by all three, so an optimizer can train its entries.
 
-    Key Features:
+    A TensorDictParams behaves like the TensorDict that it wraps. You can index
+    it, set entries, and call :meth:`~tensordict.TensorDictBase.to_module` to
+    load the values into a module. :meth:`named_parameters` names each entry
+    by its nested key joined with ``"."``, for example ``"0.weight"``, as
+    :class:`~torch.nn.Module` does.
 
-    - Parameter Exposure: Parameters within the tensordict are exposed to the parent module, allowing them to be included
-      in operations like `named_parameters()`.
-    - Indexing: Indexing works similarly to the wrapped tensordict. However, parameter names (in :meth:`~.named_parameters`) are registered using
-      `TensorDict.flatten_keys("_")`, which may result in different key names compared to the tensordict content.
-    - Automatic Conversion: Any tensor set in the tensordict is automatically converted to a :class:`torch.nn.Parameter`,
-      unless specified otherwise through the :attr:`no_convert` keyword argument.
+    When you set an entry, float16, float32 and float64 tensors become
+    :class:`~torch.nn.Parameter`. Tensors of all other dtypes (including
+    bfloat16, complex and bool) become buffers. An optimizer built from
+    ``parameters()`` therefore does not see bfloat16 entries. Pass
+    ``no_convert=True`` to register all tensors as buffers.
 
     Args:
         parameters (TensorDictBase or dict): The tensordict to represent as parameters. Values are converted to
@@ -327,25 +334,34 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     Keyword Args:
         no_convert (bool): If `True`, no conversion to `nn.Parameter` occurs and all non-parameter, non-buffer tensors
             will be converted to a :class:`~torch.nn.Buffer` instance.
-            If ``False``, all tensors with non-integer dtypes will be converted to :class:`~torch.nn.Parameter`
-            whereas integer dtypes will be converted to :class:`~torch.nn.Buffer` instances.
+            If ``False``, float16, float32 and float64 tensors are converted to
+            :class:`~torch.nn.Parameter`, and tensors of all other dtypes to
+            :class:`~torch.nn.Buffer` instances. Tensors that already are
+            parameters or buffers stay as they are.
             Defaults to `False`.
         lock (bool): If `True`, the tensordict hosted by `TensorDictParams` is locked, preventing modifications and
             potentially impacting performance when `unlock_()` is required.
             Defaults to `False`.
 
-            .. warning:: Because the inner tensordict isn't copied or locked by default, registering the tensordict
-                in a ``TensorDictParams`` and modifying its content afterwards will __not__ update the values within
-                the  ``TensorDictParams`` :meth:`.parameters` and :meth:`~.buffers` sequences.
+            .. warning:: TensorDictParams wraps the TensorDict that you pass,
+                without a copy, and turns its leaves into parameters and
+                buffers in place. It registers the leaves that are present at
+                construction. If you later add or replace an entry of the
+                original TensorDict, indexing the TensorDictParams shows the
+                new value, but :meth:`.parameters` and :meth:`~.buffers` keep
+                the old one. Write through the TensorDictParams, or pass
+                ``lock=True``.
 
         **kwargs: Key-value pairs to populate the `TensorDictParams`. Exclusive with the `parameters` input.
 
     Examples:
+        >>> import torch
         >>> from torch import nn
         >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictParams
         >>> module = nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 4))
         >>> params = TensorDict.from_module(module)
-        >>> params.lock_()
+        >>> _ = params.lock_()
         >>> p = TensorDictParams(params)
         >>> print(p)
         TensorDictParams(params=TensorDict(
@@ -372,9 +388,15 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         ...         super().__init__()
         ...         self.params = params
         >>> m = CustomModule(p)
+        >>> [name for name, _ in m.named_parameters()]
+        ['params.0.weight', 'params.0.bias', 'params.1.weight', 'params.1.bias']
         >>> # The wrapper supports assignment, and values are converted to Parameters
         >>> m.params['other'] = torch.randn(3)
         >>> assert isinstance(m.params['other'], nn.Parameter)
+        >>> # A bfloat16 entry becomes a buffer
+        >>> m.params['half'] = torch.zeros(3, dtype=torch.bfloat16)
+        >>> [name for name, _ in m.named_buffers()]
+        ['params.half']
 
     """
 
@@ -475,7 +497,13 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         return iter(self._param_td)
 
     def register_get_post_hook(self, hook):
-        """Register a hook to be called after any get operation on leaf tensors."""
+        """Register a hook to be called after any get operation on leaf tensors.
+
+        Args:
+            hook (Callable): called as ``hook(tensordict_params, value)``
+                after each read of a leaf. If it returns a value other than
+                ``None``, that value replaces the one read.
+        """
         if not callable(hook):
             raise ValueError("Hooks must be callables.")
         self._get_post_hook.append(hook)
@@ -566,6 +594,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         update_batch_size: bool = False,
         ignore_lock: bool = False,
     ) -> TensorDictBase:
+        if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
+            _warn_update_ignore_lock(stacklevel=3)
         # Deprecating this since _set_tuple will do it thx to the decorator
         # if not self.no_convert:
         #     func = _maybe_make_param
@@ -782,8 +812,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
         return TensorDictParams(self._param_td.apply(_clone), no_convert="skip")
 
+    # Override: TensorDict._chunk is faster than the generic split
     @_fallback
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]: ...
+    def _chunk(self, chunks: int, dim: int) -> tuple[TensorDictBase, ...]: ...
 
     @_fallback
     def _unbind(self, dim: int) -> tuple[TensorDictBase, ...]: ...
@@ -917,6 +948,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback_property
     def batch_size(self) -> torch.Size: ...
 
+    # Override: forwards to _param_td so that results keep their nn.Parameters.
     @_fallback
     def contiguous(self, *args, **kwargs): ...
 
@@ -924,6 +956,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_unlock_and_set
     def del_(self, *args, **kwargs): ...
 
+    # Override: forwards to _param_td so that results keep their nn.Parameters.
     @_fallback
     def detach_(self, *args, **kwargs): ...
 
@@ -933,6 +966,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback
     def entry_class(self, *args, **kwargs): ...
 
+    # Override: forwards to _param_td.
     @_fallback
     def is_contiguous(self, *args, **kwargs): ...
 
@@ -995,6 +1029,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback_property
     def names(self): ...
 
+    # Override: forwards to _param_td; in-place pinning would replace the parameters.
     def pin_memory(self, *args, **kwargs):
         if kwargs.get("inplace", False):
             raise RuntimeError(
@@ -1005,28 +1040,29 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_unlock_and_set
     def _select(self, *args, **kwargs): ...
 
+    # Override: shares the parameters of _param_td in place.
     @_fallback
     def share_memory_(self, *args, **kwargs): ...
 
-    @property
-    def is_locked(self) -> bool:
-        # Cannot be locked
-        return self._is_locked
-
-    @is_locked.setter
+    # Override: setting the flag does not lock the parameters.
+    @TensorDictBase.is_locked.setter
     def is_locked(self, value):
         self._is_locked = bool(value)
 
+    # Override: the flag lives on _param_td.
     @_fallback_property
     def is_shared(self) -> bool: ...
 
+    # Override: the flag lives on _param_td.
     @_fallback_property
     def is_memmap(self) -> bool: ...
 
+    # Override: the flag lives on _param_td.
     @property
     def _is_shared(self) -> bool:
         return self._param_td._is_shared
 
+    # Override: the flag lives on _param_td.
     @property
     def _is_memmap(self) -> bool:
         return self._param_td._is_memmap
@@ -1034,6 +1070,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback_property
     def shape(self) -> torch.Size: ...
 
+    # Override: locks _param_td only if it is not locked already.
     def _propagate_lock(self, _lock_parents_weakrefs=None, *, is_compiling):
         """Registers the parent tensordict that handles the lock."""
         self._is_locked = True
@@ -1048,6 +1085,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 _lock_parents_weakrefs, is_compiling=is_compiling
             )
 
+    # Override: unlocks _param_td only if the parameters' lock is not kept.
     @_erase_cache_first
     def _propagate_unlock(self):
         # if we end up here, we can clear the graph associated with this td
@@ -1351,7 +1389,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_apply_on_data
     def _stack_onto_at_(
         self,
-        key: NestedKey,
         list_item: list[CompatibleType],
         dim: int,
         idx: IndexType,

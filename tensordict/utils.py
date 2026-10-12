@@ -39,7 +39,7 @@ import numpy as np
 import torch
 from pyvers import implement_for  # noqa: F401
 from tensordict import _indexing, _utils_key_json
-from tensordict._deprecation import deprecated_attributes
+from tensordict._deprecation import deprecated_attributes, warn_deprecated
 from tensordict._indexing import _getitem_batch_size  # noqa: F401
 from tensordict._nestedkey import NestedKey
 from torch import Tensor
@@ -292,6 +292,8 @@ def expand_as_right(
          a tensor with shape matching the dest input tensor shape.
 
     Examples:
+        >>> import torch
+        >>> from tensordict.utils import expand_as_right
         >>> tensor = torch.zeros(3,4)
         >>> dest = torch.zeros(3,4,5)
         >>> print(expand_as_right(tensor, dest).shape)
@@ -329,6 +331,8 @@ def expand_right(tensor: Tensor, shape: Sequence[int]) -> Tensor:
          a tensor with shape matching the target shape.
 
     Examples:
+        >>> import torch
+        >>> from tensordict.utils import expand_right
         >>> tensor = torch.zeros(3,4)
         >>> shape = (3,4,5)
         >>> print(expand_right(tensor, shape).shape)
@@ -487,13 +491,16 @@ def _set_item(
     from tensordict.tensorclass import NonTensorData, NonTensorStack
 
     if is_non_tensor(tensor):
-        if (
-            isinstance(value, NonTensorData)
-            and isinstance(tensor, NonTensorData)
-            and tensor.data == value.data
-        ):
-            return tensor
-        elif isinstance(tensor, NonTensorData):
+        if isinstance(value, NonTensorData) and isinstance(tensor, NonTensorData):
+            try:
+                is_same = bool(tensor.data == value.data)
+            except Exception:
+                # Arrays, tensors and data frames compare elementwise, and the
+                # result has no single truth value: write the value anyway.
+                is_same = False
+            if is_same:
+                return tensor
+        if isinstance(tensor, NonTensorData):
             tensor = NonTensorStack._from_nontensordata(tensor)
         if tensor.stack_dim != 0:
             tensor = NonTensorStack(*tensor.unbind(0), stack_dim=0)
@@ -505,7 +512,28 @@ def _set_item(
 
 
 class timeit:
-    """A dirty but easy to use decorator for profiling code."""
+    """Measures the time spent in a function or a block of code, by name.
+
+    Use it as a decorator or as a context manager. Each name accumulates
+    its call count, its total time and its mean time.
+    :meth:`timeit.print` logs them with the tensordict logger, and
+    :meth:`timeit.erase` resets them.
+
+    Args:
+        name (str): the name under which the time is recorded.
+
+    Examples:
+        >>> from tensordict.utils import timeit
+        >>> @timeit("step")
+        ... def step():
+        ...     return 1
+        >>> _ = step()
+        >>> with timeit("block"):
+        ...     _ = step()
+        >>> timeit.print()  # logs "block took ... msec" and "step took ... msec"
+        >>> timeit.erase()
+
+    """
 
     _REG = {}
 
@@ -778,6 +806,42 @@ def _lock_blocked(func):
         return func(self, *args, **kwargs)
 
     return new_func
+
+
+class _UpdateIgnoreLockWarned:
+    """The type of :data:`_UPDATE_IGNORE_LOCK_WARNED`."""
+
+    __slots__ = ()
+
+    def __bool__(self) -> bool:
+        return True
+
+    def __repr__(self) -> str:
+        return "_UPDATE_IGNORE_LOCK_WARNED"
+
+
+# A truthy ``ignore_lock`` value. A public ``update`` method that warns about
+# ``ignore_lock=True`` passes it down instead of ``True``, so that the nested
+# ``update`` calls behave the same but do not warn again.
+_UPDATE_IGNORE_LOCK_WARNED = _UpdateIgnoreLockWarned()
+
+
+def _warn_update_ignore_lock(stacklevel: int = 2) -> _UpdateIgnoreLockWarned:
+    """Warns that ``update(ignore_lock=True)`` is deprecated.
+
+    Call it from a public ``update`` method only when ``ignore_lock`` is truthy
+    and is not :data:`_UPDATE_IGNORE_LOCK_WARNED`, and pass the returned value
+    down as ``ignore_lock``. ``stacklevel`` counts as in :func:`warnings.warn`
+    from that ``update`` method: ``2`` points to its caller, ``3`` to the
+    caller of a decorated ``update``.
+    """
+    warn_deprecated(
+        "update(ignore_lock=True)",
+        removal="0.17",
+        replacement="'with td.unlock_(): td.update(...)'",
+        stacklevel=stacklevel + 1,
+    )
+    return _UPDATE_IGNORE_LOCK_WARNED
 
 
 def _strong_ref(obj):
@@ -2194,6 +2258,9 @@ def isin(
             the ``input`` ``key`` tensor that are also present in the ``reference``.
 
     Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.utils import isin
         >>> td = TensorDict(
         ...     {
         ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
@@ -2293,7 +2360,10 @@ def remove_duplicates(
         unique_indices (torch.Tensor, optional): The indices of the first occurrences of the unique elements in the
             input tensordict for the specified `key` along the specified `dim`. Only provided if `return_indices` is True.
 
-    Example:
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.utils import remove_duplicates
         >>> td = TensorDict(
         ...     {
         ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
@@ -2649,6 +2719,7 @@ def unravel_key(key):
     ``()``. A key that is neither a str nor a tuple raises a ``RuntimeError``.
 
     Examples:
+        >>> from tensordict import unravel_key
         >>> unravel_key("a")
         'a'
         >>> unravel_key(("a",))
@@ -2692,7 +2763,24 @@ def _unravel_keys(*keys):
 
 
 def unravel_key_list(keys):
-    """Unravels a list of keys."""
+    """Unravels every key of a list, as :func:`~tensordict.unravel_key` does.
+
+    Args:
+        keys (list or tuple of NestedKey): the keys to unravel.
+
+    Returns:
+        a list of keys: strings, or flat tuples of strings.
+
+    Raises:
+        TypeError: if ``keys`` is not a list or a tuple.
+        RuntimeError: if a key is not a valid nested key.
+
+    Examples:
+        >>> from tensordict import unravel_key_list
+        >>> unravel_key_list(["a", ("b",), ("c", ("d",))])
+        ['a', 'b', ('c', 'd')]
+
+    """
     if not isinstance(keys, (list, tuple)):
         # pybind11's wording when this was a C++ function, which TorchRL's
         # tests match.
@@ -3136,7 +3224,23 @@ from tensordict._utils_key_json import _json_dumps  # noqa: F401
 
 
 class LinkedList(list):
-    """A thin wrapper around a list that automatically updates a tensordict when the list is modified."""
+    """A list of the values of a non-tensor entry that writes item assignments back to the tensordict.
+
+    ``td[key]`` returns a :class:`LinkedList` when the entry is a
+    :class:`~tensordict.NonTensorStack`. Setting an item
+    (``values[0] = "z"``) writes the value to the tensordict. ``append`` and
+    ``extend`` change the list only, and unlink it from the tensordict.
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> td = TensorDict(batch_size=[3])
+        >>> td["names"] = ["a", "b", "c"]
+        >>> values = td["names"]
+        >>> values[0] = "z"
+        >>> td.get("names").tolist()
+        ['z', 'b', 'c']
+
+    """
 
     def __init__(self, *args, td: TensorDictBase, **kwargs):
         super().__init__(*args, **kwargs)

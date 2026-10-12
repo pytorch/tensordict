@@ -32,6 +32,8 @@ VMAP_TD_OPS = {
     "mul": lambda t: t * 2,
     "add": lambda t: t + t,
     "rsub": lambda t: 1 - t,
+    "rsub_alpha": lambda t: t.rsub(t.exp(), alpha=2),
+    "rsub_scalar_alpha": lambda t: t.rsub(1.0, alpha=2),
     "neg": lambda t: -t,
     "exp": lambda t: t.exp(),
     "maximum": lambda t: t.maximum(t.exp()),
@@ -503,6 +505,33 @@ class TestPyTree(TestTensorDictsBase):
             out = tree_map(fn, td)
             assert out.get("s").batch_size == out.batch_size
             assert out.get_non_tensor("s") == "a string"
+
+    def test_pytree_non_tensor_stack_distinct(self):
+        # A NonTensorStack whose values are not all equal comes back as the
+        # leaf it was flattened to (#2123).
+        def make():
+            td = TensorDict(a=torch.zeros(4, 3), batch_size=[4])
+            td.set("s", NonTensorStack(*"abcd"))
+            td.set("n", td.clone())
+            return td
+
+        td = make()
+        out = tree_unflatten(*tree_flatten(td))
+        for key in ("s", ("n", "s")):
+            assert isinstance(out.get(key), NonTensorStack)
+            assert out.get(key).batch_size == torch.Size([4])
+            assert out.get(key).tolist() == list("abcd")
+        out = tree_map(lambda x: x + 1, td)
+        assert out.get(("n", "s")).tolist() == list("abcd")
+        assert (out["a"] == 1).all()
+        out = tree_map(lambda x, y: x, td, make())
+        assert out.get("s").tolist() == list("abcd")
+        out = tree_map(lambda x: x[:2], td)
+        assert out.batch_size == torch.Size([2])
+        assert out.get("s").tolist() == ["a", "b"]
+        out = tree_map(lambda x: x[0], td)
+        assert out.batch_size == torch.Size([])
+        assert out.get_non_tensor("s") == "a"
 
 
 # The names that ``from tensordict._pytree import *`` used to copy into the
