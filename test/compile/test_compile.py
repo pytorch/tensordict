@@ -3099,6 +3099,34 @@ class TestTCDefaultsCompile:
         assert _NoneDefaultTC(x=inp).y is None
         assert fn(inp) is None
 
+    def test_from_dict_and_update_under_compile(self):
+        # from_dict() checks the fields with a default (#2079) without
+        # breaking the graph, and a compiled call does not warn.
+        @tensorclass
+        class WithDefaults:
+            a: torch.Tensor
+            s: str = "hi"
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def from_dict(x, full):
+            if full:
+                return WithDefaults.from_dict({"a": x, "s": "q"}, batch_size=[3])
+            return WithDefaults.from_dict({"a": x}, batch_size=[3])
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def update(c, x):
+            c.update({"a": x})
+            return c
+
+        inp = torch.ones(3)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            assert from_dict(inp, True).s == "q"
+            assert from_dict(inp, False).s is None
+            c = update(WithDefaults(a=torch.zeros(3), s="q", batch_size=[3]), inp)
+        assert (c.a == 1).all()
+        assert c.s == "q"
+
 
 class TestTCCustomInitCompile:
     """A user-defined __init__ runs under torch.compile (gh-1822)."""

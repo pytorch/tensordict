@@ -1027,6 +1027,7 @@ _TENSORCLASS_MEMBER_NAMES = frozenset(dir(TensorDict)).union(
         "fields",
         "from_tensordict",
         "_autocast",
+        "_from_dict_defaults",
         "_from_tensordict",
         "_frozen",
         "_is_tensorclass",
@@ -1233,6 +1234,18 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     expected_keys = cls.__expected_keys__ = {
         field.name for field in dataclasses.fields(cls)
     }
+    # The fields that from_dict() will fill with their defaults in 0.17. A
+    # non-tensor class keeps the input of from_dict() as its data.
+    cls._from_dict_defaults = (
+        ()
+        if _is_non_tensor
+        else tuple(
+            field.name
+            for field in dataclasses.fields(cls)
+            if field.default_factory is not dataclasses.MISSING
+            or (field.default is not dataclasses.MISSING and field.default is not None)
+        )
+    )
 
     if not shadow:
         for attr in expected_keys:
@@ -3645,18 +3658,9 @@ def _from_dict_public(
         batch_dims (int, optional): the number of batch dimensions to infer.
     """
     keys = {key[0] if isinstance(key, tuple) else key for key in input_dict}
-    # A non-tensor class keeps input_dict as its data and fills no field.
-    fields = () if issubclass(cls, NonTensorDataBase) else dataclasses.fields(cls)
-    missing = [
-        field.name
-        for field in fields
-        if field.name not in keys
-        and (
-            field.default_factory is not dataclasses.MISSING
-            or (field.default is not dataclasses.MISSING and field.default is not None)
-        )
-    ]
-    if missing:
+    missing = [name for name in cls._from_dict_defaults if name not in keys]
+    # Dynamo cannot trace warnings.warn: a compiled call stays silent.
+    if missing and not is_compiling():
         warnings.warn(
             f"{cls.__name__}.from_dict() sets the fields {missing} that the input "
             "misses to None, not to their declared defaults. Starting with "
@@ -3679,10 +3683,14 @@ def _from_dict_public(
 def _from_dict_for_update(cls, input_dict, **kwargs):
     # The update methods keep the fields that input_dict misses, so the
     # defaults that from_dict() fills in 0.17 do not concern them: skip its
-    # warning, unless the class defines its own from_dict().
-    if getattr(cls.from_dict, "__func__", None) is _from_dict_public:
+    # warning, unless the class defines its own from_dict(). Dynamo traces
+    # this attribute read, not an identity check on cls.from_dict.__func__.
+    if getattr(cls.from_dict, "_tc_default_from_dict", False):
         return _from_dict(cls, input_dict, **kwargs)
     return cls.from_dict(input_dict, **kwargs)
+
+
+_from_dict_public._tc_default_from_dict = True
 
 
 def _from_dict_instance(
@@ -4643,6 +4651,7 @@ def _patch_tc(cls):
     cls._new_unsafe = classmethod(_new_unsafe)
     cls._load_memmap = classmethod(_load_memmap)
     cls.from_dict = classmethod(_from_dict_public)
+    cls._from_dict_defaults = ()
 
     cls.set = _set
     cls.get = _get
