@@ -13,6 +13,7 @@ import math
 import os
 import queue
 import re
+import sys
 import threading
 import time
 import warnings
@@ -3144,6 +3145,30 @@ def _maybe_correct_neg_dim(
             f"Incompatible dim {new_dim} for tensordict with batch dims {ndim}."
         )
     return new_dim
+
+
+# tensordict, and torch, whose torch function modes (such as the one of
+# torch.set_default_device) can call tensordict's torch.stack and torch.cat
+_LIBRARY_DIRS = (
+    os.path.dirname(os.path.abspath(__file__)) + os.sep,
+    os.path.dirname(os.path.abspath(torch.__file__)) + os.sep,
+)
+
+
+def _warn_dim_past_batch_dims(op: str) -> None:
+    """Warns that ``op`` got a dim outside the batch dims, which raises from 0.17 (#2148)."""
+    # point to the first frame outside tensordict and torch: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_LIBRARY_DIRS):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    warnings.warn(
+        f"{op} got a dim outside the batch dims, and uses it on the dims of "
+        "the leaves instead. Starting with TensorDict 0.17, the default will "
+        "change to raising an IndexError, as torch does for a tensor of the "
+        "batch size.",
+        FutureWarning,
+        stacklevel=stacklevel,
+    )
 
 
 # Check if the new shape is a flatten / unflatten version of the current one

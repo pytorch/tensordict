@@ -212,7 +212,10 @@ def stack(input: Sequence["T"], dim: int = 0, *, out=None) -> "T":
     Args:
         input (sequence of TensorDictBase or tensorclass instances): the
             tensordicts to stack.
-        dim (int, optional): the new dimension. Defaults to ``0``.
+        dim (int, optional): the new dimension. Defaults to ``0``. A ``dim`` outside
+            ``[-batch_dims - 1, batch_dims]`` warns, and is used on the dims
+            of the leaves. Starting with TensorDict 0.17, the default will
+            change to raising an ``IndexError``, as for a tensor.
 
     Keyword Args:
         out (TensorDictBase, optional): a tensordict to write the result
@@ -301,7 +304,10 @@ def cat(input: Sequence["T"], dim: int = 0, *, out=None) -> "T":
         input (sequence of TensorDictBase or tensorclass instances): the
             tensordicts to concatenate.
         dim (int, optional): the batch dimension to concatenate along.
-            Defaults to ``0``.
+            Defaults to ``0``. A ``dim`` below ``-batch_dims`` warns, and is
+            used on the dims of the leaves. Starting with TensorDict 0.17,
+            the default will change to raising an ``IndexError``, as for a
+            tensor.
 
     Keyword Args:
         out (TensorDictBase, optional): a tensordict to write the result
@@ -341,7 +347,10 @@ def maybe_dense_stack(input: Sequence["T"], dim: int = 0, *, out=None, **kwargs)
     Args:
         input (sequence of TensorDictBase or tensorclass instances): the
             tensordicts to stack.
-        dim (int, optional): the new dimension. Defaults to ``0``.
+        dim (int, optional): the new dimension. Defaults to ``0``. A ``dim`` outside
+            ``[-batch_dims - 1, batch_dims]`` warns, and is used on the dims
+            of the leaves. Starting with TensorDict 0.17, the default will
+            change to raising an ``IndexError``, as for a tensor.
 
     Keyword Args:
         out (TensorDictBase, optional): a tensordict to write the result

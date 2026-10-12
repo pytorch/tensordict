@@ -3662,6 +3662,90 @@ class TestGeneric:
         )
         assert (out == ref).all()
 
+    @pytest.mark.parametrize(
+        "op",
+        [
+            "repeat_interleave",
+            "flatten",
+            "stack",
+            "stack_wraps",
+            "maybe_dense_stack",
+            "cat",
+            "cat_lazy",
+        ],
+    )
+    def test_dim_past_batch_dims_warns(self, op):
+        # A dim outside the batch dims is used on the dims of the leaves. It
+        # warns, and will raise an IndexError in 0.17, as for a tensor (#2148).
+        td = TensorDict({"a": torch.arange(24.0).view(2, 3, 4)}, [2, 3])
+        x = td["a"]
+        tds = list(td.unbind(0))  # batch size [3], leaves [3, 4]
+        lazy = lazy_stack(tds)
+        # leaves that make valid results, which TD_CHECK_INVARIANTS accepts
+        y = torch.arange(12.0).view(2, 3, 2)
+        tds_y = list(TensorDict({"a": y}, [2, 3]).unbind(0))  # leaves [3, 2]
+        z = torch.arange(6.0).view(2, 3)
+        tds_z = list(TensorDict({"a": z}, [2, 3]).unbind(0))  # leaves [3]
+        # op: (call with a dim outside the batch dims, its batch size and leaf
+        # today, the same op with dims inside the batch dims)
+        calls = {
+            "repeat_interleave": (
+                lambda: td.repeat_interleave(2, dim=2),
+                (2, 3),
+                x.repeat_interleave(2, dim=2),
+                lambda: td.repeat_interleave(2, dim=-2),
+            ),
+            "flatten": (
+                lambda: td.flatten(0, 2),
+                (6,),
+                x.flatten(0, 2),
+                lambda: td.flatten(-2, -1),
+            ),
+            "stack": (
+                lambda: torch.stack(tds_y, 2),
+                (3, 2),
+                torch.stack([y[0], y[1]], 2),
+                lambda: torch.stack(tds_y, -2),
+            ),
+            "stack_wraps": (
+                lambda: torch.stack(tds, -5),
+                (2, 3),
+                x,
+                lambda: torch.stack(tds, 1),
+            ),
+            "maybe_dense_stack": (
+                lambda: LazyStackedTensorDict.maybe_dense_stack(tds, -5),
+                (2, 3),
+                x,
+                lambda: LazyStackedTensorDict.maybe_dense_stack(tds, -1),
+            ),
+            "cat": (
+                lambda: torch.cat(tds_z, -2),
+                (6,),
+                torch.cat([z[0], z[1]]),
+                lambda: torch.cat(tds_z, -1),
+            ),
+            "cat_lazy": (
+                lambda: torch.cat([lazy, lazy], -3),
+                (2, 6),
+                torch.cat([x, x], 1),
+                lambda: torch.cat([lazy, lazy], -1),
+            ),
+        }
+        call, batch_size, leaf, in_range = calls[op]
+        with pytest.warns(
+            FutureWarning,
+            match="Starting with TensorDict 0.17, the default will change to "
+            "raising an IndexError",
+        ) as record:
+            out = call()
+        assert record[0].filename == __file__
+        assert out.batch_size == batch_size
+        assert torch.equal(out["a"], leaf)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            in_range()
+
     @pytest.mark.parametrize("inplace", [True, False])
     def test_roll_inplace(self, inplace):
         td = self._build_nested_td()

@@ -27,6 +27,7 @@ from tensordict.utils import (
     _is_unbatched,
     _pass_through,
     _shape,
+    _warn_dim_past_batch_dims,
     _zip_strict,
     DeviceType,
     is_non_tensor,
@@ -473,6 +474,8 @@ def _cat(
             f"={dim} and batch_size={batch_size}"
         )
     batch_size[dim] = sum([td.batch_size[dim] for td in list_of_tensordicts])
+    if dim < 0:
+        _warn_dim_past_batch_dims("cat")
     batch_size = TensorDict._parse_batch_size(None, batch_size)
 
     # check that all tensordict match
@@ -600,6 +603,8 @@ def _lazy_cat(
             )
 
     batch_size[dim] = sum(td.batch_size[dim] for td in list_of_tensordicts)
+    if dim < 0:
+        _warn_dim_past_batch_dims("cat")
     batch_size = torch.Size(batch_size)
 
     new_dim = dim
@@ -734,6 +739,8 @@ def _stack(
     batch_size = list_of_tensordicts[0].batch_size
     if dim < 0:
         dim = len(batch_size) + dim + 1
+    if not 0 <= dim <= len(batch_size):
+        _warn_dim_past_batch_dims("stack")
 
     # check that all tensordict match
     # Read lazy_legacy
