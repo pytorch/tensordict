@@ -5803,8 +5803,10 @@ class TestTensorOnly:
         x.c = 3
         assert x.c == 3
         assert isinstance(x.c, torch.Tensor)
+        # A deleted field is None, as one that was never set
         delattr(x, "c")
-        assert not hasattr(x, "c")
+        assert x.c is None
+        assert x.to_dict()["c"] is None
 
     def test_tensor_only_assign_none(self):
         # Assigning None clears a field that holds a tensor, as set() does.
@@ -5823,6 +5825,176 @@ class TestTensorOnly:
             x.c = None
         assert (x.c == 1).all()
         assert (x.to_dict()["c"] == 1).all()
+
+    @staticmethod
+    def _check_none_is_missing_key(x, key):
+        # A None field of a tensor_only instance is a key missing from its
+        # TensorDict, and _non_tensordict holds no placeholder for it
+        assert getattr(x, key) is None
+        assert key not in x._tensordict.keys()
+        assert key not in x._non_tensordict
+
+    def test_tensor_only_none_is_missing_key(self):
+        x = self.TensorOnly(torch.zeros(3), torch.zeros(3), batch_size=[3])
+        y = self.TensorOnly(
+            torch.zeros(3), torch.zeros(3), torch.ones(3), batch_size=[3]
+        )
+        y.c = None
+        z = self.TensorOnly(
+            torch.zeros(3), torch.zeros(3), torch.ones(3), batch_size=[3]
+        )
+        z.set("c", None)
+        results = [
+            x,
+            y,
+            z,
+            x.clone(),
+            x[0],
+            x[:2],
+            torch.stack([x, x]),
+            lazy_stack([x, x]),
+            x.to("cpu"),
+            x.apply(lambda v: v + 1),
+            x.exclude("a"),
+            x.select("a", "b"),
+            x.unbind(0)[0],
+            pickle.loads(pickle.dumps(x)),
+            self.TensorOnly.from_tensordict(
+                TensorDict(a=torch.zeros(3), b=torch.zeros(3), batch_size=[3])
+            ),
+        ]
+        for result in results:
+            self._check_none_is_missing_key(result, "c")
+        # The outputs list the None field, as they did with a placeholder
+        assert x.to_dict()["c"] is None
+        assert "c=None" in repr(x)
+        assert x.non_tensor_items() == [("c", None)]
+        assert x.state_dict()._metadata[""]["_non_tensor"] == {"c": None}
+        assert isinstance(x.to_tensordict(retain_none=True).get("c"), NonTensorData)
+        assert "c" not in x.to_tensordict(retain_none=False).keys()
+        td = TensorDict(
+            a=torch.zeros(3), b=torch.zeros(3), c=torch.ones(3), batch_size=[3]
+        )
+        assert (x == td).all()
+        assert not (x != td).any()
+
+    def test_tensor_only_del_none(self):
+        # A deleted field is None, whatever it held before
+        x = self.TensorOnly(
+            torch.zeros(3), torch.zeros(3), torch.ones(3), batch_size=[3]
+        )
+        x.del_("c")
+        self._check_none_is_missing_key(x, "c")
+        x.del_("c")
+        self._check_none_is_missing_key(x, "c")
+        y = self.TensorOnly(torch.zeros(3), torch.zeros(3), batch_size=[3])
+        y.del_("c")
+        self._check_none_is_missing_key(y, "c")
+        with pytest.raises(KeyError):
+            y.del_("d")
+
+    def test_tensor_only_dict_none(self):
+        # from_dict and update read a None value as None, as a regular class does
+        x = self.TensorOnly.from_dict(
+            {"a": torch.zeros(3), "b": torch.zeros(3), "c": None}, batch_size=[3]
+        )
+        self._check_none_is_missing_key(x, "c")
+        y = self.TensorOnly.from_dict(x.to_dict(), batch_size=[3])
+        self._check_none_is_missing_key(y, "c")
+        for update in (
+            lambda z: z.update({"c": None}),
+            lambda z: z.update(c=None),
+            lambda z: z.update_at_({"c": None}, 0),
+        ):
+            z = self.TensorOnly(
+                torch.zeros(3), torch.zeros(3), torch.ones(3), batch_size=[3]
+            )
+            update(z)
+            self._check_none_is_missing_key(z, "c")
+        # keys_to_update still selects the entries
+        z = self.TensorOnly(
+            torch.zeros(3), torch.zeros(3), torch.ones(3), batch_size=[3]
+        )
+        z.update({"a": torch.ones(3), "c": None}, keys_to_update=["a"])
+        assert (z.a == 1).all()
+        assert (z.c == 1).all()
+
+    def test_tensor_only_lazy_stack_none(self):
+        x = self.TensorOnly(
+            torch.zeros(3), torch.zeros(3), torch.ones(3), batch_size=[3]
+        )
+        y = self.TensorOnly(torch.zeros(3), torch.zeros(3), batch_size=[3])
+        # Building the stack leaves its inputs as they are
+        stack = lazy_stack([x, y])
+        assert isinstance(x.to_dict()["c"], torch.Tensor)
+        assert x._non_tensordict == {}
+        assert stack[1].c is None
+        # Setting None clears the field in every member
+        for clear in (
+            lambda s: setattr(s, "c", None),
+            lambda s: s.set("c", None),
+            lambda s: s.del_("c"),
+        ):
+            x = self.TensorOnly(
+                torch.zeros(3), torch.zeros(3), torch.ones(3), batch_size=[3]
+            )
+            y = self.TensorOnly(
+                torch.zeros(3), torch.zeros(3), torch.ones(3), batch_size=[3]
+            )
+            stack = lazy_stack([x, y])
+            clear(stack)
+            assert stack.c is None
+            self._check_none_is_missing_key(x, "c")
+            self._check_none_is_missing_key(y, "c")
+
+    def test_tensor_only_custom_init_none(self):
+        class Data(TensorClass["tensor_only"]):
+            a: torch.Tensor
+            b: torch.Tensor
+            c: torch.Tensor | None = None
+
+            def __init__(self, a, b=None, set_b=True):
+                self.a = a
+                if set_b:
+                    self.b = b
+
+        # A field without a default that __init__ sets to None is None
+        x = Data(torch.zeros(3))
+        self._check_none_is_missing_key(x, "b")
+        self._check_none_is_missing_key(x, "c")
+        assert (Data(torch.zeros(3), torch.ones(3)).b == 1).all()
+        # One that __init__ does not set still raises
+        with pytest.raises(TypeError, match="did not set the required field 'b'"):
+            Data(torch.zeros(3), set_b=False)
+
+        class Updated(TensorClass["tensor_only"]):
+            a: torch.Tensor
+            b: torch.Tensor
+
+            def __init__(self, a):
+                self.a = a
+                self.update({"b": None})
+
+        self._check_none_is_missing_key(Updated(torch.zeros(3)), "b")
+
+    def test_tensor_only_load_none_placeholders(self, tmp_path):
+        # Earlier versions kept a None placeholder in _non_tensordict, and
+        # wrote it in pickles and memmaps
+        x = self.TensorOnly(torch.zeros(3), torch.zeros(3), batch_size=[3])
+        state = x.__getstate__()
+        assert state["non_tensordict"] == {"c": None}
+        y = self.TensorOnly.__new__(self.TensorOnly)
+        y.__setstate__(
+            {"tensordict": x._tensordict.clone(), "non_tensordict": {"c": None}}
+        )
+        self._check_none_is_missing_key(y, "c")
+        y.c = torch.ones(3)
+        assert (y.to_dict()["c"] == 1).all()
+        x.memmap(tmp_path)
+        meta = json.loads((tmp_path / "meta.json").read_text())
+        meta["c"] = None
+        (tmp_path / "meta.json").write_text(json.dumps(meta))
+        self._check_none_is_missing_key(self.TensorOnly.load_memmap(tmp_path), "c")
 
     @pytest.mark.parametrize("mapping_type", [dict, UserDict])
     def test_tensor_only_tensordict_mapping(self, mapping_type):

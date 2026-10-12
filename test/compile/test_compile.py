@@ -1415,6 +1415,30 @@ class TestTC:
         assert (clear_c(data) == 1).all()
         assert data.y is None
 
+    def test_tc_tensor_only_del_none(self, mode):
+        class TensorOnly(TensorClass["tensor_only"]):
+            x: torch.Tensor
+            y: torch.Tensor | None = None
+
+        def clear(tc):
+            tc.del_("y")
+            return tc.x + 1
+
+        def read(tc):
+            if tc.y is None:
+                return tc.x
+            return tc.x + tc.y
+
+        clear_c = torch.compile(clear, fullgraph=True, mode=mode)
+        read_c = torch.compile(read, fullgraph=True, mode=mode)
+        data = TensorOnly(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+        assert (clear_c(data) == 1).all()
+        assert data.y is None
+        assert (read_c(data) == 0).all()
+        # The compiled read sees the field once it holds a tensor again
+        data.y = torch.full((3,), 2.0)
+        assert (read_c(data) == 2).all()
+
     @pytest.mark.parametrize("form", ["bracket", "decorator"])
     def test_tc_tensor_only_init(self, mode, form):
         # The generated __init__ of the bracket form sets _tensordict
