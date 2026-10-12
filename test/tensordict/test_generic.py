@@ -3953,6 +3953,50 @@ class TestGeneric:
         assert f"found a {type(s).__name__} at key {key!r}" in str(err.value)
         assert "inplace=False" in str(err.value)
 
+    @legacy_lazy_mode()
+    @pytest.mark.parametrize(
+        "op,call",
+        [
+            ("reshape", lambda td: td.reshape(3, 2, inplace=True)),
+            ("flatten", lambda td: td.flatten(inplace=True)),
+            ("unflatten", lambda td: td.unflatten(1, (3, 1), inplace=True)),
+            ("repeat", lambda td: td.repeat(2, 1, inplace=True)),
+            (
+                "repeat_interleave",
+                lambda td: td.repeat_interleave(2, dim=0, inplace=True),
+            ),
+            (
+                "gather",
+                lambda td: td.gather(
+                    1, torch.tensor([[2, 1, 0], [0, 2, 1]]), inplace=True
+                ),
+            ),
+        ],
+    )
+    @pytest.mark.parametrize("view", ["permute", "transpose"])
+    def test_inplace_shape_op_nested_legacy_lazy_view(self, op, call, view):
+        # The legacy lazy views support reshape and repeat_interleave in place,
+        # and refuse the other four ops before anything is rewritten.
+        src = TensorDict(y=torch.arange(6).view(3, 2), batch_size=[3, 2])
+        x = torch.arange(6).view(2, 3)
+        td = TensorDict(x=x, batch_size=[2, 3])
+        td["s"] = src.permute(1, 0) if view == "permute" else src.transpose(1, 0)
+        s_type = type(td.get("s"))
+        ref = td.to_tensordict()
+        if op in ("reshape", "repeat_interleave"):
+            assert call(td) is td
+            expected = call(ref)
+            assert td.batch_size == expected.batch_size
+            assert torch.equal(td["x"], expected["x"])
+            assert type(td.get("s")) is s_type
+            assert torch.equal(td["s", "y"], expected["s", "y"])
+        else:
+            with pytest.raises(NotImplementedError, match=rf"{op}\(inplace=True\)"):
+                call(td)
+            assert td.batch_size == torch.Size([2, 3])
+            assert torch.equal(td["x"], x)
+            assert torch.equal(td["s", "y"], ref["s", "y"])
+
     @pytest.mark.parametrize("inplace", [True, False])
     def test_unflatten_minus_one(self, inplace):
         # The -1 is inferred, as in torch.unflatten

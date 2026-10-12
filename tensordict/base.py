@@ -5711,8 +5711,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         ``repeat_interleave`` and ``gather`` refuse ``inplace=True``. Finding a
         lazy stack halfway through would leave the earlier leaves rewritten
         while ``batch_size`` is unchanged, so the whole tree is checked first.
-        The check tests ``_lazy``, so it also catches the other lazy
-        tensordicts, such as ``_SubTensorDict``, which refuse these ops too.
+        The check tests ``_lazy``, so it also catches ``_SubTensorDict``, which
+        refuses these ops too. The legacy lazy views (``_CustomOpTensorDict``)
+        refuse ``flatten``, ``unflatten``, ``repeat`` and ``gather`` but not
+        ``reshape`` and ``repeat_interleave``, so the check lets them through
+        for those two.
         The calls on nested tensordicts skip the walk, which the top-level
         call has done.
         """
@@ -5728,14 +5731,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 value = value._tensordict
             nested_key = prefix + (key,)
             if value._lazy:
-                raise NotImplementedError(
-                    f"{op_name}(inplace=True) is not supported on a tensordict "
-                    f"that holds a lazy tensordict (such as a "
-                    f"LazyStackedTensorDict or a NonTensorStack); found a "
-                    f"{type(value).__name__} at key "
-                    f"{nested_key[0] if len(nested_key) == 1 else nested_key!r}. "
-                    f"Use inplace=False instead."
-                )
+                from tensordict._lazy import _CustomOpTensorDict
+
+                if not (
+                    op_name in ("reshape", "repeat_interleave")
+                    and isinstance(value, _CustomOpTensorDict)
+                ):
+                    raise NotImplementedError(
+                        f"{op_name}(inplace=True) is not supported on a tensordict "
+                        f"that holds a lazy tensordict (such as a "
+                        f"LazyStackedTensorDict or a NonTensorStack); found a "
+                        f"{type(value).__name__} at key "
+                        f"{nested_key[0] if len(nested_key) == 1 else nested_key!r}. "
+                        f"Use inplace=False instead."
+                    )
             value._raise_if_holds_lazy_stack(op_name, nested_key)
 
     def map(
