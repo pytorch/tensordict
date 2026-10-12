@@ -4666,6 +4666,32 @@ class TestCompositeDist:
         assert "entropy" not in sample.keys()
 
     @pytest.mark.parametrize("lp_aggregate", [True, False])
+    def test_entropy_truncated_normal(self, lp_aggregate):
+        # TruncatedNormal.entropy is a property, not a method (#2103)
+        params = TensorDict(
+            x=TensorDict(
+                loc=torch.zeros(3),
+                scale=torch.ones(3),
+                a=-torch.ones(3),
+                b=torch.ones(3),
+                batch_size=[3],
+            ),
+            batch_size=[3],
+        )
+        dist = CompositeDistribution(params, distribution_map={"x": TruncatedNormal})
+        expected = TruncatedNormal(
+            torch.zeros(3), torch.ones(3), -torch.ones(3), torch.ones(3)
+        ).entropy
+        with set_composite_lp_aggregate(lp_aggregate):
+            ent = dist.entropy()
+        if lp_aggregate:
+            assert isinstance(ent, torch.Tensor)
+            torch.testing.assert_close(ent, expected)
+        else:
+            assert isinstance(ent, TensorDict)
+            torch.testing.assert_close(ent["x_entropy"], expected)
+
+    @pytest.mark.parametrize("lp_aggregate", [True, False])
     @pytest.mark.parametrize("aggregate_probabilities", [True, False])
     def test_entropy_aggregate_probabilities_deprecated(
         self, lp_aggregate, aggregate_probabilities
@@ -5485,6 +5511,20 @@ class TestToModule:
         assert module.bias is bias
         for target in grad_targets:
             assert target.grad is not None
+
+    def test_to_module_context_manager_restores_on_error(self, as_module):
+        # The module gets its original parameters back also when the body raises
+        module = nn.Linear(4, 2)
+        weight, bias = module.weight, module.bias
+        params = TensorDict.from_module(module, as_module=as_module)
+        zeros = params.detach().clone().zero_()
+        with pytest.raises(ValueError, match="error in the body"):
+            with zeros.to_module(module) as swap:
+                assert (module.weight == 0).all()
+                raise ValueError("error in the body")
+        assert module.weight is weight
+        assert module.bias is bias
+        assert not swap._last_op_queue
 
     @pytest.mark.parametrize("custom_setattr", [False, True])
     def test_to_module_from_load_memmap(self, as_module, custom_setattr, tmpdir):

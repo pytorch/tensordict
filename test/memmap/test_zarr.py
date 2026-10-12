@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import pickle
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -311,6 +312,26 @@ class TestZarrWriteOps:
         ztd.del_("a")
         assert "a" not in ztd.keys()
 
+    @pytest.mark.parametrize("key", ["a", "b", ("b", "c")])
+    def test_del_existing_key_does_not_warn(self, ztd, key):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            ztd.del_(key)
+        assert key not in ztd.keys(True)
+
+    @pytest.mark.parametrize("key", ["missing", ("b", "missing")])
+    def test_del_missing_key_warns(self, ztd, key):
+        # https://github.com/pytorch/tensordict/issues/2062
+        with pytest.warns(
+            FutureWarning,
+            match=r"del_ of a missing key .* Starting with TensorDict 0\.17, the "
+            r"default will change to raising a KeyError",
+        ) as record:
+            assert ztd.del_(key) is ztd
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert set(ztd.keys(True, True)) == {"a", ("b", "c")}
+
     def test_rename_key(self, ztd):
         ztd.rename_key_("a", "a2")
         assert "a2" in ztd.keys()
@@ -321,6 +342,23 @@ class TestZarrWriteOps:
     def test_rename_nested_group(self, ztd):
         ztd.rename_key_("b", "b2")
         assert ("b2", "c") in ztd.keys(True, True)
+
+    def test_pop_nested(self, ztd):
+        # https://github.com/pytorch/tensordict/issues/2089
+        c = ztd["b", "c"].clone()
+        out = ztd.pop("b")
+        assert isinstance(out, TensorDict)
+        assert set(out.keys()) == {"c"}
+        assert (out["c"] == c).all()
+        assert "b" not in ztd.keys()
+        ztd["b"] = TensorDict(z=torch.zeros(3, 4), batch_size=[3, 4])
+        assert set(out.keys()) == {"c"}
+
+        ztd["d", "e", "f"] = torch.ones(3, 4)
+        out = ztd.pop(("d", "e"))
+        assert isinstance(out, TensorDict)
+        assert (out["f"] == 1).all()
+        assert ("d", "e") not in ztd.keys(True)
 
     def test_create_nested(self, ztd):
         ztd.create_nested("nested")

@@ -44,7 +44,6 @@ from tensordict.nn import (
     TensorDictSequential as Seq,
 )
 from tensordict.nn.functional_modules import (
-    _exclude_td_from_pytree,
     PYTREE_REGISTERED_LAZY_TDS,
     PYTREE_REGISTERED_TDS,
 )
@@ -92,17 +91,16 @@ def test_cudagraph_module_is_released_without_gc(is_tensordict_module):
         def module(x):
             return x
 
-    with _exclude_td_from_pytree():
-        with (
-            pytest.warns(UserWarning)
-            if not torch.cuda.is_available()
-            else contextlib.nullcontext()
-        ):
-            wrapper = CudaGraphModule(module)
+    with (
+        pytest.warns(UserWarning)
+        if not torch.cuda.is_available()
+        else contextlib.nullcontext()
+    ):
+        wrapper = CudaGraphModule(module)
 
-        wrapper_ref = weakref.ref(wrapper)
-        del wrapper
-        assert wrapper_ref() is None
+    wrapper_ref = weakref.ref(wrapper)
+    del wrapper
+    assert wrapper_ref() is None
 
 
 @pytest.fixture(autouse=True)
@@ -817,6 +815,18 @@ class TestTD:
         assert td_cpu_c.device == torch.device("cpu")
         torch.testing.assert_close(td_cpu_c["a"], td["a"])
 
+    @pytest.mark.parametrize("batch_size", [[2], [2, 3]])
+    def test_to_batch_size_same_device(self, mode, batch_size):
+        def to_cpu(td):
+            return td.to("cpu", batch_size=batch_size)
+
+        td = TensorDict(a=torch.zeros(2, 3), batch_size=[2], device="cpu")
+        to_cpu_c = torch.compile(to_cpu, fullgraph=True, mode=mode)
+        result = to_cpu_c(td)
+        assert result is td
+        assert result.batch_size == torch.Size(batch_size)
+        torch.testing.assert_close(result["a"], torch.zeros(2, 3))
+
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="cuda required")
     def test_to_cpu_from_cuda(self, mode):
         def to_cpu(td):
@@ -928,6 +938,21 @@ class TestTD:
         assert out["empty"].batch_size == torch.Size([4])
         assert out["other"].shape == other.shape
         assert (out == add_one(td)).all()
+
+    def test_tree_map_non_tensor_first(self, mode):
+        # The batch size of the result is not read from the non-tensor entry,
+        # https://github.com/pytorch/tensordict/issues/2207
+        def add_one(td):
+            return tree_map(lambda x: x + 1, td)
+
+        td = TensorDict(s="a string", a=torch.zeros(4, 3), batch_size=[4])
+        add_one_c = torch.compile(add_one, fullgraph=True, mode=mode)
+        out = add_one_c(td)
+        assert out.batch_size == torch.Size([4])
+        assert list(out.keys()) == ["s", "a"]
+        assert out.get("s").batch_size == torch.Size([4])
+        assert out.get_non_tensor("s") == "a string"
+        assert (out["a"] == 1).all()
 
     # Memmap is currently not supported
     # def test_memmap(self, mode, tmpdir):
@@ -1401,6 +1426,30 @@ class TestTC:
         data = TensorOnly(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
         assert (clear_c(data) == 1).all()
         assert data.y is None
+
+    def test_tc_tensor_only_del_none(self, mode):
+        class TensorOnly(TensorClass["tensor_only"]):
+            x: torch.Tensor
+            y: torch.Tensor | None = None
+
+        def clear(tc):
+            tc.del_("y")
+            return tc.x + 1
+
+        def read(tc):
+            if tc.y is None:
+                return tc.x
+            return tc.x + tc.y
+
+        clear_c = torch.compile(clear, fullgraph=True, mode=mode)
+        read_c = torch.compile(read, fullgraph=True, mode=mode)
+        data = TensorOnly(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+        assert (clear_c(data) == 1).all()
+        assert data.y is None
+        assert (read_c(data) == 0).all()
+        # The compiled read sees the field once it holds a tensor again
+        data.y = torch.full((3,), 2.0)
+        assert (read_c(data) == 2).all()
 
     @pytest.mark.parametrize("form", ["bracket", "decorator"])
     def test_tc_tensor_only_init(self, mode, form):
@@ -2069,6 +2118,28 @@ class TestFunctional:
         else:
             assert (td_zero == 0).all()
 
+    def test_to_module_restores_on_error(self, mode):
+        # The module gets its original parameters back also when the body raises
+        module = torch.nn.Linear(3, 4)
+        orig_params = list(module.parameters())
+        td_zero = TensorDict.from_module(module).data.clone().zero_()
+
+        def call(x, td):
+            try:
+                with td.to_module(module, preserve_module_state=False):
+                    module(x)
+                    raise ValueError("error in the body")
+            except ValueError:
+                pass
+            return module(x)
+
+        call_compile = torch.compile(call, fullgraph=True, mode=mode)
+        x = torch.randn(2, 3)
+        torch.testing.assert_close(call_compile(x, td_zero), module(x))
+        assert all(
+            p_new is p_orig for p_new, p_orig in zip(module.parameters(), orig_params)
+        )
+
     # in-place modif raises an error even if fullgraph=False
     @pytest.mark.parametrize("preserve_module_state", [False, True])
     def test_vmap_functional(self, mode, preserve_module_state):
@@ -2396,19 +2467,38 @@ class TestCudaGraphs:
     @pytest.fixture(scope="class", autouse=True)
     def _set_cuda_device(self):
         device = torch.get_default_device()
-        do_unset = False
-        for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
-            if tdtype in SUPPORTED_NODES:
-                do_unset = True
-                excluder = _exclude_td_from_pytree()
-                excluder.set()
-                break
         if torch.cuda.is_available():
             torch.set_default_device("cuda:0")
         yield
-        if do_unset:
-            excluder.unset()
         torch.set_default_device(device)
+
+    def test_cudagraphs_keeps_pytree_registry(self, compiled):
+        # pytorch/tensordict#2076: creating and calling a CudaGraphModule used to
+        # remove the tensordict classes from the pytree registry for the whole
+        # process, which broke torch.export and torch.func on tensordicts.
+        td_types = PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS
+        assert all(tdtype in SUPPORTED_NODES for tdtype in td_types)
+
+        def func(td, x):
+            return td["a"] + x, td.apply(lambda t: t * 2)
+
+        tdmodule = self._make_cudagraph(
+            TensorDictModule(lambda a: a + 1, in_keys=["a"], out_keys=["b"]),
+            compiled,
+        )
+        graphed_func = self._make_cudagraph(func, compiled)
+        for i in range(4):
+            td = TensorDict(a=torch.full((3,), float(i)), batch_size=[3])
+            assert (tdmodule(td.clone())["b"] == i + 1).all()
+            y, td_out = graphed_func(td, torch.ones(3))
+            assert (y == i + 1).all()
+            assert (td_out["a"] == 2 * i).all()
+        assert all(tdtype in SUPPORTED_NODES for tdtype in td_types)
+        td = TensorDict(a=torch.ones(3), batch_size=[3])
+        leaves = tree_leaves(td)
+        assert len(leaves) == 1 and leaves[0] is td["a"]
+        grad = torch.func.grad(lambda td: (td["a"] ** 2).sum())(td)
+        torch.testing.assert_close(grad["a"], 2 * td["a"])
 
     def test_cudagraphs_random(self, compiled):
         def func(x):

@@ -2106,6 +2106,52 @@ class TestLazyStackedTensorDict:
         bs.insert(dim, len(lstd.tensordicts))
         assert lstd.batch_size == torch.Size(bs)
 
+        # a member that differs from the first one only in the -1 dim fits,
+        # whatever the order of the members
+        td5 = TensorDict({"a": torch.ones(4, 5)}, [4, 5])
+        if method == "append":
+            lstd.append(td5)
+            idx = -1
+        elif method == "insert":
+            lstd.insert(1, td5)
+            idx = 1
+        else:
+            lstd.extend([td5, td5.clone()])
+            idx = -2
+        bs = [4, -1]
+        bs.insert(dim, len(lstd.tensordicts))
+        assert lstd.batch_size == torch.Size(bs)
+        assert lstd.tensordicts[idx].batch_size == torch.Size([4, 5])
+        assert lstd.tensordicts[idx] is td5
+
+        # a member that differs in another dim, or has another number of
+        # dims, is still rejected
+        for bad in (
+            TensorDict({"a": torch.zeros(3, 2)}, [3, 2]),
+            TensorDict({"a": torch.zeros(4)}, [4]),
+            TensorDict({"a": torch.zeros(4, 2, 1)}, [4, 2, 1]),
+        ):
+            with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
+                if method == "append":
+                    lstd.append(bad)
+                elif method == "insert":
+                    lstd.insert(0, bad)
+                else:
+                    lstd.extend([td0.clone(), bad])
+        assert lstd.batch_size == torch.Size(bs)
+
+    def test_lazy_stacked_add_heterogeneous_nested(self):
+        # a stack of lazy stacks has -1 in the dim where the inner members
+        # differ
+        inner = lazy_stack([TensorDict(batch_size=[2]), TensorDict(batch_size=[3])])
+        outer = lazy_stack([inner, inner.clone()])
+        assert outer.batch_size == torch.Size([2, 2, -1])
+        outer.append(TensorDict(batch_size=[2, 5]))
+        assert outer.batch_size == torch.Size([3, 2, -1])
+        with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
+            outer.append(TensorDict(batch_size=[3, 5]))
+        assert outer.batch_size == torch.Size([3, 2, -1])
+
     def test_lazy_stack_view_full_size(self):
         tds = LazyStackedTensorDict(*[TensorDict(a=i) for i in range(60)], stack_dim=0)
         tdview = tds.view(3, 4, 5)
@@ -2252,6 +2298,15 @@ class TestLazyStackedTensorDict:
         assert key == "a"
         assert (val == torch.tensor([[0.0, 0.0], [1.0, 1.0]])).all()
         assert all(td.is_empty() for td in tds)
+
+    def test_pop_default_under_tensor(self):
+        td = TensorDict(a=torch.zeros(2), n=TensorDict(x=torch.ones(2)))
+        lazy = lazy_stack([td.clone(), td.clone()])
+        assert lazy.pop(("n", "x", "deeper"), "D") == "D"
+        assert lazy.pop(("n", "x", "deeper", "z"), None) is None
+        assert lazy.pop(("n", "y"), 0) == 0
+        assert (lazy.pop(("n", "x"), None) == 1).all()
+        assert list(lazy.keys(True)) == ["a", "n"]
 
     @pytest.mark.parametrize("failure", ["ragged", "missing"])
     def test_popitem_error_keeps_entries(self, failure):
@@ -2538,6 +2593,25 @@ class TestLazyStackedTensorDict:
         (piece,) = td.split(2, 1)
         assert piece.batch_size == torch.Size([3, 0])
         assert piece["a"].shape == torch.Size([3, 0, 4])
+
+    def test_chunk_lazy_zero_size_dim(self):
+        # torch.chunk gives `chunks` empty pieces along a zero-size dim
+        for stack_dim, dim in ((0, 1), (0, -1), (1, 0)):
+            td = LazyStackedTensorDict(
+                *[TensorDict({"a": torch.zeros(0, 4)}, [0]) for _ in range(3)],
+                stack_dim=stack_dim,
+            )
+            for chunks in (2, 3):
+                pieces = td.chunk(chunks, dim)
+                ref_pieces = torch.zeros(td.batch_size).chunk(chunks, dim)
+                assert [p.batch_size for p in pieces] == [r.shape for r in ref_pieces]
+                for piece in pieces:
+                    assert isinstance(piece, LazyStackedTensorDict)
+                    assert piece["a"].shape == (*piece.batch_size, 4)
+        # unflattening the zero-size stack dim goes through chunk
+        out = td.reshape(2, 0, 3)
+        assert out.batch_size == torch.Size([2, 0, 3])
+        assert out["a"].shape == torch.Size([2, 0, 3, 4])
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_stack(self, device):

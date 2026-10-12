@@ -231,37 +231,51 @@ if _HAS_WRAPPER_SUBCLASS_FIX:
     class UnbatchedTensor(_UnbatchedTensorMixin, torch.Tensor):
         """A torch.Tensor subclass whose shape is ignored during batch operations on a TensorDict.
 
+        .. warning::
+            ``UnbatchedTensor`` is experimental: its API can change in a minor
+            release without a deprecation cycle.
+
+        Use it for an entry that belongs to the whole batch and does not have
+        the batch dimensions: a lookup table, the parameters of a model, a
+        mask shared by every element. A plain tensor entry must have a shape
+        that starts with the batch size. An :class:`UnbatchedTensor` can have
+        any shape. See :ref:`unbatched-tensor`.
+
         When stored in a TensorDict, shape operations (indexing, reshape, unsqueeze,
-        squeeze, transpose, etc.) on the parent TensorDict will leave this tensor
-        unchanged. Data operations (arithmetic, clone, to, etc.) work natively
+        squeeze, transpose, etc.) on the parent TensorDict leave the payload of
+        this tensor unchanged. Data operations (arithmetic, clone, to, etc.) work
         through standard PyTorch tensor dispatch.
 
-        Example:
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict, UnbatchedTensor
             >>> td = TensorDict(a=UnbatchedTensor(torch.randn(3, 4)), b=torch.randn(2, 3), batch_size=(2,))
             >>> td_reshaped = td.reshape((1, 2))
-            >>> td_reshaped["a"] is td["a"]
+            >>> td_reshaped["a"].shape
+            torch.Size([3, 4])
+            >>> td_reshaped["a"].data_ptr() == td["a"].data_ptr()
             True
+            >>> td[0]["a"].shape
+            torch.Size([3, 4])
 
-        Since UnbatchedTensor is a torch.Tensor subclass, retrieving it from a
-        TensorDict returns a usable tensor directly:
+            Since UnbatchedTensor is a torch.Tensor subclass, retrieving it from a
+            TensorDict returns a usable tensor directly:
 
-        Example:
             >>> val = td["a"]
             >>> isinstance(val, torch.Tensor)
             True
             >>> isinstance(val, UnbatchedTensor)
             True
 
-        **Indexed Assignment Behavior:**
+        An :class:`UnbatchedTensor` has these constraints:
 
-        UnbatchedTensor is not affected by indexed assignment operations on the parent TensorDict.
-        Since UnbatchedTensor does not follow batch dimensions, operations like ``td[:, :2] = other``
-        will skip the UnbatchedTensor entries entirely.
-
-        **Batch Size Computation:**
-
-        UnbatchedTensor is excluded from ``auto_batch_size_()`` computation. The batch size is determined
-        solely by regular tensors.
+        - Indexed assignment (``td[:, :2] = other``) leaves an unbatched entry
+          unchanged only if ``other`` does not have that key. If ``other``
+          has it, the batch index is applied to the unbatched payload, which
+          usually raises a shape error
+          (`#2251 <https://github.com/pytorch/tensordict/issues/2251>`_).
+        - :meth:`~tensordict.TensorDictBase.auto_batch_size_` ignores
+          unbatched entries: the batch size comes from the other entries.
 
         Args:
             data (torch.Tensor or tensor-like): payload tensor.
@@ -387,37 +401,51 @@ else:
     class UnbatchedTensor(_UnbatchedTensorMixin, torch.Tensor):  # type: ignore[no-redef]
         """A torch.Tensor subclass whose shape is ignored during batch operations on a TensorDict.
 
+        .. warning::
+            ``UnbatchedTensor`` is experimental: its API can change in a minor
+            release without a deprecation cycle.
+
+        Use it for an entry that belongs to the whole batch and does not have
+        the batch dimensions: a lookup table, the parameters of a model, a
+        mask shared by every element. A plain tensor entry must have a shape
+        that starts with the batch size. An :class:`UnbatchedTensor` can have
+        any shape. See :ref:`unbatched-tensor`.
+
         When stored in a TensorDict, shape operations (indexing, reshape, unsqueeze,
-        squeeze, transpose, etc.) on the parent TensorDict will leave this tensor
-        unchanged. Data operations (arithmetic, clone, to, etc.) work natively
+        squeeze, transpose, etc.) on the parent TensorDict leave the payload of
+        this tensor unchanged. Data operations (arithmetic, clone, to, etc.) work
         through standard PyTorch tensor dispatch.
 
-        Example:
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict, UnbatchedTensor
             >>> td = TensorDict(a=UnbatchedTensor(torch.randn(3, 4)), b=torch.randn(2, 3), batch_size=(2,))
             >>> td_reshaped = td.reshape((1, 2))
-            >>> td_reshaped["a"] is td["a"]
+            >>> td_reshaped["a"].shape
+            torch.Size([3, 4])
+            >>> td_reshaped["a"].data_ptr() == td["a"].data_ptr()
             True
+            >>> td[0]["a"].shape
+            torch.Size([3, 4])
 
-        Since UnbatchedTensor is a torch.Tensor subclass, retrieving it from a
-        TensorDict returns a usable tensor directly:
+            Since UnbatchedTensor is a torch.Tensor subclass, retrieving it from a
+            TensorDict returns a usable tensor directly:
 
-        Example:
             >>> val = td["a"]
             >>> isinstance(val, torch.Tensor)
             True
             >>> isinstance(val, UnbatchedTensor)
             True
 
-        **Indexed Assignment Behavior:**
+        An :class:`UnbatchedTensor` has these constraints:
 
-        UnbatchedTensor is not affected by indexed assignment operations on the parent TensorDict.
-        Since UnbatchedTensor does not follow batch dimensions, operations like ``td[:, :2] = other``
-        will skip the UnbatchedTensor entries entirely.
-
-        **Batch Size Computation:**
-
-        UnbatchedTensor is excluded from ``auto_batch_size_()`` computation. The batch size is determined
-        solely by regular tensors.
+        - Indexed assignment (``td[:, :2] = other``) leaves an unbatched entry
+          unchanged only if ``other`` does not have that key. If ``other``
+          has it, the batch index is applied to the unbatched payload, which
+          usually raises a shape error
+          (`#2251 <https://github.com/pytorch/tensordict/issues/2251>`_).
+        - :meth:`~tensordict.TensorDictBase.auto_batch_size_` ignores
+          unbatched entries: the batch size comes from the other entries.
 
         Args:
             data (torch.Tensor or tensor-like): payload tensor.

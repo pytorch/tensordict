@@ -63,7 +63,36 @@ _VERBOSE_FALSE_OVERRIDES = {
 
 
 class set_printoptions(_DecoratorContextManager):
-    """Controls which attributes appear in TensorDict's ``__repr__`` output."""
+    """Controls which attributes appear in TensorDict's ``__repr__`` output.
+
+    Use it as a context manager or a decorator to change the options for a
+    block of code, or call ``set_printoptions(...).set()`` to change them
+    for the rest of the program. :ref:`printing` describes every option
+    with examples.
+
+    Args:
+        verbose (bool, optional): if ``False``, the device, dtype and
+            ``is_shared`` attributes are hidden, unless a keyword argument
+            sets them. Defaults to ``True``.
+        **kwargs: the options to set: ``show_batch_size``, ``show_device``,
+            ``show_is_shared``, ``show_shape``, ``show_field_device``,
+            ``show_dtype``, ``show_field_is_shared``, ``show_grad``,
+            ``show_is_contiguous``, ``show_is_view``, ``show_storage_size``,
+            ``plain`` and ``sort_keys``. An unknown option raises a
+            ``TypeError``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict, set_printoptions
+        >>> td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        >>> with set_printoptions(verbose=False):
+        ...     print(td)
+        TensorDict(
+            fields={
+                a: Tensor(shape=torch.Size([3]))},
+            batch_size=torch.Size([3]))
+
+    """
 
     def __init__(self, *, verbose: bool = True, **kwargs) -> None:
         super().__init__()
@@ -93,7 +122,17 @@ class set_printoptions(_DecoratorContextManager):
 
 
 def get_printoptions() -> dict:
-    """Returns the current TensorDict print options as a dict."""
+    """Returns the current TensorDict print options as a dict.
+
+    The keys are the options of :class:`~tensordict.set_printoptions`. See
+    :ref:`printing`.
+
+    Examples:
+        >>> from tensordict import get_printoptions
+        >>> get_printoptions()["show_dtype"]
+        True
+
+    """
     return dict(_REPR_OPTIONS)
 
 
@@ -156,6 +195,11 @@ class set_lazy_legacy(_DecoratorContextManager):
 
 def lazy_legacy(allow_none=False):
     """Returns `True` if lazy representations will be used for selected methods.
+
+    Args:
+        allow_none (bool, optional): if ``True`` and the option was never
+            set, ``None`` is returned instead of the default (``False``).
+            Defaults to ``False``.
 
     .. deprecated:: 0.15
         The legacy lazy mode is deprecated and will be removed in TensorDict 0.17,
@@ -260,7 +304,15 @@ class set_capture_non_tensor_stack(_set_capture_non_tensor_stack):
 
 
 def capture_non_tensor_stack(allow_none=False):
-    """Get the current setting for capturing non-tensor stacks."""
+    """Returns whether stacking identical non-tensor data gives one value instead of a stack.
+
+    See :class:`~tensordict.set_capture_non_tensor_stack`.
+
+    Args:
+        allow_none (bool, optional): if ``True`` and the option was never
+            set, ``None`` is returned instead of the default (``False``).
+            Defaults to ``False``.
+    """
     if _CAPTURE_NONTENSOR_STACK is None and allow_none:
         return None
     if _CAPTURE_NONTENSOR_STACK is None:
@@ -358,7 +410,17 @@ class set_list_to_stack(_set_list_to_stack):
 
 
 def list_to_stack(allow_none=False):
-    """Retrieves the current setting for list-to-stack conversion in TensorDict."""
+    """Returns whether assigning a list to a key stores a :class:`~tensordict.NonTensorStack`.
+
+    See :class:`~tensordict.set_list_to_stack`. When the option was never
+    set, the default is returned as the string ``"1"`` (a value that is
+    true), not as ``True``.
+
+    Args:
+        allow_none (bool, optional): if ``True`` and the option was never
+            set, ``None`` is returned instead of the default. Defaults to
+            ``False``.
+    """
     if _LIST_TO_STACK is None and allow_none:
         return None
     if _LIST_TO_STACK is None:
