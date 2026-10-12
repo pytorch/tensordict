@@ -1,6 +1,6 @@
 # TensorDictBase.chunk
 
-*abstract*TensorDictBase.chunk(*chunks: [int](https://docs.python.org/3/builtins/functions.html#int)*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*) → [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[TensorCollection, ...]
+TensorDictBase.chunk(*chunks: [int](https://docs.python.org/3/builtins/functions.html#int)*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*) → [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[TensorCollection, ...]
 
 Splits a tensordict into the specified number of chunks, if possible.
 
