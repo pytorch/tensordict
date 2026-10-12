@@ -829,6 +829,46 @@ class TestPointwiseOps:
             assert (result["a"] == 1).all(), name
             assert (result["n", "b"] == 2).all(), name
 
+    @pytest.mark.parametrize("op", ["lerp", "addcmul", "addcdiv"])
+    @pytest.mark.parametrize("container", ["td", "lazy_stack"])
+    def test_pairs_operands_by_key(self, op, container):
+        # lerp, addcmul and addcdiv pair the leaves of every tensordict operand
+        # by key, also when its keys come in another order (#1980)
+        torch.manual_seed(0)
+
+        def make(*, reverse):
+            if reverse:
+                return TensorDict(n={"b": torch.rand(3) + 1}, a=torch.rand(3) + 1)
+            return TensorDict(a=torch.rand(3) + 1, n={"b": torch.rand(3) + 1})
+
+        if container == "lazy_stack":
+            # the members of each stack differ in key order
+            td = LazyStackedTensorDict(make(reverse=False), make(reverse=True))
+            other1 = LazyStackedTensorDict(make(reverse=True), make(reverse=False))
+            other2 = LazyStackedTensorDict(make(reverse=True), make(reverse=False))
+        else:
+            td = make(reverse=False)
+            other1 = make(reverse=True)
+            other2 = make(reverse=True)
+        if op == "lerp":
+            # a weight below 1 so that the result depends on the pairing
+            other2 = other2 / 4
+        torch_op = getattr(torch, op)
+        result = getattr(td, op)(other1, other2)
+        for key in td.keys(True, True):
+            torch.testing.assert_close(
+                result[key], torch_op(td[key], other1[key], other2[key])
+            )
+
+        # an operand that lacks a key of td raises instead of pairing by position
+        other_keys = TensorDict(a=torch.rand(3), d={"b": torch.rand(3)})
+        if container == "lazy_stack":
+            other_keys = LazyStackedTensorDict(other_keys, other_keys.clone())
+        with pytest.raises(KeyError):
+            getattr(td, op)(other_keys, other2)
+        with pytest.raises(KeyError):
+            getattr(td, op)(other1, other_keys)
+
     @pytest.mark.skipif(not _has_h5py, reason="h5py not available")
     def test_inplace_broadcast_tensor_h5(self, tmp_path):
         # A PersistentTensorDict hands out copies of its datasets: the in-place
