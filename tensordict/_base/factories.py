@@ -134,7 +134,7 @@ def from_struct_array(
 def from_dict(
     d,
     *,
-    auto_batch_size: bool = False,
+    auto_batch_size: bool | None = None,
     batch_dims: int | None = None,
     device: torch.device | None = None,
     batch_size: torch.Size | None = None,
@@ -143,13 +143,6 @@ def from_dict(
     """Converts a dictionary to a TensorDict.
 
     .. seealso:: :meth:`TensorDictBase.from_dict` for more information.
-
-    .. note::
-        The defaults differ from :meth:`TensorDict.from_dict
-        <tensordict.TensorDictBase.from_dict>`. Here ``auto_batch_size``
-        defaults to ``False`` even if ``batch_dims`` is passed, so
-        ``batch_dims`` has no effect unless you also pass
-        ``auto_batch_size=True``.
 
     Examples:
         >>> import torch

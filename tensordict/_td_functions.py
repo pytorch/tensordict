@@ -49,7 +49,7 @@ def from_module(
 
     Same as :meth:`tensordict.TensorDict.from_module`, except for the default
     of ``lock``: this function locks the result by default, and the method
-    does not (see #1954). The entries are the parameters and buffers of the
+    does not. The entries are the parameters and buffers of the
     module themselves, not copies. Submodules become nested tensordicts.
 
     Args:

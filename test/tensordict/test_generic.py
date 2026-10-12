@@ -1527,6 +1527,8 @@ class TestGeneric:
                 ({"a": torch.zeros(3, 2)},),
                 {"auto_batch_size": True, "batch_dims": 1},
             ],
+            # https://github.com/pytorch/tensordict/issues/1954
+            ["from_dict", ({"a": torch.zeros(3, 2)},), {"batch_dims": 1}],
             [
                 "from_namedtuple",
                 (namedtuple("NT", ["a", "b"])(torch.zeros(3), torch.ones(3, 2)),),
@@ -1553,8 +1555,8 @@ class TestGeneric:
     )
     def test_module_level_constructor(self, name, args, kwargs):
         # The functions documented in td.rst match the classmethods they forward
-        # to. The defaults of from_dict(auto_batch_size) and from_module(lock)
-        # differ between the two (#1954), so those cases pass them explicitly.
+        # to. The default of from_module(lock) differs between the two, so
+        # that case passes it explicitly.
         out = getattr(tensordict, name)(*args, **kwargs)
         expected = getattr(TensorDict, name)(*args, **kwargs)
         assert type(out) is type(expected)
@@ -1623,13 +1625,13 @@ class TestGeneric:
         out.close()
 
     # Module-level function -> (the TensorDict method it forwards to, the
-    # parameters whose default may differ). The two defaults that differ are
-    # left to https://github.com/pytorch/tensordict/issues/1954.
+    # parameters whose default may differ). from_module locks its result by
+    # default, as documented, and TensorDict.from_module does not.
     _MODULE_FUNCTION_TARGETS = {
         "from_any": ("from_any", ()),
         "from_consolidated": ("from_consolidated", ()),
         "from_csv": ("from_csv", ()),
-        "from_dict": ("from_dict", ("auto_batch_size",)),
+        "from_dict": ("from_dict", ()),
         "from_h5": ("from_h5", ()),
         "from_json": ("from_json", ()),
         "from_module": ("from_module", ("lock",)),
