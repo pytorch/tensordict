@@ -3695,10 +3695,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             key = (*subkey, *_unravel_key_to_tuple(key))
             if keys_to_update and not any(key[: len(k)] == k for k in keys_to_update):
                 continue
+            full_key = (firstkey, *key)
             self._set_tuple(
-                (firstkey, *key),
+                full_key,
                 target._get_tuple(key, NO_DEFAULT),
-                inplace=BEST_ATTEMPT_INPLACE if inplace else False,
+                # a locked tensordict takes no new keys, even in place
+                inplace=inplace and (not self.is_locked or full_key in self.keys(True)),
                 validated=True,
                 non_blocking=non_blocking,
             )
