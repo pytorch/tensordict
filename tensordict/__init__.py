@@ -83,7 +83,6 @@ from tensordict.utils import (
     assert_close,
     capture_non_tensor_stack,
     get_printoptions,
-    is_batchedtensor,
     is_non_tensor,
     is_tensorclass,
     lazy_legacy,
@@ -96,6 +95,7 @@ from tensordict.utils import (
     unravel_key,
     unravel_key_list,
 )
+from torch._C._functorch import is_batchedtensor as _is_batchedtensor
 
 __version__ = None  # type: ignore
 try:
@@ -164,7 +164,6 @@ __all__ = [
     "pad_sequence",
     # Utility functions
     "is_tensor_collection",
-    "is_batchedtensor",
     "is_non_tensor",
     "is_tensorclass",
     "assert_close",
@@ -224,8 +223,14 @@ _DEPRECATED_PYTREE_NAMES = {
 __getattr__ = _deprecation.deprecated_attributes(
     __name__,
     {
-        name: (getattr(_pytree, name), replacement)
-        for name, replacement in _DEPRECATED_PYTREE_NAMES.items()
+        **{
+            name: (getattr(_pytree, name), replacement)
+            for name, replacement in _DEPRECATED_PYTREE_NAMES.items()
+        },
+        "is_batchedtensor": (
+            _is_batchedtensor,
+            "torch._C._functorch.is_batchedtensor",
+        ),
     },
     removal="0.17",
 )

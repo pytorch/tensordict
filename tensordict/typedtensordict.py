@@ -11,6 +11,7 @@ from collections.abc import Callable, Sequence
 from typing import Any, ClassVar
 
 import torch
+from tensordict._lazy import LazyStackedTensorDict
 from tensordict._pytree import _register_td_node
 from tensordict._td import TensorDict
 from tensordict.base import _register_tensor_class, NO_DEFAULT, TensorDictBase
@@ -422,24 +423,36 @@ class _TypedTensorDictMeta(type(TensorDictBase)):
 class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     """A TensorDictBase subclass with typed field declarations and backend composition.
 
+    .. warning::
+        ``TypedTensorDict`` is experimental: its API can change in a minor
+        release without a deprecation cycle.
+
     TypedTensorDict combines TensorDict's tensor operations with TypedDict-style
-    field declarations.  Subclasses declare fields as class annotations and get:
+    field declarations. Subclasses declare fields as class annotations and get:
 
     - Typed attribute access (``state.eta``)
     - Typed construction (``PredictorState(eta=..., X=..., beta=..., batch_size=...)``)
     - Inheritance (``class ObservedState(PredictorState): ...``)
     - Default-valued fields for optional pipeline branches
     - Full TensorDict interop (``.to()``, ``.clone()``, slicing, ``**state`` spreading)
-    - Backend composition via ``from_tensordict`` (H5, Redis, lazy stacks, …)
+    - Backend composition via ``from_tensordict`` (H5, Redis, lazy stacks, and others)
+
+    Use it instead of a :class:`~tensordict.TensorClass` when you need a
+    :class:`~tensordict.TensorDictBase` subclass: ``state["key"]`` access,
+    ``**state`` unpacking, or typed access to an existing backend. Use a
+    :class:`~tensordict.TensorClass` instead when fields hold non-tensor
+    values that must come back as plain Python objects.
+    :ref:`choosing-a-container` compares the containers, and
+    :ref:`typed-tensordict-guide` is the user guide.
 
     Internally, a ``TypedTensorDict`` delegates all storage to an internal
-    ``_source`` attribute (a ``TensorDictBase`` instance).  Direct construction
-    creates a ``TensorDict`` as ``_source``; ``from_tensordict`` stores the
-    given backend directly, enabling zero-copy typed access to any backend.
+    ``_source`` attribute (a ``TensorDictBase`` instance). Direct construction
+    creates a ``TensorDict`` as ``_source``. ``from_tensordict`` stores the
+    given backend directly, so the typed access to that backend makes no copy.
 
     Examples:
         >>> import torch
-        >>> from tensordict import TypedTensorDict
+        >>> from tensordict import TensorDict, TypedTensorDict
         >>> from torch import Tensor
         >>>
         >>> class PredictorState(TypedTensorDict):
@@ -461,6 +474,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
 
     _source: TensorDictBase
 
+    # Override: the flag lives on the source.
     @property
     def _is_shared(self):
         return self._source._is_shared
@@ -469,6 +483,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     def _is_shared(self, value):
         self._source._is_shared = value
 
+    # Override: the flag lives on the source.
     @property
     def _is_memmap(self):
         return self._source._is_memmap
@@ -476,6 +491,13 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     @_is_memmap.setter
     def _is_memmap(self, value):
         self._source._is_memmap = value
+
+    @property
+    def _reads_return_copies(self):
+        # a lazy stack builds each entry that _get_str returns by stacking
+        return self._source._reads_return_copies or isinstance(
+            self._source, LazyStackedTensorDict
+        )
 
     # ------------------------------------------------------------------
     # Internal helper: wrap a TensorDictBase without key validation
@@ -590,6 +612,10 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     def _has_names(self) -> bool:
         return self._source._has_names()
 
+    @property
+    def _has_non_tensor(self) -> bool:
+        return self._source._has_non_tensor
+
     def _set_names(self, names: Sequence[str] | None) -> None:
         self._source._set_names(names)
 
@@ -602,13 +628,10 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._source._change_batch_size(new_size)
 
-    @property
+    # Override: the lock state lives on the source.
+    @TensorDictBase.is_locked.getter
     def is_locked(self) -> bool:
         return self._source.is_locked
-
-    @is_locked.setter
-    def is_locked(self, value: bool) -> None:
-        self._source.is_locked = value
 
     @_as_context_manager("is_locked")
     def lock_(self, *args, **kwargs):
@@ -627,6 +650,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     # ------------------------------------------------------------------
     # _select / _exclude: special handling for inplace
     # ------------------------------------------------------------------
+    # Override: selects in _source and wraps the result.
     def _select(
         self,
         *keys,
@@ -644,6 +668,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
         )
         return type(self)._wrap_td(result)
 
+    # Override: excludes in _source and wraps the result.
     def _exclude(self, *keys, inplace: bool = False, set_shared: bool = True):
         if inplace:
             self._source._exclude(*keys, inplace=True, set_shared=set_shared)
@@ -659,6 +684,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
             return None
         return type(self)._wrap_td(result)
 
+    # Override: unwraps a typed ``out`` for the source and wraps the result.
     def where(self, condition, other, *, out=None, **kwargs):
         unwrapped_out = out._source if isinstance(out, TypedTensorDict) else out
         result = self._source.where(condition, other, out=unwrapped_out, **kwargs)
@@ -861,7 +887,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
         *,
         inplace=None,
         return_swap=True,
-        preserve_module_state: bool | None = True,
+        preserve_module_state: bool = True,
         **kwargs,
     ):
         return self._source._to_module(
@@ -959,15 +985,12 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
 _DIRECT_DELEGATES = [
     "_get_str",
     "_get_tuple",
-    "_set_str",
-    "_set_tuple",
-    "_set_at_str",
-    "_set_at_tuple",
     "_stack_onto_",
     "keys",
     "entry_class",
     "_check_is_shared",
     "_check_device",
+    "_storage_is_read_only",
     "is_contiguous",
     "popitem",
     "_cast_reduction",
@@ -1007,6 +1030,10 @@ _WRAP_DELEGATES = [
 
 # In-place: delegate to _source, return self
 _INPLACE_DELEGATES = [
+    "_set_str",
+    "_set_tuple",
+    "_set_at_str",
+    "_set_at_tuple",
     "share_memory_",
     "detach_",
     "masked_fill_",

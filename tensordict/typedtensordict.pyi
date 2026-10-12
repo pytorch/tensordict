@@ -15,6 +15,7 @@ else:
 
 import torch
 from tensordict._td import TensorDict
+from tensordict.base import TensorDictBase
 from tensordict.utils import DeviceType
 
 @dataclass_transform(kw_only_default=True)
@@ -87,3 +88,5 @@ class TypedTensorDict(TensorDict, metaclass=_TypedTensorDictMeta):
         device: DeviceType | None = None,
         **kwargs: Any,
     ) -> Self: ...
+    @classmethod
+    def from_tensordict(cls, td: TensorDictBase, *, check: bool = True) -> Self: ...
