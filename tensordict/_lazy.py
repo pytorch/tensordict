@@ -985,12 +985,12 @@ class LazyStackedTensorDict(TensorDictBase):
                 ):
                     frame, stacklevel = frame.f_back, stacklevel + 1
                 warnings.warn(
-                    "LazyStackedTensorDict.from_dict without a batch_size does "
-                    f"not give the members the names {dropped}, the entries of "
-                    "names other than names[stack_dim]. Starting with "
-                    "TensorDict 0.17, the default will change to giving them to "
-                    "the members once their batch size is known, and to raising "
-                    "a ValueError if their number differs from the number of "
+                    "LazyStackedTensorDict.from_dict without a batch_size uses "
+                    "only names[stack_dim] and leaves the members unnamed. "
+                    "Starting with TensorDict 0.17, the default will change to "
+                    f"giving the other entries of names, {dropped}, to the "
+                    "members once their batch size is known, and to raising a "
+                    "ValueError if their number differs from the number of "
                     "member batch dimensions. To name only the stack dimension, "
                     "pass stack_dim_name instead of names.",
                     FutureWarning,
