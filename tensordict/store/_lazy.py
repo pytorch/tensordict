@@ -661,9 +661,9 @@ class LazyStackedTensorDictStore(TensorDictBase):
     .. warning::
         ``store["nested"]`` is an in-memory copy of the nested entry: writes
         through it, for example ``store["nested"].set_(...)`` or
-        ``store["nested"].zero_()``, are dropped without an error (see
-        #2154). Write with the full key, ``store.set(("nested", "b"), ...)``,
-        or with :meth:`update`.
+        ``store["nested"].zero_()``, change the copy only, not the store.
+        Write with the full key, ``store.set(("nested", "b"), ...)``, or with
+        :meth:`update`.
 
     Stores each leaf key as a single concatenated blob in the store,
     regardless of how many stack elements there are.  For *N* elements and
