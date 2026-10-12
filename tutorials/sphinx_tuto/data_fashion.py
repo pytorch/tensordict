@@ -114,7 +114,7 @@ print(training_data_td)
 # Create two pairs of ``DataLoader``: one pair from the ``torchvision``
 # datasets, and one pair from the memory-mapped tensordicts.
 #
-# A ``TensorDict`` implements ``__len__``, ``__getitem__`` and
+# A ``TensorDict`` implements ``__len__``, ``__getitem__``, and
 # ``__getitems__``, so you can use it as a map-style dataset. The
 # ``DataLoader`` then reads each batch with one batched index, and the result
 # is already a ``TensorDict``. Pass ``collate_fn=lambda x: x``: the default
@@ -316,7 +316,7 @@ print(f"Training done! time: {time.perf_counter() - t0: 4.4f} s")
 # once. Then you train a model from it with a ``DataLoader`` and
 # ``collate_fn=lambda x: x``.
 #
-# The two training runs use the same model, the same initial parameters and
+# The two training runs use the same model, the same initial parameters, and
 # the same optimizer, so their times differ only by the data loading. The
 # one-pass timings before the training show the data loading alone. The
 # ``torchvision`` data loader applies ``ToTensor`` to each image, and collates

@@ -4,7 +4,7 @@ What is TensorDict?
 ===================
 
 A :class:`~tensordict.TensorDict` is a dictionary of tensors that behaves
-like one tensor. You index, reshape, move and save the whole group with one
+like one tensor. You index, reshape, move, and save the whole group with one
 call. TensorDict also makes sure that every tensor keeps the dimensions that
 the group shares. A :class:`~tensordict.TensorClass` gives the same behavior
 to a class with typed fields and methods.
@@ -19,10 +19,12 @@ each robot, and the camera images in a nested TensorDict:
   >>> import torch
   >>> from tensordict import TensorDict
   >>> robots = TensorDict(
-  ...     joints=torch.zeros(4, 7),
-  ...     camera={
-  ...         "rgb": torch.zeros(4, 3, 32, 32, dtype=torch.uint8),
-  ...         "depth": torch.zeros(4, 32, 32),
+  ...     {
+  ...         "joints": torch.zeros(4, 7),
+  ...         "camera": {
+  ...             "rgb": torch.zeros(4, 3, 32, 32, dtype=torch.uint8),
+  ...             "depth": torch.zeros(4, 32, 32),
+  ...         },
   ...     },
   ...     batch_size=[4],
   ... )
@@ -146,8 +148,8 @@ What it is not
 
 A TensorDict is not *exactly* a :class:`dict`. A dict is a good model: a
 TensorDict has the methods of a mapping, ``keys``, ``values``, ``items``,
-``get``, ``pop``, ``update``, ``in`` and ``**data``. But ``for x in data``,
-``len(data)``, ``bool(data)`` and ``data == other`` follow the rules of a
+``get``, ``pop``, ``update``, ``in``, and ``**data``. But ``for x in data``,
+``len(data)``, ``bool(data)``, and ``data == other`` follow the rules of a
 tensor:
 
   >>> isinstance(robots, dict)
@@ -160,7 +162,7 @@ tensor:
 :ref:`batch-size-not-a-dict` lists these differences.
 
 A TensorDict is not a :class:`torch.Tensor` either. Each entry keeps its own
-dtype, device and the dimensions after the batch dimensions.
+dtype, device, and the dimensions after the batch dimensions.
 ``robots.shape`` is the batch size, not the shape of an entry:
 
   >>> isinstance(robots, torch.Tensor)
@@ -168,7 +170,7 @@ dtype, device and the dimensions after the batch dimensions.
   >>> robots.shape
   torch.Size([4])
 
-A TensorDict is not a data frame. For tables that you filter, group and
+A TensorDict is not a data frame. For tables that you filter, group, and
 join, use pandas or Polars. :meth:`~tensordict.TensorDict.to_pandas` and
 :meth:`~tensordict.TensorDict.from_pandas` convert between the two.
 
@@ -177,14 +179,14 @@ Where to go next
 
 The user guide explains one concept on each page:
 
-- :ref:`batch-size`: the batch size, indexing, shape operations and dimension
+- :ref:`batch-size`: the batch size, indexing, shape operations, and dimension
   names.
 - :ref:`keys`: string and nested keys, reading and writing entries, nested
-  tensordicts and locking.
+  tensordicts, and locking.
 - :ref:`stacking`: dense and lazy stacks, and data with different shapes.
 - :ref:`operations`: arithmetic, :meth:`~tensordict.TensorDict.apply`,
-  reductions, gradients and the in-place conventions.
-- :ref:`devices`: devices, dtypes and memory.
+  reductions, gradients, and the in-place conventions.
+- :ref:`devices`: devices, dtypes, and memory.
 - :ref:`non-tensor-data`: strings and other Python objects, and entries outside
   the batch size.
 - :ref:`tensorclass-guide` and :ref:`typed-tensordict-guide`: containers with
@@ -192,9 +194,9 @@ The user guide explains one concept on each page:
 - :ref:`modules-guide`: :class:`~tensordict.nn.TensorDictModule` and the other
   modules that read and write tensordicts.
 
-For saving, storage, data loading, distributed training and
+For saving, storage, data loading, distributed training, and
 :func:`torch.compile`, see :ref:`saving`, :ref:`storage`, :ref:`data-loading`,
-:ref:`distributed` and :ref:`compile`.
+:ref:`distributed`, and :ref:`compile`.
 
 See also
 --------
@@ -202,4 +204,4 @@ See also
 - :class:`~tensordict.TensorDict` and :class:`~tensordict.TensorClass` in the
   :ref:`api-reference`.
 - The tutorials :doc:`/tutorials/tensordict_keys`,
-  :doc:`/tutorials/tensordict_slicing` and :doc:`/tutorials/tensordict_shapes`.
+  :doc:`/tutorials/tensordict_slicing`, and :doc:`/tutorials/tensordict_shapes`.

@@ -8,6 +8,7 @@ import functools
 import importlib
 import io
 import pickle
+import warnings
 
 import numpy as np
 import pytest
@@ -96,6 +97,12 @@ def test_to_local_is_deprecated(cls, what, monkeypatch):
     ) as record:
         assert store.to_local() is local
     assert record[0].filename == __file__
+
+
+_MISSING_KEY_WARNING = (
+    r"of a missing key .* does nothing today\. Starting with TensorDict 0\.17, "
+    r"the default will change to raising a KeyError"
+)
 
 
 class TestTensorDictStore:
@@ -418,6 +425,49 @@ class TestTensorDictStore:
         store_td.del_("nested")
         assert "nested" not in store_td.keys()
 
+    @pytest.mark.parametrize(
+        "method,key",
+        [
+            ("del_", "obs"),
+            ("del_", "nested"),
+            ("del_", ("nested", "a")),
+            ("pop", "obs"),
+            ("pop", "nested"),
+            ("popitem", None),
+            ("rename_key_", "obs"),
+            ("rename_key_", "nested"),
+            ("rename_key_", ("nested", "a")),
+        ],
+    )
+    def test_existing_key_does_not_warn(self, store_td, method, key):
+        # del_ and rename_key_ also act on every key under a sub-tensordict
+        store_td["obs"] = torch.randn(10, 3)
+        store_td["nested", "a"] = torch.randn(10, 2)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            if method == "popitem":
+                store_td.popitem()
+            elif method == "rename_key_":
+                store_td.rename_key_(key, "renamed")
+                assert "renamed" in store_td.keys()
+            else:
+                getattr(store_td, method)(key)
+                assert key not in store_td.keys(True)
+
+    @pytest.mark.parametrize("method", ["del_", "rename_key_"])
+    @pytest.mark.parametrize("key", ["missing", ("nested", "missing")])
+    def test_missing_key_warns(self, store_td, method, key):
+        # https://github.com/pytorch/tensordict/issues/2062
+        store_td["nested", "a"] = torch.randn(10, 2)
+        args = (key,) if method == "del_" else (key, "renamed")
+        with pytest.warns(
+            FutureWarning, match=rf"^TensorDictStore\.{method} {_MISSING_KEY_WARNING}"
+        ) as record:
+            assert getattr(store_td, method)(*args) is store_td
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert set(store_td.keys(True, True)) == {("nested", "a")}
+
     def test_locking(self, store_td):
         """Test lock/unlock."""
         store_td["obs"] = torch.randn(10, 3)
@@ -526,6 +576,81 @@ class TestTensorDictStore:
         store_td.fill_("obs", 42.0)
         result = store_td["obs"]
         assert torch.allclose(result, torch.full((10, 3), 42.0))
+
+    def test_inplace_methods_write(self, store_td):
+        """The in-place methods, update_ and copy_ write to the server (#2242)."""
+        source = TensorDict(
+            a=torch.randn(10, 3),
+            nested=TensorDict(b=torch.randn(10, 2), batch_size=[10]),
+            batch_size=[10],
+        )
+        store_td.update(source)
+        expected = source.clone()
+        other = source.apply(lambda x: torch.rand_like(x) + 1)
+        for td in (store_td, expected):
+            assert td.abs_() is td
+            assert td.add_(other, alpha=2.0) is td
+            td *= 2
+            assert td.clamp_max_(other) is td
+            assert td.update_(other.select("a") + 1) is td
+            assert td.update_(other * 3, keys_to_update=[("nested", "b")]) is td
+        assert_allclose_td(store_td.to_tensordict(), expected)
+        store_td.copy_(other)
+        assert_allclose_td(store_td.to_tensordict(), other)
+
+    def test_inplace_methods_non_tensor(self, store_td):
+        """The in-place methods skip a non-tensor entry, as on a TensorDict."""
+        source = TensorDict(
+            a=torch.randn(10, 3),
+            nested=TensorDict(b=torch.randn(10, 2), batch_size=[10]),
+            batch_size=[10],
+        )
+        store_td.update(source.clone().set_non_tensor("s", "hello"))
+        expected = source.clone()
+        other = source.apply(lambda x: torch.rand_like(x) + 1)
+        for td in (store_td, expected):
+            assert td.add_(1.0) is td
+            assert td.abs_() is td
+            assert td.lerp_(other, 0.5) is td
+            assert td.mul_(other) is td
+        assert_allclose_td(store_td.to_tensordict().exclude("s"), expected)
+        assert store_td.zero_() is store_td
+        assert (store_td["a"] == 0).all()
+        assert (store_td["nested", "b"] == 0).all()
+        assert store_td["s"] == "hello"
+
+    def test_update_from_store_round_trips(self, store_td, store_kwargs):
+        """update_ from a store reads it as often as a TensorDict destination does."""
+        td = TensorDict(
+            {
+                **{f"k{i}": torch.ones(10, 3) for i in range(5)},
+                "nested": TensorDict(b=torch.ones(10, 2), batch_size=[10]),
+            },
+            batch_size=[10],
+        )
+        store_td.update(td * 0)
+        source = TensorDictStore.from_tensordict(td, **store_kwargs)
+        try:
+            calls = []
+            run_sync = source._run_sync
+
+            def counting_run_sync(coro):
+                calls.append(None)
+                return run_sync(coro)
+
+            source._run_sync = counting_run_sync
+            for keys_to_update in (None, ["k0"]):
+                calls.clear()
+                (td * 0).update_(source, keys_to_update=keys_to_update)
+                expected = len(calls)
+                calls.clear()
+                store_td.update_(source, keys_to_update=keys_to_update)
+                assert len(calls) == expected
+            assert (store_td["k0"] == 1).all()
+        finally:
+            del source._run_sync
+            source.clear_redis()
+            source.close()
 
     def test_masked_fill_(self, store_td):
         """masked_fill_ fills the masked batch elements, as on a TensorDict."""
@@ -2045,6 +2170,50 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    def test_inplace_methods_write(self, store_kwargs):
+        """The in-place methods and update_ write to the server, as on a lazy stack (#2242).
+
+        A key whose elements differ in shape is left unchanged: it is read
+        with the shape of element 0, and writing it back would lose the
+        other elements.
+        """
+        tds = [
+            TensorDict(
+                a=torch.randn(3, 2),
+                h=torch.randn(3, 1 + i),
+                n=TensorDict(b=torch.randn(3), batch_size=[3]),
+                batch_size=[3],
+            )
+            for i in range(2)
+        ]
+        lazy_td = lazy_stack([td.clone() for td in tds])
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            for td in (store_td, lazy_td):
+                assert td.abs_() is td
+                td *= 2
+                view = td[1]
+                assert view.add_(1.0) is view
+            other = TensorDict(a=lazy_td["a"] + 1, batch_size=[2, 3])
+            assert store_td.update_(other) is store_td
+            lazy_td.update_(other)
+            for i in range(2):
+                torch.testing.assert_close(store_td[i]["a"], lazy_td[i]["a"])
+                torch.testing.assert_close(store_td[i]["n", "b"], lazy_td[i]["n", "b"])
+            # only the element view writes the heterogeneous key
+            torch.testing.assert_close(store_td[0]["h"], tds[0]["h"])
+            torch.testing.assert_close(store_td[1]["h"], tds[1]["h"] + 1)
+            # zero_ leaves it unchanged too, instead of writing the shape of
+            # element 0 to each element
+            assert store_td.zero_() is store_td
+            assert (store_td["a"] == 0).all()
+            torch.testing.assert_close(store_td[1]["h"], tds[1]["h"] + 1)
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     def test_view_shape_change_raises(self, store_stack):
         """Changing element shape through the view should raise."""
         store_td, tds, lazy_td = store_stack
@@ -2227,6 +2396,60 @@ class TestLazyStackedTensorDictStore:
                 assert set(store_td.keys(True, True)) == set(lazy_td.keys(True, True))
                 assert_allclose_td(store_td.to_tensordict(), lazy_td.to_tensordict())
             assert list(store_td.keys()) == ["a"]
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize(
+        "method,key",
+        [
+            ("del_", "a"),
+            ("del_", "n"),
+            ("del_", ("n", "m")),
+            ("pop", "a"),
+            ("pop", "n"),
+            ("popitem", None),
+            ("rename_key_", "a"),
+            ("rename_key_", "n"),
+            ("rename_key_", ("n", "m")),
+        ],
+    )
+    def test_existing_key_does_not_warn(self, store_kwargs, method, key):
+        # del_ and rename_key_ also act on every key under a sub-tensordict
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            self._nested_lazy_td(), **store_kwargs
+        )
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                if method == "popitem":
+                    store_td.popitem()
+                elif method == "rename_key_":
+                    store_td.rename_key_(key, "renamed")
+                    assert "renamed" in store_td.keys()
+                else:
+                    getattr(store_td, method)(key)
+                    assert key not in store_td.keys(True)
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize("method", ["del_", "rename_key_"])
+    @pytest.mark.parametrize("key", ["missing", ("n", "missing")])
+    def test_missing_key_warns(self, store_kwargs, method, key):
+        # https://github.com/pytorch/tensordict/issues/2062
+        lazy_td = self._nested_lazy_td()
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        args = (key,) if method == "del_" else (key, "renamed")
+        try:
+            with pytest.warns(
+                FutureWarning,
+                match=rf"^LazyStackedTensorDictStore\.{method} {_MISSING_KEY_WARNING}",
+            ) as record:
+                assert getattr(store_td, method)(*args) is store_td
+            assert len(record) == 1
+            assert record[0].filename == __file__
+            assert set(store_td.keys(True, True)) == set(lazy_td.keys(True, True))
         finally:
             store_td.clear_redis()
             store_td.close()

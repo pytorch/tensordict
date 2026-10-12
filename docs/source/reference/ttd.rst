@@ -30,6 +30,6 @@ See also
 --------
 
 - :ref:`typed-tensordict-guide`: declare and use a ``TypedTensorDict``.
-- :ref:`choosing-a-container`: tensorclass, ``TypedTensorDict`` or
+- :ref:`choosing-a-container`: tensorclass, ``TypedTensorDict``, or
   ``TensorDict``.
 - :ref:`compatibility`: which containers work on which storage backends.

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import operator
+import warnings
 
 import torch
 from tensordict._indexing import (
@@ -76,6 +77,21 @@ def _check_indexed_value(store, value) -> None:
             f"{type(store).__name__} takes a tensordict, a dict or a scalar at an "
             "index, not a tensor. Use set_at_ to write a tensor to one entry."
         )
+
+
+def _warn_missing_key(store, what: str, key, *, stacklevel: int) -> None:
+    """Warn that ``what`` ("del_" or "rename_key_") found no ``key`` in ``store``.
+
+    ``stacklevel`` counts as in :func:`warnings.warn` from the caller of this
+    function.
+    """
+    warnings.warn(
+        f"{type(store).__name__}.{what} of a missing key {key!r} does nothing "
+        "today. Starting with TensorDict 0.17, the default will change to "
+        "raising a KeyError, as TensorDict does.",
+        FutureWarning,
+        stacklevel=stacklevel + 1,
+    )
 
 
 def _dtype_to_str(dtype: torch.dtype) -> str:

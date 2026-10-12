@@ -59,6 +59,7 @@ from tensordict.store._utils import (
     _prepare_indexed_value,
     _str_to_dtype,
     _tensor_to_bytes,
+    _warn_missing_key,
 )
 from tensordict.utils import (
     _as_context_manager,
@@ -101,6 +102,8 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
 
     _td_dim_names = None
     _masking_on_dense_copy = True
+    # each read fetches the entry from the server into a new tensor
+    _reads_return_copies = True
 
     def __init__(self, parent, element_idx: int):
         self._parent = parent
@@ -428,11 +431,6 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         raise RuntimeError("Cannot popitem from a stack element view.")
 
-    def zero_(self) -> Self:
-        for key in self.keys():
-            self.fill_(key, 0)
-        return self
-
     def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
         existing = self.get(key)
         if is_tensor_collection(existing):
@@ -647,6 +645,8 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
 
     _td_dim_names = None
     _masking_on_dense_copy = True
+    # each read fetches the entry from the server into a new tensor
+    _reads_return_copies = True
 
     def __init__(
         self,
@@ -1718,12 +1718,17 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
             key_path = _KEY_SEP.join(key)
 
         all_keys = self._get_all_keys()
-        if key_path in all_keys:
+        found = key_path in all_keys
+        if found:
             self._run_sync(self._adel_key(key_path))
         prefix_check = key_path + _KEY_SEP
         for k in all_keys:
             if k.startswith(prefix_check):
+                found = True
                 self._run_sync(self._adel_key(k))
+        if not found:
+            # stacklevel 3: skip the _lock_blocked wrapper
+            _warn_missing_key(self, "del_", key, stacklevel=3)
         return self
 
     async def _adel_key(self, key_path: str):
@@ -1758,7 +1763,10 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
             else:
                 renames = self._sub_td_renames(all_keys, old_path, new_path)
             if not renames:
-                return renames
+                # a sub-tensordict at old_path may still exist, with a
+                # destination that is not free
+                old_prefix = old_path + _KEY_SEP
+                return renames, any(k.startswith(old_prefix) for k in all_keys)
             moves = []
             for src_kp, dst_kp in renames:
                 moves += [
@@ -1784,15 +1792,17 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
                 pipe.srem(self._keys_registry_key, src_kp)
                 pipe.sadd(self._keys_registry_key, dst_kp)
             await pipe.execute()
-            return renames
+            return renames, True
 
-        renamed = self._run_sync(_arename())
+        renamed, found = self._run_sync(_arename())
         if self._meta_cache is not None:
             # the old paths are gone, and a leaf at new_path may have been
             # replaced
             for src_kp, dst_kp in renamed:
                 self._meta_cache.pop(src_kp, None)
                 self._meta_cache.pop(dst_kp, None)
+        if not found:
+            _warn_missing_key(self, "rename_key_", old_key, stacklevel=2)
         return self
 
     @staticmethod
@@ -2087,10 +2097,19 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
     def detach_(self) -> Self:
         return self
 
-    def zero_(self) -> Self:
-        for key in self.keys():
-            self.fill_(key, 0)
-        return self
+    def _write_back(self, keys, values, method: str) -> None:
+        # Override: a key whose elements differ in shape is read with the shape
+        # of the first element, and writing it back would lose the others: it
+        # is left unchanged, as fill_ does.
+        keys = [_unravel_key_to_tuple(key) for key in keys]
+        homogeneous = self._run_sync(
+            self._ais_homogeneous([_KEY_SEP.join(key) for key in keys])
+        )
+        super()._write_back(
+            [key for key, keep in zip(keys, homogeneous) if keep],
+            [value for value, keep in zip(values, homogeneous) if keep],
+            method,
+        )
 
     def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
         existing = self.get(key)
