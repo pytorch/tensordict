@@ -2781,10 +2781,6 @@ class TensorDictStore(TensorDictBase):
             "Call `to_tensordict()` first."
         )
 
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
-        splits = -(self.batch_size[dim] // -chunks)
-        return self.split(splits, dim)
-
     # ---- Memory ops: not supported ----
 
     def share_memory_(self):

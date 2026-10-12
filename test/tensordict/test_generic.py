@@ -5094,6 +5094,26 @@ class TestGeneric:
                     for piece in pieces:
                         assert piece["a"].shape == (*piece.batch_size, 4)
 
+    def test_chunk_arguments(self):
+        # every class shares one chunk: same checks, and numpy integers work
+        big = TensorDict({"a": torch.zeros(2, 5, 4)}, [2, 5])
+        cases = [
+            big[0],
+            big._get_sub_tensordict(0),
+            lazy_stack([big[0], big[1]]),
+            lazy_stack([big[0], big[1]], 1),
+        ]
+        for td in cases:
+            for chunks in (0, -1):
+                with pytest.raises(ValueError, match="strictly positive"):
+                    td.chunk(chunks)
+            pieces = td.chunk(np.int64(2), -1)
+            assert [p.batch_size for p in pieces] == [
+                r.shape for r in torch.zeros(td.batch_size).chunk(2, -1)
+            ]
+            for piece in pieces:
+                assert all(type(s) is int for s in piece.batch_size)
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_squeeze(self, device):
         torch.manual_seed(1)

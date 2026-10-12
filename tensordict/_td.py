@@ -734,21 +734,12 @@ class TensorDict(TensorDictBase):
         )
         return out
 
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
-        if chunks < 1:
-            raise ValueError(
-                f"chunks must be a strictly positive integer, got {chunks}."
-            )
-        # fall back on split, using upper rounding
+    # Override: Tensor.chunk on each leaf is faster than the generic split
+    def _chunk(self, chunks: int, dim: int) -> tuple[TensorCollection, ...]:
         batch_size = self.batch_size
-        dim = _maybe_correct_neg_dim(dim, batch_size)
         max_size = batch_size[dim]
-        if max_size == 0:
-            # torch.chunk returns `chunks` empty pieces along a zero-size dim
-            segments = [(0, 0)] * chunks
-        else:
-            split_size = -(max_size // -chunks)
-            segments = _create_segments_from_int(split_size, max_size)
+        split_size = -(max_size // -chunks)
+        segments = _create_segments_from_int(split_size, max_size)
         splits = {
             k: (v,) * len(segments) if _is_unbatched(v) else v.chunk(chunks, dim)
             for k, v in self.items()
@@ -3464,13 +3455,6 @@ class _SubTensorDict(TensorDictBase):
         )
 
     # TODO: check these implementations
-
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
-        splits = -(self.batch_size[dim] // -chunks)
-        if splits == 0 and type(chunks) is int and chunks > 0:
-            # torch.chunk returns `chunks` empty pieces along a zero-size dim
-            return self.split([0] * chunks, dim)
-        return self.split(splits, dim)
 
     def _view(self, *args, **kwargs):
         raise RuntimeError(

@@ -514,8 +514,10 @@ class _StoreStackElementView(TensorDictBase):
     def _unsqueeze(self, dim):
         raise RuntimeError(f"Cannot call `unsqueeze` on a {type(self).__name__}.")
 
-    def chunk(self, chunks, dim=0):
-        return self.to_tensordict().chunk(chunks, dim)
+    # Override: one batched read of the element, where the generic split reads
+    # one key at a time
+    def _chunk(self, chunks, dim):
+        return self.to_tensordict()._chunk(chunks, dim)
 
     def share_memory_(self):
         raise NotImplementedError(
@@ -2405,13 +2407,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
             f"Cannot call `unsqueeze` on a {type(self).__name__}. "
             "Call `to_tensordict()` first."
         )
-
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
-        splits = -(self.batch_size[dim] // -chunks)
-        if splits == 0 and type(chunks) is int and chunks > 0:
-            # torch.chunk returns `chunks` empty pieces along a zero-size dim
-            return self.split([0] * chunks, dim)
-        return self.split(splits, dim)
 
     # ---- Memory ops: not supported ----
 
