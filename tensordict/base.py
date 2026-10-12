@@ -40,6 +40,7 @@ from typing import (
 
 import numpy as np
 import torch
+from tensordict._base.unsupported import _unsupported
 from tensordict._contextlib import LAST_OP_MAPS
 from tensordict._deprecation import deprecated, warn_deprecated_env_var
 from tensordict._indexing import (
@@ -2530,7 +2531,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             f"The tensordict has no saved path (memmap={self.is_memmap()}, path={self._memmap_prefix})."
         )
 
-    @abc.abstractmethod
     def make_memmap(
         self,
         key: NestedKey,
@@ -2563,9 +2563,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             A new memory mapped tensor.
 
         """
-        raise NotImplementedError
+        raise RuntimeError(
+            _unsupported(
+                self, "make_memmap", "Only a memory-mapped TensorDict supports it."
+            )
+        )
 
-    @abc.abstractmethod
     def make_memmap_from_storage(
         self,
         key: NestedKey,
@@ -2604,9 +2607,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             A new memory mapped tensor with the given storage.
 
         """
-        raise NotImplementedError
+        raise RuntimeError(
+            _unsupported(
+                self,
+                "make_memmap_from_storage",
+                "Only a memory-mapped TensorDict supports it.",
+            )
+        )
 
-    @abc.abstractmethod
     def make_memmap_from_tensor(
         self,
         key: NestedKey,
@@ -2640,22 +2648,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             A new memory mapped tensor with the given storage.
 
         """
-        raise NotImplementedError
-
-    @classmethod
-    @abc.abstractmethod
-    def _load_memmap(
-        cls,
-        prefix: Path,
-        metadata: dict,
-        device: torch.device | None = None,
-        *,
-        robust_key,
-        out=None,
-        allow_pickle: bool | None = None,
-        mode: str | None = None,
-    ):
-        raise NotImplementedError
+        raise RuntimeError(
+            _unsupported(
+                self,
+                "make_memmap_from_tensor",
+                "Only a memory-mapped TensorDict supports it.",
+            )
+        )
 
     # Key functionality: set, get, set_, set_at_, update, update_
     @abc.abstractmethod

@@ -1643,6 +1643,32 @@ class _Serialization:
             out._sync_all()
         return out
 
+    @classmethod
+    def _load_memmap(
+        cls,
+        prefix: Path,
+        metadata: dict,
+        device: torch.device | None = None,
+        out=None,
+        *,
+        robust_key,
+        allow_pickle: bool | None = None,
+        mode: str | None = None,
+    ):
+        # A class that has no memmap layout of its own (a store, a
+        # PersistentTensorDict, TensorDictParams) loads a TensorDict.
+        from tensordict._td import TensorDict
+
+        return TensorDict._load_memmap(
+            prefix,
+            metadata,
+            device,
+            out,
+            robust_key=robust_key,
+            allow_pickle=allow_pickle,
+            mode=mode,
+        )
+
     def load_memmap_(
         self,
         prefix: str | Path,

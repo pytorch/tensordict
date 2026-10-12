@@ -1080,7 +1080,7 @@ class TestTensorDictsRequiresGrad:
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )

@@ -27,7 +27,9 @@ containers:
   and from other containers and file formats, such as dicts, pytrees, H5,
   Zarr, pandas and `nn.Module` parameters) and `distributed.py`. These
   modules import `base.py`'s helpers, so `base.py` imports them after its
-  helpers and before the class. `_base/factories.py` holds the module-level
+  helpers and before the class. `unsupported.py` holds the mixins of the
+  operations that some backends cannot support (see "The TensorDictBase
+  contract"). `_base/factories.py` holds the module-level
   constructors (`from_dict`, `from_h5`, ...) that `base.py` re-exports.
 - `_td.py`: `TensorDict`, the dense implementation, and `_SubTensorDict`, a
   view on an index of another tensordict.
@@ -181,18 +183,25 @@ overrides only when it can do better.
 The implementations also reuse code in two ways:
 
 - A few class-level aliases still borrow TensorDict's code where it is
-  specific to dense storage: the vmap hooks, `_memmap_` and `_load_memmap`. For
-  example, `_load_memmap = TensorDict._load_memmap` binds the classmethod to
-  `TensorDict`, so that a store or a `PersistentTensorDict` loads a memmap as
+  specific to dense storage: `_SubTensorDict._add_batch_dim`, the vmap hooks
+  of the legacy lazy views and `TensorDictParams._memmap_`. The default
+  `_load_memmap` of `TensorDictBase` calls `TensorDict._load_memmap`, so that
+  a store, a `PersistentTensorDict` or a `TensorDictParams` loads a memmap as
   a `TensorDict`.
 - `TensorDictParams` forwards most calls to the tensordict it wraps
   (`_param_td`), through the `_fallback` decorators in `nn/params.py`.
   `TypedTensorDict` forwards to `_source` through the `_*_DELEGATES` lists at
   the end of `typedtensordict.py`.
 
-An operation that a backend cannot support raises. For example,
-`TensorDictStore._view` raises a `RuntimeError` that asks the user to call
-`to_tensordict()` first.
+An operation that a backend cannot support raises. The raising bodies are
+written once, in the mixins of `_base/unsupported.py`: `_NoShapeOps` (the
+shape hooks), `_NoVmap` (the vmap hooks), `_NoSetNonTensor`, and
+`_StoreUnsupported` for the stores. A class lists them before
+`TensorDictBase` in its bases, so the hooks stay abstract on
+`TensorDictBase`. For example, `TensorDictStore._view` raises a
+`RuntimeError` that asks the user to call `to_tensordict()` first. The
+`make_memmap*` methods, which only `TensorDict` implements, raise by
+default on `TensorDictBase` instead.
 
 ## How calls reach a tensordict
 

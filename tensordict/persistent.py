@@ -20,6 +20,7 @@ from typing import Any, Callable, overload, Tuple, Type, TYPE_CHECKING
 
 import numpy as np
 import torch
+from tensordict._base.unsupported import _NoSetNonTensor, _NoShapeOps, _NoVmap
 from tensordict._deprecation import deprecated
 from tensordict._indexing import _entry_index
 from tensordict._td import (
@@ -758,7 +759,7 @@ _BACKENDS: dict[str, Type[_PersistentBackend]] = {
 }
 
 
-class PersistentTensorDict(TensorDictBase):
+class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase):
     """A tensordict whose entries live in an HDF5 file or a Zarr store.
 
     The HDF5 backend (``backend="h5"``) needs ``h5py``. The Zarr backend
@@ -1500,67 +1501,6 @@ class PersistentTensorDict(TensorDictBase):
             )
         return self
 
-    def make_memmap(
-        self,
-        key: NestedKey,
-        shape: torch.Size | torch.Tensor,
-        *,
-        dtype: torch.dtype | None = None,
-        robust_key: bool | None = True,
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't allowed for persistent tensordicts."
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
-    def make_memmap_from_storage(
-        self,
-        key: NestedKey,
-        storage: torch.UntypedStorage,
-        shape: torch.Size | torch.Tensor,
-        *,
-        dtype: torch.dtype | None = None,
-        robust_key: bool | None = True,
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't allowed for persistent tensordicts."
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
-    def make_memmap_from_tensor(
-        self,
-        key: NestedKey,
-        tensor: torch.Tensor,
-        *,
-        copy_data: bool = True,
-        robust_key: bool | None = True,
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't allowed for persistent tensordicts."
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
-    def memmap_(
-        self,
-        prefix: str | None = None,
-        copy_existing: bool = False,
-        num_threads: int = 0,
-    ) -> PersistentTensorDict:
-        """Raises a ``RuntimeError``: a PersistentTensorDict cannot be memory-mapped in-place.
-
-        Use :meth:`~tensordict.TensorDictBase.memmap` to build a memory-mapped copy instead.
-
-        Args:
-            prefix (str, optional): unused.
-            copy_existing (bool, optional): unused.
-            num_threads (int, optional): unused.
-
-        See :meth:`~tensordict.TensorDictBase.memmap_`.
-        """
-        raise RuntimeError(
-            "Cannot build a memmap TensorDict in-place from a PersistentTensorDict. Use `td.memmap()` instead."
-        )
-
     def _memmap_(
         self,
         *,
@@ -1575,7 +1515,10 @@ class PersistentTensorDict(TensorDictBase):
         robust_key,
     ) -> T:
         if inplace:
-            raise RuntimeError("Cannot call memmap inplace in a persistent tensordict.")
+            raise RuntimeError(
+                "Cannot build a memmap TensorDict in-place from a PersistentTensorDict. "
+                "Use `td.memmap()` instead."
+            )
 
         # re-implements this to make it faster using the meta-data
         def save_metadata(data: TensorDictBase, filepath, metadata=None):
@@ -1684,8 +1627,6 @@ class PersistentTensorDict(TensorDictBase):
                     executor.submit(save_metadata, dest, prefix / "meta.json", metadata)
                 )
         return dest
-
-    _load_memmap = TensorDict._load_memmap
 
     # Override: file-backed entries cannot be pinned.
     def pin_memory(self, *args, **kwargs):
@@ -2052,11 +1993,6 @@ class PersistentTensorDict(TensorDictBase):
             inplace = has_key
         return inplace
 
-    def _set_non_tensor(self, key: NestedKey, value: Any):
-        raise NotImplementedError(
-            f"set_non_tensor is not compatible with the tensordict type {type(self).__name__}."
-        )
-
     def _set_str(
         self,
         key: str,
@@ -2218,42 +2154,6 @@ class PersistentTensorDict(TensorDictBase):
             # to spot what the root is...
             self._is_locked = False
             self.lock_()
-
-    def _add_batch_dim(self, *, in_dim, vmap_level):
-        raise RuntimeError("Persistent tensordicts cannot be used with vmap.")
-
-    def _remove_batch_dim(self, vmap_level, batch_size, out_dim): ...
-
-    def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim): ...
-
-    def _view(self, *args, **kwargs):
-        raise RuntimeError(
-            "Cannot call `view` on a persistent tensordict. Call `reshape` instead."
-        )
-
-    def _transpose(self, dim0, dim1):
-        raise RuntimeError(
-            "Cannot call `transpose` on a persistent tensordict. Make it dense before calling this method by calling `to_tensordict`."
-        )
-
-    def _permute(
-        self,
-        *args,
-        **kwargs,
-    ):
-        raise RuntimeError(
-            "Cannot call `permute` on a persistent tensordict. Make it dense before calling this method by calling `to_tensordict`."
-        )
-
-    def _squeeze(self, dim=None):
-        raise RuntimeError(
-            "Cannot call `squeeze` on a persistent tensordict. Make it dense before calling this method by calling `to_tensordict`."
-        )
-
-    def _unsqueeze(self, dim: int):
-        raise RuntimeError(
-            "Cannot call `unsqueeze` on a persistent tensordict. Make it dense before calling this method by calling `to_tensordict`."
-        )
 
 
 _register_tensor_class(PersistentTensorDict)
