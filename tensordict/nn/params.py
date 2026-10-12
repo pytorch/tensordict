@@ -808,6 +808,10 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
         return TensorDictParams(self._param_td.apply(_clone), no_convert="skip")
 
+    # Override: TensorDict._chunk is faster than the generic split
+    @_fallback
+    def _chunk(self, chunks: int, dim: int) -> tuple[TensorDictBase, ...]: ...
+
     @_fallback
     def _unbind(self, dim: int) -> tuple[TensorDictBase, ...]: ...
 
