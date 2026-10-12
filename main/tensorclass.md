@@ -428,9 +428,11 @@ union of these. Any other annotation raises `TypeError` when the class is
 defined. Python numbers and NumPy arrays become tensors. A value that cannot
 become a tensor, for example a `str`, is stored as
 [`NonTensorData`](reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData) with no error, and attribute access
-returns the `NonTensorData` wrapper. Attribute access does not look in the
-storage for non-tensor values, so it does less work. On one CPU, reading a
-tensor field took 150 ns with `tensor_only` and 230 ns without it.
+returns the `NonTensorData` wrapper. A `None` field is a key missing
+from the tensor storage: setting a field to `None` or deleting it removes
+its entry, and reading it gives `None`. Attribute access does not look in
+the storage for non-tensor values, so it does less work. On one CPU, reading
+a tensor field took 150 ns with `tensor_only` and 230 ns without it.
 `benchmarks/tensorclass/test_tensorclass_speed.py` measures it.
 
 `frozen`
