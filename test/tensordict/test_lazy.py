@@ -11,6 +11,7 @@ import os
 import pickle
 import platform
 import sys
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -1273,6 +1274,47 @@ class TestLazyStackedTensorDict:
         )
         assert td.batch_size == torch.Size([3, 2, 4])
         assert td.names == ["s", None, None]
+
+    @pytest.mark.parametrize("from_list", [False, True])
+    def test_from_dict_names_without_batch_size(self, from_list):
+        # without a batch_size the members get no names today; the calls that
+        # 0.17 changes (names given to the members, ValueError on a mismatch)
+        # warn and keep their result
+        def build(members, **kwargs):
+            if from_list:
+                return LazyStackedTensorDict.from_list(members, **kwargs)
+            return LazyStackedTensorDict.from_dict(members, **kwargs)
+
+        members = [{"a": torch.zeros(3)}, {"a": torch.ones(3)}]
+        scalars = [{"a": torch.zeros(())}, {"a": torch.ones(())}]
+        for data, kwargs, batch_size, names in [
+            (members, {"auto_batch_size": True}, [2, 3], ["s", None]),
+            (members, {"auto_batch_size": True, "names": ["s"]}, [2, 3], None),
+            (members, {"auto_batch_size": True, "batch_dims": 1}, [2, 3], None),
+            (members, {}, [2], ["s"]),
+            (scalars, {"auto_batch_size": True}, [2], ["s"]),
+        ]:
+            kwargs.setdefault("names", ["s", "x"])
+            with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+                td = build(data, **kwargs)
+            assert td.batch_size == torch.Size(batch_size)
+            assert td.names == (names or ["s", None])
+            assert all(
+                name is None for member in td.tensordicts for name in member.names
+            )
+        with pytest.warns(FutureWarning) as record:
+            build(members, auto_batch_size=True, names=["s", "x"])
+        assert record[0].filename == __file__
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            td = build(scalars, auto_batch_size=True, names=["s"])
+            assert td.names == ["s"]
+            td = build(scalars, names=["s"])
+            assert td.names == ["s"]
+            td = build(members, batch_size=[3], names=["s", "x"])
+            assert td.names == ["s", "x"]
+            td = build(members, auto_batch_size=True)
+            assert td.names == [None, None]
 
     def test_lazy_get(self):
         inner_td = lazy_stack(
