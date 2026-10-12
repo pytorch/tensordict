@@ -1,5 +1,10 @@
 # TypedTensorDict
 
+Warning
+
+`TypedTensorDict` is experimental: its API can change in a minor release
+without a deprecation cycle.
+
 A [`TypedTensorDict`](reference/generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict) is a tensordict with declared fields.
 It subclasses [`TensorDictBase`](reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase), and you declare its fields
 as class annotations, as in a [`typing.TypedDict`](https://docs.python.org/3/library/typing.html#typing.TypedDict). Choose it over a

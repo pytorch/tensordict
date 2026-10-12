@@ -11,6 +11,11 @@ Bases: [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBa
 
 A TensorDictBase subclass with typed field declarations and backend composition.
 
+Warning
+
+`TypedTensorDict` is experimental: its API can change in a minor
+release without a deprecation cycle.
+
 TypedTensorDict combines TensorDict's tensor operations with TypedDict-style
 field declarations. Subclasses declare fields as class annotations and get:
 

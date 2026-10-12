@@ -40,7 +40,7 @@ reshaping and stacking apply to these dimensions.
 | [`LazyStackedTensorDict`](reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) | A stack of tensordicts whose entries have different shapes, for example sequences of different lengths. [`lazy_stack()`](reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack) makes one. It keeps the stacked tensordicts, so a write to the stack changes them. | Each read of an entry stacks it into a new tensor. An entry with different shapes raises `RuntimeError` unless you ask for a padded tensor, a nested tensor or a list (`get(key, as_padded_tensor=True)`). `keys()` lists only the keys that all the stacked tensordicts have. |
 | [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) | Data in an HDF5 or Zarr file, read on demand. The file can be larger than the memory. | Each read loads a new tensor from the file, so an in-place operation on it does not change the file. `update_()` writes nothing, with no error ([#2217](https://github.com/pytorch/tensordict/issues/2217), [#2242](https://github.com/pytorch/tensordict/issues/2242)). Needs `h5py` or `zarr`. |
 | [`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) | Data on a Redis, Dragonfly or KeyDB server, which several processes or machines can read and write. | Needs a running server and the `redis` package. Each read goes over the network. The data stays on the server until you call `clear_redis()`. `update_()` writes nothing, with no error ([#2242](https://github.com/pytorch/tensordict/issues/2242)). |
-| [`TypedTensorDict`](reference/generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict) | Declared fields on a class that is a `TensorDictBase`, with `**state` unpacking and the full tensordict API. | Attribute access returns a string field as a [`NonTensorData`](reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData) wrapper. No custom `__init__` and no `__post_init__`. |
+| [`TypedTensorDict`](reference/generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict) | Declared fields on a class that is a `TensorDictBase`, with `**state` unpacking and the full tensordict API. | Experimental: its API can change in a minor release without a deprecation cycle (see [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide)). Attribute access returns a string field as a [`NonTensorData`](reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData) wrapper. No custom `__init__` and no `__post_init__`. |
 | A plain `dict` of tensors | Any Python values, with no rule on their shapes. | No batch dimensions: you write a loop, or a `torch.utils._pytree.tree_map` call, for each operation on the values. |
 
 On `PersistentTensorDict` and `TensorDictStore`, use `set_()` for each
@@ -75,6 +75,10 @@ a [`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#
 put them in a tensordict with `batch_size=[]`.
 
 ## TensorClass or TypedTensorDict?
+
+`TypedTensorDict` is experimental: its API can change in a minor release
+without a deprecation cycle (see [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide)).
+`TensorClass` follows the normal deprecation rules.
 
 Both declare typed fields with class annotations, and both can wrap a
 tensordict of any backend. A [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) holds a

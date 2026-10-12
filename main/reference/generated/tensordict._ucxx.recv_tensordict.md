@@ -4,6 +4,11 @@
 
 Receive a TensorDict from a UCXX endpoint (stateless, always expects metadata).
 
+Warning
+
+`recv_tensordict` is experimental: its API can change in a minor
+release without a deprecation cycle.
+
 Parameters:
 
 - **endpoint** - a UCXX endpoint object.

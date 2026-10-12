@@ -318,6 +318,11 @@ raises a `ValueError` for them (see [Printing and display](../printing.html#prin
 
 ## UnbatchedTensor
 
+Warning
+
+`UnbatchedTensor` is experimental: its API can change in a minor release
+without a deprecation cycle.
+
 Some tensors belong to the whole batch, not to each element: a configuration
 tensor, a mask, or parameters that all the elements share. The shape of such
 a tensor does not start with the batch size. To store it in a tensordict, wrap

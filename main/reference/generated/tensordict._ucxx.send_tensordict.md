@@ -4,6 +4,11 @@
 
 Send a TensorDict over a UCXX endpoint (stateless, always sends metadata).
 
+Warning
+
+`send_tensordict` is experimental: its API can change in a minor
+release without a deprecation cycle.
+
 Parameters:
 
 - **endpoint** - a UCXX endpoint object.

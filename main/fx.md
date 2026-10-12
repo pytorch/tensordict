@@ -10,7 +10,7 @@ object is not subscriptable` on a [`TensorDictModule`](reference/generated/tenso
 Warning
 
 `tensordict.prototype.fx` is a prototype. Its API can change without a
-deprecation period. To make a module faster or to export it, use
+deprecation cycle. To make a module faster or to export it, use
 [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile) or [`torch.export.export()`](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export) (see
 [torch.compile, torch.func, torch.export and CUDA graphs](compile.html#compile)). If you find a problem, open an issue.
 

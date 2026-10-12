@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5147+gbb5f4a1b6.d20261012)">
+<meta name="llm:version" content="main (0.14.0.dev5152+gf092054bf.d20261012)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5147+gbb5f4a1b6.d20261012)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5152+gf092054bf.d20261012)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1644,6 +1644,11 @@ document.write(`
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict._ucxx.</span></span><span class="sig-name descname"><span class="pre">TensorDictServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">consolidated</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict._ucxx.TensorDictServer" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>A one-to-many listener that accepts connections and yields TensorDictPipe instances.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><code class="docutils literal notranslate"><span class="pre">TensorDictServer</span></code> is experimental: its API can change in a minor
+release without a deprecation cycle.</p>
+</div>
 <p>Wraps <code class="docutils literal notranslate"><span class="pre">ucxx.create_listener</span></code> to provide a server that can handle
 multiple clients, each getting their own <a class="reference internal" href="tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe" title="tensordict._ucxx.TensorDictPipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPipe</span></code></a>.
 It needs the optional <code class="docutils literal notranslate"><span class="pre">ucxx</span></code> package. Import it from
@@ -2053,7 +2058,7 @@ for each new client connection.</p>
        "headline": "TensorDictServer",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictServer",
        "url": "/reference/generated/tensordict._ucxx.TensorDictServer.html",
-       "articleBody": "TensorDictServer# class tensordict._ucxx.TensorDictServer(port: int, *, consolidated: bool = True)# Bases: object A one-to-many listener that accepts connections and yields TensorDictPipe instances. Wraps ucxx.create_listener to provide a server that can handle multiple clients, each getting their own TensorDictPipe. It needs the optional ucxx package. Import it from tensordict._ucxx. Examples Each client connects with TensorDictPipe.connect(). This example is not tested: it needs ucxx and client processes. import asyncio from tensordict._ucxx import TensorDictServer async def handler(pipe): async for td in pipe: print(td[\"obs\"].shape) async def main(): server = TensorDictServer(port=13337) await server.serve(handler) # runs until server.close() asyncio.run(main()) async aclose() \u2192 None# Close the server (async). close() \u2192 None# Close the server and stop accepting connections. async serve(on_connect: Callable[[TensorDictPipe], Awaitable[None]]) \u2192 None# Accept connections and call on_connect for each new client. This runs indefinitely until close() is called. Parameters: on_connect \u2013 an async callable that receives a TensorDictPipe for each new client connection.",
+       "articleBody": "TensorDictServer# class tensordict._ucxx.TensorDictServer(port: int, *, consolidated: bool = True)# Bases: object A one-to-many listener that accepts connections and yields TensorDictPipe instances. Warning TensorDictServer is experimental: its API can change in a minor release without a deprecation cycle. Wraps ucxx.create_listener to provide a server that can handle multiple clients, each getting their own TensorDictPipe. It needs the optional ucxx package. Import it from tensordict._ucxx. Examples Each client connects with TensorDictPipe.connect(). This example is not tested: it needs ucxx and client processes. import asyncio from tensordict._ucxx import TensorDictServer async def handler(pipe): async for td in pipe: print(td[\"obs\"].shape) async def main(): server = TensorDictServer(port=13337) await server.serve(handler) # runs until server.close() asyncio.run(main()) async aclose() \u2192 None# Close the server (async). close() \u2192 None# Close the server and stop accepting connections. async serve(on_connect: Callable[[TensorDictPipe], Awaitable[None]]) \u2192 None# Accept connections and call on_connect for each new client. This runs indefinitely until close() is called. Parameters: on_connect \u2013 an async callable that receives a TensorDictPipe for each new client connection.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

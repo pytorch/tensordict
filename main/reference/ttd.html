@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5147+gbb5f4a1b6.d20261012)">
+<meta name="llm:version" content="main (0.14.0.dev5152+gf092054bf.d20261012)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5147+gbb5f4a1b6.d20261012)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5152+gf092054bf.d20261012)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1630,6 +1630,11 @@ document.write(`
                   
   <section id="typedtensordict">
 <span id="api-typed-tensordict"></span><h1>TypedTensorDict<a class="headerlink" href="#typedtensordict" title="Link to this heading">#</a></h1>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><code class="docutils literal notranslate"><span class="pre">TypedTensorDict</span></code> is experimental: its API can change in a minor release
+without a deprecation cycle.</p>
+</div>
 <p>This page lists <a class="reference internal" href="generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict" title="tensordict.TypedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TypedTensorDict</span></code></a>, a
 <a class="reference internal" href="generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> subclass whose fields you declare as
 class annotations, as in a <code class="docutils literal notranslate"><span class="pre">TypedDict</span></code>. A subclass adds fields to the
@@ -2030,7 +2035,7 @@ listed by task in <a class="reference internal" href="td.html#api-tensordict-met
        "headline": "TypedTensorDict",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TypedTensorDict",
        "url": "/reference/ttd.html",
-       "articleBody": "TypedTensorDict# This page lists TypedTensorDict, a TensorDictBase subclass whose fields you declare as class annotations, as in a TypedDict. A subclass adds fields to the fields of its parent, and from_tensordict() wraps any tensordict (H5, Redis, lazy stacks) without a copy. For a guide with examples, see TypedTensorDict. TypedTensorDict has the methods of TensorDictBase, listed by task in Methods by task. TypedTensorDict(*args, **kwargs) A TensorDictBase subclass with typed field declarations and backend composition. See also# TypedTensorDict: declare and use a TypedTensorDict. Which container should I use?: tensorclass, TypedTensorDict or TensorDict. Containers on storage backends: which containers work on which storage backends.",
+       "articleBody": "TypedTensorDict# Warning TypedTensorDict is experimental: its API can change in a minor release without a deprecation cycle. This page lists TypedTensorDict, a TensorDictBase subclass whose fields you declare as class annotations, as in a TypedDict. A subclass adds fields to the fields of its parent, and from_tensordict() wraps any tensordict (H5, Redis, lazy stacks) without a copy. For a guide with examples, see TypedTensorDict. TypedTensorDict has the methods of TensorDictBase, listed by task in Methods by task. TypedTensorDict(*args, **kwargs) A TensorDictBase subclass with typed field declarations and backend composition. See also# TypedTensorDict: declare and use a TypedTensorDict. Which container should I use?: tensorclass, TypedTensorDict or TensorDict. Containers on storage backends: which containers work on which storage backends.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

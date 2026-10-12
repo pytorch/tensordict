@@ -6,6 +6,11 @@ Bases: [`object`](https://docs.python.org/3/builtins/functions.html#object)
 
 A persistent point-to-point channel for streaming TensorDicts over UCXX.
 
+Warning
+
+`TensorDictPipe` is experimental: its API can change in a minor
+release without a deprecation cycle.
+
 It needs the optional `ucxx` package. Import it from
 `tensordict._ucxx`: there is no public import path.
 

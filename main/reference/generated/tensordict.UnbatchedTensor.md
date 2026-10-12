@@ -6,6 +6,11 @@ Bases: `_UnbatchedTensorMixin`, [`Tensor`](https://docs.pytorch.org/docs/stable/
 
 A torch.Tensor subclass whose shape is ignored during batch operations on a TensorDict.
 
+Warning
+
+`UnbatchedTensor` is experimental: its API can change in a minor
+release without a deprecation cycle.
+
 Use it for an entry that belongs to the whole batch and does not have
 the batch dimensions: a lookup table, the parameters of a model, a
 mask shared by every element. A plain tensor entry must have a shape

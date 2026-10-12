@@ -368,6 +368,12 @@ def shared_dataset(rank, world_size):
 
 ## Stream between nodes with UCXX
 
+Warning
+
+`TensorDictPipe`, `TensorDictServer`, `send_tensordict` and
+`recv_tensordict` are experimental: their API can change in a minor
+release without a deprecation cycle.
+
 [`TensorDictPipe`](reference/generated/tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe) sends tensordicts from one process
 to one other process over [UCXX](https://github.com/rapidsai/ucxx), the
 Python bindings of [UCX](https://openucx.org/). Use it when one node

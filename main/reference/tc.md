@@ -47,6 +47,11 @@ an entry: [`attrs()`](generated/tensordict.TensorDictBase.attrs.html#tensordict.
 
 ## Entries that ignore the batch shape
 
+Warning
+
+`UnbatchedTensor` is experimental: its API can change in a minor release
+without a deprecation cycle.
+
 An [`UnbatchedTensor`](generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor) is a tensor that shape operations
 on its tensordict (indexing, reshaping, stacking) leave unchanged.
 Operations on its data, such as arithmetic or

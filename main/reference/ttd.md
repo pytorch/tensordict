@@ -1,5 +1,10 @@
 # TypedTensorDict
 
+Warning
+
+`TypedTensorDict` is experimental: its API can change in a minor release
+without a deprecation cycle.
+
 This page lists [`TypedTensorDict`](generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict), a
 [`TensorDictBase`](generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) subclass whose fields you declare as
 class annotations, as in a `TypedDict`. A subclass adds fields to the

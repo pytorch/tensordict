@@ -10,7 +10,9 @@ an in-memory [`TensorDict`](reference/generated/tensordict.TensorDict.html#tenso
 or the server directly. A few operations behave differently on some backends:
 see Operations on each backend.
 
-To choose between `TensorClass` and `TypedTensorDict`, see
+`TypedTensorDict` is experimental: its API can change in a minor release
+without a deprecation cycle (see [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide)). To choose
+between `TensorClass` and `TypedTensorDict`, see
 [Which container should I use?](choosing_a_container.html#choosing-a-container). For the backends themselves, see [Large datasets and storage backends](storage.html#storage)
 and [Save and load tensordicts](saving.html#saving).
 

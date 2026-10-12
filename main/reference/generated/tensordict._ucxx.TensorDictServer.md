@@ -6,6 +6,11 @@ Bases: [`object`](https://docs.python.org/3/builtins/functions.html#object)
 
 A one-to-many listener that accepts connections and yields TensorDictPipe instances.
 
+Warning
+
+`TensorDictServer` is experimental: its API can change in a minor
+release without a deprecation cycle.
+
 Wraps `ucxx.create_listener` to provide a server that can handle
 multiple clients, each getting their own [`TensorDictPipe`](tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe).
 It needs the optional `ucxx` package. Import it from
