@@ -2132,6 +2132,12 @@ class _Reductions:
                 f"The dimension {dim} is incompatible with a tensordict with batch_size {self.batch_size}."
             )
         batch_size = self.batch_size
+        names = None
+        if self._has_names():
+            if keepdim:
+                names = list(self.names)
+            else:
+                names = [name for i, name in enumerate(self.names) if i not in new_dim]
         if keepdim:
             batch_size = torch.Size(
                 [b if i not in new_dim else 1 for i, b in enumerate(batch_size)]
@@ -2146,10 +2152,12 @@ class _Reductions:
                 out,
                 default=None,
                 batch_size=batch_size,
+                names=names,
             )
             return out.update(result)
 
         return self._fast_apply(
             lambda x: torch.logsumexp(x, dim=new_dim, keepdim=keepdim),
             batch_size=batch_size,
+            names=names,
         )
