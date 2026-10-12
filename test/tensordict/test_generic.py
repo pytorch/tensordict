@@ -3517,6 +3517,36 @@ class TestGeneric:
         assert out.a.shape == (4, 6)
         assert out.b.shape == (4, 6, 2)
 
+    def test_pad_tensorclass(self):
+        # pad without inplace=True returns a tensorclass for a tensorclass,
+        # at the top level and nested, like the tensorclass method
+        @tensorclass
+        class _Inner:
+            y: torch.Tensor
+
+        @tensorclass
+        class _Sample:
+            a: torch.Tensor
+            inner: _Inner
+            s: str = "x"
+
+        s = _Sample(
+            a=torch.ones(3, 4),
+            inner=_Inner(y=torch.ones(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        out = pad(s, [0, 1])
+        assert type(out) is _Sample
+        assert type(out.inner) is _Inner
+        assert out.batch_size == (4,)
+        assert out.a.shape == (4, 4)
+        assert out.inner.y.shape == (4,)
+        assert out.s == ["x", "x", "x", None]
+        assert (out.a == s.pad([0, 1]).a).all()
+        assert type(s.pad([0, 1]).inner) is _Inner
+        td = TensorDict(s=s, batch_size=[3])
+        assert type(pad(td, [0, 1])["s"]) is _Sample
+
     def test_pad_keeps_names(self):
         td = TensorDict(
             a=torch.ones(3, 4),
