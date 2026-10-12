@@ -1521,7 +1521,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         self.batch_size = value
 
     @property
-    @abc.abstractmethod
     def batch_size(self) -> torch.Size:
         """The batch size of the tensordict, as a :class:`torch.Size`. ``shape`` is the same attribute.
 
@@ -1565,7 +1564,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             ...
             RuntimeError: the Tensor key 0 has shape torch.Size([3, 4]) which is incompatible with the batch-size torch.Size([4]).
         """
-        raise NotImplementedError
+        return self._batch_size
+
+    @batch_size.setter
+    def batch_size(self, new_size: torch.Size) -> None:
+        self._batch_size_setter(new_size)
 
     def size(self, dim: int | None = None) -> torch.Size | int:
         """Returns the batch size, or the size of one batch dimension.
@@ -2471,7 +2474,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Device functionality: device is optional. If provided, it will enforce
     # all data is on the same device
     @property
-    @abc.abstractmethod
     def device(self) -> torch.device | None:
         """Device of a TensorDict.
 
@@ -2517,12 +2519,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             device(type='meta')
 
         """
-        raise NotImplementedError
+        return self._device
 
     @device.setter
-    @abc.abstractmethod
     def device(self, value: DeviceType) -> None:
-        raise NotImplementedError
+        raise RuntimeError(
+            "device cannot be set using tensordict.device = device, "
+            "because device cannot be updated in-place. To update device, use "
+            "tensordict.to(new_device), which will return a new tensordict "
+            "on the new device. You can also use tensordict.to(new_device) as a "
+            "context manager for temporary device changes."
+        )
 
     @_lock_blocked
     def clear(self) -> Self:
@@ -6983,9 +6990,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
-    @abc.abstractmethod
     def _change_batch_size(self, new_size: torch.Size) -> None:
-        raise NotImplementedError
+        self._batch_size = new_size
 
     def is_contiguous(self) -> bool:
         """Returns a boolean indicating if all the tensors are contiguous."""
