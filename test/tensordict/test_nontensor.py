@@ -853,6 +853,46 @@ class TestNonTensorData:
         td[()] = TensorDict(a="s1", batch_size=batch_size)
         assert td.get("a").tolist() == expected
 
+    @pytest.mark.parametrize(
+        "value", [3, 2.5, True, np.int64(3), np.float32(2.5)], ids=type
+    )
+    @pytest.mark.parametrize(
+        "index", [1, slice(0, 2), torch.tensor([0, 2])], ids=["int", "slice", "tensor"]
+    )
+    def test_lazy_set_at_scalar(self, value, index):
+        # A scalar written into a non-tensor entry of a lazy stack gives what a
+        # dense tensordict gives. Each member writes it at the index (), which
+        # used to raise AttributeError: stack_dim.
+        def make():
+            return TensorDict(
+                a=NonTensorData("s0", batch_size=[3]),
+                b=torch.zeros(3),
+                batch_size=[3],
+            )
+
+        dense = make()
+        dense.set_at_("a", value, index)
+        lazy = lazy_stack(list(make().unbind(0)))
+        lazy.set_at_("a", value, index)
+        expected = dense.get("a").tolist()
+        result = lazy.get("a").tolist()
+        assert [type(x) for x in result] == [type(x) for x in expected]
+        for x, y in zip(result, expected):
+            if isinstance(y, torch.Tensor):
+                assert x.dtype == y.dtype
+                assert x == y
+            else:
+                assert x == y == "s0"
+        assert lazy["b"].tolist() == [0.0, 0.0, 0.0]
+
+    def test_set_at_scalar_no_batch_dims(self):
+        # A member of a lazy stack writes a scalar into its non-tensor entry
+        # at (), which selects the whole entry
+        td = TensorDict(a=NonTensorData("s0"))
+        td.set_at_("a", 3, ())
+        assert type(td.get("a")) is NonTensorData
+        assert td.get("a").data == torch.tensor(3)
+
     @pytest.mark.parametrize("cls", [NonTensorData, MetaData])
     @pytest.mark.parametrize("locked", [False, True])
     @pytest.mark.parametrize("index", [..., (...,)], ids=["ellipsis", "tuple"])
