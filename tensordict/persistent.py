@@ -1398,17 +1398,6 @@ class PersistentTensorDict(TensorDictBase):
     def _change_batch_size(self, value):
         raise NotImplementedError
 
-    def _stack_onto_(
-        self, list_item: list[CompatibleType], dim: int
-    ) -> PersistentTensorDict:
-        for key in self.keys():
-            vals = [td._get_str(key, None) for td in list_item]
-            if all(v is None for v in vals):
-                continue
-            stacked = torch.stack(vals, dim=dim)
-            self.set_(key, stacked)
-        return self
-
     @property
     def batch_size(self):
         return self._batch_size

@@ -3802,10 +3802,6 @@ class TestTensorDicts(TestTensorDictsBase):
             )
             for _ in range(tds_count)
         ]
-        if td_name in ("sub_td", "sub_td2"):
-            with pytest.raises(IndexError, match="storages of the indexed tensors"):
-                LazyStackedTensorDict.lazy_stack(tds_list, 0, out=td)
-            return
         data_ptr_set_before = {val.data_ptr() for val in decompose(td)}
 
         stacked_td = LazyStackedTensorDict.lazy_stack(tds_list, 0, out=td)
@@ -5343,6 +5339,87 @@ class TestEmptyTensorMemmapRoundtrip:
 
         assert "empty" in loaded
         assert "missing" not in loaded
+
+
+class TestSubTensorDictStack:
+    @pytest.mark.parametrize("idx", [0, 1, -1, slice(1, 3), (slice(None), 1)])
+    def test_stack_out_sub_td(self, idx):
+        # torch.stack(..., out=sub) writes into the source at the sub's index,
+        # also when the index does not start at offset 0 and for nested entries.
+        td = TensorDict(
+            a=torch.zeros(3, 2, 4),
+            nested=TensorDict(b=torch.zeros(3, 2, 5), batch_size=[3, 2]),
+            batch_size=[3, 2],
+        )
+        sub = td._get_sub_tensordict(idx)
+        expected = td.clone()
+        items = [t.to_tensordict() + i + 1 for i, t in enumerate(sub.unbind(0))]
+        expected[idx] = torch.stack(items, 0)
+        ptrs = {v.data_ptr() for v in td.values(True, True)}
+        assert torch.stack(items, 0, out=sub) is sub
+        assert {v.data_ptr() for v in td.values(True, True)} == ptrs
+        assert (td == expected).all()
+
+    def test_stack_out_sub_td_missing_key(self):
+        # A key of the destination that no stacked tensordict has is kept,
+        # as with a dense destination.
+        td = TensorDict(a=torch.zeros(3, 2), c=torch.zeros(3, 2), batch_size=[3, 2])
+        sub = td._get_sub_tensordict(1)
+        torch.stack([TensorDict(a=torch.ones(()))] * 2, 0, out=sub)
+        assert (td["a"][1] == 1).all()
+        assert (td["a"][0] == 0).all() and (td["a"][2] == 0).all()
+        assert (td["c"] == 0).all()
+
+    @pytest.mark.parametrize(
+        "shape,device", [((3, 0), "cpu"), ((3, 2), "meta")], ids=["empty", "meta"]
+    )
+    def test_stack_out_sub_td_copy_index_no_data(self, shape, device):
+        # Leaves without data have nothing to write: an index that copies is accepted.
+        td = TensorDict(a=torch.zeros(shape, device=device), batch_size=[3])
+        sub = td._get_sub_tensordict(torch.tensor([0, 2]))
+        item = TensorDict(a=torch.zeros(shape[1:], device=device), batch_size=[])
+        assert torch.stack([item] * 2, 0, out=sub) is sub
+
+    def test_stack_out_sub_td_nested_mismatch(self):
+        td = TensorDict(
+            nested=TensorDict(b=torch.zeros(3, 2), batch_size=[3, 2]), batch_size=[3, 2]
+        )
+        sub = td._get_sub_tensordict(0)
+        with pytest.raises(RuntimeError, match="non-tensordict values"):
+            torch.stack([TensorDict(nested=torch.ones(()))] * 2, 0, out=sub)
+
+    def test_stack_out_sub_td_nested_non_tensor(self):
+        td = TensorDict(
+            nested=TensorDict(b=torch.zeros(3, 2), batch_size=[3, 2]), batch_size=[3, 2]
+        )
+        sub = td._get_sub_tensordict(1)
+        with pytest.raises(RuntimeError, match="non-tensordict values"):
+            torch.stack([TensorDict(nested=NonTensorData("x"))] * 2, 0, out=sub)
+
+    @pytest.mark.parametrize("idx", [0, 1])
+    def test_stack_out_sub_td_shape_mismatch(self, idx):
+        # torch.stack must not resize the indexed view and write over other rows.
+        td = TensorDict(a=torch.zeros(3, 2, 1), batch_size=[3, 2])
+        sub = td._get_sub_tensordict(idx)
+        with pytest.raises(RuntimeError, match="Cannot stack values of shape"):
+            torch.stack([TensorDict(a=torch.ones(3))] * 2, 0, out=sub)
+        assert td["a"].shape == (3, 2, 1)
+        assert (td["a"] == 0).all()
+
+    def test_stack_out_sub_td_negative_dim(self):
+        td = TensorDict(a=torch.zeros(3, 2, 4, 5), batch_size=[3, 2, 4])
+        items = [
+            TensorDict(a=torch.full((2, 5), float(i)), batch_size=[2]) for i in range(4)
+        ]
+        torch.stack(items, -1, out=td._get_sub_tensordict(1))
+        assert (td["a"][1] == torch.stack([t["a"] for t in items], -2)).all()
+        assert (td["a"][0] == 0).all() and (td["a"][2] == 0).all()
+
+    def test_stack_out_sub_td_copy_index(self):
+        td = TensorDict(a=torch.zeros(3, 2), batch_size=[3, 2])
+        sub = td._get_sub_tensordict(torch.tensor([0, 2]))
+        with pytest.raises(IndexError, match="storages of the indexed tensors"):
+            torch.stack([TensorDict(a=torch.ones(2), batch_size=[2])] * 2, 0, out=sub)
 
 
 class TestSubTensorDictMemmapRoundtrip:
