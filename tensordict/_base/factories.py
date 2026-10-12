@@ -172,7 +172,7 @@ def from_dict(
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
-        >>> # Without auto_batch_size=True, the batch size is empty.
+        >>> # Without auto_batch_size=True or batch_dims, the batch size is empty.
         >>> from_dict(input_dict).batch_size
         torch.Size([])
         >>> # To work out the batch size of an existing tensordict, use auto_batch_size_
