@@ -491,6 +491,42 @@ class TestPointwiseOps:
         assert (td == self._lazy_td * 2).all()
         assert ((td.abs() ** 2).clamp_max(td) == td).all()
 
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize(
+        "name",
+        (
+            "abs acos asin atan ceil cos cosh erf erfc exp expm1 floor frac lgamma "
+            "log log10 log1p log2 reciprocal round sigmoid sign sin sinh sqrt tan "
+            "tanh trunc"
+        ).split(),
+    )
+    def test_unary_no_tensor(self, name, nested):
+        # Without tensor leaves, the structure comes back, as with -td.
+        td = TensorDict({"a": TensorDict({}, [3])} if nested else {}, [3])
+        result = getattr(td, name)()
+        assert result is not td
+        assert result.batch_size == td.batch_size
+        assert list(result.keys(True)) == list(td.keys(True))
+        assert getattr(td, name + "_")() is td
+
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_binary_no_tensor(self, nested):
+        # Without tensor leaves, the structure comes back, as with td + 1.
+        td = TensorDict({"a": TensorDict({}, [3])} if nested else {}, [3])
+        results = [td - 1, 1 - td, td / 2, 2 / td, td**2, td - td, td / td, td**td]
+        results += [td.sub(1, alpha=2), td.rsub(1, alpha=2)]
+        for result in results:
+            assert result is not td
+            assert result.batch_size == td.batch_size
+            assert list(result.keys(True)) == list(td.keys(True))
+        assert td.sub_(1) is td
+        assert td.sub_(td, alpha=2) is td
+        assert td.div_(2) is td
+        assert td.pow_(td) is td
+        norm = td.norm()
+        assert norm.batch_size == ()
+        assert list(norm.keys(True)) == list(td.keys(True))
+
     def test_clamp_min_default(self):
         # Create two tds with different key sets
         td0 = TensorDict(a=2, b=2, c=2)

@@ -6198,7 +6198,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         """
         keys, vals = self._items_list(True, True, collapse=True)
-        vals = _foreach("norm", vals, dtype=dtype)
+        if vals:
+            vals = _foreach("norm", vals, dtype=dtype)
         items = dict(zip(keys, vals))
 
         def get(name, val):
