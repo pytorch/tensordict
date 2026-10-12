@@ -2550,6 +2550,55 @@ class TestGeneric:
             ("child", "g", "h"),
         ]
 
+    @staticmethod
+    def _is_leaf_nested_td():
+        class MyClass(TensorClass):
+            x: torch.Tensor
+
+        return TensorDict(
+            a=torch.zeros(3),
+            nested=TensorDict(b=torch.zeros(3), batch_size=[3]),
+            tc=MyClass(x=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+
+    @pytest.mark.parametrize("stack", [False, True])
+    def test_items_is_leaf_filters(self, stack):
+        # is_leaf filters the leaves; it does not stop the recursion, so
+        # items, keys and values list the same entries (#2131).
+        td = self._is_leaf_nested_td()
+        if stack:
+            td = lazy_stack([td, td.clone()])
+        for is_leaf in (
+            lambda cls: True,
+            lambda cls: not is_tensor_collection(cls) or is_tensorclass(cls),
+        ):
+            keys = list(td.keys(True, True, is_leaf=is_leaf))
+            items = list(td.items(True, True, is_leaf=is_leaf))
+            assert sorted(map(str, keys)) == sorted(str(key) for key, _ in items)
+            assert ("tc", "x") in keys
+            assert len(list(td.values(True, True, is_leaf=is_leaf))) == len(keys)
+
+    @pytest.mark.parametrize("stack", [False, True])
+    @pytest.mark.parametrize("inplace", [False, True])
+    def test_flatten_keys_is_leaf_keeps_value(self, stack, inplace):
+        # flatten_keys keeps a value that is_leaf accepts whole, in place and
+        # out of place, on dense and lazy tensordicts (#2131).
+        td = self._is_leaf_nested_td()
+        if stack:
+            td = lazy_stack([td, td.clone()])
+        out = td.flatten_keys(
+            is_leaf=lambda cls: not is_tensor_collection(cls) or is_tensorclass(cls),
+            inplace=inplace,
+        )
+        assert set(out.keys()) == {"a", "nested.b", "tc"}
+        assert is_tensorclass(out.get("tc"))
+        td = self._is_leaf_nested_td()
+        if stack:
+            td = lazy_stack([td, td.clone()])
+        out = td.flatten_keys(is_leaf=lambda cls: True, inplace=inplace)
+        assert set(out.keys()) == {"a", "nested", "tc"}
+
     def test_load_device(self, tmpdir):
         t = nn.Transformer(
             d_model=64,

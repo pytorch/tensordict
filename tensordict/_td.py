@@ -41,6 +41,7 @@ from tensordict.base import (
     _holds_its_tensors,
     _is_accepted_class,
     _is_leaf_nontensor,
+    _IS_LEAF_WITHOUT_NODES,
     _is_tensor_collection,
     _load_metadata,
     _NESTED_TENSORS_AS_LISTS,
@@ -2467,6 +2468,9 @@ class TensorDict(TensorDictBase):
             return sorted(self._tensordict.items(), key=keyfunc)
         elif include_nested and leaves_only and not sort:
             is_leaf = _default_is_leaf if is_leaf is None else is_leaf
+            # is_leaf only filters: the entries of a tensor collection that it
+            # accepts are listed too
+            accepts_nodes = is_leaf not in _IS_LEAF_WITHOUT_NODES
             result = []
 
             def fast_iter():
@@ -2474,30 +2478,38 @@ class TensorDict(TensorDictBase):
                     # We could easily make this faster, here we're iterating twice over the keys,
                     #  but we could iterate just once.
                     #  Ideally we should make a "dirty" list of items then call unravel_key on all of them.
-                    if not is_leaf(type(val)):
+                    if is_leaf(type(val)):
+                        result.append((key, val))
+                        # Recurse as TensorDictBase.items does: not into
+                        # non-tensor or pass-through values.
+                        if not (
+                            accepts_nodes
+                            and _is_tensor_collection(type(val))
+                            and not is_non_tensor(val)
+                            and not _pass_through(val)
+                        ):
+                            continue
+                    elif (
                         # Skip the values without entries, such as the tensors in
                         # non_tensor_items. The cheap checks come first: a TensorDict
                         # has entries, and the default is_leaf and
                         # _NESTED_TENSORS_AS_LISTS only reject tensor collections.
-                        if (
-                            type(val) is not TensorDict
-                            and is_leaf is not _default_is_leaf
-                            and is_leaf is not _NESTED_TENSORS_AS_LISTS
-                            and not _is_tensor_collection(type(val))
-                        ):
-                            continue
-                        for _key, _val in val.items(
-                            include_nested=include_nested,
-                            leaves_only=leaves_only,
-                            is_leaf=is_leaf,
-                        ):
-                            if isinstance(_key, str):
-                                _key = (key, _key)
-                            else:
-                                _key = (key, *_key)
-                            result.append((_key, _val))
-                    else:
-                        result.append((key, val))
+                        type(val) is not TensorDict
+                        and is_leaf is not _default_is_leaf
+                        and is_leaf is not _NESTED_TENSORS_AS_LISTS
+                        and not _is_tensor_collection(type(val))
+                    ):
+                        continue
+                    for _key, _val in val.items(
+                        include_nested=include_nested,
+                        leaves_only=leaves_only,
+                        is_leaf=is_leaf,
+                    ):
+                        if isinstance(_key, str):
+                            _key = (key, _key)
+                        else:
+                            _key = (key, *_key)
+                        result.append((_key, _val))
                 return result
 
             return fast_iter()
