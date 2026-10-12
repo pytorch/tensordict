@@ -516,6 +516,27 @@ class TestTensorDictStore:
         result = store_td["obs"]
         assert torch.allclose(result, torch.full((10, 3), 42.0))
 
+    def test_inplace_methods_write(self, store_td):
+        """The in-place methods, update_ and copy_ write to the server (#2242)."""
+        source = TensorDict(
+            a=torch.randn(10, 3),
+            nested=TensorDict(b=torch.randn(10, 2), batch_size=[10]),
+            batch_size=[10],
+        )
+        store_td.update(source)
+        expected = source.clone()
+        other = source.apply(lambda x: torch.rand_like(x) + 1)
+        for td in (store_td, expected):
+            assert td.abs_() is td
+            assert td.add_(other, alpha=2.0) is td
+            td *= 2
+            assert td.clamp_max_(other) is td
+            assert td.update_(other.select("a") + 1) is td
+            assert td.update_(other * 3, keys_to_update=[("nested", "b")]) is td
+        assert_allclose_td(store_td.to_tensordict(), expected)
+        store_td.copy_(other)
+        assert_allclose_td(store_td.to_tensordict(), other)
+
     def test_masked_fill_(self, store_td):
         """masked_fill_ fills the masked batch elements, as on a TensorDict."""
         source = TensorDict(
@@ -2009,6 +2030,50 @@ class TestLazyStackedTensorDictStore:
             store_td[1].fill_("n", 5.0)
             torch.testing.assert_close(store_td[1]["n", "h"], torch.full((3, 3), 5.0))
             torch.testing.assert_close(store_td[0]["n", "h"], tds[0]["n", "h"])
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_inplace_methods_write(self, store_kwargs):
+        """The in-place methods and update_ write to the server, as on a lazy stack (#2242).
+
+        A key whose elements differ in shape is left unchanged: it is read
+        with the shape of element 0, and writing it back would lose the
+        other elements.
+        """
+        tds = [
+            TensorDict(
+                a=torch.randn(3, 2),
+                h=torch.randn(3, 1 + i),
+                n=TensorDict(b=torch.randn(3), batch_size=[3]),
+                batch_size=[3],
+            )
+            for i in range(2)
+        ]
+        lazy_td = lazy_stack([td.clone() for td in tds])
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            for td in (store_td, lazy_td):
+                assert td.abs_() is td
+                td *= 2
+                view = td[1]
+                assert view.add_(1.0) is view
+            other = TensorDict(a=lazy_td["a"] + 1, batch_size=[2, 3])
+            assert store_td.update_(other) is store_td
+            lazy_td.update_(other)
+            for i in range(2):
+                torch.testing.assert_close(store_td[i]["a"], lazy_td[i]["a"])
+                torch.testing.assert_close(store_td[i]["n", "b"], lazy_td[i]["n", "b"])
+            # only the element view writes the heterogeneous key
+            torch.testing.assert_close(store_td[0]["h"], tds[0]["h"])
+            torch.testing.assert_close(store_td[1]["h"], tds[1]["h"] + 1)
+            # zero_ leaves it unchanged too, instead of writing the shape of
+            # element 0 to each element
+            assert store_td.zero_() is store_td
+            assert (store_td["a"] == 0).all()
+            torch.testing.assert_close(store_td[1]["h"], tds[1]["h"] + 1)
         finally:
             store_td.clear_redis()
             store_td.close()

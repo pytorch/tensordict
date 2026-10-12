@@ -814,6 +814,24 @@ class TestFromTensordict:
         assert state.batch_size == torch.Size([2])
         assert state.eta.shape == (2, 3)
 
+    def test_from_tensordict_lazy_stack_inplace(self):
+        # #2242: the in-place methods write into the members of the stack
+        tds = [self._make_td() for _ in range(2)]
+        state = PredictorState.from_tensordict(lazy_stack(tds))
+        expected = state.to_tensordict()
+        other = expected.apply(lambda x: torch.rand_like(x) + 1)
+        for td in (state, expected):
+            assert td.abs_() is td
+            assert td.add_(other, alpha=2.0) is td
+            td *= 2
+            assert td.lerp_(other, 0.5) is td
+            assert td.update_(other.select("eta") * 3) is td
+        assert (state._source[0]["eta"] == tds[0]["eta"]).all()
+        torch.testing.assert_close(lazy_stack(tds)["eta"], expected["eta"])
+        torch.testing.assert_close(state.to_tensordict(), expected)
+        state.copy_(other)
+        torch.testing.assert_close(state.to_tensordict(), other)
+
     def test_from_tensordict_memmap(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             td = self._make_td()

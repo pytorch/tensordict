@@ -41,7 +41,11 @@ from typing import (
 import numpy as np
 import torch
 from tensordict._contextlib import LAST_OP_MAPS
-from tensordict._deprecation import deprecated, warn_deprecated_env_var
+from tensordict._deprecation import (
+    deprecated,
+    deprecation_message,
+    warn_deprecated_env_var,
+)
 from tensordict._indexing import (
     _entry_index,
     _getitem_batch_size,
@@ -406,8 +410,8 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     )
                 )
                 # Like torch, an in-place op returns self once it has written into
-                # the tensors that self holds. Containers that hand out copies of
-                # their storage (h5 files, stores) still return the new tensordict.
+                # the tensors that self holds. Containers that build their entries
+                # on each read (lazy stacks, views) still return the new tensordict.
                 if inplace and self_expand is self and _holds_leaves_of(self, result):
                     return self
                 return result
@@ -826,6 +830,50 @@ _NESTED_TENSORS_AS_LISTS = _NestedTensorsAsLists()
 _NESTED_TENSORS_AS_LISTS_NONTENSOR = _NestedTensorsAsListsNonTensor()
 
 
+def _warn_read_only(method: str, stacklevel: int) -> None:
+    """Warns that the in-place ``method`` leaves a file opened read-only unchanged."""
+    warnings.warn(
+        deprecation_message(
+            f"Calling {method}() on a tensordict stored in a file opened "
+            "read-only, which leaves the file unchanged,",
+            removal="0.17",
+        )
+        + " From then on, the call raises. Open the file with mode='r+' to "
+        "write the result, or call to_tensordict() first to change a copy in "
+        "memory.",
+        FutureWarning,
+        stacklevel=stacklevel,
+    )
+
+
+def _has_lazy_stack(td: TensorDictBase) -> bool:
+    """Whether ``td`` or one of its nested tensordicts is a lazy stack."""
+    from tensordict._lazy import LazyStackedTensorDict
+
+    return isinstance(td, LazyStackedTensorDict) or any(
+        isinstance(value, LazyStackedTensorDict)
+        for value in td.values(True, is_leaf=_is_leaf_nontensor)
+    )
+
+
+def _write_back_inplace(method: Callable) -> Callable:
+    """Makes an in-place method also write its result where reads return copies.
+
+    The in-place methods change the tensor leaves that ``_items_list(True,
+    True)`` returns. On a class that sets ``_reads_return_copies``, such as a
+    file or a store, these leaves are copies of the stored data, and the
+    method runs through ``_inplace_on_copies`` instead.
+    """
+
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        if not self._reads_return_copies:
+            return method(self, *args, **kwargs)
+        return self._inplace_on_copies(method, *args, **kwargs)
+
+    return wrapper
+
+
 def _expand_to_match_shape(
     parent_batch_size: torch.Size,
     data: Tensor | TensorDictBase,
@@ -994,6 +1042,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Class-level default for the dim-name methods: no names until
     # _set_names stores them on the instance.
     _td_dim_names = None
+    # Whether the tensors that items() returns are copies of the stored data,
+    # as for an h5 or zarr file or a store. The in-place methods then write
+    # their results back (see _write_back_inplace and _write_back).
+    _reads_return_copies = False
 
     @classmethod
     def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
@@ -3645,6 +3697,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_dims=self.batch_dims
             )
+        # The tensor leaves of self that the copy_ calls below change, to write
+        # back where they are copies of the stored data. A lazy stack in the
+        # input splits self into its elements: those leaves are not recorded,
+        # and stay unchanged.
+        written = None
+        if self._reads_return_copies and not _has_lazy_stack(input_dict_or_td):
+            written = []
 
         if keys_to_update is not None:
             if len(keys_to_update) == 0:
@@ -3664,6 +3723,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                                 f"The key {name} was not found in the dest tensordict."
                             )
                         dest.copy_(source, non_blocking=non_blocking)
+                        if written is not None and isinstance(dest, Tensor):
+                            written.append((name, dest))
 
         else:
             # Fastest route using _foreach_copy_
@@ -3684,6 +3745,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     _foreach_copy_compiled(vals, other_val, non_blocking=non_blocking)
                 else:
                     _foreach("copy_", vals, other_val, non_blocking=non_blocking)
+                if self._reads_return_copies:
+                    self._write_back(new_keys, vals, "update_")
                 if not input_dict_or_td._has_non_tensor:
                     return self
                 from tensordict import NonTensorStack
@@ -3712,6 +3775,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                             f"The key {name} was not found in the dest tensordict."
                         )
                     dest.copy_(source, non_blocking=non_blocking)
+                    if written is not None and isinstance(dest, Tensor):
+                        written.append((name, dest))
 
             named = True
 
@@ -3724,6 +3789,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             named=named,
             is_leaf=_is_leaf_nontensor,
         )
+        if written:
+            self._write_back(*zip(*written), "update_")
         return self
 
     def update_at_(
@@ -4249,6 +4316,59 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             else:
                 for k in self.keys(sort=sort):
                     yield self._get_str(k, NO_DEFAULT)
+
+    def _inplace_on_copies(self, method: Callable, *args, **kwargs) -> Self:
+        """Runs the in-place ``method`` on a copy of the tensor leaves, and writes them back.
+
+        Called by the in-place methods when ``_reads_return_copies`` is set.
+        """
+        from tensordict._td import TensorDict
+
+        if self._storage_is_read_only():
+            # the method runs on self, which writes nothing
+            result = method(self, *args, **kwargs)
+            _warn_read_only(method.__name__, stacklevel=4)
+            return result
+        try:
+            items = dict(self.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS))
+        except RuntimeError:
+            # The members of a lazy stack that differ in shape cannot be read
+            # as one tensor: the method runs on self, which writes nothing
+            # unless it broadcasts self over its members.
+            return method(self, *args, **kwargs)
+        leaves = TensorDict(items, batch_size=self.batch_size, device=self.device)
+        result = method(leaves, *args, **kwargs)
+        if result is not leaves:
+            # broadcasting self returns a new tensordict and writes nothing
+            return result
+        keys, values = leaves._items_list(True, True)
+        self._write_back(keys, values, method.__name__)
+        return self
+
+    def _write_back(self, keys, values, method: str, stacklevel: int = 2) -> None:
+        """Writes the leaves that the in-place method ``method`` changed back to storage.
+
+        Only called when ``_reads_return_copies`` is set. ``values`` are the
+        changed copies of the leaves under ``keys``. ``stacklevel`` counts the
+        frames to the user's call, as in :func:`warnings.warn`.
+        """
+        if not keys:
+            return
+        if self._storage_is_read_only():
+            _warn_read_only(method, stacklevel=stacklevel + 2)
+            return
+        for key, value in zip(keys, values):
+            self._set_tuple(
+                _unravel_key_to_tuple(key),
+                value,
+                inplace=True,
+                validated=True,
+                non_blocking=False,
+            )
+
+    def _storage_is_read_only(self) -> bool:
+        """Whether the storage of a tensordict that reads copies cannot be written."""
+        return False
 
     @_cache_while_locked  # noqa: B019
     def _values_list(

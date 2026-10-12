@@ -908,6 +908,27 @@ class TestTD:
         assert add_c(td, other) is td
         assert (td["a"] == 2).all()
 
+    def test_inplace_methods(self, mode):
+        # The in-place methods trace without a graph break: the check for
+        # containers that read copies of their data is a class attribute
+        def inplace(td, other):
+            td.abs_()
+            td.add_(other, alpha=2.0)
+            td.mul_(2.0)
+            td += 1
+            td.lerp_(other, 0.5)
+            td.clamp_max_(other)
+            td.update_(other * 2, keys_to_update=["a"])
+            return td.copy_(td * 0.5)
+
+        td = TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4, 2)}, batch_size=[4])
+        other = td.apply(lambda x: torch.rand_like(x) + 1)
+        expected = inplace(td.clone(), other)
+        inplace_c = torch.compile(inplace, fullgraph=True, mode=mode)
+        result = td.clone()
+        assert inplace_c(result, other) is result
+        assert_close(result, expected)
+
     @pytest.mark.parametrize("after_empty", ["tensor", "nested"])
     def test_tree_map_empty_nested_first(self, after_empty, mode):
         # The batch size of the result is not read from the empty nested td,

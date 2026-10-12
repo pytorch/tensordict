@@ -81,14 +81,15 @@ table:
        temporary file that is not deleted. A zarr clone raises
        ``FileExistsError``. Pass a destination: ``w.clone(newfile=path)``.
        To copy the data into memory, use ``to_tensordict()``.
-   * - ``PersistentTensorDict``, ``TensorDictStore``
-     - ``update_(d)``
-     - Writes nothing, and raises no error
-       (`#2217 <https://github.com/pytorch/tensordict/issues/2217>`_,
-       `#2242 <https://github.com/pytorch/tensordict/issues/2242>`_).
-       ``TypedTensorDict`` over a
-       ``LazyStackedTensorDict`` has the same fault. Use ``set_()`` for each
-       key, or ``update(d, inplace=True)``.
+   * - ``PersistentTensorDict`` opened read-only (the default of
+       ``from_h5()`` and ``from_zarr()``)
+     - In-place methods such as ``add_()``, ``update_(d)``, ``copy_(d)``
+     - Write nothing, and warn ``FutureWarning: Calling add_() on a
+       tensordict stored in a file opened read-only, which leaves the file
+       unchanged, is deprecated and will be removed in TensorDict 0.17``.
+       From 0.17 on, these calls raise, as ``zero_()`` and ``set_()`` already
+       do. Open the file with ``mode="r+"`` to write, or call
+       ``to_tensordict()`` to change a copy in memory.
    * - ``PersistentTensorDict``, ``TensorDictStore``,
        ``LazyStackedTensorDict``
      - In-place operation on a field, such as ``w.a.add_(1)``

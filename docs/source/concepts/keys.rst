@@ -186,15 +186,6 @@ raises a ``KeyError`` for a missing key.
 ``update`` writes the entries one after the other. If one entry raises, for
 example on a batch size mismatch, the entries before it are already written.
 
-.. warning::
-
-   Do not use ``update_`` on a :class:`~tensordict.PersistentTensorDict` or a
-   :class:`~tensordict.store.TensorDictStore`. On these backends, ``update_``
-   writes nothing and raises no error
-   (`#2217 <https://github.com/pytorch/tensordict/issues/2217>`_,
-   `#2242 <https://github.com/pytorch/tensordict/issues/2242>`_). Use ``set_``
-   for each key, or ``update(..., inplace=True)``.
-
 Select, exclude and remove entries
 ----------------------------------
 
