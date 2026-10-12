@@ -2051,6 +2051,37 @@ class TestTensorClass:
         assert not (data != data2).y.X.any()
         assert not (data != data2).y.z.any()
 
+    def test_non_tensor_items(self):
+        @tensorclass
+        class Inner:
+            z: torch.Tensor
+            u: str
+
+        @tensorclass
+        class MyData:
+            x: torch.Tensor
+            s: str
+            y: torch.Tensor = None
+            inner: Inner = None
+
+        inner = Inner(z=torch.zeros(3), u="u", batch_size=[3])
+        data = MyData(x=torch.zeros(3), s="s", inner=inner, batch_size=[3])
+        # as for a TensorDict: a tuple, with the non-tensor fields
+        items = data.non_tensor_items()
+        assert isinstance(items, tuple)
+        assert [key for key, _ in items] == ["y", "s"]
+        assert items[0][1] is None
+        assert items[1][1].data == "s"
+        # include_nested=True used to raise TypeError
+        items = data.non_tensor_items(include_nested=True)
+        assert [key for key, _ in items] == ["y", "s", ("inner", "u")]
+        assert items[2][1].data == "u"
+        # the pytree context keeps the fields held outside the TensorDict
+        leaves, spec = torch.utils._pytree.tree_flatten(data)
+        assert spec.context["non_tensor_data"] == {"y": None}
+        rebuilt = torch.utils._pytree.tree_unflatten(leaves, spec)
+        assert rebuilt.s == "s" and rebuilt.y is None and rebuilt.inner.u == "u"
+
     def test_permute(self):
         @tensorclass
         class MyDataNested:
@@ -5900,7 +5931,7 @@ class TestTensorOnly:
         # The outputs list the None field, as they did with a placeholder
         assert x.to_dict()["c"] is None
         assert "c=None" in repr(x)
-        assert x.non_tensor_items() == [("c", None)]
+        assert x.non_tensor_items() == (("c", None),)
         assert x.state_dict()._metadata[""]["_non_tensor"] == {"c": None}
         assert isinstance(x.to_tensordict(retain_none=True).get("c"), NonTensorData)
         assert "c" not in x.to_tensordict(retain_none=False).keys()

@@ -4488,18 +4488,12 @@ def _xor(self, other: object) -> bool:
 
 
 def _non_tensor_items(self, include_nested=False):
-    if include_nested:
-        return self.non_tensor_items() + self._tensordict.non_tensor_items(
-            include_nested=True
-        )
-    elif is_tensorclass(self):
-        items = list(self._non_tensordict.items())
-        if type(self)._tensor_only:
-            # A None field of a tensor_only class is a missing key
-            items.extend((key, None) for key in _none_fields(self))
-        return items
-    else:
-        return self._tensordict.non_tensor_items()
+    # The fields held outside the TensorDict, then its non-tensor leaves
+    items = tuple(self._non_tensordict.items())
+    if type(self)._tensor_only:
+        # A None field of a tensor_only class is a missing key
+        items += tuple((key, None) for key in _none_fields(self))
+    return items + self._tensordict.non_tensor_items(include_nested)
 
 
 def _bool(self):
