@@ -4134,6 +4134,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 td.rename_key_(old_key, new_key, safe=safe)
         return self
 
+    # Override: where runs on each member, so that members with different
+    # shapes work, and the result is a lazy stack.
     def where(
         self,
         condition: Tensor,
@@ -4190,15 +4192,13 @@ class LazyStackedTensorDict(TensorDictBase):
             return out
         return result
 
+    # Override: each member is filled with its slice of the mask, so that
+    # members with different shapes work.
     def masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
         mask_unbind = mask.unbind(dim=self.stack_dim)
         for _mask, td in _zip_strict(mask_unbind, self.tensordicts):
             td.masked_fill_(_mask, value)
         return self
-
-    def masked_fill(self, mask: Tensor, value: float | bool) -> Self:
-        td_copy = self.clone()
-        return td_copy.masked_fill_(mask, value)
 
     @_lock_blocked
     def insert(self, index: int, tensordict: T) -> None:
@@ -4754,6 +4754,7 @@ class _CustomOpTensorDict(TensorDictBase):
 
     _safe = False
     _lazy = True
+    _masking_on_dense_copy = True
 
     def __init__(
         self,
@@ -5151,23 +5152,7 @@ class _CustomOpTensorDict(TensorDictBase):
         self._source.detach_()
         return self
 
-    def where(
-        self,
-        condition: Tensor,
-        other: Tensor | TensorDictBase,
-        *,
-        out: TensorDictBase | None = None,
-        pad: int | bool = None,
-        update_batch_size: bool = False,
-    ):
-        return self.to_tensordict().where(
-            condition=condition,
-            other=other,
-            out=out,
-            pad=pad,
-            update_batch_size=update_batch_size,
-        )
-
+    # Override: the mask goes through the inverse op and fills the source.
     def masked_fill_(self, mask: Tensor, value: float | bool) -> _CustomOpTensorDict:
         for key, item in self.items():
             val = self._source.get(key)
@@ -5180,10 +5165,6 @@ class _CustomOpTensorDict(TensorDictBase):
             val[mask_proc_inv] = value
             self._source.set(key, val)
         return self
-
-    def masked_fill(self, mask: Tensor, value: float | bool) -> Self:
-        td_copy = self.clone()
-        return td_copy.masked_fill_(mask, value)
 
     def _memmap_(
         self,

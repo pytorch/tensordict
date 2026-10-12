@@ -170,13 +170,16 @@ are `torch.Tensor` subclasses that a tensordict can store as entries.
 `TensorDictBase` marks its backend-specific methods with
 `@abc.abstractmethod`: the storage hooks (`_get_str`, `_set_str`, ...),
 the shape operations (`_view`, `_permute`, `_unsqueeze`, ...), `keys`,
-`_clone` and others, 39 in all. A class that lacks one
+`_clone` and others, 37 in all. A class that lacks one
 cannot be instantiated. The rest of `TensorDictBase` (`base.py` and the mixins in
 `_base/`) is written on top of these methods, and all the implementations
 share it, including generic
 implementations of operations such as `reshape`, `split`, `__setitem__`,
 `_index_tensordict`, `_apply_nest` and the comparison operators, which a class
-overrides only when it can do better.
+overrides only when it can do better. Some of this code also reads a class
+attribute that a backend sets: with `_masking_on_dense_copy = True`, `where`
+and `masked_fill` work on a `to_tensordict()` copy (the stores, which read it
+in one round trip, `PersistentTensorDict` and the views).
 
 The implementations also reuse code in two ways:
 

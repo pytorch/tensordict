@@ -671,6 +671,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
             return None
         return type(self)._wrap_td(result)
 
+    # Override: unwraps a typed ``out`` for the source and wraps the result.
     def where(self, condition, other, *, out=None, **kwargs):
         unwrapped_out = out._source if isinstance(out, TypedTensorDict) else out
         result = self._source.where(condition, other, out=unwrapped_out, **kwargs)
