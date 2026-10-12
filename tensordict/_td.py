@@ -1597,6 +1597,7 @@ class TensorDict(TensorDictBase):
             self.del_(old_key)
         return self
 
+    # Override: stacks into the existing leaf storages (torch.stack(out=)).
     def _stack_onto_(self, list_item: list[CompatibleType], dim: int) -> TensorDict:
         for key in self.keys():
             vals = [item._get_str(key, None) for item in list_item]
@@ -1633,14 +1634,26 @@ class TensorDict(TensorDictBase):
             idx = (idx,)
         idx = convert_ellipsis_to_idx(idx, self.batch_size)
         for key in self.keys():
-            vals = [td._get_str(key, NO_DEFAULT) for td in list_item]
-            if all(v is None for v in vals):
-                continue
+            try:
+                vals = [td._get_str(key, NO_DEFAULT) for td in list_item]
+            except KeyError:
+                if all(td._get_str(key, None) is None for td in list_item):
+                    # as in _stack_onto_, keep an entry that no tensordict has
+                    continue
+                raise
             v = self._get_str(key, NO_DEFAULT)
             if _is_unbatched(v):
                 continue
+            if _is_tensor_collection(type(v)):
+                if not isinstance(v, TensorDictBase):
+                    raise RuntimeError(
+                        f"Cannot call _stack_onto_at_ with an entry of type {type(v).__name__}."
+                    )
+                v._stack_onto_at_(vals, dim=dim, idx=idx)
+                continue
             v_idx = v[idx]
-            if v.data_ptr() != v_idx.data_ptr():
+            # A copy (advanced index) is not a view: writing into it would be lost.
+            if not v_idx._is_view():
                 raise IndexError(
                     f"Index {idx} is incompatible with stack(..., out=data) as the storages of the indexed tensors differ."
                 )
@@ -2939,6 +2952,7 @@ class _SubTensorDict(TensorDictBase):
             return type(self)
         return source_type
 
+    # Override: writes at self.idx of the source, in place.
     def _stack_onto_(self, list_item: list[CompatibleType], dim: int) -> _SubTensorDict:
         self._source._stack_onto_at_(list_item, dim=dim, idx=self.idx)
         return self

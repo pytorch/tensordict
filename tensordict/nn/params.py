@@ -1377,7 +1377,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_apply_on_data
     def _stack_onto_at_(
         self,
-        key: NestedKey,
         list_item: list[CompatibleType],
         dim: int,
         idx: IndexType,
