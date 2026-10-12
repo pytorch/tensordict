@@ -70,18 +70,17 @@ The containers
      - Data in an HDF5 or Zarr file, read on demand. The file can be larger
        than the memory.
      - Each read loads a new tensor from the file, so an in-place operation
-       on it does not change the file. ``update_()`` writes nothing, with no
-       error
-       (`#2217 <https://github.com/pytorch/tensordict/issues/2217>`_,
-       `#2242 <https://github.com/pytorch/tensordict/issues/2242>`_). Needs
-       ``h5py`` or ``zarr``.
+       on that tensor does not change the file. The in-place methods of the
+       tensordict, such as ``add_()`` and ``update_()``, write to the file
+       when it is open for writing (``mode="r+"``); ``from_h5()`` and
+       ``from_zarr()`` open it read-only by default. Needs ``h5py`` or
+       ``zarr``.
    * - :class:`~tensordict.store.TensorDictStore`
      - Data on a Redis, Dragonfly, or KeyDB server, which several processes
        or machines can read and write.
      - Needs a running server and the ``redis`` package. Each read goes over
        the network. The data stays on the server until you call
-       ``clear_redis()``. ``update_()`` writes nothing, with no error
-       (`#2242 <https://github.com/pytorch/tensordict/issues/2242>`_).
+       ``clear_redis()``.
    * - :class:`~tensordict.TypedTensorDict`
      - Declared fields on a class that is a ``TensorDictBase``, with
        ``**state`` unpacking and the full tensordict API.

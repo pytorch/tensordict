@@ -15,7 +15,9 @@ The HDF5 backend (`backend="h5"`) needs `h5py`. The Zarr backend
 (`backend="zarr"`) needs `zarr>=3.0`. Each read of an entry loads it
 from the file into a new tensor, so `ptd["a"] is ptd["a"]` is
 `False`, and in-place changes to the tensor that you read do not reach
-the file. Writes (`ptd["a"] = value`) go to the file.
+the file. Writes (`ptd["a"] = value`) go to the file, and so do the
+in-place methods of the tensordict, such as `ptd.add_(1)` and
+`ptd.update_(other)`.
 
 Use it to read or write existing HDF5 or Zarr data. To keep tensordict
 data on disk for fast reloads, use [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap)

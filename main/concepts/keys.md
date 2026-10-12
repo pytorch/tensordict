@@ -203,15 +203,6 @@ raises a `KeyError` for a missing key.
 `update` writes the entries one after the other. If one entry raises, for
 example on a batch size mismatch, the entries before it are already written.
 
-Warning
-
-Do not use `update_` on a [`PersistentTensorDict`](../reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) or a
-[`TensorDictStore`](../reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore). On these backends, `update_`
-writes nothing and raises no error
-([#2217](https://github.com/pytorch/tensordict/issues/2217),
-[#2242](https://github.com/pytorch/tensordict/issues/2242)). Use `set_`
-for each key, or `update(..., inplace=True)`.
-
 ## Select, exclude, and remove entries
 
 [`select()`](../reference/generated/tensordict.TensorDictBase.select.html#tensordict.TensorDictBase.select) returns a new tensordict with the keys
