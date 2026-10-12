@@ -437,32 +437,39 @@ jobs:
           echo "Updated stable symlink -> $VERSION_MAJOR_MINOR"
 
           # Rewrite versions.html from the X.Y docs folders, newest first, so
-          # that it lists every version that has docs.
+          # that it lists every version that has docs. The page carries its
+          # own style, because the files of a docs theme change with the
+          # theme.
           STABLE=$(readlink stable)
           {
             cat <<'EOF'
-          <html>
+          <!DOCTYPE html>
+          <html lang="en">
             <head>
               <meta charset="utf-8">
-
               <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <link rel="stylesheet" href="main/_static/css/theme.css" type="text/css" />
-              <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato" type="text/css" />
-              <link rel="stylesheet" href="main/_static/css/pytorch_theme.css" type="text/css" />
-              <script src="main/_static/js/modernizr.min.js"></script>
-
-
+              <title>TensorDict documentation versions</title>
+              <style>
+                body {
+                  margin: 3rem auto;
+                  max-width: 40rem;
+                  padding: 0 1rem;
+                  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+                  line-height: 1.6;
+                  color: #262626;
+                }
+                h1 { font-size: 2rem; font-weight: 600; }
+                ul { list-style: none; padding: 0; }
+                li { border-bottom: 1px solid #e5e5e5; padding: 0.4rem 0; }
+                a { color: #ee4c2c; text-decoration: none; }
+                a:hover { text-decoration: underline; }
+              </style>
             </head>
             <body>
-              <div class="wy-nav-content">
-                <div class="rst-content">
-              <h1> TensorDict Documentation </h1>
-              <div class="toctree-wrapper compound">
-                <p class="caption"><span class="caption-text">Pick a version</span></p>
-                <ul>
-                  <li class="toctree-l1">
-                    <a class="reference internal" href="main/">main (unstable)</a>
-                  </li>
+              <h1>TensorDict documentation</h1>
+              <p>Pick a version:</p>
+              <ul>
+                <li><a href="main/">main (unstable)</a></li>
           EOF
             find . -maxdepth 1 -type d -regextype posix-extended -regex '\./[0-9]+\.[0-9]+' -printf '%f\n' |
               sort -rV |
@@ -471,17 +478,10 @@ jobs:
                 if [[ "$FOLDER" == "$STABLE" ]]; then
                   LABEL="${LABEL} (stable release)"
                 fi
-                printf '        <li class="toctree-l1">\n'
-                printf '          <a class="reference internal" href="%s/">%s</a>\n' "$FOLDER" "$LABEL"
-                printf '        </li>\n'
+                printf '      <li><a href="%s/">%s</a></li>\n' "$FOLDER" "$LABEL"
               done
             cat <<'EOF'
-                </ul>
-                <p>You can view previous versions of the tensordict documentation
-                <a href="https://pytorch.org/tensordict/versions.html">here</a>.
-
-              </div>
-              </div></div>
+              </ul>
             </body>
           </html>
           EOF
