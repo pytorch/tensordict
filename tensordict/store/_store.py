@@ -2687,8 +2687,6 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
             f"    td_id={self._td_id!r})"
         )
 
-    # ---- Delegated to TensorDict (same pattern as PersistentTensorDict) ----
-
     # Override: server-side entries cannot be pinned.
     def pin_memory(self, *args, **kwargs):
         raise RuntimeError(

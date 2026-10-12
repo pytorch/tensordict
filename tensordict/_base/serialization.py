@@ -964,6 +964,14 @@ class _Serialization:
         Note:
             Serialising in this fashion might be slow with deeply nested tensordicts, so
             it is not recommended to call this method inside a training loop.
+
+        Note:
+            A :class:`~tensordict.PersistentTensorDict`, a
+            :class:`~tensordict.store.TensorDictStore` or a
+            :class:`~tensordict.store.LazyStackedTensorDictStore` (or one of its
+            elements) cannot be memory-mapped in-place: this method raises a
+            ``RuntimeError``. Use :meth:`~tensordict.TensorDictBase.memmap` to
+            build a memory-mapped copy instead.
         """
         prefix = Path(prefix) if prefix is not None else self._memmap_prefix
         if num_threads > 1:
