@@ -1278,8 +1278,9 @@ class TestLazyStackedTensorDict:
     @pytest.mark.parametrize("from_list", [False, True])
     def test_from_dict_names_without_batch_size(self, from_list):
         # without a batch_size the members get no names today; the calls that
-        # 0.17 changes (names given to the members, ValueError on a mismatch)
-        # warn and keep their result
+        # 0.17 changes warn and keep their result: a FutureWarning where the
+        # names will be given to the members, a DeprecationWarning where they
+        # do not match the member batch dimensions and the call will raise
         def build(members, **kwargs):
             if from_list:
                 return LazyStackedTensorDict.from_list(members, **kwargs)
@@ -1287,24 +1288,38 @@ class TestLazyStackedTensorDict:
 
         members = [{"a": torch.zeros(3)}, {"a": torch.ones(3)}]
         scalars = [{"a": torch.zeros(())}, {"a": torch.ones(())}]
-        for data, kwargs, batch_size, names in [
-            (members, {"auto_batch_size": True}, [2, 3], ["s", None]),
-            (members, {"auto_batch_size": True, "names": ["s"]}, [2, 3], None),
-            (members, {"auto_batch_size": True, "batch_dims": 1}, [2, 3], None),
-            (members, {}, [2], ["s"]),
-            (scalars, {"auto_batch_size": True}, [2], ["s"]),
+        mixed = [{"a": torch.zeros(3)}, {"a": torch.ones(3, 4)}]
+        future = (FutureWarning, "Starting with TensorDict 0.17")
+        removal = (DeprecationWarning, "will be removed in TensorDict 0.17")
+        for data, kwargs, batch_size, names, (category, match) in [
+            (members, {"auto_batch_size": True}, [2, 3], ["s", None], future),
+            (members, {"auto_batch_size": True, "batch_dims": 1}, [2, 3], None, future),
+            (
+                members,
+                {"auto_batch_size": True, "names": ["s"]},
+                [2, 3],
+                None,
+                removal,
+            ),
+            (members, {}, [2], ["s"], removal),
+            (scalars, {"auto_batch_size": True}, [2], ["s"], removal),
         ]:
             kwargs.setdefault("names", ["s", "x"])
-            with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            with pytest.warns(category, match=match) as record:
                 td = build(data, **kwargs)
+            assert len(record) == 1
+            assert record[0].filename == __file__
             assert td.batch_size == torch.Size(batch_size)
             assert td.names == (names or ["s", None])
             assert all(
                 name is None for member in td.tensordicts for name in member.names
             )
-        with pytest.warns(FutureWarning) as record:
-            build(members, auto_batch_size=True, names=["s", "x"])
-        assert record[0].filename == __file__
+        # one member matches and the other does not: the call will raise
+        with pytest.warns(DeprecationWarning, match="removed in TensorDict 0.17"):
+            td = build(mixed, auto_batch_size=True, names=["s", "x"])
+        assert td.batch_size == torch.Size([2, 3])
+        assert td._td_dim_name == "s"
+        assert all(name is None for member in td.tensordicts for name in member.names)
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             td = build(scalars, auto_batch_size=True, names=["s"])

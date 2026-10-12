@@ -921,13 +921,14 @@ class LazyStackedTensorDict(TensorDictBase):
             names (list of str, optional): the names of the dimensions of the
                 result, stack dimension included. Exclusive with
                 ``stack_dim_name``. Without a ``batch_size``, only
-                ``names[stack_dim]`` is used today: the members get no names,
-                and a :class:`FutureWarning` is emitted when the change below
-                affects the call. Starting with TensorDict 0.17,
-                the default will change to giving the others to the members
-                once their batch size is known, and to raising a
-                ``ValueError`` if their number differs from the member batch
-                dimensions.
+                ``names[stack_dim]`` is used today and the members get no
+                names. Starting with TensorDict 0.17, the default will change
+                to giving the others to the members once their batch size is
+                known (a :class:`FutureWarning` is emitted when this changes
+                the result). Passing other entries whose number differs from
+                the member batch dimensions is deprecated and will be removed
+                in TensorDict 0.17 (a :class:`DeprecationWarning` is emitted);
+                use ``stack_dim_name`` instead.
 
         Returns:
             a :class:`~tensordict.LazyStackedTensorDict`.
@@ -984,18 +985,26 @@ class LazyStackedTensorDict(TensorDictBase):
                     _PACKAGE_DIR
                 ):
                     frame, stacklevel = frame.f_back, stacklevel + 1
-                warnings.warn(
-                    "LazyStackedTensorDict.from_dict without a batch_size uses "
-                    "only names[stack_dim] and leaves the members unnamed. "
-                    "Starting with TensorDict 0.17, the default will change to "
-                    f"giving the other entries of names, {dropped}, to the "
-                    "members once their batch size is known, and to raising a "
-                    "ValueError if their number differs from the number of "
-                    "member batch dimensions. To name only the stack dimension, "
-                    "pass stack_dim_name instead of names.",
-                    FutureWarning,
-                    stacklevel=stacklevel,
-                )
+                if all(td.batch_dims == len(dropped) for td in tensordicts):
+                    warnings.warn(
+                        "LazyStackedTensorDict.from_dict without a batch_size "
+                        "uses only names[stack_dim] and leaves the members "
+                        "unnamed. Starting with TensorDict 0.17, the default "
+                        "will change to giving the other entries of names, "
+                        f"{dropped}, to the members once their batch size is "
+                        "known.",
+                        FutureWarning,
+                        stacklevel=stacklevel,
+                    )
+                else:
+                    warn_deprecated(
+                        "LazyStackedTensorDict.from_dict with names whose "
+                        "entries other than names[stack_dim] do not match the "
+                        "member batch dimensions",
+                        removal="0.17",
+                        replacement="stack_dim_name",
+                        stacklevel=stacklevel,
+                    )
 
         return cls._new_lazy_unsafe(
             *tensordicts,
