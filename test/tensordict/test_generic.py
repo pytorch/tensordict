@@ -1484,6 +1484,39 @@ class TestGeneric:
         t[0][1].extend([0, 2])
         assert isinstance(TensorDict.from_any(t), NonTensorStack)
 
+    def test_from_any_structseq_warns(self):
+        # from_any converts a torch.return_types result like a tuple, with the
+        # keys "0", "1", and warns that 0.17 gives its field names instead
+        t = torch.arange(12.0).reshape(3, 4)
+        NT = namedtuple("NT", ["a", "b"])
+        calls = [
+            (lambda: TensorDict.from_any(t.sort(1)), ()),
+            (lambda: from_any(t.sort(1)), ()),
+            (lambda: TensorDict.from_any(t.sort(1), auto_batch_size=True), ()),
+            (lambda: TensorDict.from_namedtuple(NT(a=t, b=t.sort(1))), ("b",)),
+            (lambda: TensorDict.from_any({"x": t.sort(1)}), ("x",)),
+            (lambda: TensorDict.from_dict({"x": t.sort(1)}), ("x",)),
+        ]
+        for call, key in calls:
+            with pytest.warns(
+                FutureWarning, match="Starting with TensorDict 0.17"
+            ) as record:
+                td = call()
+            assert [w.filename for w in record] == [__file__]
+            sub = td[key] if key else td
+            assert set(sub.keys()) == {"0", "1"}
+            assert (sub["0"] == t.sort(1).values).all()
+            assert (sub["1"] == t.sort(1).indices).all()
+        # other tuples, and the explicit from_namedtuple and from_tuple, do not warn
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert set(TensorDict.from_any((t, t)).keys()) == {"0", "1"}
+            assert set(TensorDict.from_any(NT(a=t, b=t)).keys()) == {"a", "b"}
+            assert set(TensorDict.from_any(tuple(t.sort(1))).keys()) == {"0", "1"}
+            td = TensorDict.from_namedtuple(t.sort(1))
+            assert set(td.keys()) == {"values", "indices"}
+            assert set(TensorDict.from_tuple(t.sort(1)).keys()) == {"0", "1"}
+
     def test_from_any_userdict(self):
         class D(UserDict): ...
 
