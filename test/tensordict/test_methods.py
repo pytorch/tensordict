@@ -5220,9 +5220,14 @@ class TestPointwise(TestTensorDictsBase):
         td.apply_(lambda x: x.uniform_(*value_range))
         return td
 
-    def _operand(self, td, value_range):
-        # A dense tensordict of the same structure as td, with other values
-        return td.to_tensordict().apply_(lambda x: x.uniform_(*value_range))
+    def _operand(self, td, value_range, operand_type):
+        # A tensordict of the same structure as td, with other values: of the
+        # same type as td (a lazy stack for a lazy stack), or dense (#1932)
+        if operand_type == "dense" or isinstance(td, PersistentTensorDict):
+            other = td.to_tensordict()
+        else:
+            other = td.clone()
+        return other.apply_(lambda x: x.uniform_(*value_range))
 
     @pytest.mark.parametrize("op", _POINTWISE_UNARY_OPS)
     def test_unary(self, td_name, device, op):
@@ -5244,14 +5249,16 @@ class TestPointwise(TestTensorDictsBase):
         for key, val in expected.items():
             torch.testing.assert_close(td.get(key), val)
 
+    @pytest.mark.parametrize("operand_type", ["same", "dense"])
     @pytest.mark.parametrize("inplace", [False, True])
     @pytest.mark.parametrize("op", sorted(_POINTWISE_BINARY_OPS))
-    def test_binary(self, td_name, device, op, inplace):
+    def test_binary(self, td_name, device, op, inplace, operand_type):
         num_operands, args, kwargs = _POINTWISE_BINARY_OPS[op]
         # addcdiv divides by its second operand, which must not be close to 0
         td = self._float_td(td_name, device, _POINTWISE_POSITIVE_RANGE)
         operands = [
-            self._operand(td, _POINTWISE_POSITIVE_RANGE) for _ in range(num_operands)
+            self._operand(td, _POINTWISE_POSITIVE_RANGE, operand_type)
+            for _ in range(num_operands)
         ]
         expected = {
             key: getattr(torch, op)(

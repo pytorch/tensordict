@@ -683,6 +683,17 @@ class TestLazyStackedTensorDict:
         with pytest.raises(KeyError, match="keys in tensordicts mismatch"):
             dense + stack
 
+    @pytest.mark.parametrize("lazy_first", [True, False])
+    def test_arithmetic_with_dense_keeps_lock(self, lazy_first):
+        # As with two dense tensordicts, a locked left operand gives a locked result
+        dense = TensorDict(a=torch.ones(2, 3), batch_size=[2, 3])
+        stack = lazy_stack(list(dense.clone().unbind(0)))
+        self_td, other = (stack, dense) if lazy_first else (dense, stack)
+        self_td.lock_()
+        assert (self_td + other).is_locked
+        assert self_td.lerp(other, 0.5).is_locked
+        assert not (other + self_td).is_locked
+
     def test_auto_device(self):
         # The device of a lazy stack is read from its members, so auto_device_
         # sets it on them, also when the lazy stack is nested in a tensordict.

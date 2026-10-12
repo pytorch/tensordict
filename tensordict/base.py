@@ -400,7 +400,7 @@ def _apply_pointwise(
         other_keys = set(other.keys(True, True))
         if other_keys != keys:
             _mismatch_keys(keys, other_keys)
-    return td.apply(leaf_fn, *tds)
+    return td.apply(leaf_fn, *tds, propagate_lock=True)
 
 
 def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Callable]:
