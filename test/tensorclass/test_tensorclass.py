@@ -5096,6 +5096,57 @@ class TestDeprecations:
         assert record[0].filename == __file__
         assert c._tensordict is td
 
+    @pytest.mark.parametrize(
+        "base",
+        [None, TensorClass, TensorClass["tensor_only"]],
+        ids=["decorator", "subclass", "tensor_only"],
+    )
+    def test_from_dict_defaults(self, base):
+        annotations = {"a": torch.Tensor, "b": torch.Tensor, "t": torch.Tensor}
+        namespace = {
+            "__annotations__": annotations,
+            "b": dataclasses.field(default_factory=lambda: torch.ones(2)),
+            "t": None,
+        }
+        if base is None:
+            annotations["s"] = str
+            namespace["s"] = "hi"
+            MyClass = tensorclass(type("MyClass", (), namespace))
+        else:
+            MyClass = type("MyClass", (base,), namespace)
+        defaults = {"b"} if base is not None else {"b", "s"}
+        a = torch.zeros(2)
+        with pytest.warns(
+            FutureWarning, match=r"Starting with TensorDict 0\.17, the default"
+        ) as record:
+            c = MyClass.from_dict({"a": a}, batch_size=[2])
+        assert record[0].filename == __file__
+        assert all(repr(key) in str(record[0].message) for key in defaults)
+        assert all(getattr(c, key) is None for key in (*defaults, "t"))
+
+        # no warning when the result stays the same in 0.17
+        full = {
+            "a": a,
+            **{key: getattr(MyClass(a=a, batch_size=[2]), key) for key in defaults},
+        }
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            # every field with a non-None default is given; t defaults to None
+            assert MyClass.from_dict(full, batch_size=[2]).t is None
+            # a field without a default stays None
+            assert (
+                MyClass.from_dict(
+                    {k: v for k, v in full.items() if k != "a"}, batch_size=[2]
+                ).a
+                is None
+            )
+            # the update methods keep the values of the instance
+            c = MyClass(a=a, b=torch.full((2,), 3.0), batch_size=[2])
+            c.update({"a": torch.ones(2)})
+            c.update_({"a": torch.ones(2)})
+            c.update_at_({"a": torch.ones(())}, 0)
+            assert (c.b == 3).all()
+
     # The library code that builds and converts tensorclasses does not call the
     # deprecated members.
     @pytest.mark.parametrize(

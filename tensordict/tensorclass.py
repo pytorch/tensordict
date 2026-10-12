@@ -1444,7 +1444,7 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     if not hasattr(cls, "_load_memmap"):
         cls._load_memmap = classmethod(_load_memmap)
     if not hasattr(cls, "from_dict") and "from_dict" not in expected_keys:
-        cls.from_dict = classmethod(_from_dict)
+        cls.from_dict = classmethod(_from_dict_public)
     if (
         not hasattr(cls, "from_dict_instance")
         and "from_dict_instance" not in expected_keys
@@ -3199,7 +3199,9 @@ def _update(
         is_leaf = _is_leaf_nontensor
     if isinstance(input_dict_or_td, dict):
         none_keys = _dict_none_keys(self, input_dict_or_td)
-        input_dict_or_td = type(self).from_dict(input_dict_or_td, auto_batch_size=False)
+        input_dict_or_td = _from_dict_for_update(
+            type(self), input_dict_or_td, auto_batch_size=False
+        )
         if none_keys:
             _add_none_entries(input_dict_or_td, none_keys)
             _update(
@@ -3297,8 +3299,8 @@ def _update_(
         return self
     if isinstance(input_dict_or_td, dict):
         none_keys = _dict_none_keys(self, input_dict_or_td)
-        input_dict_or_td = type(self).from_dict(
-            input_dict_or_td, batch_size=self.batch_size
+        input_dict_or_td = _from_dict_for_update(
+            type(self), input_dict_or_td, batch_size=self.batch_size
         )
         # update_() raises for them, as it did before
         _add_none_entries(input_dict_or_td, none_keys)
@@ -3336,8 +3338,8 @@ def _update_at_(
     if isinstance(input_dict_or_td, dict):
         try:
             none_keys = _dict_none_keys(self, input_dict_or_td)
-            input_dict_or_td = type(self).from_dict(
-                input_dict_or_td, batch_size=self.batch_size
+            input_dict_or_td = _from_dict_for_update(
+                type(self), input_dict_or_td, batch_size=self.batch_size
             )
             _add_none_entries(input_dict_or_td, none_keys)
         except RuntimeError:
@@ -3613,6 +3615,74 @@ def _from_dict(
     non_tensordict = {}
 
     return cls.from_tensordict(tensordict=td, non_tensordict=non_tensordict)
+
+
+def _from_dict_public(
+    cls,
+    input_dict,
+    *,
+    auto_batch_size: bool | None = None,
+    batch_size=None,
+    device=None,
+    batch_dims=None,
+):
+    """Builds an instance of the tensorclass from a dictionary of its fields.
+
+    The fields that ``input_dict`` misses are set to ``None``, also those that
+    declare a default or a default factory. Starting with TensorDict 0.17, the
+    default will change to filling these fields with their defaults, as the
+    constructor does. Until then, a call that misses such a field warns with a
+    :class:`FutureWarning`.
+
+    Args:
+        input_dict (dict): the values of the fields. Nested dictionaries become
+            tensordicts, or tensorclasses for the fields annotated with one.
+
+    Keyword Args:
+        auto_batch_size (bool, optional): whether to infer the batch size.
+        batch_size (torch.Size, optional): the batch size.
+        device (torch.device, optional): the device.
+        batch_dims (int, optional): the number of batch dimensions to infer.
+    """
+    keys = {key[0] if isinstance(key, tuple) else key for key in input_dict}
+    # A non-tensor class keeps input_dict as its data and fills no field.
+    fields = () if issubclass(cls, NonTensorDataBase) else dataclasses.fields(cls)
+    missing = [
+        field.name
+        for field in fields
+        if field.name not in keys
+        and (
+            field.default_factory is not dataclasses.MISSING
+            or (field.default is not dataclasses.MISSING and field.default is not None)
+        )
+    ]
+    if missing:
+        warnings.warn(
+            f"{cls.__name__}.from_dict() sets the fields {missing} that the input "
+            "misses to None, not to their declared defaults. Starting with "
+            "TensorDict 0.17, the default will change to filling these fields "
+            "with their defaults and default factories, as the constructor does. "
+            "Pass the fields to from_dict() to choose their values.",
+            FutureWarning,
+            stacklevel=2,
+        )
+    return _from_dict(
+        cls,
+        input_dict,
+        auto_batch_size=auto_batch_size,
+        batch_size=batch_size,
+        device=device,
+        batch_dims=batch_dims,
+    )
+
+
+def _from_dict_for_update(cls, input_dict, **kwargs):
+    # The update methods keep the fields that input_dict misses, so the
+    # defaults that from_dict() fills in 0.17 do not concern them: skip its
+    # warning, unless the class defines its own from_dict().
+    if getattr(cls.from_dict, "__func__", None) is _from_dict_public:
+        return _from_dict(cls, input_dict, **kwargs)
+    return cls.from_dict(input_dict, **kwargs)
 
 
 def _from_dict_instance(
@@ -4572,7 +4642,7 @@ def _patch_tc(cls):
     cls.from_tensordict = _from_tensordict_public
     cls._new_unsafe = classmethod(_new_unsafe)
     cls._load_memmap = classmethod(_load_memmap)
-    cls.from_dict = classmethod(_from_dict)
+    cls.from_dict = classmethod(_from_dict_public)
 
     cls.set = _set
     cls.get = _get
