@@ -1281,6 +1281,36 @@ def test_public_module_all(module_name):
     assert not missing, f"{module_name}.__all__ misses public names: {missing}"
 
 
+def _is_no_default(node):
+    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+        return any(_is_no_default(elt) for elt in node.elts)
+    return (isinstance(node, ast.Name) and node.id == "NO_DEFAULT") or (
+        isinstance(node, ast.Attribute) and node.attr == "NO_DEFAULT"
+    )
+
+
+def test_no_default_compared_by_identity():
+    # NO_DEFAULT is an IntEnum equal to 0, so ==, != and in also match dim=0
+    package = Path(tensordict.__file__).parent
+    root = package.parent
+    offenders = []
+    for path in sorted(package.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if not isinstance(node, ast.Compare):
+                continue
+            operands = [node.left, *node.comparators]
+            for op, left, right in zip(node.ops, operands, operands[1:]):
+                if isinstance(op, (ast.Is, ast.IsNot)):
+                    continue
+                if _is_no_default(left) or _is_no_default(right):
+                    offenders.append(
+                        f"{path.relative_to(root)}:{node.lineno}: {ast.unparse(node)}"
+                    )
+    assert not offenders, "compare NO_DEFAULT with is / is not:\n" + "\n".join(
+        offenders
+    )
+
+
 def test_public_module_names():
     module_names = set(_public_module_names())
     for module_name in (
