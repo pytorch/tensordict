@@ -212,6 +212,7 @@ _METHOD_FROM_TD = [
 ]
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict', no wrap of result
 _FALLBACK_METHOD_FROM_TD_NOWRAP = [
+    "_change_batch_size",
     "_check_batch_size",
     "_check_device",
     "_check_dim_name",

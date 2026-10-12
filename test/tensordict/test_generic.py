@@ -3517,6 +3517,23 @@ class TestGeneric:
         assert out.a.shape == (4, 6)
         assert out.b.shape == (4, 6, 2)
 
+    def test_pad_inplace_tensorclass_no_warning(self):
+        # pad(..., inplace=True) sets the batch size of a tensorclass, top
+        # level or nested, without the tensorclass fallback warning
+        @tensorclass
+        class _Sample:
+            a: torch.Tensor
+
+        s = _Sample(a=torch.ones(3, 4), batch_size=[3])
+        td = TensorDict(s=_Sample(a=torch.ones(3), batch_size=[3]), batch_size=[3])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert pad(s, [0, 1], inplace=True) is s
+            pad(td, [0, 1], inplace=True)
+        assert s.batch_size == (4,)
+        assert td["s"].batch_size == (4,)
+        assert td["s"].a.shape == (4,)
+
     def test_pad_tensorclass(self):
         # pad without inplace=True returns a tensorclass for a tensorclass,
         # at the top level and nested, like the tensorclass method
