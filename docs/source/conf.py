@@ -25,6 +25,7 @@ import ast
 import importlib
 import inspect
 import os
+import pathlib
 import re
 import sys
 
@@ -550,6 +551,31 @@ def _keep_sidebar(app, pagename, templatename, context, doctree):
     context["suppress_sidebar_toctree"] = lambda **kwargs: False
 
 
+# Three numbers in the SVG paths of Font Awesome's minified JavaScript, such as
+# "...-163.028.159-16...", have the form of a Brazilian tax ID, and GitHub
+# push protection rejects the gh-pages upload for them ("BII - CPF"). In SVG
+# path data, "163.028.159" reads as 163.028 and .159, so a space between the
+# two numbers draws the same icon and breaks the false match.
+_CPF_LIKE = re.compile(r"(\d{3}\.\d{3})(\.\d{3}-\d{2})")
+
+
+def _unflag_fontawesome_js(app, exception):
+    if exception is not None or app.builder.format != "html":
+        return
+    for script in pathlib.Path(app.outdir).glob(
+        "_static/vendor/fontawesome/*/js/all.min.js"
+    ):
+        text = script.read_text(encoding="utf-8")
+        new_text = text
+        while True:
+            patched = _CPF_LIKE.sub(r"\1 \2", new_text)
+            if patched == new_text:
+                break
+            new_text = patched
+        if new_text != text:
+            script.write_text(new_text, encoding="utf-8")
+
+
 def setup(app):
     app.connect("html-page-context", _set_header_nav, priority=600)
     app.connect("html-page-context", _keep_sidebar, priority=600)
@@ -557,3 +583,4 @@ def setup(app):
     app.connect("autodoc-skip-member", _skip_shared_member)
     app.connect("missing-reference", _resolve_shared_method)
     app.connect("env-updated", _alias_shared_methods)
+    app.connect("build-finished", _unflag_fontawesome_js)
