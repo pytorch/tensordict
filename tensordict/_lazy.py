@@ -4160,6 +4160,16 @@ class LazyStackedTensorDict(TensorDictBase):
             and other.ndim > 0
             and other.shape[: self.stack_dim] == self.shape[: self.stack_dim]
         ):
+            if isinstance(other, Tensor) and (
+                other.ndim <= self.stack_dim
+                or other.shape[self.stack_dim] != self.shape[self.stack_dim]
+            ):
+                raise ValueError(
+                    "A tensor `other` in LazyStackedTensorDict.where must be 0-dim "
+                    "or start with the batch shape up to the stack dim, "
+                    f"{self.shape[: self.stack_dim + 1]}, got shape {other.shape}. "
+                    f"Expand it to the batch shape {self.shape} first."
+                )
             other = other.unbind(self.stack_dim)
 
             def where(td, cond, other, pad):
