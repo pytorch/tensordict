@@ -170,13 +170,8 @@ are `torch.Tensor` subclasses that a tensordict can store as entries.
 `TensorDictBase` marks its backend-specific methods with
 `@abc.abstractmethod`: the storage hooks (`_get_str`, `_set_str`, ...),
 the shape operations (`_view`, `_permute`, `_unsqueeze`, ...), `keys`,
-`_clone` and others, 36 in all. A class that lacks one
-cannot be instantiated. The `batch_size` and `device` properties read the
-`_batch_size` and `_device` attributes, which each class sets, and
-`_change_batch_size` writes `_batch_size`. A class that derives one of
-them (a lazy stack, a view, a store that persists it) replaces only the
-accessor it needs, for example with `@TensorDictBase.batch_size.getter` or
-`@TensorDictBase.device.setter`. The rest of `TensorDictBase` (`base.py` and the mixins in
+`_clone` and others. A class that lacks one
+cannot be instantiated. The rest of `TensorDictBase` (`base.py` and the mixins in
 `_base/`) is written on top of these methods, and all the implementations
 share it, including generic
 implementations of operations such as `reshape`, `split`, `__setitem__`,
