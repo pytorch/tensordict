@@ -24,8 +24,10 @@ number. In this example, a weather grid of 3 by 4 cells has a pressure and a
     >>> import torch
     >>> from tensordict import TensorDict
     >>> td = TensorDict(
-    ...     pressure=torch.ones(3, 4),
-    ...     wind={"velocity": torch.ones(3, 4, 2)},
+    ...     {
+    ...         "pressure": torch.ones(3, 4),
+    ...         "wind": {"velocity": torch.ones(3, 4, 2)},
+    ...     },
     ...     batch_size=[3, 4],
     ... )
     >>> (td * 2 + td)["wind", "velocity"][0, 0]
@@ -74,7 +76,7 @@ underscore, such as :meth:`~tensordict.TensorDict.add_`, write into the
 leaves (see :ref:`inplace-conventions`). :ref:`api-methods-pointwise` lists
 them all.
 
-    >>> TensorDict(x=torch.tensor([-2.0, 0.5, 3.0])).clamp(0, 1)["x"]
+    >>> TensorDict({"x": torch.tensor([-2.0, 0.5, 3.0])}).clamp(0, 1)["x"]
     tensor([0.0000, 0.5000, 1.0000])
 
 Arithmetic, the pointwise methods and the comparisons ``<``, ``<=``, ``>``
@@ -134,8 +136,8 @@ The batch sizes of two tensordicts must broadcast, aligned on the right.
 Batch sizes ``(3,)`` and ``(3, 4)`` do not broadcast, even if the leaves have
 the same shape:
 
-    >>> td2 = TensorDict(a=torch.ones(3, 4), batch_size=[3])
-    >>> TensorDict(a=torch.ones(3, 4), batch_size=[3, 4]) + td2
+    >>> td2 = TensorDict({"a": torch.ones(3, 4)}, batch_size=[3])
+    >>> TensorDict({"a": torch.ones(3, 4)}, batch_size=[3, 4]) + td2
     Traceback (most recent call last):
     ...
     RuntimeError: Attempting to broadcast a dimension of length 3 at -1! ...
@@ -143,8 +145,8 @@ the same shape:
 If the two batch sizes have a different number of dimensions, the shape of
 the leaves in the result can depend on the order of the operands:
 
-    >>> td0 = TensorDict(x=torch.ones(3, 2), batch_size=[])
-    >>> td1 = TensorDict(x=torch.ones(3, 2), batch_size=[3])
+    >>> td0 = TensorDict({"x": torch.ones(3, 2)}, batch_size=[])
+    >>> td1 = TensorDict({"x": torch.ones(3, 2)}, batch_size=[3])
     >>> (td1 + td0)["x"].shape
     torch.Size([3, 2])
     >>> (td0 + td1)["x"].shape
@@ -181,8 +183,8 @@ argument for tensordicts with different keys:
 
 In this example, ``x`` and ``y`` share only the key ``"a"``:
 
-    >>> x = TensorDict(a=torch.ones(2), b=torch.ones(2), batch_size=[2])
-    >>> y = TensorDict(a=torch.ones(2), c=torch.ones(2), batch_size=[2])
+    >>> x = TensorDict({"a": torch.ones(2), "b": torch.ones(2)}, batch_size=[2])
+    >>> y = TensorDict({"a": torch.ones(2), "c": torch.ones(2)}, batch_size=[2])
     >>> x + y
     Traceback (most recent call last):
     ...
@@ -200,8 +202,10 @@ returns a new tensordict with the results, at the same keys. Use it for an
 operation that has no tensordict method:
 
     >>> td = TensorDict(
-    ...     pressure=torch.ones(3, 4),
-    ...     wind={"velocity": torch.ones(3, 4, 2)},
+    ...     {
+    ...         "pressure": torch.ones(3, 4),
+    ...         "wind": {"velocity": torch.ones(3, 4, 2)},
+    ...     },
     ...     batch_size=[3, 4],
     ... )
     >>> td.apply(lambda x: x // 2)["pressure"][0]
@@ -317,7 +321,7 @@ tensordict has two kinds of in-place operation:
 In short, ``method_`` keeps the bytes, and ``inplace=True`` on a
 shape-changing operation keeps the container.
 
-    >>> td = TensorDict(a=torch.ones(3, 4), batch_size=[3, 4])
+    >>> td = TensorDict({"a": torch.ones(3, 4)}, batch_size=[3, 4])
     >>> ptr = td["a"].data_ptr()
     >>> _ = td.add_(1)
     >>> td["a"].data_ptr() == ptr
@@ -376,7 +380,7 @@ These methods follow neither of the two kinds:
 For example, ``select(inplace=True)`` returns the same tensordict, with fewer
 keys:
 
-    >>> td = TensorDict(a=torch.ones(2), b=TensorDict(c=torch.ones(2)))
+    >>> td = TensorDict({"a": torch.ones(2), "b": TensorDict({"c": torch.ones(2)})})
     >>> td.select("a", inplace=True) is td, list(td.keys())
     (True, ['a'])
 
@@ -394,7 +398,7 @@ keeps its graph through the operations above.
 PyTorch as tuples, and returns the gradients as a new tensordict with the
 keys of ``inputs``:
 
-    >>> inputs = TensorDict(a=torch.ones(2, 3, requires_grad=True))
+    >>> inputs = TensorDict({"a": torch.ones(2, 3, requires_grad=True)})
     >>> outputs = inputs * 2.0
     >>> grads = torch.autograd.grad(outputs, inputs, torch.ones_like(outputs))
     >>> grads["a"]
@@ -406,9 +410,9 @@ tensordict inputs raises ``ValueError: torch.autograd.grad for TensorDict
 only supports TensorDictBase as output``. To differentiate a scalar loss,
 put it in a tensordict:
 
-    >>> params = TensorDict(w=torch.ones(3, requires_grad=True))
+    >>> params = TensorDict({"w": torch.ones(3, requires_grad=True)})
     >>> loss = (params["w"] ** 2).sum()
-    >>> torch.autograd.grad(TensorDict(loss=loss), params)["w"]
+    >>> torch.autograd.grad(TensorDict({"loss": loss}), params)["w"]
     tensor([2., 2., 2.])
 
 This also works for a module that reads and writes tensordicts, such as a
@@ -419,7 +423,7 @@ outputs:
     >>> from tensordict.nn import TensorDictModule
     >>> _ = torch.manual_seed(0)
     >>> module = TensorDictModule(torch.nn.Linear(3, 2), in_keys=["x"], out_keys=["y"])
-    >>> td_in = TensorDict(x=torch.randn(4, 3, requires_grad=True), batch_size=[4])
+    >>> td_in = TensorDict({"x": torch.randn(4, 3, requires_grad=True)}, batch_size=[4])
     >>> td_out = module(td_in.clone()).select(*module.out_keys)
     >>> grads = torch.autograd.grad(td_out, td_in, torch.ones_like(td_out))
     >>> grads["x"].shape
@@ -436,7 +440,7 @@ need to give a gradient. The usual case is a tensordict of losses, here a fit te
 regularization term:
 
     >>> w = torch.ones(3, requires_grad=True)
-    >>> loss_td = TensorDict(fit_loss=(w ** 2).sum(), reg_loss=w.sum())
+    >>> loss_td = TensorDict({"fit_loss": (w ** 2).sum(), "reg_loss": w.sum()})
     >>> loss_td.backward()  # same as loss_td.sum(reduce=True).backward()
     >>> w.grad
     tensor([3., 3., 3.])
@@ -445,8 +449,8 @@ For leaves that are not scalars, or to weight each loss, pass a gradient
 tensordict whose entries match the differentiable leaves by nested key:
 
     >>> w.grad = None
-    >>> loss_td = TensorDict(fit_loss=(w ** 2).sum(), reg_loss=w.sum())
-    >>> weights = TensorDict(fit_loss=torch.tensor(0.5), reg_loss=torch.tensor(1.0))
+    >>> loss_td = TensorDict({"fit_loss": (w ** 2).sum(), "reg_loss": w.sum()})
+    >>> weights = TensorDict({"fit_loss": torch.tensor(0.5), "reg_loss": torch.tensor(1.0)})
     >>> loss_td.backward(weights)
     >>> w.grad
     tensor([2., 2., 2.])
@@ -482,8 +486,8 @@ of keys. The errors are ``RuntimeError: Expected pytree structure ...`` and
 have the same python structure ...``.
 
     >>> def g(td):
-    ...     return TensorDict(x=td["a"] ** 2, batch_size=td.batch_size)
-    >>> jacrev(g)(TensorDict(a=torch.randn(4), batch_size=[4]))
+    ...     return TensorDict({"x": td["a"] ** 2}, batch_size=td.batch_size)
+    >>> jacrev(g)(TensorDict({"a": torch.randn(4)}, batch_size=[4]))
     Traceback (most recent call last):
     ...
     RuntimeError: Expected pytree structure of cotangents to be the same as pytree structure of outputs to the function...
@@ -496,7 +500,7 @@ To avoid the error, do one of these:
 
 With ``batch_size=[]``, the same function works:
 
-    >>> jacrev(g)(TensorDict(a=torch.randn(4), batch_size=[]))["x", "a"].shape
+    >>> jacrev(g)(TensorDict({"a": torch.randn(4)}, batch_size=[]))["x", "a"].shape
     torch.Size([4, 4])
 
 :mod:`torch.func` also has :func:`torch.func.grad` and :func:`torch.vmap`

@@ -19,10 +19,12 @@ each robot, and the camera images in a nested TensorDict:
   >>> import torch
   >>> from tensordict import TensorDict
   >>> robots = TensorDict(
-  ...     joints=torch.zeros(4, 7),
-  ...     camera={
-  ...         "rgb": torch.zeros(4, 3, 32, 32, dtype=torch.uint8),
-  ...         "depth": torch.zeros(4, 32, 32),
+  ...     {
+  ...         "joints": torch.zeros(4, 7),
+  ...         "camera": {
+  ...             "rgb": torch.zeros(4, 3, 32, 32, dtype=torch.uint8),
+  ...             "depth": torch.zeros(4, 32, 32),
+  ...         },
   ...     },
   ...     batch_size=[4],
   ... )

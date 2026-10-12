@@ -98,10 +98,10 @@ example in each. Each example on this page is a function of ``rank`` and
 
    def send_recv(rank, world_size):
        if rank == 0:
-           td = TensorDict(a=torch.randn(4), b=torch.randn(4, 3), batch_size=[4])
+           td = TensorDict({"a": torch.randn(4), "b": torch.randn(4, 3)}, batch_size=[4])
            td.send(dst=1)
        elif rank == 1:
-           td = TensorDict(a=torch.zeros(4), b=torch.zeros(4, 3), batch_size=[4])
+           td = TensorDict({"a": torch.zeros(4), "b": torch.zeros(4, 3)}, batch_size=[4])
            td.recv(src=0)
            print((td["b"] != 0).all())  # tensor(True)
 
@@ -136,10 +136,10 @@ hold a consolidated tensordict with the same keys, shapes and dtypes:
 
    def send_consolidated(rank, world_size):
        if rank == 0:
-           td = TensorDict(a=torch.randn(4), b=torch.randn(4, 3), batch_size=[4])
+           td = TensorDict({"a": torch.randn(4), "b": torch.randn(4, 3)}, batch_size=[4])
            td.send(dst=1, consolidated=True)
        elif rank == 1:
-           td = TensorDict(a=torch.zeros(4), b=torch.zeros(4, 3), batch_size=[4])
+           td = TensorDict({"a": torch.zeros(4), "b": torch.zeros(4, 3)}, batch_size=[4])
            td = td.consolidate(metadata=True)
            td.recv(src=0, consolidated=True)
            print((td["b"] != 0).all())  # tensor(True)
@@ -163,13 +163,13 @@ on each one before you use or change the data:
 
    def isend_irecv(rank, world_size):
        if rank == 0:
-           td = TensorDict(a=torch.randn(4), b=torch.randn(4, 3), batch_size=[4])
+           td = TensorDict({"a": torch.randn(4), "b": torch.randn(4, 3)}, batch_size=[4])
            works = td.isend(dst=1, return_early=True)
            # ... do other work, without changing td ...
            for work in works:
                work.wait()
        elif rank == 1:
-           td = TensorDict(a=torch.zeros(4), b=torch.zeros(4, 3), batch_size=[4])
+           td = TensorDict({"a": torch.zeros(4), "b": torch.zeros(4, 3)}, batch_size=[4])
            works = td.irecv(src=0, return_premature=True)
            # ... do other work, without reading td ...
            for work in works:
@@ -196,7 +196,7 @@ allocate memory again:
    def cold_start(rank, world_size):
        if rank == 0:
            td = TensorDict(
-               obs=torch.randn(2, 84), reward=torch.randn(2, 1), batch_size=[2]
+               {"obs": torch.randn(2, 84), "reward": torch.randn(2, 1)}, batch_size=[2]
            )
            td.init_remote(dst=1)
            for step in range(3):
@@ -216,7 +216,7 @@ the group must call them:
 
    def cold_start_broadcast(rank, world_size):
        if rank == 0:
-           td = TensorDict(obs=torch.randn(2, 84), batch_size=[2])
+           td = TensorDict({"obs": torch.randn(2, 84)}, batch_size=[2])
            td.init_remote(use_broadcast=True)
        else:
            td = TensorDict.from_remote_init(src=0, use_broadcast=True)
@@ -246,7 +246,7 @@ ranks can start with an empty tensordict:
 .. code-block:: python
 
    def broadcast(rank, world_size):
-       td = TensorDict(a=torch.arange(3.0), batch_size=[3]) if rank == 0 else TensorDict()
+       td = TensorDict({"a": torch.arange(3.0)}, batch_size=[3]) if rank == 0 else TensorDict()
        td = td.broadcast(src=0)
        print(rank, td["a"])  # tensor([0., 1., 2.]) on every rank
 
@@ -260,7 +260,7 @@ objects to wait on:
 .. code-block:: python
 
    def all_reduce(rank, world_size):
-       td = TensorDict(a=torch.ones(3) * rank, batch_size=[3])
+       td = TensorDict({"a": torch.ones(3) * rank}, batch_size=[3])
        td.all_reduce(op=dist.ReduceOp.SUM)
        print(rank, td["a"])  # with 2 ranks: tensor([1., 1., 1.]) on every rank
        works = td.all_reduce(async_op=True)
@@ -275,7 +275,7 @@ the local values after the call, clone the tensordict before it:
 .. code-block:: python
 
    def reduce(rank, world_size):
-       td = TensorDict(a=torch.ones(3) * (rank + 1), batch_size=[3])
+       td = TensorDict({"a": torch.ones(3) * (rank + 1)}, batch_size=[3])
        td.reduce(dst=0, op=dist.ReduceOp.SUM)
        if rank == 0:
            print(td["a"])  # with 2 ranks: tensor([3., 3., 3.])
@@ -290,7 +290,7 @@ structures:
 .. code-block:: python
 
    def all_gather(rank, world_size):
-       local = TensorDict(a=torch.full((3,), float(rank)), batch_size=[3])
+       local = TensorDict({"a": torch.full((3,), float(rank))}, batch_size=[3])
        tds = local.all_gather()
        print(rank, [td["a"][0].item() for td in tds])  # [0.0, 1.0] on every rank
 
@@ -302,7 +302,7 @@ on rank ``src`` to each rank. The other ranks pass ``tensordicts=None``:
    def scatter(rank, world_size):
        if rank == 0:
            tds = [
-               TensorDict(a=torch.full((3,), float(i)), batch_size=[3])
+               TensorDict({"a": torch.full((3,), float(i))}, batch_size=[3])
                for i in range(world_size)
            ]
        else:
@@ -320,11 +320,11 @@ dimension is ``world_size - 1``. Its own data is not in the result:
 
    def gather_and_stack(rank, world_size):
        if rank == 0:
-           out = TensorDict(a=torch.zeros(world_size - 1, 3), batch_size=[world_size - 1])
+           out = TensorDict({"a": torch.zeros(world_size - 1, 3)}, batch_size=[world_size - 1])
            out.gather_and_stack(dst=0)
            print(out["a"][:, 0])  # with 2 ranks: tensor([1.])
        else:
-           td = TensorDict(a=torch.full((3,), float(rank)), batch_size=[3])
+           td = TensorDict({"a": torch.full((3,), float(rank))}, batch_size=[3])
            td.gather_and_stack(dst=0)
 
 Several transfers and custom groups
@@ -341,15 +341,15 @@ them costs about 10 µs for each leaf.
 
    def two_transfers(rank, world_size):
        if rank == 0:
-           obs = TensorDict(a=torch.ones(4), b=torch.ones(4), batch_size=[4])
-           reward = TensorDict(r=torch.full((4,), 2.0), batch_size=[4])
+           obs = TensorDict({"a": torch.ones(4), "b": torch.ones(4)}, batch_size=[4])
+           reward = TensorDict({"r": torch.full((4,), 2.0)}, batch_size=[4])
            works = obs.isend(dst=1, init_tag=0, return_early=True)
            works += reward.isend(dst=1, init_tag=100, return_early=True)
            for work in works:
                work.wait()
        elif rank == 1:
-           obs = TensorDict(a=torch.zeros(4), b=torch.zeros(4), batch_size=[4])
-           reward = TensorDict(r=torch.zeros(4), batch_size=[4])
+           obs = TensorDict({"a": torch.zeros(4), "b": torch.zeros(4)}, batch_size=[4])
+           reward = TensorDict({"r": torch.zeros(4)}, batch_size=[4])
            reward.irecv(src=0, init_tag=100)
            obs.irecv(src=0, init_tag=0)
            print(obs["a"][0], reward["r"][0])  # tensor(1.) tensor(2.)
@@ -366,9 +366,9 @@ group:
    def custom_group(rank, world_size):
        group = dist.new_group([0, world_size - 1])
        if rank == 0:
-           TensorDict(a=torch.ones(3), batch_size=[3]).send(group=group, group_dst=1)
+           TensorDict({"a": torch.ones(3)}, batch_size=[3]).send(group=group, group_dst=1)
        elif rank == world_size - 1:
-           td = TensorDict(a=torch.zeros(3), batch_size=[3])
+           td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
            td.recv(group=group, group_src=0)
            print(td["a"])  # tensor([1., 1., 1.])
 
@@ -513,7 +513,7 @@ same tensordict, with the new values:
        pipe = await TensorDictPipe.connect("10.0.1.1", port=13337)
        buffer = None
        for obs, label in dataloader:
-           batch = TensorDict(obs=obs, label=label, batch_size=[obs.shape[0]])
+           batch = TensorDict({"obs": obs, "label": label}, batch_size=[obs.shape[0]])
            if buffer is None:
                buffer = batch.consolidate(metadata=True)  # allocate once
            else:
@@ -555,7 +555,7 @@ on the device of the sender, unless you pass ``device``:
 
 .. code-block:: python
 
-   td = TensorDict(x=torch.randn(1024, 1024, device="cuda"), batch_size=[1024])
+   td = TensorDict({"x": torch.randn(1024, 1024, device="cuda")}, batch_size=[1024])
    await pipe.asend(td)  # sender
 
    td = await pipe.arecv()  # receiver: td is on cuda

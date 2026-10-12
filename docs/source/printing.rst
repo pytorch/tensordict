@@ -19,8 +19,10 @@ each entry, and the batch size, device and ``is_shared`` of the tensordict:
     >>> import torch
     >>> from tensordict import TensorDict
     >>> td = TensorDict(
-    ...     image=torch.randn(32, 3, 64, 64),
-    ...     label=torch.randint(10, (32,)),
+    ...     {
+    ...         "image": torch.randn(32, 3, 64, 64),
+    ...         "label": torch.randint(10, (32,)),
+    ...     },
     ...     batch_size=[32],
     ... )
     >>> print(td)

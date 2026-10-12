@@ -16,7 +16,7 @@ the state of 100 particles:
   >>> tmp = tempfile.TemporaryDirectory()
   >>> root = Path(tmp.name)
   >>> particles = TensorDict(
-  ...     pos=torch.zeros(100, 3), vel=torch.ones(100, 3), batch_size=[100]
+  ...     {"pos": torch.zeros(100, 3), "vel": torch.ones(100, 3)}, batch_size=[100]
   ... )
   >>> _ = particles.save(root / "particles")
   >>> loaded = TensorDict.load_memmap(root / "particles")
@@ -184,7 +184,7 @@ loaded tensor goes:
 Here, the reader with ``mode="r"`` changes memory only, and the writer with
 the default mode changes the file:
 
-  >>> _ = TensorDict(a=torch.zeros(3), batch_size=[3]).save(root / "data")
+  >>> _ = TensorDict({"a": torch.zeros(3)}, batch_size=[3]).save(root / "data")
   >>> reader = TensorDict.load_memmap(root / "data", mode="r")
   >>> _ = reader["a"].add_(1)
   >>> TensorDict.load_memmap(root / "data")["a"]
@@ -242,9 +242,11 @@ one file instead of a directory. This example saves a triangle mesh with a
 temperature field on its vertices:
 
   >>> mesh = TensorDict(
-  ...     vertices=torch.rand(10, 3),
-  ...     faces=torch.randint(10, (16, 3)),
-  ...     fields={"temperature": torch.rand(10)},
+  ...     {
+  ...         "vertices": torch.rand(10, 3),
+  ...         "faces": torch.randint(10, (16, 3)),
+  ...         "fields": {"temperature": torch.rand(10)},
+  ...     },
   ... )
   >>> _ = mesh.save(root / "mesh.tdz")
   >>> loaded = TensorDict.load_memmap(root / "mesh.tdz")
@@ -312,8 +314,10 @@ the file again. This example saves a graph with four nodes and three edges:
 
   >>> from tensordict import from_consolidated
   >>> graph = TensorDict(
-  ...     nodes=torch.zeros(4, 8),
-  ...     edges={"index": torch.tensor([[0, 1, 2], [1, 2, 3]]), "weight": torch.ones(3)},
+  ...     {
+  ...         "nodes": torch.zeros(4, 8),
+  ...         "edges": {"index": torch.tensor([[0, 1, 2], [1, 2, 3]]), "weight": torch.ones(3)},
+  ...     },
   ... )
   >>> graph_c = graph.consolidate(root / "graph.bin")
   >>> from_consolidated(root / "graph.bin")["edges", "index"]
@@ -347,7 +351,7 @@ reference, with :func:`torch.serialization.add_safe_globals`. The list covers
 consolidated tensordicts, and non-tensor values made of Python builtins, such
 as strings, numbers, lists and dicts:
 
-  >>> batch = TensorDict(loss=torch.zeros(3), meta={"split": "train"}, batch_size=[3])
+  >>> batch = TensorDict({"loss": torch.zeros(3), "meta": {"split": "train"}}, batch_size=[3])
   >>> torch.save(batch, root / "batch.pt")
   >>> torch.load(root / "batch.pt", weights_only=True)["meta", "split"]
   'train'
@@ -358,7 +362,7 @@ values, such as NumPy arrays or dates. For these, loading stops with an
 
   >>> import datetime
   >>> from tensordict import NonTensorData
-  >>> td = TensorDict(date=NonTensorData(datetime.date(2024, 1, 1)))
+  >>> td = TensorDict({"date": NonTensorData(datetime.date(2024, 1, 1))})
   >>> torch.save(td, root / "date.pt")
   >>> torch.load(root / "date.pt", weights_only=True)
   Traceback (most recent call last):
@@ -444,9 +448,11 @@ JSON can represent to ``meta.json``, and the other values to an
 ``other.pickle`` file next to it:
 
   >>> run = TensorDict(
-  ...     x=torch.zeros(3),
-  ...     config=NonTensorData({"lr": 0.1}),
-  ...     date=NonTensorData(datetime.date(2024, 1, 1)),
+  ...     {
+  ...         "x": torch.zeros(3),
+  ...         "config": NonTensorData({"lr": 0.1}),
+  ...         "date": NonTensorData(datetime.date(2024, 1, 1)),
+  ...     },
   ...     batch_size=[3],
   ... )
   >>> _ = run.save(root / "run")
@@ -525,8 +531,10 @@ inside a :class:`~tensordict.TensorDict` or a stack of tensordicts:
   ...     data: torch.Tensor
   ...     metadata: str
   >>> data = TensorDict(
-  ...     td_list=torch.stack(td_list),
-  ...     record=Record(torch.randn(3), metadata="some text", batch_size=[]),
+  ...     {
+  ...         "td_list": torch.stack(td_list),
+  ...         "record": Record(torch.randn(3), metadata="some text", batch_size=[]),
+  ...     },
   ... )
   >>> _ = data.memmap_(root / "mixed")
   >>> loaded = TensorDict.load_memmap(root / "mixed")

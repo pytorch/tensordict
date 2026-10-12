@@ -36,8 +36,8 @@ buckets can be as follows:
 import torch
 from tensordict import TensorDict
 
-bucket0 = TensorDict(stream0=torch.randn(5), stream1=torch.randn(4))
-bucket1 = TensorDict(stream0=torch.randn(4), stream1=torch.randn(5))
+bucket0 = TensorDict({"stream0": torch.randn(5), "stream1": torch.randn(4)})
+bucket1 = TensorDict({"stream0": torch.randn(4), "stream1": torch.randn(5)})
 
 ############################################
 # You cannot stack these two tensordicts into one block of memory, because the

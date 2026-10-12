@@ -205,7 +205,7 @@ without a copy. Writes through the typed wrapper go to the storage of ``td``:
 
   >>> from tensordict import TensorDict
   >>> td = TensorDict(
-  ...     eta=torch.randn(5, 3), X=torch.randn(5, 4), beta=torch.randn(5, 1),
+  ...     {"eta": torch.randn(5, 3), "X": torch.randn(5, 4), "beta": torch.randn(5, 1)},
   ...     batch_size=[5],
   ... )
   >>> state = PredictorState.from_tensordict(td)

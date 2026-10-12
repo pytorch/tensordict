@@ -22,7 +22,7 @@ of a key path). It returns a new tensordict, and sets its ``device`` attribute
 
     >>> import torch
     >>> from tensordict import TensorDict
-    >>> batch = TensorDict(images=torch.zeros(4, 3, 8, 8), labels=torch.arange(4), batch_size=[4])
+    >>> batch = TensorDict({"images": torch.zeros(4, 3, 8, 8), "labels": torch.arange(4)}, batch_size=[4])
     >>> batch.to("meta").device
     device(type='meta')
     >>> batch64 = batch.to(torch.float64)
@@ -76,7 +76,7 @@ and dtype. The entries that the block adds are added to
 the original tensordict too. They keep the dtype that they have in the block.
 If the original tensordict has a device, they go to that device:
 
-    >>> td = TensorDict(x=torch.zeros(3), batch_size=[3], device="cpu")
+    >>> td = TensorDict({"x": torch.zeros(3)}, batch_size=[3], device="cpu")
     >>> with td.to(torch.float64) as td64:
     ...     td64["x"] += 1
     ...     td64["y"] = td64["x"] * 2
@@ -104,7 +104,7 @@ The device of a tensordict
 A tensordict has a :attr:`~tensordict.TensorDict.device` attribute. By
 default, it is ``None``, also if all the leaves are on the same device:
 
-    >>> td = TensorDict(a=torch.zeros(3), batch_size=[3])
+    >>> td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
     >>> print(td.device)
     None
 
@@ -117,14 +117,14 @@ The value changes what happens to the entries that you add:
 
 In this example, ``td`` has the ``meta`` device, and ``mixed`` has no device:
 
-    >>> td = TensorDict(a=torch.zeros(3), batch_size=[3], device="meta")
+    >>> td = TensorDict({"a": torch.zeros(3)}, batch_size=[3], device="meta")
     >>> td["b"] = torch.ones(3)  # a CPU tensor
     >>> td["b"].device
     device(type='meta')
     >>> td["n"] = {"c": torch.ones(3)}
     >>> td["n"].device, td["n", "c"].device
     (device(type='meta'), device(type='meta'))
-    >>> mixed = TensorDict(a=torch.zeros(3), b=torch.zeros(3, device="meta"), batch_size=[3])
+    >>> mixed = TensorDict({"a": torch.zeros(3), "b": torch.zeros(3, device="meta")}, batch_size=[3])
     >>> print(mixed.device)
     None
 
@@ -136,7 +136,7 @@ Two methods change the attribute and do not move any leaf:
 
 Here, all the leaves are on the CPU:
 
-    >>> TensorDict(a=torch.zeros(3), batch_size=[3]).auto_device_().device
+    >>> TensorDict({"a": torch.zeros(3)}, batch_size=[3]).auto_device_().device
     device(type='cpu')
 
 Per-leaf device and dtype casting
@@ -156,10 +156,12 @@ the device, the dtype and the shape of its leaf. ``to()`` casts each leaf of
 the tensordict to the device and the dtype of the leaf with the same key in
 this spec:
 
-    >>> source = TensorDict(a=torch.zeros(3), b=torch.zeros(3, dtype=torch.float64), batch_size=[3])
+    >>> source = TensorDict({"a": torch.zeros(3), "b": torch.zeros(3, dtype=torch.float64)}, batch_size=[3])
     >>> layout = TensorDict(
-    ...     a=torch.zeros(3, dtype=torch.float16, device="meta"),
-    ...     b=torch.zeros(3, dtype=torch.float32),
+    ...     {
+    ...         "a": torch.zeros(3, dtype=torch.float16, device="meta"),
+    ...         "b": torch.zeros(3, dtype=torch.float32),
+    ...     },
     ...     batch_size=[3],
     ... )
     >>> out = source.to(layout.attrs())
@@ -200,7 +202,7 @@ These rules apply:
 
 In this example, the spec has only the key ``"a"``, so ``"b"`` keeps its dtype:
 
-    >>> partial = TensorDict(a=torch.zeros(3, dtype=torch.float16), batch_size=[3]).attrs()
+    >>> partial = TensorDict({"a": torch.zeros(3, dtype=torch.float16)}, batch_size=[3]).attrs()
     >>> out = source.to(partial)
     >>> out["a"].dtype, out["b"].dtype
     (torch.float16, torch.float64)
@@ -221,7 +223,7 @@ returns a tensordict whose leaves are in pinned memory. With
 Pinning needs an accelerator, so this example does not run on a CPU-only
 machine:
 
-    >>> td = TensorDict(pos=torch.zeros(64, 3), batch_size=[64])
+    >>> td = TensorDict({"pos": torch.zeros(64, 3)}, batch_size=[64])
     >>> pinned = td.pin_memory()  # doctest: +SKIP
     >>> td_gpu = pinned.to("cuda", non_blocking=True)  # doctest: +SKIP
 
@@ -242,7 +244,7 @@ leaves without a copy, for example the workers of
 :ref:`keys-locking`). You can write into the existing leaves, but you cannot
 add, remove or replace an entry:
 
-    >>> td = TensorDict(a=torch.zeros(3), batch_size=[3]).share_memory_()
+    >>> td = TensorDict({"a": torch.zeros(3)}, batch_size=[3]).share_memory_()
     >>> td.is_shared(), td.is_locked
     (True, True)
     >>> td["b"] = torch.zeros(3)
@@ -271,7 +273,7 @@ consolidated tensordict is faster to send to another process. The result of
 ``consolidate()`` is locked. If you call
 :meth:`~tensordict.TensorDict.unlock_` on it, it is no longer consolidated:
 
-    >>> c = TensorDict(a=torch.zeros(3), b=torch.ones(3, 2), batch_size=[3]).consolidate()
+    >>> c = TensorDict({"a": torch.zeros(3), "b": torch.ones(3, 2)}, batch_size=[3]).consolidate()
     >>> c.is_consolidated(), c.is_locked
     (True, True)
     >>> c.to("meta").is_consolidated()

@@ -176,7 +176,9 @@ buffer = TensorDict.from_schema(
     filename=root / "buffer.zarr",
 )
 for i in range(4):
-    buffer[i] = TensorDict(obs=torch.randn(4), reward=torch.randn(()), batch_size=[])
+    buffer[i] = TensorDict(
+        {"obs": torch.randn(4), "reward": torch.randn(())}, batch_size=[]
+    )
 
 ##############################################################################
 # Conclusion

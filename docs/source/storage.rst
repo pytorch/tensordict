@@ -26,9 +26,11 @@ first four:
   ... )
   >>> for i in range(4):
   ...     log[i] = TensorDict(
-  ...         camera=torch.full((3, 64, 64), i, dtype=torch.uint8),
-  ...         joints=torch.zeros(7),
-  ...         step=i,
+  ...         {
+  ...             "camera": torch.full((3, 64, 64), i, dtype=torch.uint8),
+  ...             "joints": torch.zeros(7),
+  ...             "step": i,
+  ...         },
   ...     )
   >>> log["step"][:5]
   MemoryMappedTensor([0, 1, 2, 3, 0])
@@ -177,7 +179,7 @@ with ``zarr``, and open the store with
   >>> with h5py.File(root / "large.h5", "w") as f:
   ...     _ = f.create_dataset("image", shape=(1_000, 3, 64, 64), dtype="uint8")
   >>> large = PersistentTensorDict.from_h5(root / "large.h5", mode="r+", batch_size=[1_000])
-  >>> large[0] = TensorDict(image=torch.ones(3, 64, 64, dtype=torch.uint8))
+  >>> large[0] = TensorDict({"image": torch.ones(3, 64, 64, dtype=torch.uint8)})
   >>> large["image"][0].sum()
   tensor(12288)
 
@@ -187,7 +189,7 @@ of the dataset, and creates zero-filled files with the same structure,
 without copying the values. Make one sample, and expand it, which does not
 allocate memory:
 
-  >>> datum = TensorDict(image=torch.zeros(3, 64, 64, dtype=torch.uint8), label=0)
+  >>> datum = TensorDict({"image": torch.zeros(3, 64, 64, dtype=torch.uint8), "label": 0})
   >>> dataset = datum.expand(1_000).memmap_like(root / "dataset")
   >>> dataset.batch_size
   torch.Size([1000])
@@ -284,7 +286,7 @@ on several nodes write their results into one store:
   ...     port=6379,
   ...     td_id="sweep-1",
   ... )  # doctest: +SKIP
-  >>> results[0] = TensorDict(pos=torch.ones(100, 3), energy=-1.5)  # doctest: +SKIP
+  >>> results[0] = TensorDict({"pos": torch.ones(100, 3), "energy": -1.5})  # doctest: +SKIP
 
 In another process, on any node, open the store with
 :meth:`~tensordict.store.TensorDictStore.from_store`. It reads the batch size
@@ -387,8 +389,10 @@ memory-mapped tensordict cannot get a new entry:
 
   >>> from tensordict import NonTensorData
   >>> td = TensorDict(
-  ...     features=torch.randn(4, 3),
-  ...     label=NonTensorData("cat", batch_size=[4]),
+  ...     {
+  ...         "features": torch.randn(4, 3),
+  ...         "label": NonTensorData("cat", batch_size=[4]),
+  ...     },
   ...     batch_size=[4],
   ... )
   >>> _ = td.memmap_(root / "labels")
@@ -427,7 +431,7 @@ with :meth:`~tensordict.PersistentTensorDict.from_h5`, or write a tensordict
 that is in memory with :meth:`~tensordict.PersistentTensorDict.from_dict`.
 This example writes 500 readings of 4 sensors:
 
-  >>> td_mem = TensorDict(sensors=torch.randn(500, 4), batch_size=[500])
+  >>> td_mem = TensorDict({"sensors": torch.randn(500, 4)}, batch_size=[500])
   >>> td_h5 = PersistentTensorDict.from_dict(td_mem, root / "data.h5")
   >>> PersistentTensorDict.from_h5(root / "data.h5")["sensors"].shape
   torch.Size([500, 4])

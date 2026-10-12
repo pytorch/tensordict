@@ -29,10 +29,12 @@ function body is two lines:
 Build a TensorDict from the four tensors, then call the function:
 
   >>> batch = TensorDict(
-  ...     images=torch.randn(32, 3, 64, 64),
-  ...     labels=torch.randint(10, (32,)),
-  ...     masks=torch.ones(32, 64, 64, dtype=torch.bool),
-  ...     weights=torch.rand(32),
+  ...     {
+  ...         "images": torch.randn(32, 3, 64, 64),
+  ...         "labels": torch.randint(10, (32,)),
+  ...         "masks": torch.ones(32, 64, 64, dtype=torch.bool),
+  ...         "weights": torch.rand(32),
+  ...     },
   ...     batch_size=[32],  # the leading dimension that all tensors share
   ... )
   >>> first, second = shuffle_and_split(batch)

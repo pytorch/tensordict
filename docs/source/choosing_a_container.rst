@@ -14,7 +14,7 @@ class form without a copy:
 
   >>> import torch
   >>> from tensordict import TensorClass, TensorDict
-  >>> td = TensorDict(pos=torch.zeros(4, 3), vel=torch.zeros(4, 3), batch_size=[4])
+  >>> td = TensorDict({"pos": torch.zeros(4, 3), "vel": torch.zeros(4, 3)}, batch_size=[4])
   >>> td["mass"] = torch.ones(4)  # add a key at run time
   >>> class Particles(TensorClass):
   ...     pos: torch.Tensor

@@ -56,7 +56,7 @@ from tensordict.nn import TensorDictModule, TensorDictSequential
 # ``"x"``:
 
 tensordict = TensorDict(
-    x=torch.randn(5, 3),
+    {"x": torch.randn(5, 3)},
     batch_size=[5],
 )
 
@@ -152,7 +152,7 @@ assert "y" in tensordict
 
 block.select_out_keys("y")
 
-tensordict = TensorDict(x=torch.randn(1, 3), batch_size=[1])
+tensordict = TensorDict({"x": torch.randn(1, 3)}, batch_size=[1])
 block(tensordict)
 assert "y" in tensordict
 

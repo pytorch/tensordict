@@ -46,6 +46,14 @@ A tuple key in the constructor also creates nested entries:
 ``TensorDict({("x", "y"): torch.zeros(3)}, batch_size=[3])`` has a nested
 tensordict ``"x"`` with the key ``"y"``.
 
+Keyword arguments are a shorthand for top-level keys:
+``TensorDict(obs=torch.zeros(3), batch_size=[3])`` is the same as
+``TensorDict({"obs": torch.zeros(3)}, batch_size=[3])``. In the shorthand, the
+names of the constructor arguments (``source``, ``batch_size``, ``device``,
+``names``, ``non_blocking``, and ``lock``) are not keys, and a key must be a
+Python identifier. A key such as ``"obs.next"`` or a tuple key needs the dict.
+These docs build every TensorDict from a dict.
+
 If you know the keys when you write the code, a
 :class:`~tensordict.TensorClass` gives you typed attributes in place of string
 keys, and your editor completes them (see :ref:`tensorclass-guide`).
@@ -87,8 +95,10 @@ a nested tensordict come before the key of that tensordict. This robot state
 has a timestamp, an arm, and a gripper on the arm:
 
   >>> td = TensorDict(
-  ...     time=torch.zeros(3),
-  ...     arm={"pos": torch.zeros(3), "gripper": {"force": torch.zeros(3)}},
+  ...     {
+  ...         "time": torch.zeros(3),
+  ...         "arm": {"pos": torch.zeros(3), "gripper": {"force": torch.zeros(3)}},
+  ...     },
   ...     batch_size=[3],
   ... )
   >>> list(td.keys())
@@ -152,7 +162,7 @@ to the tensor that is already there:
 
 For example:
 
-  >>> td = TensorDict(pos=torch.zeros(3), batch_size=[3])
+  >>> td = TensorDict({"pos": torch.zeros(3)}, batch_size=[3])
   >>> old = td["pos"]
   >>> _ = td.set("pos", torch.ones(3))
   >>> old  # replaced: the old tensor did not change
@@ -178,7 +188,7 @@ copies into the existing tensors, as ``set(..., inplace=True)`` does.
 :meth:`~tensordict.TensorDict.update_` copies into existing tensors only, and
 raises a ``KeyError`` for a missing key.
 
-  >>> td = TensorDict(time=torch.zeros(3), arm={"pos": torch.zeros(3)}, batch_size=[3])
+  >>> td = TensorDict({"time": torch.zeros(3), "arm": {"pos": torch.zeros(3)}}, batch_size=[3])
   >>> _ = td.update({"time": torch.ones(3), "arm": {"vel": torch.ones(3)}})
   >>> list(td.keys(include_nested=True, leaves_only=True))
   ['time', ('arm', 'pos'), ('arm', 'vel')]
@@ -204,8 +214,10 @@ without them. Both accept nested keys. They do not copy the tensors: the new
 tensordict holds the same tensors as the original.
 
   >>> td = TensorDict(
-  ...     time=torch.zeros(3),
-  ...     arm={"pos": torch.zeros(3), "gripper": {"force": torch.zeros(3)}},
+  ...     {
+  ...         "time": torch.zeros(3),
+  ...         "arm": {"pos": torch.zeros(3), "gripper": {"force": torch.zeros(3)}},
+  ...     },
   ...     batch_size=[3],
   ... )
   >>> list(td.select("time", ("arm", "pos")).keys(include_nested=True))
@@ -230,7 +242,7 @@ Rename a key
 the tensordict. The old and the new keys can be nested, and at different
 levels:
 
-  >>> td = TensorDict(time=torch.zeros(3), arm={"pos": torch.zeros(3)}, batch_size=[3])
+  >>> td = TensorDict({"time": torch.zeros(3), "arm": {"pos": torch.zeros(3)}}, batch_size=[3])
   >>> list(td.rename_key_(("arm", "pos"), "pos").keys(include_nested=True))
   ['time', 'arm', 'pos']
 
@@ -246,7 +258,7 @@ separator. :meth:`~tensordict.TensorDict.unflatten_keys` does the reverse.
 The two methods do not copy the tensors. Use them for code or file formats
 that accept only flat string keys.
 
-  >>> td = TensorDict(time=torch.zeros(3), arm={"pos": torch.zeros(3)}, batch_size=[3])
+  >>> td = TensorDict({"time": torch.zeros(3), "arm": {"pos": torch.zeros(3)}}, batch_size=[3])
   >>> flat = td.flatten_keys()
   >>> list(flat.keys())
   ['time', 'arm.pos']
@@ -278,7 +290,7 @@ operations:
 
 For example, a new key in a nested tensordict raises:
 
-  >>> td = TensorDict(time=torch.zeros(3), arm={"pos": torch.zeros(3)}, batch_size=[3])
+  >>> td = TensorDict({"time": torch.zeros(3), "arm": {"pos": torch.zeros(3)}}, batch_size=[3])
   >>> _ = td.lock_()
   >>> td["arm", "vel"] = torch.zeros(3)
   Traceback (most recent call last):
@@ -344,7 +356,7 @@ Some methods of a tensordict also work as context managers. At the end of the
 ``with td.unlock_():`` unlocks the tensordict for the block, and locks it again
 at the end. ``with td.lock_():`` does the reverse.
 
-  >>> td = TensorDict(pos=torch.zeros(3), batch_size=[3], lock=True)
+  >>> td = TensorDict({"pos": torch.zeros(3)}, batch_size=[3], lock=True)
   >>> with td.unlock_():
   ...     td["vel"] = torch.ones(3)
   >>> td.is_locked, sorted(td.keys())
@@ -381,7 +393,7 @@ entries back to their original device and dtype (see
 :ref:`devices-temporary-moves`). If the block raises an exception, these
 operations write nothing back.
 
-  >>> td = TensorDict(x=torch.zeros(3, 4), batch_size=[3, 4])
+  >>> td = TensorDict({"x": torch.zeros(3, 4)}, batch_size=[3, 4])
   >>> with td.unsqueeze(-1) as tdu:
   ...     tdu["y"] = torch.ones(3, 4, 1)
   >>> td["y"].shape

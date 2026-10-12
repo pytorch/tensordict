@@ -22,7 +22,7 @@ Pass ``collate_fn=lambda x: x`` to keep that batch as it is:
   >>> from tensordict import TensorDict
   >>> _ = torch.manual_seed(0)
   >>> data = TensorDict(
-  ...     image=torch.randn(10, 1, 8, 8), label=torch.arange(10), batch_size=[10]
+  ...     {"image": torch.randn(10, 1, 8, 8), "label": torch.arange(10)}, batch_size=[10]
   ... )
   >>> loader = DataLoader(data, batch_size=4, shuffle=True, collate_fn=lambda x: x)
   >>> batches = list(loader)
@@ -59,7 +59,7 @@ builds a tensordict. The ``DataLoader`` then gets a list of tensordicts for
 each batch, and the default ``collate_fn`` raises the same ``TypeError``.
 Pass ``collate_fn=torch.stack`` to stack the list into one tensordict:
 
-  >>> samples = [TensorDict(features=torch.randn(3), label=i) for i in range(10)]
+  >>> samples = [TensorDict({"features": torch.randn(3), "label": i}) for i in range(10)]
   >>> batch = next(iter(DataLoader(samples, batch_size=4, collate_fn=torch.stack)))
   >>> batch.batch_size, batch["label"]
   (torch.Size([4]), tensor([0, 1, 2, 3]))
@@ -71,7 +71,7 @@ If the samples have different shapes, ``torch.stack`` raises an error. Pass
 of points:
 
   >>> from tensordict import lazy_stack
-  >>> clouds = [TensorDict(points=torch.randn(n, 3)) for n in (5, 2, 7, 3)]
+  >>> clouds = [TensorDict({"points": torch.randn(n, 3)}) for n in (5, 2, 7, 3)]
   >>> batch = next(iter(DataLoader(clouds, batch_size=4, collate_fn=lazy_stack)))
   >>> type(batch).__name__, batch.batch_size
   ('LazyStackedTensorDict', torch.Size([4]))
@@ -126,8 +126,10 @@ to a file and run it with ``python``:
    if __name__ == "__main__":
        with tempfile.TemporaryDirectory() as path:
            data = TensorDict(
-               image=torch.randn(1_000, 1, 8, 8),
-               label=torch.arange(1_000),
+               {
+                   "image": torch.randn(1_000, 1, 8, 8),
+                   "label": torch.arange(1_000),
+               },
                batch_size=[1_000],
            ).memmap_(path)
            loader = DataLoader(
@@ -172,11 +174,11 @@ system, and write its state into one row:
 
 
    def simulate(systems, i):
-       systems[i] = TensorDict(state=torch.full((3,), float(i)))
+       systems[i] = TensorDict({"state": torch.full((3,), float(i))})
 
 
    if __name__ == "__main__":
-       systems = TensorDict(state=torch.zeros(4, 3), batch_size=[4]).share_memory_()
+       systems = TensorDict({"state": torch.zeros(4, 3)}, batch_size=[4]).share_memory_()
        processes = [mp.Process(target=simulate, args=(systems, i)) for i in range(4)]
        for p in processes:
            p.start()
@@ -214,7 +216,7 @@ memory of the process that sent it:
 
    if __name__ == "__main__":
        queue = mp.Queue()
-       systems = TensorDict(state=torch.zeros(4, 3), batch_size=[4]).share_memory_()
+       systems = TensorDict({"state": torch.zeros(4, 3)}, batch_size=[4]).share_memory_()
        p = mp.Process(target=consume, args=(queue,))
        p.start()
        queue.put(systems)
@@ -244,7 +246,7 @@ it back:
    def fill(path, start, stop):
        data = TensorDict.load_memmap(path)
        for i in range(start, stop):
-           data[i] = TensorDict(image=torch.full((3, 8, 8), i, dtype=torch.uint8))
+           data[i] = TensorDict({"image": torch.full((3, 8, 8), i, dtype=torch.uint8)})
 
 
    if __name__ == "__main__":
@@ -290,17 +292,19 @@ This script computes the kinetic energy of 8 particles in two processes:
 
    def kinetic_energy(chunk):
        energy = 0.5 * chunk["mass"] * (chunk["vel"] ** 2).sum(-1)
-       return TensorDict(energy=energy, batch_size=chunk.batch_size)
+       return TensorDict({"energy": energy}, batch_size=chunk.batch_size)
 
 
    if __name__ == "__main__":
        with tempfile.TemporaryDirectory() as path:
            particles = TensorDict(
-               mass=torch.ones(8),
-               vel=torch.arange(8.0).unsqueeze(-1).repeat(1, 3),
+               {
+                   "mass": torch.ones(8),
+                   "vel": torch.arange(8.0).unsqueeze(-1).repeat(1, 3),
+               },
                batch_size=[8],
            ).memmap_()
-           out = TensorDict(energy=torch.zeros(8), batch_size=[8]).memmap_like(path)
+           out = TensorDict({"energy": torch.zeros(8)}, batch_size=[8]).memmap_like(path)
            particles.map(kinetic_energy, num_workers=2, chunksize=2, out=out)
            # MemoryMappedTensor([ 0.0000,  1.5000,  6.0000, 13.5000])
            print(out["energy"][:4])

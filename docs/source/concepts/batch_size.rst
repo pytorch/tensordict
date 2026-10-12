@@ -21,8 +21,10 @@ In this example, a tensordict holds 3 time steps of 2 robots. Each robot has
   >>> import torch
   >>> from tensordict import TensorDict
   >>> td = TensorDict(
-  ...     joints=torch.zeros(2, 3, 4),
-  ...     battery=torch.zeros(2, 3),
+  ...     {
+  ...         "joints": torch.zeros(2, 3, 4),
+  ...         "battery": torch.zeros(2, 3),
+  ...     },
   ...     batch_size=[2, 3],
   ... )
   >>> td.batch_size
@@ -78,7 +80,7 @@ dimensions. TensorDict does not infer it from the entries. With an empty batch
 size, the entries can have any shape, but you cannot index the tensordict or
 iterate over it:
 
-  >>> data = TensorDict(images=torch.zeros(3, 4), labels=torch.zeros(3))
+  >>> data = TensorDict({"images": torch.zeros(3, 4), "labels": torch.zeros(3)})
   >>> data.batch_size
   torch.Size([])
   >>> data[0]
@@ -104,7 +106,7 @@ entries share. Use ``batch_dims`` to set a maximum number of batch dimensions:
   ...     {"images": torch.zeros(3, 4), "labels": torch.zeros(3)}, auto_batch_size=True
   ... ).batch_size
   torch.Size([3])
-  >>> data = TensorDict(images=torch.zeros(3, 4, 5), masks=torch.zeros(3, 4))
+  >>> data = TensorDict({"images": torch.zeros(3, 4, 5), "masks": torch.zeros(3, 4)})
   >>> data.auto_batch_size_().batch_size
   torch.Size([3, 4])
   >>> data.auto_batch_size_(batch_dims=1).batch_size
@@ -119,7 +121,7 @@ Change the batch size
 You can assign a new batch size if all the entries are compatible with it. An
 empty batch size is always compatible:
 
-  >>> data = TensorDict(images=torch.zeros(3, 4), batch_size=[3])
+  >>> data = TensorDict({"images": torch.zeros(3, 4)}, batch_size=[3])
   >>> data.batch_size = [3, 4]
   >>> data.batch_size = [4]
   Traceback (most recent call last):
@@ -144,7 +146,7 @@ The result of a batch index is a TensorDict. Because the index applies to the
 batch dimensions, ``td[..., :2]["joints"]`` and ``td["joints"][..., :2]`` are
 different:
 
-  >>> td = TensorDict(joints=torch.zeros(2, 3, 4), battery=torch.zeros(2, 3), batch_size=[2, 3])
+  >>> td = TensorDict({"joints": torch.zeros(2, 3, 4), "battery": torch.zeros(2, 3)}, batch_size=[2, 3])
   >>> td[0].batch_size  # robot 0, all time steps
   torch.Size([3])
   >>> td[..., :2]["joints"].shape  # the first 2 time steps
@@ -186,7 +188,7 @@ To write into the batch elements of the original, assign to an index. The
 value can be a TensorDict with the batch size of the indexed result, or a
 number or tensor that broadcasts to each entry:
 
-  >>> td[1] = TensorDict(joints=torch.ones(3, 4), battery=torch.ones(3), batch_size=[3])
+  >>> td[1] = TensorDict({"joints": torch.ones(3, 4), "battery": torch.ones(3)}, batch_size=[3])
   >>> td[:, 0] = 0
   >>> td["battery"]
   tensor([[0., 1., 1.],
@@ -202,7 +204,7 @@ The shape operations of a TensorDict apply the same operation to the batch
 dimensions of each entry. They do not change the feature dimensions, and their
 dimension arguments count batch dimensions only:
 
-  >>> td = TensorDict(joints=torch.zeros(2, 3, 4), battery=torch.zeros(2, 3), batch_size=[2, 3])
+  >>> td = TensorDict({"joints": torch.zeros(2, 3, 4), "battery": torch.zeros(2, 3)}, batch_size=[2, 3])
   >>> td.reshape(6)["joints"].shape
   torch.Size([6, 4])
   >>> td.permute(1, 0)["joints"].shape
@@ -307,7 +309,7 @@ Iteration
 
 For example:
 
-  >>> td = TensorDict(a=torch.arange(3), nested={"b": torch.zeros(3, 2)}, batch_size=[3])
+  >>> td = TensorDict({"a": torch.arange(3), "nested": {"b": torch.zeros(3, 2)}}, batch_size=[3])
   >>> [x.batch_size for x in td]
   [torch.Size([]), torch.Size([]), torch.Size([])]
   >>> len(td), len(td.keys())

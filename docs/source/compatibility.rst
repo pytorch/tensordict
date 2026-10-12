@@ -127,7 +127,7 @@ The examples write their files to a temporary directory, and use this class:
 In-memory ``TensorDict``
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-  >>> td = TensorDict(a=torch.randn(4, 3), b=torch.randn(4, 5), batch_size=[4])
+  >>> td = TensorDict({"a": torch.randn(4, 3), "b": torch.randn(4, 5)}, batch_size=[4])
   >>> tc = MyTC.from_tensordict(td)
   >>> tc.a.shape
   torch.Size([4, 3])
@@ -165,7 +165,7 @@ Lazy stack
 ~~~~~~~~~~
 
   >>> from tensordict import lazy_stack
-  >>> tds = [TensorDict(a=torch.randn(3), b=torch.randn(5)) for _ in range(4)]
+  >>> tds = [TensorDict({"a": torch.randn(3), "b": torch.randn(5)}) for _ in range(4)]
   >>> ls = lazy_stack(tds, dim=0)
   >>> tc_lazy = MyTC.from_tensordict(ls)
   >>> tc_lazy[0].a.shape
@@ -223,7 +223,7 @@ The constructor creates an in-memory ``TensorDict``:
 
 ``from_tensordict`` wraps an existing ``TensorDict`` without a copy:
 
-  >>> td = TensorDict(x=torch.randn(4, 3), y=torch.randn(4, 5), batch_size=[4])
+  >>> td = TensorDict({"x": torch.randn(4, 3), "y": torch.randn(4, 5)}, batch_size=[4])
   >>> state = State.from_tensordict(td)
   >>> state.x.shape  # reads from td
   torch.Size([4, 3])
@@ -254,7 +254,7 @@ As above, these examples need a Redis server on ``localhost``:
 Lazy stack
 ~~~~~~~~~~
 
-  >>> tds = [TensorDict(x=torch.randn(3), y=torch.randn(5)) for _ in range(4)]
+  >>> tds = [TensorDict({"x": torch.randn(3), "y": torch.randn(5)}) for _ in range(4)]
   >>> ls = lazy_stack(tds, dim=0)
   >>> state = State.from_tensordict(ls)
   >>> state[0].x.shape

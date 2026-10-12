@@ -33,8 +33,10 @@ raises an error instead of splitting the function into several graphs.
   ... def step(data):
   ...     return Transition(data.obs + 1, data.reward * 0.5, batch_size=data.batch_size)
   >>> td = TensorDict(
-  ...     obs=torch.randn(8, 3),
-  ...     next=TensorDict(obs=torch.randn(8, 3), batch_size=[8]),
+  ...     {
+  ...         "obs": torch.randn(8, 3),
+  ...         "next": TensorDict({"obs": torch.randn(8, 3)}, batch_size=[8]),
+  ...     },
   ...     batch_size=[8],
   ... )
   >>> scale(td).batch_size
@@ -76,8 +78,8 @@ Writing into an input tensordict
 
     >>> @torch.compile(fullgraph=True)
     ... def policy(td):
-    ...     return TensorDict(action=td["obs"].tanh(), batch_size=td.batch_size)
-    >>> td = TensorDict(obs=torch.randn(4, 3), batch_size=[4])
+    ...     return TensorDict({"action": td["obs"].tanh()}, batch_size=td.batch_size)
+    >>> td = TensorDict({"obs": torch.randn(4, 3)}, batch_size=[4])
     >>> td["action"] = policy(td)["action"]
 
 Another batch size
@@ -180,7 +182,7 @@ tensorclasses: ``in_dims`` and ``out_dims`` refer to batch dimensions, and
 tensordict methods, arithmetic included, work on the per-sample tensordict.
 ``torch.compile(torch.vmap(fn))`` compiles the same code.
 
-  >>> td = TensorDict(a=torch.randn(5, 3), b=torch.randn(5, 3), batch_size=[5])
+  >>> td = TensorDict({"a": torch.randn(5, 3), "b": torch.randn(5, 3)}, batch_size=[5])
   >>> torch.vmap(lambda t: (t * 2 + 1).exp())(td).batch_size
   torch.Size([5])
   >>> torch.vmap(lambda t, x: t["a"] @ x, (0, None))(td, torch.randn(3)).shape
@@ -238,11 +240,13 @@ list for a nested tensordict:
 
   >>> class Model(nn.Module):
   ...     def forward(self, td):
-  ...         return TensorDict(c=td["a"] * 2 + td["n", "b"], batch_size=td.batch_size)
+  ...         return TensorDict({"c": td["a"] * 2 + td["n", "b"]}, batch_size=td.batch_size)
   >>> def make(batch):
   ...     return TensorDict(
-  ...         a=torch.randn(batch, 3),
-  ...         n=TensorDict(b=torch.randn(batch, 3), batch_size=[batch]),
+  ...         {
+  ...             "a": torch.randn(batch, 3),
+  ...             "n": TensorDict({"b": torch.randn(batch, 3)}, batch_size=[batch]),
+  ...         },
   ...         batch_size=[batch],
   ...     )
   >>> batch = torch.export.Dim("batch")
@@ -287,7 +291,7 @@ data-dependent control flow, and inputs that do not require gradients.
   >>> module = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
   >>> graph_module = CudaGraphModule(module)
   >>> results = [
-  ...     graph_module(TensorDict(x=torch.full((3,), float(i), device="cuda"), batch_size=[3]))
+  ...     graph_module(TensorDict({"x": torch.full((3,), float(i), device="cuda")}, batch_size=[3]))
   ...     for i in range(4)
   ... ]
   >>> [result["y"][0].item() for result in results]
@@ -344,7 +348,7 @@ For example:
   ... )
   >>> with torch.no_grad():
   ...     outputs = [
-  ...         policy(TensorDict(obs=torch.randn(8, 3, device="cuda"), batch_size=[8])).clone()
+  ...         policy(TensorDict({"obs": torch.randn(8, 3, device="cuda")}, batch_size=[8])).clone()
   ...         for _ in range(4)
   ...     ]
   >>> outputs[0]["action"].shape
