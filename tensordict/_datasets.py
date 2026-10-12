@@ -47,9 +47,9 @@ def to_mds(
             start a new shard. If ``None``, puts everything in one shard. Can specify bytes
             human-readable format as well, for example ``"100kb"`` for 100 kilobyte
             (100*1024) and so on. Defaults to ``1 << 26``.
-            Ignored if
-        writer: (MDSWriter, optional): the write to use. Will be created from the `out` kwarg as well as other
-            input kwargs.
+            Ignored if ``writer`` is passed.
+        writer (MDSWriter, optional): the writer to use. If ``None``, it is
+            created from ``out`` and the other keyword arguments.
         **kwargs (Any): Additional settings for the Writer.
 
     .. note:: The MDSWriter has limited support for nested dictionaries. The proper way to handle nested tensordicts
@@ -65,8 +65,9 @@ def to_mds(
 
     .. seealso:: See the Mosaic streaming library API at `<https://docs.mosaicml.com/projects/streaming>`_
 
-    The following example shows and end-to-end example of how to create a dataset and load it in a
-    PyTorch dataloader.
+    The following example writes a dataset and loads it in a PyTorch
+    dataloader. It needs ``mosaicml-streaming``, so it is not run when the
+    documentation is tested.
 
     Examples:
         >>> import tempfile
@@ -81,7 +82,7 @@ def to_mds(
         ...     TensorDict(a=0, b=1, c=torch.randn(3), d="yet another string"),
         ... )
         >>>
-        >>> with tempfile.TemporaryDirectory() as tempdir:
+        >>> with tempfile.TemporaryDirectory() as tempdir:  # doctest: +SKIP
         ...     # Create a dataset on one process / thread / node...
         ...     td.to_mds(out=tempdir)
         ...

@@ -18,11 +18,18 @@ import warnings
 
 import pytest
 import torch
-from tensordict import lazy_stack, TensorDict, TypedTensorDict
+from tensordict import (
+    lazy_stack,
+    LazyStackedTensorDict,
+    PersistentTensorDict,
+    TensorDict,
+    TypedTensorDict,
+)
 from tensordict.base import _default_is_leaf, TensorDictBase
 from torch import Tensor
 
 _has_mypy = importlib.util.find_spec("mypy") is not None
+_has_h5py = importlib.util.find_spec("h5py") is not None
 
 # ---------------------------------------------------------------------------
 # Fixture classes
@@ -169,10 +176,13 @@ class dtype: ...
         package.joinpath("__init__.pyi").write_text(
             "from .typedtensordict import TypedTensorDict as TypedTensorDict\n"
         )
+        package.joinpath("base.pyi").write_text("class TensorDictBase: ...\n")
         package.joinpath("_td.pyi").write_text(
             """from typing import Any
 
-class TensorDict:
+from tensordict.base import TensorDictBase
+
+class TensorDict(TensorDictBase):
     def __init__(self, *args: Any, **kwargs: Any) -> None: ...
 """
         )
@@ -199,6 +209,7 @@ ignore_missing_imports = True
         valid.write_text(
             """from typing_extensions import assert_type
 from tensordict import TypedTensorDict
+from tensordict._td import TensorDict
 
 class State(TypedTensorDict):
     observation: int
@@ -216,6 +227,7 @@ child = ChildState(observation=1, reward=2, done=0)
 assert_type(state.observation, int)
 assert_type(state.optional, int | None)
 assert_type(consume(child), int)
+assert_type(State.from_tensordict(TensorDict(), check=False), State)
 """
         )
         stdout, stderr, status = api.run(["--config-file", str(config), str(valid)])
@@ -564,6 +576,16 @@ class TestTensorDictOps:
         state.update({"eta": torch.ones(5, 3)})
         assert (state["eta"] == 1).all()
 
+    def test_set_returns_self(self, state):
+        assert state.set("new", torch.ones(5)) is state
+        assert state.set(("nested", "a"), torch.ones(5)) is state
+        assert state.set_("eta", torch.ones(5, 3)) is state
+        assert state.set_(("nested", "a"), torch.zeros(5)) is state
+        assert state.set_at_("eta", torch.full((3,), 2.0), 0) is state
+        assert state.set_at_(("nested", "a"), torch.tensor(2.0), 0) is state
+        assert (state["eta"][0] == 2).all()
+        assert state["nested", "a"][0] == 2
+
     def test_to_dict(self, state):
         d = state.to_dict()
         assert set(d.keys()) == {"eta", "X", "beta"}
@@ -575,6 +597,17 @@ class TestTensorDictOps:
     def test_exclude(self, state):
         exc = state.exclude("beta")
         assert set(exc.keys()) == {"eta", "X"}
+
+    def test_is_locked_setter_erases_cache(self, state):
+        # ``is_locked = False`` must drop the results cached while locked,
+        # as ``unlock_()`` does.
+        state.is_locked = True
+        state.detach()
+        state.is_locked = False
+        assert state._cache is None
+        state.set("eta", torch.ones(5, 3))
+        state.is_locked = True
+        assert (state.detach()["eta"] == 1).all()
 
 
 # ---------------------------------------------------------------------------
@@ -798,6 +831,39 @@ class TestFromTensordict:
         assert isinstance(state, PredictorState)
         assert state.batch_size == torch.Size([2])
         assert state.eta.shape == (2, 3)
+
+    def test_from_tensordict_lazy_stack_inplace(self):
+        # #2242: the in-place methods write into the members of the stack
+        tds = [self._make_td() for _ in range(2)]
+        state = PredictorState.from_tensordict(lazy_stack(tds))
+        expected = state.to_tensordict()
+        other = expected.apply(lambda x: torch.rand_like(x) + 1)
+        for td in (state, expected):
+            assert td.abs_() is td
+            assert td.add_(other, alpha=2.0) is td
+            td *= 2
+            assert td.lerp_(other, 0.5) is td
+            assert td.update_(other.select("eta") * 3) is td
+        assert (state._source[0]["eta"] == tds[0]["eta"]).all()
+        torch.testing.assert_close(lazy_stack(tds)["eta"], expected["eta"])
+        torch.testing.assert_close(state.to_tensordict(), expected)
+        state.copy_(other)
+        torch.testing.assert_close(state.to_tensordict(), other)
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+    def test_from_tensordict_lazy_stack_read_only_inplace(self, tmp_path):
+        # A stack of files opened read-only stays unchanged, and warns
+        files = []
+        for i in range(2):
+            self._make_td().to_h5(tmp_path / f"{i}.h5").close()
+            files.append(PersistentTensorDict.from_h5(tmp_path / f"{i}.h5"))
+        state = PredictorState.from_tensordict(LazyStackedTensorDict(*files))
+        before = state.to_tensordict()
+        with pytest.warns(FutureWarning, match="leaves the file unchanged"):
+            state.add_(1.0)
+        with pytest.warns(FutureWarning, match="leaves the file unchanged"):
+            state.update_(before + 1)
+        torch.testing.assert_close(state.to_tensordict(), before)
 
     def test_from_tensordict_memmap(self):
         with tempfile.TemporaryDirectory() as tmpdir:

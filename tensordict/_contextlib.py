@@ -15,6 +15,7 @@ import sys
 from typing import Any, Callable, cast, TypeVar
 
 import numpy as np
+from tensordict.utils import _parse_to
 from torch.compiler import is_compiling
 
 # Used for annotating the decorator usage of _DecoratorContextManager (e.g.,
@@ -438,16 +439,41 @@ LAST_OP_MAPS["to_module"] = _reverse_to_module
 
 
 def _reverse_to(self, args, kwargs, out):
-    """Reverse the to() operation by restoring the original device.
+    """Reverse the to() operation by restoring the original device and dtype.
 
-    Uses the input tensordict (self) to determine the original device of each tensor
-    and restores the output tensordict (out) to those original devices.
+    Writes the tensors of the tensordict returned by to() (self) back into the
+    original tensordict (out), on the original device of each tensor. If to() cast
+    the dtypes, each tensor gets its original dtype back too.
     """
     if out is None:
         return self
+    from tensordict.base import _is_tensor_collection
+    from tensordict.tensorclass import TensorAttrs
+
+    # to() casts the dtypes if it gets a dtype, a tensor, other= with a single dtype
+    # or an attrs tensordict that records dtypes. A device-only to() leaves the
+    # dtypes as they are.
+    if args and _is_tensor_collection(type(args[0])):
+        restore_dtype = any(
+            attrs.tgt_dtype is not None
+            for attrs in args[0].values(
+                True, True, is_leaf=lambda cls: issubclass(cls, TensorAttrs)
+            )
+        )
+    else:
+        # to() takes non_blocking out before it parses the other arguments
+        kwargs = {key: val for key, val in kwargs.items() if key != "non_blocking"}
+        restore_dtype = _parse_to(*args, **kwargs)[1] is not None
     # Restore each tensor to its original device/dtype from the input tensordict
     return self.apply(
-        lambda x, y: x.to(y.device) if y is not None else x, out, default=None, out=out
+        lambda x, y: (
+            (x.to(device=y.device, dtype=y.dtype) if restore_dtype else x.to(y.device))
+            if y is not None
+            else x
+        ),
+        out,
+        default=None,
+        out=out,
     )
 
 
