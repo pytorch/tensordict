@@ -310,6 +310,21 @@ class _RecordDeviceTransfer:
 _device_recorder = _RecordDeviceTransfer()
 
 
+class _InplaceShapeState(local):
+    """Per-thread state of the in-place shape ops.
+
+    ``nested`` is ``True`` while ``_inplace_rebind_leaves`` runs the op on a
+    nested tensordict. The top-level call has then checked the whole tree with
+    ``_raise_if_holds_lazy_stack``, so the nested calls skip that walk.
+    """
+
+    def __init__(self):
+        self.nested = False
+
+
+_inplace_shape_state = _InplaceShapeState()
+
+
 def _holds_its_tensors(td: TensorDictBase) -> bool:
     """Returns whether ``td`` reads its entries from a ``TensorDict``, which holds its tensors.
 
@@ -5669,7 +5684,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     )
                 continue
             if _is_tensor_collection(type(leaf)):
-                nested_fn(leaf)
+                nested = _inplace_shape_state.nested
+                _inplace_shape_state.nested = True
+                try:
+                    nested_fn(leaf)
+                finally:
+                    _inplace_shape_state.nested = nested
                 continue
             new_leaf = leaf_fn(leaf)
             del leaf
@@ -5693,14 +5713,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         while ``batch_size`` is unchanged, so the whole tree is checked first.
         The check tests ``_lazy``, so it also catches the other lazy
         tensordicts, such as ``_SubTensorDict``, which refuse these ops too.
+        The calls on nested tensordicts skip the walk, which the top-level
+        call has done.
         """
-        for key in self.keys():
-            value = self._get_str(key, default=None)
+        if not prefix and _inplace_shape_state.nested:
+            return
+        for key, value in self.items():
             cls = type(value)
-            if not _is_tensor_collection(cls):
+            if cls is Tensor:
                 continue
-            if _is_tensorclass(cls):
-                if _is_non_tensor(cls):
+            if not isinstance(value, TensorDictBase):
+                if not _is_tensorclass(cls) or _is_non_tensor(cls):
                     continue
                 value = value._tensordict
             nested_key = prefix + (key,)

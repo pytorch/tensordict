@@ -3899,9 +3899,20 @@ class TestGeneric:
         ],
     )
     @pytest.mark.parametrize("stack_type", ["non_tensor_stack", "lazy_stack"])
-    def test_inplace_shape_op_nested_lazy_stack_unchanged(self, op, call, stack_type):
+    @pytest.mark.parametrize(
+        "container", ["tensordict", "nested_tensordict", "nested_tensorclass"]
+    )
+    def test_inplace_shape_op_nested_lazy_stack_unchanged(
+        self, op, call, stack_type, container
+    ):
         # The tensor leaf "x" comes before the lazy entry "s" in key order, so
         # a check that runs only when "s" is reached would rewrite "x" first.
+        # The nested containers also hold a tensor leaf "z" before "s".
+        @tensorclass
+        class Holder:
+            z: torch.Tensor
+            s: Any
+
         if stack_type == "non_tensor_stack":
             s = NonTensorStack.from_list([["a", "b", "c"], ["d", "e", "f"]])
         else:
@@ -3911,20 +3922,35 @@ class TestGeneric:
                     for i in range(2)
                 ]
             )
-        td = TensorDict(x=torch.arange(6).view(2, 3), s=s, batch_size=[2, 3])
-        assert list(td.keys()) == ["x", "s"]
+        x = torch.arange(6).view(2, 3)
+        if container == "tensordict":
+            td = TensorDict(x=x, s=s, batch_size=[2, 3])
+            holder = td
+            key = "s"
+        else:
+            z = torch.arange(6).view(2, 3) + 10
+            cls = TensorDict if container == "nested_tensordict" else Holder
+            td = TensorDict(x=x, n=cls(z=z, s=s, batch_size=[2, 3]), batch_size=[2, 3])
+            holder = td.get("n")
+            if container == "nested_tensorclass":
+                holder = holder._tensordict
+            key = ("n", "s")
+        assert list(td.keys()) == ["x", "s" if container == "tensordict" else "n"]
         ref = td.clone()
         with pytest.raises(NotImplementedError, match=rf"{op}\(inplace=True\)") as err:
             call(td)
         assert td.batch_size == torch.Size([2, 3])
         assert torch.equal(td["x"], ref["x"])
-        assert td.get("s") is s
+        if container != "tensordict":
+            assert holder.batch_size == torch.Size([2, 3])
+            assert torch.equal(holder["z"], z)
+        assert holder.get("s") is s
         assert s.batch_size == torch.Size([2, 3])
         if stack_type == "non_tensor_stack":
-            assert s.tolist() == ref.get("s").tolist()
+            assert s.tolist() == [["a", "b", "c"], ["d", "e", "f"]]
         else:
-            assert torch.equal(s["y"], ref["s", "y"])
-        assert f"found a {type(s).__name__} at key 's'" in str(err.value)
+            assert torch.equal(s["y"], torch.tensor([[0, 1, 2], [10, 11, 12]]))
+        assert f"found a {type(s).__name__} at key {key!r}" in str(err.value)
         assert "inplace=False" in str(err.value)
 
     @pytest.mark.parametrize("inplace", [True, False])
