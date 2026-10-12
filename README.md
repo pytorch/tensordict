@@ -6,25 +6,28 @@
 [![Downloads](https://static.pepy.tech/badge/tensordict)](https://pepy.tech/projects/tensordict)
 
 PyTorch code that handles groups of tensors, such as a training batch, a
-particle system or a batch of graphs, repeats every operation for every tensor:
+particle system or a batch of graphs, usually repeats every operation for
+every tensor, and nested dicts need recursion. A TensorDict holds the group as
+one object:
 
-```diff
-- def shuffle_and_split(images, labels, masks, weights):
--     perm = torch.randperm(len(images))
--     images, labels, masks, weights = images[perm], labels[perm], masks[perm], weights[perm]
--     half = len(images) // 2
--     first = images[:half], labels[:half], masks[:half], weights[:half]
--     second = images[half:], labels[half:], masks[half:], weights[half:]
--     return first, second
-+ def shuffle_and_split(batch):
-+     batch = batch[torch.randperm(len(batch))]
-+     return batch.split(len(batch) // 2)
+```python
+batch = TensorDict(
+    {"image": images, "label": labels, "text": {"tokens": tokens, "mask": mask}},
+    batch_size=[32],
+)
+
+batch = batch.to("cuda")                      # moves every tensor, nested ones too
+train, val = batch[:24], batch[24:]           # slices every tensor
+shuffled = batch[torch.randperm(len(batch))]  # one permutation for all of them
+pairs = torch.stack([batch, batch])           # batch_size [2, 32]
+batch["text", "mask"]                         # nested keys are tuples
+flat = batch.flatten_keys(".")                # keys: image, label, text.tokens, text.mask
 ```
 
-TensorDict holds the group as one object with a shared batch size, so
-indexing, reshaping, stacking, `.to(device)`, saving and `torch.compile` apply
-to every tensor at once. TensorClass does the same for a class with typed
-fields and methods.
+The tensors share their leading dimensions, the batch size, so indexing,
+reshaping, stacking, `.to(device)`, saving and `torch.compile` apply to all of
+them at once. TensorClass does the same for a class with typed fields and
+methods.
 
 Used in physics ([PhysicsNeMo](https://github.com/NVIDIA/physicsnemo)),
 robotics ([MuJoCo Playground](https://github.com/google-deepmind/mujoco_playground),
@@ -58,18 +61,12 @@ import torch
 from tensordict import TensorDict
 
 batch = TensorDict(
-    images=torch.randn(32, 3, 64, 64),
-    labels=torch.randint(10, (32,)),
-    meta={"weight": torch.rand(32)},  # becomes a nested TensorDict
-    batch_size=[32],                  # the leading dimension that all tensors share
+    {"images": torch.randn(32, 3, 64, 64), "labels": torch.randint(10, (32,))},
+    batch_size=[32],  # the leading dimension that all tensors share
 )
 
-print(batch[:8].batch_size)                    # torch.Size([8])
-print(batch["meta", "weight"].shape)           # torch.Size([32])
-print(torch.stack([batch, batch]).batch_size)  # torch.Size([2, 32])
-print(batch.reshape(4, 8)["images"].shape)     # torch.Size([4, 8, 3, 64, 64])
-
-batch = batch.to("cuda" if torch.cuda.is_available() else "cpu")  # every tensor, nested ones too
+print(batch[:8].batch_size)                 # torch.Size([8])
+print(batch.reshape(4, 8)["images"].shape)  # torch.Size([4, 8, 3, 64, 64])
 ```
 
 Every tensor you add must have the batch dimensions:
@@ -120,7 +117,7 @@ systems = step(systems, torch.randn(64, 1000, 3), 0.01)
 import torch
 from tensordict import TensorDict, lazy_stack
 
-episodes = [TensorDict(obs=torch.randn(n, 4), batch_size=[n]) for n in (3, 5, 2)]
+episodes = [TensorDict({"obs": torch.randn(n, 4)}, batch_size=[n]) for n in (3, 5, 2)]
 batch = lazy_stack(episodes)      # keeps each sample as it is
 print(batch.batch_size)           # torch.Size([3, -1]): -1 marks the dimension that varies
 print(batch[1]["obs"].shape)      # torch.Size([5, 4])
@@ -141,8 +138,7 @@ import torch
 from tensordict import TensorDict
 
 data = TensorDict(
-    images=torch.zeros(10_000, 3, 32, 32, dtype=torch.uint8),
-    labels=torch.arange(10_000),
+    {"images": torch.zeros(10_000, 3, 32, 32, dtype=torch.uint8), "labels": torch.arange(10_000)},
     batch_size=[10_000],
 )
 path = tempfile.mkdtemp()
@@ -169,7 +165,7 @@ policy = TensorDictSequential(
     TensorDictModule(nn.Linear(4, 32), in_keys=["obs"], out_keys=["hidden"]),
     TensorDictModule(nn.Linear(32, 2), in_keys=["hidden"], out_keys=["action"]),
 )
-batch = policy(TensorDict(obs=torch.randn(10, 4), batch_size=[10]))
+batch = policy(TensorDict({"obs": torch.randn(10, 4)}, batch_size=[10]))
 print(batch["action"].shape)  # torch.Size([10, 2])
 ```
 
@@ -212,7 +208,7 @@ from tensordict import TensorDict
 def normalize(td):
     return td.apply(lambda x: (x - x.mean()) / (x.std() + 1e-6))
 
-td = TensorDict(a=torch.randn(16, 3), b={"c": torch.randn(16)}, batch_size=[16])
+td = TensorDict({"a": torch.randn(16, 3), "b": {"c": torch.randn(16)}}, batch_size=[16])
 print(normalize(td).batch_size)  # torch.Size([16])
 ```
 
@@ -229,7 +225,7 @@ See [torch.compile, torch.func, torch.export and CUDA graphs](https://docs.pytor
 | Can I get plain tensors back? | Yes. `batch["images"]` is a `torch.Tensor`, `to_dict()` returns a nested `dict`, and `numpy()`, `to_pandas()`, `to_h5()` and `to_zarr()` export. |
 | What does it depend on? | PyTorch, NumPy, cloudpickle, packaging and pyvers, plus orjson before Python 3.13 and typing_extensions on Python 3.10. |
 | What is tested? | Python 3.10 to 3.14 (with free-threaded 3.14t) and PyTorch 2.13 to nightly, on Linux (CPU and GPU) and macOS. Each pull request also runs the TorchRL test suite. |
-| Is the API stable? | It is pre-1.0. A breaking change comes after two minor releases of warnings that name the version of the change. |
+| Is the API stable? | It is pre-1.0. A breaking change comes after two minor releases of warnings that name the version of the change. APIs that the docs mark as experimental (TypedTensorDict, UnbatchedTensor, the UCXX pipes, LazyStackedTensorDictStore) can change in a minor release. |
 | Who maintains it? | The [PyTorch organization](https://github.com/pytorch), with 40+ releases since 2022 ([release notes](https://github.com/pytorch/tensordict/releases)). |
 | When should I use something else? | For tables that you filter, group and join (use pandas or Polars), or outside PyTorch. |
 

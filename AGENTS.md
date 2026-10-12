@@ -96,9 +96,9 @@ must be accurate — wrong hints are worse than none.
 
 ## Deprecations
 
-Two minor releases of warning before any breaking change. If the next
-release is `0.X`: deprecate in `0.X`, default changes in `0.(X+1)`, removal
-in `0.(X+2)`. Use `DeprecationWarning` for removals, `FutureWarning` for
+Two minor releases of warning before any breaking change, except for the APIs
+that the docs mark as experimental. If the next release is `0.X`: deprecate in
+`0.X`, default changes in `0.(X+1)`, removal in `0.(X+2)`. Use `DeprecationWarning` for removals, `FutureWarning` for
 upcoming default changes, and **state the target version explicitly** in the
 message.
 

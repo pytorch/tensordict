@@ -3038,28 +3038,32 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         )
 
     # Stack functionality
-    @abc.abstractmethod
     def _stack_onto_(
         self,
         list_item: list[CompatibleType],
         dim: int,
     ) -> Self:
-        """Stacks a list of values onto an existing key while keeping the original storage.
+        """Stacks a list of tensordicts and writes the result in place into ``self``.
+
+        This is the hook behind ``torch.stack(list_item, dim, out=self)``.
 
         Args:
-            key (str): name of the value
-            list_item (list of torch.Tensor): value to be stacked and stored in the tensordict.
-            dim (int): dimension along which the tensors should be stacked.
+            list_item (list of TensorDictBase): the tensordicts to stack.
+            dim (int): dimension along which the tensordicts are stacked.
 
         Returns:
             self
 
         """
-        raise NotImplementedError
+        for key in self.keys():
+            vals = [td._get_str(key, None) for td in list_item]
+            if all(v is None for v in vals):
+                continue
+            self.set_(key, torch.stack(vals, dim=dim))
+        return self
 
     def _stack_onto_at_(
         self,
-        key: NestedKey,
         list_item: list[CompatibleType],
         dim: int,
         idx: IndexType,

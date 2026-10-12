@@ -20,6 +20,11 @@ the server, and each read gets it from the server. A
 tensordicts on such a server, so that its entries can have different
 shapes. You need the ``redis`` package and a running server.
 
+.. warning::
+
+    ``LazyStackedTensorDictStore`` is experimental: its API can change in a
+    minor release without a deprecation cycle.
+
 Both classes have the methods of :class:`~tensordict.TensorDictBase`,
 listed by task in :ref:`api-tensordict-methods`. Their pages list the
 methods that they add, such as ``from_store``, ``close`` and
@@ -43,6 +48,12 @@ UCXX transport
 --------------
 
 .. currentmodule:: tensordict._ucxx
+
+.. warning::
+
+    ``TensorDictPipe``, ``TensorDictServer``, ``send_tensordict`` and
+    ``recv_tensordict`` are experimental: their API can change in a minor
+    release without a deprecation cycle.
 
 UCXX is the Python interface of UCX, a communication library that
 chooses the transport between two processes, such as shared memory,

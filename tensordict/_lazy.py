@@ -1793,6 +1793,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 self.lazy_stack(vals, new_stack_dim) for vals in _zip_strict(*out)
             )
 
+    # Override: writes into each stacked tensordict, without a dense stack.
     def _stack_onto_(
         self,
         list_item: list[CompatibleType],

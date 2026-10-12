@@ -15,7 +15,9 @@ an in-memory :class:`~tensordict.TensorDict`, an HDF5 or zarr file
 or the server directly. A few operations behave differently on some backends:
 see `Operations on each backend`_.
 
-To choose between ``TensorClass`` and ``TypedTensorDict``, see
+``TypedTensorDict`` is experimental: its API can change in a minor release
+without a deprecation cycle (see :ref:`typed-tensordict-guide`). To choose
+between ``TensorClass`` and ``TypedTensorDict``, see
 :ref:`choosing-a-container`. For the backends themselves, see :ref:`storage`
 and :ref:`saving`.
 

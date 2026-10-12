@@ -4554,6 +4554,21 @@ class TestGeneric:
         td.rename_key_(("a", "b", "c"), ("a", "b"))
         assert td["a", "b"] == 0
 
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_memmap_like_no_prefix_new_files(self, tmpdir, num_threads):
+        # Without a prefix, memmap_like must not reuse the files of a source
+        # memory-mapped under a prefix.
+        td = TensorDict(
+            a=torch.ones(3), nested=TensorDict(b=torch.ones(3, 2), batch_size=[3])
+        ).memmap(tmpdir)
+        like = td.memmap_like(num_threads=num_threads)
+        assert like.is_memmap()
+        assert (like == 0).all()
+        like["a"].fill_(5)
+        like["nested", "b"].fill_(5)
+        assert (td == 1).all()
+        assert (TensorDict.load_memmap(tmpdir) == 1).all()
+
     @set_list_to_stack(True)
     @set_capture_non_tensor_stack(False)
     @pytest.mark.parametrize("like", [True, False])
