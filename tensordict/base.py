@@ -994,6 +994,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Class-level default for the dim-name methods: no names until
     # _set_names stores them on the instance.
     _td_dim_names = None
+    # Set by the backends on which ``where`` and ``masked_fill`` work on a
+    # ``to_tensordict()`` copy: the stores read it in one round trip, and on
+    # all of them the result is a new, unlocked TensorDict.
+    _masking_on_dense_copy: bool = False
 
     @classmethod
     def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
@@ -6743,7 +6747,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return result
 
     # Masking
-    @abc.abstractmethod
     def masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
         """Fills the values corresponding to the mask with the desired value.
 
@@ -6770,9 +6773,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     [0., 0., 0., 0.],
                     [0., 0., 0., 0.]])
         """
-        raise NotImplementedError
+        for item in self.values():
+            mask_expand = expand_as_right(mask, item)
+            item.masked_fill_(mask_expand, value)
+        return self
 
-    @abc.abstractmethod
     def masked_fill(self, mask: Tensor, value: float | bool) -> Self:
         """Out-of-place version of masked_fill.
 
@@ -6796,7 +6801,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     [0., 0., 0., 0.],
                     [0., 0., 0., 0.]])
         """
-        raise NotImplementedError
+        if self._masking_on_dense_copy:
+            td_copy = self.to_tensordict()
+        else:
+            td_copy = self.clone()
+        return td_copy.masked_fill_(mask, value)
 
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._batch_size = new_size

@@ -837,6 +837,7 @@ class PersistentTensorDict(TensorDictBase):
     """
 
     _td_dim_names = None
+    _masking_on_dense_copy = True
     LOCKING = None
 
     @property
@@ -1532,26 +1533,8 @@ class PersistentTensorDict(TensorDictBase):
     def is_contiguous(self):
         return False
 
-    def masked_fill(self, mask, value):
-        return self.to_tensordict().masked_fill(mask, value)
-
-    def where(
-        self,
-        condition: torch.Tensor,
-        other: torch.Tensor | TensorDictBase,
-        *,
-        out: TensorDictBase | None = None,
-        pad: int | bool = None,
-        update_batch_size: bool = False,
-    ):
-        return self.to_tensordict().where(
-            condition=condition,
-            other=other,
-            out=out,
-            pad=pad,
-            update_batch_size=update_batch_size,
-        )
-
+    # Override: the file reads give copies, so the fill is written to the
+    # arrays directly, without reading them.
     def masked_fill_(self, mask, value):
         for key in self.keys(include_nested=True, leaves_only=True):
             array = self._get_array(key)
