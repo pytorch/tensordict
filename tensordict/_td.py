@@ -47,6 +47,7 @@ from tensordict.base import (
     _register_tensor_class,
     _select_entry,
     _UNSET,
+    _warn_scalar_over_non_tensor,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
     is_tensor_collection,
@@ -1248,13 +1249,21 @@ class TensorDict(TensorDictBase):
                     not value.is_nested and value.shape[: len(batch_size)] == batch_size
                 )
             ) and (device is None or value.device == device)
+        scalar = None
         if not validated:
+            if isinstance(value, (bool, int, float)):
+                scalar = value
             value = self._validate_value(
                 value, check_shape=True, non_blocking=non_blocking, key=key
             )
         if not inplace:
             if self._is_locked and not ignore_lock:
                 raise RuntimeError(_LOCK_ERROR)
+            if scalar is not None and not self._batch_size:
+                # a NonTensorData entry, not a NonTensorStack
+                dest = self._tensordict.get(key)
+                if is_non_tensor(dest) and is_tensorclass(dest):
+                    _warn_scalar_over_non_tensor(key, scalar)
             self._tensordict[key] = value
         else:
             try:

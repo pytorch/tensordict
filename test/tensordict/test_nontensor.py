@@ -819,6 +819,69 @@ class TestNonTensorData:
             == "another string!"
         )
 
+    @pytest.mark.parametrize(
+        "write,key,expected",
+        [
+            (lambda td: td.__setitem__("a", td["a"]), "a", True),
+            (lambda td: td.set("a", 1), "a", 1),
+            (lambda td: td.update({"a": 1.5}), "a", 1.5),
+            (lambda td: td.set(("nested", "a"), False), ("nested", "a"), False),
+        ],
+        ids=["setitem", "set", "update", "nested"],
+    )
+    def test_set_scalar_over_non_tensor_warns(self, write, key, expected):
+        # A Python scalar written over a NonTensorData entry is a 0-d tensor
+        # today, and stays NonTensorData in 0.17 (gh-1199)
+        td = TensorDict(a=NonTensorData(True), nested=TensorDict(a=NonTensorData(True)))
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17") as w:
+            write(td)
+        assert w[0].filename == __file__
+        value = td.get(key)
+        assert type(value) is torch.Tensor
+        assert value.ndim == 0
+        assert value == torch.tensor(expected)
+
+    @pytest.mark.parametrize(
+        "write",
+        [
+            lambda td: td.set("a", "text"),
+            lambda td: td.set("a", torch.tensor(1)),
+            lambda td: td.set("a", NonTensorData(1)),
+            lambda td: td.set("b", 1),
+            lambda td: td.set("c", 1),
+            lambda td: td.set("s", 1),
+            lambda td: td.update(TensorDict(a=1)),
+        ],
+        ids=["str", "tensor", "non-tensor", "tensor-entry", "new", "stack", "td"],
+    )
+    def test_set_over_non_tensor_no_warning(self, write):
+        td = TensorDict(
+            a=NonTensorData(True), b=torch.zeros(()), s=NonTensorStack("x", "y")
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            write(td)
+
+    @pytest.mark.parametrize(
+        "write,batch_size",
+        [
+            (lambda td: td.set("a", 1), [2]),
+            (lambda td: td.set_("a", 1), []),
+            (lambda td: td.update_({"a": 1}), []),
+            (lambda td: td.lock_().set("a", 1), []),
+        ],
+        ids=["batched", "set_", "update_", "locked"],
+    )
+    def test_set_scalar_over_non_tensor_raises_no_warning(self, write, batch_size):
+        # These writes raise today: they do not warn
+        td = TensorDict(
+            a=NonTensorData(True, batch_size=batch_size), batch_size=batch_size
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with pytest.raises((RuntimeError, ValueError)):
+                write(td)
+
     @pytest.mark.parametrize("stacked", [False, True])
     @pytest.mark.parametrize("array", [np.array, torch.tensor], ids=["numpy", "torch"])
     def test_set_at_array_data(self, array, stacked):
