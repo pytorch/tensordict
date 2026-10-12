@@ -3,20 +3,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Test-related tensorclass definitions for distributed tests.
+"""Deprecated module: the distributed-test fixtures moved to ``tensordict._testing``."""
 
-The classes here live inside the library so that both sender and receiver
-processes can import them by fully-qualified name during multiprocessing
-(``spawn`` start method) and distributed communication.
-"""
+from __future__ import annotations
 
-import torch
-from tensordict import tensorclass
+from tensordict import _deprecation, _testing
 
-
-@tensorclass
-class MyDistData:
-    """Simple tensorclass used to test type recovery over the wire."""
-
-    a: torch.Tensor
-    b: torch.Tensor
+__getattr__ = _deprecation.deprecated_attributes(
+    __name__, {"MyDistData": (_testing.MyDistData, None)}, removal="0.17"
+)

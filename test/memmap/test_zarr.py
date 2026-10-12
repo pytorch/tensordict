@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import pickle
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -261,6 +262,19 @@ class TestZarrIndexing:
         assert (ztd.get_at("a", 0) == 0).all()
         assert (ztd.get_at(("b", "c"), 0) == 0).all()
 
+    @pytest.mark.parametrize(
+        "index",
+        [0, (slice(None), 1), torch.tensor([0, 2])],
+        ids=["int", "tuple", "tensor"],
+    )
+    def test_setitem_scalar(self, ztd_and_td, index):
+        # a scalar is written into every entry at the index
+        ztd, td = ztd_and_td
+        ztd[index] = 7
+        td[index] = 7
+        for key in td.keys(True, True):
+            assert (ztd.get(key) == td.get(key)).all(), key
+
 
 @pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")
 class TestZarrWriteOps:
@@ -288,6 +302,35 @@ class TestZarrWriteOps:
         assert (ztd["a"] == 0).all()
         assert (ztd["b", "c"] == 0).all()
 
+    def test_inplace_methods_write(self, ztd, tmp_path):
+        # #2242: the in-place methods write their result to the store
+        expected = ztd.to_tensordict()
+        other = expected.apply(lambda x: torch.rand_like(x) + 1)
+        for td in (ztd, expected):
+            assert td.abs_() is td
+            assert td.add_(other, alpha=2.0) is td
+            td *= 2
+            assert td.clamp_max_(other) is td
+            assert td.update_(other.select("a") + 1) is td
+            assert td.update_(other * 3, keys_to_update=[("b", "c")]) is td
+        reopened = PersistentTensorDict.from_zarr(tmp_path / "s.zarr")
+        torch.testing.assert_close(reopened.to_tensordict(), expected)
+        ztd.copy_(other)
+        torch.testing.assert_close(reopened.to_tensordict(), other)
+
+    def test_inplace_read_only_warns(self, ztd, tmp_path):
+        # The in-place methods leave a read-only store unchanged, as before
+        # they wrote to stores, and warn that this will raise
+        ro = PersistentTensorDict.from_zarr(tmp_path / "s.zarr")
+        before = ro.to_tensordict()
+        match = r"^Calling add_\(\) on a tensordict stored in a file opened read-only.*0\.17"
+        with pytest.warns(FutureWarning, match=match) as record:
+            assert ro.add_(1.0) is ro
+        assert record[0].filename == __file__
+        with pytest.warns(FutureWarning, match="update_"):
+            ro.update_(before + 1)
+        torch.testing.assert_close(ro.to_tensordict(), before)
+
     def test_masked_fill_(self, ztd):
         ztd.zero_()
         ztd.masked_fill_(torch.tensor([True, False, False]), 3.0)
@@ -297,6 +340,26 @@ class TestZarrWriteOps:
     def test_del(self, ztd):
         ztd.del_("a")
         assert "a" not in ztd.keys()
+
+    @pytest.mark.parametrize("key", ["a", "b", ("b", "c")])
+    def test_del_existing_key_does_not_warn(self, ztd, key):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            ztd.del_(key)
+        assert key not in ztd.keys(True)
+
+    @pytest.mark.parametrize("key", ["missing", ("b", "missing")])
+    def test_del_missing_key_warns(self, ztd, key):
+        # https://github.com/pytorch/tensordict/issues/2062
+        with pytest.warns(
+            FutureWarning,
+            match=r"del_ of a missing key .* Starting with TensorDict 0\.17, the "
+            r"default will change to raising a KeyError",
+        ) as record:
+            assert ztd.del_(key) is ztd
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert set(ztd.keys(True, True)) == {"a", ("b", "c")}
 
     def test_rename_key(self, ztd):
         ztd.rename_key_("a", "a2")
@@ -308,6 +371,23 @@ class TestZarrWriteOps:
     def test_rename_nested_group(self, ztd):
         ztd.rename_key_("b", "b2")
         assert ("b2", "c") in ztd.keys(True, True)
+
+    def test_pop_nested(self, ztd):
+        # https://github.com/pytorch/tensordict/issues/2089
+        c = ztd["b", "c"].clone()
+        out = ztd.pop("b")
+        assert isinstance(out, TensorDict)
+        assert set(out.keys()) == {"c"}
+        assert (out["c"] == c).all()
+        assert "b" not in ztd.keys()
+        ztd["b"] = TensorDict(z=torch.zeros(3, 4), batch_size=[3, 4])
+        assert set(out.keys()) == {"c"}
+
+        ztd["d", "e", "f"] = torch.ones(3, 4)
+        out = ztd.pop(("d", "e"))
+        assert isinstance(out, TensorDict)
+        assert (out["f"] == 1).all()
+        assert ("d", "e") not in ztd.keys(True)
 
     def test_create_nested(self, ztd):
         ztd.create_nested("nested")
@@ -426,6 +506,25 @@ class TestZarrStores:
         assert td_recon.batch_size == torch.Size([3])
         assert (td_recon["a"] == td["a"]).all()
         assert (td_recon["b", "c"] == td["b", "c"]).all()
+        td_recon.close()
+
+    def test_zip_store_nontensor_written_once(self, tmp_path):
+        # a zip entry cannot be replaced: the non-tensor marker must be
+        # written with the array, not in a second zarr.json entry
+        import zipfile
+
+        from zarr.storage import ZipStore
+
+        path = tmp_path / "s.zarr.zip"
+        td = TensorDict({"a": torch.randn(3), "s": "a string"}, batch_size=[3])
+        store = ZipStore(str(path), mode="w")
+        td.to_zarr(store).close()
+
+        with zipfile.ZipFile(path) as zf:
+            names = zf.namelist()
+        assert names.count("s/zarr.json") == 1
+        td_recon = TensorDict.from_zarr(ZipStore(str(path), mode="r"))
+        assert td_recon["s"] == "a string"
         td_recon.close()
 
     def test_group_kwarg(self, tmp_path):

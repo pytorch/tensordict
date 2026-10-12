@@ -182,6 +182,7 @@ def _expected_names(batch_size, index, names):
     and advanced indices broadcast together give unnamed dims. The dependency is
     traced by indexing a tensor of coordinates along each input dim. A dim of
     size 0 or 1 does not show the dependency and is returned as ``Ellipsis``.
+    A name that several output dims would take names none of them.
     """
     torch_index = _torch_index(index)
     coords = [
@@ -202,7 +203,11 @@ def _expected_names(batch_size, index, names):
             if (coord.amax(out_dim) != coord.amin(out_dim)).any()
         ]
         expected.append(names[depends[0]] if len(depends) == 1 else None)
-    return expected
+    # names are unique: one that several output dims would take names none
+    return [
+        name if name in (None, Ellipsis) or expected.count(name) == 1 else None
+        for name in expected
+    ]
 
 
 class TestTensorDictMatchesTorch:
