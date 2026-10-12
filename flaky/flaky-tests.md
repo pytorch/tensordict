@@ -1,4 +1,4 @@
-# Flaky Test Report - 2026-10-11
+# Flaky Test Report - 2026-10-12
 
 ## Summary
 
@@ -6,7 +6,7 @@
 - **Affected parameterized cases**: 0
 - **Newly confirmed**: 0
 - **Resolved since previous report**: 0
-- **Total tests analyzed**: 58737
+- **Total tests analyzed**: 58862
 - **CI runs analyzed**: 30
 
 ---
@@ -24,4 +24,4 @@ No test has recent fail/pass evidence on the same commit and CI environment.
 
 ---
 
-*Generated at 2026-10-11T06:28:11.094003+00:00*
+*Generated at 2026-10-12T06:42:14.529838+00:00*
