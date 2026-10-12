@@ -6,14 +6,19 @@
 
 # we use deepcopy as our implementation modifies the modules in-place
 import argparse
-import warnings
 from copy import deepcopy
 
 import pytest
 import torch
 from functorch import make_functional_with_buffers as functorch_make_functional
 from tensordict import TensorDict
-from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
+from tensordict.nn import (
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictSequential,
+    TensorDictModule,
+    TensorDictModuleBase,
+    TensorDictSequential,
+)
 from torch import nn, vmap
 
 
@@ -106,6 +111,54 @@ def make_tdseq_dispatch():
 def test_tdseq_dispatch(benchmark):
     benchmark.pedantic(
         lambda net, x: net(x), setup=make_tdseq_dispatch, warmup_rounds=10, rounds=1000
+    )
+
+
+def make_tdseq_selected_out_keys():
+    return (
+        (
+            TensorDictSequential(
+                TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["h"]),
+                TensorDictModule(lambda h: h + 1, in_keys=["h"], out_keys=["y"]),
+                selected_out_keys=["y"],
+            ),
+            TensorDict({"x": torch.zeros(()), "a": {"b": torch.zeros(())}}, []),
+        ),
+        {},
+    )
+
+
+def test_tdseq_selected_out_keys(benchmark):
+    benchmark.pedantic(
+        lambda net, td: net(td),
+        setup=make_tdseq_selected_out_keys,
+        warmup_rounds=10,
+        rounds=1000,
+    )
+
+
+def make_probseq():
+    return (
+        (
+            ProbabilisticTensorDictSequential(
+                TensorDictModule(
+                    lambda x: (x, x.exp()), in_keys=["x"], out_keys=["loc", "scale"]
+                ),
+                ProbabilisticTensorDictModule(
+                    in_keys=["loc", "scale"],
+                    out_keys=["y"],
+                    distribution_class=torch.distributions.Normal,
+                ),
+            ),
+            TensorDict({"x": torch.zeros(())}, []),
+        ),
+        {},
+    )
+
+
+def test_probseq(benchmark):
+    benchmark.pedantic(
+        lambda net, td: net(td), setup=make_probseq, warmup_rounds=10, rounds=1000
     )
 
 
@@ -321,12 +374,6 @@ def test_to_module_plain_tensor_speed(benchmark, preserve_module_state):
         if preserve_module_state is None
         else {"preserve_module_state": preserve_module_state}
     )
-    if preserve_module_state is None:
-        warnings.filterwarnings(
-            "ignore",
-            message="TensorDict.to_module\\(\\) is replacing an existing nn.Parameter",
-            category=FutureWarning,
-        )
 
     def func(params=params, module=module, kwargs=kwargs):
         with params.to_module(module, **kwargs):

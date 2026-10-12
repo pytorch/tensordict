@@ -18,13 +18,26 @@ __all__ = ["EnsembleModule"]
 class EnsembleModule(TensorDictModuleBase):
     """Module that wraps a module and repeats it to form an ensemble.
 
+    The constructor makes ``num_copies`` sets of parameters, each one reset
+    with the ``reset_parameters`` method of the submodules. It stacks them in
+    ``ensemble.params_td``, a :class:`~tensordict.nn.TensorDictParams` with
+    batch size ``[num_copies]``. A call runs the module once per copy with
+    :func:`torch.vmap`, so every output gets a leading dimension of size
+    ``num_copies``.
+
+    ``ensemble.parameters()`` returns the stacked copies, which an optimizer
+    can train. It also returns the parameters of the original ``module``,
+    which the call does not use.
+
     Args:
         module (nn.Module): The nn.module to duplicate and wrap.
         num_copies (int): The number of copies of module to make.
-        expand_input (bool, optional): Whether to expand the input TensorDict to match the number of copies. This should be
-            True unless you are chaining ensemble modules together, e.g. EnsembleModule(cnn) -> EnsembleModule(mlp).
-            If False, EnsembleModule(mlp) will expected the previous module(s) to have already expanded the input.
-            Defaults to ``True``.
+        expand_input (bool, optional): if ``True``, every copy receives the
+            same input. If ``False``, the input must already have a leading
+            dimension of size ``num_copies``, and copy ``i`` receives entry
+            ``i``. Use ``False`` for an EnsembleModule placed after another
+            one, for example ``EnsembleModule(cnn)`` followed by
+            ``EnsembleModule(mlp)``. Defaults to ``True``.
 
     Examples:
         >>> import torch
@@ -44,7 +57,7 @@ class EnsembleModule(TensorDictModuleBase):
             device=None,
             is_shared=False)
 
-    To stack EnsembleModules together, we should be mindful of turning off `expand_input` from the second module and on.
+    To chain EnsembleModules, set ``expand_input=False`` on the second one and on those after it.
 
     Examples:
         >>> import torch
@@ -115,14 +128,14 @@ class EnsembleModule(TensorDictModuleBase):
             for params_copy in parameters.unbind(0):
                 self.reset_parameters_recursive(params_copy)
                 params_pointers.append(params_copy)
-            return LazyStackedTensorDict.lazy_stack(params_pointers, -1)
+            return LazyStackedTensorDict.lazy_stack(params_pointers, 0)
         else:
             # In case the user has added other neural networks to the EnsembleModule
             # besides those in self.module
             child_mods = [
                 mod
                 for name, mod in self.named_children()
-                if name != "module" and name != "ensemble_parameters"
+                if name not in ("module", "ensemble_parameters", "params_td")
             ]
             if child_mods:
                 warnings.warn(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 
 import numpy as np
 import pytest
@@ -21,6 +22,23 @@ from tensordict.tensorclass import NonTensorData
 
 _has_pandas = importlib.util.find_spec("pandas") is not None
 _has_pyarrow = importlib.util.find_spec("pyarrow") is not None
+
+
+def test_tabular_module_is_deprecated():
+    import tensordict._tabular
+
+    sys.modules.pop("tensordict.tabular", None)
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"^tensordict\.tabular is deprecated and will be removed in TensorDict "
+        r"0\.17\. Use TensorDict\.from_pandas, from_csv, from_parquet, from_json, "
+        r"to_pandas, to_csv, to_parquet and to_json instead\.$",
+    ) as record:
+        import tensordict.tabular as tabular
+    assert record[0].filename == __file__
+    assert tabular._read_csv is tensordict._tabular._read_csv
+    with pytest.raises(AttributeError):
+        tabular.not_a_name
 
 
 @tensorclass

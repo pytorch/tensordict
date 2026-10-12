@@ -303,8 +303,10 @@ class _Distributed:
                 :class:`~tensordict._ucxx.TensorDictPipe` for UCXX-based
                 transport.  When a pipe is passed, the data is received
                 in-place into this tensordict's consolidated storage (if
-                available). Mutually exclusive with ``group_src``; exactly one
-                of the two must be provided.
+                available and its layout matches the received data);
+                otherwise the pipe returns a new tensordict, so use the
+                returned value. Mutually exclusive with ``group_src``;
+                exactly one of the two must be provided.
 
         Keyword Args:
             group (torch.distributed.ProcessGroup, optional): if set, the specified process group
