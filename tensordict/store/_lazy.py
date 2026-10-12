@@ -86,6 +86,26 @@ def _empty_structure(key_paths: set[str]) -> dict:
     return structure
 
 
+class _HeterogeneousKeyError(RuntimeError):
+    """Raised when a key whose elements differ in shape or dtype is read or written as one tensor."""
+
+    def __init__(self, key_path: str):
+        self.key_path = key_path
+        super().__init__(
+            f"Failed to stack the elements of the entry {key_path!r}: they differ "
+            "in shape or dtype. Read or write each element instead, for example "
+            "store[i][key]."
+        )
+
+
+def _element_index(idx) -> tuple[int, tuple] | None:
+    """Splits an index whose first item is an int into that item and the rest, or returns None."""
+    first, rest = (idx[0], idx[1:]) if isinstance(idx, tuple) and idx else (idx, ())
+    if isinstance(first, int) and not isinstance(first, bool):
+        return first, rest
+    return None
+
+
 # ---------------------------------------------------------------------------
 # _StoreStackElementView — write-through view for a single stack element
 # ---------------------------------------------------------------------------
@@ -739,7 +759,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
         self._backend = backend
 
         self._cache_metadata = cache_metadata
-        self._meta_cache: dict[str, tuple[list[int], torch.dtype]] | None = (
+        self._meta_cache: dict[str, tuple[list[int] | None, torch.dtype]] | None = (
             {} if cache_metadata else None
         )
 
@@ -830,8 +850,12 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     async def _aget_metadata_batch(
         self, key_paths: list[str]
-    ) -> dict[str, tuple[list[int], torch.dtype]]:
-        result: dict[str, tuple[list[int], torch.dtype]] = {}
+    ) -> dict[str, tuple[list[int] | None, torch.dtype]]:
+        """Returns the stacked shape and the dtype of each key.
+
+        The shape is ``None`` for a key whose elements differ in shape or dtype.
+        """
+        result: dict[str, tuple[list[int] | None, torch.dtype]] = {}
         uncached: list[str] = []
         for kp in key_paths:
             if self._meta_cache is not None and kp in self._meta_cache:
@@ -845,7 +869,11 @@ class LazyStackedTensorDictStore(TensorDictBase):
             raw_metas = await pipe.execute()
             for kp, raw_meta in zip(uncached, raw_metas):
                 meta = _decode_meta(raw_meta)
-                shape = json.loads(meta["shape"])
+                shape = (
+                    json.loads(meta["shape"])
+                    if self._is_key_homogeneous(meta)
+                    else None
+                )
                 dtype = _str_to_dtype(meta["dtype"])
                 result[kp] = (shape, dtype)
                 if self._meta_cache is not None:
@@ -859,12 +887,17 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     async def _ais_homogeneous(self, key_paths: list[str]) -> list[bool]:
         """Reads from the metadata which keys hold elements of one shape and dtype."""
+        cache = self._meta_cache or {}
+        uncached = [kp for kp in key_paths if kp not in cache]
         pipe = self._client.pipeline()
-        for kp in key_paths:
+        for kp in uncached:
             pipe.hget(self._meta_key(kp), "homogeneous")
-        flags = await pipe.execute()
+        flags = dict(zip(uncached, await pipe.execute() if uncached else []))
         # as in _is_key_homogeneous, a key without the flag is homogeneous
-        return [flag in (None, b"1", "1") for flag in flags]
+        return [
+            cache[kp][0] is not None if kp in cache else flags[kp] in (None, b"1", "1")
+            for kp in key_paths
+        ]
 
     def _row_bytes(self, shape: list[int], dtype: torch.dtype) -> int:
         """Byte size of one stack element for a homogeneous key."""
@@ -997,7 +1030,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
         await pipe.execute()
 
         if self._meta_cache is not None:
-            self._meta_cache[key_path] = (full_shape, dtype)
+            self._meta_cache[key_path] = (None, dtype)
 
     # ---- element access (reads) ----
 
@@ -1213,6 +1246,19 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
         meta_map = await self._aget_metadata_batch(key_paths)
 
+        result: dict[str, torch.Tensor] = {}
+        heterogeneous = [kp for kp in key_paths if meta_map[kp][0] is None]
+        if heterogeneous:
+            # one element of these keys is read with its own shape, as on a
+            # lazy stack; several elements cannot be stacked
+            element = _element_index(idx) if self._stack_dim == 0 else None
+            if element is None:
+                raise _HeterogeneousKeyError(heterogeneous[0])
+            pos, rest = element
+            elements = await self._abatch_get_element_keys(pos, heterogeneous)
+            result.update({kp: tensor[rest] for kp, tensor in elements.items()})
+            key_paths = [kp for kp in key_paths if kp not in elements]
+
         pipe = self._client.pipeline()
         plan: list[tuple[str, list[int], torch.dtype, object, bool]] = []
         fallback_kps: list[str] = []
@@ -1261,7 +1307,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
         has_cmds = any(has_cmd for _, _, _, _, has_cmd in plan) or fallback_kps
         raw_results = await pipe.execute() if has_cmds else []
 
-        result: dict[str, torch.Tensor] = {}
         ri = 0
         for kp, result_shape, dtype, local_idx, has_cmd in plan:
             if not has_cmd:
@@ -1363,6 +1408,22 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
         key_paths = list(items.keys())
         meta_map = await self._aget_metadata_batch(key_paths)
+
+        heterogeneous = [kp for kp in key_paths if meta_map[kp][0] is None]
+        elements = {}
+        for kp in heterogeneous:
+            # one element of these keys is written with its own shape, as on
+            # a lazy stack; several elements cannot be written as one tensor
+            elements[kp] = (
+                _element_index(items[kp][1]) if self._stack_dim == 0 else None
+            )
+            if elements[kp] is None:
+                raise _HeterogeneousKeyError(kp)
+        for kp, (pos, rest) in elements.items():
+            existing = (await self._abatch_get_element_keys(pos, [kp]))[kp]
+            existing[rest] = items[kp][0]
+            await self._aset_element_key(pos, kp, existing)
+        key_paths = [kp for kp in key_paths if kp not in elements]
 
         direct_kps: list[str] = []
         lua_kps: list[str] = []
@@ -1596,6 +1657,17 @@ class LazyStackedTensorDictStore(TensorDictBase):
             return default
         raise KeyError(f"key {key} not found in {type(self).__name__}")
 
+    def _get_tuple(self, key, default=NO_DEFAULT, **kwargs):
+        # Override: a nested entry is read alone, not with the whole
+        # sub-tensordict of key[0], whose other entries may have elements of
+        # different shapes
+        if len(key) > 1:
+            try:
+                return self._get_str(_KEY_SEP.join(key), NO_DEFAULT, **kwargs)
+            except KeyError:
+                pass
+        return super()._get_tuple(key, default, **kwargs)
+
     def _set_str(
         self,
         key: str,
@@ -1618,24 +1690,30 @@ class LazyStackedTensorDictStore(TensorDictBase):
                 sub_tuple = _unravel_key_to_tuple(sub_key)
                 full_kp = key_path + _KEY_SEP + _KEY_SEP.join(sub_tuple)
                 tensor = value.get(sub_key)
-                self._run_sync(self._aset_full_tensor(full_kp, tensor))
+                self._run_sync(self._aset_full_tensor(full_kp, tensor, inplace))
             return self
 
         if isinstance(value, torch.Tensor):
-            self._run_sync(self._aset_full_tensor(key_path, value))
+            self._run_sync(self._aset_full_tensor(key_path, value, inplace))
             return self
 
         try:
             value = torch.as_tensor(value)
-            self._run_sync(self._aset_full_tensor(key_path, value))
+            self._run_sync(self._aset_full_tensor(key_path, value, inplace))
         except (ValueError, TypeError):
             raise TypeError(
                 f"LazyStackedTensorDictStore only supports tensor values, got {type(value)}"
             )
         return self
 
-    async def _aset_full_tensor(self, key_path: str, tensor: torch.Tensor):
+    async def _aset_full_tensor(
+        self, key_path: str, tensor: torch.Tensor, inplace: bool = False
+    ):
         """Set a full (stacked) tensor for a key."""
+        if inplace and not (await self._ais_homogeneous([key_path]))[0]:
+            # as on a lazy stack, set_ cannot write one tensor to elements
+            # of different shapes
+            raise _HeterogeneousKeyError(key_path)
         data = _tensor_to_bytes(tensor)
         shape = list(tensor.shape)
         dtype = tensor.dtype
@@ -1668,14 +1746,18 @@ class LazyStackedTensorDictStore(TensorDictBase):
         if self.is_locked and not inplace:
             raise RuntimeError(_LOCK_ERROR)
         if isinstance(value, torch.Tensor):
-            self._run_sync(self._aset_full_tensor(key_path, value))
+            self._run_sync(self._aset_full_tensor(key_path, value, inplace))
         elif is_tensor_collection(value):
             for sub_key in value.keys(include_nested=True, leaves_only=True):
                 sub_tuple = _unravel_key_to_tuple(sub_key)
                 full_kp = key_path + _KEY_SEP + _KEY_SEP.join(sub_tuple)
-                self._run_sync(self._aset_full_tensor(full_kp, value.get(sub_key)))
+                self._run_sync(
+                    self._aset_full_tensor(full_kp, value.get(sub_key), inplace)
+                )
         else:
-            self._run_sync(self._aset_full_tensor(key_path, torch.as_tensor(value)))
+            self._run_sync(
+                self._aset_full_tensor(key_path, torch.as_tensor(value), inplace)
+            )
         return self
 
     def _set_at_items(self, key_path: str, value, idx) -> dict:
@@ -2156,37 +2238,82 @@ class LazyStackedTensorDictStore(TensorDictBase):
     def detach_(self) -> Self:
         return self
 
-    def _write_back(self, keys, values, method: str) -> None:
-        # Override: a key whose elements differ in shape is read with the shape
-        # of the first element, and writing it back would lose the others: it
-        # is left unchanged, as fill_ does.
-        keys = [_unravel_key_to_tuple(key) for key in keys]
-        homogeneous = self._run_sync(
-            self._ais_homogeneous([_KEY_SEP.join(key) for key in keys])
-        )
-        super()._write_back(
-            [key for key, keep in zip(keys, homogeneous) if keep],
-            [value for value, keep in zip(values, homogeneous) if keep],
-            method,
+    def _inplace_on_copies(self, method: Callable, *args, **kwargs) -> Self:
+        # Override: a key whose elements differ in shape cannot be read as one
+        # tensor. The method then runs on each element, as on a lazy stack.
+        try:
+            return super()._inplace_on_copies(method, *args, **kwargs)
+        except _HeterogeneousKeyError as err:
+            error = err
+
+        def split(arg):
+            if is_tensor_collection(arg) and arg.batch_size == self.batch_size:
+                return arg.unbind(self._stack_dim)
+            if isinstance(arg, torch.Tensor) or is_tensor_collection(arg):
+                raise RuntimeError(
+                    f"{method.__name__} cannot split this argument over the "
+                    f"elements of the entry {error.key_path!r}, which differ in "
+                    "shape. Call it on each element instead, for example "
+                    f"store[i].{method.__name__}(...)."
+                ) from error
+            return [arg] * self._count
+
+        args = [split(arg) for arg in args]
+        kwargs = {key: split(arg) for key, arg in kwargs.items()}
+        for i in range(self._count):
+            _StoreStackElementView(self, i)._inplace_on_copies(
+                method,
+                *[arg[i] for arg in args],
+                **{key: arg[i] for key, arg in kwargs.items()},
+            )
+        return self
+
+    def update_(
+        self,
+        input_dict_or_td=None,
+        clone: bool = False,
+        *,
+        non_blocking: bool = False,
+        keys_to_update: Sequence[NestedKey] | None = None,
+        **kwargs,
+    ) -> Self:
+        # Override: without keys_to_update, TensorDictBase.update_ reads every
+        # entry of self, and a key whose elements differ in shape cannot be
+        # read as one tensor. Only the keys of the input are then read.
+        try:
+            return super().update_(
+                input_dict_or_td,
+                clone,
+                non_blocking=non_blocking,
+                keys_to_update=keys_to_update,
+                **kwargs,
+            )
+        except _HeterogeneousKeyError:
+            if keys_to_update is not None:
+                raise
+        keys_to_update = list(kwargs)
+        if input_dict_or_td is not None:
+            if not is_tensor_collection(input_dict_or_td):
+                input_dict_or_td = TensorDict.from_dict(
+                    input_dict_or_td, batch_dims=self.batch_dims
+                )
+            keys_to_update += list(input_dict_or_td.keys(True, True))
+        return super().update_(
+            input_dict_or_td,
+            clone,
+            non_blocking=non_blocking,
+            keys_to_update=keys_to_update,
+            **kwargs,
         )
 
     def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
         existing = self.get(key)
         if is_tensor_collection(existing):
             # existing is a new TensorDict: write its leaves back under their
-            # full keys, except those whose elements differ in shape, which
-            # set_ would write with the shape of the first element
+            # full keys
             key = _unravel_key_to_tuple(key)
-            subkeys = [
-                _unravel_key_to_tuple(k)
-                for k in existing.keys(include_nested=True, leaves_only=True)
-            ]
-            homogeneous = self._run_sync(
-                self._ais_homogeneous([_KEY_SEP.join(key + k) for k in subkeys])
-            )
-            for subkey, is_homogeneous in zip(subkeys, homogeneous):
-                if is_homogeneous:
-                    self.set_(key + subkey, existing.get(subkey).fill_(value))
+            for subkey, leaf in existing.items(include_nested=True, leaves_only=True):
+                self.set_(key + _unravel_key_to_tuple(subkey), leaf.fill_(value))
         else:
             existing = existing.fill_(value)
             self.set_(key, existing)
