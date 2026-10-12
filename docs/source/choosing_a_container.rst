@@ -71,8 +71,10 @@ The containers
        than the memory.
      - Each read loads a new tensor from the file, so an in-place operation
        on that tensor does not change the file. The in-place methods of the
-       tensordict, such as ``add_()`` and ``update_()``, write to the file.
-       Needs ``h5py`` or ``zarr``.
+       tensordict, such as ``add_()`` and ``update_()``, write to the file
+       when it is open for writing (``mode="r+"``); ``from_h5()`` and
+       ``from_zarr()`` open it read-only by default. Needs ``h5py`` or
+       ``zarr``.
    * - :class:`~tensordict.store.TensorDictStore`
      - Data on a Redis, Dragonfly or KeyDB server, which several processes
        or machines can read and write.
