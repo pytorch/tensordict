@@ -69,8 +69,8 @@ Choose a backend
    * - zarr
      - ``"zarr"``
      - :class:`~tensordict.PersistentTensorDict`
-     - a directory, a zip file or an object store
-     - You need chunks, compression or an object store, or you read the
+     - a directory, a zip file, or an object store
+     - You need chunks, compression, or an object store, or you read the
        data with xarray or dask.
    * - Shared memory
      - ``"shared"``
@@ -81,10 +81,10 @@ Choose a backend
    * - Redis-compatible server
      - ``"redis"``, ``"dragonfly"``
      - :class:`~tensordict.store.TensorDictStore`
-     - the memory of a Redis, Dragonfly or KeyDB server
+     - the memory of a Redis, Dragonfly, or KeyDB server
      - Processes on several nodes share data, without a shared file system.
 
-Only the memory-mapped files, HDF5 and zarr keep the data after the
+Only the memory-mapped files, HDF5, and zarr keep the data after the
 processes end. A Redis server keeps it while the server runs.
 
 Declare a schema with from_schema
@@ -126,7 +126,7 @@ These are the keywords of each backend:
   :meth:`zarr.Group.create_array` (``chunks``, ``compressors``).
 - ``"shared"``: none.
 - ``"redis"`` and ``"dragonfly"``: ``host``, ``port``, ``db``,
-  ``unix_socket_path``, ``prefix`` (the namespace of the keys on the server)
+  ``unix_socket_path``, ``prefix`` (the namespace of the keys on the server),
   and ``td_id`` (see `Share data between nodes with Redis`_).
 
 Preallocate a dataset that is larger than memory
@@ -204,7 +204,7 @@ Read and write
 --------------
 
 You read and write a tensordict on any backend with the usual operations.
-On ``"h5"``, ``"zarr"`` and ``"redis"``, an index reads only the selected
+On ``"h5"``, ``"zarr"``, and ``"redis"``, an index reads only the selected
 rows. On ``"memmap"``, the operating system reads only the pages of those
 rows from disk, and keeps the pages that you read often in memory:
 
@@ -214,7 +214,7 @@ rows from disk, and keeps the pages that you read often in memory:
 
 The ``"memmap"`` and ``"shared"`` backends return a locked tensordict (see
 :ref:`keys-locking`). Write into its tensors in place, with ``td[i] = sample``,
-``set_``, ``update_`` or an in-place method such as ``td["x"].add_(1)``. Do
+``set_``, ``update_``, or an in-place method such as ``td["x"].add_(1)``. Do
 not use ``td["x"] += 1``: it changes the tensor, then raises a
 ``RuntimeError``. To add an entry, add it before you create the files:
 
@@ -259,7 +259,7 @@ Share data between nodes with Redis
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 :class:`~tensordict.store.TensorDictStore` keeps each tensor as raw bytes on a
-Redis-compatible server (Redis, Dragonfly or KeyDB). Processes on any node
+Redis-compatible server (Redis, Dragonfly, or KeyDB). Processes on any node
 that can connect to the server share one store. It needs the ``redis``
 package (``pip install redis``).
 
@@ -419,7 +419,7 @@ Memory-mapped files
 
 The ``"memmap"`` backend stores each leaf in a ``.memmap`` file, through
 :class:`~tensordict.MemoryMappedTensor`. :ref:`saving` describes the
-directory layout, the ``meta.json`` files, single-file archives and the
+directory layout, the ``meta.json`` files, single-file archives, and the
 ``mode`` of ``load_memmap``.
 
 HDF5
@@ -443,7 +443,7 @@ zarr
 
 With ``backend="zarr"``, :class:`~tensordict.PersistentTensorDict` stores each
 tensor as a zarr array and each nested tensordict as a zarr group. The store
-can be a local directory, a ``zarr.storage.ZipStore`` or any other
+can be a local directory, a ``zarr.storage.ZipStore``, or any other
 ``zarr.abc.store.Store``. You can read and write separate chunks in parallel.
 The zarr backend needs ``zarr>=3.0`` (``pip install "tensordict[zarr]"``).
 
@@ -500,14 +500,14 @@ on Redis.
 See also
 --------
 
-- :ref:`saving`: memory-mapped directories, archives and their on-disk
+- :ref:`saving`: memory-mapped directories, archives, and their on-disk
   layout.
 - :ref:`data-loading`: read these datasets with a ``DataLoader``, and share
   them between processes.
 - :ref:`distributed`: send tensordicts between nodes.
 - The reference of :meth:`~tensordict.TensorDictBase.from_schema`,
   :class:`~tensordict.PersistentTensorDict`,
-  :class:`~tensordict.store.TensorDictStore` and
+  :class:`~tensordict.store.TensorDictStore`, and
   :class:`~tensordict.MemoryMappedTensor`.
 - Tutorials: :ref:`sphx_glr_tutorials_tensordict_memory.py` and
   :ref:`sphx_glr_tutorials_zarr_storage.py`.

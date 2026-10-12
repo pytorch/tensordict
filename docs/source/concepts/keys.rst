@@ -1,11 +1,11 @@
 .. _keys:
 
-Keys, nested keys and locking
-=============================
+Keys, nested keys, and locking
+==============================
 
 A tensordict groups related tensors in a tree. One key reads any of them: a
 string for the top level, a tuple of strings for a nested entry. A lock fixes
-the set of keys, so that no code adds, replaces or removes an entry by
+the set of keys, so that no code adds, replaces, or removes an entry by
 mistake.
 
 Nested tensordicts and nested keys
@@ -205,8 +205,8 @@ example on a batch size mismatch, the entries before it are already written.
    `#2242 <https://github.com/pytorch/tensordict/issues/2242>`_). Use ``set_``
    for each key, or ``update(..., inplace=True)``.
 
-Select, exclude and remove entries
-----------------------------------
+Select, exclude, and remove entries
+-----------------------------------
 
 :meth:`~tensordict.TensorDict.select` returns a new tensordict with the keys
 that you name. :meth:`~tensordict.TensorDict.exclude` returns a new tensordict
@@ -283,7 +283,7 @@ tensordicts. A locked tensordict raises a ``RuntimeError`` for each of these
 operations:
 
 - Add a key, at any level.
-- Replace an entry: ``td[key] = value``, ``set`` and ``update`` without
+- Replace an entry: ``td[key] = value``, ``set``, and ``update`` without
   ``inplace=True``.
 - Remove or rename an entry: ``del``, ``pop``, ``rename_key_``, and
   ``select`` or ``exclude`` with ``inplace=True``.
@@ -342,9 +342,9 @@ These methods also lock it:
   unlocked one.
 
 A new tensordict that a method returns is not always locked like the original.
-On a locked tensordict, ``clone()``, ``select()``, ``apply()``, indexing and
+On a locked tensordict, ``clone()``, ``select()``, ``apply()``, indexing, and
 :func:`torch.stack` return an unlocked tensordict. ``view()``, ``reshape()``,
-``unsqueeze()`` and ``to()`` return a locked one. Read ``is_locked`` on the
+``unsqueeze()``, and ``to()`` return a locked one. Read ``is_locked`` on the
 result if your code depends on it.
 
 Temporary changes with ``with``
@@ -377,14 +377,14 @@ gets its original parameters back:
   >>> bool((module.weight == 0).all())
   False
 
-``unlock_``, ``lock_`` and ``to_module`` also undo their change when the
+``unlock_``, ``lock_``, and ``to_module`` also undo their change when the
 ``with`` block raises an exception.
 
 These shape operations also work as context managers:
 :meth:`~tensordict.TensorDict.view`, :meth:`~tensordict.TensorDict.permute`,
 :meth:`~tensordict.TensorDict.transpose`,
 :meth:`~tensordict.TensorDict.unsqueeze`,
-:meth:`~tensordict.TensorDict.flatten` and
+:meth:`~tensordict.TensorDict.flatten`, and
 :meth:`~tensordict.TensorDict.unflatten`. At the end of the block, the entries
 that you wrote into the result go back into the original, with the reverse
 operation. :meth:`~tensordict.TensorDict.reshape` does not write back.
@@ -404,7 +404,7 @@ See also
 
 - :class:`~tensordict.NestedKey`, :meth:`~tensordict.TensorDict.keys`,
   :meth:`~tensordict.TensorDict.get`, :meth:`~tensordict.TensorDict.set`,
-  :meth:`~tensordict.TensorDict.set_` and :meth:`~tensordict.TensorDict.lock_`
+  :meth:`~tensordict.TensorDict.set_`, and :meth:`~tensordict.TensorDict.lock_`
   in the :ref:`api-reference`.
 - :ref:`api-methods-keys` and :ref:`api-methods-locking`: the methods for keys
   and locking.

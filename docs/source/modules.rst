@@ -109,7 +109,7 @@ before it calls the wrapped module.
 When the wrapped module raises an error, :class:`~tensordict.nn.TensorDictModule`
 raises the same error again. Its cause is a ``RuntimeError`` with the text
 ``TensorDictModule failed with operation``, followed by the wrapped module, its
-``in_keys`` and its ``out_keys``. Python prints the cause first, so the
+``in_keys``, and its ``out_keys``. Python prints the cause first, so the
 original error is the last one in the traceback.
 
 Where the outputs go
@@ -121,7 +121,7 @@ The ``inplace`` argument sets where the module writes its outputs:
 - ``False``: into a new :class:`~tensordict.TensorDict` that holds only the
   outputs, with an empty batch size and no device. The input does not change.
 - ``"empty"``: into ``tensordict.empty()``, a new tensordict with no entries
-  and the type, batch size and device of the input.
+  and the type, batch size, and device of the input.
 
 In this example, the module writes into a new tensordict:
 
@@ -200,7 +200,7 @@ Write your own module
 To write a module that works on the tensordict itself, subclass
 :class:`~tensordict.nn.TensorDictModuleBase`. Give the class ``in_keys`` and
 ``out_keys``, and a ``forward`` that takes a tensordict, writes the
-``out_keys`` into it and returns it. To accept keyword calls too, decorate
+``out_keys`` into it, and returns it. To accept keyword calls too, decorate
 ``forward`` with :class:`~tensordict.nn.dispatch`:
 
   >>> from tensordict.nn import TensorDictModuleBase, dispatch
@@ -222,7 +222,7 @@ To write a module that works on the tensordict itself, subclass
 A plain :class:`torch.nn.Module` with ``in_keys`` and ``out_keys``
 attributes also works in a sequence (see `Chain modules:
 TensorDictSequential`_), if its ``forward`` takes a tensordict, writes its
-outputs into it and returns it.
+outputs into it, and returns it.
 
 Run a module on a tensorclass
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -326,7 +326,7 @@ tensordict. The sequence does not track the keys of a callable that has no
 
 A :class:`torch.nn.Sequential` of tensordict modules runs on a tensordict,
 because each module returns the tensordict. But it has no ``in_keys`` and
-``out_keys``, so keyword calls, ``select_out_keys`` and
+``out_keys``, so keyword calls, ``select_out_keys``, and
 ``select_subsequence`` do not work on it. Use
 :class:`~tensordict.nn.TensorDictSequential` instead.
 
@@ -578,7 +578,7 @@ methods:
 
 If the sequence returns the distribution of its last module (see
 ``return_composite`` below), these methods write the intermediate entries
-(``"params"``, ``"loc"`` and ``"scale"`` here) into the input tensordict:
+(``"params"``, ``"loc"``, and ``"scale"`` here) into the input tensordict:
 
   >>> td = TensorDict({"obs": torch.randn(5, 3)}, batch_size=[5])
   >>> policy.get_dist(td)
@@ -789,7 +789,7 @@ Parameters as tensordicts
 The parameters of a model fit in a tensordict, with one nested key for each
 submodule. With such a tensordict, you can make a functional call: a call of
 a module with parameters that the module does not own. Use functional calls
-for ensembles, target networks, meta-learning and per-sample gradients.
+for ensembles, target networks, meta-learning, and per-sample gradients.
 
 Extract and swap parameters
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -872,7 +872,7 @@ Keep parameters on a module: TensorDictParams
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A plain :class:`~tensordict.TensorDict` attribute of a module is not seen by
-``module.parameters()``, ``module.state_dict()`` or ``module.to()``. An
+``module.parameters()``, ``module.state_dict()``, or ``module.to()``. An
 optimizer then does not train it, and a checkpoint does not save it.
 :class:`~tensordict.TensorDictParams` is a tensordict whose entries are
 registered as parameters and buffers of the module that holds it. Use it to
@@ -902,12 +902,12 @@ A target network must not be trained by the optimizer. In this example,
   ...     target_value = critic.net(torch.zeros(1, 2, dtype=torch.float64))
 
 A :class:`~tensordict.TensorDictParams` behaves like the tensordict that it
-wraps: you can index it, set entries and call ``to_module``. These rules
+wraps: you can index it, set entries, and call ``to_module``. These rules
 apply:
 
-- When you set an entry, ``float16``, ``float32`` and ``float64`` tensors
+- When you set an entry, ``float16``, ``float32``, and ``float64`` tensors
   become :class:`~torch.nn.parameter.Parameter`. Tensors of all other dtypes, including
-  ``bfloat16``, complex and ``bool``, become buffers. An optimizer does not see
+  ``bfloat16``, complex, and ``bool``, become buffers. An optimizer does not see
   a buffer. With ``no_convert=True``, all tensors that are not already
   parameters become buffers.
 - ``named_parameters()`` names each entry by its nested key, joined with
@@ -938,9 +938,9 @@ Compile and capture modules
 ---------------------------
 
 The modules of :mod:`tensordict.nn` work with :func:`torch.compile`,
-:mod:`torch.func` and :func:`torch.export.export`. A module that writes into
+:mod:`torch.func`, and :func:`torch.export.export`. A module that writes into
 its input recompiles when the key set of the input changes. For this limit,
-the others and their workarounds, see :ref:`compile`. To record a module as
+the others, and their workarounds, see :ref:`compile`. To record a module as
 a CUDA graph and replay it, use :class:`~tensordict.nn.CudaGraphModule` (see
 :ref:`compile-cudagraphs`).
 
@@ -949,13 +949,13 @@ See also
 
 - :ref:`api-nn`: the reference of every class and function on this page.
 - :ref:`compile`: :func:`torch.compile`, :mod:`torch.func`,
-  :func:`torch.export.export` and CUDA graphs with tensordict modules.
+  :func:`torch.export.export`, and CUDA graphs with tensordict modules.
 - The :doc:`TensorDictModule tutorial </tutorials/tensordict_module>`: a
   residual block built step by step from tensordict modules, plain functions
   in a sequence, and a first probabilistic module.
 - The :doc:`functional tutorial </tutorials/functional>`: functional calls,
-  ensembles and ``vmap`` with ``from_module`` and ``to_module``.
+  ensembles, and ``vmap`` with ``from_module`` and ``to_module``.
 - The :doc:`export tutorial </tutorials/export>`: export a tensordict module
   with :func:`torch.export.export`, and select its outputs first.
-- `TorchRL <https://pytorch.org/rl/>`_: policies, value networks and losses
+- `TorchRL <https://pytorch.org/rl/>`_: policies, value networks, and losses
   built from these modules.

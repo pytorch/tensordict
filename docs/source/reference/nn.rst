@@ -6,7 +6,7 @@ tensordict.nn
 .. module:: tensordict.nn
 
 This page lists the modules of ``tensordict.nn``, and the probabilistic
-modules, distributions and helpers that go with them. A module reads the
+modules, distributions, and helpers that go with them. A module reads the
 entries named in its ``in_keys`` from a tensordict, and writes the entries
 named in its ``out_keys`` into it. For a guide with examples, see
 :ref:`modules-guide`.
@@ -158,7 +158,7 @@ Utilities
   of a tensordict.
 - :class:`set_skip_existing` and :func:`skip_existing` make a module skip
   its computation when its output entries are already in the tensordict.
-- :func:`mappings`, :func:`add_custom_mapping` and :class:`biased_softplus`
+- :func:`mappings`, :func:`add_custom_mapping`, and :class:`biased_softplus`
   map the output of a network to positive values, for example the scale
   of a distribution. :func:`inv_softplus` is the inverse of the softplus
   function, and :func:`~tensordict.nn.utils.expln` is the positive mapping
@@ -216,4 +216,4 @@ See also
   examples.
 - :ref:`compile`: compile modules and capture them in CUDA graphs.
 - The tutorials :doc:`/tutorials/tensordict_module`,
-  :doc:`/tutorials/functional` and :doc:`/tutorials/export`.
+  :doc:`/tutorials/functional`, and :doc:`/tutorials/export`.

@@ -22,7 +22,7 @@ shapes. You need the ``redis`` package and a running server.
 
 Both classes have the methods of :class:`~tensordict.TensorDictBase`,
 listed by task in :ref:`api-tensordict-methods`. Their pages list the
-methods that they add, such as ``from_store``, ``close`` and
+methods that they add, such as ``from_store``, ``close``, and
 ``clear_redis``. ``STORE_BACKENDS`` is the type of their ``backend``
 argument.
 
@@ -46,7 +46,7 @@ UCXX transport
 
 UCXX is the Python interface of UCX, a communication library that
 chooses the transport between two processes, such as shared memory,
-InfiniBand or TCP. These classes and functions need the optional ``ucxx``
+InfiniBand, or TCP. These classes and functions need the optional ``ucxx``
 package.
 
 - A :class:`~tensordict._ucxx.TensorDictPipe` is a channel between two
@@ -84,7 +84,7 @@ path for now, although the module name starts with an underscore.
 See also
 --------
 
-- :ref:`storage`: start a server, write a tensordict to it and read it
+- :ref:`storage`: start a server, write a tensordict to it, and read it
   back.
 - :ref:`compatibility`: which containers work on a store.
 - :ref:`distributed`: send tensordicts between processes.

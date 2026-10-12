@@ -111,7 +111,7 @@ different shapes. See :ref:`stacking-variable-size` for that case.
 .. note::
 
    Only stacking is lazy. Shape operations such as ``squeeze``, ``unsqueeze``,
-   ``permute`` and ``view`` return a regular TensorDict. The legacy lazy
+   ``permute``, and ``view`` return a regular TensorDict. The legacy lazy
    versions of these operations exist only with
    :func:`~tensordict.set_lazy_legacy` set to ``True``. This mode is deprecated
    and will be removed in tensordict 0.17.
@@ -238,7 +238,7 @@ arguments to :meth:`~tensordict.LazyStackedTensorDict.get`:
 - ``as_nested_tensor=True`` returns a nested tensor (:mod:`torch.nested`). The
   default layout is ``torch.jagged``. Set another one with ``layout``.
 
-For example, with three graphs of 2, 3 and 1 nodes, and 2 features for each
+For example, with three graphs of 2, 3, and 1 nodes, and 2 features for each
 node:
 
   >>> _ = torch.manual_seed(0)
@@ -286,7 +286,7 @@ Padding with pad_sequence
 the longest one along ``pad_dim``, and stacks them. With ``return_mask=True``,
 it adds a ``"masks"`` entry that marks the values that are not padding. Use it
 to get one dense TensorDict, for example for a model that takes a padded
-batch. Here, three recordings of a 2-channel sensor have 2, 3 and 1 samples:
+batch. Here, three recordings of a 2-channel sensor have 2, 3, and 1 samples:
 
   >>> from tensordict import pad_sequence
   >>> tds = [TensorDict({"signal": torch.ones(n, 2)}) for n in [2, 3, 1]]
@@ -357,7 +357,7 @@ See also
 
 - :class:`~tensordict.LazyStackedTensorDict`, :func:`~tensordict.stack`,
   :func:`~tensordict.lazy_stack`, :func:`~tensordict.maybe_dense_stack`,
-  :func:`~tensordict.cat` and :func:`~tensordict.pad_sequence` in the
+  :func:`~tensordict.cat`, and :func:`~tensordict.pad_sequence` in the
   :ref:`api-reference`.
 - The tutorials :doc:`/tutorials/tensordict_shapes` (stacking and
   concatenating) and :doc:`/tutorials/streamed_tensordict` (building lazy

@@ -60,7 +60,7 @@ Choose a format
      - :meth:`~tensordict.TensorDictBase.memmap_like`,
        :meth:`~tensordict.TensorDictBase.from_schema`
      - :ref:`storage`
-   * - Store chunked, compressed or remote data (HDF5, zarr, Redis)
+   * - Store chunked, compressed, or remote data (HDF5, zarr, Redis)
      - :class:`~tensordict.PersistentTensorDict`,
        :class:`~tensordict.store.TensorDictStore`
      - :ref:`storage`
@@ -107,7 +107,7 @@ only that part of the tree. ``subpath`` takes a nested key, such as
   >>> last_layer["weight"].shape
   torch.Size([2, 4])
 
-To read the keys, shapes and dtypes of a checkpoint without its data, load
+To read the keys, shapes, and dtypes of a checkpoint without its data, load
 it on the ``"meta"`` device:
 
   >>> TensorDict.load_memmap(root / "checkpoint", device="meta")["0", "weight"]
@@ -119,7 +119,7 @@ Options of save and load_memmap
 The methods have several names:
 
 - :meth:`~tensordict.TensorDictBase.save`,
-  :meth:`~tensordict.TensorDictBase.dumps` and
+  :meth:`~tensordict.TensorDictBase.dumps`, and
   :meth:`~tensordict.TensorDictBase.memmap` are one method. They return a
   new tensordict with memory-mapped leaves.
 - :meth:`~tensordict.TensorDictBase.memmap_` writes the same files, and
@@ -127,8 +127,8 @@ The methods have several names:
 - :meth:`~tensordict.TensorDictBase.load` and
   :meth:`~tensordict.TensorDictBase.load_memmap` are one method.
 
-``memmap``, ``memmap_`` and ``save`` lock the tensordict that they return.
-You can write into its tensors in place, but you cannot add, remove or
+``memmap``, ``memmap_``, and ``save`` lock the tensordict that they return.
+You can write into its tensors in place, but you cannot add, remove, or
 replace an entry (see :ref:`keys-locking`).
 
 To write several files at the same time, pass ``num_threads``. Threads make
@@ -205,7 +205,7 @@ Save to one file
 ----------------
 
 A directory has one file for each leaf. To write one file instead, use an
-archive, a consolidated file or :func:`torch.save`:
+archive, a consolidated file, or :func:`torch.save`:
 
 .. list-table::
    :header-rows: 1
@@ -298,7 +298,7 @@ you give a changed archive to a tool that reads them, such as ``unzip`` or
   >>> from tensordict import refresh_archive_checksums
   >>> _ = refresh_archive_checksums(root / "mesh.tdz")
 
-To compress an archive, pass ``compression="deflate"``, ``"bzip2"`` or
+To compress an archive, pass ``compression="deflate"``, ``"bzip2"``, or
 ``"lzma"``. tensordict cannot memory-map a compressed leaf. It decompresses
 the leaf into memory the first time you use it, and ``mode="r+"`` raises an
 error. Use compression for archival storage. ``uint8`` images and boolean
@@ -349,7 +349,7 @@ tensordict, it allowlists the classes and functions that these files
 reference, with :func:`torch.serialization.add_safe_globals`. The list covers
 :class:`~tensordict.TensorDict`, :class:`~tensordict.LazyStackedTensorDict`,
 consolidated tensordicts, and non-tensor values made of Python builtins, such
-as strings, numbers, lists and dicts:
+as strings, numbers, lists, and dicts:
 
   >>> batch = TensorDict({"loss": torch.zeros(3), "meta": {"split": "train"}}, batch_size=[3])
   >>> torch.save(batch, root / "batch.pt")
@@ -556,7 +556,7 @@ Memory-mapped tensors
 
 A :class:`~tensordict.MemoryMappedTensor` is a tensor whose data is in a file
 on disk. It has constructors like those of torch, such as ``empty``,
-``zeros`` and ``from_tensor``, and tensordict manages the file. Use it:
+``zeros``, and ``from_tensor``, and tensordict manages the file. Use it:
 
 - To work with contiguous data that is larger than the memory.
 - To send data to other processes. If all the processes can read the same
@@ -592,7 +592,7 @@ the number of leaves. In one run of
 
 - Open: a single file parses one metadata block, and a directory opens one
   file for each leaf. With 2000 leaves, opening took 122 ms for a directory,
-  50 ms for an archive and 13 ms for a consolidated file.
+  50 ms for an archive, and 13 ms for a consolidated file.
 - Save: a directory save is the fastest. With 8 leaves, an archive took 25
   times as long as a directory (845 ms and 34 ms). With 2000 leaves, it took
   3.4 times as long.
@@ -617,7 +617,7 @@ documentation is built. Download its script to measure your own machine.
 .. figure:: /tutorials/images/sphx_glr_serialization_speed_002.png
    :width: 100%
    :alt: Bar charts of the save and open times of memmap directories,
-         consolidated files, zip archives, torch.save files and safetensors
+         consolidated files, zip archives, torch.save files, and safetensors
          files, for two tensordict layouts.
    :target: tutorials/serialization_speed.html
 
@@ -629,13 +629,13 @@ documentation is built. Download its script to measure your own machine.
 See also
 --------
 
-- :ref:`storage`: preallocate a dataset on disk, and the HDF5, zarr and
+- :ref:`storage`: preallocate a dataset on disk, and the HDF5, zarr, and
   Redis backends.
 - :ref:`data-loading`: read a saved dataset with a ``DataLoader``, and share
   it between processes.
 - The reference of :meth:`~tensordict.TensorDictBase.memmap`,
   :meth:`~tensordict.TensorDictBase.load_memmap`,
-  :meth:`~tensordict.TensorDictBase.consolidate` and
+  :meth:`~tensordict.TensorDictBase.consolidate`, and
   :class:`~tensordict.MemoryMappedTensor`, and the saving methods in
   :ref:`api-methods-saving`.
 - Tutorials: :ref:`sphx_glr_tutorials_tensordict_memory.py` and

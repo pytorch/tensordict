@@ -1,22 +1,22 @@
 .. _compile:
 
-torch.compile, torch.func, torch.export and CUDA graphs
-=======================================================
+torch.compile, torch.func, torch.export, and CUDA graphs
+========================================================
 
 This page lists what works when tensordicts and tensorclasses go through
-:func:`torch.compile`, :mod:`torch.func`, :func:`torch.export.export` and CUDA
+:func:`torch.compile`, :mod:`torch.func`, :func:`torch.export.export`, and CUDA
 graphs, what makes a function recompile or fail, and how to work around each
 limit.
 
 How tensordicts compile
 -----------------------
 
-:class:`~tensordict.TensorDict`, :class:`~tensordict.LazyStackedTensorDict`
+:class:`~tensordict.TensorDict`, :class:`~tensordict.LazyStackedTensorDict`,
 and tensorclasses are registered as pytree nodes, so :mod:`torch.func` and
 :func:`torch.export.export` see their tensors as leaves. Inside
 :func:`torch.compile`, Dynamo traces the Python code of tensordict like user
 code: indexing, ``apply``, arithmetic, reductions (see :ref:`operations`),
-shape operations, stacking and construction all end up in the graph. Most
+shape operations, stacking, and construction all end up in the graph. Most
 operations compile with ``fullgraph=True``. With that flag, a graph break
 raises an error instead of splitting the function into several graphs.
 
@@ -65,7 +65,7 @@ Another key set
   depend on the other keys.
 
 Writing into an input tensordict
-  ``td["y"] = ...``, ``td.set``, ``td.update`` and a
+  ``td["y"] = ...``, ``td.set``, ``td.update``, and a
   :class:`~tensordict.nn.TensorDictModule` (which writes its ``out_keys`` into
   its input, see :ref:`modules-guide`) recompile whenever the key set of the
   input changes, even when the key written already exists. Dynamo guards on
@@ -89,7 +89,7 @@ Another batch size
   ``torch._dynamo.mark_dynamic`` on an entry does not: the batch size holds
   Python ints, and a function that builds a tensordict with
   ``batch_size=td.batch_size`` then raises ``ConstraintViolationError``.
-  ``split``, ``chunk``, ``unbind`` and ``tolist`` recompile for each batch
+  ``split``, ``chunk``, ``unbind``, and ``tolist`` recompile for each batch
   size, also after that.
 
 Lazy stacks of another length
@@ -101,7 +101,7 @@ Strings in the output
   Each distinct ``str`` value of a tensorclass field or of a
   :class:`~tensordict.NonTensorData` entry (see :ref:`non-tensor-data`)
   recompiles the function when the function returns it, for instance
-  through ``apply``, ``clone`` or the constructor of a tensorclass. Dynamo
+  through ``apply``, ``clone``, or the constructor of a tensorclass. Dynamo
   specializes the graph on the value. Reading only the tensors does not
   recompile. Return tensors from the
   compiled function and rebuild the tensorclass outside, or keep the strings
@@ -123,7 +123,7 @@ Known limits
 ------------
 
 The following patterns break the graph (an error with ``fullgraph=True``).
-The error messages in the table are those of PyTorch 2.13, 2.14 and the 2.16
+The error messages in the table are those of PyTorch 2.13, 2.14, and the 2.16
 nightly. Other versions can word them differently.
 
 .. list-table::
@@ -156,7 +156,7 @@ nightly. Other versions can word them differently.
        ``torch._dynamo.config.capture_dynamic_output_shape_ops = True``:
        ``Could not guard on data-dependent expression``.
      - Keep the shapes fixed: ``torch.where(mask, td, other)``,
-       ``td.where(mask, other)`` or ``td.masked_fill(~mask, 0.0)``, or index
+       ``td.where(mask, other)``, or ``td.masked_fill(~mask, 0.0)``, or index
        outside the compiled function.
    * - ``memmap``, ``memmap_like``, ``share_memory_``, ``to_namedtuple``,
        ``data_ptr``
@@ -193,7 +193,7 @@ operation per entry, so they are slower than in eager mode
 (`pytorch/pytorch#200456 <https://github.com/pytorch/pytorch/issues/200456>`_).
 
 :func:`torch.func.grad`, :func:`~torch.func.grad_and_value`,
-:func:`~torch.func.vjp` and :func:`~torch.func.jacrev` accept tensordict
+:func:`~torch.func.vjp`, and :func:`~torch.func.jacrev` accept tensordict
 inputs. The gradient is a tensordict with the structure of the input:
 
   >>> grads = torch.func.grad(lambda t: (t["a"] ** 2).sum())(td)
@@ -205,7 +205,7 @@ and for ``torch.autograd.grad`` and ``backward`` on tensordicts, see the
 
 To call a module with other parameters, extract them with
 :meth:`~tensordict.TensorDict.from_module` and swap them in with
-:meth:`~tensordict.TensorDict.to_module`. This works in eager mode, compiled
+:meth:`~tensordict.TensorDict.to_module`. This works in eager mode, compiled,
 and under :func:`torch.vmap`, which gives model ensembles and per-sample
 gradients:
 
@@ -357,9 +357,9 @@ For example:
 See also
 --------
 
-- :ref:`operations`: arithmetic, ``apply``, reductions and gradients with
+- :ref:`operations`: arithmetic, ``apply``, reductions, and gradients with
   tensordicts.
 - :ref:`modules-guide`: :class:`~tensordict.nn.TensorDictModule` and the
   other modules of ``tensordict.nn``.
-- :ref:`devices`: ``to()``, pinned memory and shared memory.
+- :ref:`devices`: ``to()``, pinned memory, and shared memory.
 - :ref:`fx`: FX tracing of tensordict modules, a prototype.

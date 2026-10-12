@@ -4,7 +4,7 @@ TensorDict
 A ``dict[str, torch.Tensor]`` that behaves like one tensor.
 
 PyTorch code that handles groups of tensors, such as a training batch, a
-particle system or a batch of graphs, repeats every operation for every
+particle system, or a batch of graphs, repeats every operation for every
 tensor:
 
 .. code-block:: python
@@ -48,7 +48,7 @@ TensorDict: keys at run time, like a dict
 
 You add and read keys at run time, as in a ``dict``. A ``dict`` value becomes
 a nested TensorDict, and a tuple of keys reads its entries. The tensors share
-the batch size, so indexing, reshaping, stacking and ``.to(device)`` apply to
+the batch size, so indexing, reshaping, stacking, and ``.to(device)`` apply to
 every tensor at once, nested ones too:
 
   >>> batch["meta"] = {"id": torch.arange(32)}
@@ -69,7 +69,7 @@ a group stay aligned:
   RuntimeError: batch dimension mismatch, got self.batch_size=torch.Size([32]) and value.shape=torch.Size([31]) for key 'scores'. The leading dimensions of a value must match the batch size.
 
 You can also :ref:`save it to disk <saving>`, :ref:`pass it to modules
-<modules-guide>` and :ref:`compile functions that take it <compile>`.
+<modules-guide>`, and :ref:`compile functions that take it <compile>`.
 
 TensorClass: fields and methods, like a dataclass
 -------------------------------------------------
@@ -104,7 +104,7 @@ write once runs on one item or on a batch of any shape, and it compiles with
   torch.Size([64, 1000])
 
 The fields are class attributes, so your editor completes ``systems.pos``.
-Indexing, stacking, ``.to(device)`` and saving work as for a TensorDict.
+Indexing, stacking, ``.to(device)``, and saving work as for a TensorDict.
 :ref:`tensorclass-guide` explains TensorClass, and
 :ref:`choosing-a-container` helps you choose between the two forms.
 
@@ -116,7 +116,7 @@ Install
    pip install tensordict
 
 tensordict needs Python 3.10+ and PyTorch 2.13+. :ref:`installation` covers
-nightly builds, the optional dependencies, conda-forge and source installs.
+nightly builds, the optional dependencies, conda-forge, and source installs.
 
 Where to go
 -----------
@@ -126,11 +126,11 @@ Where to go
 - :ref:`User guide <overview>`: one page for each concept, from the batch
   size to TensorClass and ``tensordict.nn``.
 - :ref:`How-to guides <saving>`: one page for each task, such as saving,
-  large datasets, data loading, distributed training and
+  large datasets, data loading, distributed training, and
   :func:`torch.compile`.
 - :doc:`Tutorials <tutorials/tensordict_keys>`: scripts that you can run or
   download as notebooks.
-- :ref:`API reference <api-reference>`: every public class, function and
+- :ref:`API reference <api-reference>`: every public class, function, and
   method. The :ref:`genindex` lists them from A to Z.
 
 .. toctree::

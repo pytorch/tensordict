@@ -1,9 +1,9 @@
 .. _operations:
 
-Arithmetic, apply, reductions and gradients
-===========================================
+Arithmetic, apply, reductions, and gradients
+============================================
 
-Arithmetic, :mod:`torch` functions and reductions on a tensordict apply to
+Arithmetic, :mod:`torch` functions, and reductions on a tensordict apply to
 every leaf in one call, and gradients flow through them. A leaf is a tensor at
 the end of a key path (see :ref:`keys`). You write the computation once for
 the whole group of tensors, and the result keeps the keys and the batch size
@@ -17,7 +17,7 @@ Pointwise operations
 --------------------
 
 A pointwise operation applies to each leaf and returns a new tensordict with
-the same keys. The other operand can be a tensordict, a tensor or a Python
+the same keys. The other operand can be a tensordict, a tensor, or a Python
 number. In this example, a weather grid of 3 by 4 cells has a pressure and a
 2-D wind velocity for each cell:
 
@@ -71,7 +71,7 @@ call :meth:`~tensordict.TensorDict.apply` (see below).
 Most pointwise functions of :mod:`torch` also have a tensordict method:
 :meth:`~tensordict.TensorDict.exp`, :meth:`~tensordict.TensorDict.sqrt`,
 :meth:`~tensordict.TensorDict.clamp`, :meth:`~tensordict.TensorDict.sigmoid`,
-:meth:`~tensordict.TensorDict.lerp` and many more. The methods with a trailing
+:meth:`~tensordict.TensorDict.lerp`, and many more. The methods with a trailing
 underscore, such as :meth:`~tensordict.TensorDict.add_`, write into the
 leaves (see :ref:`inplace-conventions`). :ref:`api-methods-pointwise` lists
 them all.
@@ -79,7 +79,7 @@ them all.
     >>> TensorDict({"x": torch.tensor([-2.0, 0.5, 3.0])}).clamp(0, 1)["x"]
     tensor([0.0000, 0.5000, 1.0000])
 
-Arithmetic, the pointwise methods and the comparisons ``<``, ``<=``, ``>``
+Arithmetic, the pointwise methods, and the comparisons ``<``, ``<=``, ``>``,
 and ``>=`` keep non-tensor entries, such as strings, as they are (see
 :ref:`non-tensor-data`). ``==`` and ``!=`` between two tensordicts also
 compare the non-tensor values, and give a boolean tensor at their keys.
@@ -170,7 +170,7 @@ Otherwise it raises a ``KeyError``. The methods
 :meth:`~tensordict.TensorDict.mul`, :meth:`~tensordict.TensorDict.div`,
 :meth:`~tensordict.TensorDict.pow`, :meth:`~tensordict.TensorDict.maximum`,
 :meth:`~tensordict.TensorDict.minimum`,
-:meth:`~tensordict.TensorDict.clamp_max` and
+:meth:`~tensordict.TensorDict.clamp_max`, and
 :meth:`~tensordict.TensorDict.clamp_min` accept a ``default`` keyword
 argument for tensordicts with different keys:
 
@@ -226,7 +226,7 @@ are. These arguments change what ``apply`` does:
   results into the existing leaves and return the same tensordict.
 - ``out=``: write the results into another tensordict.
 
-The next examples use another tensordict, ``batch_size=`` and a function that
+The next examples use another tensordict, ``batch_size=``, and a function that
 returns ``None``:
 
     >>> td.apply(lambda x, y: x + y, td)["pressure"][0, 0]
@@ -260,12 +260,12 @@ The reductions of :mod:`torch` are tensordict methods too:
 :meth:`~tensordict.TensorDict.nanmean`,
 :meth:`~tensordict.TensorDict.quantile`,
 :meth:`~tensordict.TensorDict.logsumexp`, :meth:`~tensordict.TensorDict.norm`,
-:meth:`~tensordict.TensorDict.all` and :meth:`~tensordict.TensorDict.any`.
+:meth:`~tensordict.TensorDict.all`, and :meth:`~tensordict.TensorDict.any`.
 The ``dim`` argument selects what they reduce:
 
 - No ``dim``: each leaf is reduced to one value. The result has batch size
   ``[]``.
-- ``dim=0``, ``dim=-1`` or a tuple: these are batch dimensions. Each leaf is
+- ``dim=0``, ``dim=-1``, or a tuple: these are batch dimensions. Each leaf is
   reduced over them, and they are removed from the batch size of the result.
   A ``dim`` that is not a batch dimension raises an ``IndexError``.
 - ``dim="feature"``: each leaf is reduced over its feature dimensions. The
@@ -304,14 +304,14 @@ In-place operations
 tensordict has two kinds of in-place operation:
 
 - A method with a trailing underscore (``method_``), such as
-  :meth:`~tensordict.TensorDict.add_`, :meth:`~tensordict.TensorDict.mul_`
+  :meth:`~tensordict.TensorDict.add_`, :meth:`~tensordict.TensorDict.mul_`,
   or :meth:`~tensordict.TensorDict.masked_fill_`, writes into the same tensor
   storage for every leaf. The ``data_ptr`` of each leaf does not change. This
   is the convention of PyTorch. These methods exist only for operations that
-  keep the shape, dtype and layout of each tensor.
+  keep the shape, dtype, and layout of each tensor.
 - The ``inplace=True`` keyword of a shape-changing operation, such as
   :meth:`~tensordict.TensorDict.pad`, :meth:`~tensordict.TensorDict.repeat`,
-  :meth:`~tensordict.TensorDict.gather` or
+  :meth:`~tensordict.TensorDict.gather`, or
   :meth:`~tensordict.TensorDict.repeat_interleave`, keeps the tensordict
   object and its keys. Each leaf can get a new tensor. The operation
   allocates no second tensordict, and it releases each old leaf as soon as it
@@ -330,7 +330,7 @@ shape-changing operation keeps the container.
     >>> padded is td, td.batch_size, td["a"].data_ptr() == ptr
     (True, torch.Size([4, 4]), False)
 
-For :meth:`~tensordict.TensorDict.set`, :meth:`~tensordict.TensorDict.update`
+For :meth:`~tensordict.TensorDict.set`, :meth:`~tensordict.TensorDict.update`,
 and :meth:`~tensordict.TensorDict.apply`, ``inplace=True`` writes into the
 existing leaf when the key exists, so its ``data_ptr`` does not change. A
 value of another dtype is cast to the dtype of the leaf. ``set()`` and
@@ -359,12 +359,12 @@ These methods follow neither of the two kinds:
 - :meth:`~tensordict.TensorDict.lock_`, :meth:`~tensordict.TensorDict.unlock_`,
   :meth:`~tensordict.TensorDict.rename_key_`, :meth:`~tensordict.TensorDict.del_`,
   :meth:`~tensordict.TensorDict.auto_batch_size_`,
-  :meth:`~tensordict.TensorDict.auto_device_` and
+  :meth:`~tensordict.TensorDict.auto_device_`, and
   :meth:`~tensordict.TensorDict.clear_device_` change the tensordict
-  itself: its lock, its keys, its batch size or its device. They do not
+  itself: its lock, its keys, its batch size, or its device. They do not
   touch the leaves.
 - On the key methods :meth:`~tensordict.TensorDict.select`,
-  :meth:`~tensordict.TensorDict.exclude` and
+  :meth:`~tensordict.TensorDict.exclude`, and
   :meth:`~tensordict.TensorDict.split_keys`, ``inplace=True`` removes the
   other keys from the tensordict and returns it. On
   :meth:`~tensordict.TensorDict.flatten_keys` and
@@ -372,7 +372,7 @@ These methods follow neither of the two kinds:
   tensordict and returns it.
 - On :meth:`~tensordict.TensorDict.reshape`,
   :meth:`~tensordict.TensorDict.flatten`,
-  :meth:`~tensordict.TensorDict.unflatten` and
+  :meth:`~tensordict.TensorDict.unflatten`, and
   :meth:`~tensordict.TensorDict.contiguous`, ``inplace=True`` keeps the
   object, as for the other shape-changing operations. A leaf keeps its
   storage when the operation can return a view of it.
@@ -394,7 +394,7 @@ keeps its graph through the operations above.
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 :func:`torch.autograd.grad` accepts tensordicts, also nested ones, for its
-``outputs``, ``inputs`` and ``grad_outputs``. tensordict passes the leaves to
+``outputs``, ``inputs``, and ``grad_outputs``. tensordict passes the leaves to
 PyTorch as tuples, and returns the gradients as a new tensordict with the
 keys of ``inputs``:
 
@@ -458,7 +458,7 @@ tensordict whose entries match the differentiable leaves by nested key:
 Jacobians and Hessians
 ~~~~~~~~~~~~~~~~~~~~~~
 
-:func:`torch.func.jacrev`, :func:`torch.func.jacfwd` and
+:func:`torch.func.jacrev`, :func:`torch.func.jacfwd`, and
 :func:`torch.func.hessian` work on functions that take and return
 tensordicts. The result is a tensordict in which the entry
 ``J["output_key", "input_key"]`` is the Jacobian block for that pair of keys:
@@ -510,7 +510,7 @@ how to compute per-sample gradients and model ensembles.
 See also
 --------
 
-- :ref:`api-methods-pointwise`, :ref:`api-methods-reductions` and
+- :ref:`api-methods-pointwise`, :ref:`api-methods-reductions`, and
   :ref:`api-methods-functional`: the reference entries of the methods on
   this page.
 - :ref:`stacking`: combine tensordicts with :func:`torch.stack` and

@@ -7,7 +7,7 @@ Building models with TensorDictModule
 **Author**: `Nicolas Dufour <https://github.com/nicolas-dufour>`_, `Vincent Moens <https://github.com/vmoens>`_
 
 The parts of a model often exchange many named tensors, such as observations,
-hidden states and the parameters of a distribution. You then write code that
+hidden states, and the parameters of a distribution. You then write code that
 passes each tensor to the right layer. With
 :class:`~tensordict.nn.TensorDictModule`, each layer reads and writes named
 entries of one :class:`~tensordict.TensorDict`, and you chain the layers by
@@ -132,7 +132,7 @@ residual = TensorDictModule(
 )
 
 ###############################################################################
-# Put ``block0``, ``block1`` and ``residual`` together to get the residual
+# Put ``block0``, ``block1``, and ``residual`` together to get the residual
 # block:
 
 block = TensorDictSequential(block0, block1, residual)

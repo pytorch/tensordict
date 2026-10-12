@@ -316,14 +316,14 @@ returns the results one chunk at a time.
 See also
 --------
 
-- :ref:`storage`: memory-mapped, HDF5, zarr, shared-memory and Redis
+- :ref:`storage`: memory-mapped, HDF5, zarr, shared-memory, and Redis
   backends.
 - :ref:`saving`: memory-mapped directories and the ``mode`` of
   ``load_memmap``.
 - :ref:`distributed`: send tensordicts between nodes.
 - The reference of :meth:`~tensordict.TensorDictBase.share_memory_`,
   :meth:`~tensordict.TensorDictBase.pin_memory`,
-  :meth:`~tensordict.TensorDictBase.map` and :func:`~tensordict.lazy_stack`.
+  :meth:`~tensordict.TensorDictBase.map`, and :func:`~tensordict.lazy_stack`.
 - Tutorials: :ref:`sphx_glr_tutorials_data_fashion.py`,
-  :ref:`sphx_glr_tutorials_tensorclass_fashion.py` and
+  :ref:`sphx_glr_tutorials_tensorclass_fashion.py`, and
   :ref:`sphx_glr_tutorials_tensorclass_imagenet.py`.

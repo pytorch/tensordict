@@ -1,7 +1,7 @@
 .. _devices:
 
-Devices, dtypes and memory
-==========================
+Devices, dtypes, and memory
+===========================
 
 One call moves or casts every tensor of a tensordict, nested ones too:
 ``td.to("cuda")``, ``td.to(torch.float16)``, or a device and a dtype for each
@@ -41,7 +41,7 @@ casting`_. These forms also work:
   all its leaves have one dtype.
 - :meth:`~tensordict.TensorDict.float`, :meth:`~tensordict.TensorDict.double`,
   :meth:`~tensordict.TensorDict.half`, :meth:`~tensordict.TensorDict.int`,
-  :meth:`~tensordict.TensorDict.bool` and the other dtype methods of
+  :meth:`~tensordict.TensorDict.bool`, and the other dtype methods of
   :class:`torch.Tensor` cast every leaf.
 - :meth:`~tensordict.TensorDict.cpu` and :meth:`~tensordict.TensorDict.cuda`
   are the same as ``to("cpu")`` and ``to("cuda")``.
@@ -152,7 +152,7 @@ mixed-precision state dict.
 
 :meth:`~tensordict.TensorDict.attrs` returns a tensordict whose leaves are
 :class:`~tensordict.TensorAttrs` objects, one for each leaf. Each one records
-the device, the dtype and the shape of its leaf. ``to()`` casts each leaf of
+the device, the dtype, and the shape of its leaf. ``to()`` casts each leaf of
 the tensordict to the device and the dtype of the leaf with the same key in
 this spec:
 
@@ -242,7 +242,7 @@ memory. Other processes on the same machine can then read and write the
 leaves without a copy, for example the workers of
 :mod:`torch.multiprocessing`. After this call, the tensordict is locked (see
 :ref:`keys-locking`). You can write into the existing leaves, but you cannot
-add, remove or replace an entry:
+add, remove, or replace an entry:
 
     >>> td = TensorDict({"a": torch.zeros(3)}, batch_size=[3]).share_memory_()
     >>> td.is_shared(), td.is_locked
@@ -286,7 +286,7 @@ See also
 
 - :ref:`api-methods-device`: the reference entries of
   :meth:`~tensordict.TensorDict.to`, :meth:`~tensordict.TensorDict.attrs`,
-  :meth:`~tensordict.TensorDict.pin_memory` and the other methods on this
+  :meth:`~tensordict.TensorDict.pin_memory`, and the other methods on this
   page.
 - :ref:`operations`: arithmetic, and the in-place conventions that
   ``share_memory_()`` and ``memmap_()`` do not follow.

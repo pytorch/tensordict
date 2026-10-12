@@ -3,7 +3,7 @@
 Non-tensor data and unbatched entries
 =====================================
 
-A tensordict can store strings, labels and other Python objects next to its
+A tensordict can store strings, labels, and other Python objects next to its
 tensors. Indexing and stacking keep them aligned with the batch. A tensordict
 can also hold a tensor that belongs to the whole batch, such as a parameter
 that all the elements share. Shape operations leave that tensor as it is.
@@ -45,7 +45,7 @@ What becomes a tensor
 
 When you set a value that is not a tensor, tensordict converts it:
 
-- Python numbers, booleans, NumPy arrays and lists of numbers become
+- Python numbers, booleans, NumPy arrays, and lists of numbers become
   tensors. ``True`` becomes ``tensor(True)``.
 - A dict becomes a nested tensordict.
 - A list of other values, such as strings, becomes a
@@ -287,11 +287,11 @@ that is the same for every element.
 Non-tensor data in other operations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- Arithmetic, :meth:`~tensordict.TensorDict.apply` and
+- Arithmetic, :meth:`~tensordict.TensorDict.apply`, and
   :meth:`~tensordict.TensorDict.to` pass non-tensor entries to the result as
   they are. ``==`` and ``!=`` between two tensordicts compare them (see
   :ref:`operations`).
-- ``keys(leaves_only=True)``, ``values(leaves_only=True)`` and
+- ``keys(leaves_only=True)``, ``values(leaves_only=True)``, and
   ``items(leaves_only=True)`` skip the non-tensor entries. To include them,
   pass ``is_leaf=tensordict.is_leaf_nontensor``:
 
@@ -358,13 +358,13 @@ Rules
 - Operations that change only the batch shape do not change it.
   ``reshape``, ``view``, ``unbind``, ``split``, ``squeeze``, ``unsqueeze``,
   ``permute``, ``transpose``, ``flatten``, ``unflatten``, ``chunk``,
-  ``expand``, ``cat``, ``stack`` and indexing return the same
+  ``expand``, ``cat``, ``stack``, and indexing return the same
   :class:`~tensordict.UnbatchedTensor`, with the same storage.
 - Other operations work as for a tensor: device and dtype casts (``to``),
   pointwise arithmetic (``+``, ``-``, ``*``, ``/``), ``clone``, gradient
-  computation and access by key.
+  computation, and access by key.
 - Python conversions follow PyTorch. ``str()``, ``bool()``, ``int()``,
-  ``float()``, ``complex()`` and conversions to an integer index go to the
+  ``float()``, ``complex()``, and conversions to an integer index go to the
   wrapped tensor.
 
 For example, an :class:`~tensordict.UnbatchedTensor` with one element
@@ -420,7 +420,7 @@ See also
 
 - :ref:`api-tensorclass`: the reference entries of
   :class:`~tensordict.NonTensorData`, :class:`~tensordict.NonTensorStack`,
-  :class:`~tensordict.MetaData` and :class:`~tensordict.UnbatchedTensor`.
+  :class:`~tensordict.MetaData`, and :class:`~tensordict.UnbatchedTensor`.
 - :ref:`stacking`: stacks of tensordicts, and variable-size data.
 - :ref:`tensorclass-guide`: tensorclass fields that hold non-tensor values.
 - :ref:`saving`: how non-tensor entries are saved.

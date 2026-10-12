@@ -6,7 +6,7 @@ Building tensordicts from streams
 
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
-Sensors, robots and transaction logs produce streams of data, often at
+Sensors, robots, and transaction logs produce streams of data, often at
 different rates. To process a stream in batches, you group the incoming values
 into buckets, one for each fixed time window. The buckets have different
 lengths, so they do not fit in one tensor. This tutorial groups two streams,

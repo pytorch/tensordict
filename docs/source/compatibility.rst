@@ -67,7 +67,7 @@ table:
    * - Memory-mapped ``TensorDict``
      - Write a field, ``update(d)``
      - ``memmap_()`` locks the tensordict, so these raise ``RuntimeError:
-       Cannot modify locked TensorDict``. Use ``set_()``, ``update_()`` or
+       Cannot modify locked TensorDict``. Use ``set_()``, ``update_()``, or
        ``update(d, inplace=True)``, which write into the existing files.
    * - ``PersistentTensorDict``
      - Write a field, ``update(d)``
@@ -94,7 +94,7 @@ table:
      - In-place operation on a field, such as ``w.a.add_(1)``
      - Reading an entry returns a new tensor with a copy of the data, so the
        operation does not change the storage. Write the result back with
-       ``w.a = ...``, ``set_()`` or an indexed assignment.
+       ``w.a = ...``, ``set_()``, or an indexed assignment.
 
 Nested tensorclass fields
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -307,5 +307,5 @@ See also
   containers.
 - :ref:`choosing-a-container`: which container to use, and the
   ``TensorClass`` and ``TypedTensorDict`` comparison.
-- :ref:`storage`: HDF5, zarr, Redis and the other storage backends.
+- :ref:`storage`: HDF5, zarr, Redis, and the other storage backends.
 - :ref:`saving`: memory-mapped tensordicts and the other formats on disk.

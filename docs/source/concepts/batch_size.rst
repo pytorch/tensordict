@@ -1,11 +1,11 @@
 .. _batch-size:
 
-Batch size, shapes and indexing
-===============================
+Batch size, shapes, and indexing
+================================
 
 The batch size is the shape that all the entries of a
 :class:`~tensordict.TensorDict` share at the front. With it, one index, one
-``reshape`` or one ``unbind`` applies to every tensor of the group. A tensor
+``reshape``, or one ``unbind`` applies to every tensor of the group. A tensor
 of the wrong shape raises an error when you add it.
 
 Batch size and batch dimensions
@@ -222,9 +222,9 @@ The other shape operations are :meth:`~tensordict.TensorDict.view`,
 :meth:`~tensordict.TensorDict.transpose`,
 :meth:`~tensordict.TensorDict.squeeze`,
 :meth:`~tensordict.TensorDict.expand`,
-:meth:`~tensordict.TensorDict.chunk`, :meth:`~tensordict.TensorDict.repeat`
+:meth:`~tensordict.TensorDict.chunk`, :meth:`~tensordict.TensorDict.repeat`,
 and :meth:`~tensordict.TensorDict.repeat_interleave`. As for tensors,
-``view``, ``permute``, ``unbind`` and ``expand`` return views of the same
+``view``, ``permute``, ``unbind``, and ``expand`` return views of the same
 storage. ``expand`` repeats the same memory, so an in-place write into an
 expanded entry raises a ``RuntimeError``. Call ``clone()`` first to get
 separate copies.
@@ -276,14 +276,14 @@ A TensorDict is not *exactly* a dict
 
 A :class:`dict` is a good model of a TensorDict. A TensorDict has the
 mapping methods of a dict: ``keys()``, ``values()``, ``items()``, ``get()``,
-``pop()``, ``update()`` and ``setdefault()``, and it unpacks with ``**td``.
+``pop()``, ``update()``, and ``setdefault()``, and it unpacks with ``**td``.
 The operations below are the exceptions. Most of them follow the rules of a
 tensor:
 
 Iteration
   ``for x in td`` iterates over the first batch dimension, like a tensor. Each
   ``x`` is a TensorDict. A tensordict with no batch dimensions raises a
-  ``TypeError``. To iterate over the entries, use ``keys()``, ``values()`` or
+  ``TypeError``. To iterate over the entries, use ``keys()``, ``values()``, or
   ``items()``.
 
 ``len``
@@ -291,7 +291,7 @@ Iteration
   is empty. ``len(td.keys())`` is the number of keys.
 
 ``bool``
-  ``bool(td)``, ``if td:`` and ``while td:`` raise a ``RuntimeError``
+  ``bool(td)``, ``if td:``, and ``while td:`` raise a ``RuntimeError``
   (`#1939 <https://github.com/pytorch/tensordict/issues/1939>`_ asks for a
   dict-like truth value). To test for no entries, use
   :meth:`~tensordict.TensorDict.is_empty`.
@@ -334,7 +334,7 @@ See also
 
 - :attr:`~tensordict.TensorDict.batch_size`,
   :meth:`~tensordict.TensorDict.auto_batch_size_`,
-  :meth:`~tensordict.TensorDict.from_dict` and
+  :meth:`~tensordict.TensorDict.from_dict`, and
   :attr:`~tensordict.TensorDict.names` in the :ref:`api-reference`.
 - :ref:`api-methods-indexing` and :ref:`api-methods-shape`: the indexing and
   shape methods.

@@ -1,6 +1,6 @@
 """
-Getting, setting and nesting keys
-=================================
+Getting, setting, and nesting keys
+==================================
 **Author**: `Tom Begley <https://github.com/tcbegley>`_
 
 A :class:`~tensordict.TensorDict` stores tensors under string keys, as a
@@ -274,10 +274,10 @@ print(tensordict.exclude(("nested", "b"), ("nested", "double_nested")))
 # Conclusion
 # ----------
 #
-# You can now set, read, rename and delete the entries of a
+# You can now set, read, rename, and delete the entries of a
 # :class:`~tensordict.TensorDict` at any depth, with tuples of strings for the
 # nested keys. You can test keys with ``in``, list them with ``keys()``,
-# ``values()`` and ``items()``, flatten them, and keep or drop a subset with
+# ``values()``, and ``items()``, flatten them, and keep or drop a subset with
 # ``select`` and ``exclude``.
 #
 # Two behaviors differ from a ``dict``. ``get`` returns ``None`` for a missing
@@ -288,7 +288,7 @@ print(tensordict.exclude(("nested", "b"), ("nested", "double_nested")))
 # Further reading
 # ---------------
 #
-# - :ref:`keys` explains keys, nested keys and locking.
+# - :ref:`keys` explains keys, nested keys, and locking.
 # - :ref:`non-tensor-data` explains how to store values that are not tensors.
 # - :ref:`sphx_glr_tutorials_tensordict_shapes.py` shows the shape operations.
 # - :ref:`api-methods-keys` lists all the key methods.

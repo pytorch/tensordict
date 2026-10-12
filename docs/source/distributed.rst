@@ -3,7 +3,7 @@
 Distributed tensordicts
 =======================
 
-A tensordict sends, receives and reduces all its tensors with one call:
+A tensordict sends, receives, and reduces all its tensors with one call:
 ``td.send(dst=1)`` sends every leaf to rank 1, and ``td.all_reduce()``
 reduces every leaf over all ranks of :mod:`torch.distributed`. To stream
 tensordicts between two nodes without a process group, use a UCXX pipe. To
@@ -121,7 +121,7 @@ send and recv
 ~~~~~~~~~~~~~
 
 The ``send_recv`` example above sends each leaf as one message. The receiver
-must hold a tensordict with the same keys, shapes and dtypes. ``recv`` writes
+must hold a tensordict with the same keys, shapes, and dtypes. ``recv`` writes
 the received values into its tensors.
 
 With ``consolidated=True``, ``send`` sends all the leaves as one message
@@ -130,7 +130,7 @@ copies the leaves into one storage (see :ref:`saving`), unless the tensordict
 is consolidated already. This is faster when the tensordict has many small
 leaves. In one measurement with 100 leaves of 256 bytes, on one machine with
 ``gloo``, a consolidated send was 34 times as fast as a send per leaf. The receiver must
-hold a consolidated tensordict with the same keys, shapes and dtypes:
+hold a consolidated tensordict with the same keys, shapes, and dtypes:
 
 .. code-block:: python
 
@@ -179,7 +179,7 @@ on each one before you use or change the data:
 A receiver that does not know the structure
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If the receiver does not know the keys, shapes and dtypes of the tensordict,
+If the receiver does not know the keys, shapes, and dtypes of the tensordict,
 call :meth:`~tensordict.TensorDictBase.init_remote` on the sender and
 :meth:`~tensordict.TensorDictBase.from_remote_init` on the receiver. The
 sender sends the metadata, then the data. The receiver builds a new
@@ -280,8 +280,8 @@ the local values after the call, clone the tensordict before it:
        if rank == 0:
            print(td["a"])  # with 2 ranks: tensor([3., 3., 3.])
 
-all_gather, scatter and gather_and_stack
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+all_gather, scatter, and gather_and_stack
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 :meth:`~tensordict.TensorDictBase.all_gather` returns a list with the
 tensordict of each rank, on every rank. The tensordicts can have different
@@ -330,7 +330,7 @@ dimension is ``world_size - 1``. Its own data is not in the result:
 Several transfers and custom groups
 -----------------------------------
 
-``send``, ``recv``, ``isend`` and ``irecv`` mark the message of each leaf with
+``send``, ``recv``, ``isend``, and ``irecv`` mark the message of each leaf with
 a tag: ``init_tag``, ``init_tag + 1``, and so on. If two tensordicts go
 from one rank to another at the same time, give them tag ranges that do not
 overlap. Pass the same ``init_tag`` on both sides. With
@@ -426,7 +426,7 @@ trainer. Compared with ``send`` and ``recv`` of ``torch.distributed``:
 - It needs no process group. The two sides connect by IP address and port.
 - After the first message, the receiver writes each new batch into the same
   buffer. It does not allocate memory or parse metadata.
-- UCX selects the transport: TCP, InfiniBand verbs or RoCE.
+- UCX selects the transport: TCP, InfiniBand verbs, or RoCE.
 - If the tensors are on a GPU and GPUDirect RDMA is available, the buffer
   goes from GPU memory to the network, with no copy in CPU memory.
 - The API uses :mod:`asyncio`, and has synchronous wrappers.
@@ -438,7 +438,7 @@ is tested: ``ucxx`` is not installed on the machines that test it.
 Install UCXX
 ~~~~~~~~~~~~
 
-UCXX needs Linux, Python 3.11+ and the UCX system libraries. The ``pip``
+UCXX needs Linux, Python 3.11+, and the UCX system libraries. The ``pip``
 packages are built for CUDA:
 
 .. code-block:: bash
@@ -478,7 +478,7 @@ phases:
    flag, then the storage only. The receiver writes it into the buffer of
    the first message.
 
-If the structure changes (other keys, shapes or dtypes), the pipe sends the
+If the structure changes (other keys, shapes, or dtypes), the pipe sends the
 metadata again. The sender compares a hash of the metadata at each send. If
 the tensordict is not consolidated, the sender consolidates it at each send,
 which allocates a new buffer. To avoid that, consolidate once and copy each
@@ -537,7 +537,7 @@ error happens: the iterator turns every exception into the end of the loop,
 and does not raise it. If you need the error, call ``await pipe.arecv()`` in
 a ``while`` loop instead.
 
-``pipe.send(td)``, ``pipe.recv()`` and ``pipe.close()`` are synchronous
+``pipe.send(td)``, ``pipe.recv()``, and ``pipe.close()`` are synchronous
 wrappers. If no event loop runs in the thread, each call runs the coroutine
 with :func:`asyncio.run`. In a coroutine, or in a callback of a running event
 loop, use the async methods (``asend``, ``arecv``, ``aclose``). There, a
@@ -621,7 +621,7 @@ These numbers come from the pull request that added UCXX
 measured them on two nodes with NVIDIA H200 GPUs and 400 Gb/s InfiniBand,
 with ``nvidia_peermem`` loaded. This page does not repeat the measurement.
 The script is ``benchmarks/distributed/bench_transport.py``. It needs a Ray
-cluster of two nodes, or the ``RANK``, ``MASTER_ADDR`` and ``PEER_ADDR``
+cluster of two nodes, or the ``RANK``, ``MASTER_ADDR``, and ``PEER_ADDR``
 environment variables.
 
 Each tensordict has two leaves of the size in the "Size" column, so each

@@ -10,7 +10,7 @@ tensordict, and the classes for non-tensor data and unbatched entries. A
 *tensorclass* is a class that you declare like a dataclass, with typed fields
 and methods, and that has the tensor operations of a
 :class:`~tensordict.TensorDict`. For a guide to fields, auto-casting, the
-class options and static type checking, see :ref:`tensorclass-guide`.
+class options, and static type checking, see :ref:`tensorclass-guide`.
 
 To declare a tensorclass, subclass :class:`~tensordict.TensorClass`. The
 :func:`~tensordict.tensorclass` decorator is the original way, kept for
@@ -20,7 +20,7 @@ A tensorclass has the methods of :class:`~tensordict.TensorDictBase`,
 listed by task in :ref:`api-tensordict-methods`. On a tensorclass, the
 methods that return a ``TensorDict`` on a ``TensorDict`` return an
 instance of the tensorclass. Examples are ``select``, ``clone``, ``to``,
-``apply``, indexing and reshaping.
+``apply``, indexing, and reshaping.
 
 Tensorclasses
 -------------
@@ -47,7 +47,7 @@ as strings or Python objects. It wraps each one in a
 :class:`~tensordict.NonTensorStack`. If you stack
 :class:`~tensordict.MetaData` entries that hold the same object, the
 result is one ``MetaData``, not a ``NonTensorStack``.
-:class:`~tensordict.TensorAttrs` describes the device, dtype and shape of
+:class:`~tensordict.TensorAttrs` describes the device, dtype, and shape of
 an entry: :meth:`~tensordict.TensorDictBase.attrs` returns them. See
 :ref:`non-tensor-data`.
 
@@ -80,7 +80,7 @@ See also
 --------
 
 - :ref:`tensorclass-guide`: declare and use a tensorclass.
-- :ref:`choosing-a-container`: tensorclass, ``TypedTensorDict`` or
+- :ref:`choosing-a-container`: tensorclass, ``TypedTensorDict``, or
   ``TensorDict``.
 - :ref:`api-typed-tensordict`: the other container with typed fields.
 - The tutorials :doc:`/tutorials/tensorclass_fashion` and

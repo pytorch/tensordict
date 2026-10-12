@@ -20,7 +20,7 @@ Requirements
 ------------
 
 tensordict is pure Python: it has no compiled extension. Each change is
-tested with PyTorch 2.13, the latest PyTorch release and PyTorch nightly, on
+tested with PyTorch 2.13, the latest PyTorch release, and PyTorch nightly, on
 Python 3.10 to 3.14 and the free-threaded 3.14t.
 
 If PyTorch is not installed, ``pip`` installs the default build from PyPI
@@ -49,7 +49,7 @@ Some features need other packages. Install them with an extra, for example
    * - ``h5``
      - ``h5py>=3.8``
      - HDF5 files: :meth:`~tensordict.TensorDict.to_h5`,
-       :meth:`~tensordict.TensorDict.from_h5` and
+       :meth:`~tensordict.TensorDict.from_h5`, and
        :class:`~tensordict.PersistentTensorDict`.
    * - ``zarr``
      - ``zarr>=3.0``
@@ -60,7 +60,7 @@ Some features need other packages. Install them with an extra, for example
      - ``pandas>=1.5``
      - DataFrames and CSV files: :meth:`~tensordict.TensorDict.to_pandas`,
        :meth:`~tensordict.TensorDict.from_pandas`,
-       :meth:`~tensordict.TensorDict.to_csv` and
+       :meth:`~tensordict.TensorDict.to_csv`, and
        :meth:`~tensordict.TensorDict.from_csv`.
    * - ``parquet``
      - ``pyarrow>=10.0``
@@ -71,11 +71,11 @@ Some features need other packages. Install them with an extra, for example
      - ``pandas>=1.5`` and ``pyarrow>=10.0``
      - The ``pandas`` and ``parquet`` extras together.
    * - ``onnx``
-     - ``onnx``, ``onnxscript`` and ``onnxruntime``
+     - ``onnx``, ``onnxscript``, and ``onnxruntime``
      - Export of a :class:`~tensordict.nn.TensorDictModule` to ONNX with
        :func:`torch.onnx.export`, and running the result.
 
-:ref:`storage` explains the HDF5, Zarr and tabular formats.
+:ref:`storage` explains the HDF5, Zarr, and tabular formats.
 
 Install a nightly build
 -----------------------

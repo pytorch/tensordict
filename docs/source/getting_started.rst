@@ -15,7 +15,7 @@ not installed yet, read :ref:`installation` first.
    :alt: A nested TensorDict in the center, with arrows to the result of
          td[0], torch.stack, td.split, td.split_keys, td0.update(td1),
          td.memmap, td.cuda, td.cpu, td.to_module, TensorDict.from_module,
-         td.consolidate and flatten_keys.
+         td.consolidate, and flatten_keys.
    :width: 100%
 
    Common operations on one nested TensorDict. The two arrows on
@@ -45,7 +45,7 @@ and ``bool`` values to :class:`torch.Tensor`:
   tensor(0)
 
 A TensorDict has the methods of a Python ``dict``: ``keys``, ``values``,
-``items``, ``get``, ``update``, ``pop``, ``setdefault`` and others. Keys are
+``items``, ``get``, ``update``, ``pop``, ``setdefault``, and others. Keys are
 strings, or tuples of strings for nested entries.
 :meth:`~tensordict.TensorDict.select` keeps some entries and
 :meth:`~tensordict.TensorDict.exclude` removes them. Both return a new
@@ -129,7 +129,7 @@ For the ``data`` of this section:
 Indexing and shape operations
 -----------------------------
 
-Indexing, slicing and shape operations apply to the batch dimensions. They
+Indexing, slicing, and shape operations apply to the batch dimensions. They
 return a new TensorDict, with the same operation applied to every leaf:
 
   >>> sub = data[..., :2]
@@ -172,7 +172,7 @@ TensorClass: the class form
 :class:`~tensordict.TensorClass` is the class form of a TensorDict. You
 declare the fields as class annotations, like a dataclass, and you add your
 own methods. A TensorClass has the tensor behavior of a TensorDict: the batch
-size, indexing, shape operations and the batch-size check. This class holds a
+size, indexing, shape operations, and the batch-size check. This class holds a
 batch of images and their labels:
 
   >>> from tensordict import TensorClass
@@ -251,8 +251,8 @@ level, with the keys joined by a separator.
 :ref:`keys` explains nested keys and the methods that select and flatten
 them.
 
-Devices, dtypes and arithmetic
-------------------------------
+Devices, dtypes, and arithmetic
+-------------------------------
 
 :meth:`~tensordict.TensorDict.to` moves or casts every leaf with one call. A
 dtype casts every leaf, the integer and boolean ones too. If you set
@@ -288,8 +288,8 @@ TensorDict:
   >>> data.apply(lambda x: x.float().mean(-1) if x.ndim > 1 else x)["pos"]
   tensor([1., 1., 1.])
 
-:ref:`devices` explains devices, dtypes and ``non_blocking`` copies.
-:ref:`operations` lists the arithmetic, reductions and ``apply``.
+:ref:`devices` explains devices, dtypes, and ``non_blocking`` copies.
+:ref:`operations` lists the arithmetic, reductions, and ``apply``.
 
 Stacking and concatenation
 --------------------------
@@ -391,7 +391,7 @@ with ``allow_pickle``. :meth:`~tensordict.TensorDict.consolidate` copies all
 the leaves into one storage. A device move or an inter-process transfer of
 the result then copies one buffer.
 
-:ref:`saving` compares ``memmap``, :func:`torch.save` and ``state_dict``.
+:ref:`saving` compares ``memmap``, :func:`torch.save`, and ``state_dict``.
 :ref:`storage` covers datasets that do not fit in memory.
 
 Locking
@@ -489,5 +489,5 @@ Next steps
   :doc:`tutorials/tensordict_keys`, then :doc:`tutorials/tensordict_slicing`
   and :doc:`tutorials/tensordict_shapes`.
 - The how-to guides solve one task each: :ref:`saving`, :ref:`storage`,
-  :ref:`data-loading`, :ref:`distributed` and :ref:`compile`.
+  :ref:`data-loading`, :ref:`distributed`, and :ref:`compile`.
 - :ref:`api-reference` lists every class and method.
