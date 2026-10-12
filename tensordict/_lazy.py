@@ -178,11 +178,14 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
         if not has_first_key or len(item) == 1:
             return has_first_key
         # otherwise take the long way
-        return all(
-            item[1:]
-            in tensordict.get(item[0]).keys(self.include_nested, self.leaves_only)
-            for tensordict in self.tensordict.tensordicts
-        )
+        for tensordict in self.tensordict.tensordicts:
+            sub = tensordict._get_str(item[0], None)
+            # As in TensorDict, a nested key that goes through a tensor is absent
+            if self.include_nested and not _is_tensor_collection(type(sub)):
+                return False
+            if item[1:] not in sub.keys(self.include_nested, self.leaves_only):
+                return False
+        return True
 
     def __repr__(self):
         return f"{type(self).__name__}({tuple(self)})"
