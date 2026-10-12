@@ -226,8 +226,10 @@ def pack_memmap(
         >>> import torch
         >>> from tensordict import TensorDict, pack_memmap
         >>> td = TensorDict(a=torch.randn(3), b=TensorDict(c=torch.zeros(3, 2)))
-        >>> td.memmap("./saved_td")
-        >>> pack_memmap("./saved_td", "./saved_td.tdz")
+        >>> td = td.memmap("./saved_td")
+        >>> path = pack_memmap("./saved_td", "./saved_td.tdz")
+        >>> path
+        PosixPath('saved_td.tdz')
         >>> td2 = TensorDict.load_memmap("./saved_td.tdz")
         >>> assert (td == td2).all()
     """

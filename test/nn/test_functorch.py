@@ -15,10 +15,43 @@ from _utils_internal import expand_list, get_available_devices, TestTensorDictsB
 from functorch import (
     make_functional_with_buffers as functorch_make_functional_with_buffers,
 )
-from tensordict import LazyStackedTensorDict, TensorDict
+from tensordict import assert_close, LazyStackedTensorDict, NonTensorStack, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn, vmap
-from torch.utils._pytree import tree_map
+from torch.utils._pytree import (
+    tree_flatten,
+    tree_flatten_with_path,
+    tree_map,
+    tree_structure,
+    tree_unflatten,
+)
+
+# TensorDict methods that call torch._foreach_*, applied to one sample of a
+# tensordict with batch_size [4].
+VMAP_TD_OPS = {
+    "mul": lambda t: t * 2,
+    "add": lambda t: t + t,
+    "rsub": lambda t: 1 - t,
+    "rsub_alpha": lambda t: t.rsub(t.exp(), alpha=2),
+    "rsub_scalar_alpha": lambda t: t.rsub(1.0, alpha=2),
+    "neg": lambda t: -t,
+    "exp": lambda t: t.exp(),
+    "maximum": lambda t: t.maximum(t.exp()),
+    "maximum_scalar": lambda t: t.maximum(0.0),
+    "clamp_min": lambda t: t.clamp_min(0.0),
+    "clamp_max": lambda t: t.clamp_max(0.0),
+    "clamp_min_": lambda t: t.clone().clamp_min_(0.0),
+    "clamp_max_": lambda t: t.clone().clamp_max_(0.0),
+    "lerp": lambda t: t.lerp(t.exp(), 0.5),
+    "addcmul": lambda t: t.addcmul(t, t, value=2),
+    "norm": lambda t: t.norm(),
+    "add_": lambda t: t.clone().add_(1),
+    "mul_": lambda t: t.clone().mul_(t),
+    "exp_": lambda t: t.clone().exp_(),
+    "minimum_scalar_": lambda t: t.clone().minimum_(0.0),
+    "update_": lambda t: t.clone().update_(t * 2),
+    "clone_with_device": lambda t: t.to("cpu").clone(),
+}
 
 
 class TestVmap:
@@ -226,6 +259,36 @@ class TestNativeFunctorch:
         assert out[1].shape == torch.Size([4, 3])
         assert out[0]["a"].shape == torch.Size([4, 3, 1])
 
+    @pytest.mark.parametrize("op", sorted(VMAP_TD_OPS))
+    def test_vmap_td_ops(self, op):
+        # These methods call torch._foreach_*, which has no vmap batching rule
+        fn = VMAP_TD_OPS[op]
+        td = TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4, 2)}, batch_size=[4])
+        expected = torch.stack([fn(td[i]) for i in range(4)])
+        assert_close(vmap(fn)(td), expected)
+
+    def test_vmap_td_inplace_writes_input(self):
+        td = TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4, 2)}, batch_size=[4])
+        expected = td * 2
+        vmap(lambda t: t.mul_(2))(td)
+        assert_close(td, expected)
+
+    @pytest.mark.parametrize("name", ["clamp_min_", "clamp_max_"])
+    def test_vmap_td_clamp_inplace_error(self, name):
+        # Writing a batched value into a closed-over td raises, as for a tensor
+        td = TensorDict(a=-torch.ones(4, 3), batch_size=[4])
+        with pytest.raises(RuntimeError, match="inplace arithmetic"):
+            vmap(lambda x: getattr(td, name)(x))(torch.zeros(2, 4, 3))
+
+    def test_vmap_grad_td(self):
+        td = TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4, 2)}, batch_size=[4])
+
+        def loss(t):
+            return (t * 2).exp().sum(reduce=True)
+
+        grads = vmap(torch.func.grad(loss))(td)
+        assert_close(grads, (td * 2).exp() * 2)
+
 
 class TestSetTensor:
     def test_set_tensor_deprecation(self):
@@ -351,6 +414,33 @@ class TestPyTree(TestTensorDictsBase):
         td_no_shape = tree_map(lambda x: x.squeeze(), td)
         assert td_no_shape.shape == torch.Size([])
 
+    def test_spec_batch_size(self):
+        # The batch size is not part of the tree structure, the number of
+        # batch dims is. The batch size is kept to rebuild a tensordict without
+        # tensors.
+        def spec(*batch_size):
+            return tree_structure(
+                TensorDict(a=torch.zeros(*batch_size, 2), batch_size=batch_size)
+            )
+
+        assert spec(4) == spec(6)
+        assert spec(4) != spec(4, 2)
+        _, spec_with_path = tree_flatten_with_path(
+            TensorDict(a=torch.zeros(4, 2), batch_size=[4])
+        )
+        assert spec_with_path == spec(4)
+        td = tree_map(lambda x: x, TensorDict(batch_size=[3]))
+        assert td.batch_size == torch.Size([3])
+
+    def test_pytree_map_different_batch_sizes(self):
+        # The specs of td4 and td6 are equal; the batch size of the result is
+        # read from its tensors.
+        td4 = TensorDict(x=torch.zeros(4, 3), batch_size=[4])
+        td6 = TensorDict(x=torch.zeros(6, 3), batch_size=[6])
+        assert tree_map(lambda a, b: b, td4, td6).batch_size == torch.Size([6])
+        out = tree_map(lambda a, b: torch.cat([a, b]), td4, td6)
+        assert out.batch_size == torch.Size([10])
+
     def test_pytree_lazy(self):
         td0 = TensorDict(
             {
@@ -375,6 +465,73 @@ class TestPyTree(TestTensorDictsBase):
         # With exclusive keys
         del td0["a"]
         assert (tree_map(lambda x: x + 1, td) == td + 1).all()
+
+    def test_pytree_non_tensor_spec(self):
+        # The specs of tensordicts with batched non-tensor entries compare
+        # without raising.
+        def make(s="a string"):
+            return TensorDict(a=torch.zeros(4, 3), s=s, batch_size=[4], device="cpu")
+
+        assert tree_structure(make()) == tree_structure(make())
+        assert tree_structure(make()) != tree_structure(make("another string"))
+        assert tree_flatten_with_path(make())[1] == tree_structure(make())
+        out = tree_map(lambda a, b: a + b, make(), make())
+        assert out.get_non_tensor("s") == "a string"
+        assert (out["a"] == 0).all()
+
+        def make_stack(*values):
+            td = make()
+            td.set("stack", NonTensorStack(*values))
+            return td
+
+        assert tree_structure(make_stack(*"aaaa")) == tree_structure(
+            make_stack(*"aaaa")
+        )
+        assert tree_structure(make_stack(*"abcd")) == tree_structure(
+            make_stack(*"abcd")
+        )
+        assert tree_structure(make_stack(*"abcd")) != tree_structure(
+            make_stack(*"abce")
+        )
+
+    def test_pytree_non_tensor_batch_size(self):
+        # A non-tensor entry is rebuilt with the batch size and device of its
+        # tensordict, also when the function changes the batch size.
+        td = TensorDict(a=torch.zeros(4, 3), s="a string", batch_size=[4], device="cpu")
+        out = tree_unflatten(*tree_flatten(td))
+        assert out.get("s").batch_size == torch.Size([4])
+        assert out.get("s").device == torch.device("cpu")
+        for fn in (lambda x: x[0], lambda x: x[:2], lambda x: x.unsqueeze(0)):
+            out = tree_map(fn, td)
+            assert out.get("s").batch_size == out.batch_size
+            assert out.get_non_tensor("s") == "a string"
+
+    def test_pytree_non_tensor_stack_distinct(self):
+        # A NonTensorStack whose values are not all equal comes back as the
+        # leaf it was flattened to (#2123).
+        def make():
+            td = TensorDict(a=torch.zeros(4, 3), batch_size=[4])
+            td.set("s", NonTensorStack(*"abcd"))
+            td.set("n", td.clone())
+            return td
+
+        td = make()
+        out = tree_unflatten(*tree_flatten(td))
+        for key in ("s", ("n", "s")):
+            assert isinstance(out.get(key), NonTensorStack)
+            assert out.get(key).batch_size == torch.Size([4])
+            assert out.get(key).tolist() == list("abcd")
+        out = tree_map(lambda x: x + 1, td)
+        assert out.get(("n", "s")).tolist() == list("abcd")
+        assert (out["a"] == 1).all()
+        out = tree_map(lambda x, y: x, td, make())
+        assert out.get("s").tolist() == list("abcd")
+        out = tree_map(lambda x: x[:2], td)
+        assert out.batch_size == torch.Size([2])
+        assert out.get("s").tolist() == ["a", "b"]
+        out = tree_map(lambda x: x[0], td)
+        assert out.batch_size == torch.Size([])
+        assert out.get_non_tensor("s") == "a"
 
 
 # The names that ``from tensordict._pytree import *`` used to copy into the
@@ -429,6 +586,28 @@ class TestPyTreeNamespace:
             ],
             check=True,
         )
+
+
+def test_is_batchedtensor_is_deprecated():
+    assert "is_batchedtensor" not in vars(tensordict)
+    assert "is_batchedtensor" not in tensordict.__all__
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"^tensordict\.is_batchedtensor is deprecated and will be removed in "
+        r"TensorDict 0\.17\. Use torch\._C\._functorch\.is_batchedtensor instead\.$",
+    ) as record:
+        from tensordict import is_batchedtensor
+    assert record[0].filename == __file__
+    assert is_batchedtensor is torch._C._functorch.is_batchedtensor
+    assert not is_batchedtensor(torch.zeros(3))
+    seen = []
+
+    def func(x):
+        seen.append(is_batchedtensor(x))
+        return x
+
+    vmap(func)(torch.zeros(2, 3))
+    assert seen == [True]
 
 
 if __name__ == "__main__":

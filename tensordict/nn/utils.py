@@ -58,13 +58,19 @@ class biased_softplus(nn.Module):
     """A biased softplus module.
 
     The bias indicates the value that is to be returned when a zero-tensor is
-    passed through the transform.
+    passed through the transform. The module computes
+    ``softplus(x + inv_softplus(bias - min_val)) + min_val``.
 
     Args:
-        bias (scalar): 'bias' of the softplus transform. If bias=1.0, then a _bias shift will be computed such that
-            softplus(0.0 + _bias) = bias.
-        min_val (scalar): minimum value of the transform.
-            default: 0.1
+        bias (float): the output for a zero input.
+        min_val (float, optional): minimum value of the output. Defaults to ``0.01``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict.nn import biased_softplus
+        >>> f = biased_softplus(1.0)
+        >>> f(torch.zeros(2))
+        tensor([1., 1.])
     """
 
     def __init__(self, bias: float, min_val: float = 0.01) -> None:
@@ -100,21 +106,23 @@ _MAPPINGS: dict[str, Callable[[torch.Tensor], torch.Tensor]] = {
 
 
 def mappings(key: str) -> Callable:
-    """Given an input string, returns a surjective function f(x): R -> R^+.
+    """Returns the function named by ``key``.
+
+    All the functions except ``"none"`` (the identity) map real numbers to
+    non-negative numbers. ``"relu"`` can return 0, the others return
+    positive numbers.
 
     Args:
         key (str): one of `"softplus"`, `"exp"`, `"relu"`, `"expln"`,
             `"biased_softplus"` or `"none"` (no mapping).
 
     .. note::
-        If the key begins with `"biased_softplus"`, then it needs to take the following form:
-        ```"biased_softplus_{bias}"``` where ```bias``` can be converted to a floating point number that will be
-        used to bias the softplus function.
-        Alternatively, the ```"biased_softplus_{bias}_{min_val}"``` syntax can be used.
-        In that case, the additional ```min_val``` term is a floating point
-        number that will be used to encode the minimum value of the softplus transform.
-        In practice, the equation used is `softplus(x + bias) + min_val`, where bias and min_val are values computed
-        such that the conditions above are met.
+        If the key begins with ``"biased_softplus"``, then it needs to take the following form:
+        ``"biased_softplus_{bias}"`` where ``bias`` can be converted to a floating point number.
+        Alternatively, the ``"biased_softplus_{bias}_{min_val}"`` syntax can be used.
+        The function is then :class:`biased_softplus` with these arguments:
+        ``softplus(x + inv_softplus(bias - min_val)) + min_val``, which returns
+        ``bias`` for a zero input and is always greater than ``min_val``.
 
     .. note::
         Custom mappings can be added through ``tensordict.nn.add_custom_mapping``.
@@ -149,6 +157,7 @@ def add_custom_mapping(name: str, mapping: Callable[[torch.Tensor], torch.Tensor
             with the same shape.
 
     Examples:
+        >>> import torch
         >>> from tensordict.nn import add_custom_mapping, NormalParamExtractor
         >>> add_custom_mapping("my_mapping", lambda x: torch.zeros_like(x))
         >>> npe = NormalParamExtractor(scale_mapping="my_mapping", scale_lb=0.0)
@@ -167,7 +176,7 @@ class set_skip_existing(_DecoratorContextManager):
     When used as a method decorator, it will check the tensordict input keys
     and skip the method if the current mode applies to all output keys and they
     are already present.
-    This not not expected to be used as a decorator for methods that do not
+    This is not expected to be used as a decorator for methods that do not
     respect the following signature: ``def fun(self, tensordict, *args, **kwargs)``.
 
     Args:
@@ -191,6 +200,8 @@ class set_skip_existing(_DecoratorContextManager):
             in the module's method being decorated. Defaults to ``out_keys``.
 
     Examples:
+        >>> import torch
+        >>> from tensordict.nn import set_skip_existing, skip_existing
         >>> with set_skip_existing():
         ...     if skip_existing():
         ...         print("True")
@@ -232,7 +243,7 @@ class set_skip_existing(_DecoratorContextManager):
             is_shared=False)
 
     Decorating a method with the mode set to ``None`` is useful whenever one
-    wants ot let the context manager take care of skipping things from the outside:
+    wants to let the context manager take care of skipping things from the outside:
 
     Examples:
         >>> from tensordict import TensorDict
@@ -266,7 +277,7 @@ class set_skip_existing(_DecoratorContextManager):
             ...         return tensordict
             ...
             >>> module = MyModule()
-            >>> module(TensorDict({"out": torch.zeros(())}, []))  # does not print anything
+            >>> module(TensorDict({"out": torch.zeros(())}, []))  # runs: in_keys and out_keys overlap
             calling the method!
             TensorDict(
                 fields={
@@ -367,29 +378,28 @@ class _set_skip_existing_None(set_skip_existing):
 
         @functools.wraps(func)
         def wrapper(_self, tensordict, *args: Any, **kwargs: Any) -> Any:
-            if skip_existing() and is_compiling():
-                raise RuntimeError(
-                    "skip_existing is not compatible with torch.compile."
-                )
-            in_keys = getattr(_self, self.in_key_attr)
-            out_keys = getattr(_self, self.out_key_attr)
             # we use skip_existing to allow users to override the mode internally
-            skip_mode = skip_existing()
-            if (
-                skip_mode
-                and (skip_mode is True or all(key in skip_mode for key in out_keys))
-                and all(key in tensordict.keys(True) for key in out_keys)
-                and not any(key in out_keys for key in in_keys)
-            ):
-                return tensordict
-            if is_compiling():
+            skip_mode = _skip_existing.get_mode()
+            compiling = is_compiling()
+            if skip_mode:
+                if compiling:
+                    raise RuntimeError(
+                        "skip_existing is not compatible with torch.compile."
+                    )
+                in_keys = getattr(_self, self.in_key_attr)
+                out_keys = getattr(_self, self.out_key_attr)
+                if (
+                    (skip_mode is True or all(key in skip_mode for key in out_keys))
+                    and all(key in tensordict.keys(True) for key in out_keys)
+                    and not any(key in out_keys for key in in_keys)
+                ):
+                    return tensordict
+            if compiling:
                 return func(_self, tensordict, *args, **kwargs)
-            self.prev = _skip_existing.get_mode()
             try:
-                result = func(_self, tensordict, *args, **kwargs)
+                return func(_self, tensordict, *args, **kwargs)
             finally:
-                _skip_existing.set_mode(self.prev)
-            return result
+                _skip_existing.set_mode(skip_mode)
 
         return wrapper
 
@@ -479,8 +489,14 @@ _composite_lp_aggregate = _ContextManager(
 def composite_lp_aggregate(nowarn: bool = False) -> bool | None:
     """Returns whether a :class:`~tensordict.nn.distributions.CompositeDistribution` log-probabilities and entropies will be aggregated in a single tensor.
 
+    Returns ``False`` unless :class:`~tensordict.nn.set_composite_lp_aggregate`
+    or the ``COMPOSITE_LP_AGGREGATE`` environment variable set it to ``True``.
+    See the :ref:`log-probability key table <log-prob-keys>` of
+    :class:`~tensordict.nn.ProbabilisticTensorDictModule` for what each value
+    changes.
+
     Args:
-        nowarn (bool, optional): whether to ignore warnings. Defaults to False.
+        nowarn (bool, optional): has no effect. Defaults to False.
 
     .. seealso:: :func:`~tensordict.nn.set_composite_lp_aggregate`
 
@@ -493,17 +509,29 @@ class set_composite_lp_aggregate(_DecoratorContextManager):
     """Controls whether :class:`~tensordict.nn.distributions.CompositeDistribution` log-probabilities and entropies will be aggregated in a single tensor.
 
     When :func:`~tensordict.nn.composite_lp_aggregate` returns ``True``, the log-probs / entropies of :class:`~tensordict.nn.distributions.CompositeDistribution`
-    will be summed into a single tensor with the shape of the root tensordict. This behaviour is being deprecated in favor of
-    non-aggregated log-probs, which offer more flexibility and a somewhat more natural API (tensordict samples, tensordict log-probs, tensordict entropies).
+    will be summed into a single tensor with the shape of the root tensordict.
+    When it returns ``False`` (the default), they are returned as a
+    TensorDict with one ``<name>_log_prob`` (or ``<name>_entropy``) entry per
+    sampled key. The value also decides the keys where probabilistic modules
+    write their log-probabilities: see the :ref:`log-probability key table <log-prob-keys>` of
+    :class:`~tensordict.nn.ProbabilisticTensorDictModule`, and
+    :ref:`modules-guide`.
 
     The value of composite_lp_aggregate can also be controlled through the `COMPOSITE_LP_AGGREGATE` environment variable.
+    It works as a context manager and as a decorator, and :meth:`set` and
+    :meth:`unset` change it outside of a block.
+
+    Args:
+        mode (bool, optional): the value that
+            :func:`~tensordict.nn.composite_lp_aggregate` returns inside the
+            block. Defaults to ``True``.
 
     Example:
-        >>> _ = torch.manual_seed(0)
+        >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import CompositeDistribution, set_composite_lp_aggregate
-        >>> import torch
         >>> from torch import distributions as d
+        >>> _ = torch.manual_seed(0)
         >>> params = TensorDict({
         ...     "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
         ...     ("nested", "disc"): {"logits": torch.randn(3, 10)}

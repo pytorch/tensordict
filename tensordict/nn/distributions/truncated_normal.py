@@ -143,7 +143,36 @@ class TruncatedStandardNormal(Distribution):
 class TruncatedNormal(TruncatedStandardNormal):
     """Truncated Normal distribution.
 
-    https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
+    A normal distribution of mean ``loc`` and standard deviation ``scale``,
+    restricted to the interval ``[a, b]``. Its samples are reparameterized
+    (``rsample``).
+
+    Source: https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
+
+    Args:
+        loc (Number or torch.Tensor): the mean of the normal distribution
+            before truncation.
+        scale (Number or torch.Tensor): the standard deviation of the normal
+            distribution before truncation. Values under ``1e-6`` are set to
+            ``1e-6``.
+        a (Number or torch.Tensor): the lower bound of the support, in the
+            same units as ``loc``.
+        b (Number or torch.Tensor): the upper bound of the support, in the
+            same units as ``loc``.
+        validate_args (bool, optional): passed to
+            :class:`~torch.distributions.Distribution`.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict.nn.distributions import TruncatedNormal
+        >>> _ = torch.manual_seed(0)
+        >>> dist = TruncatedNormal(loc=torch.zeros(3), scale=torch.ones(3), a=-1.0, b=1.0)
+        >>> dist.sample()
+        tensor([-0.0064,  0.4764, -0.7754])
+        >>> dist.mean
+        tensor([0., 0., 0.])
+        >>> TruncatedNormal(loc=5.0, scale=1.0, a=4.0, b=6.0).mean
+        tensor(5.)
     """
 
     has_rsample = True
@@ -156,8 +185,8 @@ class TruncatedNormal(TruncatedStandardNormal):
         b: Number | torch.Tensor,
         validate_args: bool | None = None,
     ) -> None:
-        scale = scale.clamp_min(self.eps)
         self.loc, self.scale, a, b = broadcast_all(loc, scale, a, b)
+        self.scale = self.scale.clamp_min(self.eps)
         self._non_std_a = a
         self._non_std_b = b
         a = (a - self.loc) / self.scale
@@ -168,14 +197,30 @@ class TruncatedNormal(TruncatedStandardNormal):
         self._variance = self._variance * self.scale**2
         self._entropy += self._log_scale
 
+    @constraints.dependent_property
+    def support(self) -> constraints.Constraint:
+        return constraints.interval(self._non_std_a, self._non_std_b)
+
     def _to_std_rv(self, value: torch.Tensor) -> torch.Tensor:
         return (value - self.loc) / self.scale
 
     def _from_std_rv(self, value: torch.Tensor) -> torch.Tensor:
         return value * self.scale + self.loc
 
+    def _validated_std_rv(self, value: torch.Tensor) -> torch.Tensor:
+        std_value = self._to_std_rv(value)
+        if self._validate_args:
+            # The support is [a, b], so check the value itself, not the
+            # standardised value that TruncatedStandardNormal checks. A Python
+            # number is checked in the dtype that it is computed in.
+            self._validate_sample(
+                torch.as_tensor(value, dtype=std_value.dtype, device=std_value.device)
+            )
+        return std_value
+
     def cdf(self, value: torch.Tensor) -> torch.Tensor:
-        return super().cdf(self._to_std_rv(value))
+        value = self._validated_std_rv(value)
+        return ((self._big_phi(value) - self._big_phi_a) / self._Z).clamp(0, 1)
 
     def icdf(self, value: torch.Tensor) -> torch.Tensor:
         sample = self._from_std_rv(super().icdf(value))
@@ -191,8 +236,10 @@ class TruncatedNormal(TruncatedStandardNormal):
         return sample
 
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
-        value = self._to_std_rv(value)
-        return super().log_prob(value) - self._log_scale
+        value = self._validated_std_rv(value)
+        return (
+            _CONST_LOG_INV_SQRT_2PI - self._log_Z - (value**2) * 0.5 - self._log_scale
+        )
 
 
 __getattr__ = deprecated_attributes(
