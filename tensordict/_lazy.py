@@ -4707,7 +4707,10 @@ class LazyStackedTensorDict(TensorDictBase):
     def split(self, split_size: int | list[int], dim: int = 0) -> list[TensorDictBase]:
         dim = _maybe_correct_neg_dim(dim, shape=self.shape)
         if dim == self.stack_dim:
-            if isinstance(split_size, int):
+            if isinstance(split_size, int) and split_size >= 0 and not self.tensordicts:
+                # torch.split returns one empty piece along a zero-size dim
+                split_size = [0]
+            elif isinstance(split_size, int):
                 split_size = [split_size] * -(len(self.tensordicts) // -split_size)
                 split_size[-1] = len(self.tensordicts) - sum(split_size[:-1])
 
