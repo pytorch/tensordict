@@ -5221,13 +5221,8 @@ class TestPointwise(TestTensorDictsBase):
         return td
 
     def _operand(self, td, value_range):
-        # A tensordict of the same structure as td, with other values. A lazy
-        # stack gets a lazy stack: arithmetic with a dense tensordict raises (#1932).
-        if isinstance(td, PersistentTensorDict):
-            other = td.to_tensordict()
-        else:
-            other = td.clone()
-        return other.apply_(lambda x: x.uniform_(*value_range))
+        # A dense tensordict of the same structure as td, with other values
+        return td.to_tensordict().apply_(lambda x: x.uniform_(*value_range))
 
     @pytest.mark.parametrize("op", _POINTWISE_UNARY_OPS)
     def test_unary(self, td_name, device, op):

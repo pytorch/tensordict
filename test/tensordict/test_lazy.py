@@ -610,6 +610,79 @@ class TestLazyStackedTensorDict:
         else:
             td1.norm()
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize(
+        "op,args",
+        [
+            ("add", ()),
+            ("sub", ()),
+            ("rsub", ()),
+            ("mul", ()),
+            ("div", ()),
+            ("pow", ()),
+            ("mod", ()),
+            ("maximum", ()),
+            ("minimum", ()),
+            ("clamp_max", ()),
+            ("clamp_min", ()),
+            ("lerp", (0.3,)),
+            ("addcmul", ("other",)),
+            ("addcdiv", ("other",)),
+            ("add_", ()),
+            ("sub_", ()),
+            ("mul_", ()),
+            ("div_", ()),
+            ("pow_", ()),
+            ("maximum_", ()),
+            ("minimum_", ()),
+            ("clamp_max_", ()),
+            ("clamp_min_", ()),
+            ("lerp_", (0.3,)),
+            ("addcmul_", ("other",)),
+            ("addcdiv_", ("other",)),
+        ],
+    )
+    @pytest.mark.parametrize("lazy_first", [True, False])
+    def test_arithmetic_with_dense(self, stack_dim, op, args, lazy_first):
+        # The pointwise ops pair the leaves of a lazy stack and of a dense
+        # tensordict by key, in both orders (#1932).
+        def make_dense():
+            return TensorDict(
+                a=torch.rand(2, 3) + 1,
+                nested=TensorDict(b=torch.rand(2, 3, 4) + 1, batch_size=[2, 3]),
+                batch_size=[2, 3],
+            )
+
+        stack = lazy_stack(list(make_dense().unbind(stack_dim)), stack_dim)
+        dense = make_dense()
+        self_td, other = (stack, dense) if lazy_first else (dense, stack)
+        expected = getattr(self_td.to_tensordict(), op)(
+            other.to_tensordict(),
+            *[other.to_tensordict() if arg == "other" else arg for arg in args],
+        )
+        args = [other if arg == "other" else arg for arg in args]
+        members = stack.tensordicts if lazy_first else [dense]
+        data_ptrs = [td["nested", "b"].data_ptr() for td in members]
+
+        out = getattr(self_td, op)(other, *args)
+
+        assert isinstance(out, type(self_td))
+        # pow rounds differently on the strided members of a lazy stack
+        for key, value in expected.items(True, True):
+            torch.testing.assert_close(out[key], value)
+        if op.endswith("_"):
+            assert out is self_td
+            assert [td["nested", "b"].data_ptr() for td in members] == data_ptrs
+
+    def test_arithmetic_with_dense_mismatched_keys(self):
+        # As with two dense tensordicts, a key that only one operand has raises
+        dense = TensorDict(a=torch.ones(2, 3), z=torch.ones(2, 3), batch_size=[2, 3])
+        stack = lazy_stack(list(dense.exclude("z").unbind(0)))
+        with pytest.raises(KeyError, match="keys in tensordicts mismatch"):
+            stack + dense
+        with pytest.raises(KeyError, match="keys in tensordicts mismatch"):
+            dense + stack
+
     def test_auto_device(self):
         # The device of a lazy stack is read from its members, so auto_device_
         # sets it on them, also when the lazy stack is nested in a tensordict.

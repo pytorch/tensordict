@@ -77,6 +77,7 @@ from tensordict.utils import (
     _LOCK_ERROR,
     _lock_warn,
     _maybe_correct_neg_dim,
+    _mismatch_keys,
     _pass_through,
     _pass_through_cls,
     _proc_init,
@@ -356,10 +357,58 @@ def _holds_leaves_of(td: TensorDictBase, other: TensorDictBase) -> bool:
     return True
 
 
+def _mixes_lazy_stacks(td: TensorDictBase, others: tuple) -> bool:
+    """Returns whether some of ``td`` and the tensordicts in ``others`` are lazy stacks and some are not.
+
+    The pointwise ops flatten a lazy stack into one key per member, such as
+    ``("0", "a")``, which a dense operand does not have (#1932).
+    """
+    # a cheap filter first: lazy stacks set _lazy, numbers and tensors do not have it
+    lazy = td._lazy
+    for other in others:
+        lazy = lazy or getattr(type(other), "_lazy", False)
+    if not lazy:
+        return False
+    from tensordict._lazy import LazyStackedTensorDict
+
+    is_stack = isinstance(td, LazyStackedTensorDict)
+    return any(
+        isinstance(other, TensorDictBase)
+        and isinstance(other, LazyStackedTensorDict) is not is_stack
+        for other in others
+    )
+
+
+def _apply_pointwise(
+    td: TensorDictBase, fn: Callable, others: tuple, inplace: bool
+) -> TensorDictBase:
+    """Computes ``fn(leaf, *others)`` leaf by leaf, pairing the leaves of the tensordicts in ``others`` by key."""
+    is_td = [isinstance(other, TensorDictBase) for other in others]
+
+    def leaf_fn(x, *leaves):
+        leaves = iter(leaves)
+        return fn(
+            x, *[next(leaves) if flag else other for flag, other in zip(is_td, others)]
+        )
+
+    tds = [other for flag, other in zip(is_td, others) if flag]
+    if inplace:
+        return td.apply_(leaf_fn, *tds)
+    # apply ignores the keys that only the others have; the dense ops raise
+    keys = set(td.keys(True, True))
+    for other in tds:
+        other_keys = set(other.keys(True, True))
+        if other_keys != keys:
+            _mismatch_keys(keys, other_keys)
+    return td.apply(leaf_fn, *tds)
+
+
 def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Callable]:
     """Ensures that elementwise ops are broadcast when an nd tensor is passed."""
     # add_, mul_, ... are in-place; __eq__, __lt__, ... also end with "_".
     inplace = op.endswith("_") and not op.endswith("__")
+    # The comparisons pair a lazy stack with a dense operand by key already
+    pairs_by_apply = op == "__mod__" or not op.startswith("__")
     # torch.Tensor has no rsub method: call torch.rsub on the leaves instead.
     torch_op = None if hasattr(torch.Tensor, op) else getattr(torch, op)
 
@@ -384,6 +433,19 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     need_broadcast = True
                     break
             if not need_broadcast:
+                if (
+                    pairs_by_apply
+                    and kwargs.get("default") is None
+                    and _mixes_lazy_stacks(self, others)
+                ):
+                    # alpha=None and default=None are the defaults of the ops
+                    kwargs = {k: v for k, v in kwargs.items() if v is not None}
+                    return _apply_pointwise(
+                        self,
+                        lambda x, *xs: leaf_op(x, *xs, *args, **kwargs),
+                        others,
+                        inplace,
+                    )
                 return func(self, *others, *args, **kwargs)
             others_map = []
             shape = self.shape
