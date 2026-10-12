@@ -1649,7 +1649,10 @@ class TensorDict(TensorDictBase):
                     raise RuntimeError(
                         f"Cannot call _stack_onto_at_ with an entry of type {type(v).__name__}."
                     )
-                if not all(_is_tensor_collection(type(val)) for val in vals):
+                if not all(
+                    _is_tensor_collection(type(val)) and not _is_non_tensor(type(val))
+                    for val in vals
+                ):
                     raise RuntimeError(
                         f"Cannot stack non-tensordict values into the tensordict entry {key!r}."
                     )
@@ -1662,6 +1665,17 @@ class TensorDict(TensorDictBase):
                 raise IndexError(
                     f"Index {idx} is incompatible with stack(..., out=data) as the storages of the indexed tensors differ."
                 )
+            # torch.stack would resize the view and write past the indexed region.
+            val = vals[0]
+            if isinstance(val, Tensor):
+                shape = v_idx.shape
+                stacked_shape = list(val.shape)
+                stacked_shape.insert(dim if dim >= 0 else dim + len(shape), len(vals))
+                if shape != tuple(stacked_shape):
+                    raise RuntimeError(
+                        f"Cannot stack values of shape {tuple(val.shape)} into the entry "
+                        f"{key!r} of shape {tuple(shape)} with stack(..., out=data)."
+                    )
             torch.stack(vals, dim=dim, out=v_idx)
         return self
 

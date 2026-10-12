@@ -5370,6 +5370,33 @@ class TestSubTensorDictStack:
         with pytest.raises(RuntimeError, match="non-tensordict values"):
             torch.stack([TensorDict(nested=torch.ones(()))] * 2, 0, out=sub)
 
+    def test_stack_out_sub_td_nested_non_tensor(self):
+        td = TensorDict(
+            nested=TensorDict(b=torch.zeros(3, 2), batch_size=[3, 2]), batch_size=[3, 2]
+        )
+        sub = td._get_sub_tensordict(1)
+        with pytest.raises(RuntimeError, match="non-tensordict values"):
+            torch.stack([TensorDict(nested=NonTensorData("x"))] * 2, 0, out=sub)
+
+    @pytest.mark.parametrize("idx", [0, 1])
+    def test_stack_out_sub_td_shape_mismatch(self, idx):
+        # torch.stack must not resize the indexed view and write over other rows.
+        td = TensorDict(a=torch.zeros(3, 2, 1), batch_size=[3, 2])
+        sub = td._get_sub_tensordict(idx)
+        with pytest.raises(RuntimeError, match="Cannot stack values of shape"):
+            torch.stack([TensorDict(a=torch.ones(3))] * 2, 0, out=sub)
+        assert td["a"].shape == (3, 2, 1)
+        assert (td["a"] == 0).all()
+
+    def test_stack_out_sub_td_negative_dim(self):
+        td = TensorDict(a=torch.zeros(3, 2, 4, 5), batch_size=[3, 2, 4])
+        items = [
+            TensorDict(a=torch.full((2, 5), float(i)), batch_size=[2]) for i in range(4)
+        ]
+        torch.stack(items, -1, out=td._get_sub_tensordict(1))
+        assert (td["a"][1] == torch.stack([t["a"] for t in items], -2)).all()
+        assert (td["a"][0] == 0).all() and (td["a"][2] == 0).all()
+
     def test_stack_out_sub_td_copy_index(self):
         td = TensorDict(a=torch.zeros(3, 2), batch_size=[3, 2])
         sub = td._get_sub_tensordict(torch.tensor([0, 2]))
