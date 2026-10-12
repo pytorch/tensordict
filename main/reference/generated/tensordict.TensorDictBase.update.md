@@ -64,7 +64,9 @@ This argument assumes that keys_to_update is left empty, and that inplace=False.
 If the keys of the destination (self) is not a subset of the keys of the source,
 an exception will be raised, as TensorDict will be unable to infer what to do with the extra
 destination entries.
-- **ignore_lock** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - meant to update a tensordict
+- **ignore_lock** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - 
+
+meant to update a tensordict
 regardless of its locked status. Defaults to `False`.
 On a locked [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), `ignore_lock=True`
 does not lift the lock in the current version: a new or
@@ -72,6 +74,11 @@ replaced entry still raises `RuntimeError`
 ([#2260](https://github.com/pytorch/tensordict/issues/2260)). Use
 `inplace=True`, or unlock the tensordict with
 [`unlock_()`](tensordict.TensorDictBase.unlock_.html#tensordict.TensorDictBase.unlock_) first.
+
+Deprecated since version 0.15: `ignore_lock=True` warns, and the argument will be
+removed in TensorDict 0.17. Unlock the tensordict with
+[`unlock_()`](tensordict.TensorDictBase.unlock_.html#tensordict.TensorDictBase.unlock_) instead, for instance
+`with td.unlock_(): td.update(other)`.
 - ****kwargs** - additional key-value pairs to write into `self` as top-level entries. When both
 `input_dict_or_td` and `kwargs` are provided, kwargs win on key conflict.
 

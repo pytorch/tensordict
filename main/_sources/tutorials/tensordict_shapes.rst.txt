@@ -63,7 +63,7 @@ other dimensions.
  .. code-block:: none
 
 
-    <torch._C.Generator object at 0x7f85131c42f0>
+    <torch._C.Generator object at 0x7f1438dc42f0>
 
 
 
