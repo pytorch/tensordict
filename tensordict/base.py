@@ -83,6 +83,8 @@ from tensordict.utils import (
     _strtobool,
     _td_fields,
     _unravel_key_to_tuple,
+    _UPDATE_IGNORE_LOCK_WARNED,
+    _warn_update_ignore_lock,
     _zip_strict,
     capture_non_tensor_stack,
     DeviceType,
@@ -3303,6 +3305,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 ``inplace=True``, or unlock the tensordict with
                 :meth:`~.unlock_` first.
 
+                .. deprecated:: 0.15
+                    ``ignore_lock=True`` warns, and the argument will be
+                    removed in TensorDict 0.17. Unlock the tensordict with
+                    :meth:`~.unlock_` instead, for instance
+                    ``with td.unlock_(): td.update(other)``.
+
             **kwargs: additional key-value pairs to write into ``self`` as top-level entries. When both
                 ``input_dict_or_td`` and ``kwargs`` are provided, kwargs win on key conflict.
 
@@ -3348,6 +3356,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             ['x', 'y']
 
         """
+        if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
+            ignore_lock = _warn_update_ignore_lock(stacklevel=3)
         if kwargs:
             if input_dict_or_td is None:
                 input_dict_or_td = kwargs

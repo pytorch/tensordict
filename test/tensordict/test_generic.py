@@ -6327,6 +6327,52 @@ class TestGeneric:
         assert t["a", "b"].shape == torch.Size([2, 3, 1])
         t.update({"a": {"d": [[[1]] * 3] * 2}})
 
+    @pytest.mark.parametrize("lazy", [False, True])
+    def test_update_ignore_lock_deprecated(self, lazy):
+        # #2260: ignore_lock=True warns once per call, not once per nested
+        # tensordict, and otherwise behaves as before.
+        td = TensorDict({"a": torch.zeros(3), "n": {"b": {"c": torch.zeros(3)}}}, [3])
+        if lazy:
+            td = LazyStackedTensorDict(*td.unbind(0))
+        source = TensorDict({"a": torch.ones(3), "n": {"b": {"c": torch.ones(3)}}}, [3])
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"^update\(ignore_lock=True\) is deprecated and will be removed in "
+            r"TensorDict 0\.17\. Use 'with td\.unlock_\(\): td\.update\(\.\.\.\)' instead\.$",
+        ) as record:
+            assert td.update(source, ignore_lock=True) is td
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert (td == source).all()
+
+        # On a locked tensordict, the call still raises for a new entry
+        td.lock_()
+        with (
+            pytest.warns(DeprecationWarning, match=r"ignore_lock=True") as record,
+            pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"),
+        ):
+            td.update({"d": torch.ones(3)}, ignore_lock=True)
+        assert len(record) == 1
+        with pytest.warns(DeprecationWarning, match=r"ignore_lock=True") as record:
+            td.update(source.zero_(), inplace=True, ignore_lock=True)
+        assert len(record) == 1
+        assert (td == 0).all()
+
+    @pytest.mark.parametrize("lazy", [False, True])
+    @pytest.mark.parametrize("ignore_lock", [None, False])
+    def test_update_ignore_lock_not_deprecated(self, lazy, ignore_lock):
+        td = TensorDict({"a": torch.zeros(3), "n": {"b": {"c": torch.zeros(3)}}}, [3])
+        if lazy:
+            td = LazyStackedTensorDict(*td.unbind(0))
+        source = TensorDict({"a": torch.ones(3), "n": {"b": {"c": torch.ones(3)}}}, [3])
+        kwargs = {} if ignore_lock is None else {"ignore_lock": ignore_lock}
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            td.update(source, **kwargs)
+            td.lock_()
+            td.update(source.zero_(), inplace=True, **kwargs)
+        assert (td == 0).all()
+
     @pytest.mark.parametrize("method", ["set", "update", "update_td", "update_kwargs"])
     @pytest.mark.parametrize("nested", [False, True])
     @pytest.mark.parametrize("device", [None, "cpu", "meta"])

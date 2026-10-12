@@ -94,6 +94,8 @@ from tensordict.utils import (
     _StringOnlyDict,
     _sub_index,
     _unravel_key_to_tuple,
+    _UPDATE_IGNORE_LOCK_WARNED,
+    _warn_update_ignore_lock,
     _zip_strict,
     DeviceType,
     expand_as_right,
@@ -1167,6 +1169,8 @@ class TensorDict(TensorDictBase):
         ignore_lock: bool = False,
         **kwargs,
     ) -> Self:
+        if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
+            ignore_lock = _warn_update_ignore_lock()
         if (
             not is_compiling()
             and type(self) is TensorDict
@@ -2884,6 +2888,8 @@ class _SubTensorDict(TensorDictBase):
         ignore_lock: bool = False,
         **kwargs,
     ) -> _SubTensorDict:
+        if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
+            ignore_lock = _warn_update_ignore_lock(stacklevel=3)
         if kwargs:
             if input_dict_or_td is None:
                 input_dict_or_td = kwargs
