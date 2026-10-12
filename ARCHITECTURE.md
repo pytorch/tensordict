@@ -267,6 +267,11 @@ touches these places:
      torch. Its known failures are listed in
      `test/tensordict/indexing_known_failures.json`. When a change fixes one,
      set `TENSORDICT_UPDATE_KNOWN_FAILURES=1` to rewrite that file.
+   - Other operations: `test/tensordict/test_conformance.py` runs a set of
+     operations on each type and on its dense copy and compares the
+     results. Its known failures are in
+     `test/tensordict/conformance_known_failures.json`, rewritten the same
+     way.
 9. `benchmarks/` when the operation is on a hot path.
 
 ## Where things live
