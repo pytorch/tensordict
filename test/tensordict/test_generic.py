@@ -520,6 +520,27 @@ class TestGeneric:
             assert actual.shape == expected.shape
             assert actual.dtype == expected.dtype
 
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_consolidate_column_slice(self, num_threads):
+        # x[:, :1] has strides (4, 1) and reshape(-1) returns a stride-4
+        # view of it, which cannot be viewed as bytes
+        x = torch.arange(12, dtype=torch.float32).reshape(3, 4)
+        td = TensorDict(
+            {
+                "column": x[:, :1],
+                "strided": x[:, ::2],
+                "transposed": x.t()[:3],
+                "expanded": torch.ones(()).expand(3, 1),
+            },
+            batch_size=[3],
+        )
+        td_c = td.consolidate(num_threads=num_threads)
+        td_p = pickle.loads(pickle.dumps(td_c))
+
+        for key, expected in td.items():
+            assert torch.equal(td_c[key], expected)
+            assert torch.equal(td_p[key], expected)
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_consolidate_non_contiguous_requires_grad(self, device):
         base = torch.arange(24, dtype=torch.float32, device=device, requires_grad=True)

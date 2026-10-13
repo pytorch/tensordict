@@ -734,7 +734,13 @@ class _Serialization:
                         flat_views.append(None)
                         continue
                     stride = v.stride()
-                    if (stride and stride[-1] != 1) or v.storage_offset():
+                    # reshape(-1) may return a view that is not stride-1,
+                    # e.g. for x[:, :1], which cannot be viewed as bytes
+                    if (
+                        (stride and stride[-1] != 1)
+                        or v.storage_offset()
+                        or not v.is_contiguous()
+                    ):
                         v = v.clone(memory_format=torch.contiguous_format)
                     flat_view = v.reshape(-1).view(torch.uint8)
                     pad = offsets[idx + 1] - offsets[idx] - flat_view.numel()
@@ -829,7 +835,11 @@ class _Serialization:
                 if is_compiling():
                     if not v.is_contiguous():
                         v = v.clone(memory_format=torch.contiguous_format)
-                elif (stride and stride[-1] != 1) or v.storage_offset():
+                elif (
+                    (stride and stride[-1] != 1)
+                    or v.storage_offset()
+                    or not v.is_contiguous()
+                ):
                     v = v.clone(memory_format=torch.contiguous_format)
                 v, pad = _view_and_pad(v)
                 items.append(v)
