@@ -1591,19 +1591,7 @@ def _server_keys(store, store_kwargs):
         client.close()
 
 
-@pytest.mark.parametrize(
-    "stacked",
-    [
-        False,
-        pytest.param(
-            True,
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="LazyStackedTensorDictStore.clear_redis keeps _meta_cache",
-            ),
-        ),
-    ],
-)
+@pytest.mark.parametrize("stacked", [False, True])
 def test_clear_redis_deletes_server_keys(store_kwargs, stacked):
     store = _small_store(store_kwargs, stacked)
     try:
