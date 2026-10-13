@@ -3902,6 +3902,16 @@ class TestEnsembleModule:
 
 
 class TestTensorDictParams:
+    def test_masked_select(self):
+        params = TensorDictParams(
+            TensorDict(a=nn.Parameter(torch.zeros(3, 2)), batch_size=[3])
+        )
+        mask = torch.tensor([True, False, True])
+        assert params.masked_select(mask).batch_size == torch.Size([2])
+        with pytest.raises(NotImplementedError, match="masked_select"):
+            params.masked_select(mask, inplace=True)
+        assert params.batch_size == torch.Size([3])
+
     @pytest.mark.parametrize(
         "name", ["TDPARAM_HANDLED_FUNCTIONS", "implements_for_tdparam"]
     )

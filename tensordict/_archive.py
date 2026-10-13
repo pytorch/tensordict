@@ -33,7 +33,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
 
 import torch
-from tensordict.memmap import MemoryMappedTensor
+from tensordict.memmap import _raise_if_jagged, MemoryMappedTensor
 from tensordict.utils import _zip_strict
 
 # Suffix that triggers archive mode by default in ``save``/``memmap``.
@@ -786,14 +786,28 @@ def _write_archive_from_td(
     (zero) staging bytes themselves are streamed, producing a preallocated
     writable archive.
 
-    Nested-tensor leaves are not supported by ``memmap_like``; tensordicts
-    containing them fall back to full staging via ``memmap``.
+    With ``like=False``, tensordicts containing nested-tensor leaves fall
+    back to full staging via ``memmap``: :func:`_tensor_chunks` cannot
+    stream a nested tensor's bytes, since it flattens with ``view(-1)``.
     """
     # circular import: base imports this module
     from tensordict.base import _NESTED_TENSORS_AS_LISTS
 
     leaves = list(td.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS))
     has_nested = any(getattr(v, "is_nested", False) for v in leaves)
+    if like and has_nested:
+        # memmap_like reloads the archive with load_memmap(mode="r+"), which
+        # cannot map a nested tensor: fail before anything is written
+        key, value = next(
+            (key, value)
+            for key, value in td.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+            if getattr(value, "is_nested", False)
+        )
+        _raise_if_jagged(value, key)
+        raise NotImplementedError(
+            f"memmap_like does not support nested tensors in archive mode "
+            f"(key {key!r} is a nested tensor). Pass a directory prefix instead."
+        )
     staging = tempfile.mkdtemp(dir=archive_path.parent, prefix=f".{archive_path.name}.")
     try:
         file_to_source = None
@@ -820,8 +834,8 @@ def _write_archive_from_td(
                     if filename is not None:
                         file_to_source[Path(filename).resolve()] = source
         else:
-            # nested tensors are not supported by memmap_like: fall back to
-            # writing the data to the staging directory
+            # nested tensors cannot be streamed by _tensor_chunks: fall back
+            # to writing the data to the staging directory
             td.memmap(
                 prefix=staging,
                 copy_existing=copy_existing,

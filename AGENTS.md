@@ -125,9 +125,12 @@ Prefix the PR title with one of the canonical tags:
 
 ```
 [BE] [Benchmark] [BugFix] [CI] [Compile] [Deprecation] [Distributed]
-[Doc] [Feature] [Minor] [Performance] [Quality] [Refactor] [Test]
+[Doc] [Feature] [Performance] [Quality] [Refactor] [Test] [Typing]
 [Versioning]
 ```
+
+`.github/workflows/pr-label.yml` maps each prefix to a label and fails on
+any prefix it does not know.
 
 Pick the most specific. `[Feature]` = new user-facing capability;
 `[BE]` = internal plumbing; `[Quality]` = lint/typing/cleanup;

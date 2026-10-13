@@ -2134,6 +2134,37 @@ class TestTensorClass:
         assert not (data != data2).y.X.any()
         assert not (data != data2).y.z.any()
 
+    def test_non_tensor_items(self):
+        @tensorclass
+        class Inner:
+            z: torch.Tensor
+            u: str
+
+        @tensorclass
+        class MyData:
+            x: torch.Tensor
+            s: str
+            y: torch.Tensor = None
+            inner: Inner = None
+
+        inner = Inner(z=torch.zeros(3), u="u", batch_size=[3])
+        data = MyData(x=torch.zeros(3), s="s", inner=inner, batch_size=[3])
+        # as for a TensorDict: a tuple, with the non-tensor fields
+        items = data.non_tensor_items()
+        assert isinstance(items, tuple)
+        assert [key for key, _ in items] == ["y", "s"]
+        assert items[0][1] is None
+        assert items[1][1].data == "s"
+        # include_nested=True used to raise TypeError
+        items = data.non_tensor_items(include_nested=True)
+        assert [key for key, _ in items] == ["y", "s", ("inner", "u")]
+        assert items[2][1].data == "u"
+        # the pytree context keeps the fields held outside the TensorDict
+        leaves, spec = torch.utils._pytree.tree_flatten(data)
+        assert spec.context["non_tensor_data"] == {"y": None}
+        rebuilt = torch.utils._pytree.tree_unflatten(leaves, spec)
+        assert rebuilt.s == "s" and rebuilt.y is None and rebuilt.inner.u == "u"
+
     def test_permute(self):
         @tensorclass
         class MyDataNested:
@@ -2395,6 +2426,25 @@ class TestTensorClass:
             assert reshaped.shape == torch.Size([4, 3])
             assert reshaped.y.shape == torch.Size([4, 3])
             assert reshaped.z == reshaped.y.z == z
+
+    def test_torch_pointwise_functions(self):
+        # pointwise torch functions keep the tensorclass type (#1926)
+        data = MyData(
+            X=-torch.ones(3, 4), y=torch.zeros(3, 4), z="test", batch_size=[3, 4]
+        )
+        for result, x in (
+            (torch.abs(data), torch.ones(3, 4)),
+            (torch.add(data, data), -2 * torch.ones(3, 4)),
+            (torch.clamp(data, min=-0.5), -0.5 * torch.ones(3, 4)),
+        ):
+            assert type(result) is MyData
+            assert result.z == "test"
+            torch.testing.assert_close(result.X, x)
+        # in-place forms and non-tensor data are not passed through
+        with pytest.raises(TypeError):
+            torch.abs_(data)
+        with pytest.raises(TypeError):
+            torch.abs(NonTensorData("x", batch_size=[3]))
 
     def test_shape_ops_minus_one(self):
         # A -1 keeps the size of its dim in expand and broadcast_to, and is
@@ -5317,6 +5367,57 @@ class TestDeprecations:
         assert record[0].filename == __file__
         assert c._tensordict is td
 
+    @pytest.mark.parametrize(
+        "base",
+        [None, TensorClass, TensorClass["tensor_only"]],
+        ids=["decorator", "subclass", "tensor_only"],
+    )
+    def test_from_dict_defaults(self, base):
+        annotations = {"a": torch.Tensor, "b": torch.Tensor, "t": torch.Tensor}
+        namespace = {
+            "__annotations__": annotations,
+            "b": dataclasses.field(default_factory=lambda: torch.ones(2)),
+            "t": None,
+        }
+        if base is None:
+            annotations["s"] = str
+            namespace["s"] = "hi"
+            MyClass = tensorclass(type("MyClass", (), namespace))
+        else:
+            MyClass = type("MyClass", (base,), namespace)
+        defaults = {"b"} if base is not None else {"b", "s"}
+        a = torch.zeros(2)
+        with pytest.warns(
+            FutureWarning, match=r"Starting with TensorDict 0\.17, the default"
+        ) as record:
+            c = MyClass.from_dict({"a": a}, batch_size=[2])
+        assert record[0].filename == __file__
+        assert all(repr(key) in str(record[0].message) for key in defaults)
+        assert all(getattr(c, key) is None for key in (*defaults, "t"))
+
+        # no warning when the result stays the same in 0.17
+        full = {
+            "a": a,
+            **{key: getattr(MyClass(a=a, batch_size=[2]), key) for key in defaults},
+        }
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            # every field with a non-None default is given; t defaults to None
+            assert MyClass.from_dict(full, batch_size=[2]).t is None
+            # a field without a default stays None
+            assert (
+                MyClass.from_dict(
+                    {k: v for k, v in full.items() if k != "a"}, batch_size=[2]
+                ).a
+                is None
+            )
+            # the update methods keep the values of the instance
+            c = MyClass(a=a, b=torch.full((2,), 3.0), batch_size=[2])
+            c.update({"a": torch.ones(2)})
+            c.update_({"a": torch.ones(2)})
+            c.update_at_({"a": torch.ones(())}, 0)
+            assert (c.b == 3).all()
+
     # The library code that builds and converts tensorclasses does not call the
     # deprecated members.
     @pytest.mark.parametrize(
@@ -6121,7 +6222,7 @@ class TestTensorOnly:
         # The outputs list the None field, as they did with a placeholder
         assert x.to_dict()["c"] is None
         assert "c=None" in repr(x)
-        assert x.non_tensor_items() == [("c", None)]
+        assert x.non_tensor_items() == (("c", None),)
         assert x.state_dict()._metadata[""]["_non_tensor"] == {"c": None}
         assert isinstance(x.to_tensordict(retain_none=True).get("c"), NonTensorData)
         assert "c" not in x.to_tensordict(retain_none=False).keys()

@@ -20,6 +20,7 @@ import numpy as np
 import pytest
 import torch
 from tensordict import (
+    _utils_key_json,
     capture_non_tensor_stack,
     lazy_stack,
     LazyStackedTensorDict,
@@ -68,6 +69,7 @@ except ImportError:
     _has_h5py = False
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
+_has_orjson = importlib.util.find_spec("orjson", None) is not None
 
 PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
 
@@ -1473,6 +1475,28 @@ class TestNonTensorData:
         loaded = TensorDict.load_memmap(tmp_path, allow_pickle=True)
         assert loaded.tolist() == [{1, 2}, {3}]
 
+    @pytest.mark.parametrize(
+        "backend",
+        [
+            "json",
+            pytest.param(
+                "orjson",
+                marks=pytest.mark.skipif(not _has_orjson, reason="orjson not found"),
+            ),
+        ],
+    )
+    def test_memmap_int_outside_64_bit(self, tmp_path, backend, monkeypatch):
+        # orjson only writes ints that fit in 64 bits
+        monkeypatch.setattr(_utils_key_json, "_JSON_BACKEND", backend)
+        td = TensorDict(n=NonTensorData(2**64), m=NonTensorData(-(2**63) - 1))
+        td.memmap_(tmp_path / "td")
+        loaded = TensorDict.load_memmap(tmp_path / "td", allow_pickle=False)
+        assert loaded["n"] == 2**64
+        assert loaded["m"] == -(2**63) - 1
+        NonTensorStack(2**64, 1).memmap(tmp_path / "stack")
+        loaded = TensorDict.load_memmap(tmp_path / "stack", allow_pickle=False)
+        assert loaded.tolist() == [2**64, 1]
+
     def test_load_memmap_refreshes_non_tensor(self, tmp_path):
         def make(version):
             return TensorDict(
@@ -1717,6 +1741,45 @@ class TestNonTensorData:
             assert type(td["val"]) is type(val1)
             assert td["val"] == val1
 
+    def test_shared_copy(self):
+        # A shallow copy of a shared tensordict reads the values, not the
+        # shared wrappers, and keeps sharing them like the tensors
+        td = TensorDict(
+            a=torch.zeros(3),
+            s="hello",
+            n=NonTensorData(3.5, batch_size=[3]),
+            sub=TensorDict(s="x", batch_size=[3]),
+            batch_size=[3],
+        ).share_memory_()
+        for copy in (td.copy(), td.clone(recurse=False)):
+            assert copy["s"] == "hello"
+            assert copy["n"] == 3.5
+            assert copy["sub", "s"] == "x"
+            assert copy.get("s").is_shared()
+        copy = td.copy()
+        # update_ with tensor entries in the source skips the non-tensor
+        # leaves of a shared tensordict (#2487), so the str and the tensor are
+        # written in two calls
+        copy.update_({"s": "bye"})
+        copy.update_({"a": torch.ones(3)})
+        assert td["s"] == "bye"
+        assert (td["a"] == 1).all()
+
+    def test_memmap_share_non_tensor_copy(self, tmpdir):
+        # A shallow copy of a tensordict memory-mapped with share_non_tensor
+        # reads the values, not the shared wrappers
+        td = TensorDict(
+            a=torch.zeros(3),
+            s="hello",
+            n=NonTensorData(3.5, batch_size=[3]),
+            sub=TensorDict(s="x", batch_size=[3]),
+            batch_size=[3],
+        ).memmap_(tmpdir, share_non_tensor=True)
+        for copy in (td.copy(), td.clone(recurse=False)):
+            assert copy["s"] == "hello"
+            assert copy["n"] == 3.5
+            assert copy["sub", "s"] == "x"
+
     @pytest.mark.parametrize("strategy", ["shared", "memmap"])
     @pytest.mark.parametrize(
         "val1,expected",
@@ -1735,8 +1798,39 @@ class TestNonTensorData:
             td.share_memory_()
         else:
             td.memmap_(tmpdir, share_non_tensor=True)
-        td.update_(TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []))
+        with pytest.warns(UserWarning, match="holds at most 100 bytes"):
+            td.update_(TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []))
         assert td["val"] == expected
+
+    @pytest.mark.parametrize("strategy", ["shared", "memmap"])
+    def test_shared_value_lost_warns(self, strategy, tmpdir):
+        # Writes that do not fit the shared value warn instead of losing data
+        # silently (#2163); writes that fit do not warn.
+        td = TensorDict(s=NonTensorData("abc"), i=NonTensorData(3))
+        if strategy == "shared":
+            td.share_memory_()
+        else:
+            td.memmap_(tmpdir, share_non_tensor=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            td.update_(
+                TensorDict(s=NonTensorData("y" * 100), i=NonTensorData(2**63 - 1))
+            )
+            td.update_(TensorDict(i=NonTensorData(-(2**63))))
+        with pytest.warns(UserWarning, match="the new 120-byte value was cut"):
+            td.update_(TensorDict(s=NonTensorData("y" * 120)))
+        assert td["s"] == "y" * 100
+        with pytest.warns(UserWarning, match="it is stored as 0"):
+            td.update_(TensorDict(i=NonTensorData(2**64)))
+        assert td["i"] == 0
+        with pytest.warns(UserWarning, match="stored as 9223372036854775807"):
+            td.set_("i", NonTensorData(-(2**63) - 1))
+        assert td["i"] == 2**63 - 1
+        if strategy == "shared":
+            td = TensorDict(i=NonTensorData(2**64))
+            with pytest.warns(UserWarning, match="it is stored as 0"):
+                td.share_memory_()
+            assert td["i"] == 0
 
     def _update_stack(self, td):
         td[1::2] = TensorDict({"val": NonTensorData(data=3, batch_size=[5])}, [5])

@@ -642,9 +642,24 @@ class TestTensorDicts(TestTensorDictsBase):
                     torch.device("cpu:1"), torch.int, batch_size=torch.Size([])
                 )
         else:
-            td_dtype_device = td.to(
-                torch.device("cpu:1"), torch.int, batch_size=torch.Size([])
-            )
+            # These have batched nested entries, which keep their batch size
+            # in 0.17 instead of getting batch_size=[]
+            with (
+                pytest.warns(FutureWarning, match="TensorDict 0.17")
+                if td_name
+                in (
+                    "nested_td",
+                    "nested_tensorclass",
+                    "td_h5",
+                    "td_with_non_tensor",
+                    "td_with_non_tensor_and_metadata",
+                    "nested_typed_td",
+                )
+                else contextlib.nullcontext()
+            ):
+                td_dtype_device = td.to(
+                    torch.device("cpu:1"), torch.int, batch_size=torch.Size([])
+                )
             assert all(t.dtype == torch.int for t in td_dtype_device.values(True, True))
             assert td_dtype_device.device == torch.device("cpu:1")
             assert td_dtype_device.batch_size == torch.Size([])
@@ -842,14 +857,23 @@ class TestTensorDicts(TestTensorDictsBase):
         del td["a"]
         assert "a" not in td.keys()
 
-    def test_empty(self, td_name, device):
+    @pytest.mark.parametrize("recurse", [False, True])
+    def test_empty(self, td_name, device, recurse):
         td = getattr(self, td_name)(device)
-        td_empty = td.empty()
+        td_empty = td.empty(recurse=recurse)
         assert not td_empty.is_locked
         assert td_empty.shape == td.shape
         assert td_empty.names == td.names
         assert td_empty.device == td.device
         td_empty.set("a", torch.zeros(()).expand(td.shape))
+        batch_size = torch.Size([*td.batch_size, 1])
+        names = [f"dim{i}" for i in range(len(batch_size))]
+        td_empty = td.empty(
+            recurse=recurse, batch_size=batch_size, names=names, device="meta"
+        )
+        assert td_empty.batch_size == batch_size
+        assert td_empty.names == names
+        assert td_empty.device == torch.device("meta")
 
     def test_empty_like(self, td_name, device):
         if "sub_td" in td_name:
@@ -2747,6 +2771,46 @@ class TestTensorDicts(TestTensorDictsBase):
                 [s if i != 2 else 1 for i, s in enumerate(td.shape)]
             )
             assert isinstance(getattr(td, red)(reduce=True), torch.Tensor)
+
+    @pytest.mark.parametrize(
+        "red",
+        ("mean", "nanmean", "sum", "nansum", "prod", "std", "var", "amax", "amin"),
+    )
+    def test_reduction_empty_dim(self, td_name, device, red, tmpdir):
+        # dim=() reduces over all the elements, as torch.sum(x, dim=()) does
+        if td_name == "td_with_unbatched":
+            pytest.skip("UnbatchedTensor incompatible with reduction ops")
+        td = getattr(self, td_name)(device)
+        td = _to_float(td, td_name, tmpdir)
+        leaves = dict(td.items(True, True))
+        # torch.prod does not take dim=(); prod(dim=()) gives prod()
+        kwargs = {} if red == "prod" else {"dim": ()}
+        tdr = getattr(td, red)(dim=())
+        assert tdr.batch_size == torch.Size(())
+        for key, val in leaves.items():
+            torch.testing.assert_close(
+                tdr[key], getattr(torch, red)(val, **kwargs), equal_nan=True
+            )
+        torch.testing.assert_close(
+            getattr(td, red)(dim=(), reduce=True),
+            getattr(td, red)(reduce=True),
+            equal_nan=True,
+        )
+        # a NumPy integer dim is not compared with ()
+        assert (
+            getattr(td, red)(dim=np.int64(0)).batch_size
+            == getattr(td, red)(dim=0).batch_size
+        )
+        if red == "prod":
+            return
+        tdr = getattr(td, red)(dim=(), keepdim=True)
+        assert tdr.batch_size == torch.Size([1] * td.ndim)
+        for key, val in leaves.items():
+            torch.testing.assert_close(
+                tdr[key],
+                getattr(torch, red)(val, dim=(), keepdim=True),
+                equal_nan=True,
+            )
 
     @pytest.mark.parametrize(
         "red", ("mean", "nanmean", "sum", "nansum", "prod", "std", "var", "quantile")

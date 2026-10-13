@@ -404,6 +404,24 @@ def _pad_filler_like(template: TensorDictBase, value: float) -> TensorDictBase:
     return filler
 
 
+def _with_batch_size(
+    template: TensorDictBase, batch_size: Sequence[int]
+) -> TensorDictBase:
+    """Give a tensordict without leaves the batch size ``batch_size``.
+
+    The sub-tensordicts get it too, followed by their own extra dims. The
+    number of elements may change, which a reshape would not allow.
+    """
+    batch_dims = template.batch_dims
+    return template._fast_apply(
+        lambda nested: _with_batch_size(
+            nested, (*batch_size, *nested.batch_size[batch_dims:])
+        ),
+        batch_size=batch_size,
+        call_on_nested=True,
+    )
+
+
 def _pad_lazy_stack_inplace(
     tensordict: LazyStackedTensorDict,
     pad_size: Sequence[int],
@@ -596,7 +614,9 @@ def pad_sequence(
     ] + old_batch_size
 
     if out is None:
-        out = list_of_tensordicts[0].empty(recurse=True).reshape(torch.Size(shape))
+        out = _with_batch_size(
+            list_of_tensordicts[0].empty(recurse=True), torch.Size(shape)
+        )
 
     for key in keys:
         try:

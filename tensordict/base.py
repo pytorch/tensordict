@@ -479,6 +479,33 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     other = other.expand(shape)
                 others_map.append(other)
             if any(isinstance(other, torch.Tensor) for other in others_map):
+                from tensordict._lazy import LazyStackedTensorDict
+
+                if isinstance(self_expand, LazyStackedTensorDict) and not is_non_tensor(
+                    self_expand
+                ):
+                    # The leaves of each member lack the stack dim: give each
+                    # member its slice of the operands.
+                    stack_dim = self_expand.stack_dim
+                    others_split = [
+                        other.unbind(stack_dim)
+                        if other is not None
+                        else [None] * self_expand.shape[stack_dim]
+                        for other in others_map
+                    ]
+                    results = [
+                        getattr(td, op)(*member_others, *args, **kwargs)
+                        for td, *member_others in zip(
+                            self_expand.tensordicts, *others_split
+                        )
+                    ]
+                    if inplace and self_expand is self:
+                        return self
+                    return self_expand._new_lazy_unsafe(
+                        *results,
+                        stack_dim=stack_dim,
+                        stack_dim_name=self_expand._td_dim_name,
+                    )
                 result = self_expand._fast_apply(
                     lambda x: leaf_op(
                         x,
@@ -5975,14 +6002,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         ``_inplace_rebind_leaves`` rewrites the leaves in key order, and the
         ``LazyStackedTensorDict`` (and ``NonTensorStack``) versions of
         ``reshape``, ``flatten``, ``unflatten``, ``repeat``,
-        ``repeat_interleave`` and ``gather`` refuse ``inplace=True``. Finding a
-        lazy stack halfway through would leave the earlier leaves rewritten
-        while ``batch_size`` is unchanged, so the whole tree is checked first.
-        The check tests ``_lazy``, so it also catches ``_SubTensorDict``, which
-        refuses these ops too. The legacy lazy views (``_CustomOpTensorDict``)
-        refuse ``flatten``, ``unflatten``, ``repeat`` and ``gather`` but not
-        ``reshape`` and ``repeat_interleave``, so the check lets them through
-        for those two.
+        ``repeat_interleave``, ``gather`` and ``masked_select`` refuse
+        ``inplace=True``. Finding a lazy stack halfway through would leave the
+        earlier leaves rewritten while ``batch_size`` is unchanged, so the
+        whole tree is checked first. The check tests ``_lazy``, so it also
+        catches ``_SubTensorDict``, which refuses these ops too. The legacy
+        lazy views (``_CustomOpTensorDict``) refuse ``flatten``, ``unflatten``,
+        ``repeat``, ``gather`` and ``masked_select`` but not ``reshape`` and
+        ``repeat_interleave``, so the check lets them through for those two.
         The calls on nested tensordicts skip the walk, which the top-level
         call has done.
         """
@@ -7225,6 +7252,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         Keyword Args:
             batch_size (torch.Size, optional): a new batch-size for the tensordict.
+                With ``recurse=True``, a sub-tensordict whose batch size is the
+                start of the new one gets the new one, a sub-tensordict whose
+                batch size starts with the new one keeps it, and any other
+                sub-tensordict raises a ``RuntimeError``.
             device (torch.device, optional): a new device.
             names (list of str, optional): dimension names.
 
@@ -7246,6 +7277,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # unpacking the view would call its __len__, which walks them too.
             leaves = [key for key in self.keys(True, True)]  # noqa: C416
             result = self._exclude(*leaves, set_shared=False)
+            if batch_size is not None:
+                # The batch_size setter gives the new batch size to the shorter
+                # sub-tensordicts and skips the empty ones of other shapes:
+                # those must already fit it.
+                batch_size = torch.Size(batch_size)
+                for key, value in result.items(True):
+                    ndim = min(value.batch_dims, len(batch_size))
+                    if value.batch_size[:ndim] != batch_size[:ndim]:
+                        raise RuntimeError(
+                            f"empty(recurse=True) cannot give the batch size "
+                            f"{batch_size} to the entry {key!r}, whose batch size "
+                            f"{value.batch_size} does not start with it."
+                        )
         if batch_size is not None:
             result.batch_size = batch_size
         if device is not NO_DEFAULT:
