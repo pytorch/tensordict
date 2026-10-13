@@ -14,8 +14,8 @@ source worker, or a
 transport. When a pipe is passed, the data is received
 in-place into this tensordict's consolidated storage (if
 available and its layout matches the received data);
-otherwise the pipe returns a new tensordict, so use the
-returned value. Mutually exclusive with `group_src`;
+otherwise the pipe returns a tensordict of its own, so use
+the returned value. Mutually exclusive with `group_src`;
 exactly one of the two must be provided.
 
 Keyword Arguments:

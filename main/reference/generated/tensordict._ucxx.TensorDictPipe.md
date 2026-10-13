@@ -87,10 +87,12 @@ storage in-place (zero allocation).
 Parameters:
 
 **td** - if provided and consolidated, receives into its storage
-when its layout matches the received data. Otherwise a new
-TensorDict is returned, so use the return value. If
-`None`, uses the internally cached TensorDict from the
-previous receive (if any).
+when its layout matches the received data. Otherwise the
+pipe returns a new TensorDict, or on a message with the same
+schema its own TensorDict from the previous receive, so use
+the return value. If `None`, uses the internally cached
+TensorDict from the previous receive (if any). Not used when
+the pipe has `consolidated=False`.
 
 Keyword Arguments:
 
@@ -160,7 +162,8 @@ Parameters:
 
 **td** - if provided, receives into this TensorDict in-place when
 it is consolidated and its layout matches the received data.
-Otherwise a new TensorDict is returned, so use the return
+Otherwise the pipe returns a new TensorDict or its own
+TensorDict from the previous receive, so use the return
 value.
 
 Keyword Arguments:

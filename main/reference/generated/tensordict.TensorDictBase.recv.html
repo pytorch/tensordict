@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5334+g7bb684fcf.d20261013)">
+<meta name="llm:version" content="main (0.14.0.dev5336+gd29ed3aa5.d20261013)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5334+g7bb684fcf.d20261013)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5336+gd29ed3aa5.d20261013)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1652,8 +1652,8 @@ source worker, or a
 transport.  When a pipe is passed, the data is received
 in-place into this tensordict’s consolidated storage (if
 available and its layout matches the received data);
-otherwise the pipe returns a new tensordict, so use the
-returned value. Mutually exclusive with <code class="docutils literal notranslate"><span class="pre">group_src</span></code>;
+otherwise the pipe returns a tensordict of its own, so use
+the returned value. Mutually exclusive with <code class="docutils literal notranslate"><span class="pre">group_src</span></code>;
 exactly one of the two must be provided.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
@@ -2048,7 +2048,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.recv",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.recv",
        "url": "/reference/generated/tensordict.TensorDictBase.recv.html",
-       "articleBody": "TensorDictBase.recv# TensorDictBase.recv(src: int | \u0027TensorDictPipe\u0027 | None = None, *, group: \u0027torch.distributed.ProcessGroup\u0027 | None = None, group_src: int | None = None, init_tag: int = 0, pseudo_rand: bool = False, consolidated: bool = False) \u2192 int# Receives the content of a tensordict and updates content with it. Check the example in the send method for context. Parameters: src (int or TensorDictPipe, optional) \u2013 the global rank of the source worker, or a TensorDictPipe for UCXX-based transport. When a pipe is passed, the data is received in-place into this tensordict\u2019s consolidated storage (if available and its layout matches the received data); otherwise the pipe returns a new tensordict, so use the returned value. Mutually exclusive with group_src; exactly one of the two must be provided. Keyword Arguments: group (torch.distributed.ProcessGroup, optional) \u2013 if set, the specified process group will be used for communication. Otherwise, the default process group will be used. Defaults to None. group_src (int, optional) \u2013 the rank of the source worker relative to group. Requires group to be passed and is mutually exclusive with src. When set, the p2p calls are issued directly on the group\u2019s backend, so group may be a standalone ProcessGroup built against a store (never registered through init_process_group() or new_group()). Defaults to None. init_tag (int) \u2013 the init_tag used by the source worker. pseudo_rand (bool) \u2013 if True, the sequence of tags will be pseudo- random, allowing to send multiple data from different nodes without overlap. Notice that the generation of these pseudo-random numbers is expensive (1e-5 sec/number), meaning that it could slow down the runtime of your algorithm. This value must match the one passed to send(). Defaults to False. consolidated (bool) \u2013 if True, receives a single consolidated storage tensor directly into self._consolidated[\"storage\"]. The tensordict must already be consolidated (e.g. from a prior from_remote_init() call). All leaf tensor views update in-place automatically. Defaults to False. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.recv# TensorDictBase.recv(src: int | \u0027TensorDictPipe\u0027 | None = None, *, group: \u0027torch.distributed.ProcessGroup\u0027 | None = None, group_src: int | None = None, init_tag: int = 0, pseudo_rand: bool = False, consolidated: bool = False) \u2192 int# Receives the content of a tensordict and updates content with it. Check the example in the send method for context. Parameters: src (int or TensorDictPipe, optional) \u2013 the global rank of the source worker, or a TensorDictPipe for UCXX-based transport. When a pipe is passed, the data is received in-place into this tensordict\u2019s consolidated storage (if available and its layout matches the received data); otherwise the pipe returns a tensordict of its own, so use the returned value. Mutually exclusive with group_src; exactly one of the two must be provided. Keyword Arguments: group (torch.distributed.ProcessGroup, optional) \u2013 if set, the specified process group will be used for communication. Otherwise, the default process group will be used. Defaults to None. group_src (int, optional) \u2013 the rank of the source worker relative to group. Requires group to be passed and is mutually exclusive with src. When set, the p2p calls are issued directly on the group\u2019s backend, so group may be a standalone ProcessGroup built against a store (never registered through init_process_group() or new_group()). Defaults to None. init_tag (int) \u2013 the init_tag used by the source worker. pseudo_rand (bool) \u2013 if True, the sequence of tags will be pseudo- random, allowing to send multiple data from different nodes without overlap. Notice that the generation of these pseudo-random numbers is expensive (1e-5 sec/number), meaning that it could slow down the runtime of your algorithm. This value must match the one passed to send(). Defaults to False. consolidated (bool) \u2013 if True, receives a single consolidated storage tensor directly into self._consolidated[\"storage\"]. The tensordict must already be consolidated (e.g. from a prior from_remote_init() call). All leaf tensor views update in-place automatically. Defaults to False. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
