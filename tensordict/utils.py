@@ -48,6 +48,7 @@ from torch._C._functorch import (  # noqa: F401  # @manual=fbcode//caffe2:torch
 )
 from torch.compiler import allow_in_graph, assume_constant_result, is_compiling
 from torch.nn.parameter import (
+    Buffer,
     UninitializedBuffer,
     UninitializedParameter,
     UninitializedTensorMixin,
@@ -2017,12 +2018,6 @@ def _resolve_expand_shape(shape: Sequence[int], batch_size: torch.Size) -> torch
                 f"{list(shape)}.  Tensor sizes: {list(batch_size)}"
             )
     return torch.Size(resolved)
-
-
-# Imports of ``tensordict.utils.Buffer`` resolve to this empty placeholder,
-# as they have since torch.nn.Buffer was added (torch 2.5).
-class Buffer:  # noqa: D101
-    ...
 
 
 class _BufferLegacy(torch.nn.Buffer):

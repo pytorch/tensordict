@@ -701,6 +701,20 @@ def test_utils_deprecated_names_behave_as_before():
     assert is_seq_of_nested_key([("a", "b"), "c"])
 
 
+def test_utils_buffer_is_torch_buffer():
+    # tensordict.utils.Buffer is torch.nn.Buffer, and reading it does not warn.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        buffer_cls = tensordict.utils.Buffer
+    assert buffer_cls is torch.nn.Buffer
+    tensor = torch.zeros(3)
+    assert isinstance(torch.nn.Buffer(tensor), buffer_cls)
+    buffer = buffer_cls(tensor, persistent=False)
+    assert isinstance(buffer, torch.nn.Buffer)
+    assert not buffer.persistent
+    torch.testing.assert_close(buffer, tensor)
+
+
 def test_tensordict_module_deprecated_names():
     legacy_module = tensordict.tensordict
     # Importing the legacy module, and the names that it still exports, does not warn.
