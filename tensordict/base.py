@@ -4813,8 +4813,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             with :func:`~tensordict.default_is_leaf` as the default
             ``is_leaf``. A nested key is never in a view built with
             ``include_nested=False``: ``("nested", "b") in td.keys()`` is
-            ``False``. On a :class:`~tensordict.LazyStackedTensorDict`, it is
-            still ``True``, with a ``FutureWarning``, until TensorDict 0.17.
+            ``False``. On a :class:`~tensordict.LazyStackedTensorDict`, a
+            :class:`~tensordict.store.TensorDictStore` and a
+            :class:`~tensordict.store.LazyStackedTensorDictStore`, it is still
+            ``True``, with a ``FutureWarning``, until TensorDict 0.17.
 
         Args:
             include_nested (bool, optional): if ``True``, the entries of the

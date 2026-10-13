@@ -66,6 +66,7 @@ from tensordict.utils import (
     _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
+    _warn_nested_key_in_flat_keys,
     expand_as_right,
     is_non_tensor,
     NestedKey,
@@ -595,10 +596,13 @@ class _LazyStackedStoreKeysView(_TensorDictKeysView):
         else:
             full_key = _KEY_SEP.join(key)
         all_keys = td._get_all_keys()
-        if full_key in all_keys:
-            return True
         prefix_check = full_key + _KEY_SEP
-        return any(k.startswith(prefix_check) for k in all_keys)
+        found = full_key in all_keys or any(
+            k.startswith(prefix_check) for k in all_keys
+        )
+        if found and not isinstance(key, str) and not self.include_nested:
+            _warn_nested_key_in_flat_keys(key, td)
+        return found
 
     def __len__(self):
         return sum(1 for _ in self)

@@ -123,9 +123,12 @@ finds a nested key only with ``include_nested=True``:
   >>> ("arm", "pos") in td.keys()
   False
 
-On a :class:`~tensordict.LazyStackedTensorDict`, ``("arm", "pos") in td.keys()``
-is ``True`` and emits a ``FutureWarning``. This result is deprecated and will
-be removed in TensorDict 0.17: from then on, the check returns ``False``.
+On a :class:`~tensordict.LazyStackedTensorDict`, a
+:class:`~tensordict.store.TensorDictStore` and a
+:class:`~tensordict.store.LazyStackedTensorDictStore`,
+``("arm", "pos") in td.keys()`` is ``True`` and emits a ``FutureWarning``. This
+result is deprecated and will be removed in TensorDict 0.17: from then on, the
+check returns ``False``.
 
 On a :class:`~tensordict.TensorDict`, and on most other types,
 ``key in td.keys(include_nested=True, leaves_only=True)`` checks that the key
