@@ -1300,6 +1300,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
                             # see above: only for the guard, as keys() can be
                             # costly (e.g. on a lazy stack)
                             out = td._get_str(key, None)
+                        if out is _UNSET:
+                            out = _partial_field(td, key)
                     if out is _UNSET:
                         # A field missing from the TensorDict is None
                         non_tensordict = self._non_tensordict
@@ -2758,6 +2760,51 @@ def _none_fields(self) -> list[str]:
     ]
 
 
+def _partial_field(td, key: str) -> Any:
+    # A lazy stack's keys() lists only the keys every member holds. A field
+    # that only some members set reads as the list of the members' values,
+    # with None for a member that does not set it, like get(key, as_list=True).
+    # Returns _UNSET if no member sets it.
+    if not isinstance(td, LazyStackedTensorDict):
+        return _UNSET
+    values = []
+    found = False
+    for member in td.tensordicts:
+        if type(member) is TensorDict:
+            # cheaper than _get_str, which raises a KeyError for a miss
+            out = member._tensordict.get(key)
+        else:
+            out = member._get_str(key, _UNSET)
+            if out is _UNSET:
+                out = _partial_field(member, key)
+                if out is _UNSET:
+                    out = None
+        if out is not None:
+            found = True
+            if is_non_tensor(out):
+                out = (
+                    out.data
+                    if not isinstance(out, NonTensorStack)
+                    else out.tolist(as_linked_list=True)
+                )
+        values.append(out)
+    return values if found else _UNSET
+
+
+def _del_partial_field(td, key: str) -> None:
+    # Deletes key from the members of a lazy stack that hold it, when the
+    # stack's keys() does not list it because other members do not.
+    if isinstance(td, LazyStackedTensorDict):
+        for member in td.tensordicts:
+            if type(member) is TensorDict:
+                if key in member._tensordict:
+                    member.del_(key)
+            elif key in member.keys():
+                member.del_(key)
+            else:
+                _del_partial_field(member, key)
+
+
 def _non_tensor_keys(self):
     # The fields that the TensorDict of self does not hold
     if not type(self)._is_non_tensor:
@@ -2832,6 +2879,8 @@ def _getattr(self, item: str, **kwargs) -> Any:
             out = td._get_str(item, _UNSET, **kwargs)
             if out is _UNSET and is_compiling() and item in td.keys():
                 out = td._get_str(item, None, **kwargs)
+            if out is _UNSET:
+                out = _partial_field(td, item)
         if out is _UNSET:
             # A declared field that neither store holds is None
             return None
@@ -2891,6 +2940,8 @@ class _FieldGetter:
             out = td._get_str(name, _UNSET)
             if out is _UNSET and is_compiling() and name in td.keys():
                 out = td._get_str(name, None)
+            if out is _UNSET:
+                out = _partial_field(td, name)
         if out is _UNSET:
             # A declared field that neither store holds is None
             return None
@@ -3005,6 +3056,8 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
         td = self._tensordict
         if key in (td._tensordict if type(td) is TensorDict else td.keys()):
             td.del_(key)
+        elif type(td) is not TensorDict:
+            _del_partial_field(td, key)
         # _set_none_field, inlined
         if __dict__ is None:
             __dict__ = self.__dict__
@@ -4205,6 +4258,12 @@ def _set(
                         f"Cannot update an existing entry of type {type(self._tensordict.get(key))} with a value of type {value_type}."
                     )
                 self._tensordict.del_(key)
+            elif (
+                not self_is_non_tensor
+                and not inplace
+                and type(self._tensordict) is not TensorDict
+            ):
+                _del_partial_field(self._tensordict, key)
             if self_is_non_tensor:
                 self._non_tensordict[key] = value
             # _set_none_field, inlined: a None field is a missing key

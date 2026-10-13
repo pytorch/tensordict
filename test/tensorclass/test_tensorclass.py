@@ -1550,6 +1550,60 @@ class TestTensorClass:
         check(d, "x")
         assert d.to_dict()["x"] is None
 
+    @pytest.mark.parametrize("kind", ["regular", "tensor_only", "shadow"])
+    def test_lazy_stack_field_set_on_some_members(self, kind):
+        # #2526: a field that only some members of a lazy stack set reads as
+        # the list of the members' values, and setting it to None clears it
+        # on every member
+        @tensorclass
+        class Inner:
+            a: torch.Tensor
+
+        @tensorclass(tensor_only=kind == "tensor_only", shadow=kind == "shadow")
+        class Data:
+            x: torch.Tensor
+            y: torch.Tensor | None = None
+            inner: Inner | None = None
+
+        def members():
+            p = Data(
+                x=torch.zeros(3),
+                y=torch.ones(3),
+                inner=Inner(a=torch.ones(3), batch_size=[3]),
+                batch_size=[3],
+            )
+            return p, Data(x=torch.zeros(3), batch_size=[3])
+
+        p, q = members()
+        stack = lazy_stack([p, q])
+        for value in (stack.y, stack.get("y")):
+            assert isinstance(value, list) and len(value) == 2
+            assert (value[0] == 1).all() and value[1] is None
+        inner = stack.inner
+        assert isinstance(inner[0], Inner) and inner[1] is None
+        # a field that every member sets, or none, reads as before
+        assert stack.x.shape == (2, 3)
+        assert lazy_stack([q, q.clone()]).y is None
+        # a stack of stacks reads each member as it reads on its own
+        nested = lazy_stack([stack, lazy_stack([p.clone(), p.clone()])])
+        assert nested.y[0][1] is None and nested.y[1].shape == (2, 3)
+
+        for clear in (
+            lambda s: setattr(s, "y", None),
+            lambda s: s.set("y", None),
+        ):
+            p, q = members()
+            r, _ = members()
+            stack = lazy_stack([lazy_stack([p, r]), lazy_stack([q, q.clone()])])
+            clear(stack)
+            assert stack.y is None
+            assert p.y is None and r.y is None
+            assert stack[0].y is None and stack[0, 0].y is None
+            assert "y" not in p._tensordict.keys()
+            assert stack.x.shape == (2, 2, 3)
+        stack.inner = None
+        assert p.inner is None and stack.inner is None
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_device(self, device):
         data = MyData(
