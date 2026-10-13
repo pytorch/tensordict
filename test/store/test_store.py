@@ -717,6 +717,15 @@ class TestTensorDictStore:
         with pytest.raises(NotImplementedError):
             store_td.share_memory_()
 
+    def test_vmap_raises(self, store_td):
+        """vmap raises, also on a function that returns the store."""
+        store_td["obs"] = torch.randn(10, 3)
+        with pytest.raises(RuntimeError, match="cannot be used with vmap"):
+            torch.vmap(lambda x: x)(store_td)
+        # this used to return None
+        with pytest.raises(RuntimeError, match="cannot be used with vmap"):
+            torch.vmap(lambda x: store_td)(torch.zeros(2))
+
     def test_memmap(self, store_td, tmp_path):
         """memmap and save write a memory-mapped copy; only memmap_ raises."""
         source = TensorDict(
@@ -1835,6 +1844,18 @@ class TestLazyStackedTensorDictStore:
         assert (elem == tds[1]).all()
         with pytest.raises(RuntimeError, match="in-place"):
             store_td.memmap_(tmp_path / "memmap_")
+        with pytest.raises(RuntimeError, match="in-place"):
+            store_td[1].memmap_(tmp_path / "elem_")
+
+    def test_vmap_raises(self, store_stack):
+        """vmap raises, also on a function that returns the store or an element."""
+        store_td, tds, lazy_td = store_stack
+        for td in (store_td, store_td[0]):
+            with pytest.raises(RuntimeError, match="cannot be used with vmap"):
+                torch.vmap(lambda x: x)(td)
+            # this used to return None
+            with pytest.raises(RuntimeError, match="cannot be used with vmap"):
+                torch.vmap(lambda x, td=td: td)(torch.zeros(2))
 
     # ---- td[idx].to_tensordict() pattern ----
 
@@ -2171,6 +2192,81 @@ class TestLazyStackedTensorDictStore:
                 torch.testing.assert_close(store_td[i]["n", "h"], tds[i]["n", "h"])
             store_td[1].fill_("n", 5.0)
             torch.testing.assert_close(store_td[1]["n", "h"], torch.full((3, 3), 5.0))
+            torch.testing.assert_close(store_td[0]["n", "h"], tds[0]["n", "h"])
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_update_nested(self, store_kwargs):
+        """update() with a sub-tensordict value writes nested entries, as on a lazy stack (#2154)."""
+        lazy_td = self._nested_lazy_td()
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            self._nested_lazy_td(), **store_kwargs
+        )
+        try:
+            for td in (store_td, lazy_td):
+                td.update(
+                    TensorDict(
+                        n=TensorDict(b=torch.ones(5, 3, 2), batch_size=[5, 3]),
+                        batch_size=[5, 3],
+                    )
+                )
+                td.update(
+                    {
+                        ("n", "m"): TensorDict(
+                            c=torch.full((5, 3), 2.0), batch_size=[5, 3]
+                        )
+                    }
+                )
+                td.update(
+                    {
+                        "n": {
+                            "b": torch.full((5, 3, 2), 9.0),
+                            "m": {"c": torch.full((5, 3), 3.0)},
+                        }
+                    },
+                    keys_to_update=[("n", "m", "c")],
+                )
+                # a new leaf under an existing sub-tensordict
+                td.update({"n": {"d": torch.full((5, 3), 4.0)}})
+                td[1].update({"n": {"b": torch.full((3, 2), 5.0)}})
+                # the context manager writes back through update()
+                with td.flatten_keys() as flat:
+                    flat.set_("n.m.c", torch.full((5, 3), 6.0))
+            assert_allclose_td(store_td.to_tensordict(), lazy_td.to_tensordict())
+            torch.testing.assert_close(store_td[1]["n", "b"], torch.full((3, 2), 5.0))
+            torch.testing.assert_close(store_td["n", "d"], torch.full((5, 3), 4.0))
+            # a locked store takes an in-place update of an existing nested leaf
+            store_td.lock_()
+            store_td.update({"n": {"b": torch.full((5, 3, 2), 7.0)}}, inplace=True)
+            torch.testing.assert_close(store_td["n", "b"], torch.full((5, 3, 2), 7.0))
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                store_td.update({"n": {"e": torch.ones(5, 3)}}, inplace=True)
+            assert ("n", "e") not in store_td.keys(True)
+            store_td.unlock_()
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_update_nested_heterogeneous(self, store_kwargs):
+        """update() of a nested leaf leaves a sibling whose elements differ in shape intact."""
+        tds = [
+            TensorDict(
+                n=TensorDict(b=torch.ones(3), h=torch.ones(3, 2 + i), batch_size=[3]),
+                batch_size=[3],
+            )
+            for i in range(2)
+        ]
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            store_td.update({"n": {"b": torch.full((2, 3), 5.0)}})
+            torch.testing.assert_close(store_td["n", "b"], torch.full((2, 3), 5.0))
+            for i in range(2):
+                torch.testing.assert_close(store_td[i]["n", "h"], tds[i]["n", "h"])
+            store_td[1].update({"n": {"h": torch.zeros(3, 3)}})
+            torch.testing.assert_close(store_td[1]["n", "h"], torch.zeros(3, 3))
             torch.testing.assert_close(store_td[0]["n", "h"], tds[0]["n", "h"])
         finally:
             store_td.clear_redis()
