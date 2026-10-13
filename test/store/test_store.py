@@ -2613,6 +2613,59 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    @pytest.mark.parametrize("stack_dim", [1, 2])
+    def test_stack_dim_nonzero_round_trips(self, store_kwargs, stack_dim, monkeypatch):
+        """A write that gives the same bytes in both layouts takes as many round trips on either (#2030).
+
+        A scalar written over the dims up to the stack dim, or a write at one
+        index repeated on each of those dims, costs no more on an entry
+        stored stack dim first than on one stored in the batch layout.
+        """
+        import redis.asyncio as aioredis
+
+        calls = []
+        execute = aioredis.client.Pipeline.execute
+        execute_command = aioredis.Redis.execute_command
+
+        async def counting_execute(pipe, *args, **kwargs):
+            if pipe.command_stack:
+                calls.append(None)
+            return await execute(pipe, *args, **kwargs)
+
+        async def counting_execute_command(client, *args, **kwargs):
+            if not isinstance(client, aioredis.client.Pipeline):
+                calls.append(None)
+            return await execute_command(client, *args, **kwargs)
+
+        monkeypatch.setattr(aioredis.client.Pipeline, "execute", counting_execute)
+        monkeypatch.setattr(aioredis.Redis, "execute_command", counting_execute_command)
+        lazy_td = self._layout_lazy_td(stack_dim, 2, [3, 4][:stack_dim])
+        element = torch.tensor([6, 5])
+        writes = (
+            lambda td: td.__setitem__(slice(None), 7.0),
+            lambda td: td.set_at_("a", 8.0, slice(None)),
+            lambda td: td.set_at_("a", 9.0, (1, 1)),
+            lambda td: td.set_at_(("n", "b"), element, (1,) * (stack_dim + 1)),
+        )
+        counts = {}
+        for written in ("upload", "set"):
+            store_td = self._layout_store(store_kwargs, lazy_td, written, False)
+            try:
+                store_td["a"]
+                counts[written] = []
+                for write in writes:
+                    calls.clear()
+                    write(store_td)
+                    counts[written].append(len(calls))
+                expected = lazy_td.clone()
+                for write in writes:
+                    write(expected)
+                assert (store_td.to_tensordict() == expected).all()
+            finally:
+                store_td.clear_redis()
+                store_td.close()
+        assert counts["upload"] == counts["set"]
+
     @pytest.mark.parametrize("legacy", [False, True])
     @pytest.mark.parametrize("written", ["upload", "set"])
     def test_stack_dim_nonzero_square(self, store_kwargs, written, legacy):

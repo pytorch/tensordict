@@ -137,6 +137,13 @@ def _element_index(idx, count: int) -> tuple[int, tuple] | None:
     return None
 
 
+def _is_scalar(value) -> bool:
+    """Whether ``value`` writes one value at every position it is written to."""
+    return isinstance(value, Number) or (
+        isinstance(value, torch.Tensor) and value.numel() == 1
+    )
+
+
 def _getranges(pipe, key: str, ranges: list[tuple[int, int]]) -> None:
     """Queues on ``pipe`` the read of the concatenated byte ranges of ``key``."""
     if len(ranges) == 1:
@@ -854,6 +861,32 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             return layout == "stack"
         return None
 
+    def _same_in_both_layouts(self, shape: list[int], idx, scalar: bool) -> bool:
+        """Whether ``idx``, in the batch layout, picks the same bytes of a stack-first entry of ``shape`` as if the entry were in the batch layout.
+
+        True when the index picks the same position of each dim up to the
+        stack dim either way or, for a write of one ``scalar`` value, the
+        same positions in any order: the byte ranges of the batch layout are
+        then right.
+        """
+
+        def positions(i, size):
+            if isinstance(i, slice):
+                picked = range(size)[i]
+                return picked[::-1] if picked.step < 0 else picked
+            if isinstance(i, int) and not isinstance(i, bool) and -size <= i < size:
+                return range(i % size, i % size + 1)
+            return None
+
+        sd = self._stack_pos
+        lead = _as_tuple(idx)[: sd + 1]
+        lead = (*lead, *[slice(None)] * (sd + 1 - len(lead)))
+        for size, i, j in zip(shape, lead, (lead[sd], *lead[:sd])):
+            picked = positions(i, size)
+            if picked is None or picked != positions(j, size):
+                return False
+        return scalar or not any(isinstance(i, slice) for i in lead)
+
     @property
     def _stack_pos(self) -> int:
         # the position of the stack dim in the batch size, as __init__ inserts it
@@ -1234,7 +1267,8 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         ``idx`` is in the batch layout. An entry stored in it (written by
         ``set``) is read by byte ranges; an entry stored stack dim first
         (written by ``from_lazy_stack``), when the stack dim is not 0, is read
-        whole and moved into the batch layout. See ``_stack_first``.
+        whole and moved into the batch layout, unless ``idx`` picks the same
+        bytes in both layouts. See ``_stack_first``.
         """
         if not key_paths:
             return {}
@@ -1264,6 +1298,7 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             kp
             for kp in key_paths
             if self._stack_first(meta_map[kp][0], self._layouts.get(kp))
+            and not self._same_in_both_layouts(meta_map[kp][0], idx, False)
         }
         for kp in key_paths:
             full_shape, dtype = meta_map[kp]
@@ -1411,8 +1446,8 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         Each index is in the batch layout. An entry stored in it (written by
         ``set``) is written by byte ranges; an entry stored stack dim first
         (written by ``from_lazy_stack``), when the stack dim is not 0, by a
-        read-modify-write of the whole entry, which keeps its layout. See
-        ``_stack_first``.
+        read-modify-write of the whole entry, which keeps its layout, unless
+        the write gives the same bytes in both layouts. See ``_stack_first``.
         """
         if not items:
             return
@@ -1442,17 +1477,20 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         lua_kps: list[str] = []
         rmw_kps: list[str] = []
 
-        stack_first = {
+        stack_first = [
             kp
             for kp in key_paths
             if self._stack_first(meta_map[kp][0], self._layouts.get(kp))
-        }
+            and not self._same_in_both_layouts(
+                meta_map[kp][0], items[kp][1], _is_scalar(items[kp][0])
+            )
+        ]
         for kp in key_paths:
+            if kp in stack_first:
+                continue
             _, idx = items[kp]
             shape, dtype = meta_map[kp]
-            ranges = (
-                None if kp in stack_first else _compute_byte_ranges(shape, dtype, idx)
-            )
+            ranges = _compute_byte_ranges(shape, dtype, idx)
             if ranges is None:
                 rmw_kps.append(kp)
             elif not ranges:
@@ -1495,7 +1533,23 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             pipe.eval(_LUA_SETRANGES, 1, self._data_key(kp), *argv)
             has_pipe_cmds = True
 
+        # an entry stored stack dim first is read whole in the same pipeline,
+        # written in the batch layout and stored back in its own
+        for kp in stack_first:
+            pipe.get(self._data_key(kp))
+            has_pipe_cmds = True
+
         if has_pipe_cmds:
+            raw = await pipe.execute()
+
+        if stack_first:
+            pipe = self._client.pipeline()
+            for kp, data in zip(stack_first, raw[-len(stack_first) :]):
+                shape, dtype = meta_map[kp]
+                value, idx = items[kp]
+                tensor = _bytes_to_tensor(data, shape, dtype)
+                tensor.movedim(0, self._stack_pos)[_as_tuple(idx)] = value
+                pipe.set(self._data_key(kp), _tensor_to_bytes(tensor))
             await pipe.execute()
 
         # Covering-range RMW for step>1 slices or unsupported
@@ -1505,22 +1559,13 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             for kp in rmw_kps:
                 shape, dtype = meta_map[kp]
                 _, idx = items[kp]
-                cr = (
-                    None
-                    if kp in stack_first
-                    else _compute_covering_range(shape, dtype, idx)
-                )
+                cr = _compute_covering_range(shape, dtype, idx)
                 if cr is None:
                     # Full read-modify-write
                     data = await self._client.get(self._data_key(kp))
                     tensor = _bytes_to_tensor(data, shape, dtype)
                     value, idx = items[kp]
-                    target = (
-                        tensor.movedim(0, self._stack_pos)
-                        if kp in stack_first
-                        else tensor
-                    )
-                    target[_as_tuple(idx)] = value
+                    tensor[_as_tuple(idx)] = value
                     await self._client.set(self._data_key(kp), _tensor_to_bytes(tensor))
                     continue
                 byte_offset, byte_length = cr
