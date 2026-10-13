@@ -5263,6 +5263,18 @@ class TestGeneric:
                 for piece in pieces:
                     assert piece["a"].shape == (*piece.batch_size, 4)
                     assert piece["b", "c"].shape == piece.batch_size
+        # split(0) gives one empty piece and split([]) none, as in torch
+        for split_size in (0, []):
+            pieces = td.split(split_size, 0)
+            ref_pieces = ref.split(split_size, 0)
+            assert [p.batch_size for p in pieces] == [r.shape for r in ref_pieces]
+            for piece in pieces:
+                assert piece["a"].shape == (*piece.batch_size, 4)
+        # along dim 1, of size 3, both raise as in torch
+        with pytest.raises(ValueError, match="split_size must be positive"):
+            td.split(0, 1)
+        with pytest.raises(RuntimeError, match="Insufficient number of elements"):
+            td.split([], 1)
 
     def test_chunk_zero_size_dim_views(self, tmp_path):
         # sub-tensordicts, legacy lazy views and h5 tensordicts have their own

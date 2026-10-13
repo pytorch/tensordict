@@ -2593,6 +2593,17 @@ class TestLazyStackedTensorDict:
         (piece,) = td.split(2, 1)
         assert piece.batch_size == torch.Size([3, 0])
         assert piece["a"].shape == torch.Size([3, 0, 4])
+        # split(0) gives one empty piece and split([]) none, as in torch
+        (piece,) = td.split(0, 1)
+        assert piece.batch_size == torch.Size([3, 0])
+        assert piece["a"].shape == torch.Size([3, 0, 4])
+        assert td.split([], 1) == ()
+        # along the stack dim of a stack with no members
+        empty = LazyStackedTensorDict(batch_size=(3,), stack_dim=0)
+        for split_size in (0, 2):
+            (piece,) = empty.split(split_size, 0)
+            assert piece.batch_size == torch.Size([0, 3])
+        assert empty.split([], 0) == ()
 
     def test_chunk_lazy_zero_size_dim(self):
         # torch.chunk gives `chunks` empty pieces along a zero-size dim
