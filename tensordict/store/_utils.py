@@ -115,6 +115,9 @@ def _bytes_to_tensor(
     dtype: torch.dtype,
 ) -> torch.Tensor:
     """Deserialize raw bytes to a tensor using torch.frombuffer."""
+    if not data:
+        # torch.frombuffer rejects an empty buffer
+        return torch.empty(0, dtype=dtype).reshape(shape)
     return torch.frombuffer(bytearray(data), dtype=dtype).reshape(shape)
 
 

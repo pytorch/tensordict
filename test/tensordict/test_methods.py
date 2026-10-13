@@ -423,7 +423,9 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         with pytest.raises(
             RuntimeError,
-            match="Converting a tensordict to boolean value is not permitted",
+            match=r"Converting a tensordict to boolean value is not permitted. "
+            r"Use len\(td.keys\(\)\) to test for keys, td.is_empty\(\) to test "
+            r"for leaves, or \(a == b\).all\(\) / .any\(\) to reduce a comparison.",
         ):
             assert td
 
@@ -447,12 +449,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_broadcast(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if td_name == "td_with_unbatched":
-            # UnbatchedTensor indexed assignment not yet implemented
-            pytest.skip(
-                "UnbatchedTensor broadcast/indexed assignment not yet implemented"
-            )
-            return
         sub_td = td[:, :2].to_tensordict(retain_none=True)
         sub_td.zero_()
         sub_dict = sub_td.to_dict()
@@ -646,9 +642,24 @@ class TestTensorDicts(TestTensorDictsBase):
                     torch.device("cpu:1"), torch.int, batch_size=torch.Size([])
                 )
         else:
-            td_dtype_device = td.to(
-                torch.device("cpu:1"), torch.int, batch_size=torch.Size([])
-            )
+            # These have batched nested entries, which keep their batch size
+            # in 0.17 instead of getting batch_size=[]
+            with (
+                pytest.warns(FutureWarning, match="TensorDict 0.17")
+                if td_name
+                in (
+                    "nested_td",
+                    "nested_tensorclass",
+                    "td_h5",
+                    "td_with_non_tensor",
+                    "td_with_non_tensor_and_metadata",
+                    "nested_typed_td",
+                )
+                else contextlib.nullcontext()
+            ):
+                td_dtype_device = td.to(
+                    torch.device("cpu:1"), torch.int, batch_size=torch.Size([])
+                )
             assert all(t.dtype == torch.int for t in td_dtype_device.values(True, True))
             assert td_dtype_device.device == torch.device("cpu:1")
             assert td_dtype_device.batch_size == torch.Size([])
@@ -846,14 +857,23 @@ class TestTensorDicts(TestTensorDictsBase):
         del td["a"]
         assert "a" not in td.keys()
 
-    def test_empty(self, td_name, device):
+    @pytest.mark.parametrize("recurse", [False, True])
+    def test_empty(self, td_name, device, recurse):
         td = getattr(self, td_name)(device)
-        td_empty = td.empty()
+        td_empty = td.empty(recurse=recurse)
         assert not td_empty.is_locked
         assert td_empty.shape == td.shape
         assert td_empty.names == td.names
         assert td_empty.device == td.device
         td_empty.set("a", torch.zeros(()).expand(td.shape))
+        batch_size = torch.Size([*td.batch_size, 1])
+        names = [f"dim{i}" for i in range(len(batch_size))]
+        td_empty = td.empty(
+            recurse=recurse, batch_size=batch_size, names=names, device="meta"
+        )
+        assert td_empty.batch_size == batch_size
+        assert td_empty.names == names
+        assert td_empty.device == torch.device("meta")
 
     def test_empty_like(self, td_name, device):
         if "sub_td" in td_name:
@@ -2855,6 +2875,17 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td[("nested", "back")] == 0).all()
         assert "second" not in td.keys()
 
+    def test_rename_key_overwrite(self, td_name, device) -> None:
+        # with safe=False (the default), an existing entry is replaced, as in
+        # TensorDict: PersistentTensorDict raised a KeyError
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        td.unlock_()
+        a = td.get("a").clone()
+        assert td.rename_key_("a", "b") is td
+        assert "a" not in td.keys()
+        torch.testing.assert_close(td.get("b"), a)
+
     def test_repeat(self, td_name, device):
         td = getattr(self, td_name)(device)
         assert (td.repeat(1, 1, 1, 1) == td).all()
@@ -3268,14 +3299,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_setitem(self, td_name, device, idx):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if td_name == "td_with_unbatched":
-            # UnbatchedTensor indexed assignment requires special handling:
-            # the internal _tensordict has batch_size=[] which mismatches during assignment
-            pytest.skip(
-                "UnbatchedTensor indexed assignment not yet implemented "
-                "(internal _tensordict batch_size mismatch)"
-            )
-            return
         if isinstance(idx, torch.Tensor) and idx.numel() > 1 and td.shape[0] == 1:
             pytest.skip("cannot index tensor with desired index")
 

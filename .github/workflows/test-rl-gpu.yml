@@ -16,7 +16,7 @@ env:
   CHANNEL: "nightly"
   # Keep reverse-dependency results reproducible. Bump this only after the
   # corresponding TorchRL revision has passed this integration suite.
-  TORCHRL_REF: b295f5b011c6e8e3d895d4cf2828c8864a135d93
+  TORCHRL_REF: f0af32d31045f235b30210fa2ce01d581c08b986
 
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.

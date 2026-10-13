@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from typing import Sequence
+
 import torch
 from tensordict.base import TensorDictBase
 
@@ -132,21 +134,15 @@ def from_struct_array(
 def from_dict(
     d,
     *,
-    auto_batch_size: bool = False,
+    auto_batch_size: bool | None = None,
     batch_dims: int | None = None,
     device: torch.device | None = None,
     batch_size: torch.Size | None = None,
+    names: Sequence[str] | None = None,
 ) -> "TensorDictBase":
     """Converts a dictionary to a TensorDict.
 
     .. seealso:: :meth:`TensorDictBase.from_dict` for more information.
-
-    .. note::
-        The defaults differ from :meth:`TensorDict.from_dict
-        <tensordict.TensorDictBase.from_dict>`. Here ``auto_batch_size``
-        defaults to ``False`` even if ``batch_dims`` is passed, so
-        ``batch_dims`` has no effect unless you also pass
-        ``auto_batch_size=True``.
 
     Examples:
         >>> import torch
@@ -176,7 +172,7 @@ def from_dict(
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
-        >>> # Without auto_batch_size=True, the batch size is empty.
+        >>> # Without auto_batch_size=True or batch_dims, the batch size is empty.
         >>> from_dict(input_dict).batch_size
         torch.Size([])
         >>> # To work out the batch size of an existing tensordict, use auto_batch_size_
@@ -193,15 +189,16 @@ def from_dict(
         batch_dims=batch_dims,
         device=device,
         batch_size=batch_size,
+        names=names,
     )
 
 
 def from_h5(
     h5_file,
     *,
+    mode: str = "r",
     auto_batch_size: bool = False,
     batch_dims: int | None = None,
-    device: torch.device | None = None,
     batch_size: torch.Size | None = None,
 ) -> "TensorDictBase":
     """Converts an HDF5 file to a TensorDict.
@@ -212,9 +209,9 @@ def from_h5(
 
     return TensorDict.from_h5(
         h5_file,
+        mode=mode,
         auto_batch_size=auto_batch_size,
         batch_dims=batch_dims,
-        device=device,
         batch_size=batch_size,
     )
 
