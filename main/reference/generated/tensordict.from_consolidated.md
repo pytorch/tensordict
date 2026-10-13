@@ -8,6 +8,10 @@ A consolidated file is the single file that
 [`consolidate()`](tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate) writes when you pass it a
 `filename`. Same as [`tensordict.TensorDict.from_consolidated()`](tensordict.TensorDictBase.from_consolidated.html#tensordict.TensorDictBase.from_consolidated).
 
+The batch sizes and names are as they were when the file was written.
+To write later changes into the file, call
+`consolidate(filename=filename)` again on the consolidated tensordict.
+
 Parameters:
 
 **filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path*) - the path of the file.

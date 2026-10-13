@@ -294,6 +294,10 @@ tensor([[0, 1, 2],
  [1, 2, 3]])
 ```
 
+The file keeps the batch sizes and names that the tensordict had when
+`consolidate` wrote it. If you change them on `graph_c` later, call
+`graph_c.consolidate(root / "graph.bin")` again to write them into the file.
+
 `consolidate` returns a locked tensordict. If you unlock it with
 [`unlock_()`](reference/generated/tensordict.TensorDictBase.unlock_.html#tensordict.TensorDictBase.unlock_), it is no longer consolidated:
 

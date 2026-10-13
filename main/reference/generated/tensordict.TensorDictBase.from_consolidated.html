@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5516+gf579634e5.d20261013)">
+<meta name="llm:version" content="main (0.14.0.dev5517+g820befe37.d20261013)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5516+gf579634e5.d20261013)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5517+g820befe37.d20261013)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,7 +1642,12 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.from_consolidated">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">from_consolidated</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.from_consolidated" title="Link to this definition">#</a></dt>
-<dd></dd></dl>
+<dd><p>Reconstructs a tensordict from a file written by <a class="reference internal" href="tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate" title="tensordict.TensorDictBase.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a>.</p>
+<p>The batch sizes and names are as they were when the file was written.
+To write later changes into the file, call
+<code class="docutils literal notranslate"><span class="pre">consolidate(filename=filename)</span></code> again on the consolidated tensordict.
+See <a class="reference internal" href="tensordict.from_consolidated.html#tensordict.from_consolidated" title="tensordict.from_consolidated"><code class="xref py py-func docutils literal notranslate"><span class="pre">from_consolidated()</span></code></a>.</p>
+</dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
 other methods, see <a class="reference internal" href="../td.html#api-tensordict-methods"><span class="std std-ref">Methods by task</span></a>.</p>
@@ -2009,7 +2014,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.from_consolidated",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.from_consolidated",
        "url": "/reference/generated/tensordict.TensorDictBase.from_consolidated.html",
-       "articleBody": "TensorDictBase.from_consolidated# classmethod TensorDictBase.from_consolidated(filename)# Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use from_consolidated# Benchmarking TensorDict serialization speed Benchmarking TensorDict serialization speed",
+       "articleBody": "TensorDictBase.from_consolidated# classmethod TensorDictBase.from_consolidated(filename)# Reconstructs a tensordict from a file written by consolidate(). The batch sizes and names are as they were when the file was written. To write later changes into the file, call consolidate(filename=filename) again on the consolidated tensordict. See from_consolidated(). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use from_consolidated# Benchmarking TensorDict serialization speed Benchmarking TensorDict serialization speed",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

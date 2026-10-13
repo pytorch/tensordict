@@ -51,8 +51,20 @@ differently if the metadata is or isn't available.
 
 Note
 
-If the tensordict is already consolidated, all arguments are ignored and `self`
-is returned. Call [`contiguous()`](tensordict.TensorDictBase.contiguous.html#tensordict.TensorDictBase.contiguous) to re-consolidate.
+If the tensordict is already consolidated, all arguments but `filename` are
+ignored and `self` is returned. Call [`contiguous()`](tensordict.TensorDictBase.contiguous.html#tensordict.TensorDictBase.contiguous) to re-consolidate.
+
+Note
+
+The file written with `filename` is a snapshot of the batch sizes and names
+at the time of the call: [`from_consolidated()`](tensordict.TensorDictBase.from_consolidated.html#tensordict.TensorDictBase.from_consolidated) reads them back from it.
+The leaves are views into the file, so in-place writes into them reach it
+(unless `use_buffer=True`), but setting `batch_size` or `names` later
+does not. Call `consolidate(filename=filename)` again on the result to write
+the current ones into the file. Another file name writes nothing:
+`td.contiguous().consolidate(filename=other)` writes a new file. Nothing
+is written either if the file has been deleted or replaced, or has changed
+size, since this tensordict was written to it.
 
 Note
 

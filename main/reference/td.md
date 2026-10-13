@@ -286,7 +286,7 @@ Device and memory
 | [`TensorDictBase.record_stream`](generated/tensordict.TensorDictBase.record_stream.html#tensordict.TensorDictBase.record_stream)(stream) | Marks the tensordict as having been used by this stream. |
 | [`TensorDictBase.consolidate`](generated/tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate)([filename, ...]) | Copies all the leaves into one contiguous storage, and returns a tensordict of views of it. |
 | [`TensorDictBase.is_consolidated`](generated/tensordict.TensorDictBase.is_consolidated.html#tensordict.TensorDictBase.is_consolidated)() | Checks if a TensorDict has a consolidated storage. |
-| [`TensorDictBase.from_consolidated`](generated/tensordict.TensorDictBase.from_consolidated.html#tensordict.TensorDictBase.from_consolidated)(filename) | |
+| [`TensorDictBase.from_consolidated`](generated/tensordict.TensorDictBase.from_consolidated.html#tensordict.TensorDictBase.from_consolidated)(filename) | Reconstructs a tensordict from a file written by [`consolidate()`](generated/tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate). |
 | [`TensorDictBase.bytes`](generated/tensordict.TensorDictBase.bytes.html#tensordict.TensorDictBase.bytes)(*[, count_duplicates]) | Counts the number of bytes of the contained tensors. |
 | [`TensorDictBase.data_ptr`](generated/tensordict.TensorDictBase.data_ptr.html#tensordict.TensorDictBase.data_ptr)(*[, storage]) | Returns the data_ptr of the tensordict leaves. |
 | [`TensorDictBase.param_count`](generated/tensordict.TensorDictBase.param_count.html#tensordict.TensorDictBase.param_count)(*[, count_duplicates]) | Counts the number of parameters (total number of indexable items), accounting for tensors only. |
