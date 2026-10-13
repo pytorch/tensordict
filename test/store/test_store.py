@@ -2149,6 +2149,81 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    def test_update_nested(self, store_kwargs):
+        """update() with a sub-tensordict value writes nested entries, as on a lazy stack (#2154)."""
+        lazy_td = self._nested_lazy_td()
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            self._nested_lazy_td(), **store_kwargs
+        )
+        try:
+            for td in (store_td, lazy_td):
+                td.update(
+                    TensorDict(
+                        n=TensorDict(b=torch.ones(5, 3, 2), batch_size=[5, 3]),
+                        batch_size=[5, 3],
+                    )
+                )
+                td.update(
+                    {
+                        ("n", "m"): TensorDict(
+                            c=torch.full((5, 3), 2.0), batch_size=[5, 3]
+                        )
+                    }
+                )
+                td.update(
+                    {
+                        "n": {
+                            "b": torch.full((5, 3, 2), 9.0),
+                            "m": {"c": torch.full((5, 3), 3.0)},
+                        }
+                    },
+                    keys_to_update=[("n", "m", "c")],
+                )
+                # a new leaf under an existing sub-tensordict
+                td.update({"n": {"d": torch.full((5, 3), 4.0)}})
+                td[1].update({"n": {"b": torch.full((3, 2), 5.0)}})
+                # the context manager writes back through update()
+                with td.flatten_keys() as flat:
+                    flat.set_("n.m.c", torch.full((5, 3), 6.0))
+            assert_allclose_td(store_td.to_tensordict(), lazy_td.to_tensordict())
+            torch.testing.assert_close(store_td[1]["n", "b"], torch.full((3, 2), 5.0))
+            torch.testing.assert_close(store_td["n", "d"], torch.full((5, 3), 4.0))
+            # a locked store takes an in-place update of an existing nested leaf
+            store_td.lock_()
+            store_td.update({"n": {"b": torch.full((5, 3, 2), 7.0)}}, inplace=True)
+            torch.testing.assert_close(store_td["n", "b"], torch.full((5, 3, 2), 7.0))
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                store_td.update({"n": {"e": torch.ones(5, 3)}}, inplace=True)
+            assert ("n", "e") not in store_td.keys(True)
+            store_td.unlock_()
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_update_nested_heterogeneous(self, store_kwargs):
+        """update() of a nested leaf leaves a sibling whose elements differ in shape intact."""
+        tds = [
+            TensorDict(
+                n=TensorDict(b=torch.ones(3), h=torch.ones(3, 2 + i), batch_size=[3]),
+                batch_size=[3],
+            )
+            for i in range(2)
+        ]
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            store_td.update({"n": {"b": torch.full((2, 3), 5.0)}})
+            torch.testing.assert_close(store_td["n", "b"], torch.full((2, 3), 5.0))
+            for i in range(2):
+                torch.testing.assert_close(store_td[i]["n", "h"], tds[i]["n", "h"])
+            store_td[1].update({"n": {"h": torch.zeros(3, 3)}})
+            torch.testing.assert_close(store_td[1]["n", "h"], torch.zeros(3, 3))
+            torch.testing.assert_close(store_td[0]["n", "h"], tds[0]["n", "h"])
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     def test_inplace_methods_write(self, store_kwargs):
         """The in-place methods and update_ write to the server, as on a lazy stack (#2242).
 

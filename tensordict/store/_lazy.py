@@ -103,6 +103,8 @@ class _StoreStackElementView(TensorDictBase):
     _masking_on_dense_copy = True
     # each read fetches the entry from the server into a new tensor
     _reads_return_copies = True
+    # and each sub-tensordict is a new TensorDict
+    _nested_reads_return_copies = True
 
     def __init__(self, parent, element_idx: int):
         self._parent = parent
@@ -648,10 +650,11 @@ class LazyStackedTensorDictStore(TensorDictBase):
     limits" section).
 
     .. warning::
-        Writes to nested entries through :meth:`update`, :meth:`zero_`,
-        :meth:`fill_` or ``store["nested"].set_`` are dropped without an
-        error (see #2154). Write a full element instead, for example
-        ``store[1] = TensorDict(...)``.
+        ``store["nested"]`` is an in-memory copy of the nested entry: writes
+        through it, for example ``store["nested"].set_(...)`` or
+        ``store["nested"].zero_()``, change the copy only, not the store.
+        Write with the full key, ``store.set(("nested", "b"), ...)``, or with
+        :meth:`update`.
 
     Stores each leaf key as a single concatenated blob in the store,
     regardless of how many stack elements there are.  For *N* elements and
@@ -706,6 +709,8 @@ class LazyStackedTensorDictStore(TensorDictBase):
     _masking_on_dense_copy = True
     # each read fetches the entry from the server into a new tensor
     _reads_return_copies = True
+    # and each sub-tensordict is a new TensorDict
+    _nested_reads_return_copies = True
 
     def __init__(
         self,
