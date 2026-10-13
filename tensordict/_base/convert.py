@@ -47,6 +47,7 @@ from tensordict.base import (
     _maybe_preserve_module_state,
     _PACKAGE_DIR,
     _set_tensor_dict,
+    _wrap_extra_state,
     Buffer,
     is_compiling,
     is_tensor_collection,
@@ -68,9 +69,10 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from torch import nn, Tensor
+from torch.nn.modules.module import _EXTRA_STATE_KEY_SUFFIX
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.nn.utils._named_member_accessor import swap_tensor
-from torch.utils._pytree import is_structseq_instance
+from torch.utils._pytree import is_structseq_instance, tree_map
 
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
@@ -158,6 +160,28 @@ def _warn_structseq_keys(obj) -> None:
     )
 
 
+def _swap_extra_state(module, value, return_swap):
+    """Loads the extra state ``value`` into ``module`` and returns the old one if ``return_swap``.
+
+    ``value`` is the extra state that ``from_module(use_state_dict=True)``
+    saves with ``get_extra_state()``. It is loaded as ``load_state_dict``
+    does.
+    """
+    out = None
+    if return_swap:
+        # Clone the tensors: set_extra_state may copy into them.
+        out = _wrap_extra_state(
+            tree_map(
+                lambda x: x.clone() if isinstance(x, Tensor) else x,
+                module.get_extra_state(),
+            )
+        )
+    if is_tensor_collection(value):
+        value = value.to_dict()
+    module.set_extra_state(value)
+    return out
+
+
 def _swap_into_module(td, module, memo, non_blocking, preserve_module_state):
     """Writes the leaves of ``td`` into ``module`` and returns the old ones in a dict.
 
@@ -174,7 +198,9 @@ def _swap_into_module(td, module, memo, non_blocking, preserve_module_state):
     _modules = __dict__["_modules"]
     swap = memo[weakref.ref(module)] = {}
     for key, value in td.items():
-        if isinstance(value, (Tensor, ftdim.Tensor)):
+        if key == _EXTRA_STATE_KEY_SUFFIX:
+            local_out = _swap_extra_state(module, value, True)
+        elif isinstance(value, (Tensor, ftdim.Tensor)):
             local_out = _set_tensor_dict(
                 __dict__,
                 _parameters,
@@ -215,6 +241,9 @@ def _swap_into_module(td, module, memo, non_blocking, preserve_module_state):
 def _replaced_entries(swap: dict, td, entries: list) -> list:
     """Lists the ``(sub-tensordict, key, value)`` of ``swap`` that are not the values of ``td``."""
     for key, val in swap.items():
+        if key == _EXTRA_STATE_KEY_SUFFIX:
+            # Restored with set_extra_state, nothing to write.
+            continue
         if isinstance(val, dict):
             _replaced_entries(val, td._get_str(key, default=NO_DEFAULT), entries)
         elif td._get_str(key, None) is not val:
@@ -1354,7 +1383,9 @@ class _Conversion:
             __dict__ = None
 
         for key, value in input.items():
-            if isinstance(value, (Tensor, ftdim.Tensor)):
+            if key == _EXTRA_STATE_KEY_SUFFIX:
+                local_out = _swap_extra_state(module, value, return_swap)
+            elif isinstance(value, (Tensor, ftdim.Tensor)):
                 # For Dynamo, we use regular set/delattr as we're not
                 #  much afraid by overhead (and dynamo doesn't like those
                 #  hacks we're doing).
