@@ -10,6 +10,7 @@ import io
 import os
 import pickle
 import platform
+import re
 import sys
 import warnings
 from pathlib import Path
@@ -3076,10 +3077,14 @@ class TestLazyStackedTensorDict:
         with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
             pieces = td.split([1, 5], stack_dim)
         assert [p.batch_size[stack_dim] for p in pieces] == [1, 2]
-        # an invalid int raises as in TensorDict.split
+        # an invalid int raises as in TensorDict.split (#2361), also on a
+        # NonTensorStack and along the other dim
+        stack = NonTensorStack.from_list([["a", "b"], ["c", "d"], ["e", "f"]])
         for split_size in (0, -1):
-            with pytest.raises(ValueError, match="split_size must be positive"):
-                td.split(split_size, stack_dim)
+            msg = f"TensorDict.split: split_size must be positive, got {split_size}."
+            for x, dim in ((td, stack_dim), (td, 1 - stack_dim), (stack, 0)):
+                with pytest.raises(ValueError, match=re.escape(msg)):
+                    x.split(split_size, dim)
         with pytest.raises(TypeError, match="must be int or list of ints"):
             td.split(2.0, stack_dim)
 
