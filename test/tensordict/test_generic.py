@@ -7413,6 +7413,55 @@ class TestGeneric:
         assert set(params_reg.flatten_keys(".").keys()) == set(sd.keys())
         assert_allclose_td(params_reg.flatten_keys("."), TensorDict(sd, []))
 
+    @pytest.mark.parametrize("use_state_dict", [True, False])
+    @pytest.mark.parametrize("kind", ["dict", "tensor", "object"])
+    def test_to_module_extra_state(self, kind, use_state_dict):
+        # to_module loads the extra state that from_module(use_state_dict=True)
+        # saves, also for nested modules, and the context manager restores it.
+        class Counter(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.lin = nn.Linear(2, 2)
+                self.count = 0
+
+            def get_extra_state(self):
+                if kind == "dict":
+                    return {"count": torch.tensor(self.count), "n": self.count}
+                if kind == "tensor":
+                    return torch.tensor(self.count)
+                return self.count
+
+            def set_extra_state(self, state):
+                if kind == "dict":
+                    assert isinstance(state["n"], int)
+                    self.count = int(state["count"])
+                    assert state["n"] == self.count
+                elif kind == "tensor":
+                    assert isinstance(state, torch.Tensor)
+                    self.count = int(state)
+                else:
+                    assert isinstance(state, int)
+                    self.count = state
+
+        def make():
+            return nn.Sequential(nn.Linear(2, 2), nn.Sequential(Counter()))
+
+        src = make()
+        src[1][0].count = 7
+        params = TensorDict.from_module(src, use_state_dict=True)
+        assert (params.clone() == params).all()
+
+        dst = make()
+        params.to_module(dst, use_state_dict=use_state_dict)
+        assert dst[1][0].count == 7
+        assert (dst[0].weight == src[0].weight).all()
+
+        dst = make()
+        with params.to_module(dst, use_state_dict=use_state_dict):
+            assert dst[1][0].count == 7
+            dst[1][0].count = 8
+        assert dst[1][0].count == 0
+
     @pytest.mark.parametrize("mask_key", [None, "mask"])
     def test_to_padded_tensor(self, mask_key):
         with warnings.catch_warnings():

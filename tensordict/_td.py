@@ -51,6 +51,7 @@ from tensordict.base import (
     _select_entry,
     _UNSET,
     _warn_scalar_over_non_tensor,
+    _wrap_extra_state,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
     is_tensor_collection,
@@ -113,6 +114,7 @@ from tensordict.utils import (
 from torch import Tensor
 from torch._functorch.vmap import _maybe_remove_batch_dim
 from torch.compiler import is_compiling
+from torch.nn.modules.module import _EXTRA_STATE_KEY_SUFFIX
 from torch.utils._pytree import tree_map
 
 try:
@@ -539,6 +541,10 @@ class TensorDict(TensorDictBase):
                 hook_result = hook(module, destination, prefix, local_metadata)
                 if hook_result is not None:
                     destination = hook_result
+            if _EXTRA_STATE_KEY_SUFFIX in destination:
+                destination[_EXTRA_STATE_KEY_SUFFIX] = _wrap_extra_state(
+                    destination[_EXTRA_STATE_KEY_SUFFIX]
+                )
         if not filter_empty or destination:
             destination_set = True
             if cls is TensorDict and not use_state_dict:

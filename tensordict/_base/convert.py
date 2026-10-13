@@ -47,6 +47,7 @@ from tensordict.base import (
     _maybe_preserve_module_state,
     _PACKAGE_DIR,
     _set_tensor_dict,
+    _wrap_extra_state,
     Buffer,
     is_compiling,
     is_tensor_collection,
@@ -68,6 +69,7 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from torch import nn, Tensor
+from torch.nn.modules.module import _EXTRA_STATE_KEY_SUFFIX
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.nn.utils._named_member_accessor import swap_tensor
 from torch.utils._pytree import is_structseq_instance
@@ -1188,7 +1190,15 @@ class _Conversion:
             __dict__ = None
 
         for key, value in input.items():
-            if isinstance(value, (Tensor, ftdim.Tensor)):
+            if key == _EXTRA_STATE_KEY_SUFFIX:
+                # The extra state that from_module(use_state_dict=True) saves
+                # with get_extra_state(): load it as load_state_dict does.
+                if return_swap:
+                    local_out = _wrap_extra_state(module.get_extra_state())
+                if is_tensor_collection(value):
+                    value = value.to_dict()
+                module.set_extra_state(value)
+            elif isinstance(value, (Tensor, ftdim.Tensor)):
                 # For Dynamo, we use regular set/delattr as we're not
                 #  much afraid by overhead (and dynamo doesn't like those
                 #  hacks we're doing).
@@ -1252,6 +1262,9 @@ class _Conversion:
 
                 def _quick_set(swap_dict, swap_td):
                     for key, val in swap_dict.items():
+                        if key == _EXTRA_STATE_KEY_SUFFIX:
+                            # Restored with set_extra_state, nothing to write.
+                            continue
                         if isinstance(val, dict):
                             _quick_set(val, swap_td._get_str(key, default=NO_DEFAULT))
                         elif swap_td._get_str(key, None) is not val:
