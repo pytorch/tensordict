@@ -23,6 +23,7 @@ from tensordict import (
     tensorclass,
     TensorDict,
     TypedTensorDict,
+    UnbatchedTensor,
 )
 from tensordict._td import is_tensor_collection
 from tensordict.base import TensorDictBase
@@ -527,6 +528,37 @@ class TestPointwiseOps:
         other = TensorDict(a=torch.zeros(4, 5), batch_size=[4])
         with pytest.raises(RuntimeError, match="must match the size"):
             getattr(td, name)(other)
+
+    @pytest.mark.parametrize("op", ["maximum", "minimum"])
+    @pytest.mark.parametrize("other_type", ["tensordict", "float", "tensor"])
+    def test_maximum_minimum_unbatched(self, op, other_type):
+        def make_td():
+            return TensorDict(
+                a=torch.tensor([[0.0, 1.0, 2.0]]),
+                unbatched=UnbatchedTensor(torch.tensor([0.0, 1.0, 2.0, 3.0])),
+                batch_size=[1],
+            )
+
+        if other_type == "tensordict":
+            other = make_td().apply(lambda x: torch.full_like(x, 1.5))
+        elif other_type == "float":
+            other = 1.5
+        else:
+            other = torch.tensor(1.5)
+        torch_op = getattr(torch, op)
+        expected = make_td().apply(lambda x: torch_op(x, torch.tensor(1.5)))
+
+        td = make_td()
+        result = getattr(td, op)(other)
+        assert isinstance(result.get("unbatched"), UnbatchedTensor)
+        assert (result == expected).all()
+
+        data_ptrs = {key: td.get(key).data_ptr() for key in td.keys()}
+        result = getattr(td, f"{op}_")(other)
+        assert result is td
+        assert isinstance(td.get("unbatched"), UnbatchedTensor)
+        assert {key: td.get(key).data_ptr() for key in td.keys()} == data_ptrs
+        assert (td == expected).all()
 
     @pytest.mark.parametrize("shape", [(4,), (3, 4), (2, 3, 4)])
     def test_broadcast_tensor(self, shape):
