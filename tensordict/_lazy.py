@@ -39,7 +39,11 @@ from typing import (
 
 import numpy as np
 import torch
-from tensordict._deprecation import deprecated, warn_deprecated
+from tensordict._deprecation import (
+    deprecated,
+    deprecation_message,
+    warn_deprecated,
+)
 from tensordict._indexing import (
     _advanced_ndim,
     _BOOL,
@@ -200,10 +204,24 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
         for tensordict in self.tensordict.tensordicts:
             sub = tensordict._get_str(item[0], None)
             # As in TensorDict, a nested key that goes through a tensor is absent
-            if self.include_nested and not _is_tensor_collection(type(sub)):
+            if not _is_tensor_collection(type(sub)):
                 return False
             if item[1:] not in sub.keys(self.include_nested, self.leaves_only):
                 return False
+        if not self.include_nested:
+            warnings.warn(
+                deprecation_message(
+                    f"Finding the nested key {item} in "
+                    f"{type(self.tensordict).__name__}.keys() without "
+                    "include_nested=True",
+                    removal="0.17",
+                )
+                + " Starting with TensorDict 0.17, the check returns False, as "
+                "it does for TensorDict. Use keys(include_nested=True) to look "
+                "up a nested key.",
+                FutureWarning,
+                stacklevel=2,
+            )
         return True
 
     def __repr__(self):

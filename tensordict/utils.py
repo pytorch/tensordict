@@ -768,7 +768,6 @@ def _erase_cache_first(fun):
     return new_fun
 
 
-_NON_STR_KEY_TUPLE_ERR = "Nested membership checks with tuples of strings is only supported when setting `include_nested=True`."
 _NON_STR_KEY_ERR = "TensorDict keys are always strings. Membership checks are only supported for strings or non-empty tuples of strings (for nested TensorDicts)"
 _GENERIC_NESTED_ERR = "Only NestedKeys are supported: a key must be a string or a non-empty, possibly nested tuple of strings. Got key {!r}."
 
@@ -804,7 +803,8 @@ class _StringKeys(KeysView):
             except Exception:
                 raise TypeError(_NON_STR_KEY_ERR)
             if len(unravel_item) > 1:
-                raise TypeError(_NON_STR_KEY_TUPLE_ERR)
+                # A nested key is not a top-level key
+                return False
             else:
                 item = unravel_item[0]
         return self.keys.__contains__(item)
