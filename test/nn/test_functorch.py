@@ -6,6 +6,7 @@
 import argparse
 import subprocess
 import sys
+import warnings
 
 import pytest
 import tensordict
@@ -15,8 +16,15 @@ from _utils_internal import expand_list, get_available_devices, TestTensorDictsB
 from functorch import (
     make_functional_with_buffers as functorch_make_functional_with_buffers,
 )
-from tensordict import assert_close, LazyStackedTensorDict, NonTensorStack, TensorDict
+from tensordict import (
+    assert_close,
+    LazyStackedTensorDict,
+    NonTensorData,
+    NonTensorStack,
+    TensorDict,
+)
 from tensordict.nn import TensorDictModule, TensorDictSequential
+from tensordict.utils import is_non_tensor
 from torch import nn, vmap
 from torch.utils._pytree import (
     tree_flatten,
@@ -532,6 +540,70 @@ class TestPyTree(TestTensorDictsBase):
         out = tree_map(lambda x: x[0], td)
         assert out.batch_size == torch.Size([])
         assert out.get_non_tensor("s") == "a"
+
+    def test_pytree_non_tensor_stack_equal_warns(self):
+        # A NonTensorStack whose values are all equal is rebuilt from the
+        # input as a NonTensorData, and what the function returned for it is
+        # dropped. In 0.17 the leaf is kept; until then the calls whose result
+        # will change warn (#2123).
+        def make():
+            td = TensorDict(a=torch.zeros(4, 3), batch_size=[4])
+            td.set("s", NonTensorStack(*"aaaa"))
+            td.set("n", td.clone())
+            return td
+
+        td = make()
+        changed = {
+            "round trip": lambda: tree_unflatten(*tree_flatten(td)),
+            "x + 1": lambda: tree_map(lambda x: x + 1, td),
+            "clone": lambda: tree_map(lambda x: x.clone(), td),
+            "x[:2]": lambda: tree_map(lambda x: x[:2], td),
+            "replace": lambda: tree_map(
+                lambda x: NonTensorStack(*"wxyz") if is_non_tensor(x) else x, td
+            ),
+            "replace data": lambda: tree_map(
+                lambda x: NonTensorData("z", batch_size=[4]) if is_non_tensor(x) else x,
+                td,
+            ),
+        }
+        for name, call in changed.items():
+            with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+                out = call()
+            for key in ("s", ("n", "s")):
+                assert type(out.get(key)) is NonTensorData, name
+                assert out.get(key).batch_size == out.batch_size, name
+                assert out.get_non_tensor(key) == "a", name
+
+        same = {
+            "x[0]": lambda: tree_map(lambda x: x[0], td),
+            "same data": lambda: tree_map(
+                lambda x: NonTensorData("a", batch_size=[4]) if is_non_tensor(x) else x,
+                td,
+            ),
+            "tensor": lambda: tree_map(
+                lambda x: torch.zeros(4) if is_non_tensor(x) else x, td
+            ),
+        }
+        for name, call in same.items():
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                out = call()
+            assert type(out.get("s")) is NonTensorData, name
+            assert out.get_non_tensor("s") == "a", name
+
+        distinct = TensorDict(a=torch.zeros(4, 3), batch_size=[4])
+        distinct.set("s", NonTensorStack(*"abcd"))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            out = tree_unflatten(*tree_flatten(distinct))
+        assert out.get("s").tolist() == list("abcd")
+
+    def test_pytree_non_tensor_stack_equal_warning_points_to_caller(self):
+        td = TensorDict(a=torch.zeros(4, 3), batch_size=[4])
+        td.set("s", NonTensorStack(*"aaaa"))
+        with pytest.warns(FutureWarning) as record:
+            tree_map(lambda x: x, td)
+        assert record[0].filename == __file__
 
 
 # The names that ``from tensordict._pytree import *`` used to copy into the

@@ -102,7 +102,8 @@ def pad(
 
     Returns:
         The padded tensordict. When ``inplace=True`` this is the same object as
-        the input; otherwise a new tensordict.
+        the input; otherwise a new tensordict, or a new tensorclass of the
+        same type for a tensorclass input.
 
     Examples:
         >>> from tensordict import TensorDict, pad
@@ -134,6 +135,16 @@ def pad(
         # NonTensorStack is a LazyStackedTensorDict subclass: dispatch before
         # the lazy-stack branch so non-tensor values are preserved.
         return _pad_non_tensor(tensordict, pad_size, inplace=inplace)
+
+    if not inplace and is_tensorclass(tensordict):
+        # Pad the wrapped tensordict and rebuild the tensorclass around the
+        # result. The bound ``pad`` method is skipped: a tensorclass may
+        # override it with another signature.
+        return tensordict._from_tensordict(
+            pad(tensordict._tensordict, pad_size, value, safe=False),
+            dict(tensordict._non_tensordict),
+            safe=False,
+        )
 
     if inplace and isinstance(tensordict, LazyStackedTensorDict):
         return _pad_lazy_stack_inplace(tensordict, pad_size, value)
@@ -393,6 +404,24 @@ def _pad_filler_like(template: TensorDictBase, value: float) -> TensorDictBase:
     return filler
 
 
+def _with_batch_size(
+    template: TensorDictBase, batch_size: Sequence[int]
+) -> TensorDictBase:
+    """Give a tensordict without leaves the batch size ``batch_size``.
+
+    The sub-tensordicts get it too, followed by their own extra dims. The
+    number of elements may change, which a reshape would not allow.
+    """
+    batch_dims = template.batch_dims
+    return template._fast_apply(
+        lambda nested: _with_batch_size(
+            nested, (*batch_size, *nested.batch_size[batch_dims:])
+        ),
+        batch_size=batch_size,
+        call_on_nested=True,
+    )
+
+
 def _pad_lazy_stack_inplace(
     tensordict: LazyStackedTensorDict,
     pad_size: Sequence[int],
@@ -585,7 +614,9 @@ def pad_sequence(
     ] + old_batch_size
 
     if out is None:
-        out = list_of_tensordicts[0].empty(recurse=True).reshape(torch.Size(shape))
+        out = _with_batch_size(
+            list_of_tensordicts[0].empty(recurse=True), torch.Size(shape)
+        )
 
     for key in keys:
         try:

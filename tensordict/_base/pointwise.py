@@ -21,8 +21,10 @@ import torch
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
+    _apply_pointwise,
     _is_tensor_collection,
     _maybe_broadcast_other,
+    _mixes_lazy_stacks,
     _NESTED_TENSORS_AS_LISTS,
     _write_back_inplace,
     CompatibleType,
@@ -578,6 +580,8 @@ class _PointwiseOps:
     def abs(self) -> Self:
         """Computes the absolute value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("abs", vals)
         items = dict(zip(keys, vals))
 
@@ -595,12 +599,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def abs_(self) -> Self:
         """Computes the absolute value of each element of the TensorDict in-place."""
-        _foreach("abs_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("abs_", vals)
         return self
 
     def acos(self) -> Self:
         """Computes the :func:`~torch.acos` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("acos", vals)
         items = dict(zip(keys, vals))
 
@@ -618,12 +626,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def acos_(self) -> Self:
         """Computes the :func:`~torch.acos` value of each element of the TensorDict in-place."""
-        _foreach("acos_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("acos_", vals)
         return self
 
     def exp(self) -> Self:
         """Computes the :func:`~torch.exp` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("exp", vals)
         items = dict(zip(keys, vals))
 
@@ -641,7 +653,9 @@ class _PointwiseOps:
     @_write_back_inplace
     def exp_(self) -> Self:
         """Computes the :func:`~torch.exp` value of each element of the TensorDict in-place."""
-        _foreach("exp_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("exp_", vals)
         return self
 
     def neg(self) -> Self:
@@ -682,6 +696,8 @@ class _PointwiseOps:
     def reciprocal(self) -> Self:
         """Computes the :func:`~torch.reciprocal` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("reciprocal", vals)
         items = dict(zip(keys, vals))
 
@@ -699,12 +715,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def reciprocal_(self) -> Self:
         """Computes the :func:`~torch.reciprocal` value of each element of the TensorDict in-place."""
-        _foreach("reciprocal_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("reciprocal_", vals)
         return self
 
     def sigmoid(self) -> Self:
         """Computes the :func:`~torch.sigmoid` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("sigmoid", vals)
         items = dict(zip(keys, vals))
 
@@ -722,12 +742,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def sigmoid_(self) -> Self:
         """Computes the :func:`~torch.sigmoid` value of each element of the TensorDict in-place."""
-        _foreach("sigmoid_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("sigmoid_", vals)
         return self
 
     def sign(self) -> Self:
         """Computes the :func:`~torch.sign` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("sign", vals)
         items = dict(zip(keys, vals))
 
@@ -745,12 +769,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def sign_(self) -> Self:
         """Computes the :func:`~torch.sign` value of each element of the TensorDict in-place."""
-        _foreach("sign_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("sign_", vals)
         return self
 
     def sin(self) -> Self:
         """Computes the :func:`~torch.sin` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("sin", vals)
         items = dict(zip(keys, vals))
 
@@ -768,12 +796,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def sin_(self) -> Self:
         """Computes the :func:`~torch.sin` value of each element of the TensorDict in-place."""
-        _foreach("sin_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("sin_", vals)
         return self
 
     def sinh(self) -> Self:
         """Computes the :func:`~torch.sinh` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("sinh", vals)
         items = dict(zip(keys, vals))
 
@@ -791,12 +823,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def sinh_(self) -> Self:
         """Computes the :func:`~torch.sinh` value of each element of the TensorDict in-place."""
-        _foreach("sinh_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("sinh_", vals)
         return self
 
     def tan(self) -> Self:
         """Computes the :func:`~torch.tan` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("tan", vals)
         items = dict(zip(keys, vals))
 
@@ -814,12 +850,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def tan_(self) -> Self:
         """Computes the :func:`~torch.tan` value of each element of the TensorDict in-place."""
-        _foreach("tan_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("tan_", vals)
         return self
 
     def tanh(self) -> Self:
         """Computes the :func:`~torch.tanh` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("tanh", vals)
         items = dict(zip(keys, vals))
 
@@ -837,12 +877,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def tanh_(self) -> Self:
         """Computes the :func:`~torch.tanh` value of each element of the TensorDict in-place."""
-        _foreach("tanh_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("tanh_", vals)
         return self
 
     def trunc(self) -> Self:
         """Computes the :func:`~torch.trunc` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("trunc", vals)
         items = dict(zip(keys, vals))
 
@@ -860,12 +904,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def trunc_(self) -> Self:
         """Computes the :func:`~torch.trunc` value of each element of the TensorDict in-place."""
-        _foreach("trunc_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("trunc_", vals)
         return self
 
     def lgamma(self) -> Self:
         """Computes the :func:`~torch.lgamma` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("lgamma", vals)
         items = dict(zip(keys, vals))
 
@@ -883,12 +931,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def lgamma_(self) -> Self:
         """Computes the :func:`~torch.lgamma` value of each element of the TensorDict in-place."""
-        _foreach("lgamma_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("lgamma_", vals)
         return self
 
     def frac(self) -> Self:
         """Computes the :func:`~torch.frac` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("frac", vals)
         items = dict(zip(keys, vals))
 
@@ -906,12 +958,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def frac_(self) -> Self:
         """Computes the :func:`~torch.frac` value of each element of the TensorDict in-place."""
-        _foreach("frac_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("frac_", vals)
         return self
 
     def expm1(self) -> Self:
         """Computes the :func:`~torch.expm1` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("expm1", vals)
         items = dict(zip(keys, vals))
 
@@ -929,12 +985,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def expm1_(self) -> Self:
         """Computes the :func:`~torch.expm1` value of each element of the TensorDict in-place."""
-        _foreach("expm1_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("expm1_", vals)
         return self
 
     def log(self) -> Self:
         """Computes the :func:`~torch.log` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("log", vals)
         items = dict(zip(keys, vals))
 
@@ -952,7 +1012,9 @@ class _PointwiseOps:
     @_write_back_inplace
     def log_(self) -> Self:
         """Computes the :func:`~torch.log` value of each element of the TensorDict in-place."""
-        _foreach("log_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("log_", vals)
         return self
 
     def softmax(self, dim: int, dtype: torch.dtype | None = None):  # noqa: D417
@@ -976,6 +1038,8 @@ class _PointwiseOps:
     def log10(self) -> Self:
         """Computes the :func:`~torch.log10` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("log10", vals)
         items = dict(zip(keys, vals))
 
@@ -993,12 +1057,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def log10_(self) -> Self:
         """Computes the :func:`~torch.log10` value of each element of the TensorDict in-place."""
-        _foreach("log10_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("log10_", vals)
         return self
 
     def log1p(self) -> Self:
         """Computes the :func:`~torch.log1p` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("log1p", vals)
         items = dict(zip(keys, vals))
 
@@ -1016,12 +1084,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def log1p_(self) -> Self:
         """Computes the :func:`~torch.log1p` value of each element of the TensorDict in-place."""
-        _foreach("log1p_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("log1p_", vals)
         return self
 
     def log2(self) -> Self:
         """Computes the :func:`~torch.log2` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("log2", vals)
         items = dict(zip(keys, vals))
 
@@ -1039,12 +1111,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def log2_(self) -> Self:
         """Computes the :func:`~torch.log2` value of each element of the TensorDict in-place."""
-        _foreach("log2_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("log2_", vals)
         return self
 
     def ceil(self) -> Self:
         """Computes the :func:`~torch.ceil` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("ceil", vals)
         items = dict(zip(keys, vals))
 
@@ -1062,12 +1138,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def ceil_(self) -> Self:
         """Computes the :func:`~torch.ceil` value of each element of the TensorDict in-place."""
-        _foreach("ceil_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("ceil_", vals)
         return self
 
     def floor(self) -> Self:
         """Computes the :func:`~torch.floor` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("floor", vals)
         items = dict(zip(keys, vals))
 
@@ -1085,12 +1165,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def floor_(self) -> Self:
         """Computes the :func:`~torch.floor` value of each element of the TensorDict in-place."""
-        _foreach("floor_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("floor_", vals)
         return self
 
     def round(self) -> Self:
         """Computes the :func:`~torch.round` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("round", vals)
         items = dict(zip(keys, vals))
 
@@ -1108,12 +1192,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def round_(self) -> Self:
         """Computes the :func:`~torch.round` value of each element of the TensorDict in-place."""
-        _foreach("round_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("round_", vals)
         return self
 
     def erf(self) -> Self:
         """Computes the :func:`~torch.erf` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("erf", vals)
         items = dict(zip(keys, vals))
 
@@ -1131,12 +1219,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def erf_(self) -> Self:
         """Computes the :func:`~torch.erf` value of each element of the TensorDict in-place."""
-        _foreach("erf_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("erf_", vals)
         return self
 
     def erfc(self) -> Self:
         """Computes the :func:`~torch.erfc` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("erfc", vals)
         items = dict(zip(keys, vals))
 
@@ -1154,12 +1246,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def erfc_(self) -> Self:
         """Computes the :func:`~torch.erfc` value of each element of the TensorDict in-place."""
-        _foreach("erfc_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("erfc_", vals)
         return self
 
     def asin(self) -> Self:
         """Computes the :func:`~torch.asin` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("asin", vals)
         items = dict(zip(keys, vals))
 
@@ -1177,12 +1273,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def asin_(self) -> Self:
         """Computes the :func:`~torch.asin` value of each element of the TensorDict in-place."""
-        _foreach("asin_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("asin_", vals)
         return self
 
     def atan(self) -> Self:
         """Computes the :func:`~torch.atan` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("atan", vals)
         items = dict(zip(keys, vals))
 
@@ -1200,12 +1300,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def atan_(self) -> Self:
         """Computes the :func:`~torch.atan` value of each element of the TensorDict in-place."""
-        _foreach("atan_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("atan_", vals)
         return self
 
     def cos(self) -> Self:
         """Computes the :func:`~torch.cos` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("cos", vals)
         items = dict(zip(keys, vals))
 
@@ -1223,12 +1327,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def cos_(self) -> Self:
         """Computes the :func:`~torch.cos` value of each element of the TensorDict in-place."""
-        _foreach("cos_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("cos_", vals)
         return self
 
     def cosh(self) -> Self:
         """Computes the :func:`~torch.cosh` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("cosh", vals)
         items = dict(zip(keys, vals))
 
@@ -1246,7 +1354,9 @@ class _PointwiseOps:
     @_write_back_inplace
     def cosh_(self) -> Self:
         """Computes the :func:`~torch.cosh` value of each element of the TensorDict in-place."""
-        _foreach("cosh_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("cosh_", vals)
         return self
 
     @_maybe_broadcast_other("bitwise_and")
@@ -1491,13 +1601,13 @@ class _PointwiseOps:
         """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(end)):
-            end_val = end._values_list(True, True)
+            end_val = _values_by_key(end, keys)
         else:
             end_val = end
         if isinstance(weight, (float, torch.Tensor)):
             weight_val = weight
         elif _is_tensor_collection(type(weight)):
-            weight_val = weight._values_list(True, True)
+            weight_val = _values_by_key(weight, keys)
         else:
             weight_val = weight
         vals = _foreach("lerp", vals, end_val, weight_val)
@@ -1521,6 +1631,8 @@ class _PointwiseOps:
         weight: TensorDictBase | torch.Tensor | float,
     ):
         """In-place version of :meth:`~.lerp`."""
+        if _mixes_lazy_stacks(self, (end, weight)):
+            return _apply_pointwise(self, Tensor.lerp_, (end, weight), inplace=True)
         # the leaves of the tensordict operands are paired by key, as in add_
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(end)):
@@ -1563,11 +1675,11 @@ class _PointwiseOps:
         """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other1)):
-            other1_val = other1._values_list(True, True)
+            other1_val = _values_by_key(other1, keys)
         else:
             other1_val = other1
         if _is_tensor_collection(type(other2)):
-            other2_val = other2._values_list(True, True)
+            other2_val = _values_by_key(other2, keys)
         else:
             other2_val = other2
         vals = _foreach("addcdiv", vals, other1_val, other2_val, value=value)
@@ -1635,11 +1747,11 @@ class _PointwiseOps:
         """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other1)):
-            other1_val = other1._values_list(True, True)
+            other1_val = _values_by_key(other1, keys)
         else:
             other1_val = other1
         if _is_tensor_collection(type(other2)):
-            other2_val = other2._values_list(True, True)
+            other2_val = _values_by_key(other2, keys)
         else:
             other2_val = other2
         vals = _foreach("addcmul", vals, other1_val, other2_val, value=value)
@@ -1710,6 +1822,7 @@ class _PointwiseOps:
 
         """
         keys, vals = self._items_list(True, True)
+        no_tensors = not vals
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
                 True, True, sorting_keys=keys, default=default
@@ -1720,6 +1833,9 @@ class _PointwiseOps:
                 keys = new_keys
         else:
             other_val = other
+        if no_tensors and not vals:
+            # No tensor in self, and default fills none in from other.
+            return self.copy()
         if alpha is not None:
             vals = _foreach("sub", vals, other_val, alpha=alpha)
         else:
@@ -1759,6 +1875,8 @@ class _PointwiseOps:
         else:
             vals = self._values_list(True, True)
             other_val = other
+        if not vals:
+            return self
         if alpha is not None:
             _foreach("sub_", vals, other_val, alpha=alpha)
         else:
@@ -1811,6 +1929,7 @@ class _PointwiseOps:
 
         """
         keys, vals = self._items_list(True, True)
+        no_tensors = not vals
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
                 True, True, sorting_keys=keys, default=default
@@ -1821,6 +1940,9 @@ class _PointwiseOps:
                 keys = new_keys
         else:
             other_val = other
+        if no_tensors and not vals:
+            # No tensor in self, and default fills none in from other.
+            return self.copy()
         if alpha is not None:
             if _is_tensor_collection(type(other)):
                 # torch.rsub(input, other, alpha=a) is torch.sub(other, input, alpha=a)
@@ -1983,6 +2105,10 @@ class _PointwiseOps:
             Inplace ``maximum`` does not support ``default`` keyword argument.
 
         """
+        if _mixes_lazy_stacks(self, (other,)):
+            return _apply_pointwise(
+                self, lambda x, y: torch.maximum(x, y, out=x), (other,), inplace=True
+            )
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
@@ -2069,6 +2195,10 @@ class _PointwiseOps:
             Inplace ``minimum`` does not support ``default`` keyword argument.
 
         """
+        if _mixes_lazy_stacks(self, (other,)):
+            return _apply_pointwise(
+                self, lambda x, y: torch.minimum(x, y, out=x), (other,), inplace=True
+            )
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
@@ -2155,6 +2285,8 @@ class _PointwiseOps:
             Inplace ``clamp_max`` does not support ``default`` keyword argument.
 
         """
+        if _mixes_lazy_stacks(self, (other,)):
+            return _apply_pointwise(self, Tensor.clamp_max_, (other,), inplace=True)
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
@@ -2257,6 +2389,8 @@ class _PointwiseOps:
             Inplace ``clamp_min`` does not support ``default`` keyword argument.
 
         """
+        if _mixes_lazy_stacks(self, (other,)):
+            return _apply_pointwise(self, Tensor.clamp_min_, (other,), inplace=True)
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
@@ -2432,6 +2566,8 @@ class _PointwiseOps:
         else:
             vals = self._values_list(True, True)
             other_val = other
+        if not vals:
+            return self
         _foreach("pow_", vals, other_val)
         return self
 
@@ -2463,6 +2599,7 @@ class _PointwiseOps:
 
         """
         keys, vals = self._items_list(True, True)
+        no_tensors = not vals
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
                 True, True, sorting_keys=keys, default=default
@@ -2473,6 +2610,9 @@ class _PointwiseOps:
                 keys = new_keys
         else:
             other_val = other
+        if no_tensors and not vals:
+            # No tensor in self, and default fills none in from other.
+            return self.copy()
         vals = _foreach("pow", vals, other_val)
         items = dict(zip(keys, vals))
 
@@ -2507,6 +2647,8 @@ class _PointwiseOps:
         else:
             vals = self._values_list(True, True)
             other_val = other
+        if not vals:
+            return self
         _foreach("div_", vals, other_val)
         return self
 
@@ -2539,6 +2681,7 @@ class _PointwiseOps:
 
         """
         keys, vals = self._items_list(True, True)
+        no_tensors = not vals
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
                 True, True, sorting_keys=keys, default=default
@@ -2549,6 +2692,9 @@ class _PointwiseOps:
                 keys = new_keys
         else:
             other_val = other
+        if no_tensors and not vals:
+            # No tensor in self, and default fills none in from other.
+            return self.copy()
         vals = _foreach("div", vals, other_val)
         items = dict(zip(keys, vals))
 
@@ -2571,12 +2717,16 @@ class _PointwiseOps:
     @_write_back_inplace
     def sqrt_(self) -> Self:
         """In-place version of :meth:`~.sqrt`."""
-        _foreach("sqrt_", self._values_list(True, True))
+        vals = self._values_list(True, True)
+        if vals:
+            _foreach("sqrt_", vals)
         return self
 
     def sqrt(self) -> Self:
         """Computes the element-wise square root of ``self``."""
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         vals = _foreach("sqrt", vals)
         items = dict(zip(keys, vals))
 
@@ -2642,6 +2792,11 @@ class _PointwiseOps:
                 otherwise yields ``other``.
             other (TensorDictBase or Scalar): value (if ``other`` is a scalar)
                 or values selected at indices where condition is ``False``.
+                On a :class:`~tensordict.LazyStackedTensorDict`, a tensor
+                ``other`` that starts with the batch shape up to the stack
+                dim is split along the stack dim, one piece per member, so
+                it must also have the stack size at the stack dim: expand it
+                to the batch shape first.
 
         Keyword Args:
             out (TensorDictBase, optional): the output ``TensorDictBase`` instance.

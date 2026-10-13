@@ -17,6 +17,7 @@ from numbers import Number
 from typing import Any, Callable, Literal, Sequence, Type, TYPE_CHECKING
 
 import torch
+from tensordict._base.unsupported import _StoreUnsupported
 from tensordict._deprecation import deprecated
 from tensordict._indexing import _as_tuple, _getitem_batch_size, convert_ellipsis_to_idx
 from tensordict._td import (
@@ -202,7 +203,7 @@ class _StoreTDKeysView(_TensorDictKeysView):
         return sum(1 for _ in self)
 
 
-class TensorDictStore(TensorDictBase):
+class TensorDictStore(_StoreUnsupported, TensorDictBase):
     """A TensorDict whose entries live on a Redis-compatible server.
 
     Supports `Redis <https://redis.io>`_, `Dragonfly <https://dragonflydb.io>`_,
@@ -304,6 +305,7 @@ class TensorDictStore(TensorDictBase):
     _masking_on_dense_copy = True
     # each read fetches the entry from the server into a new tensor
     _reads_return_copies = True
+    _rename_key_lenient = True
     # Set on the shallow copies that _clone(recurse=False) returns: they share
     # the data and the metadata keys of the store, but not its batch size.
     _is_shallow_copy = False
@@ -1805,9 +1807,8 @@ class TensorDictStore(TensorDictBase):
             return value.to_tensordict()
         return value
 
-    def rename_key_(
-        self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
-    ) -> TensorDictStore:
+    # Override: renames the keys on the server, without reading the data.
+    def _rename_key(self, old_key: NestedKey, new_key: NestedKey) -> None:
         if isinstance(old_key, str):
             old_path = self._full_key_path(old_key)
         else:
@@ -1819,9 +1820,6 @@ class TensorDictStore(TensorDictBase):
         else:
             new_key_tuple = _unravel_key_to_tuple(new_key)
             new_path = self._full_key_path(_KEY_SEP.join(new_key_tuple))
-
-        if safe and new_path in self._get_all_keys():
-            raise KeyError(f"key {new_key} already present in {type(self).__name__}.")
 
         async def _arename(old_path, new_path):
             all_keys = await self._aget_all_keys()
@@ -1857,8 +1855,8 @@ class TensorDictStore(TensorDictBase):
             if old_meta is not None:
                 self._meta_cache[new_path] = old_meta
         if not found:
-            _warn_missing_key(self, "rename_key_", old_key, stacklevel=2)
-        return self
+            # stacklevel 3: skip rename_key_
+            _warn_missing_key(self, "rename_key_", old_key, stacklevel=3)
 
     def entry_class(self, key: NestedKey) -> type:
         if isinstance(key, str):
@@ -2535,7 +2533,9 @@ class TensorDictStore(TensorDictBase):
         return self
 
     # Override: to_tensordict reads all the entries in one round trip.
-    def masked_select(self, mask):
+    def masked_select(self, mask, *, inplace=False):
+        if inplace:
+            return super().masked_select(mask, inplace=True)
         return self.to_tensordict().masked_select(mask)
 
     # ---- Pickling ----
@@ -2692,119 +2692,12 @@ class TensorDictStore(TensorDictBase):
             f"    td_id={self._td_id!r})"
         )
 
-    # ---- Delegated to TensorDict (same pattern as PersistentTensorDict) ----
-
-    # ---- Shape ops: raise NotImplementedError ----
-
-    def _view(self, *args, **kwargs):
-        raise RuntimeError(
-            f"Cannot call `view` on a {type(self).__name__}. "
-            "Call `to_tensordict()` first."
-        )
-
-    def _transpose(self, dim0, dim1):
-        raise RuntimeError(
-            f"Cannot call `transpose` on a {type(self).__name__}. "
-            "Call `to_tensordict()` first."
-        )
-
-    def _permute(self, *args, **kwargs):
-        raise RuntimeError(
-            f"Cannot call `permute` on a {type(self).__name__}. "
-            "Call `to_tensordict()` first."
-        )
-
-    def _squeeze(self, dim=None):
-        raise RuntimeError(
-            f"Cannot call `squeeze` on a {type(self).__name__}. "
-            "Call `to_tensordict()` first."
-        )
-
-    def _unsqueeze(self, dim: int):
-        raise RuntimeError(
-            f"Cannot call `unsqueeze` on a {type(self).__name__}. "
-            "Call `to_tensordict()` first."
-        )
-
-    # ---- Memory ops: not supported ----
-
-    def _memmap_(
-        self,
-        *,
-        prefix,
-        copy_existing,
-        executor,
-        futures,
-        inplace,
-        like,
-        share_non_tensor,
-        existsok,
-        robust_key,
-    ):
-        if inplace:
-            raise RuntimeError(
-                f"Cannot call memmap on a {type(self).__name__} in-place. "
-                "Call `to_tensordict()` first."
-            )
-        return self.to_tensordict()._memmap_(
-            prefix=prefix,
-            copy_existing=copy_existing,
-            executor=executor,
-            futures=futures,
-            inplace=False,
-            like=like,
-            share_non_tensor=share_non_tensor,
-            existsok=existsok,
-            robust_key=robust_key,
-        )
-
-    def make_memmap(self, key, shape, *, dtype=None, robust_key=True):
-        raise RuntimeError(
-            f"Cannot make memory-mapped tensor on a {type(self).__name__}."
-        )
-
-    def make_memmap_from_storage(
-        self, key, storage, shape, *, dtype=None, robust_key=True
-    ):
-        raise RuntimeError(
-            f"Cannot make memory-mapped tensor on a {type(self).__name__}."
-        )
-
-    def make_memmap_from_tensor(self, key, tensor, *, copy_data=True, robust_key=True):
-        raise RuntimeError(
-            f"Cannot make memory-mapped tensor on a {type(self).__name__}."
-        )
-
-    def memmap_(self, prefix=None, copy_existing=False, num_threads=0):
-        """Raises a ``RuntimeError``: a TensorDictStore cannot be memory-mapped in-place.
-
-        Use :meth:`~tensordict.TensorDictBase.memmap` to build a memory-mapped copy instead.
-
-        Args:
-            prefix (str, optional): unused.
-            copy_existing (bool, optional): unused.
-            num_threads (int, optional): unused.
-
-        See :meth:`~tensordict.TensorDictBase.memmap_`.
-        """
-        raise RuntimeError(
-            f"Cannot build a memmap TensorDict in-place from a {type(self).__name__}. "
-            "Use `td.memmap()` instead."
-        )
-
     # Override: server-side entries cannot be pinned.
     def pin_memory(self, *args, **kwargs):
         raise RuntimeError(
             f"Cannot pin memory of a {type(self).__name__}. "
             "Call `to_tensordict()` before making this call."
         )
-
-    def _add_batch_dim(self, *, in_dim, vmap_level):
-        raise RuntimeError(f"{type(self).__name__} cannot be used with vmap.")
-
-    def _remove_batch_dim(self, vmap_level, batch_size, out_dim): ...
-
-    def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim): ...
 
     # Override: not supported: it would read the store.
     def _select(self, *keys, inplace=False, strict=True, set_shared=True):
@@ -2848,19 +2741,6 @@ class TensorDictStore(TensorDictBase):
                 f"Cannot call unflatten_keys in_place with a {type(self).__name__}."
             )
         return self.to_tensordict().unflatten_keys(separator=separator)
-
-    _load_memmap = TensorDict._load_memmap
-
-    def _set_non_tensor(self, key: NestedKey, value: Any):
-        raise NotImplementedError(
-            f"set_non_tensor is not compatible with the tensordict type {type(self).__name__}."
-        )
-
-    def _stack_onto_(self, list_item, dim):
-        raise RuntimeError(
-            f"Cannot call _stack_onto_ on a {type(self).__name__}. "
-            "Call `to_tensordict()` first."
-        )
 
 
 _register_tensor_class(TensorDictStore)

@@ -131,7 +131,8 @@ class CudaGraphModule:
         - Tensor and tensordict arguments can change between calls, if their device and shape stay the same.
           Arguments that are not tensors (a ``float``, a ``str``) must not change after the capture. If the
           function takes tensors, a changed value raises a ``ValueError``. If it takes a tensordict, the replay uses
-          the captured value and ignores the new one, without an error (pytorch/tensordict#2075).
+          the captured value, ignores the new one and emits a ``FutureWarning``. Starting with TensorDict 0.17, the
+          default will change to raising a ``ValueError`` there too (pytorch/tensordict#2075).
           The keyword arguments of a tensordict module are its ``in_keys`` (see :func:`~tensordict.nn.dispatch`)
           and ``tensordict_out``.
 
@@ -276,6 +277,8 @@ class CudaGraphModule:
                     # during capture (an output written under an input key), so
                     # ``self._tensordict`` is not a safe update target. Only the
                     # capture-time input leaves are copied; extra keys are ignored.
+                    if args or kwargs or self._graph_args:
+                        self._warn_if_args_changed(args, kwargs)
                     if tensordict.batch_size != self._graph_batch_size:
                         raise ValueError(
                             f"{self.__class__.__name__} was captured with batch_size="
@@ -365,6 +368,9 @@ class CudaGraphModule:
                         )
 
                     _tree_map(self._check_non_tensor, (args, kwargs))
+                    # The replay reads the captured arguments: keep them to
+                    # warn when a later call passes others.
+                    self._graph_args = _tree_leaves((args, kwargs))
 
                     torch.cuda.synchronize(self.device)
                     kwargs = kwargs.copy()
@@ -429,6 +435,10 @@ class CudaGraphModule:
                                 filter_empty=True,
                             )
                     return this_out
+
+            # The frames between the warning and the user's call: this method,
+            # ``_call``, the ``dispatch`` wrapper if there is one, ``__call__``.
+            self._args_warning_stacklevel = 5 if hasattr(_call, "__wrapped__") else 4
 
         else:
 
@@ -529,6 +539,33 @@ class CudaGraphModule:
                 f"{self.__class__.__name__} was captured with the entry {key!r} of "
                 f"shape {captured_shape} but got shape {shape}. CUDA graphs replay "
                 "fixed shapes."
+            )
+
+    def _warn_if_args_changed(self, args, kwargs):
+        # Compares the leaves, as the replay of a function that takes tensors
+        # does in ``_maybe_copy_onto_``.
+        leaves = _tree_leaves((args, kwargs))
+        changed = len(leaves) != len(self._graph_args)
+        for leaf, graph_leaf in zip(leaves, self._graph_args):
+            if changed:
+                break
+            if leaf is graph_leaf or is_tensor_collection(graph_leaf):
+                continue
+            try:
+                changed = bool(leaf != graph_leaf)
+            except Exception:
+                changed = True
+        if changed:
+            warnings.warn(
+                f"{type(self).__name__} was captured with other non-tensor "
+                "arguments than this call's. The replay ignores them and uses "
+                "the captured values. Starting with TensorDict 0.17, the "
+                "default will change to raising a ValueError, as for a "
+                "function that takes tensors. Pass the values that change as "
+                "entries of the tensordict, or use one CudaGraphModule per "
+                "value (pytorch/tensordict#2075).",
+                FutureWarning,
+                stacklevel=self._args_warning_stacklevel,
             )
 
     @staticmethod
