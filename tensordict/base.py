@@ -40,6 +40,7 @@ from typing import (
 
 import numpy as np
 import torch
+from tensordict._base.unsupported import _unsupported
 from tensordict._contextlib import LAST_OP_MAPS
 from tensordict._deprecation import (
     deprecated,
@@ -77,6 +78,7 @@ from tensordict.utils import (
     _LOCK_ERROR,
     _lock_warn,
     _maybe_correct_neg_dim,
+    _mismatch_keys,
     _pass_through,
     _pass_through_cls,
     _proc_init,
@@ -310,6 +312,21 @@ class _RecordDeviceTransfer:
 _device_recorder = _RecordDeviceTransfer()
 
 
+class _InplaceShapeState(local):
+    """Per-thread state of the in-place shape ops.
+
+    ``nested`` is ``True`` while ``_inplace_rebind_leaves`` runs the op on a
+    nested tensordict. The top-level call has then checked the whole tree with
+    ``_raise_if_holds_lazy_stack``, so the nested calls skip that walk.
+    """
+
+    def __init__(self):
+        self.nested = False
+
+
+_inplace_shape_state = _InplaceShapeState()
+
+
 def _holds_its_tensors(td: TensorDictBase) -> bool:
     """Returns whether ``td`` reads its entries from a ``TensorDict``, which holds its tensors.
 
@@ -356,10 +373,58 @@ def _holds_leaves_of(td: TensorDictBase, other: TensorDictBase) -> bool:
     return True
 
 
+def _mixes_lazy_stacks(td: TensorDictBase, others: tuple) -> bool:
+    """Returns whether some of ``td`` and the tensordicts in ``others`` are lazy stacks and some are not.
+
+    The pointwise ops flatten a lazy stack into one key per member, such as
+    ``("0", "a")``, which a dense operand does not have (#1932).
+    """
+    # a cheap filter first: lazy stacks set _lazy, numbers and tensors do not have it
+    lazy = td._lazy
+    for other in others:
+        lazy = lazy or getattr(type(other), "_lazy", False)
+    if not lazy:
+        return False
+    from tensordict._lazy import LazyStackedTensorDict
+
+    is_stack = isinstance(td, LazyStackedTensorDict)
+    return any(
+        isinstance(other, TensorDictBase)
+        and isinstance(other, LazyStackedTensorDict) is not is_stack
+        for other in others
+    )
+
+
+def _apply_pointwise(
+    td: TensorDictBase, fn: Callable, others: tuple, inplace: bool
+) -> TensorDictBase:
+    """Computes ``fn(leaf, *others)`` leaf by leaf, pairing the leaves of the tensordicts in ``others`` by key."""
+    is_td = [isinstance(other, TensorDictBase) for other in others]
+
+    def leaf_fn(x, *leaves):
+        leaves = iter(leaves)
+        return fn(
+            x, *[next(leaves) if flag else other for flag, other in zip(is_td, others)]
+        )
+
+    tds = [other for flag, other in zip(is_td, others) if flag]
+    if inplace:
+        return td.apply_(leaf_fn, *tds)
+    # apply ignores the keys that only the others have; the dense ops raise
+    keys = set(td.keys(True, True))
+    for other in tds:
+        other_keys = set(other.keys(True, True))
+        if other_keys != keys:
+            _mismatch_keys(keys, other_keys)
+    return td.apply(leaf_fn, *tds, propagate_lock=True)
+
+
 def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Callable]:
     """Ensures that elementwise ops are broadcast when an nd tensor is passed."""
     # add_, mul_, ... are in-place; __eq__, __lt__, ... also end with "_".
     inplace = op.endswith("_") and not op.endswith("__")
+    # The comparisons pair a lazy stack with a dense operand by key already
+    pairs_by_apply = op == "__mod__" or not op.startswith("__")
     # torch.Tensor has no rsub method: call torch.rsub on the leaves instead.
     torch_op = None if hasattr(torch.Tensor, op) else getattr(torch, op)
 
@@ -384,6 +449,19 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     need_broadcast = True
                     break
             if not need_broadcast:
+                if (
+                    pairs_by_apply
+                    and kwargs.get("default") is None
+                    and _mixes_lazy_stacks(self, others)
+                ):
+                    # alpha=None and default=None are the defaults of the ops
+                    kwargs = {k: v for k, v in kwargs.items() if v is not None}
+                    return _apply_pointwise(
+                        self,
+                        lambda x, *xs: leaf_op(x, *xs, *args, **kwargs),
+                        others,
+                        inplace,
+                    )
                 return func(self, *others, *args, **kwargs)
             others_map = []
             shape = self.shape
@@ -769,6 +847,31 @@ def _default_is_leaf(cls: Type) -> bool:
     return not _is_tensor_collection(cls) or getattr(cls, "_pass_through", False)
 
 
+def _flatten_keys_leaves(
+    td: TensorCollection, is_leaf: Callable[[Type], bool]
+) -> list[tuple[NestedKey, Any]]:
+    """Returns the ``(key, value)`` pairs that ``flatten_keys`` keeps.
+
+    Unlike ``items(True, True, is_leaf)``, a tensor collection whose class
+    ``is_leaf`` accepts is kept whole: its entries are not listed.
+    """
+    result = []
+    for key, val in td.items():
+        cls = type(val)
+        if is_leaf(cls):
+            result.append(((key,), val))
+        elif (
+            _is_tensor_collection(cls)
+            and not is_non_tensor(cls)
+            and not _pass_through(val)
+        ):
+            result.extend(
+                ((key, *subkey), subval)
+                for subkey, subval in _flatten_keys_leaves(val, is_leaf)
+            )
+    return result
+
+
 def _is_leaf_nontensor(cls: Type) -> bool:
     """Returns ``True`` if a type is not a tensor collection (tensordict or tensorclass) or is a non-tensor.
 
@@ -832,6 +935,16 @@ _NESTED_TENSORS_AS_LISTS = _NestedTensorsAsLists()
 
 _NESTED_TENSORS_AS_LISTS_NONTENSOR = _NestedTensorsAsListsNonTensor()
 
+# The is_leaf functions that accept no tensor collection with entries: for
+# them, items(True, True, is_leaf) lists the leaves that flatten_keys keeps.
+_IS_LEAF_WITHOUT_NODES = (
+    _default_is_leaf,
+    _NESTED_TENSORS_AS_LISTS,
+    _NESTED_TENSORS_AS_LISTS_NONTENSOR,
+    _is_leaf_nontensor,
+    _is_non_tensor,
+)
+
 
 # Set while an in-place method runs on a tensordict whose file is opened
 # read-only, so that the nested calls it makes do not warn again.
@@ -856,6 +969,23 @@ def _warn_read_only(method: str) -> None:
         + " From then on, the call raises. Open the file with mode='r+' to "
         "write the result, or call to_tensordict() first to change a copy in "
         "memory.",
+        FutureWarning,
+        stacklevel=stacklevel,
+    )
+
+
+def _warn_scalar_over_non_tensor(key: str, value: bool | int | float) -> None:
+    """Warns that ``value``, written over the non-tensor entry ``key``, becomes a tensor today."""
+    # point to the first frame outside tensordict: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    warnings.warn(
+        f"The {type(value).__name__} written over the NonTensorData entry "
+        f"{key!r} is stored as a 0-d tensor today. Starting with TensorDict "
+        "0.17, the default will change to storing it as NonTensorData, like "
+        "the entry it replaces. Write torch.tensor(value) to keep the tensor, "
+        "or NonTensorData(value) to keep the non-tensor entry now.",
         FutureWarning,
         stacklevel=stacklevel,
     )
@@ -1051,7 +1181,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     _safe: bool = False
     _lazy: bool = False
     _inplace_set: bool = False
-    is_meta: bool = False
     _is_locked: bool = False
     _is_shared: bool = False
     _is_memmap: bool = False
@@ -1079,6 +1208,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # as for an h5 or zarr file or a store. The in-place methods then write
     # their results back (see _write_back_inplace and _write_back).
     _reads_return_copies = False
+    # Whether a sub-tensordict read with _get_str is a new TensorDict filled
+    # from the stored data, as in the lazy stores. update() then writes the
+    # leaves it merges into the sub-tensordict back (see _update_write_back).
+    _nested_reads_return_copies = False
     # Set by PersistentTensorDict and the stores, whose rename_key_ did not
     # check the lock or the type of the old key before 0.15: until 0.17 they
     # rename in a locked tensordict with a warning, and pass an old key that is
@@ -1096,7 +1229,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return TensorDict._new_unsafe(*args, **kwargs)
 
     def __bool__(self) -> bool:
-        raise RuntimeError("Converting a tensordict to boolean value is not permitted")
+        raise RuntimeError(
+            "Converting a tensordict to boolean value is not permitted. "
+            "Use len(td.keys()) to test for keys, td.is_empty() to test for "
+            "leaves, or (a == b).all() / .any() to reduce a comparison."
+        )
 
     def __repr__(self) -> str:
         try:
@@ -2565,6 +2702,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def is_cpu(self):
         return self.device is not None and self.device.type == "cpu"
 
+    @property
+    def is_meta(self) -> bool:
+        return self.device is not None and self.device.type == "meta"
+
     def share_memory_(self) -> Self:
         """Places all the tensors in shared memory.
 
@@ -2613,7 +2754,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             f"The tensordict has no saved path (memmap={self.is_memmap()}, path={self._memmap_prefix})."
         )
 
-    @abc.abstractmethod
     def make_memmap(
         self,
         key: NestedKey,
@@ -2646,9 +2786,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             A new memory mapped tensor.
 
         """
-        raise NotImplementedError
+        raise RuntimeError(
+            _unsupported(
+                self, "make_memmap", "Only a memory-mapped TensorDict supports it."
+            )
+        )
 
-    @abc.abstractmethod
     def make_memmap_from_storage(
         self,
         key: NestedKey,
@@ -2687,9 +2830,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             A new memory mapped tensor with the given storage.
 
         """
-        raise NotImplementedError
+        raise RuntimeError(
+            _unsupported(
+                self,
+                "make_memmap_from_storage",
+                "Only a memory-mapped TensorDict supports it.",
+            )
+        )
 
-    @abc.abstractmethod
     def make_memmap_from_tensor(
         self,
         key: NestedKey,
@@ -2723,22 +2871,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             A new memory mapped tensor with the given storage.
 
         """
-        raise NotImplementedError
-
-    @classmethod
-    @abc.abstractmethod
-    def _load_memmap(
-        cls,
-        prefix: Path,
-        metadata: dict,
-        device: torch.device | None = None,
-        *,
-        robust_key,
-        out=None,
-        allow_pickle: bool | None = None,
-        mode: str | None = None,
-    ):
-        raise NotImplementedError
+        raise RuntimeError(
+            _unsupported(
+                self,
+                "make_memmap_from_tensor",
+                "Only a memory-mapped TensorDict supports it.",
+            )
+        )
 
     # Key functionality: set, get, set_, set_at_, update, update_
     @abc.abstractmethod
@@ -2778,6 +2917,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         leading dimensions of the value must match :attr:`~.batch_size`.
         Arrays and numbers are converted to tensors. Strings and other
         objects are stored as :class:`~tensordict.NonTensorData`.
+
+        A Python ``bool``, ``int`` or ``float`` written over an existing
+        :class:`~tensordict.NonTensorData` entry is stored as a 0-d tensor,
+        and the write emits a :class:`FutureWarning`. Starting with
+        TensorDict 0.17, the default will change to storing it as
+        :class:`~tensordict.NonTensorData`, like the entry it replaces.
 
         Args:
             key (NestedKey): the key to set: a string, or a tuple of strings
@@ -3566,6 +3711,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                             update_batch_size=update_batch_size,
                             ignore_lock=ignore_lock,
                         )
+                        if self._nested_reads_return_copies:
+                            self._update_write_back(
+                                firstkey,
+                                target,
+                                subkey,
+                                value,
+                                sub_keys_to_update,
+                                is_leaf=is_leaf,
+                                inplace=inplace,
+                                non_blocking=non_blocking,
+                            )
                         continue
                     elif isinstance(value, (dict,)) or _is_tensor_collection(
                         type(value)
@@ -3610,6 +3766,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                                 update_batch_size=update_batch_size,
                                 ignore_lock=ignore_lock,
                             )
+                            if self._nested_reads_return_copies:
+                                self._update_write_back(
+                                    firstkey,
+                                    target,
+                                    (),
+                                    value,
+                                    sub_keys_to_update,
+                                    is_leaf=is_leaf,
+                                    inplace=inplace,
+                                    non_blocking=non_blocking,
+                                )
                         continue
                 # A tensor collection may still be a leaf so we need to duplicate the logic here
                 if (
@@ -3652,6 +3819,44 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # self.batch_size = ()
             self.auto_batch_size_(bd, keep_compliant_size=True)
         return self
+
+    def _update_write_back(
+        self,
+        firstkey,
+        target,
+        subkey,
+        value,
+        keys_to_update,
+        *,
+        is_leaf,
+        inplace,
+        non_blocking,
+    ):
+        """Writes the leaves that update() merged into the copy ``target`` back to self.
+
+        ``target`` is a copy of ``self[firstkey]`` and ``value`` was merged
+        into it at ``subkey``. Only the leaves of ``value`` are written, so the
+        other leaves of ``target``, which may have been read with the shape of
+        the first element of a stack, are left as they are.
+        """
+        if not _is_tensor_collection(type(value)):
+            from tensordict._td import TensorDict
+
+            value = TensorDict(value, batch_size=[])
+        keys_to_update = [_unravel_key_to_tuple(k) for k in keys_to_update or ()]
+        for key in value.keys(True, True, is_leaf=is_leaf):
+            key = (*subkey, *_unravel_key_to_tuple(key))
+            if keys_to_update and not any(key[: len(k)] == k for k in keys_to_update):
+                continue
+            full_key = (firstkey, *key)
+            self._set_tuple(
+                full_key,
+                target._get_tuple(key, NO_DEFAULT),
+                # a locked tensordict takes no new keys, even in place
+                inplace=inplace and (not self.is_locked or full_key in self.keys(True)),
+                validated=True,
+                non_blocking=non_blocking,
+            )
 
     def update_(
         self,
@@ -3789,13 +3994,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
                 # _items_list leaves out the non-tensor leaves: copy them below.
                 # Like the tensor leaves above, keys missing in self are skipped.
-                # copy_ raises for a locked dest (#2288) and between a
-                # NonTensorData and a NonTensorStack: these leaves are skipped too.
+                # copy_ raises between a NonTensorData and a NonTensorStack, and
+                # for most types in a shared or memmapped dest: these leaves are
+                # skipped too.
                 def inplace_update(name, source, dest):
                     if (
                         _is_non_tensor(type(source))
                         and _is_non_tensor(type(dest))
-                        and not dest.is_locked
+                        and not (dest._is_shared or dest._is_memmap)
                         and isinstance(source, NonTensorStack)
                         == isinstance(dest, NonTensorStack)
                     ):
@@ -4652,7 +4858,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return value
 
     @property
-    @_cache_while_locked  # noqa: B019
     def sorted_keys(self) -> list[NestedKey]:
         """Returns the keys sorted in alphabetical order.
 
@@ -4662,7 +4867,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         is unlocked for faster execution.
 
         """
-        return sorted(self.keys())
+        return list(self._sorted_keys())
+
+    @_cache_while_locked  # noqa: B019
+    def _sorted_keys(self) -> tuple[NestedKey, ...]:
+        # The lock cache stores a tuple so that sorted_keys can return a new
+        # list: a caller that changes that list cannot change the cache.
+        return tuple(sorted(self.keys()))
 
     def _transform_keys(self, key_transform: Callable[[NestedKey], NestedKey]) -> Self:
         """Transform all keys using the provided function.
@@ -5740,7 +5951,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     )
                 continue
             if _is_tensor_collection(type(leaf)):
-                nested_fn(leaf)
+                nested = _inplace_shape_state.nested
+                _inplace_shape_state.nested = True
+                try:
+                    nested_fn(leaf)
+                finally:
+                    _inplace_shape_state.nested = nested
                 continue
             new_leaf = leaf_fn(leaf)
             del leaf
@@ -5750,6 +5966,53 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         ):
             self._change_batch_size(torch.Size(new_batch_size))
         return self
+
+    def _raise_if_holds_lazy_stack(
+        self, op_name: str, prefix: tuple[str, ...] = ()
+    ) -> None:
+        """Raise if any nested entry is lazy, before an in-place shape op.
+
+        ``_inplace_rebind_leaves`` rewrites the leaves in key order, and the
+        ``LazyStackedTensorDict`` (and ``NonTensorStack``) versions of
+        ``reshape``, ``flatten``, ``unflatten``, ``repeat``,
+        ``repeat_interleave`` and ``gather`` refuse ``inplace=True``. Finding a
+        lazy stack halfway through would leave the earlier leaves rewritten
+        while ``batch_size`` is unchanged, so the whole tree is checked first.
+        The check tests ``_lazy``, so it also catches ``_SubTensorDict``, which
+        refuses these ops too. The legacy lazy views (``_CustomOpTensorDict``)
+        refuse ``flatten``, ``unflatten``, ``repeat`` and ``gather`` but not
+        ``reshape`` and ``repeat_interleave``, so the check lets them through
+        for those two.
+        The calls on nested tensordicts skip the walk, which the top-level
+        call has done.
+        """
+        if not prefix and _inplace_shape_state.nested:
+            return
+        for key, value in self.items():
+            cls = type(value)
+            if cls is Tensor:
+                continue
+            if not isinstance(value, TensorDictBase):
+                if not _is_tensorclass(cls) or _is_non_tensor(cls):
+                    continue
+                value = value._tensordict
+            nested_key = prefix + (key,)
+            if value._lazy:
+                from tensordict._lazy import _CustomOpTensorDict
+
+                if not (
+                    op_name in ("reshape", "repeat_interleave")
+                    and isinstance(value, _CustomOpTensorDict)
+                ):
+                    raise NotImplementedError(
+                        f"{op_name}(inplace=True) is not supported on a tensordict "
+                        f"that holds a lazy tensordict (such as a "
+                        f"LazyStackedTensorDict or a NonTensorStack); found a "
+                        f"{type(value).__name__} at key "
+                        f"{nested_key[0] if len(nested_key) == 1 else nested_key!r}. "
+                        f"Use inplace=False instead."
+                    )
+            value._raise_if_holds_lazy_stack(op_name, nested_key)
 
     def map(
         self,
@@ -6262,7 +6525,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         """
         keys, vals = self._items_list(True, True, collapse=True)
-        vals = _foreach("norm", vals, dtype=dtype)
+        if vals:
+            vals = _foreach("norm", vals, dtype=dtype)
         items = dict(zip(keys, vals))
 
         def get(name, val):
@@ -7197,9 +7461,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def _flatten_keys_outplace(self, separator, is_leaf):
         if is_leaf is None:
             is_leaf = _is_leaf_nontensor
-        all_leaves_all_vals = zip(
-            *self.items(include_nested=True, leaves_only=True, is_leaf=is_leaf)
-        )
+        if is_leaf in _IS_LEAF_WITHOUT_NODES:
+            # items() lists the same leaves, faster
+            leaves = self.items(include_nested=True, leaves_only=True, is_leaf=is_leaf)
+        else:
+            leaves = _flatten_keys_leaves(self, is_leaf)
+        all_leaves_all_vals = zip(*leaves)
         try:
             all_leaves, all_vals = all_leaves_all_vals
         except ValueError:
@@ -7245,10 +7512,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def _flatten_keys_inplace(self, separator, is_leaf):
         if is_leaf is None:
             is_leaf = _is_leaf_nontensor
-        all_leaves = [
-            _unravel_key_to_tuple(key)
-            for key in self.keys(include_nested=True, leaves_only=True, is_leaf=is_leaf)
-        ]
+        if is_leaf in _IS_LEAF_WITHOUT_NODES:
+            # keys() lists the same leaves, faster
+            leaves = self.keys(include_nested=True, leaves_only=True, is_leaf=is_leaf)
+        else:
+            leaves = (key for key, _ in _flatten_keys_leaves(self, is_leaf))
+        all_leaves = [_unravel_key_to_tuple(key) for key in leaves]
         all_leaves_flat = [separator.join(key) for key in all_leaves]
         if len(set(all_leaves_flat)) < len(set(all_leaves)):
             # find duplicates
@@ -7269,9 +7538,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self.rename_key_(leaf, leaf_flat)
             if len(leaf) == 1:
                 root_keys.discard(leaf[0])
-        # with a custom is_leaf, a sub-tensordict can be a leaf and still have
-        # leaves of its own; those were moved out, so remove it as well
-        root_keys.update(leaf[0] for leaf in all_leaves if len(leaf) > 1)
         self.exclude(*root_keys, inplace=True)
         return self
 
@@ -7937,12 +8203,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         def _is_attrs_leaf(cls):
             return issubclass(cls, TensorAttrs) or _default_is_leaf(cls)
 
+        # _flatten_keys_leaves keeps each TensorAttrs whole; items() would also
+        # search it for entries
         spec: dict = {}
-        for key, val in attrs_td.items(
-            include_nested=True, leaves_only=True, is_leaf=_is_attrs_leaf
-        ):
+        for key, val in _flatten_keys_leaves(attrs_td, _is_attrs_leaf):
             if isinstance(val, TensorAttrs):
-                spec[key] = val
+                spec[unravel_key(key)] = val
 
         # D2H (device-to-host) is the only transfer direction that needs an explicit
         # sync after an async copy: host memory is outside the source device's stream

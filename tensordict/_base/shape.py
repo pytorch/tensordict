@@ -31,6 +31,7 @@ from tensordict.utils import (
     _is_unbatched,
     _maybe_correct_neg_dim,
     _resolve_expand_shape,
+    _warn_dim_past_batch_dims,
     _zip_strict,
     is_non_tensor,
     lazy_legacy,
@@ -524,9 +525,10 @@ class _ShapeOps:
             return tensor.reshape((*shape, *tensor.shape[batch_dims:]))
 
         if inplace:
+            self._raise_if_holds_lazy_stack("reshape")
 
             def nested_fn(nested):
-                nested.reshape(shape, inplace=True)
+                nested.reshape((*shape, *nested.batch_size[batch_dims:]), inplace=True)
 
             return self._inplace_rebind_leaves(_reshape, nested_fn, torch.Size(shape))
         return self._fast_apply(
@@ -552,7 +554,9 @@ class _ShapeOps:
             repeats (torch.Tensor or int): The number of repetitions for each element. `repeats` is broadcast to fit
                 the shape of the given axis.
             dim (int, optional): The dimension along which to repeat values. By default, use the flattened input
-                array, and return a flat output array.
+                array, and return a flat output array. A ``dim`` past the batch dims warns, and is used on the
+                dims of the leaves. Starting with TensorDict 0.17, the default will change to raising an
+                ``IndexError``, as for a tensor.
 
         Keyword Args:
             output_size (int, optional): Total output size for the given axis (e.g. sum of repeats). If given, it
@@ -620,6 +624,8 @@ class _ShapeOps:
             raise ValueError(
                 f"dim {dim} is out of range for tensordict with shape {self.shape}."
             )
+        if dim_corrected >= self.ndim:
+            _warn_dim_past_batch_dims("repeat_interleave")
         new_batch_size = []
         for i, s in enumerate(self.batch_size):
             if i == dim_corrected:
@@ -645,6 +651,7 @@ class _ShapeOps:
             )
 
         if inplace:
+            self._raise_if_holds_lazy_stack("repeat_interleave")
 
             def nested_fn(nested):
                 nested.repeat_interleave(
@@ -738,6 +745,7 @@ class _ShapeOps:
                     "repeat(inplace=True) is not supported on LazyStackedTensorDict; "
                     "call .to_tensordict() first or use inplace=False."
                 )
+            self._raise_if_holds_lazy_stack("repeat")
             new_batch_size = torch.Size(
                 [s * r for s, r in zip(self.batch_size, repeats)]
             )
@@ -747,7 +755,9 @@ class _ShapeOps:
                 return leaf.repeat(*repeats, *((1,) * (leaf.ndim - ndim)))
 
             def nested_fn(nested):
-                nested.repeat(*repeats, inplace=True)
+                nested.repeat(
+                    *repeats, *((1,) * (nested.batch_dims - ndim)), inplace=True
+                )
 
             return self._inplace_rebind_leaves(leaf_fn, nested_fn, new_batch_size)
         return self._repeat(*repeats)
@@ -1122,6 +1132,12 @@ class _ShapeOps:
 
         Returns a list of ``TensorDict`` instances with the view of split chunks of items.
 
+        On a :class:`~tensordict.LazyStackedTensorDict`, sizes along the stack
+        dim that are negative or do not add up to the stack size emit a
+        :class:`FutureWarning`, and the pieces miss members or have a wrong
+        batch size. Starting with TensorDict 0.17, the default will change to
+        raising a ``RuntimeError``, as ``TensorDict.split`` does.
+
         Args:
             split_size (int or List(int)): size of a single chunk or list of sizes for each chunk.
             dim (int): dimension along which to split the tensor.
@@ -1145,7 +1161,7 @@ class _ShapeOps:
         dim = _maybe_correct_neg_dim(dim, batch_size)
         max_size = batch_size[dim]
         if isinstance(split_size, int):
-            if split_size <= 0:
+            if split_size < 0 or (split_size == 0 and max_size != 0):
                 raise ValueError(
                     f"TensorDict.split: split_size must be positive, got {split_size}."
                 )
@@ -1163,6 +1179,9 @@ class _ShapeOps:
             }
         elif isinstance(split_size, (list, tuple)):
             if len(split_size) == 0:
+                if max_size == 0:
+                    # torch.split returns no pieces along a zero-size dim
+                    return ()
                 raise RuntimeError("Insufficient number of elements in split_size.")
             if not all(isinstance(x, int) for x in split_size):
                 raise TypeError(WRONG_TYPE)
@@ -1277,6 +1296,7 @@ class _ShapeOps:
                     "gather(inplace=True) is not supported on LazyStackedTensorDict; "
                     "call .to_tensordict() first or use inplace=False."
                 )
+            self._raise_if_holds_lazy_stack("gather")
             if index.ndim != self.batch_dims:
                 raise NotImplementedError(
                     f"gather(inplace=True) requires index.ndim == self.batch_dims "
@@ -1290,18 +1310,26 @@ class _ShapeOps:
                     f"Cannot gather tensordict with shape {self.shape} along dim {dim}."
                 )
             new_batch_size = torch.Size(index.shape)
+            # as torch.gather does, keep the size of the index on the batch dims
+            # where it is smaller than the tensordict
+            target_batch_shape = list(map(min, index.shape, self.batch_size))
+
+            def expand_index(shape):
+                index_expand = index
+                while index_expand.ndim < len(shape):
+                    index_expand = index_expand.unsqueeze(-1)
+                target_shape = list(shape)
+                target_shape[: len(target_batch_shape)] = target_batch_shape
+                target_shape[dim_corrected] = index_expand.shape[dim_corrected]
+                return index_expand.expand(target_shape)
 
             def leaf_fn(leaf):
-                index_expand = index
-                while index_expand.ndim < leaf.ndim:
-                    index_expand = index_expand.unsqueeze(-1)
-                target_shape = list(leaf.shape)
-                target_shape[dim_corrected] = index_expand.shape[dim_corrected]
-                index_expand = index_expand.expand(target_shape)
-                return torch.gather(leaf, dim_corrected, index_expand)
+                return torch.gather(leaf, dim_corrected, expand_index(leaf.shape))
 
             def nested_fn(nested):
-                nested.gather(dim_corrected, index, inplace=True)
+                nested.gather(
+                    dim_corrected, expand_index(nested.batch_size), inplace=True
+                )
 
             return self._inplace_rebind_leaves(leaf_fn, nested_fn, new_batch_size)
         return torch.gather(self, dim, index, out=out)
@@ -2199,6 +2227,10 @@ class _ShapeOps:
             start_dim (int): the first dim to flatten
             end_dim (int): the last dim to flatten
 
+        A ``start_dim`` or ``end_dim`` outside the batch dims warns, and is
+        used on the dims of the leaves. Starting with TensorDict 0.17, the
+        default will change to raising an ``IndexError``, as for a tensor.
+
         Keyword Args:
             inplace (bool, optional): If ``True``, this tensordict's identity
                 and key set are preserved; each leaf is flattened one at a
@@ -2253,6 +2285,8 @@ class _ShapeOps:
             raise ValueError(
                 "The end dimension must be greater or equal to the start dim."
             )
+        if start_dim < 0 or end_dim >= self.ndim:
+            _warn_dim_past_batch_dims("flatten")
 
         def flatten(tensor):
             return torch.flatten(tensor, start_dim, end_dim)
@@ -2283,6 +2317,7 @@ class _ShapeOps:
                     "LazyStackedTensorDict; call .to_tensordict() first or use "
                     "inplace=False."
                 )
+            self._raise_if_holds_lazy_stack("flatten")
 
             def nested_fn(nested):
                 nested.flatten(start_dim, end_dim, inplace=True)
@@ -2353,6 +2388,7 @@ class _ShapeOps:
                     "LazyStackedTensorDict; call .to_tensordict() first or use "
                     "inplace=False."
                 )
+            self._raise_if_holds_lazy_stack("unflatten")
 
             def nested_fn(nested):
                 nested.unflatten(dim, unflattened_size, inplace=True)

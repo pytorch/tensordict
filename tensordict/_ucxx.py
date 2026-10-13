@@ -354,6 +354,8 @@ class TensorDictPipe:
         self._send_schema_hash: bytes | None = None
         self._recv_schema_hash: bytes | None = None
         self._recv_td: TensorDictBase | None = None
+        # Storage size and device of the last schema received.
+        self._recv_storage_spec: tuple[int, torch.device] | None = None
         self._closed = False
 
     @classmethod
@@ -494,10 +496,12 @@ class TensorDictPipe:
 
         Args:
             td: if provided and consolidated, receives into its storage
-                when its layout matches the received data. Otherwise a new
-                TensorDict is returned, so use the return value. If
-                ``None``, uses the internally cached TensorDict from the
-                previous receive (if any).
+                when its layout matches the received data. Otherwise the
+                pipe returns a new TensorDict, or on a message with the same
+                schema its own TensorDict from the previous receive, so use
+                the return value. If ``None``, uses the internally cached
+                TensorDict from the previous receive (if any). Not used when
+                the pipe has ``consolidated=False``.
 
         Keyword Args:
             device: device for storage allocation on first receive.
@@ -541,6 +545,7 @@ class TensorDictPipe:
                 effective_device = torch.device(device)
             else:
                 effective_device = torch.device(sender_device)
+            self._recv_storage_spec = (total_bytes, effective_device)
 
             if td is not None and self._can_recv_into(
                 td, total_bytes, effective_device
@@ -567,8 +572,16 @@ class TensorDictPipe:
             self._recv_td = result
             return result
 
-        # SAME_SCHEMA_FLAG: receive into existing buffer
-        recv_target = td if td is not None else self._recv_td
+        # SAME_SCHEMA_FLAG: receive into td if it has the layout of the last
+        # schema, otherwise into the buffer of the previous receive. When td
+        # is that buffer, the check cannot change the target, so skip it.
+        recv_target = self._recv_td
+        if td is not None and (
+            td is self._recv_td
+            or self._recv_storage_spec is None
+            or self._can_recv_into(td, *self._recv_storage_spec)
+        ):
+            recv_target = td
         if recv_target is None or not recv_target.is_consolidated():
             raise RuntimeError(
                 "Received same-schema flag but no consolidated TensorDict "
@@ -656,7 +669,8 @@ class TensorDictPipe:
         Args:
             td: if provided, receives into this TensorDict in-place when
                 it is consolidated and its layout matches the received data.
-                Otherwise a new TensorDict is returned, so use the return
+                Otherwise the pipe returns a new TensorDict or its own
+                TensorDict from the previous receive, so use the return
                 value.
 
         Keyword Args:

@@ -43,7 +43,7 @@ from tensordict.base import (
     NO_DEFAULT,
     Self,
 )
-from tensordict.memmap import MemoryMappedTensor
+from tensordict.memmap import _raise_if_jagged, MemoryMappedTensor
 from tensordict.utils import (
     _DTYPE_TO_STR_DTYPE,
     _encode_key_for_filesystem,
@@ -908,8 +908,23 @@ class _Serialization:
         )
 
     def is_consolidated(self):
-        """Checks if a TensorDict has a consolidated storage."""
-        return hasattr(self, "_consolidated")
+        """Checks if a TensorDict has a consolidated storage.
+
+        Returns ``False`` once :meth:`~.memmap_` moves the leaves out of the
+        consolidated storage, or once an in-place write changes a non-tensor
+        entry, as the consolidated storage and metadata no longer match the
+        content. :meth:`~.consolidate` then builds a new consolidated copy.
+        """
+        return hasattr(self, "_consolidated") and not self._consolidated.get(
+            "stale", False
+        )
+
+    def _mark_consolidated_stale(self):
+        """Marks the consolidated state of self and of its lock parents as stale."""
+        for td in (self, *(ref() for ref in self._lock_parents_weakrefs)):
+            consolidated = getattr(td, "_consolidated", None)
+            if consolidated is not None:
+                consolidated["stale"] = True
 
     def memmap_(
         self,
@@ -964,6 +979,14 @@ class _Serialization:
         Note:
             Serialising in this fashion might be slow with deeply nested tensordicts, so
             it is not recommended to call this method inside a training loop.
+
+        Note:
+            A :class:`~tensordict.PersistentTensorDict`, a
+            :class:`~tensordict.store.TensorDictStore` or a
+            :class:`~tensordict.store.LazyStackedTensorDictStore` (or one of its
+            elements) cannot be memory-mapped in-place: this method raises a
+            ``RuntimeError``. Use :meth:`~tensordict.TensorDictBase.memmap` to
+            build a memory-mapped copy instead.
         """
         prefix = Path(prefix) if prefix is not None else self._memmap_prefix
         if num_threads > 1:
@@ -1325,10 +1348,11 @@ class _Serialization:
             # we create an empty copy of self
             # This is because calling MMapTensor.from_tensor(mmap_tensor) does nothing
             # if both are in filesystem
-            def empty(x):
+            def empty(key, x):
+                _raise_if_jagged(x, key)
                 return torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
 
-            input = self.apply(empty)
+            input = self.apply(empty, named=True, nested_keys=True)
             result = input._memmap_(
                 prefix=prefix,
                 copy_existing=copy_existing,
@@ -1345,10 +1369,11 @@ class _Serialization:
                 return result
             return TensorDictFuture(futures, result)
 
-        def empty_expand(x):
+        def empty_expand(key, x):
+            _raise_if_jagged(x, key)
             return torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
 
-        input = self.apply(empty_expand)
+        input = self.apply(empty_expand, named=True, nested_keys=True)
         return input._memmap_(
             prefix=prefix,
             copy_existing=copy_existing,
@@ -1642,6 +1667,32 @@ class _Serialization:
         ):
             out._sync_all()
         return out
+
+    @classmethod
+    def _load_memmap(
+        cls,
+        prefix: Path,
+        metadata: dict,
+        device: torch.device | None = None,
+        out=None,
+        *,
+        robust_key,
+        allow_pickle: bool | None = None,
+        mode: str | None = None,
+    ):
+        # A class that has no memmap layout of its own (a store, a
+        # PersistentTensorDict, TensorDictParams) loads a TensorDict.
+        from tensordict._td import TensorDict
+
+        return TensorDict._load_memmap(
+            prefix,
+            metadata,
+            device,
+            out,
+            robust_key=robust_key,
+            allow_pickle=allow_pickle,
+            mode=mode,
+        )
 
     def load_memmap_(
         self,

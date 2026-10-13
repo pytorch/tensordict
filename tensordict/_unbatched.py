@@ -270,10 +270,9 @@ if _HAS_WRAPPER_SUBCLASS_FIX:
         An :class:`UnbatchedTensor` has these constraints:
 
         - Indexed assignment (``td[:, :2] = other``) leaves an unbatched entry
-          unchanged only if ``other`` does not have that key. If ``other``
-          has it, the batch index is applied to the unbatched payload, which
-          usually raises a shape error
-          (`#2251 <https://github.com/pytorch/tensordict/issues/2251>`_).
+          unchanged if ``other`` does not have that key. If ``other`` has it
+          with a payload of the same shape, the payload is written whole,
+          whatever the index, because the whole batch shares it.
         - :meth:`~tensordict.TensorDictBase.auto_batch_size_` ignores
           unbatched entries: the batch size comes from the other entries.
 
@@ -440,10 +439,9 @@ else:
         An :class:`UnbatchedTensor` has these constraints:
 
         - Indexed assignment (``td[:, :2] = other``) leaves an unbatched entry
-          unchanged only if ``other`` does not have that key. If ``other``
-          has it, the batch index is applied to the unbatched payload, which
-          usually raises a shape error
-          (`#2251 <https://github.com/pytorch/tensordict/issues/2251>`_).
+          unchanged if ``other`` does not have that key. If ``other`` has it
+          with a payload of the same shape, the payload is written whole,
+          whatever the index, because the whole batch shares it.
         - :meth:`~tensordict.TensorDictBase.auto_batch_size_` ignores
           unbatched entries: the batch size comes from the other entries.
 

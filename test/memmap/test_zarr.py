@@ -546,6 +546,37 @@ class TestZarrStores:
         assert td_recon["s"] == "a string"
         td_recon.close()
 
+    @pytest.mark.parametrize("named", [False, True])
+    def test_zip_store_groups_written_once(self, tmp_path, named):
+        # each group's zarr.json is written with its attributes, once
+        import zipfile
+
+        from zarr.storage import ZipStore
+
+        path = tmp_path / "s.zarr.zip"
+        td = TensorDict(
+            {"a": torch.randn(4, 3), "b": {"c": {"d": torch.randn(4, 2, 5)}}},
+            batch_size=[4],
+        )
+        td["b"].batch_size = [4, 2]
+        if named:
+            td.names = ["t"]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            store = ZipStore(str(path), mode="w")
+            td.to_zarr(store).close()
+
+        with zipfile.ZipFile(path) as zf:
+            names = zf.namelist()
+        assert len(names) == len(set(names))
+        td_recon = TensorDict.from_zarr(ZipStore(str(path), mode="r"))
+        assert td_recon.batch_size == torch.Size([4])
+        assert td_recon["b"].batch_size == torch.Size([4, 2])
+        assert td_recon["b", "c"].batch_size == torch.Size([4, 2])
+        assert td_recon.names == (["t"] if named else [None])
+        assert (td_recon["b", "c", "d"] == td["b", "c", "d"]).all()
+        td_recon.close()
+
     def test_group_kwarg(self, tmp_path):
         td = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [3])
         td.to_zarr(tmp_path / "s.zarr")

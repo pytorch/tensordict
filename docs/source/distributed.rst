@@ -574,12 +574,13 @@ send and recv with a pipe
 :meth:`~tensordict.TensorDictBase.recv` also take a ``TensorDictPipe`` instead
 of a rank, and :meth:`~tensordict.TensorDictBase.asend` and
 :meth:`~tensordict.TensorDictBase.arecv` are their async versions. With a
-pipe, ``recv`` does not always write into ``td``. On the first message, it
-writes into ``td`` and returns ``td`` if ``td`` is consolidated and has the
-layout of the sent tensordict. Otherwise it returns a new consolidated
-tensordict and leaves ``td`` unchanged
-(`#2244 <https://github.com/pytorch/tensordict/issues/2244>`_). Keep the
-return value, and receive into it:
+pipe, ``recv`` does not always write into ``td``. It writes into ``td`` and
+returns ``td`` if ``td`` is consolidated and has the layout of the sent
+tensordict. Otherwise it leaves ``td`` unchanged and returns a tensordict of
+the pipe: a new consolidated tensordict when the message brings a new schema,
+and the tensordict that received the previous message when the schema has not
+changed. A pipe made with ``consolidated=False`` never writes into ``td``.
+Keep the return value, and receive into it:
 
 .. code-block:: python
 
@@ -587,10 +588,6 @@ return value, and receive into it:
 
    td = td.recv(src=pipe)  # receiver: use the return value
    td = await td.arecv(pipe)  # the async version
-
-On the next messages, ``recv`` writes into ``td`` if ``td`` is consolidated.
-If it is not, ``recv`` raises a ``RuntimeError``: "Received same-schema flag
-but no consolidated TensorDict is available for in-place receive."
 
 Several clients: TensorDictServer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

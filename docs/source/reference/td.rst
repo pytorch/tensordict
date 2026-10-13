@@ -680,10 +680,9 @@ Locking
 ~~~~~~~
 
 A locked tensordict raises an error if you add, replace, rename, or delete
-an entry. In-place writes with ``set_`` still work, except for non-tensor
-entries (`#2288 <https://github.com/pytorch/tensordict/issues/2288>`_). ``unlock_`` also works
-in a ``with`` block: the tensordict is locked again at the end of the
-block. See :ref:`keys`.
+an entry. In-place writes with ``set_`` and ``update_`` still work, also for
+non-tensor entries. ``unlock_`` also works in a ``with`` block: the
+tensordict is locked again at the end of the block. See :ref:`keys`.
 
 .. autosummary::
     :toctree: generated/

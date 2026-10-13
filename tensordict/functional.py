@@ -102,7 +102,8 @@ def pad(
 
     Returns:
         The padded tensordict. When ``inplace=True`` this is the same object as
-        the input; otherwise a new tensordict.
+        the input; otherwise a new tensordict, or a new tensorclass of the
+        same type for a tensorclass input.
 
     Examples:
         >>> from tensordict import TensorDict, pad
@@ -134,6 +135,16 @@ def pad(
         # NonTensorStack is a LazyStackedTensorDict subclass: dispatch before
         # the lazy-stack branch so non-tensor values are preserved.
         return _pad_non_tensor(tensordict, pad_size, inplace=inplace)
+
+    if not inplace and is_tensorclass(tensordict):
+        # Pad the wrapped tensordict and rebuild the tensorclass around the
+        # result. The bound ``pad`` method is skipped: a tensorclass may
+        # override it with another signature.
+        return tensordict._from_tensordict(
+            pad(tensordict._tensordict, pad_size, value, safe=False),
+            dict(tensordict._non_tensordict),
+            safe=False,
+        )
 
     if inplace and isinstance(tensordict, LazyStackedTensorDict):
         return _pad_lazy_stack_inplace(tensordict, pad_size, value)
