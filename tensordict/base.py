@@ -1030,6 +1030,53 @@ def _warn_scalar_over_non_tensor(
     )
 
 
+# the keyword arguments of LazyStackedTensorDict.get, and those of them that
+# give the same result on a dense tensordict
+_GET_KWARGS_DENSE = frozenset(
+    ("as_padded_tensor", "padding_side", "layout", "padding_value")
+)
+_GET_KWARGS = _GET_KWARGS_DENSE | {"as_list", "as_nested_tensor"}
+
+
+def _warn_get_kwargs(
+    td: TensorDictBase, kwargs: dict[str, Any], result: Any, default: Any
+) -> None:
+    """Warns about the keyword arguments of ``get`` that ``td`` ignored, where a lazy stack does not."""
+    if not _GET_KWARGS.issuperset(kwargs):
+        message = (
+            f"{type(td).__name__}.get() ignores the unexpected keyword "
+            f"arguments {sorted(kwargs.keys() - _GET_KWARGS)} today. Starting "
+            "with TensorDict 0.17, the default will change to raising a "
+            "TypeError, as a LazyStackedTensorDict does."
+        )
+    elif (
+        isinstance(result, torch.Tensor)
+        and result is not default
+        and td.batch_dims
+        and not (kwargs.get("as_nested_tensor") and result.is_nested)
+    ):
+        if kwargs.get("as_list"):
+            name, future = "as_list", "list(tensor.unbind(0))"
+        else:
+            name, future = (
+                "as_nested_tensor",
+                "torch.nested.as_nested_tensor(list(tensor.unbind(0)), layout=layout)",
+            )
+        message = (
+            f"{type(td).__name__}.get(key, {name}=True) returns the stored "
+            "tensor today. Starting with TensorDict 0.17, the default will "
+            f"change to returning {future}, as a LazyStackedTensorDict does. "
+            f"Drop {name}=True to keep the tensor."
+        )
+    else:
+        return
+    # point to the first frame outside tensordict: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    warnings.warn(message, FutureWarning, stacklevel=stacklevel)
+
+
 def _has_lazy_stack(td: TensorDictBase) -> bool:
     """Whether ``td`` or one of its nested tensordicts is a lazy stack, which ``_apply_nest`` splits.
 
@@ -3388,6 +3435,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         .. note:: Keyword arguments can be passed to :meth:`~.get` when dealing with ragged tensors.
             See :meth:`~tensordict.LazyStackedTensorDict.get` for a complete overview.
+            A dense tensordict ignores them today and warns for ``as_list=True``,
+            ``as_nested_tensor=True`` and unknown keywords. Starting with
+            TensorDict 0.17, the default will change to returning a list or a
+            nested tensor, as a lazy stack does, and to raising a ``TypeError``
+            for an unknown keyword.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -3419,7 +3471,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             default = None
         else:
             default = NO_DEFAULT
-        return self._get_tuple(key_tuple, default=default, **kwargs)
+        result = self._get_tuple(key_tuple, default=default, **kwargs)
+        if (
+            kwargs
+            and not _GET_KWARGS_DENSE.issuperset(kwargs)
+            and (
+                kwargs.get("as_list")
+                or kwargs.get("as_nested_tensor")
+                or not _GET_KWARGS.issuperset(kwargs)
+            )
+        ):
+            _warn_get_kwargs(self, kwargs, result, default)
+        return result
 
     @abc.abstractmethod
     def _get_str(self, key, default, **kwargs):
