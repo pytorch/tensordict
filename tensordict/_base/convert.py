@@ -261,7 +261,7 @@ def _restore_module(swap, args, kwargs, out):
     """
     hooks = torch.nn.modules.module._global_parameter_registration_hooks
     memo = {"hooks": tuple(hooks.values())}
-    current = swap._to_module(*args, **kwargs, swap_dest={}, memo=memo)
+    current = swap._to_module(*args, **{**kwargs, "memo": memo}, swap_dest={})
     if not isinstance(current, dict):
         return current
     replaced = _replaced_entries(current, out, [])

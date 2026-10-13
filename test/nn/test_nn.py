@@ -5669,6 +5669,10 @@ class TestToModule:
             assert module[1].weight is params["1", "weight"]
         assert params.is_locked
         assert params._is_shared
+        # memo=None is accepted by the public to_module
+        with params.to_module(module, memo=None, preserve_module_state=False):
+            assert module[1].weight is params["1", "weight"]
+        assert module[0].weight is weight
 
     @pytest.mark.parametrize("custom_setattr", [False, True])
     def test_to_module_from_load_memmap(self, as_module, custom_setattr, tmpdir):
