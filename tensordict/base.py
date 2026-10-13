@@ -5214,7 +5214,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             if out.is_locked:
                 raise RuntimeError(_LOCK_ERROR)
             is_locked = False
-            if batch_size is not None and batch_size != out.batch_size:
+            if batch_size is not None and torch.Size(batch_size) != out.batch_size:
                 raise RuntimeError(
                     "batch_size and out.batch_size must be equal when both are provided."
                 )
@@ -5462,7 +5462,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             if out.is_locked:
                 raise RuntimeError(_LOCK_ERROR)
             is_locked = False
-            if batch_size is not None and batch_size != out.batch_size:
+            if batch_size is not None and torch.Size(batch_size) != out.batch_size:
                 raise RuntimeError(
                     "batch_size and out.batch_size must be equal when both are provided."
                 )
@@ -6208,7 +6208,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             get,
             named=True,
             nested_keys=True,
-            batch_size=[],
+            batch_size=torch.Size([]),
             propagate_lock=True,
             out=out,
         )

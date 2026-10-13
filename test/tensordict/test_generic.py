@@ -6581,6 +6581,26 @@ class TestGeneric:
         out = td.clone().lock_()
         assert td.where(mask, 0, out=out) is out
 
+    def test_apply_out_batch_size_list(self):
+        # a batch_size list equal to out.batch_size is accepted
+        td = TensorDict(a=torch.ones(3), b={"c": torch.ones(3, 2)}, batch_size=[3])
+        out = td.clone()
+        assert td.apply(lambda x: x * 2, batch_size=[3], out=out) is out
+        assert_allclose_td(out, td * 2)
+
+    def test_apply_out_batch_size_list_multithread(self):
+        td = TensorDict(a=torch.ones(3), b=torch.ones(3, 2), batch_size=[3])
+        out = td.clone()
+        result = td._fast_apply(lambda x: x * 2, batch_size=[3], out=out, num_threads=2)
+        assert result is out
+        assert_allclose_td(out, td * 2)
+
+    def test_norm_out(self):
+        td = TensorDict(a=torch.ones(3), b={"c": torch.ones(3, 2)}, batch_size=[3])
+        out = td.norm().zero_()
+        assert td.norm(out=out) is out
+        assert_allclose_td(out, td.norm())
+
     def test_zero_grad_module(self):
         x = torch.randn(3, 3)
         linear = nn.Linear(3, 4)
