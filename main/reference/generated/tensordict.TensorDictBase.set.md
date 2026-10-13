@@ -11,6 +11,12 @@ leading dimensions of the value must match [`batch_size`](tensordict.TensorDictB
 Arrays and numbers are converted to tensors. Strings and other
 objects are stored as [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData).
 
+A Python `bool`, `int` or `float` written over an existing
+[`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) entry is stored as a 0-d tensor,
+and the write emits a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning). Starting with
+TensorDict 0.17, the default will change to storing it as
+[`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData), like the entry it replaces.
+
 Parameters:
 
 - **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the key to set: a string, or a tuple of strings
