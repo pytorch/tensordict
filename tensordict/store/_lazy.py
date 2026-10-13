@@ -2286,6 +2286,65 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
             )
         return self
 
+    def update(
+        self,
+        input_dict_or_td=None,
+        clone: bool = False,
+        inplace: bool = False,
+        *,
+        non_blocking: bool = False,
+        keys_to_update: Sequence[NestedKey] | None = None,
+        is_leaf: Callable[[Type], bool] | None = None,
+        update_batch_size: bool = False,
+        ignore_lock: bool = False,
+        **kwargs,
+    ) -> Self:
+        # Override: TensorDictBase.update reads each sub-tensordict of self
+        # that the input writes into, and a sub-tensordict with a leaf whose
+        # elements differ in shape cannot be read as one tensordict. Each leaf
+        # of the input is then written under its full key, which merges the
+        # sub-tensordicts as update does.
+        try:
+            # keyword arguments: the lock check of update reads inplace and
+            # ignore_lock from them
+            return super().update(
+                input_dict_or_td,
+                clone=clone,
+                inplace=inplace,
+                non_blocking=non_blocking,
+                keys_to_update=keys_to_update,
+                is_leaf=is_leaf,
+                update_batch_size=update_batch_size,
+                ignore_lock=ignore_lock,
+                **kwargs,
+            )
+        except _HeterogeneousKeyError:
+            if is_leaf is not None or update_batch_size or ignore_lock:
+                raise
+        if keys_to_update is not None:
+            keys_to_update = [_unravel_key_to_tuple(key) for key in keys_to_update]
+        all_keys = self._get_all_keys()
+        # kwargs come last: they win on key conflict
+        for source in (input_dict_or_td, kwargs):
+            if source is None:
+                continue
+            if not is_tensor_collection(source):
+                source = TensorDict.from_dict(source, batch_dims=self.batch_dims)
+            for key, value in source.items(True, True):
+                key = _unravel_key_to_tuple(key)
+                if keys_to_update is not None and not any(
+                    key[: len(k)] == k for k in keys_to_update
+                ):
+                    continue
+                if clone:
+                    value = value.clone()
+                if inplace and _KEY_SEP.join(key) in all_keys:
+                    self.set_(key, value, non_blocking=non_blocking)
+                else:
+                    # a locked store raises here, as update does
+                    self.set(key, value, non_blocking=non_blocking)
+        return self
+
     def update_(
         self,
         input_dict_or_td=None,
