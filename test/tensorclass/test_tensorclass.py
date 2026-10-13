@@ -1467,6 +1467,17 @@ class TestTensorClass:
         ):
             data.device = torch.device("cpu")
 
+    def test_is_meta(self):
+        data = MyData(
+            X=torch.ones(3, 4, 5),
+            y=torch.zeros(3, 4, 5, dtype=torch.bool),
+            z="test_tensorclass",
+            batch_size=[3, 4],
+            device="cpu",
+        )
+        assert data.is_meta is False
+        assert data.to("meta").is_meta is True
+
     def test_disallowed_attributes(self):
         with pytest.raises(
             AttributeError,

@@ -1051,7 +1051,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     _safe: bool = False
     _lazy: bool = False
     _inplace_set: bool = False
-    is_meta: bool = False
     _is_locked: bool = False
     _is_shared: bool = False
     _is_memmap: bool = False
@@ -2559,6 +2558,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     @property
     def is_cpu(self):
         return self.device is not None and self.device.type == "cpu"
+
+    @property
+    def is_meta(self) -> bool:
+        return self.device is not None and self.device.type == "meta"
 
     def share_memory_(self) -> Self:
         """Places all the tensors in shared memory.
