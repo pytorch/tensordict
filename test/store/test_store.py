@@ -768,6 +768,33 @@ class TestTensorDictStore:
         for key in expected.keys(include_nested=True, leaves_only=True):
             torch.testing.assert_close(store_td[key], expected[key])
 
+    def test_masked_select_copy(self, store_td, monkeypatch):
+        """masked_select returns a dense copy, read in one to_tensordict call."""
+        source = TensorDict(
+            {
+                "a": torch.arange(10.0),
+                "nested": TensorDict({"d": torch.ones(10, 4)}, [10]),
+            },
+            [10],
+        )
+        store_td.update(source)
+        mask = torch.zeros(10, dtype=torch.bool)
+        mask[[1, 4, 7]] = True
+        calls = []
+        to_tensordict = TensorDictStore.to_tensordict
+
+        def counting_to_tensordict(self, *args, **kwargs):
+            calls.append(self)
+            return to_tensordict(self, *args, **kwargs)
+
+        monkeypatch.setattr(TensorDictStore, "to_tensordict", counting_to_tensordict)
+        result = store_td.masked_select(mask)
+        assert len(calls) == 1 and calls[0] is store_td
+        assert type(result) is TensorDict
+        assert (result == source.masked_select(mask)).all()
+        assert store_td.batch_size == (10,)
+        assert (store_td.to_tensordict() == source).all()
+
     def test_is_contiguous(self, store_td):
         """Redis TDs are not contiguous."""
         assert not store_td.is_contiguous()
@@ -2575,11 +2602,45 @@ class TestLazyStackedTensorDictStore:
     def test_masked_select_inplace_raises(self, store_stack):
         """masked_select(inplace=True) raises on the stack and its element views."""
         store_td, tds, lazy_td = store_stack
-        with pytest.raises(NotImplementedError, match="masked_select"):
+        with pytest.raises(
+            NotImplementedError,
+            match="masked_select.inplace=True. is not supported on "
+            "LazyStackedTensorDictStore",
+        ):
             store_td.masked_select(torch.ones(5, 4, dtype=torch.bool), inplace=True)
-        with pytest.raises(NotImplementedError, match="masked_select"):
+        with pytest.raises(
+            NotImplementedError,
+            match="masked_select.inplace=True. is not supported on "
+            "_StoreStackElementView",
+        ):
             store_td[1].masked_select(torch.ones(4, dtype=torch.bool), inplace=True)
         assert store_td.batch_size == torch.Size([5, 4])
+        # the store is still readable
+        assert (store_td.to_tensordict() == lazy_td).all()
+
+    @pytest.mark.parametrize("element", [False, True])
+    def test_masked_select_copy(self, store_stack, element, monkeypatch):
+        """masked_select returns a dense copy, read in one to_tensordict call."""
+        store_td, tds, lazy_td = store_stack
+        target, expected = (store_td[1], tds[1]) if element else (store_td, lazy_td)
+        mask = torch.zeros(target.shape, dtype=torch.bool)
+        mask[1] = True
+        mask[-1] = True
+        calls = []
+        cls = type(target)
+        to_tensordict = cls.to_tensordict
+
+        def counting_to_tensordict(self, *args, **kwargs):
+            calls.append(self)
+            return to_tensordict(self, *args, **kwargs)
+
+        monkeypatch.setattr(cls, "to_tensordict", counting_to_tensordict)
+        result = target.masked_select(mask)
+        assert len(calls) == 1 and calls[0] is target
+        assert type(result) is TensorDict
+        assert (result == expected.masked_select(mask)).all()
+        monkeypatch.undo()
+        assert (store_td.to_tensordict() == lazy_td).all()
 
     def test_view_masked_fill_(self, store_stack):
         """rltd[1].masked_fill_ fills the masked rows of element 1 only."""

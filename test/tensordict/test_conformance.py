@@ -123,6 +123,10 @@ _OPS = {
         "add(td)": lambda td: td.add(td),
         "mul(td)": lambda td: td.mul(td),
         "td == td": lambda td: td == td,
+        "td != td": lambda td: td != td,
+        "td < td": lambda td: td < td,
+        "(td > 0) | (td < 1)": lambda td: (td > 0) | (td < 1),
+        "(td > 0) ^ (td < 1)": lambda td: (td > 0) ^ (td < 1),
         "clamp(-1, 1)": lambda td: td.clamp(-1, 1),
         "abs_()": _inplace(lambda td: td.abs_()),
         "add_(1)": _inplace(lambda td: td.add_(1)),
@@ -148,6 +152,8 @@ _OPS = {
         "sum('feature')": lambda td: td.sum("feature"),
         "sum(reduce=True)": lambda td: td.sum(reduce=True),
         "amax(reduce=True)": lambda td: td.amax(reduce=True),
+        "all(0)": lambda td: td.all(0),
+        "any()": lambda td: td.any(),
     },
     "shape": {
         "reshape(-1)": lambda td: td.reshape(-1),
@@ -178,6 +184,7 @@ _OPS = {
         ),
         "torch.where(mask, td, 0)": lambda td: torch.where(_MASK, td, 0),
         "masked_fill(mask, -1)": lambda td: td.masked_fill(_MASK, -1),
+        "masked_select(mask)": lambda td: td.masked_select(_MASK),
         "masked_fill_(mask, -1)": _inplace(lambda td: td.masked_fill_(_MASK, -1)),
     },
     "apply": {

@@ -424,8 +424,6 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
     """Ensures that elementwise ops are broadcast when an nd tensor is passed."""
     # add_, mul_, ... are in-place; __eq__, __lt__, ... also end with "_".
     inplace = op.endswith("_") and not op.endswith("__")
-    # The comparisons pair a lazy stack with a dense operand by key already
-    pairs_by_apply = op == "__mod__" or not op.startswith("__")
     # torch.Tensor has no rsub method: call torch.rsub on the leaves instead.
     torch_op = None if hasattr(torch.Tensor, op) else getattr(torch, op)
 
@@ -450,11 +448,7 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     need_broadcast = True
                     break
             if not need_broadcast:
-                if (
-                    pairs_by_apply
-                    and kwargs.get("default") is None
-                    and _mixes_lazy_stacks(self, others)
-                ):
+                if kwargs.get("default") is None and _mixes_lazy_stacks(self, others):
                     # alpha=None and default=None are the defaults of the ops
                     kwargs = {k: v for k, v in kwargs.items() if v is not None}
                     return _apply_pointwise(
@@ -1243,6 +1237,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # ``to_tensordict()`` copy: the stores read it in one round trip, and on
     # all of them the result is a new, unlocked TensorDict.
     _masking_on_dense_copy: bool = False
+    # Set by the stores, on which ``masked_select`` masks a
+    # ``to_tensordict()`` copy, read in one round trip. On the views and h5
+    # files, that is slower than masking each entry.
+    _masked_select_on_dense_copy: bool = False
+    # Set by the backends on which ``masked_select(inplace=True)`` raises (the
+    # lazy stacks raise too).
+    _masked_select_inplace_unsupported: bool = False
     # Whether the tensors that items() returns are copies of the stored data,
     # as for an h5 or zarr file or a store. The in-place methods then write
     # their results back (see _write_back_inplace and _write_back).
