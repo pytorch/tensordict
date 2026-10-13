@@ -1121,6 +1121,7 @@ _POINTWISE_FUNCTIONS = (
     "isneginf",
     "isposinf",
     "isreal",
+    "lerp",
     "lgamma",
     "log",
     "log10",
