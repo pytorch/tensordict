@@ -5994,6 +5994,21 @@ class TestGeneric:
         source.unlock_()
         assert not sub.is_locked
 
+    def test_unlock_holding_subtd(self):
+        # unlock_ of a tensordict that holds a _SubTensorDict leaves the view,
+        # whose lock is its source's, alone
+        source = TensorDict(a=torch.zeros(4, 3), batch_size=[4, 3])
+        td = TensorDict(batch_size=[2])
+        td.set("s", _SubTensorDict(source, (slice(0, 2),)))
+        for locked in (False, True):
+            if locked:
+                source.lock_()
+            assert td.unlock_() is td
+            assert not td.is_locked
+            assert td.get("s").is_locked is locked
+            with pytest.raises(RuntimeError, match="Cannot lock a _SubTensorDict"):
+                td.lock_()
+
     def test_typed_unlock_in_locked_graph_raises(self):
         source = TensorDict(
             a=torch.zeros(3, 5),

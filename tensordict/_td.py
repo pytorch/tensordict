@@ -3312,13 +3312,19 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
             "Casting a sub-tensordict values to shared memory cannot be done."
         )
 
-    # Override: only the parent tensordict can be unlocked; an unlocked view
-    # has nothing to unlock.
-    def _propagate_unlock(self):
+    # Override: only the parent tensordict can be unlocked, so a raise in
+    # _propagate_unlock would also stop the unlock_ of a tensordict that
+    # holds this view.
+    @_as_context_manager("is_locked")
+    def unlock_(self) -> Self:
         if self.is_locked:
             raise RuntimeError(
                 "Cannot unlock a _SubTensorDict. Unlock the parent tensordict instead."
             )
+        return self
+
+    # Override: the lock is the source's; a view holds nothing to unlock.
+    def _propagate_unlock(self):
         return []
 
     def _remove_lock(self, lock_id):
