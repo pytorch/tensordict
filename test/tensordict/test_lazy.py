@@ -610,6 +610,27 @@ class TestLazyStackedTensorDict:
         else:
             td1.norm()
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_arithmetic_ops_broadcast_tensor(self, stack_dim):
+        # A tensor with the batch dims is split along the stack dim, as the
+        # members' leaves lack it (#2365)
+        dense = TensorDict(
+            a=torch.arange(24.0).view(2, 3, 4),
+            b=torch.arange(6.0).view(2, 3),
+            batch_size=[2, 3],
+        )
+        for other in (torch.arange(6.0).view(2, 3), torch.arange(3.0)):
+            lazy = lazy_stack(list(dense.clone().unbind(stack_dim)), stack_dim)
+            for op in ("add", "mul", "sub", "rsub"):
+                result = getattr(lazy, op)(other)
+                assert isinstance(result, LazyStackedTensorDict)
+                assert result.stack_dim == stack_dim
+                assert (result == getattr(dense, op)(other)).all(), op
+            weight = torch.full((3,), 0.5)
+            assert (lazy.lerp(other, weight) == dense.lerp(other, weight)).all()
+            assert lazy.add_(other) is lazy
+            assert (lazy == dense + other).all()
+
     def test_auto_device(self):
         # The device of a lazy stack is read from its members, so auto_device_
         # sets it on them, also when the lazy stack is nested in a tensordict.
