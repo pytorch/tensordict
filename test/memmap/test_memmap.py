@@ -959,6 +959,19 @@ class TestNestedTensor:
             assert t1.dtype == t2.dtype
             assert (t1 == t2).all()
 
+    @pytest.mark.parametrize("fn", ["empty", "zeros", "ones"])
+    @pytest.mark.parametrize("with_filename", [False, True])
+    def test_nested_default_dtype(self, fn, with_filename, tmpdir):
+        filename = str(Path(tmpdir) / "file.memmap") if with_filename else None
+        tensor = getattr(MemoryMappedTensor, fn)(self.shape, filename=filename)
+        assert type(tensor) is MemoryMappedTensor
+        assert tensor.is_nested
+        assert tensor.dtype == torch.get_default_dtype()
+        assert (tensor._nested_tensor_size() == self.shape).all()
+        if fn != "empty":
+            expected = 0 if fn == "zeros" else 1
+            assert all((t == expected).all() for t in tensor.unbind(0))
+
     @pytest.mark.parametrize("with_filename", [False, True])
     def test_from_storage(self, with_filename, tmpdir):
         if with_filename:
@@ -1046,6 +1059,60 @@ class TestNestedTensor:
         else:
             assert not path.exists()
         assert os.listdir(tmpdir) == (["data.tdz"] if existing else [])
+
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    @pytest.mark.parametrize("with_prefix", [False, True])
+    def test_memmap_td_jagged_raises(self, num_threads, with_prefix, tmpdir):
+        # https://github.com/pytorch/tensordict/issues/1924
+        lazy = TensorDict.from_list(
+            [{"tokens": torch.arange(n)} for n in (3, 5, 2)], lazy=True
+        )
+        td = lazy.densify(layout=torch.jagged)
+        prefix = tmpdir if with_prefix else None
+        with pytest.raises(NotImplementedError, match="jagged.*'tokens'"):
+            td.memmap(prefix, num_threads=num_threads)
+
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    @pytest.mark.parametrize("with_prefix", [False, True])
+    def test_memmap_td_strided_nested(self, num_threads, with_prefix, tmpdir):
+        # https://github.com/pytorch/tensordict/issues/1924
+        lazy = TensorDict.from_list(
+            [{"tokens": torch.arange(n)} for n in (3, 5, 2)], lazy=True
+        )
+        td = lazy.densify(layout=torch.strided)
+        prefix = tmpdir if with_prefix else None
+        tdmemmap = td.memmap(prefix, num_threads=num_threads)
+        if with_prefix:
+            del tdmemmap
+            gc.collect()
+            tdmemmap = TensorDict.load_memmap(tmpdir)
+        assert tdmemmap["tokens"].is_nested
+        for t1, t2 in zip(td["tokens"].unbind(0), tdmemmap["tokens"].unbind(0)):
+            assert (t1 == t2).all()
+
+    @pytest.mark.parametrize("with_filename", [False, True])
+    def test_from_tensor_jagged_raises(self, with_filename, tmpdir):
+        # https://github.com/pytorch/tensordict/issues/1924
+        tensor = torch.nested.nested_tensor(
+            [torch.arange(n) for n in (3, 5, 2)], layout=torch.jagged
+        )
+        filename = str(Path(tmpdir) / "file.memmap") if with_filename else None
+        with pytest.raises(NotImplementedError, match="jagged"):
+            MemoryMappedTensor.from_tensor(tensor, filename=filename)
+
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    @pytest.mark.parametrize("prefix", [None, "dir", "data.tdz"])
+    def test_memmap_like_td_jagged_raises(self, num_threads, prefix, tmpdir):
+        # https://github.com/pytorch/tensordict/issues/1924
+        lazy = TensorDict.from_list(
+            [{"tokens": torch.arange(n)} for n in (3, 5, 2)], lazy=True
+        )
+        td = lazy.densify(layout=torch.jagged)
+        if prefix is not None:
+            prefix = Path(tmpdir) / prefix
+        with pytest.raises(NotImplementedError, match="jagged.*'tokens'"):
+            td.memmap_like(prefix, num_threads=num_threads)
+        assert os.listdir(tmpdir) == []
 
     @pytest.mark.parametrize("fn", ["empty", "zeros", "ones"])
     def test_complex_with_handler(self, fn):

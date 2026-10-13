@@ -33,7 +33,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
 
 import torch
-from tensordict.memmap import MemoryMappedTensor
+from tensordict.memmap import _raise_if_jagged, MemoryMappedTensor
 from tensordict.utils import _zip_strict
 
 # Suffix that triggers archive mode by default in ``save``/``memmap``.
@@ -798,11 +798,12 @@ def _write_archive_from_td(
     if like and has_nested:
         # memmap_like reloads the archive with load_memmap(mode="r+"), which
         # cannot map a nested tensor: fail before anything is written
-        key = next(
-            key
+        key, value = next(
+            (key, value)
             for key, value in td.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
             if getattr(value, "is_nested", False)
         )
+        _raise_if_jagged(value, key)
         raise NotImplementedError(
             f"memmap_like does not support nested tensors in archive mode "
             f"(key {key!r} is a nested tensor). Pass a directory prefix instead."

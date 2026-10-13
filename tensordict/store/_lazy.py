@@ -19,6 +19,7 @@ from numbers import Number
 from typing import Any, Callable, Sequence, Tuple, Type
 
 import torch
+from tensordict._base.unsupported import _StoreUnsupported
 from tensordict._deprecation import deprecated
 from tensordict._indexing import _as_tuple, _getitem_batch_size, convert_ellipsis_to_idx
 from tensordict._td import (
@@ -91,7 +92,7 @@ def _empty_structure(key_paths: set[str]) -> dict:
 # ---------------------------------------------------------------------------
 
 
-class _StoreStackElementView(TensorDictBase):
+class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
     """Write-through view of one element in a :class:`LazyStackedTensorDictStore`.
 
     Returned by ``redis_lazy_stack[int]``.  All reads and writes go through
@@ -103,6 +104,8 @@ class _StoreStackElementView(TensorDictBase):
     _masking_on_dense_copy = True
     # each read fetches the entry from the server into a new tensor
     _reads_return_copies = True
+    # and each sub-tensordict is a new TensorDict
+    _nested_reads_return_copies = True
 
     def __init__(self, parent, element_idx: int):
         self._parent = parent
@@ -126,19 +129,13 @@ class _StoreStackElementView(TensorDictBase):
 
     # ---- TensorDictBase interface ----
 
-    @property
-    def batch_size(self) -> torch.Size:
-        return self._batch_size
-
-    @batch_size.setter
+    # Override: sets the batch size without checking it against the entries.
+    @TensorDictBase.batch_size.setter
     def batch_size(self, value):
         self._batch_size = torch.Size(value)
 
-    @property
-    def device(self) -> torch.device | None:
-        return self._device
-
-    @device.setter
+    # Override: the device can be set.
+    @TensorDictBase.device.setter
     def device(self, value):
         self._device = torch.device(value) if value is not None else None
 
@@ -436,9 +433,6 @@ class _StoreStackElementView(TensorDictBase):
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         raise RuntimeError("Cannot popitem from a stack element view.")
 
-    def _change_batch_size(self, new_size: torch.Size) -> None:
-        self._batch_size = new_size
-
     def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
         existing = self.get(key)
         if is_tensor_collection(existing):
@@ -499,64 +493,14 @@ class _StoreStackElementView(TensorDictBase):
     def _clone(self, recurse=True):
         return self.to_tensordict()
 
-    def _view(self, *a, **kw):
-        raise RuntimeError(f"Cannot call `view` on a {type(self).__name__}.")
-
-    def _transpose(self, dim0, dim1):
-        raise RuntimeError(f"Cannot call `transpose` on a {type(self).__name__}.")
-
-    def _permute(self, *a, **kw):
-        raise RuntimeError(f"Cannot call `permute` on a {type(self).__name__}.")
-
-    def _squeeze(self, dim=None):
-        raise RuntimeError(f"Cannot call `squeeze` on a {type(self).__name__}.")
-
-    def _unsqueeze(self, dim):
-        raise RuntimeError(f"Cannot call `unsqueeze` on a {type(self).__name__}.")
-
     # Override: one batched read of the element, where the generic split reads
     # one key at a time
     def _chunk(self, chunks, dim):
         return self.to_tensordict()._chunk(chunks, dim)
 
-    def _memmap_(self, **kw):
-        if kw["inplace"]:
-            raise RuntimeError(f"Cannot call memmap on a {type(self).__name__}.")
-        return self.to_tensordict()._memmap_(**kw)
-
-    def make_memmap(self, key, shape, *, dtype=None, robust_key=True):
-        raise RuntimeError(f"Cannot make memmap on a {type(self).__name__}.")
-
-    def make_memmap_from_storage(
-        self, key, storage, shape, *, dtype=None, robust_key=True
-    ):
-        raise RuntimeError(f"Cannot make memmap on a {type(self).__name__}.")
-
-    def make_memmap_from_tensor(self, key, tensor, *, copy_data=True, robust_key=True):
-        raise RuntimeError(f"Cannot make memmap on a {type(self).__name__}.")
-
-    def memmap_(self, prefix=None, copy_existing=False, num_threads=0):
-        """Raises a ``RuntimeError``: a stack element view cannot be memory-mapped in-place.
-
-        Args:
-            prefix (str, optional): unused.
-            copy_existing (bool, optional): unused.
-            num_threads (int, optional): unused.
-
-        See :meth:`~tensordict.TensorDictBase.memmap_`.
-        """
-        raise RuntimeError(f"Cannot call memmap_ on a {type(self).__name__}.")
-
     # Override: server-side entries cannot be pinned.
     def pin_memory(self, *a, **kw):
         raise RuntimeError(f"Cannot pin memory of a {type(self).__name__}.")
-
-    def _add_batch_dim(self, *, in_dim, vmap_level):
-        raise RuntimeError(f"{type(self).__name__} cannot be used with vmap.")
-
-    def _remove_batch_dim(self, vmap_level, batch_size, out_dim): ...
-
-    def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim): ...
 
     # Override: not supported: it would read the store.
     def _select(self, *keys, inplace=False, strict=True, set_shared=True):
@@ -586,16 +530,6 @@ class _StoreStackElementView(TensorDictBase):
     @_as_context_manager()
     def unflatten_keys(self, separator=".", inplace=False):
         return self.to_tensordict().unflatten_keys(separator=separator)
-
-    _load_memmap = TensorDict._load_memmap
-
-    def _set_non_tensor(self, key, value):
-        raise NotImplementedError(
-            f"set_non_tensor is not compatible with {type(self).__name__}."
-        )
-
-    def _stack_onto_(self, list_item, dim):
-        raise RuntimeError(f"Cannot call _stack_onto_ on a {type(self).__name__}.")
 
 
 # ---------------------------------------------------------------------------
@@ -635,7 +569,7 @@ class _LazyStackedStoreKeysView(_TensorDictKeysView):
         return sum(1 for _ in self)
 
 
-class LazyStackedTensorDictStore(TensorDictBase):
+class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
     """A lazy stack of tensordicts whose entries live on a Redis-compatible server.
 
     .. warning::
@@ -657,10 +591,11 @@ class LazyStackedTensorDictStore(TensorDictBase):
     limits" section).
 
     .. warning::
-        Writes to nested entries through :meth:`update`, :meth:`zero_`,
-        :meth:`fill_` or ``store["nested"].set_`` are dropped without an
-        error (see #2154). Write a full element instead, for example
-        ``store[1] = TensorDict(...)``.
+        ``store["nested"]`` is an in-memory copy of the nested entry: writes
+        through it, for example ``store["nested"].set_(...)`` or
+        ``store["nested"].zero_()``, change the copy only, not the store.
+        Write with the full key, ``store.set(("nested", "b"), ...)``, or with
+        :meth:`update`.
 
     Stores each leaf key as a single concatenated blob in the store,
     regardless of how many stack elements there are.  For *N* elements and
@@ -715,6 +650,8 @@ class LazyStackedTensorDictStore(TensorDictBase):
     _masking_on_dense_copy = True
     # each read fetches the entry from the server into a new tensor
     _reads_return_copies = True
+    # and each sub-tensordict is a new TensorDict
+    _nested_reads_return_copies = True
 
     def __init__(
         self,
@@ -1475,21 +1412,9 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     # ---- TensorDictBase interface ----
 
-    @property
-    def batch_size(self) -> torch.Size:
-        return self._batch_size
-
-    @batch_size.setter
-    def batch_size(self, value):
-        self._batch_size = torch.Size(value)
-
-    @property
-    def device(self) -> torch.device | None:
-        return self._device
-
-    @device.setter
-    def device(self, value):
-        self._device = torch.device(value) if value is not None else None
+    # Override: assigns batch_size and device without checks, like a stack element.
+    batch_size = _StoreStackElementView.batch_size
+    device = _StoreStackElementView.device
 
     def _rename_subtds(self, names):
         pass
@@ -2177,9 +2102,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
     def detach_(self) -> Self:
         return self
 
-    def _change_batch_size(self, new_size: torch.Size) -> None:
-        self._batch_size = new_size
-
     def _write_back(self, keys, values, method: str) -> None:
         # Override: a key whose elements differ in shape is read with the shape
         # of the first element, and writing it back would lose the others: it
@@ -2375,112 +2297,9 @@ class LazyStackedTensorDictStore(TensorDictBase):
             f"    td_id={self._td_id!r})"
         )
 
-    # ---- Delegated ops ----
-
-    # ---- Shape ops: not supported ----
-
-    def _view(self, *args, **kwargs):
-        raise RuntimeError(
-            f"Cannot call `view` on a {type(self).__name__}. "
-            "Call `to_tensordict()` first."
-        )
-
-    def _transpose(self, dim0, dim1):
-        raise RuntimeError(
-            f"Cannot call `transpose` on a {type(self).__name__}. "
-            "Call `to_tensordict()` first."
-        )
-
-    def _permute(self, *args, **kwargs):
-        raise RuntimeError(
-            f"Cannot call `permute` on a {type(self).__name__}. "
-            "Call `to_tensordict()` first."
-        )
-
-    def _squeeze(self, dim=None):
-        raise RuntimeError(
-            f"Cannot call `squeeze` on a {type(self).__name__}. "
-            "Call `to_tensordict()` first."
-        )
-
-    def _unsqueeze(self, dim: int):
-        raise RuntimeError(
-            f"Cannot call `unsqueeze` on a {type(self).__name__}. "
-            "Call `to_tensordict()` first."
-        )
-
-    # ---- Memory ops: not supported ----
-
-    def _memmap_(
-        self,
-        *,
-        prefix,
-        copy_existing,
-        executor,
-        futures,
-        inplace,
-        like,
-        share_non_tensor,
-        existsok,
-        robust_key,
-    ):
-        if inplace:
-            raise RuntimeError(
-                f"Cannot call memmap on a {type(self).__name__} in-place."
-            )
-        return self.to_tensordict()._memmap_(
-            prefix=prefix,
-            copy_existing=copy_existing,
-            executor=executor,
-            futures=futures,
-            inplace=False,
-            like=like,
-            share_non_tensor=share_non_tensor,
-            existsok=existsok,
-            robust_key=robust_key,
-        )
-
-    def make_memmap(self, key, shape, *, dtype=None, robust_key=True):
-        raise RuntimeError(
-            f"Cannot make memory-mapped tensor on a {type(self).__name__}."
-        )
-
-    def make_memmap_from_storage(
-        self, key, storage, shape, *, dtype=None, robust_key=True
-    ):
-        raise RuntimeError(
-            f"Cannot make memory-mapped tensor on a {type(self).__name__}."
-        )
-
-    def make_memmap_from_tensor(self, key, tensor, *, copy_data=True, robust_key=True):
-        raise RuntimeError(
-            f"Cannot make memory-mapped tensor on a {type(self).__name__}."
-        )
-
-    def memmap_(self, prefix=None, copy_existing=False, num_threads=0):
-        """Raises a ``RuntimeError``: a LazyStackedTensorDictStore cannot be memory-mapped in-place.
-
-        Args:
-            prefix (str, optional): unused.
-            copy_existing (bool, optional): unused.
-            num_threads (int, optional): unused.
-
-        See :meth:`~tensordict.TensorDictBase.memmap_`.
-        """
-        raise RuntimeError(
-            f"Cannot build a memmap TensorDict in-place from a {type(self).__name__}."
-        )
-
     # Override: server-side entries cannot be pinned.
     def pin_memory(self, *args, **kwargs):
         raise RuntimeError(f"Cannot pin memory of a {type(self).__name__}.")
-
-    def _add_batch_dim(self, *, in_dim, vmap_level):
-        raise RuntimeError(f"{type(self).__name__} cannot be used with vmap.")
-
-    def _remove_batch_dim(self, vmap_level, batch_size, out_dim): ...
-
-    def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim): ...
 
     # Override: not supported: it would read the store.
     def _select(self, *keys, inplace=False, strict=True, set_shared=True):
@@ -2518,16 +2337,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
                 f"Cannot call unflatten_keys in_place with a {type(self).__name__}."
             )
         return self.to_tensordict().unflatten_keys(separator=separator)
-
-    _load_memmap = TensorDict._load_memmap
-
-    def _set_non_tensor(self, key: NestedKey, value: Any):
-        raise NotImplementedError(
-            f"set_non_tensor is not compatible with {type(self).__name__}."
-        )
-
-    def _stack_onto_(self, list_item, dim):
-        raise RuntimeError(f"Cannot call _stack_onto_ on a {type(self).__name__}.")
 
 
 _register_tensor_class(LazyStackedTensorDictStore)

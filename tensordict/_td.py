@@ -24,6 +24,7 @@ from warnings import warn
 
 import torch
 from tensordict._archive import _memmap_tensor_from_path
+from tensordict._base.unsupported import _NoShapeOps
 from tensordict._indexing import (
     _entry_index,
     _getitem_batch_size,
@@ -54,7 +55,7 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
-from tensordict.memmap import MemoryMappedTensor
+from tensordict.memmap import _raise_if_jagged, MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
     _BatchedUninitializedBuffer,
@@ -1120,37 +1121,6 @@ class TensorDict(TensorDictBase):
             else:
                 renames.append((item, td_names))
 
-    @property
-    def device(self) -> torch.device | None:
-        """Device of the tensordict.
-
-        Returns `None` if device hasn't been provided in the constructor or set via `tensordict.to(device)`.
-        The `to()` method can also be used as a context manager for temporary device changes.
-
-        """
-        return self._device
-
-    @device.setter
-    def device(self, value: DeviceType) -> None:
-        raise RuntimeError(
-            "device cannot be set using tensordict.device = device, "
-            "because device cannot be updated in-place. To update device, use "
-            "tensordict.to(new_device), which will return a new tensordict "
-            "on the new device. You can also use tensordict.to(new_device) as a "
-            "context manager for temporary device changes."
-        )
-
-    @property
-    def batch_size(self) -> torch.Size:
-        return self._batch_size
-
-    @batch_size.setter
-    def batch_size(self, new_size: torch.Size) -> None:
-        self._batch_size_setter(new_size)
-
-    def _change_batch_size(self, new_size: torch.Size) -> None:
-        self._batch_size = new_size
-
     # Override: O(1) on the dict of entries, which keeps the insertion order.
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
@@ -1777,6 +1747,9 @@ class TensorDict(TensorDictBase):
                     )
                 continue
             else:
+                # Check on the calling thread: memmap() does not re-raise
+                # errors from executor jobs.
+                _raise_if_jagged(value, key)
                 if executor is None:
                     _populate_memmap(
                         dest=dest,
@@ -2536,7 +2509,7 @@ class TensorDict(TensorDictBase):
             )
 
 
-class _SubTensorDict(TensorDictBase):
+class _SubTensorDict(_NoShapeOps, TensorDictBase):
     """A TensorDict that only sees an index of the stored tensors."""
 
     _lazy = True
@@ -2602,25 +2575,15 @@ class _SubTensorDict(TensorDictBase):
     def _storage_is_read_only(self) -> bool:
         return self._source._storage_is_read_only()
 
-    @property
-    def batch_size(self) -> torch.Size:
-        return self._batch_size
-
-    @batch_size.setter
-    def batch_size(self, new_size: torch.Size) -> None:
-        self._batch_size_setter(new_size)
-
-    @property
+    # Override: the names come from the source, at the index of the view.
+    @TensorDictBase.names.getter
     def names(self):
         names = self._source._get_names_idx(self.idx)
         if names is None:
             return [None] * self.batch_dims
         return names
 
-    @names.setter
-    def names(self, value):
-        self._set_names(value)
-
+    # Override: a view cannot rename the dims of its source.
     def _set_names(self, names: Sequence[str] | None):
         if names is None:
             names = [None] * self.batch_dims
@@ -2630,9 +2593,11 @@ class _SubTensorDict(TensorDictBase):
             "Names of a subtensordict cannot be modified. Instantiate it as a TensorDict first."
         )
 
+    # Override: the names are the source's.
     def _has_names(self):
         return self._source._has_names()
 
+    # Override: a view cannot erase the names of its source.
     def _erase_names(self):
         raise RuntimeError(
             "Cannot erase names of a _SubTensorDict. Erase source TensorDict's names instead."
@@ -2643,6 +2608,7 @@ class _SubTensorDict(TensorDictBase):
             if _is_tensor_collection(self.entry_class(key)):
                 raise RuntimeError("Cannot rename nested sub-tensordict dimensions.")
 
+    # Override: the device is the source's.
     @property
     def device(self) -> None | torch.device:
         return self._source.device
@@ -2880,9 +2846,6 @@ class _SubTensorDict(TensorDictBase):
         ):
             return result
         return self.to_tensordict().to(*args, **kwargs)
-
-    def _change_batch_size(self, new_size: torch.Size) -> None:
-        self._batch_size = new_size
 
     def _get_non_tensor(self, key: NestedKey, default=NO_DEFAULT):
         out = super()._get_non_tensor(key, default=default)
@@ -3328,40 +3291,6 @@ class _SubTensorDict(TensorDictBase):
             index,
         )
 
-    def make_memmap(
-        self,
-        key: NestedKey,
-        shape: torch.Size | torch.Tensor,
-        *,
-        dtype: torch.dtype | None = None,
-        robust_key: bool | None = True,
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't currently allowed for _SubTensorDict."
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
-    def make_memmap_from_storage(
-        self,
-        key: NestedKey,
-        storage: torch.UntypedStorage,
-        shape: torch.Size | torch.Tensor,
-        *,
-        dtype: torch.dtype | None = None,
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't currently allowed for _SubTensorDict."
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
-    def make_memmap_from_tensor(
-        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't currently allowed for _SubTensorDict."
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
     # Override: a view over another tensordict cannot be shared.
     def share_memory_(self) -> Self:
         raise RuntimeError(
@@ -3437,37 +3366,6 @@ class _SubTensorDict(TensorDictBase):
             keepdim=keepdim,
             tuple_ok=tuple_ok,
             **kwargs,
-        )
-
-    # TODO: check these implementations
-
-    def _view(self, *args, **kwargs):
-        raise RuntimeError(
-            "Cannot call `view` on a sub-tensordict. Call `reshape` instead."
-        )
-
-    def _transpose(self, dim0, dim1):
-        raise RuntimeError(
-            "Cannot call `transpose` on a sub-tensordict. Make it dense before calling this method by calling `to_tensordict`."
-        )
-
-    def _permute(
-        self,
-        *args,
-        **kwargs,
-    ):
-        raise RuntimeError(
-            "Cannot call `permute` on a sub-tensordict. Make it dense before calling this method by calling `to_tensordict`."
-        )
-
-    def _squeeze(self, dim=None):
-        raise RuntimeError(
-            "Cannot call `squeeze` on a sub-tensordict. Make it dense before calling this method by calling `to_tensordict`."
-        )
-
-    def _unsqueeze(self, dim: int):
-        raise RuntimeError(
-            "Cannot call `unsqueeze` on a sub-tensordict. Make it dense before calling this method by calling `to_tensordict`."
         )
 
     _add_batch_dim = TensorDict._add_batch_dim

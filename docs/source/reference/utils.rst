@@ -64,8 +64,8 @@ Debugging and profiling
 ``print_directory_tree`` prints the files of a directory, for example
 the directory of a saved tensordict. ``timeit`` and ``logger`` are the
 timer and the logger that tensordict uses in its own code. ``Buffer`` is
-an empty class, kept so that old imports of ``tensordict.utils.Buffer``
-still work. Use :class:`torch.nn.Buffer <torch.nn.parameter.Buffer>` instead.
+:class:`torch.nn.Buffer <torch.nn.parameter.Buffer>`, kept here so that old
+imports of ``tensordict.utils.Buffer`` still work.
 
 .. autosummary::
     :toctree: generated/
