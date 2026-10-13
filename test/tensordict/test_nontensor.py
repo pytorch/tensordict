@@ -920,13 +920,13 @@ class TestNonTensorData:
             assert s.tolist() == ["2", "3"]
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
-    def test_setitem_into_members(self, stack_dim):
+    def test_setitem_into_members(self, stack_dim, tmpdir):
         # A write that changes part of a NonTensorData member, along a dim
         # other than the stack dim, turns the member into a stack.
-        def make():
+        def make(value="s0"):
             n = 2 if stack_dim == 0 else 3
             return NonTensorStack(
-                *[NonTensorData("s0", batch_size=[5 - n]) for _ in range(n)],
+                *[NonTensorData(value, batch_size=[5 - n]) for _ in range(n)],
                 stack_dim=stack_dim,
             )
 
@@ -951,6 +951,15 @@ class TestNonTensorData:
         with pytest.raises(RuntimeError, match="Cannot modify locked"):
             s[1, 0] = NonTensorData("x")
         assert s.tolist() == [["s0"] * 3] * 2
+        # a memmap stack writes the value and saves it
+        s = make().memmap_(tmpdir)
+        s[1, 0] = NonTensorData("x")
+        assert s.tolist() == [["s0"] * 3, ["x", "s0", "s0"]]
+        assert TensorDict.load_memmap(tmpdir).tolist() == s.tolist()
+        # a locked stack takes a value it cannot compare, as before
+        s = make(np.zeros(2)).lock_()
+        with pytest.warns(UserWarning, match="may or may not be equal"):
+            s[1, 0] = NonTensorData(np.zeros(2))
 
     def test_setitem_other_value_raises(self):
         # One NonTensorData holds one value: it cannot take another value at

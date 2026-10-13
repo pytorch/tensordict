@@ -6784,15 +6784,15 @@ class NonTensorStack(LazyStackedTensorDict):
 
     def _setitem_member(self, member: int, member_index: IndexType, piece) -> None:
         td = self.tensordicts[member]
-        if (
-            isinstance(td, NonTensorData)
-            and _non_tensor_value_differs(td, piece) is not False
-        ):
+        if isinstance(td, NonTensorData):
+            differs = _non_tensor_value_differs(td, piece)
             # A NonTensorData holds one value for all its elements: to take
-            # other values in a part of it, the member becomes a stack.
-            if self.is_locked:
+            # other values in a part of it, the member becomes a stack. A
+            # memmap stack saves itself again after the write.
+            if differs is not False and (not self.is_locked or self._is_memmap):
+                td = self.tensordicts[member] = td.maybe_to_stack()
+            elif differs:
                 raise RuntimeError(_LOCK_ERROR)
-            td = self.tensordicts[member] = td.maybe_to_stack()
         td[member_index] = piece
 
     def update_at_(
