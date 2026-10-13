@@ -1444,6 +1444,38 @@ class TestLazyStackedTensorDict:
         assert td.names == names
         assert all(member.names == ["x"] for member in td.tensordicts)
 
+    @pytest.mark.parametrize("batch_size", [None, [3]])
+    @pytest.mark.parametrize("stack_dim", [-1, -2])
+    @pytest.mark.parametrize("names", [False, True])
+    @pytest.mark.parametrize("as_list", [False, True])
+    def test_from_dict_negative_stack_dim(self, batch_size, stack_dim, names, as_list):
+        # a negative stack_dim counts from the end of the stack's dims, as in
+        # LazyStackedTensorDict(*members, stack_dim=stack_dim)
+        members = [{"a": torch.zeros(3, 4)}, {"a": torch.ones(3, 4)}]
+        if not as_list:
+            members = {str(i): member for i, member in enumerate(members)}
+        kwargs = {"batch_size": batch_size}
+        if batch_size is None:
+            kwargs["auto_batch_size"] = True
+            kwargs["batch_dims"] = 1
+        if names:
+            kwargs["names"] = ["x", "s"] if stack_dim == -1 else ["s", "x"]
+        with warnings.catch_warnings():
+            # without a batch_size, names warns about the 0.17 change
+            warnings.simplefilter("ignore", FutureWarning)
+            td = LazyStackedTensorDict.from_dict(members, stack_dim=stack_dim, **kwargs)
+        expected = LazyStackedTensorDict(
+            TensorDict(a=torch.zeros(3, 4), batch_size=[3]),
+            TensorDict(a=torch.ones(3, 4), batch_size=[3]),
+            stack_dim=stack_dim,
+        )
+        assert td.stack_dim == expected.stack_dim
+        assert td.batch_size == expected.batch_size
+        assert td["a"].shape == expected["a"].shape
+        assert td.to_tensordict()["a"].shape == expected["a"].shape
+        if names:
+            assert td.names[td.stack_dim] == "s"
+
     @pytest.mark.parametrize("auto_batch_size", [False, True])
     def test_from_dict_member_names(self, auto_batch_size):
         # names with one entry per member dimension keeps its current meaning:
