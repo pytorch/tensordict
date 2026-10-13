@@ -137,9 +137,14 @@ def pad(
         return _pad_non_tensor(tensordict, pad_size, inplace=inplace)
 
     if not inplace and is_tensorclass(tensordict):
-        # The tensorclass method pads the wrapped tensordict and rebuilds the
-        # tensorclass around the result.
-        return tensordict.pad(pad_size, value, inplace=False, safe=False)
+        # Pad the wrapped tensordict and rebuild the tensorclass around the
+        # result. The bound ``pad`` method is skipped: a tensorclass may
+        # override it with another signature.
+        return tensordict._from_tensordict(
+            pad(tensordict._tensordict, pad_size, value, safe=False),
+            dict(tensordict._non_tensordict),
+            safe=False,
+        )
 
     if inplace and isinstance(tensordict, LazyStackedTensorDict):
         return _pad_lazy_stack_inplace(tensordict, pad_size, value)

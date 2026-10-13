@@ -3564,6 +3564,22 @@ class TestGeneric:
         td = TensorDict(s=s, batch_size=[3])
         assert type(pad(td, [0, 1])["s"]) is _Sample
 
+        # a tensorclass may override pad with another signature
+        @tensorclass
+        class _CustomPad:
+            x: torch.Tensor
+
+            def pad(self, n):
+                raise AssertionError
+
+        c = _CustomPad(x=torch.ones(3), batch_size=[3])
+        out = pad(c, [0, 1])
+        assert type(out) is _CustomPad
+        assert out.x.shape == (4,)
+        out = pad(TensorDict(c=c, batch_size=[3]), [0, 1])
+        assert type(out["c"]) is _CustomPad
+        assert out["c"].x.shape == (4,)
+
     def test_pad_keeps_names(self):
         td = TensorDict(
             a=torch.ones(3, 4),
