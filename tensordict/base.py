@@ -4998,7 +4998,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 raise KeyError(f"Key {old_key} not found in tensordict.")
             return
         value = self.get(old_key, default=NO_DEFAULT)
-        inside = _is_inside(new_key, old_key)
+        # only a tuple can lie inside another key; skipping the check for a
+        # str keeps the common renames as fast as before
+        inside = isinstance(new_key, tuple) and _is_inside(new_key, old_key)
         if inside:
             # deleting the old entry after the move would delete the moved
             # entry with it
