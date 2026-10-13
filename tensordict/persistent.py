@@ -1478,6 +1478,42 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         except ValueError:
             self._batch_size = _batch_size
 
+    # Overrides: with inplace=True, these ops rewrite every dataset and only
+    # then set the new batch size, which _change_batch_size refuses. Raise
+    # before writing. An empty TensorDict gives the new batch size and checks
+    # the arguments.
+    def reshape(self, *args, **kwargs) -> Self:
+        if kwargs.get("inplace", False):
+            shape_kwargs = {k: v for k, v in kwargs.items() if k != "inplace"}
+            self._raise_if_inplace_resizes(
+                "reshape",
+                TensorDict(batch_size=self.batch_size).reshape(*args, **shape_kwargs),
+            )
+        return super().reshape(*args, **kwargs)
+
+    def flatten(self, start_dim=None, end_dim=None, *, inplace: bool = False):
+        if inplace:
+            self._raise_if_inplace_resizes(
+                "flatten",
+                TensorDict(batch_size=self.batch_size).flatten(start_dim, end_dim),
+            )
+        return super().flatten(start_dim, end_dim, inplace=inplace)
+
+    def repeat(self, *repeats: int, inplace: bool = False) -> Self:
+        if inplace:
+            self._raise_if_inplace_resizes(
+                "repeat", TensorDict(batch_size=self.batch_size).repeat(*repeats)
+            )
+        return super().repeat(*repeats, inplace=inplace)
+
+    def _raise_if_inplace_resizes(self, op_name: str, result: TensorDict) -> None:
+        if result.batch_size != self.batch_size:
+            raise NotImplementedError(
+                f"{op_name}(inplace=True) is not supported on {type(self).__name__} "
+                "when it changes the batch size; call to_tensordict() first or use "
+                "inplace=False."
+            )
+
     def _rename_subtds(self, names):
         if names is None:
             names = [None] * self.ndim
