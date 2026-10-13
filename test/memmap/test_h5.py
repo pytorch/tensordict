@@ -477,6 +477,7 @@ def test_inplace_read_only_warns(tmp_path):
         # #2570: one warning for a lazy stack of rows of the file
         lambda: lazy_stack([h5td[0], h5td[1]]).add_(1.0),
         lambda: lazy_stack([h5td[0], h5td[1]]).zero_(),
+        lambda: lazy_stack([h5td, h5td]).zero_(),
         lambda: h5td.update_({"a": torch.zeros(3)}),
         lambda: h5td.copy_(td.clone().zero_()),
     ):
@@ -488,9 +489,24 @@ def test_inplace_read_only_warns(tmp_path):
     assert (h5td["a"] == -1).all()
     with pytest.raises(OSError):
         h5td.zero_()
-    # #2570: as on a lazy stack of the file
-    with pytest.raises(OSError):
-        lazy_stack([h5td, h5td]).zero_()
+    # #2570: zero_ on a lazy stack writes the writable files and leaves the
+    # read-only ones unchanged, with one warning, also in nested stacks
+    nested = TensorDict({"a": torch.ones(3), "n": {"b": torch.ones(3)}}, [3])
+    nested.to_h5(tmp_path / "nested.h5").close()
+    read_only = PersistentTensorDict.from_h5(tmp_path / "nested.h5")
+    writable = PersistentTensorDict.from_dict(nested, filename=tmp_path / "w.h5")
+    stack = lazy_stack(
+        [lazy_stack([writable, read_only]), lazy_stack([read_only, writable])]
+    )
+    with pytest.warns(
+        FutureWarning, match="zero_.*leaves the file unchanged"
+    ) as record:
+        assert stack.zero_() is stack
+    assert len(record) == 1
+    assert record[0].filename == __file__
+    torch.testing.assert_close(writable.to_tensordict(), nested.zero_())
+    assert (read_only["a"] == 1).all()
+    assert (read_only["n", "b"] == 1).all()
     # masked_fill_ raises on the rows of the file too, as it did before
     mask = torch.tensor([True, False])
     for call in (
