@@ -2249,6 +2249,12 @@ class TestLazyStackedTensorDictStore:
                     view.set(key, torch.ones(3))
             with pytest.raises(RuntimeError, match="Cannot modify locked"):
                 view.update({"x": torch.ones(3)}, inplace=True)
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                view["n"] = TensorDict(c=torch.ones(3))
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                view.set("n", TensorDict(b=torch.ones(3), c=torch.ones(3)))
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                view["n"] = torch.ones(3)
             assert list(store_td.keys(True, True)) == ["a", ("n", "b")]
             # the keys the store has are written, with or without inplace
             view.set("a", torch.ones(3))
@@ -2262,6 +2268,12 @@ class TestLazyStackedTensorDictStore:
             store_td.unlock_()
             view.set("x", torch.ones(3))
             torch.testing.assert_close(store_td["x"][1], torch.ones(3))
+            # a locked view still needs inplace for the keys the store has
+            view.lock_()
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                view.set("a", torch.ones(3))
+            view.set("a", torch.zeros(3), inplace=True)
+            torch.testing.assert_close(store_td["a"][1], torch.zeros(3))
         finally:
             store_td.clear_redis()
             store_td.close()

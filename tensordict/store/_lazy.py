@@ -219,13 +219,16 @@ class _StoreStackElementView(TensorDictBase):
     ):
         if not validated:
             value = self._validate_value(value, check_shape=True, key=key)
-        # a locked view, or the view of a locked store, writes the keys the
-        # store has whatever inplace is, and raises for a new key (#2404)
+        # the view of a locked store writes the keys the store has, also
+        # without inplace, and raises for a new key (#2404)
         if (
             (self.is_locked or self._parent.is_locked)
             and not ignore_lock
             and inplace is not True
-            and not _writes_existing_leaves(self._get_all_keys(), key, value)
+            and (
+                (self.is_locked and inplace is False)
+                or not _writes_existing_leaves(self._get_all_keys(), key, value)
+            )
         ):
             raise RuntimeError(_LOCK_ERROR)
 
@@ -273,7 +276,10 @@ class _StoreStackElementView(TensorDictBase):
         if (
             (self.is_locked or self._parent.is_locked)
             and inplace is not True
-            and not _writes_existing_leaves(self._get_all_keys(), key_path, value)
+            and (
+                (self.is_locked and inplace is False)
+                or not _writes_existing_leaves(self._get_all_keys(), key_path, value)
+            )
         ):
             raise RuntimeError(_LOCK_ERROR)
         if isinstance(value, torch.Tensor):
