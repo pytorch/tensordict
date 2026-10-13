@@ -529,7 +529,11 @@ class _ShapeOps:
             def nested_fn(nested):
                 nested.reshape((*shape, *nested.batch_size[batch_dims:]), inplace=True)
 
-            return self._inplace_rebind_leaves(_reshape, nested_fn, torch.Size(shape))
+            self._inplace_rebind_leaves(_reshape, nested_fn, torch.Size(shape))
+            if self._has_names():
+                # as without inplace: the reshaped dims have no name
+                self._erase_names()
+            return self
         return self._fast_apply(
             _reshape,
             batch_size=shape,
@@ -2321,9 +2325,10 @@ class _ShapeOps:
             def nested_fn(nested):
                 nested.flatten(start_dim, end_dim, inplace=True)
 
-            return self._inplace_rebind_leaves(
-                flatten, nested_fn, torch.Size(batch_size)
-            )
+            self._inplace_rebind_leaves(flatten, nested_fn, torch.Size(batch_size))
+            if names is not None:
+                self.names = names
+            return self
         out = self._fast_apply(
             flatten,
             batch_size=batch_size,
@@ -2380,6 +2385,12 @@ class _ShapeOps:
             )
         else:
             batch_size = list(unflattened_size) + list(self.batch_size[1:])
+        if self._has_names():
+            names = list(self.names)
+            for _ in range(len(unflattened_size) - 1):
+                names.insert(dim, None)
+        else:
+            names = None
         # TODO: check that this works with nested tds of different batch size
         if inplace:
             if self._lazy:
@@ -2393,16 +2404,14 @@ class _ShapeOps:
             def nested_fn(nested):
                 nested.unflatten(dim, unflattened_size, inplace=True)
 
-            return self._inplace_rebind_leaves(
-                unflatten, nested_fn, torch.Size(batch_size)
-            )
+            self._inplace_rebind_leaves(unflatten, nested_fn, torch.Size(batch_size))
+            if names is not None:
+                self.names = names
+            return self
         out = self._fast_apply(
             unflatten, batch_size=batch_size, propagate_lock=True, call_on_nested=True
         )
-        if self._has_names():
-            names = list(self.names)
-            for _ in range(len(unflattened_size) - 1):
-                names.insert(dim, None)
+        if names is not None:
             out.names = names
         return out
 
