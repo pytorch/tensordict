@@ -2427,6 +2427,25 @@ class TestTensorClass:
             assert reshaped.y.shape == torch.Size([4, 3])
             assert reshaped.z == reshaped.y.z == z
 
+    def test_torch_pointwise_functions(self):
+        # pointwise torch functions keep the tensorclass type (#1926)
+        data = MyData(
+            X=-torch.ones(3, 4), y=torch.zeros(3, 4), z="test", batch_size=[3, 4]
+        )
+        for result, x in (
+            (torch.abs(data), torch.ones(3, 4)),
+            (torch.add(data, data), -2 * torch.ones(3, 4)),
+            (torch.clamp(data, min=-0.5), -0.5 * torch.ones(3, 4)),
+        ):
+            assert type(result) is MyData
+            assert result.z == "test"
+            torch.testing.assert_close(result.X, x)
+        # in-place forms and non-tensor data are not passed through
+        with pytest.raises(TypeError):
+            torch.abs_(data)
+        with pytest.raises(TypeError):
+            torch.abs(NonTensorData("x", batch_size=[3]))
+
     def test_shape_ops_minus_one(self):
         # A -1 keeps the size of its dim in expand and broadcast_to, and is
         # inferred in unflatten, as for tensors
