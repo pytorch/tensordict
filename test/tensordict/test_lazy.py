@@ -1814,6 +1814,43 @@ class TestLazyStackedTensorDict:
 
         assert isinstance(td.get("a", as_padded_tensor=True), torch.Tensor)
 
+    @pytest.mark.parametrize("padding_side", ["right", "left"])
+    def test_lazy_stack_nested_get_padded_ragged(self, padding_side):
+        # a [prompts, samples] stack with ragged lengths: every ragged dim is
+        # padded, not only dim 0 of each member
+        lengths = [[1, 2], [2, 3]]
+        grouped = lazy_stack(
+            [
+                lazy_stack([TensorDict(tokens=torch.full((n,), n + 1.0)) for n in row])
+                for row in lengths
+            ]
+        )
+        padded = grouped.get("tokens", as_padded_tensor=True, padding_side=padding_side)
+        assert padded.shape == (2, 2, 3)
+        flat = grouped.view(-1).get(
+            "tokens", as_padded_tensor=True, padding_side=padding_side
+        )
+        assert (padded == flat.view(2, 2, 3)).all()
+        # members ragged after dim 0, such as [1, L] token rows
+        rows = [torch.ones(1, 3), torch.ones(1, 5)]
+        td = lazy_stack([TensorDict(tokens=row) for row in rows])
+        expected = torch.zeros(2, 1, 5)
+        if padding_side == "right":
+            expected[0, :, :3] = 1
+        else:
+            expected[0, :, 2:] = 1
+        expected[1] = 1
+        for out in (
+            td.get("tokens", as_padded_tensor=True, padding_side=padding_side),
+            LazyStackedTensorDict.lazy_stack(
+                rows, as_padded_tensor=True, padding_side=padding_side
+            ),
+        ):
+            assert (out == expected).all()
+        # the jagged layout has a single ragged level
+        with pytest.raises(ValueError, match=r"view\(-1\)"):
+            grouped.get("tokens", as_nested_tensor=True)
+
     def test_lazy_stack_nested_tensordict_as_list(self):
         """Regression test: as_list should return list for leaf tensors,
         but properly stack nested TensorDicts"""
