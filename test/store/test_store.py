@@ -2457,6 +2457,43 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    def test_locked_update_inplace(self, store_kwargs):
+        """A locked store and element view write their keys with inplace=True, as a lazy stack does (#2403)."""
+        tds = [
+            TensorDict(a=torch.zeros(3), n=TensorDict(b=torch.zeros(3)))
+            for _ in range(2)
+        ]
+        lazy_td = lazy_stack([td.clone() for td in tds])
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            for td in (store_td, lazy_td, store_td[1], lazy_td[1]):
+                td.lock_()
+                td.update({"a": td["a"] + 1}, inplace=True)
+                td.set(("n", "b"), td["n", "b"] + 2, inplace=True)
+                td.set(
+                    "n",
+                    TensorDict(b=td["n", "b"] + 3, batch_size=td.shape),
+                    inplace=True,
+                )
+                # a new key still raises, also as a leaf of a tensordict value
+                with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                    td.update({"c": td["a"]}, inplace=True)
+                with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                    td.set(("n", "c"), td["a"], inplace=True)
+                with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                    td["n"] = TensorDict(c=td["a"], batch_size=td.shape)
+                with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                    td["n"] = td["a"]
+                with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                    td["n", "m"] = TensorDict(c=td["a"], batch_size=td.shape)
+                td.unlock_()
+            assert_allclose_td(store_td.to_tensordict(), lazy_td.to_tensordict())
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     def test_view_shape_change_raises(self, store_stack):
         """Changing element shape through the view should raise."""
         store_td, tds, lazy_td = store_stack
