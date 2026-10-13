@@ -1518,9 +1518,26 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     def _rename_subtds(self, names):
         if names is None:
             names = [None] * self.ndim
-        for item in self._nested_tensordicts.values():
+        for key, item in self._nested_tensordicts.items():
             if is_tensor_collection(item):
                 td_names = list(names) + list(item.names)[self.ndim :]
+                clash = [
+                    n for n in td_names[self.ndim :] if n is not None and n in names
+                ]
+                if clash:
+                    # nested names were dropped before #2252, so this did not raise
+                    warnings.warn(
+                        f"The new names {list(names)} clash with the names "
+                        f"{clash} of the nested tensordict at key {key!r}, so "
+                        "those dims are left unnamed. Starting with TensorDict "
+                        "0.17, the default will change to raising a "
+                        "ValueError, as TensorDict does.",
+                        FutureWarning,
+                        stacklevel=4,
+                    )
+                    td_names = list(names) + [
+                        None if n in clash else n for n in td_names[self.ndim :]
+                    ]
                 item.rename_(*td_names)
 
     # Override: materializes with one read of the file.
@@ -2091,6 +2108,8 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                 self._backend.create_group(self.file, first_key, metadata)
                 target_td = self._get_str(first_key, default=NO_DEFAULT)
                 target_td.batch_size = value.batch_size
+                if value._has_names():
+                    target_td.names = value.names
             elif not is_tensor_collection(target_td):
                 raise RuntimeError(
                     f"cannot set a tensor collection in place of a non-tensor collection in {type(self).__name__}. "
