@@ -2123,6 +2123,31 @@ class TestGeneric:
                 assert p.grad is None
             assert all(param.grad is not None for param in params.values(True, True))
 
+    def test_from_pytree_non_str_keys(self, tmpdir):
+        # Dict keys that are not NestedKeys come back unchanged, not as tensors
+        def key_types(pytree):
+            return {repr(key): type(key) for key in pytree}
+
+        keys = [0, 1.5, True, None, (0, 1), ("a", 0), "a"]
+        pytree = {key: torch.full((3,), float(i)) for i, key in enumerate(keys)}
+        td = TensorDict.from_pytree(pytree)
+        pytree_recon = td.to_pytree()
+        assert key_types(pytree_recon) == key_types(pytree)
+        for key, value in pytree.items():
+            assert (pytree_recon[key] == value).all()
+        # also when the keys have batch dims, and after memmap and load_memmap
+        td.memmap(tmpdir)
+        for td_other in (
+            torch.stack([td, td.clone()]),
+            td.unsqueeze(0),
+            # _pytree_type is a class, so it is pickled
+            TensorDict.load_memmap(tmpdir, allow_pickle=True),
+        ):
+            assert key_types(td_other.to_pytree()) == key_types(pytree)
+        # The keys take no part in the batch size
+        assert TensorDict.from_pytree(pytree, batch_size=[3]).batch_size == (3,)
+        assert TensorDict.from_pytree(pytree, auto_batch_size=True).batch_size == (3,)
+
     @pytest.mark.parametrize(
         "method,args,fields",
         [
