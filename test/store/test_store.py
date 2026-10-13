@@ -2208,11 +2208,22 @@ class TestLazyStackedTensorDictStore:
                 td.lock_()
                 td.update({"a": td["a"] + 1}, inplace=True)
                 td.set(("n", "b"), td["n", "b"] + 2, inplace=True)
-                # a new key still raises
+                td.set(
+                    "n",
+                    TensorDict(b=td["n", "b"] + 3, batch_size=td.shape),
+                    inplace=True,
+                )
+                # a new key still raises, also as a leaf of a tensordict value
                 with pytest.raises(RuntimeError, match="Cannot modify locked"):
                     td.update({"c": td["a"]}, inplace=True)
                 with pytest.raises(RuntimeError, match="Cannot modify locked"):
                     td.set(("n", "c"), td["a"], inplace=True)
+                with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                    td["n"] = TensorDict(c=td["a"], batch_size=td.shape)
+                with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                    td["n"] = td["a"]
+                with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                    td["n", "m"] = TensorDict(c=td["a"], batch_size=td.shape)
                 td.unlock_()
             assert_allclose_td(store_td.to_tensordict(), lazy_td.to_tensordict())
         finally:
