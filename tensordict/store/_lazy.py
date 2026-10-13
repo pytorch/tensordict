@@ -28,6 +28,7 @@ from tensordict._td import (
     NO_DEFAULT,
     TensorDict,
 )
+from tensordict._td_functions import lazy_stack
 from tensordict.base import (
     _is_leaf_nontensor,
     _register_tensor_class,
@@ -1461,7 +1462,26 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             names = self._get_names_idx(index)
 
         all_keys = sorted(self._get_all_keys())
-        result_map = self._run_sync(self._abatch_get_at(all_keys, index))
+        try:
+            result_map = self._run_sync(self._abatch_get_at(all_keys, index))
+        except _HeterogeneousKeyError:
+            # as on a lazy stack, a slice of the stack dim gives the lazy
+            # stack of the elements it picks, each with its own shapes
+            first, rest = (
+                (index[0], index[1:])
+                if isinstance(index, tuple) and index
+                else (index, ())
+            )
+            if (
+                self._stack_dim
+                or not isinstance(first, slice)
+                or not range(self._count)[first]
+                or not all(i is None or isinstance(i, (int, slice)) for i in rest)
+            ):
+                raise
+            return lazy_stack(
+                [self._index_tensordict((i, *rest)) for i in range(self._count)[first]]
+            )
 
         source: dict = {}
         for kp, value in result_map.items():
@@ -2143,14 +2163,23 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         except _HeterogeneousKeyError as err:
             error = err
 
+        # the public name of a hook such as _masked_fill_
+        name = method.__name__.lstrip("_")
+
         def split(arg):
             if is_tensor_collection(arg) and arg.batch_size == self.batch_size:
+                return arg.unbind(self._stack_dim)
+            if (
+                name == "masked_fill_"
+                and isinstance(arg, torch.Tensor)
+                and arg.shape == self.batch_size
+            ):
+                # the mask: each element is filled with its slice, as on a
+                # lazy stack
                 return arg.unbind(self._stack_dim)
             if is_tensor_collection(arg) or (
                 isinstance(arg, torch.Tensor) and arg.ndim
             ):
-                # the public name of a hook such as _masked_fill_
-                name = method.__name__.lstrip("_")
                 raise RuntimeError(
                     f"{name} cannot split this argument over the "
                     f"elements of the entry {error.key_path!r}, which differ in "
