@@ -889,11 +889,24 @@ class TestNonTensorData:
             (lambda td: td.set("a", 1), "a", 1),
             (lambda td: td.update({"a": 1.5}), "a", 1.5),
             (lambda td: td.set(("nested", "a"), False), ("nested", "a"), False),
+            (lambda td: td.set("a", np.bool_(False)), "a", False),
+            (lambda td: td.set("a", np.int64(1)), "a", 1),
+            (lambda td: td.set("a", np.float32(1.5)), "a", 1.5),
+            (lambda td: td.set("a", np.float64(1.5)), "a", 1.5),
         ],
-        ids=["setitem", "set", "update", "nested"],
+        ids=[
+            "setitem",
+            "set",
+            "update",
+            "nested",
+            "np-bool",
+            "np-int64",
+            "np-float32",
+            "np-float64",
+        ],
     )
     def test_set_scalar_over_non_tensor_warns(self, write, key, expected):
-        # A Python scalar written over a NonTensorData entry is a 0-d tensor
+        # A Python or NumPy scalar written over a NonTensorData entry is a 0-d tensor
         # today, and stays NonTensorData in 0.17 (gh-1199)
         td = TensorDict(a=NonTensorData(True), nested=TensorDict(a=NonTensorData(True)))
         with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17") as w:
