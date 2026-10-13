@@ -53,7 +53,7 @@ from tensordict._nestedkey import NestedKey
 from tensordict._pytree import _register_td_node
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._tensorcollection import TensorCollection
-from tensordict._torch_func import TD_HANDLED_FUNCTIONS
+from tensordict._torch_func import _POINTWISE_FUNCTIONS, TD_HANDLED_FUNCTIONS
 from tensordict._utils_options import _set_capture_non_tensor_stack
 from tensordict.base import (
     _is_accepted_class,
@@ -198,6 +198,14 @@ _TD_PASS_THROUGH = {
     torch.zeros_like: True,
     torch.autograd.grad: True,
 }
+# pointwise torch functions, without the in-place forms, which would return a
+# new tensorclass. NonTensorData does not pass them through.
+_POINTWISE_PASS_THROUGH = {
+    getattr(torch, name): True
+    for name in _POINTWISE_FUNCTIONS
+    if not name.endswith("_")
+}
+_TD_PASS_THROUGH.update(_POINTWISE_PASS_THROUGH)
 # Methods to be executed from tensordict, any ref to self means 'tensorclass'
 _METHOD_FROM_TD = [
     "__enter__",
@@ -5367,10 +5375,11 @@ class NonTensorDataBase(TensorClass):
         ):
             return NonTensorData._cat_non_tensor(*args, **(kwargs or {}))
         # NonTensorData.where does not select elementwise, so torch.where is
-        # not passed through
+        # not passed through, and neither are the pointwise math functions
         if (
             func not in _TD_PASS_THROUGH
             or func is torch.where
+            or func in _POINTWISE_PASS_THROUGH
             or not all(issubclass(t, (Tensor, cls)) for t in types)
         ):
             from torch._ops import HigherOrderOperator
