@@ -6375,6 +6375,13 @@ class NonTensorStack(LazyStackedTensorDict):
     value for the whole batch, use :class:`~tensordict.MetaData`. See
     :ref:`non-tensor-data`.
 
+    ``torch.utils._pytree.tree_unflatten`` and ``tree_map`` rebuild a
+    :class:`NonTensorStack` entry of a tensordict whose values are all equal
+    from the input, as a :class:`~tensordict.NonTensorData`, and drop the value
+    that the function returned for it; they warn when that changes the result.
+    Starting with TensorDict 0.17, the default will change to keeping the
+    returned value, as they do when the values differ.
+
     Examples:
         >>> import torch
         >>> from tensordict import NonTensorData, NonTensorStack, TensorDict
