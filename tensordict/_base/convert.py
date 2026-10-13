@@ -385,17 +385,16 @@ class _Conversion:
         if _pytree_type in (list, tuple):
             return _pytree_type((items[str(i)] for i in range(len(items))))
         if _pytree_type is dict:
-            items = dict(
-                (
-                    (
-                        (_pytree_dict_key(val.get("key")), val["value"])
-                        if key.startswith("<NON_NESTED>")
-                        else (key, val)
-                    )
-                    for (key, val) in items.items()
-                )
-            )
-            return items
+            result = {}
+            for key, val in items.items():
+                if key.startswith("<NON_NESTED>"):
+                    key, val = _pytree_dict_key(val.get("key")), val["value"]
+                    # The entry holding key and value has no _pytree_type, so
+                    # the conversion above left the value as it is
+                    if is_tensor_collection(val):
+                        val = val.to_pytree()
+                result[key] = val
+            return result
         if _is_namedtuple_class(_pytree_type):
             from tensordict._td import TensorDict
 

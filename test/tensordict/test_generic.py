@@ -1935,6 +1935,18 @@ class TestGeneric:
         assert TensorDict.from_pytree(pytree, batch_size=[3]).batch_size == (3,)
         assert TensorDict.from_pytree(pytree, auto_batch_size=True).batch_size == (3,)
 
+    def test_from_pytree_non_str_keys_nested_values(self):
+        # Lists, tuples, dicts and namedtuples under non-str keys are rebuilt
+        NT = namedtuple("NT", ["a"])
+        t = torch.zeros(3)
+        value = [t, (t, {"x": t}), {0: t}, NT(a=t)]
+        for key in ("s", 1, (1, 2)):
+            pytree = {key: value}
+            pytree_recon = TensorDict.from_pytree(pytree).to_pytree()
+            assert torch.utils._pytree.tree_structure(
+                pytree_recon
+            ) == torch.utils._pytree.tree_structure(pytree)
+
     @pytest.mark.parametrize(
         "method,args,fields",
         [
