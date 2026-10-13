@@ -739,6 +739,24 @@ def _cache_while_locked(fun):
     return newfun
 
 
+def _copy_cached_result(fun):
+    """Returns a shallow copy of the tensordict cached by ``_cache_while_locked``.
+
+    Put it above ``@_cache_while_locked`` on methods that return a new, unlocked
+    tensordict, so that a write into the result does not change the cache and
+    later calls.
+    """
+
+    @wraps(fun)
+    def newfun(_self: "TensorDictBase", *args, **kwargs):
+        out = fun(_self, *args, **kwargs)
+        if _self.is_locked and not is_compiling() and not out.is_locked:
+            out = out.copy()
+        return out
+
+    return newfun
+
+
 def _erase_cache_first(fun):
     """A decorator to erase the cache at each call."""
 
@@ -2160,8 +2178,13 @@ class TensorDictFuture:
         self.resulting_td = resulting_td
 
     def result(self):
-        """Wait and returns the resulting tensordict."""
+        """Wait and returns the resulting tensordict.
+
+        Raises the first error of the futures, if any.
+        """
         concurrent.futures.wait(self.futures)
+        for future in self.futures:
+            future.result()
         return self.resulting_td
 
 
@@ -3205,6 +3228,21 @@ def _maybe_correct_neg_dim(
             f"Incompatible dim {new_dim} for tensordict with batch dims {ndim}."
         )
     return new_dim
+
+
+def _check_unflatten_size(
+    batch_size: torch.Size, dim: int, unflattened_size: Sequence[int]
+) -> None:
+    """Raises as torch.unflatten does when the sizes don't multiply up to the dim size."""
+    if (
+        -1 not in unflattened_size
+        and -1 not in batch_size
+        and math.prod(unflattened_size) != batch_size[dim]
+    ):
+        raise RuntimeError(
+            f"unflatten: Provided sizes {list(unflattened_size)} don't multiply up "
+            f"to the size of dim {dim} ({batch_size[dim]}) in the input tensor"
+        )
 
 
 # tensordict, and torch, whose torch function modes (such as the one of

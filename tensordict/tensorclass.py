@@ -3031,10 +3031,6 @@ def _record_tensorclass(tc, result, last_op):
     # ``with tc.view(-1) as f:`` writes f back into tc._tensordict on exit, the
     # object that the last op of f refers to. Also refer to tc.
     name, (args, kwargs, td_ref) = last_op
-    if type(td_ref) is functools.partial and td_ref.func is _write_back_dest:
-        # flatten_keys/unflatten_keys of a locked TensorDict return their cached
-        # result again: record the tensorclass again, do not wrap twice
-        td_ref = td_ref.args[0]
     if td_ref() is tc._tensordict:
         tc_ref = _strong_ref(tc) if is_compiling() else weakref.ref(tc)
         dest = functools.partial(_write_back_dest, td_ref, tc_ref)
@@ -3064,6 +3060,29 @@ def _exit(self, exc_type, exc_val, exc_tb):
                         if key in keys:
                             del non_tensordict[key]
     return result
+
+
+# The torch.return_types that TensorDict.max, min, cummax and cummin return
+_TD_RETURN_TYPES = (
+    torch.return_types.max,
+    torch.return_types.min,
+    torch.return_types.cummax,
+    torch.return_types.cummin,
+)
+
+
+def _tuple_like(result: tuple, items: list) -> tuple:
+    """Returns ``items`` in a plain tuple, or in a tuple of the type of ``result``.
+
+    The ``torch.return_types`` of ``max``, ``min``, ``cummax`` and ``cummin`` keep
+    their type. ``torch.load(weights_only=True)`` accepts them, see
+    ``tensordict/_reductions.py``. Other tuples stay plain tuples, such as the
+    namedtuples of ``to_namedtuple``: their classes are made at call time and
+    cannot be pickled.
+    """
+    if isinstance(result, _TD_RETURN_TYPES):
+        return type(result)(items)
+    return tuple(items)
 
 
 # The fallback methods that write a key, with the position and the name of
@@ -3139,7 +3158,9 @@ def _wrap_td_method(
                 return self
 
             if isinstance(result, tuple):
-                return tuple(deliver_result(self, r, kwargs) for r in result)
+                return _tuple_like(
+                    result, [deliver_result(self, r, kwargs) for r in result]
+                )
             return deliver_result(self, result, kwargs)
 
         if funcname not in _FIELD_KEY_ARGUMENT:
@@ -3173,7 +3194,7 @@ def _wrap_td_method(
             return self
 
         if isinstance(result, tuple):
-            return tuple(deliver_result(self, r, {}) for r in result)
+            return _tuple_like(result, [deliver_result(self, r, {}) for r in result])
         return deliver_result(self, result, {})
 
     def wrapped_func_setter(self, value):
@@ -3398,6 +3419,30 @@ def _update(
     return self
 
 
+def _update_ignores_keys_to_update(self, source, keys_to_update) -> bool:
+    # Whether update_() with the tensorclass source writes other entries than
+    # it would with keys_to_update, as for a TensorDict source: an entry of
+    # self that keys_to_update leaves out, or none for a selected entry that
+    # self does not have, which raises a KeyError.
+    keys_to_update = [_unravel_key_to_tuple(key) for key in keys_to_update]
+
+    def selected(key):
+        return any(key[: len(prefix)] == prefix for prefix in keys_to_update)
+
+    dest_keys = {
+        _unravel_key_to_tuple(key)
+        for key in self._tensordict.keys(True, True, is_leaf=_is_leaf_nontensor)
+    }
+    for key in source._tensordict.keys(True, True, is_leaf=_is_leaf_nontensor):
+        key = _unravel_key_to_tuple(key)
+        if selected(key) != (key in dest_keys):
+            return True
+    return any(
+        value is not None and not selected((key,))
+        for key, value in source._non_tensordict.items()
+    )
+
+
 def _update_(
     self,
     input_dict_or_td: dict[str, CompatibleType] | T | None = None,
@@ -3408,6 +3453,14 @@ def _update_(
     non_blocking: bool = False,
     **kwargs,
 ):
+    """Writes the entries of a dictionary, a tensordict or a tensorclass into the existing entries.
+
+    See :meth:`~tensordict.TensorDictBase.update_`. A tensorclass or dict
+    source ignores ``keys_to_update``: the entries that it leaves out are
+    written too, and the call warns. Starting with TensorDict 0.17, the default
+    will change to writing only the entries in ``keys_to_update``, as for a
+    TensorDict source.
+    """
     if kwargs:
         if input_dict_or_td is None:
             input_dict_or_td = kwargs
@@ -3437,6 +3490,21 @@ def _update_(
         non_tensordict = {
             k: v for k, v in input_dict_or_td._non_tensordict.items() if v is not None
         }
+        if (
+            keys_to_update is not None
+            and not is_dynamo_compiling()
+            and _update_ignores_keys_to_update(self, input_dict_or_td, keys_to_update)
+        ):
+            warnings.warn(
+                f"{type(self).__name__}.update_() with a tensorclass or dict "
+                "source ignores keys_to_update, and writes the entries that "
+                "it leaves out. Starting with TensorDict 0.17, the default will "
+                "change to writing only the entries in keys_to_update, as for "
+                "a TensorDict source, which raises a KeyError for a selected "
+                "entry that the tensorclass does not have.",
+                FutureWarning,
+                stacklevel=2,
+            )
         self._tensordict.update_(input_dict_or_td._tensordict)
         self._non_tensordict.update(non_tensordict)
         return self
@@ -3459,6 +3527,16 @@ def _update_at_(
     keys_to_update: Sequence[NestedKey] | None = None,
     non_blocking: bool = False,
 ):
+    """Writes the entries of a dictionary, a tensordict or a tensorclass in place at an index.
+
+    See :meth:`~tensordict.TensorDictBase.update_at_`. A tensorclass or dict
+    source that :meth:`update` accepts, such as one with the batch size of
+    the tensorclass, goes to :meth:`update` instead: its entries replace
+    those of the tensorclass whatever the index, and the call warns. Starting
+    with TensorDict 0.17, the default will change to writing such a source in
+    place at the index, as :meth:`~tensordict.TensorDictBase.update_at_`
+    does.
+    """
     # A source that update() accepts still goes to update(), which replaces the
     # entries whatever the index, as writing it at the index could raise.
     # Sources that update() rejects for their batch size are written at the index.
@@ -3519,6 +3597,23 @@ def _update_at_(
             else:
                 self._non_tensordict.update(non_tensordict)
                 _clear_none_entries(self, none_keys)
+                # Dynamo cannot trace warnings.warn, so only eager calls warn.
+                if not is_dynamo_compiling() and (
+                    non_tensordict or not source.is_empty()
+                ):
+                    warnings.warn(
+                        f"{type(self).__name__}.update_at_() with a source that "
+                        "update() accepts, such as one with the batch size of the "
+                        "tensorclass, replaces the entries of the tensorclass by "
+                        "those of the source, whatever the index. Starting with "
+                        "TensorDict 0.17, the default will change to writing the "
+                        "source in place at the index, as "
+                        "TensorDict.update_at_() does: the entries keep their "
+                        "storage, and a source that does not have the shape of "
+                        "the index raises.",
+                        FutureWarning,
+                        stacklevel=2,
+                    )
                 return self
 
     # LazyStackedTensorDict.update_at_ takes no keys_to_update
@@ -3597,6 +3692,16 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
         or (item is None)
     ) and self.batch_size == ():
         return self.update(value.squeeze(0))
+    if (
+        isinstance(self, NonTensorData)
+        and is_non_tensor(value)
+        and _non_tensor_value_differs(self, value)
+    ):
+        raise ValueError(
+            "A NonTensorData holds one value for all its elements, so it "
+            "cannot take another value at an index. Call maybe_to_stack() "
+            "to get a NonTensorStack, which holds a value per element."
+        )
 
     if not is_tensorclass(value) and not isinstance(
         value, (TensorDictBase, numbers.Number, Tensor)
@@ -5528,9 +5633,7 @@ class NonTensorDataBase(TensorClass):
         )
 
     def empty(self, recurse=False, *, device=NO_DEFAULT, batch_size=None, names=None):
-        if batch_size is not None and names is None:
-            names = None
-        else:
+        if names is None and batch_size is None:
             names = self._maybe_names()
         return type(self)(
             data=self.data,
@@ -6460,6 +6563,26 @@ class TensorAttrs(TensorClass):
         return cls(batch_size=(), **kwargs)
 
 
+def _non_tensor_value_differs(dest: NonTensorData, value: Any) -> bool | None:
+    """Whether the non-tensor ``value`` holds a value other than the value of ``dest``.
+
+    Returns ``None`` if the values do not compare to a single bool, as arrays
+    and tensors do.
+    """
+    data = dest.data
+    try:
+        other = value.data
+    except AttributeError:
+        # a NonTensorStack of different values
+        return True
+    if other is data:
+        return False
+    try:
+        return bool(other != data)
+    except Exception:
+        return None
+
+
 # For __setitem__ and _update_at_ we don't pass a kwarg but use a global variable instead
 _BREAK_ON_MEMMAP = True
 
@@ -6731,11 +6854,30 @@ class NonTensorStack(LazyStackedTensorDict):
         positions = self._positions().reshape(_get_shape_from_args(*args, **kwargs))
         if positions.shape == self.batch_size:
             return self
+        if not positions.numel():
+            # With no entries, regrouping the stack does not give every shape
+            # (it keeps [3, 0] for [1, 0]).
+            result = self._reshape_empty(positions.shape)
+            if self.is_locked:
+                result.lock_()
+            return result
         try:
             # regrouping the stack shares the entries, like a view
             return self._view(positions.shape)
         except RuntimeError:
             return self._select_positions(positions)
+
+    def _reshape_empty(self, shape: torch.Size) -> NonTensorStack:
+        # Stack the dims before the first zero-size one, so that tolist()
+        # nests like torch's. From that dim on, a stack without members, as
+        # an empty index gives.
+        if shape[0]:
+            return type(self)(
+                *[self._reshape_empty(shape[1:]) for _ in range(shape[0])]
+            )
+        return self._new_lazy_unsafe(
+            stack_dim=0, device=self.device, batch_size=shape[1:]
+        )
 
     def _memmap_(
         self,
@@ -7042,6 +7184,19 @@ class NonTensorStack(LazyStackedTensorDict):
                 )
         finally:
             _BREAK_ON_MEMMAP = True
+
+    def _setitem_member(self, member: int, member_index: IndexType, piece) -> None:
+        td = self.tensordicts[member]
+        if isinstance(td, NonTensorData):
+            differs = _non_tensor_value_differs(td, piece)
+            # A NonTensorData holds one value for all its elements: to take
+            # other values in a part of it, the member becomes a stack. A
+            # memmap stack saves itself again after the write.
+            if differs is not False and (not self.is_locked or self._is_memmap):
+                td = self.tensordicts[member] = td.maybe_to_stack()
+            elif differs:
+                raise RuntimeError(_LOCK_ERROR)
+        td[member_index] = piece
 
     def update_at_(
         self,

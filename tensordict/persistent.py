@@ -912,6 +912,9 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     LOCKING = None
     # each read loads the entry from the file into a new tensor
     _reads_return_copies = True
+    # _change_batch_size raises, so an in-place shape method that changes the
+    # batch size raises before it rewrites the datasets
+    _inplace_batch_size_change = False
 
     @property
     @deprecated("PersistentTensorDict.kwargs", removal="0.17")
@@ -1500,16 +1503,17 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     def _change_batch_size(self, value):
         raise NotImplementedError
 
-    # Override: checks the batch size against the file, and keeps the old
-    # one if it does not fit.
+    # Override: checks the batch size against the file; if it does not fit,
+    # keeps the old one and raises, like TensorDict.
     @TensorDictBase.batch_size.setter
     def batch_size(self, value):
         _batch_size = self._batch_size
         try:
             self._batch_size = torch.Size(value)
             self._check_batch_size(self._batch_size)
-        except ValueError:
+        except ValueError as err:
             self._batch_size = _batch_size
+            raise RuntimeError(str(err)) from err
 
     def _rename_subtds(self, names):
         if names is None:
@@ -1533,6 +1537,9 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         # h5py raises a KeyError for a missing key, zarr does not
         missing = self.backend == "zarr" and not self._backend.contains(self.file, path)
         self._backend.delete(self.file, path)
+        # a sub-tensordict read before keeps the deleted group: drop it, so that
+        # a new entry at this key gets a fresh one
+        self._forget_nested(_unravel_key_to_tuple(key))
         if missing:
             # stacklevel 3: skip the _lock_blocked wrapper
             warnings.warn(

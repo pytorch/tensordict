@@ -366,6 +366,27 @@ class TestNonTensorData:
         with pytest.raises(RuntimeError, match="invalid for input of size 6"):
             grid.reshape(4, 2)
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize(
+        "shape",
+        [(1, -1), (1, 0), (2, 0), (0, 1), (3, 0, 1), (2, 3, 0), (1, 0, 3), (-1,)],
+    )
+    def test_reshape_non_tensor_stack_zero_size(self, shape, stack_dim):
+        # A stack with no entries takes the shape torch gives, and tolist()
+        # nests like torch's tolist()
+        stack = NonTensorStack(
+            *[NonTensorData("a", batch_size=[0]) for _ in range(3)],
+            stack_dim=stack_dim,
+        )
+        expected = torch.zeros(stack.batch_size).reshape(shape)
+        result = stack.reshape(shape)
+        assert isinstance(result, NonTensorStack)
+        assert result.batch_size == expected.shape
+        assert result.tolist() == expected.tolist()
+        assert result.device == stack.device
+        assert not result.is_locked
+        assert stack.lock_().reshape(shape).is_locked
+
     def test_comparison(self, non_tensor_data):
         non_tensor_data = non_tensor_data.exclude(("nested", "str"))
         assert (non_tensor_data | non_tensor_data).get_non_tensor(("nested", "bool"))
@@ -587,6 +608,25 @@ class TestNonTensorData:
             result["observation"], torch.tensor([[0.0], [1.0], [1.0], [1.0]])
         )
         assert batch.get(("metadata", "index")).tolist() == [0, 1]
+
+    @pytest.mark.parametrize("cls", [NonTensorData, MetaData])
+    @pytest.mark.parametrize("old_names", [None, ["m"]])
+    def test_empty_names(self, cls, old_names):
+        # empty() applies the names it is given, as TensorDict.empty() does
+        x = cls(data="x", batch_size=[2], names=old_names)
+        assert x.empty().names == (old_names or [None])
+        assert x.empty(batch_size=[2]).names == [None]
+        for out in (
+            x.empty(names=["n"]),
+            x.empty(batch_size=[2], names=["n"]),
+            TensorDict(batch_size=[2]).empty(names=["n"]),
+        ):
+            assert out.names == ["n"]
+        out = x.empty(batch_size=[2, 3], names=["n", "o"])
+        assert type(out) is cls
+        assert out.batch_size == (2, 3)
+        assert out.names == ["n", "o"]
+        assert out.data == "x"
 
     def test_expand(self):
         d = NonTensorData(0, batch_size=(3,))
@@ -1050,6 +1090,61 @@ class TestNonTensorData:
             assert t.batch_size == (2, 1)
             s[:, i] = t
             assert s.tolist() == ["2", "3"]
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_setitem_into_members(self, stack_dim, tmpdir):
+        # A write that changes part of a NonTensorData member, along a dim
+        # other than the stack dim, turns the member into a stack.
+        def make(value="s0"):
+            n = 2 if stack_dim == 0 else 3
+            return NonTensorStack(
+                *[NonTensorData(value, batch_size=[5 - n]) for _ in range(n)],
+                stack_dim=stack_dim,
+            )
+
+        s = make()
+        assert s.batch_size == (2, 3)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            s[1] = NonTensorData("x", batch_size=[3])
+        assert s.tolist() == [["s0"] * 3, ["x"] * 3]
+        s = make()
+        s[1, 0] = NonTensorData("x")
+        assert s.tolist() == [["s0"] * 3, ["x", "s0", "s0"]]
+        s = make()
+        s[0, 1:] = NonTensorStack("a", "b")
+        assert s.tolist() == [["s0", "a", "b"], ["s0"] * 3]
+        # an equal value leaves the members as they are
+        s = make()
+        s[1, 0] = NonTensorData("s0")
+        assert all(type(td) is NonTensorData for td in s.tensordicts)
+        assert s.tolist() == [["s0"] * 3] * 2
+        s = make().lock_()
+        with pytest.raises(RuntimeError, match="Cannot modify locked"):
+            s[1, 0] = NonTensorData("x")
+        assert s.tolist() == [["s0"] * 3] * 2
+        # a memmap stack writes the value and saves it
+        s = make().memmap_(tmpdir)
+        s[1, 0] = NonTensorData("x")
+        assert s.tolist() == [["s0"] * 3, ["x", "s0", "s0"]]
+        assert TensorDict.load_memmap(tmpdir).tolist() == s.tolist()
+        # a locked stack takes a value it cannot compare, as before
+        s = make(np.zeros(2)).lock_()
+        with pytest.warns(UserWarning, match="may or may not be equal"):
+            s[1, 0] = NonTensorData(np.zeros(2))
+
+    def test_setitem_other_value_raises(self):
+        # One NonTensorData holds one value: it cannot take another value at
+        # an index
+        data = NonTensorData("s0", batch_size=[3])
+        with pytest.raises(ValueError, match="one value for all its elements"):
+            data[1] = NonTensorData("x")
+        with pytest.raises(ValueError, match="one value for all its elements"):
+            data[1:] = NonTensorStack("s0", "x")
+        assert data.tolist() == ["s0"] * 3
+        data[1] = NonTensorData("s0")
+        data[1:] = NonTensorStack("s0", "s0")
+        assert data.tolist() == ["s0"] * 3
 
     def test_stack(self, non_tensor_data):
         assert (
@@ -2456,6 +2551,28 @@ class TestUnbatchedTensor:
         out = td.norm()
         assert type(out.get("a")) is torch.Tensor
         assert out["a"].shape == ()
+
+    def test_unbatched_to_batch_size(self):
+        # https://github.com/pytorch/tensordict/issues/2499
+        td = TensorDict(
+            a=torch.ones(3, 2),
+            u=UnbatchedTensor(torch.ones(5)),
+            n=TensorDict(v=UnbatchedTensor(torch.ones(7)), batch_size=[3, 2]),
+            batch_size=[3, 2],
+        )
+        with pytest.warns(FutureWarning, match="batch_size"):
+            out = td.to(torch.float64, batch_size=[3])
+        for key in ("u", ("n", "v")):
+            assert isinstance(out.get(key), UnbatchedTensor)
+            assert out.get(key).dtype == torch.float64
+            assert out.get(key).batch_size == (3,)
+        out = td.to(torch.float64, batch_size=[3, 2])
+        assert out.get("u").dtype == torch.float64
+
+        # Shape ops still leave the payload unchanged
+        out = td.reshape(6)
+        assert out["u"].shape == (5,)
+        assert out.get("u").batch_size == (6,)
 
     @pytest.mark.parametrize("op", [operator.add, operator.sub, operator.mul])
     def test_unbatched_pointwise_other_unbatched(self, op):
