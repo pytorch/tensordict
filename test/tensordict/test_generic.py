@@ -6289,6 +6289,25 @@ class TestGeneric:
         torch.testing.assert_close(cummax.values, -cummin.values)
         torch.testing.assert_close(cummax.indices, cummin.indices)
 
+    @pytest.mark.parametrize("reduction", ["max", "min"])
+    def test_max_min_reduce_dim(self, reduction):
+        td = TensorDict(
+            a=torch.randn(3, 4, 5),
+            b=TensorDict(
+                c=torch.randn(3, 4, 5), d=torch.randn(3, 4, 5), batch_size=(3, 4, 5)
+            ),
+            batch_size=(3, 4),
+        )
+        agglomerate = torch.cat([td["a"], td["b", "c"], td["b", "d"]], dim=0)
+        expected = getattr(torch, reduction)(agglomerate, dim=0)
+        result = getattr(td, reduction)(dim=0, reduce=True)
+        assert isinstance(result, getattr(torch.return_types, reduction))
+        torch.testing.assert_close(result.values, expected.values)
+        torch.testing.assert_close(result.indices, expected.indices)
+        values = getattr(td, reduction)(dim=0, reduce=True, return_indices=False)
+        assert isinstance(values, torch.Tensor)
+        torch.testing.assert_close(values, expected.values)
+
     @pytest.mark.parametrize("reduce", [False, True])
     @pytest.mark.parametrize(
         "reduction",
