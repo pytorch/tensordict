@@ -65,6 +65,9 @@ from tensordict.base import (
     _PACKAGE_DIR,
     _register_tensor_class,
     _SELF_NESTING_ERROR,
+    _SET_AT_CAST_CALL,
+    _SET_AT_CAST_TYPES,
+    _warn_set_at_cast,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
     is_tensor_collection,
@@ -1697,13 +1700,23 @@ class LazyStackedTensorDict(TensorDictBase):
             return self
         if not validated and not self._is_vmapped and isinstance(value, numbers.Number):
             # each member writes a Python scalar in the dtype of its entry, as
-            # torch does
-            self._set_at_members(
-                key, value, index, validated=False, non_blocking=non_blocking
-            )
+            # torch does. A non-tensor entry casts it to a tensor, which warns
+            # once for the whole stack.
+            outermost = getattr(_SET_AT_CAST_CALL, "warned", None) is None
+            if outermost:
+                _SET_AT_CAST_CALL.warned = False
+            try:
+                self._set_at_members(
+                    key, value, index, validated=False, non_blocking=non_blocking
+                )
+            finally:
+                if outermost:
+                    _SET_AT_CAST_CALL.warned = None
             return self
         converted = False
+        original = None
         if not validated:
+            original = value
             converted = not is_tensor_collection(value)
             value = self._validate_value(
                 value, check_shape=False, non_blocking=non_blocking
@@ -1732,6 +1745,10 @@ class LazyStackedTensorDict(TensorDictBase):
                 # the value is written to each entry of the nested tensordicts
                 self._get_str(key, NO_DEFAULT)[index] = value
                 return self
+            if getattr(type(entry), "_is_non_tensor", False) and isinstance(
+                original, _SET_AT_CAST_TYPES
+            ):
+                _warn_set_at_cast(key, original)
             feature_ndim = entry.ndim
             if not _is_unbatched(entry):
                 feature_ndim -= entry_batch_dims

@@ -49,8 +49,10 @@ from tensordict.base import (
     _register_tensor_class,
     _SCALAR_TYPES,
     _select_entry,
+    _SET_AT_CAST_TYPES,
     _UNSET,
     _warn_scalar_over_non_tensor,
+    _warn_set_at_cast,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
     is_tensor_collection,
@@ -1344,12 +1346,19 @@ class TensorDict(TensorDictBase):
                 # each entry of the nested tensordict casts the scalar
                 tensor_in[idx] = value
                 return self
+            original = value
             value = _cast_scalar(value, tensor_in)
             converted = not is_tensor_collection(value)
             value = self._validate_value(
                 value, check_shape=False, non_blocking=non_blocking
             )
             validated = True
+            if (
+                getattr(type(tensor_in), "_is_non_tensor", False)
+                and isinstance(original, _SET_AT_CAST_TYPES)
+                and not is_tensor_collection(value)
+            ):
+                _warn_set_at_cast(key, original)
 
         if is_non_tensor(value) and not (self._is_shared or self._is_memmap):
             if isinstance(idx, tuple) and len(idx) == 1:

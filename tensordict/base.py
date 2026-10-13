@@ -1030,6 +1030,37 @@ def _warn_scalar_over_non_tensor(
     )
 
 
+# the values that set_at_ casts to a tensor in a non-tensor entry, and warns about
+_SET_AT_CAST_TYPES = (list, *_SCALAR_TYPES)
+# Set while a lazy stack writes a scalar into its members, each of which casts
+# it, so that the call warns once: False until the first warning, then True.
+_SET_AT_CAST_CALL = local()
+
+
+def _warn_set_at_cast(
+    key: str, value: list | bool | int | float | np.bool_ | np.integer | np.floating
+) -> None:
+    """Warns that ``value``, written at an index of the non-tensor entry ``key``, becomes a tensor today."""
+    warned = getattr(_SET_AT_CAST_CALL, "warned", None)
+    if warned:
+        return
+    if warned is False:
+        _SET_AT_CAST_CALL.warned = True
+    # point to the first frame outside tensordict: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    warnings.warn(
+        f"The {type(value).__name__} written at an index of the non-tensor "
+        f"entry {key!r} is cast to a tensor today. Starting with TensorDict "
+        "0.17, the default will change to storing it as non-tensor data. "
+        "Write torch.tensor(value) to keep the tensor, or "
+        "NonTensorData(value) to store it as non-tensor data now.",
+        FutureWarning,
+        stacklevel=stacklevel,
+    )
+
+
 def _has_lazy_stack(td: TensorDictBase) -> bool:
     """Whether ``td`` or one of its nested tensordicts is a lazy stack, which ``_apply_nest`` splits.
 
@@ -3232,6 +3263,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Writes ``value`` into the existing entry ``key`` at the index ``index``, in place.
 
         ``td.set_at_(key, value, index)`` is the same as ``td[key][index] = value``.
+
+        A list, or a ``bool``, ``int`` or ``float`` (also as a NumPy scalar),
+        written into a non-tensor entry is cast to a tensor, and the write
+        emits a :class:`FutureWarning`. Starting with TensorDict 0.17, the
+        default will change to storing it as non-tensor data. Wrap the value
+        in :class:`~tensordict.NonTensorData` to store it as non-tensor data
+        now, or pass a tensor to keep the tensor.
 
         Args:
             key (NestedKey): key to be modified. The key must exist: a

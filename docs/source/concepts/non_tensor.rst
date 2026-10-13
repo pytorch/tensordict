@@ -89,6 +89,11 @@ entry also becomes a tensor, and the write emits a :class:`FutureWarning`.
 Starting with TensorDict 0.17, the default will change to keeping it as
 :class:`~tensordict.NonTensorData`, like the entry it replaces
 (`#1199 <https://github.com/pytorch/tensordict/issues/1199>`_).
+In the same way, :meth:`~tensordict.TensorDict.set_at_` casts a list or a
+number written at an index of a non-tensor entry to a tensor, and emits a
+:class:`FutureWarning`. Starting with TensorDict 0.17, the default will change
+to storing it as non-tensor data
+(`#2522 <https://github.com/pytorch/tensordict/issues/2522>`_).
 
 Read a non-tensor entry
 ~~~~~~~~~~~~~~~~~~~~~~~
