@@ -373,6 +373,91 @@ class CompositeDistribution(d.Distribution, Mapping):
             torch.Size(shape) + self.batch_shape,
         )
 
+    def sample_and_log_prob(
+        self, shape=None
+    ) -> tuple[TensorDictBase, torch.Tensor | TensorDictBase]:
+        """Draws a sample and returns it with the log-probability of the same draw.
+
+        Each component is sampled and scored with its own ``sample_and_log_prob``
+        method if it has one, and with ``sample`` then ``log_prob`` otherwise.
+        :class:`~tensordict.nn.ProbabilisticTensorDictModule` calls this method
+        when it samples with ``return_log_prob=True``.
+
+        Args:
+            shape (torch.Size, optional): the leading sample dimensions.
+                Defaults to ``torch.Size([])``.
+
+        Returns:
+            A ``(sample, log_prob)`` tuple: the sample as returned by
+            :meth:`sample`, and its log-probability in the layout of
+            :meth:`log_prob`.
+
+        Examples:
+            >>> import torch
+            >>> from torch import distributions as d
+            >>> from tensordict import TensorDict
+            >>> from tensordict.nn import CompositeDistribution
+            >>> params = TensorDict({
+            ...     "cont": {"loc": torch.zeros(3, 4), "scale": torch.ones(3, 4)},
+            ...     ("nested", "disc"): {"logits": torch.zeros(3, 10)}
+            ... }, [3])
+            >>> dist = CompositeDistribution(params,
+            ...     distribution_map={"cont": d.Normal, ("nested", "disc"): d.Categorical})
+            >>> sample, lp = dist.sample_and_log_prob()
+            >>> sorted(lp.keys(True, True), key=str)
+            [('nested', 'disc_log_prob'), 'cont_log_prob']
+        """
+        return self._sample_and_log_prob(shape, reparameterize=False)
+
+    def rsample_and_log_prob(
+        self, shape=None
+    ) -> tuple[TensorDictBase, torch.Tensor | TensorDictBase]:
+        """Draws a reparameterized sample and returns it with the log-probability of the same draw.
+
+        Each component is sampled and scored with its own
+        ``rsample_and_log_prob`` method if it has one, and with ``rsample`` then
+        ``log_prob`` otherwise. See :meth:`sample_and_log_prob`.
+
+        Args:
+            shape (torch.Size, optional): the leading sample dimensions.
+                Defaults to ``torch.Size([])``.
+
+        Returns:
+            A ``(sample, log_prob)`` tuple: the sample as returned by
+            :meth:`rsample`, and its log-probability in the layout of
+            :meth:`log_prob`.
+        """
+        return self._sample_and_log_prob(shape, reparameterize=True)
+
+    def _sample_and_log_prob(
+        self, shape, *, reparameterize: bool
+    ) -> tuple[TensorDictBase, torch.Tensor | TensorDictBase]:
+        if shape is None:
+            shape = torch.Size([])
+        joint_name = "rsample_and_log_prob" if reparameterize else "sample_and_log_prob"
+        samples = {}
+        log_probs = {}
+        for name, dist in self.dists.items():
+            if callable(getattr(type(dist), joint_name, None)):
+                samples[name], log_probs[name] = getattr(dist, joint_name)(shape)
+            else:
+                samples[name] = (
+                    dist.rsample(shape) if reparameterize else dist.sample(shape)
+                )
+                log_probs[name] = dist.log_prob(samples[name])
+        sample = TensorDict(samples, torch.Size(shape) + self.batch_shape)
+        if not composite_lp_aggregate():
+            log_prob = {
+                _add_suffix(name, "_log_prob"): lp for name, lp in log_probs.items()
+            }
+            return sample, sample.empty(recurse=True).update(log_prob).filter_empty_()
+        slp = 0.0
+        for lp in log_probs.values():
+            if lp.ndim > sample.ndim:
+                lp = lp.flatten(sample.ndim, -1).sum(-1)
+            slp = slp + lp
+        return sample, slp
+
     def log_prob(self, sample: TensorDictBase) -> torch.Tensor | TensorDictBase:  # noqa: D417
         """Computes the log-probability of a sample.
 

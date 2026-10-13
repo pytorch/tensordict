@@ -251,6 +251,21 @@ def _use_generator(generator: torch.Generator | None):
                 generator.set_state(torch.get_rng_state())
 
 
+def _get_joint_sample_and_log_prob(
+    dist: D.Distribution,
+) -> Callable[[torch.Size], tuple[Any, Tensor | TensorDictBase]] | None:
+    """Return the method of ``dist`` that draws a sample and scores the same draw.
+
+    ``rsample_and_log_prob`` is used when ``dist.has_rsample``, and
+    ``sample_and_log_prob`` otherwise. Returns ``None`` when the distribution
+    does not define the method, as for the :mod:`torch.distributions` classes.
+    """
+    name = "rsample_and_log_prob" if dist.has_rsample else "sample_and_log_prob"
+    if callable(getattr(type(dist), name, None)):
+        return getattr(dist, name)
+    return None
+
+
 class ProbabilisticTensorDictModule(TensorDictModuleBase):
     """A module that builds a distribution from entries of a tensordict and writes a value from it.
 
@@ -267,6 +282,19 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
     :class:`~tensordict.nn.set_interaction_type`). Otherwise it uses
     ``default_interaction_type``. See :class:`~tensordict.nn.InteractionType`
     for what each type reads from the distribution.
+
+    With ``return_log_prob=True`` and the ``RANDOM`` interaction type, the
+    module draws and scores the value in one call if the distribution class
+    defines the method: ``dist.rsample_and_log_prob(sample_shape)`` if
+    ``dist.has_rsample``, ``dist.sample_and_log_prob(sample_shape)``
+    otherwise. The method returns a ``(sample, log_prob)`` tuple, with
+    ``log_prob`` in the layout of ``dist.log_prob``. Define it when
+    ``dist.log_prob(sample)`` cannot recover the draw exactly, for example
+    for a tanh-squashed normal that saturates. Otherwise the module calls
+    ``dist.log_prob`` on the sample. The :mod:`torch.distributions` classes
+    do not define these methods;
+    :class:`~tensordict.nn.distributions.CompositeDistribution` defines both,
+    and calls them on its components when they define them.
 
     The default ``distribution_class`` is
     :class:`~tensordict.nn.distributions.Delta`, which always returns its
@@ -855,9 +883,30 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         dist = self.get_dist(tensordict)
         if _requires_sample:
             generator, writeback = self._resolve_generator(tensordict)
-            out_tensors = self._dist_sample(
-                dist, interaction_type=interaction_type(), generator=generator
-            )
+            log_prob = None
+            joint_sample_and_log_prob = None
+            if (
+                self.return_log_prob
+                and (interaction_type() or self.default_interaction_type)
+                is InteractionType.RANDOM
+            ):
+                joint_sample_and_log_prob = _get_joint_sample_and_log_prob(dist)
+            if joint_sample_and_log_prob is not None:
+                # Score the draw the distribution sampled, not a value recovered
+                # from the sample (e.g. atanh of a saturated tanh)
+                lp_context = (
+                    set_composite_lp_aggregate(False)
+                    if isinstance(dist, CompositeDistribution)
+                    else contextlib.nullcontext()
+                )
+                with _use_generator(generator), lp_context:
+                    out_tensors, log_prob = joint_sample_and_log_prob(
+                        self.num_samples or torch.Size(())
+                    )
+            else:
+                out_tensors = self._dist_sample(
+                    dist, interaction_type=interaction_type(), generator=generator
+                )
             if writeback is not None:
                 writeback(generator)
             if self.num_samples is not None:
@@ -877,9 +926,10 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                             )
                         )
                     if clpa:
-                        with set_composite_lp_aggregate(False):
-                            # We want the tensordict to do the sum and such
-                            log_prob = dist.log_prob(out_tensors)
+                        if log_prob is None:
+                            with set_composite_lp_aggregate(False):
+                                # We want the tensordict to do the sum and such
+                                log_prob = dist.log_prob(out_tensors)
                         if log_prob is not out_tensors:
                             # Composite dists return the tensordict_out directly when aggrgate_prob is False
                             out_tensors.update(log_prob)
@@ -888,7 +938,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                             sum(log_prob.sum(dim="feature").values(True, True)),
                         )
                     else:
-                        log_prob = dist.log_prob(out_tensors)
+                        if log_prob is None:
+                            log_prob = dist.log_prob(out_tensors)
                         out_tensors.update(log_prob)
                         self._update_td_lp(log_prob)
                 tensordict_out.update(out_tensors)
@@ -899,7 +950,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                     dict(_zip_strict(self.dist_sample_keys, out_tensors))
                 )
                 if self.return_log_prob:
-                    log_prob = dist.log_prob(*out_tensors)
+                    if log_prob is None:
+                        log_prob = dist.log_prob(*out_tensors)
                     tensordict_out.set(self.log_prob_key, log_prob)
         elif self.return_log_prob:
             out_tensors = [
