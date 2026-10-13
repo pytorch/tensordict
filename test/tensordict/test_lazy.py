@@ -2898,7 +2898,8 @@ class TestLazyStackedTensorDict:
 
     @pytest.mark.parametrize("heterogeneous", [False, True])
     def test_reduction_reduce_true_dim_none_mixed_ndims(self, heterogeneous):
-        # Leaves with different numbers of dims
+        # Leaves with different numbers of dims, or members with different
+        # shapes: dim=None reduces all the elements
         lazy = lazy_stack(
             [
                 TensorDict(
@@ -2910,8 +2911,16 @@ class TestLazyStackedTensorDict:
                 for i in range(3)
             ]
         )
-        with pytest.raises(RuntimeError):
-            lazy.sum(dim=None, reduce=True)
+        expected = sum(td.sum(reduce=True) for td in lazy.tensordicts)
+        for kwargs in ({}, {"keepdim": False}):
+            torch.testing.assert_close(
+                lazy.sum(dim=None, reduce=True, **kwargs), expected
+            )
+        if not heterogeneous:
+            torch.testing.assert_close(
+                lazy.mean(dim=None, reduce=True),
+                lazy.to_tensordict().mean(dim=None, reduce=True),
+            )
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
     def test_all_any_dim_none_heterogeneous(self, stack_dim):

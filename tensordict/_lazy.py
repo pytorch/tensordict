@@ -3515,6 +3515,9 @@ class LazyStackedTensorDict(TensorDictBase):
         further_reduce: bool,
         **kwargs,
     ):
+        if dim is None and not keepdim:
+            # dim=None reduces over all the elements, as an omitted dim does
+            dim = NO_DEFAULT
         if further_reduce and (dim is NO_DEFAULT or dim is None or dim == "feature"):
             # Options for a tensordict result, which torch doesn't take
             for key in ("values_only", "call_on_nested", "batch_size"):
