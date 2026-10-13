@@ -2509,6 +2509,7 @@ class TestTensorClass:
             (torch.abs(data), torch.ones(3, 4)),
             (torch.add(data, data), -2 * torch.ones(3, 4)),
             (torch.clamp(data, min=-0.5), -0.5 * torch.ones(3, 4)),
+            (torch.lerp(data, torch.zeros(3, 4), 0.5), -0.5 * torch.ones(3, 4)),
         ):
             assert type(result) is MyData
             assert result.z == "test"
