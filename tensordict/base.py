@@ -40,6 +40,7 @@ from typing import (
 
 import numpy as np
 import torch
+from tensordict._base.unsupported import _unsupported
 from tensordict._contextlib import LAST_OP_MAPS
 from tensordict._deprecation import (
     deprecated,
@@ -77,6 +78,7 @@ from tensordict.utils import (
     _LOCK_ERROR,
     _lock_warn,
     _maybe_correct_neg_dim,
+    _mismatch_keys,
     _pass_through,
     _pass_through_cls,
     _proc_init,
@@ -310,6 +312,21 @@ class _RecordDeviceTransfer:
 _device_recorder = _RecordDeviceTransfer()
 
 
+class _InplaceShapeState(local):
+    """Per-thread state of the in-place shape ops.
+
+    ``nested`` is ``True`` while ``_inplace_rebind_leaves`` runs the op on a
+    nested tensordict. The top-level call has then checked the whole tree with
+    ``_raise_if_holds_lazy_stack``, so the nested calls skip that walk.
+    """
+
+    def __init__(self):
+        self.nested = False
+
+
+_inplace_shape_state = _InplaceShapeState()
+
+
 def _holds_its_tensors(td: TensorDictBase) -> bool:
     """Returns whether ``td`` reads its entries from a ``TensorDict``, which holds its tensors.
 
@@ -356,10 +373,58 @@ def _holds_leaves_of(td: TensorDictBase, other: TensorDictBase) -> bool:
     return True
 
 
+def _mixes_lazy_stacks(td: TensorDictBase, others: tuple) -> bool:
+    """Returns whether some of ``td`` and the tensordicts in ``others`` are lazy stacks and some are not.
+
+    The pointwise ops flatten a lazy stack into one key per member, such as
+    ``("0", "a")``, which a dense operand does not have (#1932).
+    """
+    # a cheap filter first: lazy stacks set _lazy, numbers and tensors do not have it
+    lazy = td._lazy
+    for other in others:
+        lazy = lazy or getattr(type(other), "_lazy", False)
+    if not lazy:
+        return False
+    from tensordict._lazy import LazyStackedTensorDict
+
+    is_stack = isinstance(td, LazyStackedTensorDict)
+    return any(
+        isinstance(other, TensorDictBase)
+        and isinstance(other, LazyStackedTensorDict) is not is_stack
+        for other in others
+    )
+
+
+def _apply_pointwise(
+    td: TensorDictBase, fn: Callable, others: tuple, inplace: bool
+) -> TensorDictBase:
+    """Computes ``fn(leaf, *others)`` leaf by leaf, pairing the leaves of the tensordicts in ``others`` by key."""
+    is_td = [isinstance(other, TensorDictBase) for other in others]
+
+    def leaf_fn(x, *leaves):
+        leaves = iter(leaves)
+        return fn(
+            x, *[next(leaves) if flag else other for flag, other in zip(is_td, others)]
+        )
+
+    tds = [other for flag, other in zip(is_td, others) if flag]
+    if inplace:
+        return td.apply_(leaf_fn, *tds)
+    # apply ignores the keys that only the others have; the dense ops raise
+    keys = set(td.keys(True, True))
+    for other in tds:
+        other_keys = set(other.keys(True, True))
+        if other_keys != keys:
+            _mismatch_keys(keys, other_keys)
+    return td.apply(leaf_fn, *tds, propagate_lock=True)
+
+
 def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Callable]:
     """Ensures that elementwise ops are broadcast when an nd tensor is passed."""
     # add_, mul_, ... are in-place; __eq__, __lt__, ... also end with "_".
     inplace = op.endswith("_") and not op.endswith("__")
+    # The comparisons pair a lazy stack with a dense operand by key already
+    pairs_by_apply = op == "__mod__" or not op.startswith("__")
     # torch.Tensor has no rsub method: call torch.rsub on the leaves instead.
     torch_op = None if hasattr(torch.Tensor, op) else getattr(torch, op)
 
@@ -384,6 +449,19 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     need_broadcast = True
                     break
             if not need_broadcast:
+                if (
+                    pairs_by_apply
+                    and kwargs.get("default") is None
+                    and _mixes_lazy_stacks(self, others)
+                ):
+                    # alpha=None and default=None are the defaults of the ops
+                    kwargs = {k: v for k, v in kwargs.items() if v is not None}
+                    return _apply_pointwise(
+                        self,
+                        lambda x, *xs: leaf_op(x, *xs, *args, **kwargs),
+                        others,
+                        inplace,
+                    )
                 return func(self, *others, *args, **kwargs)
             others_map = []
             shape = self.shape
@@ -1051,7 +1129,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     _safe: bool = False
     _lazy: bool = False
     _inplace_set: bool = False
-    is_meta: bool = False
     _is_locked: bool = False
     _is_shared: bool = False
     _is_memmap: bool = False
@@ -1079,6 +1156,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # as for an h5 or zarr file or a store. The in-place methods then write
     # their results back (see _write_back_inplace and _write_back).
     _reads_return_copies = False
+    # Whether a sub-tensordict read with _get_str is a new TensorDict filled
+    # from the stored data, as in the lazy stores. update() then writes the
+    # leaves it merges into the sub-tensordict back (see _update_write_back).
+    _nested_reads_return_copies = False
 
     @classmethod
     def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
@@ -1521,7 +1602,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         self.batch_size = value
 
     @property
-    @abc.abstractmethod
     def batch_size(self) -> torch.Size:
         """The batch size of the tensordict, as a :class:`torch.Size`. ``shape`` is the same attribute.
 
@@ -1565,7 +1645,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             ...
             RuntimeError: the Tensor key 0 has shape torch.Size([3, 4]) which is incompatible with the batch-size torch.Size([4]).
         """
-        raise NotImplementedError
+        return self._batch_size
+
+    @batch_size.setter
+    def batch_size(self, new_size: torch.Size) -> None:
+        self._batch_size_setter(new_size)
 
     def size(self, dim: int | None = None) -> torch.Size | int:
         """Returns the batch size, or the size of one batch dimension.
@@ -2471,7 +2555,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Device functionality: device is optional. If provided, it will enforce
     # all data is on the same device
     @property
-    @abc.abstractmethod
     def device(self) -> torch.device | None:
         """Device of a TensorDict.
 
@@ -2517,12 +2600,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             device(type='meta')
 
         """
-        raise NotImplementedError
+        return self._device
 
     @device.setter
-    @abc.abstractmethod
     def device(self, value: DeviceType) -> None:
-        raise NotImplementedError
+        raise RuntimeError(
+            "device cannot be set using tensordict.device = device, "
+            "because device cannot be updated in-place. To update device, use "
+            "tensordict.to(new_device), which will return a new tensordict "
+            "on the new device. You can also use tensordict.to(new_device) as a "
+            "context manager for temporary device changes."
+        )
 
     @_lock_blocked
     def clear(self) -> Self:
@@ -2552,6 +2640,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     @property
     def is_cpu(self):
         return self.device is not None and self.device.type == "cpu"
+
+    @property
+    def is_meta(self) -> bool:
+        return self.device is not None and self.device.type == "meta"
 
     def share_memory_(self) -> Self:
         """Places all the tensors in shared memory.
@@ -2601,7 +2693,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             f"The tensordict has no saved path (memmap={self.is_memmap()}, path={self._memmap_prefix})."
         )
 
-    @abc.abstractmethod
     def make_memmap(
         self,
         key: NestedKey,
@@ -2634,9 +2725,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             A new memory mapped tensor.
 
         """
-        raise NotImplementedError
+        raise RuntimeError(
+            _unsupported(
+                self, "make_memmap", "Only a memory-mapped TensorDict supports it."
+            )
+        )
 
-    @abc.abstractmethod
     def make_memmap_from_storage(
         self,
         key: NestedKey,
@@ -2675,9 +2769,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             A new memory mapped tensor with the given storage.
 
         """
-        raise NotImplementedError
+        raise RuntimeError(
+            _unsupported(
+                self,
+                "make_memmap_from_storage",
+                "Only a memory-mapped TensorDict supports it.",
+            )
+        )
 
-    @abc.abstractmethod
     def make_memmap_from_tensor(
         self,
         key: NestedKey,
@@ -2711,22 +2810,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             A new memory mapped tensor with the given storage.
 
         """
-        raise NotImplementedError
-
-    @classmethod
-    @abc.abstractmethod
-    def _load_memmap(
-        cls,
-        prefix: Path,
-        metadata: dict,
-        device: torch.device | None = None,
-        *,
-        robust_key,
-        out=None,
-        allow_pickle: bool | None = None,
-        mode: str | None = None,
-    ):
-        raise NotImplementedError
+        raise RuntimeError(
+            _unsupported(
+                self,
+                "make_memmap_from_tensor",
+                "Only a memory-mapped TensorDict supports it.",
+            )
+        )
 
     # Key functionality: set, get, set_, set_at_, update, update_
     @abc.abstractmethod
@@ -3554,6 +3644,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                             update_batch_size=update_batch_size,
                             ignore_lock=ignore_lock,
                         )
+                        if self._nested_reads_return_copies:
+                            self._update_write_back(
+                                firstkey,
+                                target,
+                                subkey,
+                                value,
+                                sub_keys_to_update,
+                                is_leaf=is_leaf,
+                                inplace=inplace,
+                                non_blocking=non_blocking,
+                            )
                         continue
                     elif isinstance(value, (dict,)) or _is_tensor_collection(
                         type(value)
@@ -3598,6 +3699,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                                 update_batch_size=update_batch_size,
                                 ignore_lock=ignore_lock,
                             )
+                            if self._nested_reads_return_copies:
+                                self._update_write_back(
+                                    firstkey,
+                                    target,
+                                    (),
+                                    value,
+                                    sub_keys_to_update,
+                                    is_leaf=is_leaf,
+                                    inplace=inplace,
+                                    non_blocking=non_blocking,
+                                )
                         continue
                 # A tensor collection may still be a leaf so we need to duplicate the logic here
                 if (
@@ -3640,6 +3752,44 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # self.batch_size = ()
             self.auto_batch_size_(bd, keep_compliant_size=True)
         return self
+
+    def _update_write_back(
+        self,
+        firstkey,
+        target,
+        subkey,
+        value,
+        keys_to_update,
+        *,
+        is_leaf,
+        inplace,
+        non_blocking,
+    ):
+        """Writes the leaves that update() merged into the copy ``target`` back to self.
+
+        ``target`` is a copy of ``self[firstkey]`` and ``value`` was merged
+        into it at ``subkey``. Only the leaves of ``value`` are written, so the
+        other leaves of ``target``, which may have been read with the shape of
+        the first element of a stack, are left as they are.
+        """
+        if not _is_tensor_collection(type(value)):
+            from tensordict._td import TensorDict
+
+            value = TensorDict(value, batch_size=[])
+        keys_to_update = [_unravel_key_to_tuple(k) for k in keys_to_update or ()]
+        for key in value.keys(True, True, is_leaf=is_leaf):
+            key = (*subkey, *_unravel_key_to_tuple(key))
+            if keys_to_update and not any(key[: len(k)] == k for k in keys_to_update):
+                continue
+            full_key = (firstkey, *key)
+            self._set_tuple(
+                full_key,
+                target._get_tuple(key, NO_DEFAULT),
+                # a locked tensordict takes no new keys, even in place
+                inplace=inplace and (not self.is_locked or full_key in self.keys(True)),
+                validated=True,
+                non_blocking=non_blocking,
+            )
 
     def update_(
         self,
@@ -4640,7 +4790,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return value
 
     @property
-    @_cache_while_locked  # noqa: B019
     def sorted_keys(self) -> list[NestedKey]:
         """Returns the keys sorted in alphabetical order.
 
@@ -4650,7 +4799,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         is unlocked for faster execution.
 
         """
-        return sorted(self.keys())
+        return list(self._sorted_keys())
+
+    @_cache_while_locked  # noqa: B019
+    def _sorted_keys(self) -> tuple[NestedKey, ...]:
+        # The lock cache stores a tuple so that sorted_keys can return a new
+        # list: a caller that changes that list cannot change the cache.
+        return tuple(sorted(self.keys()))
 
     def _transform_keys(self, key_transform: Callable[[NestedKey], NestedKey]) -> Self:
         """Transform all keys using the provided function.
@@ -5669,7 +5824,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     )
                 continue
             if _is_tensor_collection(type(leaf)):
-                nested_fn(leaf)
+                nested = _inplace_shape_state.nested
+                _inplace_shape_state.nested = True
+                try:
+                    nested_fn(leaf)
+                finally:
+                    _inplace_shape_state.nested = nested
                 continue
             new_leaf = leaf_fn(leaf)
             del leaf
@@ -5679,6 +5839,53 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         ):
             self._change_batch_size(torch.Size(new_batch_size))
         return self
+
+    def _raise_if_holds_lazy_stack(
+        self, op_name: str, prefix: tuple[str, ...] = ()
+    ) -> None:
+        """Raise if any nested entry is lazy, before an in-place shape op.
+
+        ``_inplace_rebind_leaves`` rewrites the leaves in key order, and the
+        ``LazyStackedTensorDict`` (and ``NonTensorStack``) versions of
+        ``reshape``, ``flatten``, ``unflatten``, ``repeat``,
+        ``repeat_interleave`` and ``gather`` refuse ``inplace=True``. Finding a
+        lazy stack halfway through would leave the earlier leaves rewritten
+        while ``batch_size`` is unchanged, so the whole tree is checked first.
+        The check tests ``_lazy``, so it also catches ``_SubTensorDict``, which
+        refuses these ops too. The legacy lazy views (``_CustomOpTensorDict``)
+        refuse ``flatten``, ``unflatten``, ``repeat`` and ``gather`` but not
+        ``reshape`` and ``repeat_interleave``, so the check lets them through
+        for those two.
+        The calls on nested tensordicts skip the walk, which the top-level
+        call has done.
+        """
+        if not prefix and _inplace_shape_state.nested:
+            return
+        for key, value in self.items():
+            cls = type(value)
+            if cls is Tensor:
+                continue
+            if not isinstance(value, TensorDictBase):
+                if not _is_tensorclass(cls) or _is_non_tensor(cls):
+                    continue
+                value = value._tensordict
+            nested_key = prefix + (key,)
+            if value._lazy:
+                from tensordict._lazy import _CustomOpTensorDict
+
+                if not (
+                    op_name in ("reshape", "repeat_interleave")
+                    and isinstance(value, _CustomOpTensorDict)
+                ):
+                    raise NotImplementedError(
+                        f"{op_name}(inplace=True) is not supported on a tensordict "
+                        f"that holds a lazy tensordict (such as a "
+                        f"LazyStackedTensorDict or a NonTensorStack); found a "
+                        f"{type(value).__name__} at key "
+                        f"{nested_key[0] if len(nested_key) == 1 else nested_key!r}. "
+                        f"Use inplace=False instead."
+                    )
+            value._raise_if_holds_lazy_stack(op_name, nested_key)
 
     def map(
         self,
@@ -6983,9 +7190,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
-    @abc.abstractmethod
     def _change_batch_size(self, new_size: torch.Size) -> None:
-        raise NotImplementedError
+        self._batch_size = new_size
 
     def is_contiguous(self) -> bool:
         """Returns a boolean indicating if all the tensors are contiguous."""
