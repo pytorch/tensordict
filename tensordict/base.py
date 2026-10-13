@@ -467,12 +467,17 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
             others_map = []
             shape = self.shape
             self_expand = self
-            shapes = [shape, *[other.shape for other in others if other is not None]]
+            # None and numbers, such as the weight of lerp, are passed as they are
+            is_operand = [
+                isinstance(other, torch.Tensor) or _is_tensor_collection(type(other))
+                for other in others
+            ]
+            shapes = [shape, *[o.shape for o, f in zip(others, is_operand) if f]]
             shape = torch.broadcast_shapes(*shapes)
             if shape != self_expand.shape:
                 self_expand = self_expand.expand(shape)
-            for other in others:
-                if other is None:
+            for other, flag in zip(others, is_operand):
+                if not flag:
                     others_map.append(other)
                     continue
                 # broadcast dims
@@ -490,9 +495,9 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     stack_dim = self_expand.stack_dim
                     others_split = [
                         other.unbind(stack_dim)
-                        if other is not None
-                        else [None] * self_expand.shape[stack_dim]
-                        for other in others_map
+                        if flag
+                        else [other] * self_expand.shape[stack_dim]
+                        for other, flag in zip(others_map, is_operand)
                     ]
                     results = [
                         getattr(td, op)(*member_others, *args, **kwargs)
@@ -511,8 +516,8 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     lambda x: leaf_op(
                         x,
                         *[
-                            expand_as_right(other, x) if other is not None else None
-                            for other in others_map
+                            expand_as_right(other, x) if flag else other
+                            for other, flag in zip(others_map, is_operand)
                         ],
                         *args,
                         **kwargs,

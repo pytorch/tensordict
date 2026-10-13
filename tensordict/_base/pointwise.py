@@ -1600,10 +1600,13 @@ class _PointwiseOps:
 
         """
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         if _is_tensor_collection(type(end)):
             end_val = _values_by_key(end, keys)
         else:
-            end_val = end
+            # _foreach_lerp takes a list of ends
+            end_val = [end] * len(vals)
         if isinstance(weight, (float, torch.Tensor)):
             weight_val = weight
         elif _is_tensor_collection(type(weight)):
@@ -1631,14 +1634,24 @@ class _PointwiseOps:
         weight: TensorDictBase | torch.Tensor | float,
     ):
         """In-place version of :meth:`~.lerp`."""
+        if (isinstance(end, Tensor) and end.ndim) or (
+            isinstance(weight, Tensor) and weight.ndim
+        ):
+            # broadcast the tensor to the batch dims, as lerp does. The other
+            # calls skip _maybe_broadcast_other, which costs a few us per call.
+            lerp_ = _maybe_broadcast_other("lerp_", 2)(type(self).lerp_)
+            return lerp_(self, end, weight)
         if _mixes_lazy_stacks(self, (end, weight)):
             return _apply_pointwise(self, Tensor.lerp_, (end, weight), inplace=True)
         # the leaves of the tensordict operands are paired by key, as in add_
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self
         if _is_tensor_collection(type(end)):
             end_val = _values_by_key(end, keys)
         else:
-            end_val = end
+            # _foreach_lerp_ takes a list of ends
+            end_val = [end] * len(vals)
         if isinstance(weight, (float, torch.Tensor)):
             weight_val = weight
         elif _is_tensor_collection(type(weight)):
@@ -1674,6 +1687,8 @@ class _PointwiseOps:
             value (Number, optional): multiplier for :math:`\text{other1} / \text{other2}`
         """
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         if _is_tensor_collection(type(other1)):
             other1_val = _values_by_key(other1, keys)
         else:
@@ -1702,6 +1717,8 @@ class _PointwiseOps:
         """The in-place version of :meth:`~.addcdiv`."""
         # the leaves of the tensordict operands are paired by key, as in add_
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self
         if _is_tensor_collection(type(other1)):
             other1_val = _values_by_key(other1, keys)
         else:
@@ -1746,6 +1763,8 @@ class _PointwiseOps:
             value (Number, optional): multiplier for :math:`other1 .* other2`
         """
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
         if _is_tensor_collection(type(other1)):
             other1_val = _values_by_key(other1, keys)
         else:
@@ -1774,6 +1793,8 @@ class _PointwiseOps:
         """The in-place version of :meth:`~.addcmul`."""
         # the leaves of the tensordict operands are paired by key, as in add_
         keys, vals = self._items_list(True, True)
+        if not vals:
+            return self
         if _is_tensor_collection(type(other1)):
             other1_val = _values_by_key(other1, keys)
         else:

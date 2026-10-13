@@ -35,6 +35,7 @@ from tensordict.utils import (
     _decode_key_from_filesystem,
     _encode_key_for_filesystem,
     assert_allclose_td,
+    expand_as_right,
     is_non_tensor,
     is_tensorclass,
     set_lazy_legacy,
@@ -133,6 +134,7 @@ class TestPointwiseOps:
             "clamp_min": (0.5,),
             "clamp_min_": (0.5,),
             "div": (y,),
+            "lerp": (y, 0.5),
             "logical_and": (y > 0.5,),
             "minimum": (y,),
             "mul": (y,),
@@ -570,6 +572,7 @@ class TestPointwiseOps:
         td = TensorDict({"a": TensorDict({}, [3])} if nested else {}, [3])
         results = [td - 1, 1 - td, td / 2, 2 / td, td**2, td - td, td / td, td**td]
         results += [td.sub(1, alpha=2), td.rsub(1, alpha=2)]
+        results += [td.lerp(td, 0.5), td.addcmul(td, td), td.addcdiv(td, td)]
         for result in results:
             assert result is not td
             assert result.batch_size == td.batch_size
@@ -578,9 +581,35 @@ class TestPointwiseOps:
         assert td.sub_(td, alpha=2) is td
         assert td.div_(2) is td
         assert td.pow_(td) is td
+        assert td.lerp_(td, 0.5) is td
+        assert td.addcmul_(td, td) is td
+        assert td.addcdiv_(td, td) is td
         norm = td.norm()
         assert norm.batch_size == ()
         assert list(norm.keys(True)) == list(td.keys(True))
+
+    @pytest.mark.parametrize("lazy", [False, True])
+    @pytest.mark.parametrize("inplace", [False, True])
+    @pytest.mark.parametrize("end_shape", [(3,), ()])
+    def test_lerp_tensor_end(self, end_shape, inplace, lazy):
+        # A tensor end with a number weight, as torch.lerp takes them
+        torch.manual_seed(0)
+        td = TensorDict(
+            a=torch.randn(3),
+            nested=TensorDict(b=torch.randn(3, 4), batch_size=[3]),
+            batch_size=[3],
+        )
+        end = torch.randn(end_shape)
+        expected = td.apply(lambda x: torch.lerp(x, expand_as_right(end, x), 0.5))
+        if lazy:
+            td = LazyStackedTensorDict(*td.unbind(0), stack_dim=0)
+        if inplace:
+            result = td.lerp_(end, 0.5)
+            assert result is td
+        else:
+            result = td.lerp(end, 0.5)
+        assert type(result) is type(td)
+        assert_allclose_td(result, expected)
 
     def test_clamp_min_default(self):
         # Create two tds with different key sets
