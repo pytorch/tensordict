@@ -211,6 +211,24 @@ class TestH5Serialization:
         assert h5td["s"].names == ["t", "u"]
         h5td.close()
 
+    def test_rename_clashing_with_nested_names_warns(self, tmp_path):
+        # a new name that clashes with a kept nested name leaves that nested
+        # dim unnamed, as before #2252, and warns that it will raise
+        sub = TensorDict({"y": torch.zeros(4, 2)}, [4, 2], names=["t", "x"])
+        td = TensorDict({"s": sub}, [4], names=["t"])
+        with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+            h5td = PersistentTensorDict.from_dict(
+                td, filename=tmp_path / "a.h5", names=["x"]
+            )
+        assert h5td.names == ["x"]
+        assert h5td["s"].names == ["x", None]
+        h5td.close()
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "b.h5")
+        with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+            h5td.names = ["x"]
+        assert h5td["s"].names == ["x", None]
+        h5td.close()
+
     def test_batch_size_setter_incompatible(self, tmp_path):
         # as on a TensorDict, an incompatible batch size raises and the old
         # one stays

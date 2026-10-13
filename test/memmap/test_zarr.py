@@ -628,6 +628,24 @@ class TestZarrStores:
         assert (td_recon["b", "c", "d"] == td["b", "c", "d"]).all()
         td_recon.close()
 
+    def test_rename_clashing_with_nested_names_warns(self, tmp_path):
+        # a new name that clashes with a kept nested name leaves that nested
+        # dim unnamed, as before #2252, and warns that it will raise
+        sub = TensorDict({"y": torch.zeros(4, 2)}, [4, 2], names=["t", "x"])
+        td = TensorDict({"s": sub}, [4], names=["t"])
+        with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+            ptd = PersistentTensorDict.from_dict(
+                td, tmp_path / "a.zarr", backend="zarr", names=["x"]
+            )
+        assert ptd.names == ["x"]
+        assert ptd["s"].names == ["x", None]
+        ptd.close()
+        ptd = PersistentTensorDict.from_dict(td, tmp_path / "b.zarr", backend="zarr")
+        with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+            ptd.names = ["x"]
+        assert ptd["s"].names == ["x", None]
+        ptd.close()
+
     def test_group_kwarg(self, tmp_path):
         td = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [3])
         td.to_zarr(tmp_path / "s.zarr")
