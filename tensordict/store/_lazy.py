@@ -1715,7 +1715,12 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         return self
 
     def _get_at_str(self, key, idx, default=NO_DEFAULT, **kwargs):
-        result = self._run_sync(self._abatch_get_at([key], idx))
+        try:
+            result = self._run_sync(self._abatch_get_at([key], idx))
+        except KeyError:
+            # not a leaf: a sub-tensordict, or a missing key
+            value = self._get_str(key, default, **kwargs)
+            return value if value is default else value[idx]
         tensor = result.get(key)
         if tensor is None:
             if default is not NO_DEFAULT:
@@ -1728,7 +1733,13 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         if len(key) == 1:
             return self._get_at_str(key[0], idx, default=default, **kwargs)
         key_path = _KEY_SEP.join(key)
-        result = self._run_sync(self._abatch_get_at([key_path], idx))
+        try:
+            result = self._run_sync(self._abatch_get_at([key_path], idx))
+        except KeyError:
+            # not a leaf: a sub-tensordict, a path through a tensor, or a
+            # missing key
+            value = self._get_tuple(key, default, **kwargs)
+            return value if value is default else value[idx]
         tensor = result.get(key_path)
         if tensor is None:
             if default is not NO_DEFAULT:

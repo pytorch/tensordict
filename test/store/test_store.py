@@ -580,13 +580,22 @@ class TestTensorDictStore:
                 copy.close()
 
     def test_nested_clear_redis(self, store_td, store_kwargs):
-        """clear_redis() on a nested view deletes the keys of the whole store."""
+        """clear_redis() on a nested view deletes the entries under the view only."""
         store_td["a"] = torch.arange(10.0)
         store_td["n", "b"] = torch.ones(10, 2)
+        store_td["n", "m", "c"] = torch.ones(10)
+        store_td["nn"] = torch.zeros(10)  # starts with "n", but is not under it
         store_td["n"].clear_redis()
-        assert list(store_td.keys(True, True)) == []
-        with pytest.raises(KeyError, match="No TensorDictStore"):
-            TensorDictStore.from_store(td_id=store_td._td_id, **store_kwargs)
+        assert sorted(store_td.keys(True, True)) == ["a", "nn"]
+        server_keys = _server_keys(store_td, store_kwargs)
+        assert not [key for key in server_keys if ":n." in key]
+        assert store_td._batch_size_key in server_keys
+        reader = TensorDictStore.from_store(td_id=store_td._td_id, **store_kwargs)
+        try:
+            assert sorted(reader.keys(True, True)) == ["a", "nn"]
+            assert torch.equal(reader["a"], torch.arange(10.0))
+        finally:
+            reader.close()
 
     def test_get_at_stale_key_cache(self, store_td, store_kwargs):
         """get_at of a key that another handle deleted, with a stale key cache."""
@@ -598,7 +607,7 @@ class TestTensorDictStore:
             # the metadata of the reader is not cached yet
             assert torch.equal(reader.get_at(("n", "b"), 1), torch.ones(2))
             store_td.del_("a")
-            with pytest.raises(KeyError, match="shape"):
+            with pytest.raises(KeyError, match="key a not found in TensorDictStore"):
                 reader.get_at("a", 0)
         finally:
             reader.close()
@@ -2339,9 +2348,12 @@ class TestLazyStackedTensorDictStore:
     def test_get_at_missing_key(self, store_kwargs):
         store = _small_store(store_kwargs, stacked=True)
         try:
-            for args in [("zz", 0), ("zz", 0, None), ("n", 1), (("a", "x"), 0)]:
-                with pytest.raises(KeyError, match="shape"):
-                    store.get_at(*args)
+            assert store.get_at("zz", 0, None) is None
+            assert store.get_at(("n", "zz"), 0, None) is None
+            assert torch.equal(store.get_at("n", 1)["b"], torch.ones(2))
+            assert torch.equal(store.get_at(("n", "b"), 1), torch.ones(2))
+            with pytest.raises(ValueError, match="'a' is a Tensor, not a tensordict"):
+                store.get_at(("a", "x"), 0)
         finally:
             store.clear_redis()
             store.close()

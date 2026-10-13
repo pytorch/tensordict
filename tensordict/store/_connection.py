@@ -126,6 +126,10 @@ class _StoreConnection:
     #: invisible until the store is reopened.
     _caches_keys: bool = True
 
+    #: Key path of a nested view of a ``TensorDictStore``, empty for a store.
+    #: ``clear_redis`` on a nested view deletes only the entries under it.
+    _prefix: str = ""
+
     # ---- hooks ----
 
     def _entry_server_keys(self, key_path: str) -> tuple[str, ...]:
@@ -262,6 +266,9 @@ class _StoreConnection:
                 pipe.hgetall(self._meta_key(kp))
             raw_metas = await pipe.execute()
             for kp, raw_meta in zip(uncached, raw_metas):
+                if not raw_meta:
+                    # deleted by another handle, or not a leaf
+                    raise KeyError(f"key {kp} not found in {type(self).__name__}")
                 meta = _decode_meta(raw_meta)
                 if non_tensor is not None and meta.get("is_non_tensor") == "1":
                     non_tensor[kp] = meta
@@ -327,19 +334,26 @@ class _StoreConnection:
 
         This removes all tensor data, metadata, the key registry and the
         metadata of the store, such as its batch size and the stored
-        TensorClass path. The connection stays open, so you can write new
+        TensorClass path. On a nested view, it removes only the entries
+        under the view. The connection stays open, so you can write new
         entries. Call :meth:`close` to close it.
         """
 
         async def _aclear():
-            all_keys = await self._aget_all_keys()
+            key_paths = await self._aget_all_keys()
+            if self._prefix:
+                prefix = self._prefix + _KEY_SEP
+                key_paths = [kp for kp in key_paths if kp.startswith(prefix)]
             pipe = self._client.pipeline()
-            for key_path in all_keys:
+            for key_path in key_paths:
                 for server_key in self._entry_server_keys(key_path):
                     pipe.delete(server_key)
-            pipe.delete(self._keys_registry_key)
-            for suffix in self._global_key_suffixes:
-                pipe.delete(self._redis_key(suffix))
+            if not self._prefix:
+                pipe.delete(self._keys_registry_key)
+                for suffix in self._global_key_suffixes:
+                    pipe.delete(self._redis_key(suffix))
+            elif key_paths:
+                pipe.srem(self._keys_registry_key, *key_paths)
             await pipe.execute()
 
         self._run_sync(_aclear())
