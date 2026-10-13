@@ -653,9 +653,12 @@ class TestGeneric:
         assert td["b"].is_locked
         storage = td._consolidated["storage"]
         assert storage.device == torch.device(device)
-        for value in td.values(True, True):
-            assert value.device == torch.device(device)
-            assert value.untyped_storage().data_ptr() == storage.data_ptr()
+        # A lazy stack's values are stacked copies: check the leaves of the
+        # stacked tensordicts, which are views of the storage
+        for sub_td in td.tensordicts if lazy else [td]:
+            for value in sub_td.values(True, True):
+                assert value.device == torch.device(device)
+                assert value.untyped_storage().data_ptr() == storage.data_ptr()
         assert td["b", "c"].shape == (3, 2)
         assert td[0]["d"] == "a string!"
         if device != "meta":
