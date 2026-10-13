@@ -4502,6 +4502,15 @@ class TestGeneric:
         with pytest.raises(NotImplementedError, match="masked_select"):
             lst.masked_select(torch.ones(3, 4, dtype=torch.bool), inplace=True)
 
+    def test_masked_select_inplace_sub_tensordict_raises(self):
+        sub = TensorDict({"x": torch.zeros(4, 3)}, [4])._get_sub_tensordict(slice(0, 2))
+        with pytest.raises(
+            NotImplementedError,
+            match="masked_select.inplace=True. is not supported on LazyStackedTensorDict",
+        ):
+            sub.masked_select(torch.ones(2, dtype=torch.bool), inplace=True)
+        assert sub.batch_size == (2,)
+
     @pytest.mark.parametrize(
         "op",
         [
@@ -7547,6 +7556,30 @@ class TestGeneric:
         td.set("x", value)
         td.update({"y": value})
         assert (td["x"] == 1).all() and (td["y"] == 1).all()
+
+    @pytest.mark.parametrize("operand", [None, "abc"])
+    def test_comparison_unsupported_operand(self, operand):
+        # An operand that is not a tensor, number, dict or tensor collection
+        # gives a bool: True for != and ^, False for the other ops
+        td = TensorDict(a=torch.zeros(3, dtype=torch.long), batch_size=[3])
+        for op in ("__eq__", "__lt__", "__le__", "__gt__", "__ge__", "__or__"):
+            assert getattr(td, op)(operand) is False
+        for op in ("__ne__", "__xor__"):
+            assert getattr(td, op)(operand) is True
+
+    @pytest.mark.parametrize("op", ["__ne__", "__xor__", "__or__"])
+    def test_comparison_mismatched_keys_keyerror(self, op):
+        td = TensorDict(a=torch.zeros(3, dtype=torch.long), batch_size=[3])
+        other = TensorDict(b=torch.zeros(3, dtype=torch.long), batch_size=[3])
+        with pytest.raises(KeyError, match="keys in TensorDict.* mismatch, got"):
+            getattr(td, op)(other)
+
+    @pytest.mark.parametrize("op", ["__eq__", "__lt__", "__le__", "__gt__", "__ge__"])
+    def test_comparison_mismatched_keys(self, op):
+        td = TensorDict(a=torch.zeros(3, dtype=torch.long), batch_size=[3])
+        other = TensorDict(b=torch.zeros(3, dtype=torch.long), batch_size=[3])
+        with pytest.raises(KeyError, match="keys in tensordicts mismatch. The first"):
+            getattr(td, op)(other)
 
     @pytest.mark.parametrize("nested", [False, True])
     def test_where_out_without_leaves(self, nested):
