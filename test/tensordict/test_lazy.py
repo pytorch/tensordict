@@ -3018,6 +3018,19 @@ class TestLazyStackedTensorDict:
         # A shape that matches the batch size returns the stack itself
         assert td.reshape([size or -1 for size in td.batch_size]) is td
 
+    @pytest.mark.parametrize("sizes", [(3, 3), (2, 2)])
+    def test_unflatten_lazy_zero_size_dim_bad_sizes(self, sizes):
+        # Sizes that don't multiply up to the dim raise, as on TensorDict.
+        # They returned batch sizes [3, 1, 0] and [2, -1, 0] before.
+        td = LazyStackedTensorDict(
+            *[TensorDict(a=torch.zeros(0, 4), batch_size=[0]) for _ in range(3)],
+            stack_dim=0,
+        )
+        with pytest.raises(RuntimeError, match="don't multiply up"):
+            td.unflatten(0, sizes)
+        with pytest.raises(RuntimeError, match="don't multiply up"):
+            td.to_tensordict().unflatten(0, sizes)
+
     @staticmethod
     def _shape_stack(stack_dim=1, n=2, hetero=False, **kwargs):
         # members of batch [3] with a nested tensordict; with hetero=True the

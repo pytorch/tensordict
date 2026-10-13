@@ -2460,8 +2460,9 @@ class _ShapeOps:
         past_batch_dims = start_dim < 0 or end_dim >= self.ndim
         if past_batch_dims:
             _warn_dim_past_batch_dims("flatten")
-        elif start_dim == end_dim:
-            # a no-op, which returns the input, as torch.flatten does
+        elif start_dim == end_dim and self._flatten_lenient:
+            # a no-op, which returns the input, as torch.flatten does (the
+            # members of a lazy stack may have no dim to flatten)
             return self
 
         def flatten(tensor):
@@ -2495,7 +2496,7 @@ class _ShapeOps:
             return self._inplace_rebind_leaves(
                 flatten, nested_fn, torch.Size(batch_size)
             )
-        if not past_batch_dims:
+        if not past_batch_dims and start_dim != end_dim:
             return self._reshape(torch.Size(batch_size), names)
         out = self._fast_apply(
             flatten,
@@ -2527,6 +2528,12 @@ class _ShapeOps:
             >>> td_unflat = td_flat.unflatten(0, [3, 4])
             >>> assert (td == td_unflat).all()
         """
+        if inplace and self._lazy:
+            raise NotImplementedError(
+                "unflatten(inplace=True) is not supported on "
+                "LazyStackedTensorDict; call .to_tensordict() first or use "
+                "inplace=False."
+            )
         dim = _maybe_correct_neg_dim(dim, self.batch_size)
         if (
             -1 not in unflattened_size
@@ -2567,12 +2574,6 @@ class _ShapeOps:
             batch_size = list(unflattened_size) + list(self.batch_size[1:])
         # TODO: check that this works with nested tds of different batch size
         if inplace:
-            if self._lazy:
-                raise NotImplementedError(
-                    "unflatten(inplace=True) is not supported on "
-                    "LazyStackedTensorDict; call .to_tensordict() first or use "
-                    "inplace=False."
-                )
             self._raise_if_holds_lazy_stack("unflatten")
 
             def nested_fn(nested):

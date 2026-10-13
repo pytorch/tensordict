@@ -719,7 +719,9 @@ class TestTensorDictStore:
         with pytest.raises(RuntimeError):
             store_td.unsqueeze(0)
         with pytest.raises(RuntimeError):
-            store_td.squeeze(0)
+            store_td.squeeze()
+        # squeezing a dim of size != 1 is a no-op, as on TensorDict
+        assert store_td.squeeze(0) is store_td
 
         # Escape hatch: materialize first, then shape ops work
         local = store_td.to_tensordict()

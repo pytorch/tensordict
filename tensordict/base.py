@@ -1221,9 +1221,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # reshape and repeat_interleave with inplace=True raise
     # NotImplementedError before they change anything.
     _inplace_shape_ops_unsupported: bool = False
-    # Set by LazyStackedTensorDict, whose flatten inserted a dim of size 1 for
-    # start_dim > end_dim before 0.15: until 0.17 it still does, with a
-    # FutureWarning, where the others raise a ValueError.
+    # Set by LazyStackedTensorDict, whose flatten regroups its members rather
+    # than flattening leaves: flatten(d, d) returns self, and for
+    # start_dim > end_dim it inserted a dim of size 1 before 0.15: until 0.17
+    # it still does, with a FutureWarning, where the others raise a ValueError.
     _flatten_lenient: bool = False
 
     @classmethod
