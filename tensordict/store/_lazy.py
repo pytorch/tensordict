@@ -86,6 +86,22 @@ def _empty_structure(key_paths: set[str]) -> dict:
     return structure
 
 
+def _writes_existing_leaves(key_paths: set[str], key_path: str, value: Any) -> bool:
+    """Returns whether writing ``value`` at ``key_path`` only writes leaves in ``key_paths``.
+
+    A tensordict value is written leaf by leaf under ``key_path``, so each of
+    its leaves must be in the key registry; any other value is written as the
+    leaf ``key_path``.
+    """
+    if is_tensor_collection(value):
+        prefix = key_path + _KEY_SEP
+        return all(
+            prefix + _KEY_SEP.join(_unravel_key_to_tuple(sub_key)) in key_paths
+            for sub_key in value.keys(include_nested=True, leaves_only=True)
+        )
+    return key_path in key_paths
+
+
 # ---------------------------------------------------------------------------
 # _StoreStackElementView — write-through view for a single stack element
 # ---------------------------------------------------------------------------
@@ -207,7 +223,10 @@ class _StoreStackElementView(TensorDictBase):
             self.is_locked
             and not ignore_lock
             and inplace is not True
-            and not self._convert_inplace(inplace, key)
+            and (
+                inplace is False
+                or not _writes_existing_leaves(self._get_all_keys(), key, value)
+            )
         ):
             raise RuntimeError(_LOCK_ERROR)
 
@@ -255,7 +274,10 @@ class _StoreStackElementView(TensorDictBase):
         if (
             self.is_locked
             and inplace is not True
-            and not self._convert_inplace(inplace, key_path)
+            and (
+                inplace is False
+                or not _writes_existing_leaves(self._get_all_keys(), key_path, value)
+            )
         ):
             raise RuntimeError(_LOCK_ERROR)
         if isinstance(value, torch.Tensor):
@@ -1621,7 +1643,10 @@ class LazyStackedTensorDictStore(TensorDictBase):
             self.is_locked
             and not ignore_lock
             and inplace is not True
-            and not self._convert_inplace(inplace, key)
+            and (
+                inplace is False
+                or not _writes_existing_leaves(self._get_all_keys(), key, value)
+            )
         ):
             raise RuntimeError(_LOCK_ERROR)
 
@@ -1682,7 +1707,10 @@ class LazyStackedTensorDictStore(TensorDictBase):
         if (
             self.is_locked
             and inplace is not True
-            and not self._convert_inplace(inplace, key_path)
+            and (
+                inplace is False
+                or not _writes_existing_leaves(self._get_all_keys(), key_path, value)
+            )
         ):
             raise RuntimeError(_LOCK_ERROR)
         if isinstance(value, torch.Tensor):
