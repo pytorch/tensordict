@@ -40,10 +40,49 @@ from tensordict.utils import (
     _PIN_MEM_TIMEOUT,
     _zip_strict,
     DeviceType,
+    is_non_tensor,
+    is_tensorclass,
 )
 from torch import Tensor
 from torch._utils import _get_available_device_type, _get_device_module
 from torch.nn.parameter import Parameter
+
+
+def _check_nested_batch_size(td) -> None:
+    # Checks the leaves of td and of its nested tensordicts against their batch
+    # sizes. Lazy stacks take their batch size from their parts.
+    if is_tensorclass(td):
+        td = td._tensordict
+    if td._lazy:
+        return
+    td._check_new_batch_size(td.batch_size)
+    for value in td.values():
+        if _is_tensor_collection(type(value)) and not is_non_tensor(value):
+            _check_nested_batch_size(value)
+
+
+def _to_batch_size_will_change(td, batch_size, root=True) -> bool:
+    # Whether to(device, batch_size=batch_size) on td gives a different result
+    # from to(device) followed by the batch-size setter, as it will in 0.17.
+    # Today every nested tensordict gets exactly batch_size, nested lazy stacks
+    # become TensorDicts and all names are erased.
+    if is_tensorclass(td):
+        td = td._tensordict
+    if not root:
+        if td._lazy:
+            return True
+        # the setter only changes nested batch sizes with fewer dims
+        if len(td.batch_size) >= len(batch_size) and td.batch_size != batch_size:
+            return True
+    if td._has_names() and any(
+        name is not None for name in td.names[: len(batch_size)]
+    ):
+        return True
+    return any(
+        _to_batch_size_will_change(value, batch_size, root=False)
+        for value in td.values()
+        if _is_tensor_collection(type(value))
+    )
 
 
 class _DeviceOps:
@@ -500,7 +539,15 @@ class _DeviceOps:
                 format for the 4D and 5D tensors in this tensordict, as in
                 :meth:`torch.nn.Module.to`.
             batch_size (torch.Size, optional): resulting batch-size of the
-                output tensordict.
+                output tensordict. When the device or dtype changes, every
+                nested tensordict gets exactly this batch size and the names
+                are erased. Starting with TensorDict 0.17, the default will
+                change to setting the batch size as ``to(batch_size=...)``
+                does without a device: nested tensordicts with more batch
+                dimensions keep their batch size, nested lazy stacks stay
+                lazy stacks (or raise, as there, if they need more batch
+                dimensions) and the names are kept. A ``FutureWarning`` is
+                emitted when the result will change.
             other (TensorDictBase, optional): TensorDict instance whose dtype
                 and device are the desired dtype and device for all tensors
                 in this TensorDict.
@@ -693,7 +740,8 @@ class _DeviceOps:
                 )
             else:
                 apply_kwargs["device"] = device if device is not None else self.device
-                apply_kwargs["batch_size"] = batch_size
+                # With inplace=True, the setter below sets the batch size
+                apply_kwargs["batch_size"] = None if inplace else batch_size
                 apply_kwargs["out"] = self if inplace else None
                 apply_kwargs["checked"] = True
                 if non_blocking_pin:
@@ -721,6 +769,27 @@ class _DeviceOps:
                         propagate_lock=True,
                         **apply_kwargs,
                     )
+                if batch_size is not None and not inplace:
+                    # _fast_apply gives every nested tensordict the new batch
+                    # size without checking its leaves
+                    _check_nested_batch_size(result)
+                    if not is_compiling() and _to_batch_size_will_change(
+                        self, torch.Size(batch_size)
+                    ):
+                        warnings.warn(
+                            "to() with a batch_size and a new device or dtype "
+                            "gives every nested tensordict exactly that batch "
+                            "size, turns nested lazy stacks into TensorDicts "
+                            "and erases the names. Starting with TensorDict "
+                            "0.17, the default will change to setting the "
+                            "batch size as to(batch_size=...) does without a "
+                            "device, which keeps the nested batch sizes, lazy "
+                            "stacks and names. Call to(...) and then set the "
+                            "batch_size to get the new behaviour now.",
+                            FutureWarning,
+                            # skip the _as_context_manager wrapper
+                            stacklevel=3,
+                        )
 
         if batch_size is not None:
             result.batch_size = batch_size

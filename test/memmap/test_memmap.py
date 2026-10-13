@@ -1033,6 +1033,34 @@ class TestNestedTensor:
                 assert (td[i, j] == tdsave[i, j]).all()
 
     @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_memmap_like_td_with_nested(self, tmpdir, num_threads):
+        nt = torch.nested.nested_tensor([torch.ones(2), torch.ones(3)])
+        td = TensorDict({"n": nt}, batch_size=[2])
+        out = td.memmap_like(tmpdir, num_threads=num_threads)
+        assert out["n"].is_nested
+        assert (out["n"]._nested_tensor_size() == nt._nested_tensor_size()).all()
+        assert all((t == 0).all() for t in out["n"].unbind(0))
+        assert all((t == 1).all() for t in td["n"].unbind(0))
+        loaded = TensorDict.load_memmap(tmpdir)
+        assert loaded["n"].is_nested
+        assert (loaded["n"]._nested_tensor_size() == nt._nested_tensor_size()).all()
+
+    @pytest.mark.parametrize("existing", [False, True])
+    def test_memmap_like_archive_with_nested_raises(self, tmpdir, existing):
+        nt = torch.nested.nested_tensor([torch.ones(2), torch.ones(3)])
+        td = TensorDict({"n": nt}, batch_size=[2])
+        path = Path(tmpdir) / "data.tdz"
+        if existing:
+            path.write_bytes(b"old")
+        with pytest.raises(NotImplementedError, match="archive mode"):
+            td.memmap_like(path)
+        if existing:
+            assert path.read_bytes() == b"old"
+        else:
+            assert not path.exists()
+        assert os.listdir(tmpdir) == (["data.tdz"] if existing else [])
+
+    @pytest.mark.parametrize("num_threads", [0, 2])
     @pytest.mark.parametrize("with_prefix", [False, True])
     def test_memmap_td_jagged_raises(self, num_threads, with_prefix, tmpdir):
         # https://github.com/pytorch/tensordict/issues/1924

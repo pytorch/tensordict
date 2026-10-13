@@ -1140,6 +1140,19 @@ class TestTensorClass:
 
         assert myc.X.shape == torch.Size([2, 3, 4])
 
+    def test_bool(self):
+        # bool() raises and names the replacements (#1939)
+        myc = _make_data([3])
+        with pytest.raises(
+            RuntimeError,
+            match=r"Converting a tensorclass to boolean value is not permitted. "
+            r"Use len\(tc.keys\(\)\) to test for keys, tc.is_empty\(\) to test "
+            r"for leaves, or \(a == b\).all\(\) / .any\(\) to reduce a comparison.",
+        ):
+            bool(myc)
+        with pytest.raises(RuntimeError, match="is not permitted"):
+            assert myc == myc
+
     def test_cat(self):
         @tensorclass
         class MyDataNested:
@@ -1739,7 +1752,9 @@ class TestTensorClass:
         with pytest.raises(TypeError, match="unhashable"):
             _ = {x: 0}
         assert not x.is_locked
-        x.y = 0
+        # a scalar over a NonTensorData entry: a tensor until 0.17 (gh-1199)
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            x.y = 0
 
     @pytest.mark.parametrize("from_torch", [True, False])
     def test_gather(self, from_torch):
@@ -3131,6 +3146,79 @@ class TestTensorClass:
         other = TC(x=torch.zeros(3), z=torch.zeros(3), batch_size=[3])
         other.load_state_dict(tc.state_dict())
         torch.testing.assert_close(other.z, z)
+
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    @pytest.mark.parametrize(
+        "method",
+        [
+            "set_non_tensor",
+            "setdefault",
+            "create_nested",
+            "rename_key_",
+            "update_td",
+            "update_tc",
+        ],
+    )
+    def test_write_non_field_key(self, method, tensor_only):
+        # set() rejects keys that are not fields. These methods store them
+        # and warn until TensorDict 0.17, and write fields without a warning.
+        @tensorclass(tensor_only=tensor_only)
+        class TC:
+            x: torch.Tensor
+            y: torch.Tensor = None
+            td: TensorDict = None
+
+        @tensorclass
+        class Other:
+            x: torch.Tensor
+            nope: torch.Tensor
+
+        def write(tc, key):
+            if method == "set_non_tensor":
+                tc.set_non_tensor(key, "v")
+            elif method == "setdefault":
+                tc.setdefault(key, torch.ones(3))
+            elif method == "create_nested":
+                tc.create_nested(key)
+            elif method == "rename_key_":
+                tc.rename_key_("x", key)
+            elif method == "update_td":
+                tc.update(
+                    TensorDict({key: torch.ones(3), "x": torch.ones(3)}, [3]),
+                    keys_to_update=None if key == "nope" else [key],
+                )
+            elif key == "nope":
+                tc.update(Other(x=torch.ones(3), nope=torch.ones(3), batch_size=[3]))
+            else:
+                tc.update(
+                    Other(x=torch.ones(3), nope=torch.ones(3), batch_size=[3]),
+                    keys_to_update=[key],
+                )
+
+        name = "update" if method.startswith("update") else method
+        tc = TC(x=torch.zeros(3), batch_size=[3])
+        with pytest.warns(
+            DeprecationWarning,
+            match=re.escape(
+                "Writing keys that are not fields (['nope']) with "
+                f"TC.{name}(), which set() rejects with "
+                "AttributeError, is deprecated and will be removed in "
+                "TensorDict 0.17."
+            ),
+        ) as record:
+            write(tc, "nope")
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert "nope" in tc._tensordict.keys()
+
+        # a field, and a key that is not a field left out by keys_to_update
+        key = "td" if method == "create_nested" else "x" if "update" in method else "y"
+        tc = TC(x=torch.zeros(3), batch_size=[3])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            write(tc, key)
+        assert "nope" not in tc._tensordict.keys()
+        assert key in tc._tensordict.keys()
 
     def test_replace(self):
         @tensorclass
@@ -5228,6 +5316,57 @@ class TestDeprecations:
             c = MyClass.from_tensordict(td, *args, **kwargs)
         assert record[0].filename == __file__
         assert c._tensordict is td
+
+    @pytest.mark.parametrize(
+        "base",
+        [None, TensorClass, TensorClass["tensor_only"]],
+        ids=["decorator", "subclass", "tensor_only"],
+    )
+    def test_from_dict_defaults(self, base):
+        annotations = {"a": torch.Tensor, "b": torch.Tensor, "t": torch.Tensor}
+        namespace = {
+            "__annotations__": annotations,
+            "b": dataclasses.field(default_factory=lambda: torch.ones(2)),
+            "t": None,
+        }
+        if base is None:
+            annotations["s"] = str
+            namespace["s"] = "hi"
+            MyClass = tensorclass(type("MyClass", (), namespace))
+        else:
+            MyClass = type("MyClass", (base,), namespace)
+        defaults = {"b"} if base is not None else {"b", "s"}
+        a = torch.zeros(2)
+        with pytest.warns(
+            FutureWarning, match=r"Starting with TensorDict 0\.17, the default"
+        ) as record:
+            c = MyClass.from_dict({"a": a}, batch_size=[2])
+        assert record[0].filename == __file__
+        assert all(repr(key) in str(record[0].message) for key in defaults)
+        assert all(getattr(c, key) is None for key in (*defaults, "t"))
+
+        # no warning when the result stays the same in 0.17
+        full = {
+            "a": a,
+            **{key: getattr(MyClass(a=a, batch_size=[2]), key) for key in defaults},
+        }
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            # every field with a non-None default is given; t defaults to None
+            assert MyClass.from_dict(full, batch_size=[2]).t is None
+            # a field without a default stays None
+            assert (
+                MyClass.from_dict(
+                    {k: v for k, v in full.items() if k != "a"}, batch_size=[2]
+                ).a
+                is None
+            )
+            # the update methods keep the values of the instance
+            c = MyClass(a=a, b=torch.full((2,), 3.0), batch_size=[2])
+            c.update({"a": torch.ones(2)})
+            c.update_({"a": torch.ones(2)})
+            c.update_at_({"a": torch.ones(())}, 0)
+            assert (c.b == 3).all()
 
     # The library code that builds and converts tensorclasses does not call the
     # deprecated members.

@@ -13,6 +13,7 @@ import math
 import os
 import queue
 import re
+import sys
 import threading
 import time
 import warnings
@@ -486,7 +487,15 @@ def _set_item(
     if not validated:
         raise RuntimeError
     if isinstance(tensor, Tensor):
-        tensor[index] = value
+        if (
+            _is_unbatched(value)
+            and _is_unbatched(tensor)
+            and value.shape == tensor.shape
+        ):
+            # the whole batch shares the payload: write it whole, as td[:] does
+            tensor.copy_(value, non_blocking=non_blocking)
+        else:
+            tensor[index] = value
         return tensor
     from tensordict.tensorclass import NonTensorData, NonTensorStack
 
@@ -502,6 +511,20 @@ def _set_item(
                 return tensor
         if isinstance(tensor, NonTensorData):
             tensor = NonTensorStack._from_nontensordata(tensor)
+            if (
+                isinstance(tensor, NonTensorData)
+                and isinstance(value, Tensor)
+                and (index is Ellipsis or (isinstance(index, tuple) and not index))
+            ):
+                # Without batch dims, the index selects the whole entry: the
+                # value replaces it, as NonTensorStack.__setitem__ writes an
+                # element of a stack
+                return type(tensor)(
+                    data=value,
+                    batch_size=tensor.batch_size,
+                    names=tensor._maybe_names(),
+                    device=tensor.device,
+                )
         if tensor.stack_dim != 0:
             tensor = NonTensorStack(*tensor.unbind(0), stack_dim=0)
         tensor[index] = value
@@ -2930,7 +2953,8 @@ def parse_tensor_dict_string(s: str):
 
     Raises:
         ValueError: if a field is not a ``Tensor`` or a ``TensorDict`` printed
-            with the default print options.
+            with the default print options, or if ``s`` is the repr of a lazy
+            stack with exclusive keys.
 
     """
     from tensordict import TensorDict
@@ -2943,6 +2967,10 @@ def parse_tensor_dict_string(s: str):
         re.MULTILINE,
     )
     nested_field_pattern = re.compile(r"^[ \t]*(.*?): TensorDict\(", re.MULTILINE)
+    # A lazy stack prints its exclusive keys in a block that is empty otherwise
+    exclusive_fields_pattern = re.compile(
+        r"^[ \t]*exclusive_fields=\{\n(?![ \t]*\})", re.MULTILINE
+    )
     batch_size_pattern = r"batch_size=torch.Size\((\[(.*?)\])\)"
     device_pattern = r"device=(\w+(?::\d+)?)(?=,|$)"
 
@@ -2994,6 +3022,13 @@ def parse_tensor_dict_string(s: str):
         raise ValueError(
             f"Cannot parse the field {line!r}: parse_tensor_dict_string reads "
             "Tensor and TensorDict fields printed with the default print options."
+        )
+    for match in exclusive_fields_pattern.finditer(s):
+        if any(start <= match.start() <= end for start, end in nested_dict_ranges):
+            continue
+        raise ValueError(
+            "Cannot parse the exclusive_fields of a lazy stack: "
+            "parse_tensor_dict_string does not rebuild lazy stacks with exclusive keys."
         )
 
     # Now add the nested TensorDicts to the fields
@@ -3157,6 +3192,30 @@ def _maybe_correct_neg_dim(
             f"Incompatible dim {new_dim} for tensordict with batch dims {ndim}."
         )
     return new_dim
+
+
+# tensordict, and torch, whose torch function modes (such as the one of
+# torch.set_default_device) can call tensordict's torch.stack and torch.cat
+_LIBRARY_DIRS = (
+    os.path.dirname(os.path.abspath(__file__)) + os.sep,
+    os.path.dirname(os.path.abspath(torch.__file__)) + os.sep,
+)
+
+
+def _warn_dim_past_batch_dims(op: str) -> None:
+    """Warns that ``op`` got a dim outside the batch dims, which raises from 0.17 (#2148)."""
+    # point to the first frame outside tensordict and torch: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_LIBRARY_DIRS):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    warnings.warn(
+        f"{op} got a dim outside the batch dims, and uses it on the dims of "
+        "the leaves instead. Starting with TensorDict 0.17, the default will "
+        "change to raising an IndexError, as torch does for a tensor of the "
+        "batch size.",
+        FutureWarning,
+        stacklevel=stacklevel,
+    )
 
 
 # Check if the new shape is a flatten / unflatten version of the current one

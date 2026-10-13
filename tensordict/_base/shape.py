@@ -31,6 +31,7 @@ from tensordict.utils import (
     _is_unbatched,
     _maybe_correct_neg_dim,
     _resolve_expand_shape,
+    _warn_dim_past_batch_dims,
     _zip_strict,
     is_non_tensor,
     lazy_legacy,
@@ -513,10 +514,8 @@ class _ShapeOps:
         """
         inplace = kwargs.pop("inplace", False)
         shape = _get_shape_from_args(*args, **kwargs)
-        if any(dim < 0 for dim in shape):
-            shape = _infer_size_impl(shape, self.batch_size.numel())
-            shape = torch.Size(shape)
-        if torch.Size(shape) == self.shape:
+        shape = torch.Size(_infer_size_impl(shape, self.batch_size.numel()))
+        if shape == self.shape:
             return self
         batch_dims = self.batch_dims
 
@@ -553,7 +552,9 @@ class _ShapeOps:
             repeats (torch.Tensor or int): The number of repetitions for each element. `repeats` is broadcast to fit
                 the shape of the given axis.
             dim (int, optional): The dimension along which to repeat values. By default, use the flattened input
-                array, and return a flat output array.
+                array, and return a flat output array. A ``dim`` past the batch dims warns, and is used on the
+                dims of the leaves. Starting with TensorDict 0.17, the default will change to raising an
+                ``IndexError``, as for a tensor.
 
         Keyword Args:
             output_size (int, optional): Total output size for the given axis (e.g. sum of repeats). If given, it
@@ -621,6 +622,8 @@ class _ShapeOps:
             raise ValueError(
                 f"dim {dim} is out of range for tensordict with shape {self.shape}."
             )
+        if dim_corrected >= self.ndim:
+            _warn_dim_past_batch_dims("repeat_interleave")
         new_batch_size = []
         for i, s in enumerate(self.batch_size):
             if i == dim_corrected:
@@ -1126,6 +1129,12 @@ class _ShapeOps:
         """Splits each tensor in the TensorDict with the specified size in the given dimension, like `torch.split`.
 
         Returns a list of ``TensorDict`` instances with the view of split chunks of items.
+
+        On a :class:`~tensordict.LazyStackedTensorDict`, sizes along the stack
+        dim that are negative or do not add up to the stack size emit a
+        :class:`FutureWarning`, and the pieces miss members or have a wrong
+        batch size. Starting with TensorDict 0.17, the default will change to
+        raising a ``RuntimeError``, as ``TensorDict.split`` does.
 
         Args:
             split_size (int or List(int)): size of a single chunk or list of sizes for each chunk.
@@ -2216,6 +2225,10 @@ class _ShapeOps:
             start_dim (int): the first dim to flatten
             end_dim (int): the last dim to flatten
 
+        A ``start_dim`` or ``end_dim`` outside the batch dims warns, and is
+        used on the dims of the leaves. Starting with TensorDict 0.17, the
+        default will change to raising an ``IndexError``, as for a tensor.
+
         Keyword Args:
             inplace (bool, optional): If ``True``, this tensordict's identity
                 and key set are preserved; each leaf is flattened one at a
@@ -2270,6 +2283,8 @@ class _ShapeOps:
             raise ValueError(
                 "The end dimension must be greater or equal to the start dim."
             )
+        if start_dim < 0 or end_dim >= self.ndim:
+            _warn_dim_past_batch_dims("flatten")
 
         def flatten(tensor):
             return torch.flatten(tensor, start_dim, end_dim)
@@ -2531,12 +2546,24 @@ class _ShapeOps:
                 result.set(mask_key, val)
         return result
 
-    def masked_select(self, mask: Tensor) -> Self:
+    def masked_select(self, mask: Tensor, *, inplace: bool = False) -> Self:
         """Masks all tensors of the TensorDict and return a new TensorDict instance with similar keys pointing to masked values.
 
         Args:
             mask (torch.Tensor): boolean mask to be used for the tensors.
                 Shape must match the TensorDict ``batch_size``.
+
+        Keyword Args:
+            inplace (bool, optional): If ``True``, this tensordict's identity
+                and key set are preserved; each leaf storage is replaced by
+                its masked counterpart one leaf at a time, keeping peak
+                memory close to ``1x``. Not supported on
+                :class:`~tensordict.LazyStackedTensorDict`.
+                Defaults to ``False``.
+
+        Returns:
+            a new tensordict with the masked values. When ``inplace=True``
+            this is ``self``.
 
         Examples:
             >>> import torch
@@ -2547,9 +2574,20 @@ class _ShapeOps:
             >>> td_mask = td.masked_select(mask)
             >>> td_mask.get("a")
             tensor([[0., 0., 0., 0.]])
+            >>> td.masked_select(mask, inplace=True) is td
+            True
+            >>> td.batch_size
+            torch.Size([1])
 
         """
         from tensordict._td import TensorDict
+
+        if inplace and self._lazy:
+            raise NotImplementedError(
+                "masked_select(inplace=True) is not supported on "
+                "LazyStackedTensorDict; call .to_tensordict() first or use "
+                "inplace=False."
+            )
 
         d = {}
         mask_expand = mask
@@ -2561,6 +2599,19 @@ class _ShapeOps:
         dim = int(mask.sum().item())
         other_dim = self.shape[mask.ndim :]
         batch_size = torch.Size([dim, *other_dim])
+        if inplace:
+            self._raise_if_holds_lazy_stack("masked_select")
+
+            def nested_fn(nested):
+                nested.masked_select(mask_expand, inplace=True)
+
+            self._inplace_rebind_leaves(
+                lambda value: value[mask_expand], nested_fn, batch_size
+            )
+            if self._has_names():
+                # the masked dims become one dim, which has no name
+                self._erase_names()
+            return self
         for key, value in self.items():
             if _is_unbatched(value):
                 d[key] = value._with_batch_size(batch_size)
