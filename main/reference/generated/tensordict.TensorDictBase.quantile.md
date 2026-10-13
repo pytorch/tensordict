@@ -7,11 +7,13 @@ Returns the q-th quantile of all elements in the input tensordict.
 Parameters:
 
 - **q** ([*float*](https://docs.python.org/3/builtins/functions.html#float)*or*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - quantile to compute, must be between 0 and 1.
-- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,*[*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - if `None`, returns a dimensionless
+- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - if `None`, returns a dimensionless
 tensordict containing the quantile value of all leaves (if this can be computed).
-If integer or tuple of integers, quantile is called upon the dimension specified if
+If integer, quantile is called upon the dimension specified if
 and only if this dimension is compatible with the tensordict
 shape.
+A tuple reduces only its first dim; passing one is deprecated
+and will be removed in TensorDict 0.17.
 Only the "feature" string is currently permitted. Using dim="feature" will
 achieve the reduction over all feature dimensions. If reduce=True, a tensor of the
 shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict

@@ -7,6 +7,8 @@ Returns the cumulative maximum values of all elements in the input tensordict.
 Parameters:
 
 **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - integer representing the dimension along which to perform the cummax operation.
+A tuple uses only its first dim; passing one is deprecated
+and will be removed in TensorDict 0.17.
 
 Keyword Arguments:
 
