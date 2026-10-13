@@ -552,9 +552,11 @@ class LazyStackedTensorDict(TensorDictBase):
             tensordicts are given, the stack takes the device of the first
             one and ignores this argument.
         names (list of str, optional): the dimension names of an empty stack.
-            If tensordicts are given, the names come from them and this
-            argument is ignored. To name the stack dimension, use
-            ``stack_dim_name``.
+            If tensordicts are given, the names come from them, and this
+            argument is ignored with a ``FutureWarning``. To name the dims of
+            such a stack, pass ``stack_dim_name``, or set ``names`` on the
+            stack. Starting with TensorDict 0.17, the default will change to
+            applying these names to the stack.
         stack_dim_name (str, optional): the name of the stack dimension.
             Defaults to ``None``.
         strict_shape (bool, optional): if ``True``, the batch sizes of the
@@ -703,6 +705,16 @@ class LazyStackedTensorDict(TensorDictBase):
         else:
             td0 = tensordicts[0]
             device = td0.device
+            if names is not None:
+                warnings.warn(
+                    "LazyStackedTensorDict(*tensordicts, names=...) ignores the "
+                    "names when tensordicts are given. To name the dims, pass "
+                    "stack_dim_name=, or set names on the stack. Starting with "
+                    "TensorDict 0.17, the default will change to applying the "
+                    "names to the stack.",
+                    FutureWarning,
+                    stacklevel=2,
+                )
         if stack_dim < 0:
             ndim = td0.ndim
             try:
