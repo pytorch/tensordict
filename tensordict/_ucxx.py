@@ -573,10 +573,12 @@ class TensorDictPipe:
             return result
 
         # SAME_SCHEMA_FLAG: receive into td if it has the layout of the last
-        # schema, otherwise into the buffer of the previous receive.
+        # schema, otherwise into the buffer of the previous receive. When td
+        # is that buffer, the check cannot change the target, so skip it.
         recv_target = self._recv_td
         if td is not None and (
-            self._recv_storage_spec is None
+            td is self._recv_td
+            or self._recv_storage_spec is None
             or self._can_recv_into(td, *self._recv_storage_spec)
         ):
             recv_target = td
