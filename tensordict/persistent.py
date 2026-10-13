@@ -1445,6 +1445,9 @@ class PersistentTensorDict(TensorDictBase):
         # h5py raises a KeyError for a missing key, zarr does not
         missing = self.backend == "zarr" and not self._backend.contains(self.file, path)
         self._backend.delete(self.file, path)
+        # a sub-tensordict read before keeps the deleted group: drop it, so that
+        # a new entry at this key gets a fresh one
+        self._forget_nested(_unravel_key_to_tuple(key))
         if missing:
             # stacklevel 3: skip the _lock_blocked wrapper
             warnings.warn(
