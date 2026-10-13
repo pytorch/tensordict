@@ -21,16 +21,10 @@
  "memmap_td select": [],
  "memmap_td serialization": [],
  "memmap_td shape": [],
- "nested_stacked_td apply": [
-  "apply_(None)",
-  "apply_(x + 1, propagate_lock=True)"
- ],
+ "nested_stacked_td apply": [],
  "nested_stacked_td filling": [],
  "nested_stacked_td keys": [],
- "nested_stacked_td masking": [
-  "masked_fill_(mask[:, 0, 0, 0], -1)",
-  "masked_fill_(tensor(True), -1)"
- ],
+ "nested_stacked_td masking": [],
  "nested_stacked_td pointwise": [],
  "nested_stacked_td reductions": [],
  "nested_stacked_td select": [],
@@ -105,16 +99,10 @@
   "unsqueeze(0)",
   "view(-1)"
  ],
- "stacked_td apply": [
-  "apply_(None)",
-  "apply_(x + 1, propagate_lock=True)"
- ],
+ "stacked_td apply": [],
  "stacked_td filling": [],
  "stacked_td keys": [],
- "stacked_td masking": [
-  "masked_fill_(mask[:, 0, 0, 0], -1)",
-  "masked_fill_(tensor(True), -1)"
- ],
+ "stacked_td masking": [],
  "stacked_td pointwise": [],
  "stacked_td reductions": [],
  "stacked_td select": [],
@@ -195,9 +183,7 @@
   "unsqueeze(0)",
   "view(-1)"
  ],
- "td_params apply": [
-  "apply_(None)"
- ],
+ "td_params apply": [],
  "td_params filling": [],
  "td_params keys": [],
  "td_params masking": [],

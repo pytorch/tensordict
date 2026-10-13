@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from tensordict import NonTensorData, PersistentTensorDict, TensorDict
+from tensordict import lazy_stack, NonTensorData, PersistentTensorDict, TensorDict
 from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import _NUMPY_TO_TORCH_DTYPE_DICT, is_non_tensor
 from torch import multiprocessing as mp
@@ -329,6 +329,15 @@ class TestZarrWriteOps:
         assert record[0].filename == __file__
         with pytest.warns(FutureWarning, match="update_"):
             ro.update_(before + 1)
+        torch.testing.assert_close(ro.to_tensordict(), before)
+        # masked_fill_ raises on the rows of the store too, as it did before
+        mask = torch.tensor([True, False])
+        for call in (
+            lambda: ro[0:2].masked_fill_(mask, 0.0),
+            lambda: lazy_stack([ro[0], ro[1]]).masked_fill_(mask, 0.0),
+        ):
+            with pytest.raises(ValueError, match="read-only"):
+                call()
         torch.testing.assert_close(ro.to_tensordict(), before)
 
     def test_masked_fill_(self, ztd):

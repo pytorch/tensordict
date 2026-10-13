@@ -9,7 +9,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from tensordict import NonTensorData, PersistentTensorDict, TensorClass, TensorDict
+from tensordict import (
+    lazy_stack,
+    NonTensorData,
+    PersistentTensorDict,
+    TensorClass,
+    TensorDict,
+)
 from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import is_non_tensor
 from torch import multiprocessing as mp
@@ -293,6 +299,15 @@ def test_inplace_read_only_warns(tmp_path):
     assert (h5td["a"] == -1).all()
     with pytest.raises(OSError):
         h5td.zero_()
+    # masked_fill_ raises on the rows of the file too, as it did before
+    mask = torch.tensor([True, False])
+    for call in (
+        lambda: h5td[0:2].masked_fill_(mask, 0.0),
+        lambda: lazy_stack([h5td[0], h5td[1]]).masked_fill_(mask, 0.0),
+    ):
+        with pytest.raises(OSError):
+            call()
+    assert (h5td["a"] == -1).all()
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")

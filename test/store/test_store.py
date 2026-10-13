@@ -605,9 +605,9 @@ class TestTensorDictStore:
 
     @pytest.mark.parametrize("key", ["missing", ("missing", "x")])
     def test_fill_missing_key(self, store_td, key):
-        """fill_ of a missing key raises."""
+        """fill_ of a missing key raises a KeyError, as on a TensorDict."""
         store_td["obs"] = torch.zeros(10, 3)
-        with pytest.raises(AttributeError):
+        with pytest.raises(KeyError):
             store_td.fill_(key, 1.0)
 
     def test_detach_no_read(self, store_td, monkeypatch):
@@ -717,13 +717,15 @@ class TestTensorDictStore:
             torch.testing.assert_close(store_td[key], expected[key])
 
     def test_masked_fill_non_tensor(self, store_td):
-        """masked_fill_ on a store with a non-tensor entry."""
+        """masked_fill_ leaves a non-tensor entry unchanged, as on a TensorDict."""
         store_td["a"] = torch.zeros(10, 3)
         store_td["text"] = "hello"
         mask = torch.zeros(10, dtype=torch.bool)
         mask[[1, 4]] = True
-        with pytest.raises(AttributeError, match="masked_fill"):
-            store_td.masked_fill_(mask, 1.0)
+        assert store_td.masked_fill_(mask, 1.0) is store_td
+        torch.testing.assert_close(
+            store_td["a"], torch.zeros(10, 3).masked_fill_(mask[:, None], 1.0)
+        )
         assert store_td["text"] == "hello"
 
     def test_masked_select_inplace(self, store_td):
@@ -2238,10 +2240,10 @@ class TestLazyStackedTensorDictStore:
 
     @pytest.mark.parametrize("key", ["missing", ("missing", "x")])
     def test_fill_missing_key(self, store_stack, key):
-        """fill_ of a missing key raises, on the stack and on an element view."""
+        """fill_ of a missing key raises a KeyError, on the stack and on an element view."""
         store_td, tds, lazy_td = store_stack
         for td in (store_td, store_td[1]):
-            with pytest.raises(AttributeError):
+            with pytest.raises(KeyError):
                 td.fill_(key, 1.0)
 
     def test_detach_no_read(self, store_stack, monkeypatch):
@@ -2332,11 +2334,11 @@ class TestLazyStackedTensorDictStore:
 
     @pytest.mark.parametrize("batch_size,mask_shape", [[(5, 4), (4,)], [(5, 5), (5,)]])
     def test_masked_fill_trailing_mask(self, store_kwargs, batch_size, mask_shape):
-        """A mask that is not batch-shaped still broadcasts from the right.
+        """A mask that is not batch-shaped still broadcasts from the right, with a warning.
 
-        TensorDict.masked_fill_ rejects these masks, but the store has always
-        accepted them for entries without feature dims. The behaviour is kept
-        for compatibility.
+        TensorDict.masked_fill_ aligns a mask with the leading batch dims, but
+        the store has always broadcast these masks from the right. This is
+        kept until TensorDict 0.17.
         """
         lazy_td = lazy_stack(
             [
@@ -2348,7 +2350,14 @@ class TestLazyStackedTensorDictStore:
         try:
             mask = torch.zeros(mask_shape, dtype=torch.bool)
             mask[1] = True
-            store_td.masked_fill_(mask, 1.0)
+            match = (
+                r"^Calling LazyStackedTensorDictStore\.masked_fill_ with a mask of "
+                r"shape .* broadcasts the mask from the right .* will be removed "
+                r"in TensorDict 0\.17\."
+            )
+            with pytest.warns(FutureWarning, match=match) as record:
+                assert store_td.masked_fill_(mask, 1.0) is store_td
+            assert record[0].filename == __file__
             torch.testing.assert_close(
                 store_td["b"], torch.zeros(batch_size).masked_fill(mask, 1.0)
             )
@@ -2357,7 +2366,11 @@ class TestLazyStackedTensorDictStore:
             store_td.close()
 
     def test_masked_fill_heterogeneous(self, store_kwargs):
-        """masked_fill_ on a store whose elements differ in shape (#2030)."""
+        """masked_fill_ on a store whose elements differ in shape (#2030).
+
+        A 0-d mask fills each element; a batch-shaped mask cannot be split
+        over the elements of the entries that differ in shape.
+        """
         tds = [
             TensorDict(a=torch.zeros(3), h=torch.zeros(3, 2 + i), batch_size=[3])
             for i in range(2)
@@ -2366,9 +2379,12 @@ class TestLazyStackedTensorDictStore:
             lazy_stack(tds), **store_kwargs
         )
         try:
-            for mask in (torch.tensor(True), torch.ones(2, 3, dtype=torch.bool)):
-                with pytest.raises(RuntimeError, match="differ in shape"):
-                    store_td.masked_fill_(mask, 1.0)
+            with pytest.raises(RuntimeError, match=r"^masked_fill_ cannot split"):
+                store_td.masked_fill_(torch.ones(2, 3, dtype=torch.bool), 1.0)
+            assert store_td.masked_fill_(torch.tensor(True), 1.0) is store_td
+            torch.testing.assert_close(store_td["a"], torch.ones(2, 3))
+            for i in range(2):
+                torch.testing.assert_close(store_td[i]["h"], torch.ones(3, 2 + i))
         finally:
             store_td.clear_redis()
             store_td.close()

@@ -193,6 +193,10 @@ class _PersistentBackend:
     def write_masked(self, node, mask, value) -> None:
         raise NotImplementedError
 
+    def write_full(self, node, value) -> None:
+        """Writes the scalar ``value`` into every element of the array ``node``."""
+        raise NotImplementedError
+
     def is_read_only(self, file) -> bool:
         raise NotImplementedError
 
@@ -335,6 +339,10 @@ class _H5Backend(_PersistentBackend):
 
     def write_masked(self, node, mask, value) -> None:
         node[mask] = value
+
+    def write_full(self, node, value) -> None:
+        # h5py writes a broadcast scalar much more slowly than a full array
+        node[...] = np.full(node.shape, value, dtype=node.dtype)
 
     def try_create_dataset(self, file, key, value, kwargs) -> bool:
         try:
@@ -616,6 +624,9 @@ class _ZarrBackend(_PersistentBackend):
     def write_masked(self, node, mask, value) -> None:
         node[mask] = value
 
+    def write_full(self, node, value) -> None:
+        node[...] = value
+
     def _parent_and_name(self, file, key):
         if "/" in key:
             path, name = key.rsplit("/", 1)
@@ -879,6 +890,8 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     LOCKING = None
     # each read loads the entry from the file into a new tensor
     _reads_return_copies = True
+    _storage_holds_no_gradients = True
+    _fills_without_reading = True
 
     @property
     @deprecated("PersistentTensorDict.kwargs", removal="0.17")
@@ -1512,11 +1525,6 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             )
         return self
 
-    # Override: a file holds no gradients.
-    def detach_(self):
-        # PersistentTensorDict do not carry gradients. This is a no-op
-        return self
-
     # Override: a TensorDict skeleton, built without reading the data.
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
@@ -1551,12 +1559,6 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     def _lock_sub_tensordicts(self):
         return list(self._nested_tensordicts.values())
 
-    def zero_(self) -> Self:
-        # Override: fill_ writes each array without reading it first
-        for key in self.keys():
-            self.fill_(key, 0)
-        return self
-
     def _storage_is_read_only(self) -> bool:
         return self._backend.is_read_only(self.file)
 
@@ -1577,7 +1579,7 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
 
     # Override: the file reads give copies, so the fill is written to the
     # arrays directly, without reading them.
-    def masked_fill_(self, mask, value):
+    def _masked_fill_(self, mask, value):
         for key in self.keys(include_nested=True, leaves_only=True):
             array = self._get_array(key)
             self._backend.write_masked(
@@ -1892,26 +1894,15 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             elif key[: len(cached)] == cached:
                 self._nested_tensordicts[cached]._forget_nested(key[len(cached) :])
 
-    def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
-        """Fills a tensor pointed by the key with the a given value.
-
-        Args:
-            key (str): key to be remaned
-            value (Number, bool): value to use for the filling
-
-        Returns:
-            self
-
-        """
+    # Override: writes the arrays without reading them.
+    def _fill_(self, key: tuple[str, ...], value: float | bool) -> None:
         md = self._get_metadata(key)
         if md.get("array"):
-            array = self._get_array(key)
-            array[:] = value
+            self._backend.write_full(self._get_array(key), value)
         else:
             nested = self.get(key)
             for subkey in nested.keys():
-                nested.fill_(subkey, value)
-        return self
+                nested._fill_((subkey,), value)
 
     def _create_nested_str(self, key):
         self._backend.create_group(self.file, key)

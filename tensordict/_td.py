@@ -3174,12 +3174,14 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
         )
 
     # Override: a view over another tensordict cannot detach in place.
-    def detach_(self) -> Self:
+    def _detach_(self) -> None:
         raise RuntimeError("Detaching a sub-tensordict in-place cannot be done.")
 
-    # Override: an entry read through a tensor index is a copy, so the
-    # filled entry is written back with set_.
-    def masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
+    # Override: writes each filled entry with set_, which raises on a file
+    # opened read-only, where the base write-back would warn and skip it.
+    # Delete in 0.17, when in-place writes to read-only storage raise
+    # everywhere.
+    def _masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
         for key, item in self.items():
             self.set_(key, item.masked_fill(expand_as_right(mask, item), value))
         return self

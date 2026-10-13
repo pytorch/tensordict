@@ -614,9 +614,9 @@ class TestLazyStackedTensorDict:
         ]
         stack = lazy_stack(tds)
         dense = stack.to_tensordict()
-        # fn returning None: the stack returns itself, a TensorDict None
-        assert stack.apply_(lambda x: None) is stack
-        assert dense.apply_(lambda x: None) is None
+        # fn returning None: apply_ returns self
+        for td in (stack, dense):
+            assert td.apply_(lambda x: None) is td
         # batch_size, names and device are accepted and ignored, as by TensorDict
         for kwargs in (
             {"batch_size": [4]},
@@ -627,9 +627,9 @@ class TestLazyStackedTensorDict:
                 assert td.apply_(lambda x: x + 1, **kwargs) is td
         assert stack.names == dense.names == [None, None]
         torch.testing.assert_close(stack.to_tensordict(), dense)
-        with pytest.raises(TypeError, match="propagate_lock"):
-            stack.apply_(lambda x: x + 1, propagate_lock=True)
-        assert dense.apply_(lambda x: x + 1, propagate_lock=True) is dense
+        for td in (stack, dense):
+            assert td.apply_(lambda x: x + 1, propagate_lock=True) is td
+        torch.testing.assert_close(stack.to_tensordict(), dense)
         # a fn that changes the shape of the leaves leaves the members unchanged
         before = stack.to_tensordict()
         assert stack.apply_(lambda x: x[..., :1]) is stack
@@ -667,11 +667,6 @@ class TestLazyStackedTensorDict:
         mask = (torch.arange(12).view(4, 3) % 3 == 0)[
             (Ellipsis,) + (0,) * (2 - mask_dims)
         ]
-        if mask_dims <= stack_dim:
-            # the mask has no stack dim to split it over the members
-            with pytest.raises(IndexError):
-                stack.masked_fill_(mask, 1.0)
-            return
         assert stack.masked_fill_(mask, 1.0) is stack
         torch.testing.assert_close(stack.to_tensordict(), td.masked_fill_(mask, 1.0))
 
