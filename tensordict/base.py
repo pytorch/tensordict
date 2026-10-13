@@ -45,6 +45,7 @@ from tensordict._contextlib import LAST_OP_MAPS
 from tensordict._deprecation import (
     deprecated,
     deprecation_message,
+    warn_deprecated,
     warn_deprecated_env_var,
 )
 from tensordict._indexing import (
@@ -1182,6 +1183,7 @@ def _update_at_aliases(update_at_: Callable) -> Callable:
     ``index``. ``_SubTensorDict`` called the input ``input_dict``, and took
     ``discard_idx_attr=True`` to write into its source at an index of the
     source: classes with a ``_update_source_at_`` method still take it.
+    Each of these names warns, and goes in 0.17.
     """
 
     @wraps(update_at_)
@@ -1190,11 +1192,26 @@ def _update_at_aliases(update_at_: Callable) -> Callable:
             if "discard_idx_attr" in kwargs and hasattr(
                 type(self), "_update_source_at_"
             ):
+                warn_deprecated(
+                    "update_at_(discard_idx_attr=...)",
+                    removal="0.17",
+                    replacement="get_parent_tensordict().update_at_(...)",
+                )
                 if kwargs.pop("discard_idx_attr"):
                     return self._update_source_at_(*args, **kwargs)
             if "index" in kwargs and len(args) < 2:
+                warn_deprecated(
+                    "update_at_(index=...)",
+                    removal="0.17",
+                    replacement="update_at_(idx=...)",
+                )
                 kwargs["idx"] = kwargs.pop("index")
             if "input_dict" in kwargs and not args:
+                warn_deprecated(
+                    "update_at_(input_dict=...)",
+                    removal="0.17",
+                    replacement="update_at_(input_dict_or_td=...)",
+                )
                 kwargs["input_dict_or_td"] = kwargs.pop("input_dict")
         return update_at_(self, *args, **kwargs)
 
@@ -4005,6 +4022,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             and "input_dict" not in self.keys()
         ):
             # the name of the argument in _SubTensorDict.update_ before 0.15
+            warn_deprecated(
+                "update_(input_dict=...)",
+                removal="0.17",
+                replacement="update_(input_dict_or_td=...)",
+            )
             input_dict_or_td = kwargs.pop("input_dict")
         if kwargs:
             if input_dict_or_td is None:

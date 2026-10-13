@@ -3590,7 +3590,12 @@ class TestLazyStackedTensorDict:
         # LazyStackedTensorDict.update_at_ takes the arguments of
         # TensorDictBase.update_at_, and still the name `index` for idx
         lazy = lazy_stack(self._members(2))
-        assert lazy.update_at_({"a": torch.full((3,), 5.0)}, index=0) is lazy
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"update_at_\(index=.*0\.17.*update_at_\(idx=",
+        ) as record:
+            assert lazy.update_at_({"a": torch.full((3,), 5.0)}, index=0) is lazy
+        assert record[0].filename == __file__
         assert (lazy[0]["a"] == 5).all() and (lazy[1]["a"] == 1).all()
         assert lazy.update_at_({"a": torch.full((3,), 7.0)}, idx=0) is lazy
         assert (lazy[0]["a"] == 7).all()

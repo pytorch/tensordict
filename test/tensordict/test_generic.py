@@ -7753,13 +7753,34 @@ class TestGeneric:
         assert sub.update_at_({"a": torch.ones(())}, 0, True) is sub
         assert sub.update_at_({"a": torch.ones(())}, 0, clone=True) is sub
         assert source["a"][0, 0] == 1 and source["a"][0, 1] == 0
-        assert sub.update_at_({"a": torch.ones(())}, 1, discard_idx_attr=True) is sub
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"discard_idx_attr=.*removed in TensorDict 0\.17.*get_parent_tensordict",
+        ) as record:
+            assert (
+                sub.update_at_({"a": torch.ones(())}, 1, discard_idx_attr=True) is sub
+            )
+        assert record[0].filename == __file__
         assert (source["a"][1] == 1).all()
+        with pytest.warns(DeprecationWarning, match="discard_idx_attr"):
+            sub.update_at_({"a": torch.ones(())}, 0, discard_idx_attr=False)
+        assert source["a"][0, 0] == 1 and source["a"][0, 1] == 0
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"update_at_\(input_dict=.*0\.17.*update_at_\(input_dict_or_td=",
+        ) as record:
+            sub.update_at_(input_dict={"a": torch.ones(())}, idx=0)
+        assert record[0].filename == __file__
         assert sub.update_at_({"a": torch.zeros(())}, 0, keys_to_update=[]) is sub
         assert source["a"][0, 0] == 1
         with pytest.raises(TypeError, match="Expected value"):
             sub.update_at_({"a": "text"}, 0)
-        assert sub.update_(input_dict={"a": torch.full((3,), 2.0)}) is sub
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"update_\(input_dict=.*0\.17.*update_\(input_dict_or_td=",
+        ) as record:
+            assert sub.update_(input_dict={"a": torch.full((3,), 2.0)}) is sub
+        assert record[0].filename == __file__
         assert (source["a"][0] == 2).all()
         assert sub.update_(a=torch.full((3,), 3.0)) is sub
         assert (source["a"][0] == 3).all()
@@ -7785,7 +7806,8 @@ class TestGeneric:
             [TensorDict(a=torch.zeros(3, 2), batch_size=[3]) for _ in range(2)], 1
         )
         sub = lazy._get_sub_tensordict((slice(None), 0))
-        sub.update_at_({"a": torch.tensor(4.0)}, 0, discard_idx_attr=True)
+        with pytest.warns(DeprecationWarning, match="discard_idx_attr"):
+            sub.update_at_({"a": torch.tensor(4.0)}, 0, discard_idx_attr=True)
         assert (lazy["a"][0] == 4).all() and (lazy["a"][1:] == 0).all()
         # only a _SubTensorDict takes discard_idx_attr
         for td in (source, lazy, source.permute(1, 0)):

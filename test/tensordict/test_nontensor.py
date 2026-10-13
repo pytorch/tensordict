@@ -1581,7 +1581,9 @@ class TestNonTensorData:
             assert stack.update(NonTensorStack("c", "d"), ignore_lock=True) is stack
         assert record[0].filename == __file__
         assert stack.tolist() == ["c", "d"]
-        assert stack.update_at_(NonTensorData("e"), index=1) is stack
+        with pytest.warns(DeprecationWarning, match=r"update_at_\(index=") as record:
+            assert stack.update_at_(NonTensorData("e"), index=1) is stack
+        assert record[0].filename == __file__
         assert stack.tolist() == ["c", "e"]
 
     @pytest.mark.skipif(IS_FB, reason="deactivating on fbcode")
