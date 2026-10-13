@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import json
 
 __all__ = [
     "_decode_key_from_filesystem",
@@ -103,8 +104,15 @@ def _json_dumps(data, **kwargs):
     """JSON serialization using the configured json backend."""
     backend = get_json_backend()
 
-    if _JSON_BACKEND == "orjson" and "separators" in kwargs:
-        kwargs.pop("separators")
+    if _JSON_BACKEND == "orjson":
+        orjson_kwargs = {k: v for k, v in kwargs.items() if k != "separators"}
+        try:
+            return backend.dumps(data, **orjson_kwargs)
+        except TypeError as err:
+            # orjson only takes ints that fit in 64 bits: json writes the others
+            if "Integer exceeds 64-bit range" not in str(err):
+                raise
+            backend = json
     return backend.dumps(data, **kwargs)
 
 
