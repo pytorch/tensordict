@@ -6757,11 +6757,30 @@ class NonTensorStack(LazyStackedTensorDict):
         positions = self._positions().reshape(_get_shape_from_args(*args, **kwargs))
         if positions.shape == self.batch_size:
             return self
+        if not positions.numel():
+            # With no entries, regrouping the stack does not give every shape
+            # (it keeps [3, 0] for [1, 0]).
+            result = self._reshape_empty(positions.shape)
+            if self.is_locked:
+                result.lock_()
+            return result
         try:
             # regrouping the stack shares the entries, like a view
             return self._view(positions.shape)
         except RuntimeError:
             return self._select_positions(positions)
+
+    def _reshape_empty(self, shape: torch.Size) -> NonTensorStack:
+        # Stack the dims before the first zero-size one, so that tolist()
+        # nests like torch's. From that dim on, a stack without members, as
+        # an empty index gives.
+        if shape[0]:
+            return type(self)(
+                *[self._reshape_empty(shape[1:]) for _ in range(shape[0])]
+            )
+        return self._new_lazy_unsafe(
+            stack_dim=0, device=self.device, batch_size=shape[1:]
+        )
 
     def _memmap_(
         self,

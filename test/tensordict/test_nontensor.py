@@ -366,6 +366,27 @@ class TestNonTensorData:
         with pytest.raises(RuntimeError, match="invalid for input of size 6"):
             grid.reshape(4, 2)
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize(
+        "shape",
+        [(1, -1), (1, 0), (2, 0), (0, 1), (3, 0, 1), (2, 3, 0), (1, 0, 3), (-1,)],
+    )
+    def test_reshape_non_tensor_stack_zero_size(self, shape, stack_dim):
+        # A stack with no entries takes the shape torch gives, and tolist()
+        # nests like torch's tolist()
+        stack = NonTensorStack(
+            *[NonTensorData("a", batch_size=[0]) for _ in range(3)],
+            stack_dim=stack_dim,
+        )
+        expected = torch.zeros(stack.batch_size).reshape(shape)
+        result = stack.reshape(shape)
+        assert isinstance(result, NonTensorStack)
+        assert result.batch_size == expected.shape
+        assert result.tolist() == expected.tolist()
+        assert result.device == stack.device
+        assert not result.is_locked
+        assert stack.lock_().reshape(shape).is_locked
+
     def test_comparison(self, non_tensor_data):
         non_tensor_data = non_tensor_data.exclude(("nested", "str"))
         assert (non_tensor_data | non_tensor_data).get_non_tensor(("nested", "bool"))
