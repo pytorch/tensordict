@@ -1622,8 +1622,8 @@ class TestLazyStackedTensorDict:
 
     @pytest.mark.parametrize("build", ["torch.stack", "contiguous", "sub"])
     def test_dense_get_as_list_warns(self, build):
-        # a dense tensordict ignores as_list, as_nested_tensor and unknown
-        # keywords of get, where a lazy stack does not, and warns (#2551)
+        # a dense tensordict ignores as_list and as_nested_tensor, where a
+        # lazy stack does not, and warns (#2551)
         rows = [TensorDict(x=torch.arange(4.0) + i) for i in range(2)]
         lazy = lazy_stack(rows)
         if build == "torch.stack":
@@ -1641,11 +1641,6 @@ class TestLazyStackedTensorDict:
                 out = td.get("x", **{name: True})
             assert type(out) is torch.Tensor and not out.is_nested
             assert (out == x).all()
-        with pytest.warns(
-            FutureWarning, match=r"unexpected keyword arguments \['as_lst'\]"
-        ):
-            out = td.get("x", as_lst=True)
-        assert (out == x).all()
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             assert (td.get("x", as_padded_tensor=True) == x).all()

@@ -537,7 +537,7 @@ class TestTD:
         assert "a" not in data_c.keys()
         assert (data_c == data).all()
 
-    @pytest.mark.parametrize("kwarg", ["as_list", "as_nested_tensor", "as_lst"])
+    @pytest.mark.parametrize("kwarg", ["as_list", "as_nested_tensor"])
     def test_dense_get_ignored_kwargs(self, kwarg, mode):
         # a dense get warns about these keywords in eager mode only (#2551)
         def get(td):

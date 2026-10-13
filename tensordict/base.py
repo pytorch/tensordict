@@ -1030,31 +1030,11 @@ def _warn_scalar_over_non_tensor(
     )
 
 
-# the keyword arguments of LazyStackedTensorDict.get
-_GET_KWARGS = frozenset(
-    (
-        "as_list",
-        "as_padded_tensor",
-        "as_nested_tensor",
-        "padding_side",
-        "layout",
-        "padding_value",
-    )
-)
-
-
 def _warn_get_kwargs(
     td: TensorDictBase, kwargs: dict[str, Any], result: Any, default: Any
 ) -> None:
-    """Warns about the keyword arguments of ``get`` that ``td`` ignored, where a lazy stack does not."""
-    if not _GET_KWARGS.issuperset(kwargs):
-        message = (
-            f"{type(td).__name__}.get() ignores the unexpected keyword "
-            f"arguments {sorted(kwargs.keys() - _GET_KWARGS)} today. Starting "
-            "with TensorDict 0.17, the default will change to raising a "
-            "TypeError, as a LazyStackedTensorDict does."
-        )
-    elif (
+    """Warns that ``td`` ignored ``as_list=True`` or ``as_nested_tensor=True``, which a lazy stack honors."""
+    if (
         isinstance(result, torch.Tensor)
         and result is not default
         and td.batch_dims
@@ -1312,9 +1292,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # rename in a locked tensordict with a warning, and pass an old key that is
     # not a str or tuple to _rename_key (which raises or warns as before).
     _rename_key_lenient: bool = False
-    # Whether get() ignores as_list, as_nested_tensor and unknown keywords, and
-    # warns about them (see _warn_get_kwargs). False for lazy stacks, which
-    # honor them.
+    # Whether get() ignores as_list and as_nested_tensor, and warns about them
+    # (see _warn_get_kwargs). False for lazy stacks, which honor them.
     _get_ignores_kwargs: bool = True
 
     @classmethod
@@ -3444,11 +3423,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         .. note:: Keyword arguments can be passed to :meth:`~.get` when dealing with ragged tensors.
             See :meth:`~tensordict.LazyStackedTensorDict.get` for a complete overview.
-            A dense tensordict ignores them today and warns for ``as_list=True``,
-            ``as_nested_tensor=True`` and unknown keywords. Starting with
-            TensorDict 0.17, the default will change to returning a list or a
-            nested tensor, as a lazy stack does, and to raising a ``TypeError``
-            for an unknown keyword.
+            A dense tensordict ignores them today and warns for ``as_list=True``
+            and ``as_nested_tensor=True``. Starting with TensorDict 0.17, the
+            default will change to returning a list or a nested tensor, as a
+            lazy stack does.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -3483,14 +3461,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         result = self._get_tuple(key_tuple, default=default, **kwargs)
         if (
             kwargs
-            and self._get_ignores_kwargs
             and (
                 ("as_list" in kwargs and kwargs["as_list"])
                 or ("as_nested_tensor" in kwargs and kwargs["as_nested_tensor"])
-                or not _GET_KWARGS.issuperset(kwargs)
             )
+            and self._get_ignores_kwargs
             and not is_compiling()
         ):
+            # the cheap checks come first: get is a hot path
             _warn_get_kwargs(self, kwargs, result, default)
         return result
 
