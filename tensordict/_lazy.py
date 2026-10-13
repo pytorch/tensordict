@@ -2621,7 +2621,9 @@ class LazyStackedTensorDict(TensorDictBase):
         Args:
             canonical (bool, optional): if ``True``, every dense tensor leaf
                 whose strides are not the C-row-major strides of its shape is
-                copied into a new contiguous tensor. Defaults to ``False``.
+                copied into a new contiguous tensor, even if
+                :meth:`torch.Tensor.is_contiguous` returns ``True`` (e.g.
+                because of size-1 dimensions). Defaults to ``False``.
             inplace (bool, optional): not supported on a lazy stack, which
                 cannot become a TensorDict in place. ``True`` raises a
                 ``NotImplementedError``. Defaults to ``False``.
@@ -2629,7 +2631,7 @@ class LazyStackedTensorDict(TensorDictBase):
         .. note::
             If the stacked tensordicts have no names, the result has no
             names either, even when the stack dimension has a name (from
-            ``stack_dim_name`` or ``names``). :meth:`densify` and
+            ``stack_dim_name`` or the ``names`` setter). :meth:`densify` and
             :meth:`clone` keep that name. To keep it here, name the
             dimension again with :meth:`refine_names`.
 

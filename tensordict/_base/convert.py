@@ -1307,9 +1307,9 @@ class _Conversion:
         size, device and dimension names are kept, with one exception: if the
         tensordicts of a lazy stack have no names, the result has no names
         either, even when the stack dimension has a name (from
-        ``stack_dim_name`` or ``names``). ``densify()`` and ``clone()`` of the
-        lazy stack keep that name. To keep it here, name the dimension again
-        with :meth:`refine_names`.
+        ``stack_dim_name`` or the ``names`` setter). ``densify()`` and
+        ``clone()`` of the lazy stack keep that name. To keep it here, name
+        the dimension again with :meth:`refine_names`.
 
         Keyword Args:
             retain_none (bool, optional): if ``True``, the ``None`` fields of

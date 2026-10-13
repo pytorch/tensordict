@@ -109,8 +109,8 @@ def pad(
         With ``inplace=False``, a lazy stack gives a
         :class:`~tensordict.TensorDict`. If the stacked tensordicts have no
         names, it has no names either, even when the stack dimension has a
-        name (from ``stack_dim_name`` or ``names``). To keep that name, name
-        the dimension of the result again with
+        name (from ``stack_dim_name`` or the ``names`` setter). To keep that
+        name, name the dimension of the result again with
         :meth:`~tensordict.TensorDict.refine_names`.
 
     Examples:
