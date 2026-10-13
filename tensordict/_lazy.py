@@ -97,6 +97,7 @@ from tensordict.utils import (
     _td_fields,
     _unravel_key_to_tuple,
     _UPDATE_IGNORE_LOCK_WARNED,
+    _warn_dim_past_batch_dims,
     _warn_update_ignore_lock,
     _zip_strict,
     DeviceType,
@@ -2164,7 +2165,10 @@ class LazyStackedTensorDict(TensorDictBase):
             items (Sequence of TensorDictBase instances): the tensordicts to
                 stack. It must not be empty, or a ``RuntimeError`` is raised.
             dim (int, optional): the dim along which to perform the lazy stack.
-                Defaults to 0.
+                Defaults to 0. A ``dim`` below ``-batch_dims - 1`` warns, and
+                wraps around a second time. Starting with TensorDict 0.17, the
+                default will change to raising an ``IndexError``, as for a
+                tensor.
 
         Keyword Args:
             device (torch.device, optional): not used: the stack takes the
@@ -2273,6 +2277,8 @@ class LazyStackedTensorDict(TensorDictBase):
         batch_size = items[0].batch_size
         if dim < 0:
             dim = len(batch_size) + dim + 1
+            if dim < 0:
+                _warn_dim_past_batch_dims("lazy_stack")
 
         if strict_shape:
             for td in items[1:]:
