@@ -10,6 +10,11 @@ Parameters:
 otherwise yields `other`.
 - **other** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*or**Scalar*) - value (if `other` is a scalar)
 or values selected at indices where condition is `False`.
+On a [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict), a tensor
+`other` that starts with the batch shape up to the stack
+dim is split along the stack dim, one piece per member, so
+it must also have the stack size at the stack dim: expand it
+to the batch shape first.
 
 Keyword Arguments:
 

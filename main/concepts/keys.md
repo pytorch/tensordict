@@ -296,10 +296,8 @@ Traceback (most recent call last):
 RuntimeError: Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method and make sure the key is present.
 ```
 
-These operations write into the existing tensors, so they work on a locked
-tensordict. For a non-tensor entry, `set_` and `update_` raise on a
-locked tensordict
-([#2288](https://github.com/pytorch/tensordict/issues/2288)):
+These operations write into the existing entries, so they work on a locked
+tensordict, for tensor and non-tensor entries alike:
 
 - `set_` and `update_`.
 - `set(..., inplace=True)` and `update(..., inplace=True)`, if the key

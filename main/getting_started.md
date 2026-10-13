@@ -425,8 +425,8 @@ the result then copies one buffer.
 does not accept new keys, and you cannot delete or replace an entry. You can
 still write new values into the existing tensors with
 [`set_()`](reference/generated/tensordict.TensorDictBase.set_.html#tensordict.TensorDictBase.set_) and [`update_()`](reference/generated/tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_).
-These methods copy the values into the same storage. They raise for a
-non-tensor entry ([#2288](https://github.com/pytorch/tensordict/issues/2288)):
+These methods copy the values into the same storage, or replace the value of
+a non-tensor entry:
 
 ```
 >>> data = TensorDict({"pos": torch.zeros(3)}, batch_size=[3]).lock_()

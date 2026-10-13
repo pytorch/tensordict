@@ -24,6 +24,13 @@ element holds the same value, `data` returns it. To keep one shared
 value for the whole batch, use [`MetaData`](tensordict.MetaData.html#tensordict.MetaData). See
 [Non-tensor data and unbatched entries](../../concepts/non_tensor.html#non-tensor-data).
 
+`torch.utils._pytree.tree_unflatten` and `tree_map` rebuild a
+`NonTensorStack` entry of a tensordict whose values are all equal
+from the input, as a [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData), and drop the value
+that the function returned for it; they warn when that changes the result.
+Starting with TensorDict 0.17, the default will change to keeping the
+returned value, as they do when the values differ.
+
 Examples
 
 ```

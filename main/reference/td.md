@@ -576,10 +576,9 @@ Functions
 ### Locking
 
 A locked tensordict raises an error if you add, replace, rename, or delete
-an entry. In-place writes with `set_` still work, except for non-tensor
-entries ([#2288](https://github.com/pytorch/tensordict/issues/2288)). `unlock_` also works
-in a `with` block: the tensordict is locked again at the end of the
-block. See [Keys, nested keys, and locking](../concepts/keys.html#keys).
+an entry. In-place writes with `set_` and `update_` still work, also for
+non-tensor entries. `unlock_` also works in a `with` block: the
+tensordict is locked again at the end of the block. See [Keys, nested keys, and locking](../concepts/keys.html#keys).
 
 | [`TensorDictBase.lock_`](generated/tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_)() | Locks the tensordict and its sub-tensordicts, and returns it. |
 | --- | --- |
