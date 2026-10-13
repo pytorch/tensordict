@@ -14,6 +14,7 @@ import platform
 import sys
 import warnings
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 import pytest
@@ -2941,6 +2942,19 @@ class TestLazyStackedTensorDict:
         lazy.apply_(torch.zeros_like)
         assert lazy.all() is False
         assert lazy.any() is False
+
+    @pytest.mark.parametrize("op,value", [("all", 0), ("any", 1)])
+    def test_all_any_dim_none_stops_early(self, op, value):
+        # Without a dim, all() stops at the first member that is not all True
+        # and any() at the first member that holds a True
+        lazy = lazy_stack(
+            [TensorDict(a=torch.full((4,), value), batch_size=[4]) for _ in range(3)]
+        )
+        with mock.patch.object(
+            TensorDict, op, autospec=True, side_effect=getattr(TensorDict, op)
+        ) as reduce:
+            assert getattr(lazy, op)() is bool(value)
+        assert reduce.call_count == 1
 
     @pytest.mark.parametrize("op", ["all", "any"])
     def test_all_any_dim_mismatched_member_names(self, op):
