@@ -34,6 +34,7 @@ import pytest
 import torch
 from _utils_internal import TestTensorDictsBase
 from tensordict import is_tensor_collection, TensorDict, UnbatchedTensor
+from tensordict._unbatched import _HAS_WRAPPER_SUBCLASS_FIX
 from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import is_non_tensor
 
@@ -42,15 +43,14 @@ _KNOWN_FAILURES_FILE = pathlib.Path(__file__).with_name(
 )
 _KNOWN_FAILURES = json.loads(_KNOWN_FAILURES_FILE.read_text())
 _UPDATE_KNOWN_FAILURES = bool(os.environ.get("TENSORDICT_UPDATE_KNOWN_FAILURES"))
-# Cases that run but whose outcome depends on the torch version, so the
-# known-failure check skips them and conformance_known_failures.json does not
-# list them.
-# - detach_() on td_with_unbatched: the UnbatchedTensor in the tensordict is a
-#   view (an alias that carries the batch size), so detach_() raises. Its dense
-#   copy is a view too, and raises the same way, only where UnbatchedTensor falls
-#   back to __torch_function__ (torch without pytorch/pytorch#176977, such as
-#   2.13), whose results are views made by as_subclass.
-_VERSION_DEPENDENT = {"td_with_unbatched filling": {"detach_()"}}
+# Known failures that agree where UnbatchedTensor falls back to
+# __torch_function__ (torch without pytorch/pytorch#176977, such as 2.13, where
+# _HAS_WRAPPER_SUBCLASS_FIX is False). Remove this with that flag.
+# - detach_() on td_with_unbatched (#2565): the UnbatchedTensor in the
+#   tensordict is a view (an alias that keeps its batch size), so detach_()
+#   raises. Without the fix its dense copy is a view too (results are made by
+#   as_subclass) and raises the same way.
+_AGREE_WITHOUT_WRAPPER_SUBCLASS_FIX = {"td_with_unbatched filling": {"detach_()"}}
 
 pytestmark = pytest.mark.filterwarnings(
     "ignore:A destination should be provided when cloning a PersistentTensorDict"
@@ -324,16 +324,17 @@ def _compare(make, op):
 
 def _check_known_failures(key, failures):
     """Compare ``failures`` ({case: reason}) with the known failures of ``key``."""
-    skipped = _VERSION_DEPENDENT.get(key, set())
-    failures = {case: r for case, r in failures.items() if case not in skipped}
+    agree = set()
+    if not _HAS_WRAPPER_SUBCLASS_FIX:
+        agree = _AGREE_WITHOUT_WRAPPER_SUBCLASS_FIX.get(key, set())
     if _UPDATE_KNOWN_FAILURES:
         known = json.loads(_KNOWN_FAILURES_FILE.read_text())
-        known[key] = sorted(failures)
+        known[key] = sorted(set(failures) | agree)
         _KNOWN_FAILURES_FILE.write_text(
             json.dumps(dict(sorted(known.items())), indent=1) + "\n"
         )
         return
-    known = set(_KNOWN_FAILURES.get(key, ()))
+    known = set(_KNOWN_FAILURES.get(key, ())) - agree
     new = {case: reason for case, reason in failures.items() if case not in known}
     fixed = sorted(known.difference(failures))
     message = []
