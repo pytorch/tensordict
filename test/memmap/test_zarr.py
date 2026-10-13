@@ -101,6 +101,20 @@ class TestZarrRoundTrip:
         td_recon = TensorDict.from_zarr(tmp_path / "s.zarr", batch_size=torch.Size([3]))
         assert td_recon.batch_size == torch.Size([3])
 
+    def test_batch_size_setter_incompatible(self, tmp_path):
+        # as on a TensorDict, an incompatible batch size raises and the old
+        # one stays
+        td = TensorDict({"a": torch.zeros(3, 4)}, batch_size=[3])
+        ztd = td.to_zarr(tmp_path / "s.zarr")
+        with pytest.raises(RuntimeError, match="batch size and array size mismatch"):
+            ztd.batch_size = [5]
+        assert ztd.batch_size == (3,)
+        with pytest.raises(RuntimeError, match="batch size and array size mismatch"):
+            ztd.to(batch_size=[5])
+        assert ztd.batch_size == (3,)
+        ztd.batch_size = [3, 4]
+        assert ztd.batch_size == (3, 4)
+
     def test_foreign_store_inference(self, tmp_path):
         # a store written by raw zarr, without tensordict metadata
         root = zarr.open_group(str(tmp_path / "foreign.zarr"), mode="w")

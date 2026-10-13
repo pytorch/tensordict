@@ -586,6 +586,24 @@ class TestTensorDictOps:
         assert (state["eta"][0] == 2).all()
         assert state["nested", "a"][0] == 2
 
+    @pytest.mark.parametrize(
+        "op",
+        [
+            lambda s: s.reshape(5, 1, inplace=True),
+            lambda s: s.masked_select(torch.ones(5, dtype=torch.bool), inplace=True),
+            lambda s: s.repeat_interleave(2, dim=0, inplace=True),
+            lambda s: s.flatten(inplace=True),
+            lambda s: s.repeat(2, inplace=True),
+        ],
+        ids=["reshape", "masked_select", "repeat_interleave", "flatten", "repeat"],
+    )
+    def test_shape_op_inplace_returns_self(self, state, op):
+        # inplace=True keeps the object identity, as on a TensorDict
+        expected = op(state.to_tensordict()).batch_size
+        assert op(state) is state
+        assert state.batch_size == expected
+        assert isinstance(state, PredictorState)
+
     def test_to_dict(self, state):
         d = state.to_dict()
         assert set(d.keys()) == {"eta", "X", "beta"}

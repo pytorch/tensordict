@@ -3329,9 +3329,6 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
             "Cannot lock a _SubTensorDict. Lock the parent tensordict instead."
         )
 
-    def __del__(self):
-        pass
-
     def _create_nested_str(self, key):
         # this may fail with a sub-sub tensordict
         out = self._source.empty()

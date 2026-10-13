@@ -26,6 +26,7 @@ from tensordict import (
     UnbatchedTensor,
 )
 from tensordict._td import is_tensor_collection
+from tensordict._torch_func import _POINTWISE_FUNCTIONS
 from tensordict.base import TensorDictBase
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.nn import TensorDictParams
@@ -115,6 +116,59 @@ elif is_npu_available():
 
 
 class TestPointwiseOps:
+    @pytest.mark.parametrize("name", _POINTWISE_FUNCTIONS)
+    def test_torch_pointwise_functions(self, name):
+        # torch.<name>(td) computes torch.<name> on each leaf (#1926)
+        torch.manual_seed(0)
+        x = torch.rand(3, 4) * 0.8 + 0.1
+        y = torch.rand(3, 4) * 0.8 + 0.1
+        args = {
+            "add": (y,),
+            "addcdiv": (y, y),
+            "addcmul": (y, y),
+            "bitwise_and": (y > 0.5,),
+            "clamp": (0.3, 0.6),
+            "clamp_max": (0.5,),
+            "clamp_max_": (0.5,),
+            "clamp_min": (0.5,),
+            "clamp_min_": (0.5,),
+            "div": (y,),
+            "logical_and": (y > 0.5,),
+            "minimum": (y,),
+            "mul": (y,),
+            "pow": (y,),
+            "rsub": (y,),
+            "sub": (y,),
+        }.get(name, ())
+        if name == "bitwise_and":
+            x = x > 0.3
+        func = getattr(torch, name)
+        td = TensorDict(a=x.clone(), nested=TensorDict(b=x.clone()), batch_size=[3, 4])
+        result = func(td, *args)
+        expected = func(x.clone(), *args)
+        if name.endswith("_"):
+            assert result is td
+        assert isinstance(result, TensorDict)
+        torch.testing.assert_close(result["a"], expected)
+        torch.testing.assert_close(result["nested", "b"], expected)
+
+    def test_torch_pointwise_functions_kwargs(self):
+        td = TensorDict(a=torch.arange(4.0), batch_size=[4])
+        torch.testing.assert_close(
+            torch.clamp(td, min=1.5)["a"], td["a"].clamp(min=1.5)
+        )
+        torch.testing.assert_close(
+            torch.sub(td, td, alpha=2)["a"], torch.sub(td["a"], td["a"], alpha=2)
+        )
+        torch.testing.assert_close(
+            torch.add(td, td, alpha=2)["a"], torch.add(td["a"], td["a"], alpha=2)
+        )
+        # a tensor or a number as first argument still raises
+        with pytest.raises(TypeError, match="takes a tensordict"):
+            torch.add(torch.ones(4), td)
+        with pytest.raises(TypeError, match="takes a tensordict"):
+            torch.pow(2, td)
+
     def test_r_ops(self):
         td = TensorDict(a=1)
         # mul
@@ -731,6 +785,21 @@ class TestPointwiseOps:
             torch.testing.assert_close(
                 result[key], torch.rsub(td[key], other_leaf, **kwargs)
             )
+
+    @pytest.mark.parametrize("alpha", [1, 2, -0.3])
+    @pytest.mark.parametrize("op", ["add", "add_", "sub", "sub_"])
+    def test_add_sub_alpha_number(self, op, alpha):
+        # Like torch, add and sub scale a number other by alpha (#2495)
+        torch.manual_seed(0)
+        td = TensorDict(
+            a=torch.randn(3, 4), b={"c": torch.randn(3, 4, 5)}, batch_size=(3, 4)
+        )
+        expected = td.apply(lambda x: getattr(x, op.rstrip("_"))(1.5, alpha=alpha))
+        result = getattr(td, op)(1.5, alpha=alpha)
+        if op.endswith("_"):
+            assert result is td
+        for key in ("a", ("b", "c")):
+            torch.testing.assert_close(result[key], expected[key])
 
     @pytest.mark.parametrize("shape", [(4,), (3, 4), (2, 3, 4)])
     def test_broadcast_tensordict(self, shape):
