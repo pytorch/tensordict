@@ -18,7 +18,7 @@ import sys
 import threading
 import warnings
 import weakref
-from collections import namedtuple, UserDict
+from collections import defaultdict, namedtuple, OrderedDict, UserDict
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -2395,6 +2395,23 @@ class TestGeneric:
         for name in fields:
             assert (td[name] == getattr(result, name)).all()
 
+    def test_to_namedtuple_dest_cls(self):
+        # https://github.com/pytorch/tensordict/issues/2372
+        Outer = namedtuple("Outer", ["a", "nested"])
+        td = TensorDict(a=torch.zeros(2), nested=TensorDict(p=torch.ones(2)))
+        nt = td.to_namedtuple(dest_cls=Outer)
+        assert type(nt) is Outer
+        assert type(nt.nested).__name__ == "GenericDict"
+        assert nt.nested._fields == ("p",)
+        assert (nt.nested.p == 1).all()
+        # a nested level that dest_cls takes keeps dest_cls
+        Same = namedtuple("Same", ["a", "b"], defaults=[None])
+        td = TensorDict(a=torch.zeros(2), b=TensorDict(a=torch.ones(2)))
+        nt = td.to_namedtuple(dest_cls=Same)
+        assert type(nt) is Same
+        assert type(nt.b) is Same
+        assert nt.b.b is None
+
     def test_from_pytree(self):
         class WeirdLookingClass:
             pass
@@ -2491,6 +2508,24 @@ class TestGeneric:
         assert TensorDict.from_pytree(pytree, auto_batch_size=True).batch_size == (3,)
         assert TensorDict.from_pytree(pytree, batch_size=[3]).batch_size == (3,)
         assert isinstance(td.to_pytree().nested, TensorDict)
+
+    def test_from_pytree_subclasses(self):
+        # https://github.com/pytorch/tensordict/issues/2371
+        pytree = OrderedDict(
+            b=torch.zeros(3, 2).max(1),
+            a=defaultdict(list, c=torch.ones(3)),
+        )
+        pytree_recon = TensorDict.from_pytree(pytree).to_pytree()
+        assert type(pytree_recon) is OrderedDict
+        assert list(pytree_recon) == ["b", "a"]
+        assert type(pytree_recon["b"]) is torch.return_types.max
+        assert type(pytree_recon["a"]) is defaultdict
+        assert pytree_recon["a"].default_factory is None
+
+        def check(v1, v2):
+            assert (v1 == v2).all()
+
+        torch.utils._pytree.tree_map(check, pytree, pytree_recon)
 
     def test_from_struct_array(self):
         x = np.array(
