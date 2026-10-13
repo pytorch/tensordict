@@ -72,7 +72,7 @@ from torch import nn, Tensor
 from torch.nn.modules.module import _EXTRA_STATE_KEY_SUFFIX
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.nn.utils._named_member_accessor import swap_tensor
-from torch.utils._pytree import is_structseq_instance
+from torch.utils._pytree import is_structseq_instance, tree_map
 
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
@@ -1194,7 +1194,13 @@ class _Conversion:
                 # The extra state that from_module(use_state_dict=True) saves
                 # with get_extra_state(): load it as load_state_dict does.
                 if return_swap:
-                    local_out = _wrap_extra_state(module.get_extra_state())
+                    # Clone the tensors: set_extra_state may copy into them.
+                    local_out = _wrap_extra_state(
+                        tree_map(
+                            lambda x: x.clone() if isinstance(x, Tensor) else x,
+                            module.get_extra_state(),
+                        )
+                    )
                 if is_tensor_collection(value):
                     value = value.to_dict()
                 module.set_extra_state(value)

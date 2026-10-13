@@ -7414,21 +7414,33 @@ class TestGeneric:
         assert_allclose_td(params_reg.flatten_keys("."), TensorDict(sd, []))
 
     @pytest.mark.parametrize("use_state_dict", [True, False])
-    @pytest.mark.parametrize("kind", ["dict", "tensor", "object"])
+    @pytest.mark.parametrize("kind", ["dict", "tensor", "inplace", "object"])
     def test_to_module_extra_state(self, kind, use_state_dict):
         # to_module loads the extra state that from_module(use_state_dict=True)
-        # saves, also for nested modules, and the context manager restores it.
+        # saves, also for nested modules, and the context manager restores it,
+        # also when set_extra_state copies into the tensors get_extra_state
+        # returned ("inplace").
         class Counter(nn.Module):
             def __init__(self):
                 super().__init__()
                 self.lin = nn.Linear(2, 2)
-                self.count = 0
+                self.state = torch.zeros(())
+
+            @property
+            def count(self):
+                return int(self.state)
+
+            @count.setter
+            def count(self, value):
+                self.state.fill_(value)
 
             def get_extra_state(self):
                 if kind == "dict":
                     return {"count": torch.tensor(self.count), "n": self.count}
                 if kind == "tensor":
                     return torch.tensor(self.count)
+                if kind == "inplace":
+                    return self.state
                 return self.count
 
             def set_extra_state(self, state):
@@ -7439,6 +7451,8 @@ class TestGeneric:
                 elif kind == "tensor":
                     assert isinstance(state, torch.Tensor)
                     self.count = int(state)
+                elif kind == "inplace":
+                    self.state.copy_(state)
                 else:
                     assert isinstance(state, int)
                     self.count = state
