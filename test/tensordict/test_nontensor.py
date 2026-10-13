@@ -609,6 +609,25 @@ class TestNonTensorData:
         )
         assert batch.get(("metadata", "index")).tolist() == [0, 1]
 
+    @pytest.mark.parametrize("cls", [NonTensorData, MetaData])
+    @pytest.mark.parametrize("old_names", [None, ["m"]])
+    def test_empty_names(self, cls, old_names):
+        # empty() applies the names it is given, as TensorDict.empty() does
+        x = cls(data="x", batch_size=[2], names=old_names)
+        assert x.empty().names == (old_names or [None])
+        assert x.empty(batch_size=[2]).names == [None]
+        for out in (
+            x.empty(names=["n"]),
+            x.empty(batch_size=[2], names=["n"]),
+            TensorDict(batch_size=[2]).empty(names=["n"]),
+        ):
+            assert out.names == ["n"]
+        out = x.empty(batch_size=[2, 3], names=["n", "o"])
+        assert type(out) is cls
+        assert out.batch_size == (2, 3)
+        assert out.names == ["n", "o"]
+        assert out.data == "x"
+
     def test_expand(self):
         d = NonTensorData(0, batch_size=(3,))
         d_expand = d.expand((2, 3))
@@ -870,11 +889,24 @@ class TestNonTensorData:
             (lambda td: td.set("a", 1), "a", 1),
             (lambda td: td.update({"a": 1.5}), "a", 1.5),
             (lambda td: td.set(("nested", "a"), False), ("nested", "a"), False),
+            (lambda td: td.set("a", np.bool_(False)), "a", False),
+            (lambda td: td.set("a", np.int64(1)), "a", 1),
+            (lambda td: td.set("a", np.float32(1.5)), "a", 1.5),
+            (lambda td: td.set("a", np.float64(1.5)), "a", 1.5),
         ],
-        ids=["setitem", "set", "update", "nested"],
+        ids=[
+            "setitem",
+            "set",
+            "update",
+            "nested",
+            "np-bool",
+            "np-int64",
+            "np-float32",
+            "np-float64",
+        ],
     )
     def test_set_scalar_over_non_tensor_warns(self, write, key, expected):
-        # A Python scalar written over a NonTensorData entry is a 0-d tensor
+        # A Python or NumPy scalar written over a NonTensorData entry is a 0-d tensor
         # today, and stays NonTensorData in 0.17 (gh-1199)
         td = TensorDict(a=NonTensorData(True), nested=TensorDict(a=NonTensorData(True)))
         with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17") as w:
@@ -1060,6 +1092,49 @@ class TestNonTensorData:
         assert data.data == "a"
         assert data.tolist() == ["a", "a", "a"]
 
+    @pytest.mark.parametrize(
+        "index",
+        [torch.tensor([1, 3]), slice(1, 3), [0, 2], torch.tensor([1, 0, 1, 0]) == 1],
+        ids=["tensor", "slice", "list", "mask"],
+    )
+    @pytest.mark.parametrize("ndim", [1, 2])
+    def test_set_at_writes_into_stack(self, index, ndim):
+        # A write into a NonTensorStack entry writes into the stack. It used to
+        # rebuild the whole stack first, which cost O(size) per write.
+        def make(prefix):
+            if ndim == 1:
+                return NonTensorStack.from_list([f"{prefix}{i}" for i in range(4)])
+            return NonTensorStack.from_list(
+                [[f"{prefix}{i}{j}" for j in range(2)] for i in range(4)]
+            )
+
+        td = TensorDict(a=make("s"), batch_size=[4, 2][:ndim])
+        stack = td.get("a")
+        value = make("v")[index]
+        expected = make("s")
+        expected[index] = value
+        td[index] = TensorDict(a=value, batch_size=value.batch_size)
+        assert td.get("a") is stack
+        assert stack.tolist() == expected.tolist()
+        value = make("w")[index]
+        expected[index] = value
+        td.set_at_("a", value, index)
+        assert td.get("a") is stack
+        assert stack.tolist() == expected.tolist()
+
+    def test_set_at_into_stack_of_batched_members(self):
+        # The NonTensorData members of this stack have batch dims: a write
+        # into one element of a member still turns that member into a stack
+        stack = NonTensorStack(*[NonTensorData(c, batch_size=[2]) for c in "abc"])
+        td = TensorDict(a=stack, batch_size=[3, 2])
+        td.set_at_("a", "z", 1)
+        assert td.get("a").tolist() == [["a", "a"], ["z", "z"], ["c", "c"]]
+        td.set_at_("a", NonTensorStack("x", "y"), 0)
+        assert td.get("a").tolist() == [["x", "y"], ["z", "z"], ["c", "c"]]
+        td.lock_()
+        td.set_at_("a", "q", (2, 1))
+        assert td.get("a").tolist() == [["x", "y"], ["z", "z"], ["c", "q"]]
+
     def test_setitem_edge_case(self):
         s = NonTensorStack("a string")
         t = NonTensorStack("another string")
@@ -1126,6 +1201,36 @@ class TestNonTensorData:
         data[1] = NonTensorData("s0")
         data[1:] = NonTensorStack("s0", "s0")
         assert data.tolist() == ["s0"] * 3
+
+    @pytest.mark.parametrize(
+        "index,rows",
+        [
+            (torch.tensor([0, 2]), [0, 2]),
+            (torch.tensor([True, False, True, False]), [0, 2]),
+            (slice(0, 2), [0, 1]),
+        ],
+    )
+    @pytest.mark.parametrize("source", ["stack", "data", "nested"])
+    def test_setitem_new_key(self, index, rows, source):
+        # A non-tensor stack that the destination lacks gets the full batch
+        # size, with None in the rows not written, as a tensor key gets zeros
+        if source == "data":
+            # A NonTensorData keeps its one value for all rows
+            text, values, rows = NonTensorData("a", batch_size=[2]), ["a"] * 4, range(4)
+        else:
+            text, values = NonTensorStack("a", "b"), ["a", "b"]
+        src = TensorDict(obs=torch.ones(2), text=text, batch_size=[2])
+        key = "text"
+        if source == "nested":
+            src = TensorDict(nested=src, batch_size=[2])
+            key = ("nested", "text")
+        out = TensorDict(obs=torch.zeros(4), batch_size=[4])
+        out[index] = src
+        expected = [None] * 4
+        for row, value in zip(rows, values):
+            expected[row] = value
+        assert out.get(key).batch_size == out.batch_size
+        assert out.get(key).tolist() == expected
 
     def test_stack(self, non_tensor_data):
         assert (
@@ -1272,6 +1377,42 @@ class TestNonTensorData:
         assert td_rt["sub", "t"] == ["c", "d"]
         # The consolidated metadata holds the old values
         assert not td.is_consolidated()
+
+    @pytest.mark.parametrize("layout", ["1d", "nd_members", "stack_dim1", "nested"])
+    @pytest.mark.parametrize("mode", ["plain", "locked", "memmap", "memmap_shared"])
+    @pytest.mark.parametrize("write", ["update_", "copy_"])
+    def test_update__data_into_stack(self, layout, mode, write, tmpdir):
+        # A NonTensorData written into a NonTensorStack goes to every member,
+        # also when the members are NonTensorData with batch dims (#2263)
+        if layout == "1d":
+            s = NonTensorStack("a", "b", "c")
+        elif layout == "nd_members":
+            s = torch.stack([NonTensorData(f"m{i}", batch_size=[3]) for i in range(4)])
+        elif layout == "stack_dim1":
+            s = NonTensorStack(
+                *[NonTensorData(f"m{i}", batch_size=[4]) for i in range(3)],
+                stack_dim=1,
+            )
+        else:
+            s = NonTensorStack(
+                *[NonTensorStack(*[f"m{i}{j}" for j in range(3)]) for i in range(4)]
+            )
+        assert isinstance(s, NonTensorStack)
+        td = TensorDict(s=s, batch_size=s.batch_size)
+        if mode == "locked":
+            td.lock_()
+        elif mode != "plain":
+            td.memmap_(tmpdir, share_non_tensor=mode == "memmap_shared")
+        source = TensorDict(
+            x=torch.ones(s.batch_size),
+            s=NonTensorData("w", batch_size=s.batch_size),
+            batch_size=s.batch_size,
+        )
+        getattr(td, write)(source.select("s"))
+        expected = NonTensorData("w", batch_size=s.batch_size).tolist()
+        assert td.get("s").tolist() == expected
+        if mode.startswith("memmap"):
+            assert TensorDict.load_memmap(tmpdir).get("s").tolist() == expected
 
     @pytest.mark.parametrize("mode", ["shared", "memmap", "memmap_shared"])
     @pytest.mark.parametrize("stack", [False, True])
@@ -2532,6 +2673,28 @@ class TestUnbatchedTensor:
         out = td.norm()
         assert type(out.get("a")) is torch.Tensor
         assert out["a"].shape == ()
+
+    def test_unbatched_to_batch_size(self):
+        # https://github.com/pytorch/tensordict/issues/2499
+        td = TensorDict(
+            a=torch.ones(3, 2),
+            u=UnbatchedTensor(torch.ones(5)),
+            n=TensorDict(v=UnbatchedTensor(torch.ones(7)), batch_size=[3, 2]),
+            batch_size=[3, 2],
+        )
+        with pytest.warns(FutureWarning, match="batch_size"):
+            out = td.to(torch.float64, batch_size=[3])
+        for key in ("u", ("n", "v")):
+            assert isinstance(out.get(key), UnbatchedTensor)
+            assert out.get(key).dtype == torch.float64
+            assert out.get(key).batch_size == (3,)
+        out = td.to(torch.float64, batch_size=[3, 2])
+        assert out.get("u").dtype == torch.float64
+
+        # Shape ops still leave the payload unchanged
+        out = td.reshape(6)
+        assert out["u"].shape == (5,)
+        assert out.get("u").batch_size == (6,)
 
     @pytest.mark.parametrize("op", [operator.add, operator.sub, operator.mul])
     def test_unbatched_pointwise_other_unbatched(self, op):

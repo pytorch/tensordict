@@ -7,11 +7,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import importlib
 import json
 import pickle
-import threading
 import uuid
 from numbers import Number
 from typing import Any, Callable, Literal, Sequence, Type, TYPE_CHECKING
@@ -40,7 +38,6 @@ from tensordict.utils import (
     _lock_blocked,
     _LOCK_ERROR,
     _warn_nested_key_in_flat_keys,
-    expand_as_right,
     is_non_tensor,
     NestedKey,
     unravel_key,
@@ -55,8 +52,13 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
-# Separator used for nested key paths in Redis keys
-_KEY_SEP = "."
+from tensordict.store._connection import (
+    _client_settings,
+    _connect_kwargs,
+    _KEY_SEP,
+    _read_stored_metadata,
+    _StoreConnection,
+)
 
 # Re-export every helper of _utils, including those that only
 # tensordict.store._lazy uses.
@@ -157,6 +159,53 @@ def _iter_registry_keys(paths, include_nested, leaves_only):
         yield open_prefix[:depth] if depth > 1 else open_prefix[0]
 
 
+def _rename_plan(all_keys, old_path, new_path, old_key, new_key):
+    """Plans the move of the entry at ``old_path`` to ``new_path`` in a store.
+
+    Returns ``None`` if nothing is stored at or below ``old_path``. Otherwise
+    returns ``(renames, deletes)``: the ``(source, destination)`` pairs of
+    leaf paths, ordered so that no leaf is overwritten before it moves, and
+    the leaves at or below ``new_path`` that the entry replaces, as
+    ``TensorDict`` does. A destination below a leaf raises ``KeyError``,
+    unless that leaf moves.
+    """
+    old_prefix = old_path + _KEY_SEP
+    new_prefix = new_path + _KEY_SEP
+    if old_path in all_keys:
+        renames = [(old_path, new_path)]
+    else:
+        renames = [
+            (k, new_prefix + k[len(old_prefix) :])
+            for k in all_keys
+            if k.startswith(old_prefix)
+        ]
+    if not renames:
+        return None
+    if old_path == new_path:
+        return [], []
+    parts = new_path.split(_KEY_SEP)
+    for i in range(1, len(parts)):
+        parent = _KEY_SEP.join(parts[:i])
+        # a leaf at or below old_path moves away
+        moves = parent == old_path or parent.startswith(old_prefix)
+        if not moves and parent in all_keys:
+            raise KeyError(
+                f"Cannot rename {old_key!r} to {new_key!r}: the new key is "
+                "below a leaf."
+            )
+    sources = {src for src, _ in renames}
+    deletes = [
+        k
+        for k in all_keys
+        if (k == new_path or k.startswith(new_prefix)) and k not in sources
+    ]
+    # A destination can be the source of another move: a shorter one when
+    # new_path holds old_path, a longer one when old_path holds new_path.
+    # Move that source first.
+    renames.sort(key=lambda pair: len(pair[0]), reverse=new_path.startswith(old_prefix))
+    return renames, deletes
+
+
 class _StoreTDKeysView(_TensorDictKeysView):
     """Keys view for TensorDictStore backed by a Redis key registry."""
 
@@ -206,7 +255,7 @@ class _StoreTDKeysView(_TensorDictKeysView):
         return sum(1 for _ in self)
 
 
-class TensorDictStore(_StoreUnsupported, TensorDictBase):
+class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
     """A TensorDict whose entries live on a Redis-compatible server.
 
     Supports `Redis <https://redis.io>`_, `Dragonfly <https://dragonflydb.io>`_,
@@ -306,12 +355,26 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
 
     _td_dim_names = None
     _masking_on_dense_copy = True
+    _masked_select_on_dense_copy = True
     # each read fetches the entry from the server into a new tensor
     _reads_return_copies = True
+    _storage_holds_no_gradients = True
     _rename_key_lenient = True
     # Set on the shallow copies that _clone(recurse=False) returns: they share
     # the data and the metadata keys of the store, but not its batch size.
     _is_shallow_copy = False
+
+    _global_key_suffixes = ("__batch_size__", "__device__", "__tensorclass__")
+    _pickled_attrs = _StoreConnection._pickled_attrs + (
+        "_prefix",
+        "_tensorclass_cls",
+        "_is_shallow_copy",
+    )
+    _pickle_defaults = {
+        **_StoreConnection._pickle_defaults,
+        "_tensorclass_cls": None,
+        "_is_shallow_copy": False,
+    }
 
     def __init__(
         self,
@@ -333,33 +396,13 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
             raise ModuleNotFoundError(
                 "Could not import redis. Install it with: pip install redis"
             )
-        import redis.asyncio as aioredis
 
         if batch_size is None:
             batch_size = torch.Size(())
 
-        self._locked_tensordicts = []
-        self._lock_id = set()
-        self._is_shared = False
-        self._is_memmap = False
-
         self._backend = backend
-
-        # Nested TensorDict cache
-        self._nested_tensordicts: dict[str, TensorDictStore] = {}
-
-        # Metadata cache: (shape, dtype) per key_path, shared with nested views
         self._cache_metadata = cache_metadata
-        self._meta_cache: dict[str, tuple[list[int], torch.dtype]] | None = (
-            {} if cache_metadata else None
-        )
-
-        # Keys cache: shared mutable container ``[set | None]`` holding the set
-        # of all registered leaf key paths.  The list wrapper ensures that
-        # nested views (which share the same list object) observe invalidation
-        # (``_keys_cache[0] = None``) immediately without needing their own
-        # attribute reassignment.
-        self._keys_cache: list[set[str] | None] = [None]
+        self._init_local_state()
 
         # Unique identifier for this TensorDict instance in the store
         self._td_id = td_id or str(uuid.uuid4())
@@ -376,24 +419,7 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
         self._db = db
         self._unix_socket_path = unix_socket_path
         self._redis_kwargs = redis_kwargs
-
-        # Create a new event loop in a background thread
-        self._loop = asyncio.new_event_loop()
-        self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
-        self._thread.start()
-        self._owns_loop = True
-
-        if client is not None:
-            self._client = client
-        else:
-            connect_kwargs = dict(redis_kwargs)
-            if unix_socket_path is not None:
-                connect_kwargs["unix_socket_path"] = unix_socket_path
-            else:
-                connect_kwargs["host"] = host
-                connect_kwargs["port"] = port
-            connect_kwargs["db"] = db
-            self._client = aioredis.Redis(**connect_kwargs)
+        self._open_connection(client)
 
         self._batch_size = torch.Size(batch_size)
         self._device = torch.device(device) if device is not None else None
@@ -413,18 +439,14 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
         operates under a different key prefix.
         """
         obj = cls.__new__(cls)
-        obj._locked_tensordicts = []
-        obj._lock_id = set()
-        obj._is_shared = False
-        obj._is_memmap = False
-        obj._nested_tensordicts = {}
+        obj._cache_metadata = parent._cache_metadata
+        obj._init_local_state()
         obj._td_dim_names = None
 
         obj._backend = parent._backend
         obj._td_id = parent._td_id
         obj._prefix = key_prefix
         obj._namespace = parent._namespace
-        obj._cache_metadata = parent._cache_metadata
         obj._meta_cache = parent._meta_cache
         obj._keys_cache = parent._keys_cache
 
@@ -446,34 +468,13 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
         obj._tensorclass_cls = None
         return obj
 
-    def _run_sync(self, coro):
-        """Run an async coroutine synchronously via the background event loop."""
-        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
-        return future.result()
+    # Override: also resets the cache of the nested views.
+    def _init_local_state(self) -> None:
+        super()._init_local_state()
+        # Nested TensorDict cache
+        self._nested_tensordicts: dict[str, TensorDictStore] = {}
 
     # ---- Redis key construction ----
-
-    def _redis_key(self, suffix: str) -> str:
-        """Build a Redis key with hash tag for cluster compatibility.
-
-        Format: {namespace}:{td_id}:{suffix}
-        The {td_id} is wrapped in Redis hash tags so all keys for this
-        TensorDict land on the same shard.
-        """
-        return f"{self._namespace}:{{{self._td_id}}}:{suffix}"
-
-    def _data_key(self, key_path: str) -> str:
-        """Redis key for tensor data."""
-        return self._redis_key(f"d:{key_path}")
-
-    def _meta_key(self, key_path: str) -> str:
-        """Redis key for tensor metadata hash."""
-        return self._redis_key(f"m:{key_path}")
-
-    @property
-    def _keys_registry_key(self) -> str:
-        """Redis key for the Set of all leaf key paths."""
-        return self._redis_key("__keys__")
 
     @property
     def _batch_size_key(self) -> str:
@@ -721,58 +722,6 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
         """Retrieve metadata for a key without downloading tensor data."""
         raw = await self._client.hgetall(self._meta_key(key_path))
         return _decode_meta(raw)
-
-    async def _adel_key(self, key_path: str):
-        """Delete a key's data, metadata, and registry entry."""
-        pipe = self._client.pipeline()
-        pipe.delete(self._data_key(key_path))
-        pipe.delete(self._meta_key(key_path))
-        pipe.srem(self._keys_registry_key, key_path)
-        await pipe.execute()
-        if self._meta_cache is not None:
-            self._meta_cache.pop(key_path, None)
-        if self._keys_cache[0] is not None:
-            self._keys_cache[0].discard(key_path)
-
-    async def _aget_all_keys(self) -> set[str]:
-        """Get all registered key paths from Redis."""
-        raw = await self._client.smembers(self._keys_registry_key)
-        return {k.decode() if isinstance(k, bytes) else k for k in raw}
-
-    async def _aget_metadata_batch(
-        self, key_paths: list[str], non_tensor: dict | None = None
-    ) -> dict[str, tuple[list[int], torch.dtype]]:
-        """Get ``(shape, dtype)`` for multiple keys, using the local cache when available.
-
-        Cache misses are fetched via a single Redis pipeline and stored back
-        into ``_meta_cache`` (when caching is enabled). When *non_tensor* is
-        given, the metadata of non-tensor keys is stored there instead.
-        """
-        result: dict[str, tuple[list[int], torch.dtype]] = {}
-        uncached: list[str] = []
-        for kp in key_paths:
-            if self._meta_cache is not None and kp in self._meta_cache:
-                result[kp] = self._meta_cache[kp]
-            else:
-                uncached.append(kp)
-
-        if uncached:
-            pipe = self._client.pipeline()
-            for kp in uncached:
-                pipe.hgetall(self._meta_key(kp))
-            raw_metas = await pipe.execute()
-            for kp, raw_meta in zip(uncached, raw_metas):
-                meta = _decode_meta(raw_meta)
-                if non_tensor is not None and meta.get("is_non_tensor") == "1":
-                    non_tensor[kp] = meta
-                    continue
-                shape = json.loads(meta["shape"])
-                dtype = _str_to_dtype(meta["dtype"])
-                result[kp] = (shape, dtype)
-                if self._meta_cache is not None:
-                    self._meta_cache[kp] = (shape, dtype)
-
-        return result
 
     async def _aget_batch_tensors(
         self, key_paths: list[str]
@@ -1297,21 +1246,6 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
             pipe.set(self._data_key(kp), _tensor_to_bytes(existing))
         await pipe.execute()
 
-    # ---- Sync helpers ----
-
-    def _get_all_keys(self) -> set[str]:
-        """Get all registered key paths (sync wrapper).
-
-        Uses the local ``_keys_cache`` when available, falling back to a
-        Redis ``SMEMBERS`` round-trip and populating the cache for next time.
-        """
-        if self._keys_cache[0] is not None:
-            return self._keys_cache[0]
-        keys = self._run_sync(self._aget_all_keys())
-        if self._cache_metadata:
-            self._keys_cache[0] = keys
-        return keys
-
     @staticmethod
     def _deserialize_non_tensor(data: bytes, meta: dict, idx=None) -> Any:
         """Deserialize a non-tensor value from Redis.
@@ -1826,38 +1760,35 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
 
         async def _arename(old_path, new_path):
             all_keys = await self._aget_all_keys()
-            # Rename exact match
-            found = old_path in all_keys
-            if found:
-                pipe = self._client.pipeline()
-                pipe.rename(self._data_key(old_path), self._data_key(new_path))
-                pipe.rename(self._meta_key(old_path), self._meta_key(new_path))
-                pipe.srem(self._keys_registry_key, old_path)
-                pipe.sadd(self._keys_registry_key, new_path)
-                await pipe.execute()
-            # Rename nested keys
-            old_prefix = old_path + _KEY_SEP
-            new_prefix = new_path + _KEY_SEP
-            nested = [k for k in all_keys if k.startswith(old_prefix)]
-            for k in nested:
-                new_k = new_prefix + k[len(old_prefix) :]
-                pipe = self._client.pipeline()
-                pipe.rename(self._data_key(k), self._data_key(new_k))
-                pipe.rename(self._meta_key(k), self._meta_key(new_k))
+            plan = _rename_plan(all_keys, old_path, new_path, old_key, new_key)
+            if plan is None:
+                return None
+            renames, deletes = plan
+            pipe = self._client.pipeline()
+            # the entry replaces what is stored at new_path, as in TensorDict
+            for k in deletes:
+                pipe.delete(self._data_key(k))
+                pipe.delete(self._meta_key(k))
                 pipe.srem(self._keys_registry_key, k)
-                pipe.sadd(self._keys_registry_key, new_k)
-                await pipe.execute()
-            return found or bool(nested)
+            for src, dst in renames:
+                pipe.rename(self._data_key(src), self._data_key(dst))
+                pipe.rename(self._meta_key(src), self._meta_key(dst))
+                pipe.srem(self._keys_registry_key, src)
+                pipe.sadd(self._keys_registry_key, dst)
+            await pipe.execute()
+            return plan
 
-        found = self._run_sync(_arename(old_path, new_path))
+        plan = self._run_sync(_arename(old_path, new_path))
         # Invalidate keys cache — rename changes the set of keys
         self._keys_cache[0] = None
-        if self._meta_cache is not None:
-            # Transfer cached metadata from old to new path
-            old_meta = self._meta_cache.pop(old_path, None)
-            if old_meta is not None:
-                self._meta_cache[new_path] = old_meta
-        if not found:
+        if plan is not None and self._meta_cache is not None:
+            renames, deletes = plan
+            for key_path in deletes:
+                self._meta_cache.pop(key_path, None)
+            for src, dst in renames:
+                self._meta_cache.pop(src, None)
+                self._meta_cache.pop(dst, None)
+        if plan is None:
             # stacklevel 3: skip rename_key_
             _warn_missing_key(self, "rename_key_", old_key, stacklevel=3)
 
@@ -2355,44 +2286,27 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
                 )
                 td["obs"]  # fetched from the shared store
         """
-        import redis.asyncio as aioredis
-
         # ``client`` and ``cache_metadata`` go to the constructor only.
-        connect_kwargs = {
+        redis_kwargs = {
             k: v for k, v in kwargs.items() if k not in ("client", "cache_metadata")
         }
-        if unix_socket_path is not None:
-            connect_kwargs["unix_socket_path"] = unix_socket_path
-        else:
-            connect_kwargs["host"] = host
-            connect_kwargs["port"] = port
-        connect_kwargs["db"] = db
-
-        # Temporarily create an async client to read stored metadata
-        client = aioredis.Redis(**connect_kwargs)
-
-        async def _read_meta():
-            batch_size_key = f"{prefix}:{{{td_id}}}:__batch_size__"
-            device_key = f"{prefix}:{{{td_id}}}:__device__"
-            tc_key = f"{prefix}:{{{td_id}}}:__tensorclass__"
-            pipe = client.pipeline()
-            pipe.get(batch_size_key)
-            pipe.get(device_key)
-            pipe.get(tc_key)
-            raw_bs, raw_dev, raw_tc = await pipe.execute()
-            await client.aclose()
-            return raw_bs, raw_dev, raw_tc
-
-        loop = asyncio.new_event_loop()
-        try:
-            raw_bs, raw_dev, raw_tc = loop.run_until_complete(_read_meta())
-        finally:
-            loop.close()
+        settings = _client_settings(kwargs.get("client"))
+        if settings is not None:
+            # the store is on the server of the client
+            host, port, db, unix_socket_path, credentials = settings
+            redis_kwargs = {**redis_kwargs, **credentials}
+        raw_bs, raw_dev, raw_tc = _read_stored_metadata(
+            _connect_kwargs(host, port, db, unix_socket_path, redis_kwargs),
+            prefix,
+            td_id,
+            ("__batch_size__", "__device__", "__tensorclass__"),
+        )
 
         if raw_bs is None:
+            server = unix_socket_path or f"{host}:{port}"
             raise KeyError(
                 f"No TensorDictStore with td_id={td_id!r} found at "
-                f"{host}:{port} db={db} (prefix={prefix!r})."
+                f"{server} db={db} (prefix={prefix!r})."
             )
 
         batch_size = torch.Size(json.loads(raw_bs))
@@ -2427,10 +2341,7 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
             # Deep clone: new UUID, copies all data
             new_td = TensorDictStore(
                 backend=self._backend,
-                host=self._host,
-                port=self._port,
-                db=self._db,
-                unix_socket_path=self._unix_socket_path,
+                **self._connection_kwargs(),
                 prefix=self._namespace,
                 batch_size=self._batch_size,
                 device=self._device,
@@ -2451,10 +2362,6 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
     # Override: entries live on the server.
     def is_contiguous(self) -> bool:
         return False
-
-    # Override: the server holds no gradients.
-    def detach_(self) -> Self:
-        return self
 
     def _check_new_batch_size(self, new_size: torch.Size) -> None:
         # Check the stored shapes of the tensors instead of fetching them. A
@@ -2486,16 +2393,6 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
         if not self._prefix and not self._is_shallow_copy:
             self._run_sync(self._apersist_metadata())
 
-    def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
-        existing = self.get(key)
-        if is_tensor_collection(existing):
-            for subkey in existing.keys():
-                existing.fill_(subkey, value)
-        else:
-            existing = existing.fill_(value)
-            self.set_(key, existing)
-        return self
-
     # Override: a TensorDict skeleton, built without reading the data.
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
@@ -2525,162 +2422,6 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
             batch_size=self.batch_size if batch_size is None else batch_size,
             names=self.names if names is None and self._has_names() else names,
         )
-
-    # Override: reads give copies, so each filled entry is written back with
-    # set_.
-    def masked_fill_(self, mask, value):
-        for key in self.keys(include_nested=True, leaves_only=True):
-            tensor = self.get(key)
-            tensor = tensor.masked_fill(expand_as_right(mask, tensor), value)
-            self.set_(key, tensor)
-        return self
-
-    # Override: to_tensordict reads all the entries in one round trip.
-    def masked_select(self, mask, *, inplace=False):
-        if inplace:
-            return super().masked_select(mask, inplace=True)
-        return self.to_tensordict().masked_select(mask)
-
-    # ---- Pickling ----
-
-    def __getstate__(self):
-        state = {
-            "_backend": self._backend,
-            "_host": self._host,
-            "_port": self._port,
-            "_db": self._db,
-            "_unix_socket_path": self._unix_socket_path,
-            "_namespace": self._namespace,
-            "_td_id": self._td_id,
-            "_prefix": self._prefix,
-            "_batch_size": self._batch_size,
-            "_device": self._device,
-            "_redis_kwargs": self._redis_kwargs,
-            "_is_locked": self._is_locked,
-            "_td_dim_names": self._td_dim_names,
-            "_cache_metadata": self._cache_metadata,
-            "_tensorclass_cls": self._tensorclass_cls,
-            "_is_shallow_copy": self._is_shallow_copy,
-        }
-        return state
-
-    def __setstate__(self, state):
-        import redis.asyncio as aioredis
-
-        self._backend = state.get("_backend", "redis")
-        self._host = state["_host"]
-        self._port = state["_port"]
-        self._db = state["_db"]
-        self._unix_socket_path = state["_unix_socket_path"]
-        self._namespace = state["_namespace"]
-        self._td_id = state["_td_id"]
-        self._prefix = state["_prefix"]
-        self._batch_size = state["_batch_size"]
-        self._device = state["_device"]
-        self._redis_kwargs = state["_redis_kwargs"]
-        self._td_dim_names = state["_td_dim_names"]
-        self._tensorclass_cls = state.get("_tensorclass_cls")
-        self._is_shallow_copy = state.get("_is_shallow_copy", False)
-
-        self._locked_tensordicts = []
-        self._lock_id = set()
-        self._is_shared = False
-        self._is_memmap = False
-        self._nested_tensordicts = {}
-        self._cache_metadata = state.get("_cache_metadata", True)
-        self._meta_cache = {} if self._cache_metadata else None
-        self._keys_cache = [None]
-
-        # Recreate event loop and client
-        self._loop = asyncio.new_event_loop()
-        self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
-        self._thread.start()
-        self._owns_loop = True
-
-        connect_kwargs = dict(self._redis_kwargs)
-        if self._unix_socket_path is not None:
-            connect_kwargs["unix_socket_path"] = self._unix_socket_path
-        else:
-            connect_kwargs["host"] = self._host
-            connect_kwargs["port"] = self._port
-        connect_kwargs["db"] = self._db
-        self._client = aioredis.Redis(**connect_kwargs)
-
-        was_locked = state.get("_is_locked", False)
-        self._is_locked = False
-        if was_locked:
-            self.lock_()
-
-    # ---- Cleanup ----
-
-    def close(self):
-        """Close the Redis connection and stop the background event loop.
-
-        The data stays on the server: reconnect with :meth:`from_store`, or
-        delete it with :meth:`clear_redis` before you close. After
-        ``close()``, this object cannot read or write. Garbage collection
-        calls ``close()``.
-        """
-        if hasattr(self, "_owns_loop") and self._owns_loop:
-            if (
-                hasattr(self, "_client")
-                and hasattr(self, "_loop")
-                and self._loop.is_running()
-            ):
-                try:
-                    future = asyncio.run_coroutine_threadsafe(
-                        self._client.aclose(), self._loop
-                    )
-                    future.result(timeout=2)
-                except Exception:
-                    pass
-            if hasattr(self, "_loop") and self._loop.is_running():
-                self._loop.call_soon_threadsafe(self._loop.stop)
-            if hasattr(self, "_thread") and self._thread.is_alive():
-                self._thread.join(timeout=2)
-            if hasattr(self, "_loop") and not self._loop.is_running():
-                # releases the selector and the self-pipe sockets of the loop
-                self._loop.close()
-            self._owns_loop = False
-
-    def clear_redis(self):
-        """Delete all keys associated with this TensorDict from Redis.
-
-        This removes all tensor data, metadata, the key registry and the
-        stored TensorClass path. The connection stays open, so you can write
-        new entries. Call :meth:`close` to close it.
-        """
-
-        async def _aclear():
-            all_keys = await self._aget_all_keys()
-            if not all_keys:
-                pipe = self._client.pipeline()
-                pipe.delete(self._keys_registry_key)
-                pipe.delete(self._batch_size_key)
-                pipe.delete(self._device_key)
-                pipe.delete(self._tensorclass_key)
-                await pipe.execute()
-                return
-            pipe = self._client.pipeline()
-            for key_path in all_keys:
-                pipe.delete(self._data_key(key_path))
-                pipe.delete(self._meta_key(key_path))
-            pipe.delete(self._keys_registry_key)
-            pipe.delete(self._batch_size_key)
-            pipe.delete(self._device_key)
-            pipe.delete(self._tensorclass_key)
-            await pipe.execute()
-
-        self._run_sync(_aclear())
-        if self._meta_cache is not None:
-            self._meta_cache.clear()
-        self._keys_cache[0] = None
-
-    def __del__(self):
-        try:
-            self.close()
-        except Exception:
-            pass
 
     def __repr__(self):
         keys_str = list(self.keys())

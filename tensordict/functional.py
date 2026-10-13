@@ -105,6 +105,14 @@ def pad(
         the input; otherwise a new tensordict, or a new tensorclass of the
         same type for a tensorclass input.
 
+    .. note::
+        With ``inplace=False``, a lazy stack gives a
+        :class:`~tensordict.TensorDict`. If the stacked tensordicts have no
+        names, it has no names either, even when the stack dimension has a
+        name (from ``stack_dim_name`` or the ``names`` setter). To keep that
+        name, name the dimension of the result again with
+        :meth:`~tensordict.TensorDict.refine_names`.
+
     Examples:
         >>> from tensordict import TensorDict, pad
         >>> import torch
@@ -607,6 +615,9 @@ def pad_sequence(
     # padded along it too.
     batch_pad_dim = None
     if update_batch_size and len(old_batch_size) > 0:
+        if max_seq_length == float("-inf"):
+            # No tensor leaf: pad the non-tensor entries to the longest batch
+            max_seq_length = max(td.batch_size[pad_dim] for td in list_of_tensordicts)
         old_batch_size[pad_dim] = max_seq_length
         batch_pad_dim = pad_dim % len(old_batch_size)
     shape = [

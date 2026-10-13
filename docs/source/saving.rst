@@ -324,6 +324,10 @@ the file again. This example saves a graph with four nodes and three edges:
   tensor([[0, 1, 2],
           [1, 2, 3]])
 
+The file keeps the batch sizes and names that the tensordict had when
+``consolidate`` wrote it. If you change them on ``graph_c`` later, call
+``graph_c.consolidate(root / "graph.bin")`` again to write them into the file.
+
 ``consolidate`` returns a locked tensordict. If you unlock it with
 :meth:`~tensordict.TensorDictBase.unlock_`, it is no longer consolidated:
 
@@ -348,8 +352,9 @@ torch.save and torch.load
 tensordict, it allowlists the classes and functions that these files
 reference, with :func:`torch.serialization.add_safe_globals`. The list covers
 :class:`~tensordict.TensorDict`, :class:`~tensordict.LazyStackedTensorDict`,
-consolidated tensordicts, and non-tensor values made of Python builtins, such
-as strings, numbers, lists, and dicts:
+consolidated tensordicts, non-tensor values made of Python builtins, such
+as strings, numbers, lists, and dicts, and the ``torch.return_types`` that
+``max(dim=...)``, ``min(dim=...)``, ``cummax`` and ``cummin`` return:
 
   >>> batch = TensorDict({"loss": torch.zeros(3), "meta": {"split": "train"}}, batch_size=[3])
   >>> torch.save(batch, root / "batch.pt")

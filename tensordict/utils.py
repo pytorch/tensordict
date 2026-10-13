@@ -3250,6 +3250,21 @@ def _maybe_correct_neg_dim(
     return new_dim
 
 
+def _check_unflatten_size(
+    batch_size: torch.Size, dim: int, unflattened_size: Sequence[int]
+) -> None:
+    """Raises as torch.unflatten does when the sizes don't multiply up to the dim size."""
+    if (
+        -1 not in unflattened_size
+        and -1 not in batch_size
+        and math.prod(unflattened_size) != batch_size[dim]
+    ):
+        raise RuntimeError(
+            f"unflatten: Provided sizes {list(unflattened_size)} don't multiply up "
+            f"to the size of dim {dim} ({batch_size[dim]}) in the input tensor"
+        )
+
+
 # tensordict, and torch, whose torch function modes (such as the one of
 # torch.set_default_device) can call tensordict's torch.stack and torch.cat
 _LIBRARY_DIRS = (

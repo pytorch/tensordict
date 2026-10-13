@@ -585,8 +585,28 @@ class _Serialization:
                 differently if the metadata is or isn't available.
 
         .. note::
-            If the tensordict is already consolidated, all arguments are ignored and ``self``
-            is returned. Call :meth:`~.contiguous` to re-consolidate.
+            If the tensordict is already consolidated, all arguments but ``filename`` are
+            ignored and ``self`` is returned. Call :meth:`~.contiguous` to re-consolidate.
+
+        .. note::
+            The file written with ``filename`` is a snapshot of the batch sizes and names
+            at the time of the call: :meth:`~.from_consolidated` reads them back from it.
+            The leaves are views into the file, so in-place writes into them reach it
+            (unless ``use_buffer=True``), but setting ``batch_size`` or ``names`` later
+            does not. Call ``consolidate(filename=filename)`` again on the result to write
+            the current ones into the file. Another file name writes nothing:
+            ``td.contiguous().consolidate(filename=other)`` writes a new file. Nothing
+            is written either if the file has been deleted or replaced, or has changed
+            size, since this tensordict was written to it.
+
+        .. note::
+            A pickle (or :func:`torch.save`, :meth:`~.send`, :meth:`~.broadcast`) of a
+            consolidated tensordict is rebuilt from metadata recorded here. Setting
+            ``batch_size`` or ``names`` on the consolidated tensordict updates that
+            metadata; setting them directly on a nested tensordict, as in
+            ``td["nested"].batch_size = ...``, may not. Call ``consolidate()`` again
+            afterwards: on a consolidated tensordict, it writes the current batch sizes
+            and names into that metadata.
 
         Examples:
             >>> import pickle
@@ -607,6 +627,19 @@ class _Serialization:
 
         """
         if self.is_consolidated():
+            self._update_consolidated_metadata()
+            consolidated = self._consolidated
+            if (
+                filename is not None
+                and consolidated.get("filename") == Path(filename).resolve()
+                and consolidated["file_id"] == _file_id(filename)
+            ):
+                _write_consolidated_metadata(
+                    filename,
+                    consolidated["metadata"],
+                    data_size=consolidated["storage"].numel(),
+                )
+                consolidated["file_id"] = _file_id(filename)
             return self
 
         (
@@ -631,23 +664,9 @@ class _Serialization:
             ):  # cuda device is always shared
                 storage.share_memory_()
         else:
-            # Convert the dict to json
-            try:
-                from tensordict._utils_key_json import json_dumps
-
-                metadata_dict_json = json_dumps(metadata_dict)
-            except TypeError as e:
-                raise RuntimeError(
-                    "Failed to convert the metatdata to json. "
-                    "This is usually due to a nested class that is unaccounted for by the serializer, "
-                    "such as custom TensorClass. "
-                    "If you encounter this error, please file an issue on github."
-                ) from e
-            # Represent as a tensor
-            if isinstance(metadata_dict_json, str):
-                metadata_dict_json = metadata_dict_json.encode("utf-8")
+            # Represent the json metadata as a tensor
             metadata_dict_json = torch.as_tensor(
-                bytearray(metadata_dict_json), dtype=torch.uint8
+                bytearray(_consolidated_metadata_json(metadata_dict)), dtype=torch.uint8
             )
             len_metadata = torch.tensor(
                 [metadata_dict_json.numel()], dtype=torch.int64
@@ -895,6 +914,8 @@ class _Serialization:
             if use_buffer:
                 with open(filename, "w+b") as f:
                     f.write(total_storage._handler.buffer)
+            result._consolidated["filename"] = Path(filename).resolve()
+            result._consolidated["file_id"] = _file_id(filename)
             # with open(Path(filename).with_suffix(".json"), "wb") as f:
             #     metadata_dict["size"] = filesize
             #     f.write(json.dumps(metadata_dict))
@@ -904,6 +925,13 @@ class _Serialization:
 
     @classmethod
     def from_consolidated(cls, filename):
+        """Reconstructs a tensordict from a file written by :meth:`~.consolidate`.
+
+        The batch sizes and names are as they were when the file was written.
+        To write later changes into the file, call
+        ``consolidate(filename=filename)`` again on the consolidated tensordict.
+        See :func:`~tensordict.from_consolidated`.
+        """
         # with open(Path(filename).with_suffix(".json"), "rb") as f:
         #     metadata = json.loads(f.read())
         file = torch.from_file(
@@ -927,9 +955,11 @@ class _Serialization:
         """Checks if a TensorDict has a consolidated storage.
 
         Returns ``False`` once :meth:`~.memmap_` moves the leaves out of the
-        consolidated storage, or once an in-place write changes a non-tensor
-        entry, as the consolidated storage and metadata no longer match the
-        content. :meth:`~.consolidate` then builds a new consolidated copy.
+        consolidated storage, once an in-place write changes a non-tensor
+        entry, or once a write replaces, adds or deletes an entry of an
+        unpickled copy, which is not locked, as the consolidated storage and
+        metadata no longer match the content. :meth:`~.consolidate` then
+        builds a new consolidated copy.
         """
         return hasattr(self, "_consolidated") and not self._consolidated.get(
             "stale", False
@@ -939,8 +969,20 @@ class _Serialization:
         """Marks the consolidated state of self and of its lock parents as stale."""
         for td in (self, *(ref() for ref in self._lock_parents_weakrefs)):
             consolidated = getattr(td, "_consolidated", None)
-            if consolidated is not None:
+            # An unpickled copy is not locked: "parent" links each level to
+            # the consolidated state of the tensordict that holds it.
+            while consolidated is not None:
                 consolidated["stale"] = True
+                consolidated = consolidated.get("parent")
+
+    def _update_consolidated_metadata(self) -> None:
+        # pickle, torch.save and send rebuild a consolidated tensordict from
+        # the metadata of consolidate(): write the current batch sizes and
+        # names into it
+        consolidated = getattr(self, "_consolidated", None)
+        if consolidated is None or consolidated.get("metadata") is None:
+            return
+        _update_consolidated_metadata(self, consolidated["metadata"])
 
     def memmap_(
         self,
@@ -1902,3 +1944,75 @@ class _Serialization:
                     device_module.synchronize()
 
         return result
+
+
+def _consolidated_metadata_json(metadata: dict) -> bytes:
+    """Encodes the metadata of a consolidated tensordict as the json bytes of its file."""
+    try:
+        from tensordict._utils_key_json import json_dumps
+
+        metadata_json = json_dumps(metadata)
+    except TypeError as e:
+        raise RuntimeError(
+            "Failed to convert the metatdata to json. "
+            "This is usually due to a nested class that is unaccounted for by the serializer, "
+            "such as custom TensorClass. "
+            "If you encounter this error, please file an issue on github."
+        ) from e
+    if isinstance(metadata_json, str):
+        metadata_json = metadata_json.encode("utf-8")
+    return metadata_json
+
+
+def _file_id(filename) -> tuple[int, int, int] | None:
+    """Identifies the file at ``filename``, or returns ``None`` if there is none.
+
+    A consolidated tensordict only rewrites the metadata of the file it was
+    written to: the path may since name another file, or no file at all.
+    """
+    try:
+        stat = os.stat(filename)
+    except OSError:
+        return None
+    return stat.st_dev, stat.st_ino, stat.st_size
+
+
+def _write_consolidated_metadata(filename, metadata: dict, data_size: int) -> None:
+    """Rewrites the metadata that follows the ``data_size`` bytes of leaves in a consolidated file."""
+    metadata_json = _consolidated_metadata_json(metadata)
+    # Pad a shorter json with spaces rather than shrink the file, which the
+    # tensordict maps
+    metadata_json = metadata_json.ljust(os.path.getsize(filename) - data_size - 8)
+    len_metadata = torch.tensor([len(metadata_json)], dtype=torch.int64)
+    with open(filename, "r+b") as f:
+        f.seek(data_size)
+        f.write(metadata_json)
+        f.write(len_metadata.view(torch.uint8).numpy().tobytes())
+
+
+def _update_consolidated_metadata(td, metadata: dict) -> None:
+    """Writes the batch sizes and names of ``td``'s tree into its consolidated ``metadata``, in place."""
+    cls_metadata = metadata["cls_metadata"]
+    if "stack_dim" in cls_metadata:
+        # a lazy stack records its members under "0", "1", ...
+        cls_metadata["stack_dim_name"] = td._td_dim_name
+
+        def get(key):
+            return td.tensordicts[int(key)]
+
+    else:
+        cls_metadata["batch_size"] = list(td.batch_size)
+        cls_metadata["names"] = td.names
+
+        def get(key):
+            return td._get_str(key, NO_DEFAULT)
+
+    non_tensors = metadata["non_tensors"]
+    for key, (data, _, device) in list(non_tensors.items()):
+        non_tensors[key] = (data, list(get(key).batch_size), device)
+    for key, value in metadata.items():
+        if key in ("cls_metadata", "non_tensors", "leaves") or not isinstance(
+            value, dict
+        ):
+            continue
+        _update_consolidated_metadata(get(key), value)

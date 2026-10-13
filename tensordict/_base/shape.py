@@ -23,6 +23,7 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.base import _is_tensor_collection, is_tensor_collection, Self, T
 from tensordict.utils import (
     _as_context_manager,
+    _check_unflatten_size,
     _create_segments_from_int,
     _create_segments_from_list,
     _get_shape_from_args,
@@ -528,7 +529,11 @@ class _ShapeOps:
             def nested_fn(nested):
                 nested.reshape((*shape, *nested.batch_size[batch_dims:]), inplace=True)
 
-            return self._inplace_rebind_leaves(_reshape, nested_fn, torch.Size(shape))
+            self._inplace_rebind_leaves(_reshape, nested_fn, torch.Size(shape))
+            if self._has_names():
+                # as without inplace: the reshaped dims have no name
+                self._erase_names()
+            return self
         return self._fast_apply(
             _reshape,
             batch_size=shape,
@@ -809,6 +814,11 @@ class _ShapeOps:
 
         Returns:
             The padded tensordict. When ``inplace=True`` this is ``self``.
+
+        .. note::
+            On a lazy stack whose tensordicts have no names, the result of
+            ``inplace=False`` has no names, even when the stack dimension has
+            a name. See :func:`~tensordict.pad`.
 
         Examples:
             >>> import torch
@@ -2320,9 +2330,10 @@ class _ShapeOps:
             def nested_fn(nested):
                 nested.flatten(start_dim, end_dim, inplace=True)
 
-            return self._inplace_rebind_leaves(
-                flatten, nested_fn, torch.Size(batch_size)
-            )
+            self._inplace_rebind_leaves(flatten, nested_fn, torch.Size(batch_size))
+            if names is not None:
+                self.names = names
+            return self
         out = self._fast_apply(
             flatten,
             batch_size=batch_size,
@@ -2362,6 +2373,7 @@ class _ShapeOps:
                 .unflatten(dim, unflattened_size)
                 .shape[dim : dim + len(unflattened_size)]
             )
+        _check_unflatten_size(self.batch_size, dim, unflattened_size)
 
         def unflatten(tensor):
             return torch.unflatten(
@@ -2378,6 +2390,12 @@ class _ShapeOps:
             )
         else:
             batch_size = list(unflattened_size) + list(self.batch_size[1:])
+        if self._has_names():
+            names = list(self.names)
+            for _ in range(len(unflattened_size) - 1):
+                names.insert(dim, None)
+        else:
+            names = None
         # TODO: check that this works with nested tds of different batch size
         if inplace:
             if self._lazy:
@@ -2391,16 +2409,14 @@ class _ShapeOps:
             def nested_fn(nested):
                 nested.unflatten(dim, unflattened_size, inplace=True)
 
-            return self._inplace_rebind_leaves(
-                unflatten, nested_fn, torch.Size(batch_size)
-            )
+            self._inplace_rebind_leaves(unflatten, nested_fn, torch.Size(batch_size))
+            if names is not None:
+                self.names = names
+            return self
         out = self._fast_apply(
             unflatten, batch_size=batch_size, propagate_lock=True, call_on_nested=True
         )
-        if self._has_names():
-            names = list(self.names)
-            for _ in range(len(unflattened_size) - 1):
-                names.insert(dim, None)
+        if names is not None:
             out.names = names
         return out
 
@@ -2582,12 +2598,14 @@ class _ShapeOps:
         """
         from tensordict._td import TensorDict
 
-        if inplace and self._lazy:
+        if inplace and (self._lazy or self._masked_select_inplace_unsupported):
             raise NotImplementedError(
-                "masked_select(inplace=True) is not supported on "
-                "LazyStackedTensorDict; call .to_tensordict() first or use "
-                "inplace=False."
+                f"masked_select(inplace=True) is not supported on "
+                f"{type(self).__name__}; call .to_tensordict() first or use "
+                f"inplace=False."
             )
+        if not inplace and self._masked_select_on_dense_copy:
+            return self.to_tensordict().masked_select(mask)
 
         d = {}
         mask_expand = mask

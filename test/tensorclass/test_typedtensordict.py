@@ -586,6 +586,24 @@ class TestTensorDictOps:
         assert (state["eta"][0] == 2).all()
         assert state["nested", "a"][0] == 2
 
+    @pytest.mark.parametrize(
+        "op",
+        [
+            lambda s: s.reshape(5, 1, inplace=True),
+            lambda s: s.masked_select(torch.ones(5, dtype=torch.bool), inplace=True),
+            lambda s: s.repeat_interleave(2, dim=0, inplace=True),
+            lambda s: s.flatten(inplace=True),
+            lambda s: s.repeat(2, inplace=True),
+        ],
+        ids=["reshape", "masked_select", "repeat_interleave", "flatten", "repeat"],
+    )
+    def test_shape_op_inplace_returns_self(self, state, op):
+        # inplace=True keeps the object identity, as on a TensorDict
+        expected = op(state.to_tensordict()).batch_size
+        assert op(state) is state
+        assert state.batch_size == expected
+        assert isinstance(state, PredictorState)
+
     def test_to_dict(self, state):
         d = state.to_dict()
         assert set(d.keys()) == {"eta", "X", "beta"}
@@ -849,6 +867,43 @@ class TestFromTensordict:
         torch.testing.assert_close(state.to_tensordict(), expected)
         state.copy_(other)
         torch.testing.assert_close(state.to_tensordict(), other)
+
+    def _make_nested_lazy_state(self):
+        class NestedState(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        tds = [
+            TensorDict(
+                a=torch.arange(3.0), n={"x": torch.ones(3, 2) * i}, batch_size=[3]
+            )
+            for i in range(4)
+        ]
+        return NestedState.from_tensordict(lazy_stack(tds)), tds
+
+    def test_from_tensordict_lazy_stack_nested_masked_fill_detach_(self):
+        # masked_fill_ and detach_ write into the members of a stack with a
+        # nested entry
+        state, tds = self._make_nested_lazy_state()
+        expected = state.to_tensordict()
+        mask = torch.tensor([[True, False, True]] * 2 + [[False] * 3] * 2)
+        for td in (state, expected):
+            assert td.masked_fill_(mask, -1.0) is td
+            assert td.detach_() is td
+        torch.testing.assert_close(state.to_tensordict(), expected)
+        torch.testing.assert_close(lazy_stack(tds).to_tensordict(), expected)
+
+    @pytest.mark.xfail(
+        strict=True,
+        raises=ValueError,
+        reason="the in-place methods that write back read the nested members "
+        "of the lazy source as lists of their own leaves",
+    )
+    def test_from_tensordict_lazy_stack_nested_zero_(self):
+        state, tds = self._make_nested_lazy_state()
+        assert state.zero_() is state
+        for td in tds:
+            assert (td == 0).all()
 
     @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
     def test_from_tensordict_lazy_stack_read_only_inplace(self, tmp_path):

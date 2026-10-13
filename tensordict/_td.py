@@ -47,6 +47,7 @@ from tensordict.base import (
     _load_metadata,
     _NESTED_TENSORS_AS_LISTS,
     _register_tensor_class,
+    _SCALAR_TYPES,
     _select_entry,
     _UNSET,
     _warn_scalar_over_non_tensor,
@@ -1124,7 +1125,10 @@ class TensorDict(TensorDictBase):
     # Override: O(1) on the dict of entries, which keeps the insertion order.
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
-        return self._tensordict.popitem()
+        item = self._tensordict.popitem()
+        if "_consolidated" in self.__dict__:
+            self._mark_consolidated_stale()
+        return item
 
     def update(
         self,
@@ -1178,6 +1182,8 @@ class TensorDict(TensorDictBase):
                         break
                 else:
                     self._tensordict.update(source)
+                    if "_consolidated" in self.__dict__:
+                        self._mark_consolidated_stale()
                     return self
         return super().update(
             input_dict_or_td,
@@ -1218,22 +1224,29 @@ class TensorDict(TensorDictBase):
                     not value.is_nested and value.shape[: len(batch_size)] == batch_size
                 )
             ) and (device is None or value.device == device)
-        scalar = None
+        original = None
         if not validated:
-            if isinstance(value, (bool, int, float)):
-                scalar = value
+            original = value
             value = self._validate_value(
                 value, check_shape=True, non_blocking=non_blocking, key=key
             )
         if not inplace:
             if self._is_locked and not ignore_lock:
                 raise RuntimeError(_LOCK_ERROR)
-            if scalar is not None and not self._batch_size:
-                # a NonTensorData entry, not a NonTensorStack
+            # a scalar is converted to a tensor: check the type only when it
+            # replaces a NonTensorData entry, not a NonTensorStack
+            if original is not None and original is not value and not self._batch_size:
                 dest = self._tensordict.get(key)
-                if is_non_tensor(dest) and is_tensorclass(dest):
-                    _warn_scalar_over_non_tensor(key, scalar)
+                if (
+                    is_non_tensor(dest)
+                    and is_tensorclass(dest)
+                    and isinstance(original, _SCALAR_TYPES)
+                ):
+                    _warn_scalar_over_non_tensor(key, original)
             self._tensordict[key] = value
+            if "_consolidated" in self.__dict__:
+                # An unpickled consolidated copy is not locked
+                self._mark_consolidated_stale()
         else:
             try:
                 dest = self._get_str(key, default=NO_DEFAULT)
@@ -1256,6 +1269,9 @@ class TensorDict(TensorDictBase):
                                 == value.data.untyped_storage().data_ptr()
                             ):
                                 raise
+                        if "_consolidated" in self.__dict__ and is_non_tensor(dest):
+                            # A non-tensor value is not in the consolidated storage
+                            self._mark_consolidated_stale()
             except KeyError as err:
                 raise err
             except Exception as err:
@@ -1374,7 +1390,12 @@ class TensorDict(TensorDictBase):
                 # result has no single truth value: write the value anyway.
                 is_diff = True
             if is_diff:
-                dest_val = dest.maybe_to_stack()
+                if _is_stack_of_batchless_non_tensors(dest):
+                    # Write into the stack: rebuilding it with
+                    # maybe_to_stack() would cost O(size) per write
+                    dest_val = dest
+                else:
+                    dest_val = dest.maybe_to_stack()
                 if (
                     idx is Ellipsis
                     and dest_val is dest
@@ -1526,6 +1547,8 @@ class TensorDict(TensorDictBase):
             return self
 
         del self._tensordict[key[0]]
+        if "_consolidated" in self.__dict__:
+            self._mark_consolidated_stale()
         return self
 
     # Override: stacks into the existing leaf storages (torch.stack(out=)).
@@ -2302,6 +2325,8 @@ class TensorDict(TensorDictBase):
         )
         if inplace:
             self._tensordict = result._tensordict
+            if "_consolidated" in self.__dict__:
+                self._mark_consolidated_stale()
             return self
         # If this is uncommented, a shallow copy of a shared/memmap will be shared and locked too
         # This may be undesirable, not sure if this should be the default behaviour
@@ -2344,6 +2369,8 @@ class TensorDict(TensorDictBase):
                     if not inplace:
                         _tensordict[key] = val
         if inplace:
+            if "_consolidated" in self.__dict__:
+                self._mark_consolidated_stale()
             return self
         result = self._new_unsafe(
             _tensordict,
@@ -3173,12 +3200,14 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
         )
 
     # Override: a view over another tensordict cannot detach in place.
-    def detach_(self) -> Self:
+    def _detach_(self) -> None:
         raise RuntimeError("Detaching a sub-tensordict in-place cannot be done.")
 
-    # Override: an entry read through a tensor index is a copy, so the
-    # filled entry is written back with set_.
-    def masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
+    # Override: writes each filled entry with set_, which raises on a file
+    # opened read-only, where the base write-back would warn and skip it.
+    # Delete in 0.17, when in-place writes to read-only storage raise
+    # everywhere.
+    def _masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
         for key, item in self.items():
             self.set_(key, item.masked_fill(expand_as_right(mask, item), value))
         return self
@@ -3325,9 +3354,6 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
         raise RuntimeError(
             "Cannot lock a _SubTensorDict. Lock the parent tensordict instead."
         )
-
-    def __del__(self):
-        pass
 
     def _create_nested_str(self, key):
         # this may fail with a sub-sub tensordict
@@ -3574,6 +3600,22 @@ class _TensorDictKeysView:
         include_nested = f"include_nested={self.include_nested}"
         leaves_only = f"leaves_only={self.leaves_only}"
         return f"{type(self).__name__}({list(self)},\n{indent(include_nested, 4 * ' ')},\n{indent(leaves_only, 4 * ' ')})"
+
+
+def _is_stack_of_batchless_non_tensors(dest) -> bool:
+    # A NonTensorStack whose NonTensorData leaves have no batch dims, which
+    # maybe_to_stack() would rebuild unchanged. The members of a stack are
+    # NonTensorData (tensorclasses) or NonTensorStacks.
+    if not is_non_tensor(dest) or is_tensorclass(dest):
+        return False
+    batch_dims = dest.batch_dims
+    if batch_dims == 1:
+        return True
+    members = dest.tensordicts
+    # read the class attribute: is_tensorclass is slower, once per member
+    if any(getattr(type(td), "_is_tensorclass", False) for td in members):
+        return False
+    return batch_dims == 2 or all(map(_is_stack_of_batchless_non_tensors, members))
 
 
 def _index_to_str(index: IndexType) -> Any:

@@ -78,8 +78,11 @@ def _rebuild_tensordict_files_consolidated(
     metadata,
     storage,
 ):
-    def from_metadata(metadata=metadata, prefix=None):
+    def from_metadata(metadata=metadata, prefix=None, parent=None):
         consolidated = {"storage": storage, "metadata": metadata}
+        if parent is not None:
+            # A write to this sub-tensordict makes the parent's state stale too
+            consolidated["parent"] = parent
         metadata = dict(metadata)
         non_tensor = metadata.pop("non_tensors")
         leaves = metadata.pop("leaves")
@@ -132,7 +135,9 @@ def _rebuild_tensordict_files_consolidated(
         for k, v in metadata.items():
             # Each remaining key is a tuple pointing to a sub-tensordict
             d[k] = from_metadata(
-                v, prefix=prefix + (k,) if prefix is not None else (k,)
+                v,
+                prefix=prefix + (k,) if prefix is not None else (k,),
+                parent=consolidated,
             )
         if isinstance(cls, str):
             cls = CLS_MAP[cls]
@@ -204,6 +209,11 @@ torch.serialization.add_safe_globals(
         NonTensorData,
         NonTensorStack,
         _LockedSchema,
+        # The results of max(dim=...), min(dim=...), cummax and cummin
+        torch.return_types.max,
+        torch.return_types.min,
+        torch.return_types.cummax,
+        torch.return_types.cummin,
         # Pickles from tensordict<=0.4, where this was a dict subclass
         (dict, "tensordict.utils._StringOnlyDict"),
     ]

@@ -307,6 +307,42 @@ def test_where_non_tensor_data():
     assert result.get("s").tolist() == ["a", "b", "a", "b"]
 
 
+@pytest.mark.parametrize(
+    "name", ["td == 0", "td != td", "td ^ True", "td.all(0)", "td.where(mask, 0)"]
+)
+def test_comparison_where_fullgraph(name):
+    fn = {
+        "td == 0": lambda td, mask: td == 0,
+        "td != td": lambda td, mask: td != td.clone(),
+        "td ^ True": lambda td, mask: td.bool() ^ True,
+        "td.all(0)": lambda td, mask: td.all(0),
+        "td.where(mask, 0)": lambda td, mask: td.where(mask, 0),
+    }[name]
+    td = TensorDict(
+        a=torch.arange(8.0).view(4, 2),
+        nested=TensorDict(b=torch.arange(4), batch_size=[4]),
+        batch_size=[4],
+    )
+    mask = torch.tensor([True, False, True, False])
+    result = torch.compile(fn, fullgraph=True, backend="eager")(td, mask)
+    assert (result == fn(td, mask)).all()
+
+
+@pytest.mark.xfail(
+    reason="td < tensor breaks the graph: all __torch_function__ overrides "
+    "return NotImplemented",
+    strict=True,
+)
+def test_comparison_tensor_fullgraph():
+    def fn(td, other):
+        return td < other
+
+    td = TensorDict(a=torch.arange(8.0).view(4, 2), batch_size=[4])
+    other = torch.ones(4)
+    result = torch.compile(fn, fullgraph=True, backend="eager")(td, other)
+    assert (result == fn(td, other)).all()
+
+
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
     def test_tensor_output(self, mode):
@@ -1811,6 +1847,20 @@ class TestTC:
         )
         assert (unbind(data)[-1] == unbind_c(data)[-1]).all()
 
+    def test_tc_max(self, mode):
+        def max_values(td):
+            result = td.max(dim=0)
+            return result.values, result.indices
+
+        max_values_c = torch.compile(max_values, fullgraph=True, mode=mode)
+        data = MyClass(a=None, b=torch.randn(3, 4), batch_size=[3, 4])
+        values, indices = max_values_c(data)
+        expected = data.b.max(dim=0)
+        assert isinstance(values, MyClass)
+        assert isinstance(indices, MyClass)
+        assert (values.b == expected.values).all()
+        assert (indices.b == expected.indices).all()
+
     def test_tc_iter(self, mode):
         def iterate(tc):
             return torch.stack([t.a.b + 1 for t in tc])
@@ -2976,6 +3026,47 @@ class TestCudaGraphs:
             assert {w.filename for w in record if w.category is FutureWarning} == {
                 __file__
             }
+
+    def test_interaction_type_change_warns(self, compiled):
+        # pytorch/tensordict#2547: the replay repeats the branch that the
+        # probabilistic modules took at capture, whatever the interaction type.
+        if not torch.cuda.is_available():
+            pytest.skip("CudaGraphModule only replays graphs on CUDA")
+        policy = Prob(
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=torch.distributions.Normal,
+            distribution_kwargs={"validate_args": False},
+        )
+        td = TensorDict(loc=torch.zeros(3), scale=torch.ones(3), batch_size=[3])
+        random = self._make_cudagraph(policy, compiled, warmup=3)
+        default = self._make_cudagraph(policy, compiled, warmup=3)
+        linear = self._make_cudagraph(
+            Mod(torch.nn.Linear(3, 3), in_keys=["loc"], out_keys=["y"]), compiled
+        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings("error", "CudaGraphModule was captured")
+            with set_interaction_type("random"):
+                for _ in range(4):
+                    random(td.clone())
+                    linear(td.clone())
+            for _ in range(4):
+                default(td.clone())
+            # The default interaction type of the policy is "deterministic".
+            with set_interaction_type("deterministic"):
+                default(td.clone())
+                linear(td.clone())
+        with set_interaction_type("deterministic"):
+            with pytest.warns(
+                UserWarning, match="Capture one CudaGraphModule per interaction type"
+            ) as record:
+                random(td.clone())
+            assert [w.filename for w in record] == [__file__]
+            with warnings.catch_warnings():
+                warnings.filterwarnings("error", "CudaGraphModule was captured")
+                random(td.clone())
+        with set_interaction_type("random"), pytest.warns(UserWarning):
+            default(td.clone())
 
     def test_state_dict(self, compiled):
         # Create a linear layer and wrap it in CudaGraphModule

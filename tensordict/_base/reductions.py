@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import sys
 import warnings
-from typing import Callable, Literal, overload, Tuple
+from typing import Callable, Iterable, Literal, overload, Tuple
 
 import torch
 from tensordict._deprecation import warn_deprecated
@@ -78,6 +78,16 @@ def _warn_tuple_dim(reduction_name: str, dim: tuple) -> None:
         )
 
 
+def _check_has_tensor_leaves(reduction_name: str, leaves: list) -> None:
+    # reduce=True reduces the tensor leaves together; without any, torch.cat
+    # would raise an error that does not say why
+    if not leaves:
+        raise ValueError(
+            f"{reduction_name}(reduce=True) reduces the tensor leaves together, "
+            "and this tensordict has no tensor leaves."
+        )
+
+
 class _Reductions:
     """Reductions over the batch dimensions or the leaves."""
 
@@ -101,18 +111,13 @@ class _Reductions:
             )
         if dim is not None:
             dim = _maybe_correct_neg_dim(dim, self.batch_size)
-
-            names = None
-            if self._has_names():
-                names = [name for i, name in enumerate(self.names) if i != dim]
-
             return TensorDict(
                 source={key: value.all(dim=dim) for key, value in self.items()},
                 batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
                 device=self.device,
-                names=names,
+                names=self._reduced_names(dim),
             )
-        return all(value.all() for value in self.values())
+        return all(value.all() for value in self._reduction_parts())
 
     def any(self, dim: int | None = None) -> bool | TensorCollection:
         """Checks if any value is True/non-null in the tensordict.
@@ -134,18 +139,36 @@ class _Reductions:
             )
         if dim is not None:
             dim = _maybe_correct_neg_dim(dim, self.batch_size)
-
-            names = None
-            if self._has_names():
-                names = [name for i, name in enumerate(self.names) if i != dim]
-
             return TensorDict(
                 source={key: value.any(dim=dim) for key, value in self.items()},
                 batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
                 device=self.device,
-                names=names,
+                names=self._reduced_names(dim),
             )
-        return any([value.any() for value in self.values()])
+        # A loop, not any() of a generator, which is slower when no part holds a True
+        for value in self._reduction_parts():
+            if value.any():
+                return True
+        return False
+
+    def _reduction_parts(self) -> Iterable:
+        """The parts whose ``all()`` or ``any()`` give the result of :meth:`all` or :meth:`any` without a dim.
+
+        The base returns the values. :class:`~tensordict.LazyStackedTensorDict`
+        returns its members, which need not stack into dense tensors.
+        """
+        return self.values()
+
+    def _reduced_names(self, dim: int) -> list[str | None] | None:
+        """The dim names of the result of :meth:`all` or :meth:`any` along the batch dim ``dim``, or ``None``.
+
+        ``dim`` is already non-negative. The base drops the name of ``dim``.
+        :class:`~tensordict.LazyStackedTensorDict` returns ``None`` when its
+        members' names differ or the names left are not unique.
+        """
+        if self._has_names():
+            return [name for i, name in enumerate(self.names) if i != dim]
+        return None
 
     @overload
     def amin(
@@ -305,6 +328,10 @@ class _Reductions:
             values_only=not return_indices,
             call_on_nested=False,
         )
+        if isinstance(result, torch.return_types.min):
+            # reduce=True with a dim returns what torch.min returns, as in
+            # cummax and cummin
+            return result
         if dim is not NO_DEFAULT and dim is not None and return_indices:
             # Split the tensordict
             from torch.return_types import min
@@ -479,6 +506,10 @@ class _Reductions:
             values_only=not return_indices,
             call_on_nested=False,
         )
+        if isinstance(result, torch.return_types.max):
+            # reduce=True with a dim returns what torch.max returns, as in
+            # cummax and cummin
+            return result
         if dim is not NO_DEFAULT and dim is not None and return_indices:
             # Split the tensordict
             from torch.return_types import max
@@ -523,6 +554,8 @@ class _Reductions:
 
         Args:
             dim (int): integer representing the dimension along which to perform the cummin operation.
+                A tuple uses only its first dim; passing one is deprecated
+                and will be removed in TensorDict 0.17.
 
         Keyword Args:
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
@@ -644,6 +677,8 @@ class _Reductions:
 
         Args:
             dim (int): integer representing the dimension along which to perform the cummax operation.
+                A tuple uses only its first dim; passing one is deprecated
+                and will be removed in TensorDict 0.17.
 
         Keyword Args:
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
@@ -1847,11 +1882,13 @@ class _Reductions:
 
         Args:
             q (float or torch.Tensor): quantile to compute, must be between 0 and 1.
-            dim (int, tuple of int, str, optional): if ``None``, returns a dimensionless
+            dim (int, str, optional): if ``None``, returns a dimensionless
                 tensordict containing the quantile value of all leaves (if this can be computed).
-                If integer or tuple of integers, `quantile` is called upon the dimension specified if
+                If integer, `quantile` is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
                 shape.
+                A tuple reduces only its first dim; passing one is deprecated
+                and will be removed in TensorDict 0.17.
                 Only the `"feature"` string is currently permitted. Using `dim="feature"` will
                 achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
                 shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
@@ -1992,6 +2029,7 @@ class _Reductions:
                         True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
                     )
                 ]
+                _check_has_tensor_leaves(reduction_name, agglomerate)
                 agglomerate = torch.cat(agglomerate, dim=0)
                 if reduction_name == "quantile":
                     q = kwargs.pop("q")
@@ -2027,6 +2065,7 @@ class _Reductions:
                     cat_dim = dim[0]
                 else:
                     cat_dim = dim
+                _check_has_tensor_leaves(reduction_name, agglomerate)
                 agglomerate = torch.cat(agglomerate, dim=cat_dim)
                 kwargs_copy = {}
                 if keepdim is not NO_DEFAULT:
@@ -2073,8 +2112,15 @@ class _Reductions:
         # Only the first dim of the tuple is reduced, as is. amax and amin
         # give the same result as torch for one dim inside the batch dims.
         tuple_dim = None
-        if not tuple_ok and isinstance(dim, tuple) and dim:
-            if reduction_name in ("max", "min", "prod") or (
+        if isinstance(dim, tuple) and dim:
+            if reduction_name in (
+                "max",
+                "min",
+                "prod",
+                "cummax",
+                "cummin",
+                "quantile",
+            ) or (
                 reduction_name in ("amax", "amin")
                 and (len(dim) > 1 or not 0 <= dim[0] < self.batch_dims)
             ):
@@ -2082,6 +2128,10 @@ class _Reductions:
         if dim_needs_proc:
             dim = proc_dim(dim, self.batch_dims, tuple_ok=tuple_ok)
             if not tuple_ok and dim is not None:
+                dim = dim[0]
+            elif reduction_name == "quantile" and dim:
+                # torch.quantile takes one dim, so the leaves and the batch
+                # size are reduced over the first dim of the tuple only
                 dim = dim[0]
         if dim in ("feature",):
             if keepdim:
