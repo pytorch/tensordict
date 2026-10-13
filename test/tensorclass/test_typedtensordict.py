@@ -893,12 +893,6 @@ class TestFromTensordict:
         torch.testing.assert_close(state.to_tensordict(), expected)
         torch.testing.assert_close(lazy_stack(tds).to_tensordict(), expected)
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=ValueError,
-        reason="the in-place methods that write back read the nested members "
-        "of the lazy source as lists of their own leaves",
-    )
     def test_from_tensordict_lazy_stack_nested_zero_(self):
         state, tds = self._make_nested_lazy_state()
         assert state.zero_() is state
