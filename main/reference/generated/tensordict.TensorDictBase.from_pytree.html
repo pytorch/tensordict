@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5391+gc777ff787.d20261013)">
+<meta name="llm:version" content="main (0.14.0.dev5396+g0fd3f24d6.d20261013)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5391+gc777ff787.d20261013)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5396+g0fd3f24d6.d20261013)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1646,7 +1646,11 @@ document.write(`
 <p>This method is designed to keep the pytree nested structure as much as possible.</p>
 <p>Additional non-tensor keys are added to keep track of each level’s identity, providing
 a built-in pytree-to-tensordict bijective transform API.</p>
-<p>Accepted classes currently include lists, tuples, named tuples and dict.</p>
+<p>Accepted classes currently include lists, tuples, named tuples and dict,
+and subclasses of these such as <a class="reference external" href="https://docs.python.org/3/library/collections.html#collections.OrderedDict" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">collections.OrderedDict</span></code></a>,
+<a class="reference external" href="https://docs.python.org/3/library/collections.html#collections.defaultdict" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">collections.defaultdict</span></code></a> and the results of <code class="docutils literal notranslate"><span class="pre">torch.max</span></code> and
+the other <code class="docutils literal notranslate"><span class="pre">torch.return_types</span></code>. A <code class="docutils literal notranslate"><span class="pre">defaultdict</span></code> is rebuilt without
+its <code class="docutils literal notranslate"><span class="pre">default_factory</span></code>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>For dictionaries, non-NestedKey keys are registered separately as <a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>
@@ -2051,7 +2055,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.from_pytree",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.from_pytree",
        "url": "/reference/generated/tensordict.TensorDictBase.from_pytree.html",
-       "articleBody": "TensorDictBase.from_pytree# classmethod TensorDictBase.from_pytree(pytree, *, batch_size: Size | None = None, auto_batch_size: bool = False, batch_dims: int | None = None)# Converts a pytree to a TensorDict instance. This method is designed to keep the pytree nested structure as much as possible. Additional non-tensor keys are added to keep track of each level\u2019s identity, providing a built-in pytree-to-tensordict bijective transform API. Accepted classes currently include lists, tuples, named tuples and dict. Note For dictionaries, non-NestedKey keys are registered separately as NonTensorData instances. Note Tensor-castable types (such as int, float or np.ndarray) will be converted to torch.Tensor instances. Note that this transformation is surjective: transforming back the tensordict to a pytree will not recover the original types. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e # Create a pytree with tensor leaves, and one \"weird\"-looking dict key \u003e\u003e\u003e class WeirdLookingClass: ... pass ... \u003e\u003e\u003e weird_key = WeirdLookingClass() \u003e\u003e\u003e # Make a pytree with tuple, lists, dict and namedtuple \u003e\u003e\u003e pytree = ( ... [torch.randint(10, (3,)), torch.zeros(2)], ... { ... \"tensor\": torch.randn( ... 2, ... ), ... \"td\": TensorDict({\"one\": 1}), ... weird_key: torch.randint(10, (2,)), ... \"list\": [1, 2, 3], ... }, ... {\"named_tuple\": TensorDict({\"two\": torch.ones(1) * 2}).to_namedtuple()}, ... ) \u003e\u003e\u003e # Build a TensorDict from that pytree \u003e\u003e\u003e td = TensorDict.from_pytree(pytree) \u003e\u003e\u003e # Recover the pytree \u003e\u003e\u003e pytree_recon = td.to_pytree() \u003e\u003e\u003e # Check that the leaves match \u003e\u003e\u003e def check(v1, v2): ... assert (v1 == v2).all() ... \u003e\u003e\u003e _ = torch.utils._pytree.tree_map(check, pytree, pytree_recon) \u003e\u003e\u003e assert weird_key in pytree_recon[1] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.from_pytree# classmethod TensorDictBase.from_pytree(pytree, *, batch_size: Size | None = None, auto_batch_size: bool = False, batch_dims: int | None = None)# Converts a pytree to a TensorDict instance. This method is designed to keep the pytree nested structure as much as possible. Additional non-tensor keys are added to keep track of each level\u2019s identity, providing a built-in pytree-to-tensordict bijective transform API. Accepted classes currently include lists, tuples, named tuples and dict, and subclasses of these such as collections.OrderedDict, collections.defaultdict and the results of torch.max and the other torch.return_types. A defaultdict is rebuilt without its default_factory. Note For dictionaries, non-NestedKey keys are registered separately as NonTensorData instances. Note Tensor-castable types (such as int, float or np.ndarray) will be converted to torch.Tensor instances. Note that this transformation is surjective: transforming back the tensordict to a pytree will not recover the original types. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e # Create a pytree with tensor leaves, and one \"weird\"-looking dict key \u003e\u003e\u003e class WeirdLookingClass: ... pass ... \u003e\u003e\u003e weird_key = WeirdLookingClass() \u003e\u003e\u003e # Make a pytree with tuple, lists, dict and namedtuple \u003e\u003e\u003e pytree = ( ... [torch.randint(10, (3,)), torch.zeros(2)], ... { ... \"tensor\": torch.randn( ... 2, ... ), ... \"td\": TensorDict({\"one\": 1}), ... weird_key: torch.randint(10, (2,)), ... \"list\": [1, 2, 3], ... }, ... {\"named_tuple\": TensorDict({\"two\": torch.ones(1) * 2}).to_namedtuple()}, ... ) \u003e\u003e\u003e # Build a TensorDict from that pytree \u003e\u003e\u003e td = TensorDict.from_pytree(pytree) \u003e\u003e\u003e # Recover the pytree \u003e\u003e\u003e pytree_recon = td.to_pytree() \u003e\u003e\u003e # Check that the leaves match \u003e\u003e\u003e def check(v1, v2): ... assert (v1 == v2).all() ... \u003e\u003e\u003e _ = torch.utils._pytree.tree_map(check, pytree, pytree_recon) \u003e\u003e\u003e assert weird_key in pytree_recon[1] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

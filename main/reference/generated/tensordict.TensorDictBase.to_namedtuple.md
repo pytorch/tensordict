@@ -6,7 +6,10 @@ Converts a tensordict to a namedtuple.
 
 Parameters:
 
-**dest_cls** (*Type**,**optional*) - an optional namedtuple class to use.
+**dest_cls** (*Type**,**optional*) - an optional namedtuple class to use
+for the result. A nested tensordict is converted to
+`dest_cls` too if `dest_cls` takes its keys, and to a
+`GenericDict` otherwise.
 
 Examples
 

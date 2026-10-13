@@ -9,7 +9,11 @@ This method is designed to keep the pytree nested structure as much as possible.
 Additional non-tensor keys are added to keep track of each level's identity, providing
 a built-in pytree-to-tensordict bijective transform API.
 
-Accepted classes currently include lists, tuples, named tuples and dict.
+Accepted classes currently include lists, tuples, named tuples and dict,
+and subclasses of these such as [`collections.OrderedDict`](https://docs.python.org/3/library/collections.html#collections.OrderedDict),
+[`collections.defaultdict`](https://docs.python.org/3/library/collections.html#collections.defaultdict) and the results of `torch.max` and
+the other `torch.return_types`. A `defaultdict` is rebuilt without
+its `default_factory`.
 
 Note
 
