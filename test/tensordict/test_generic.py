@@ -3694,6 +3694,69 @@ class TestGeneric:
         assert out.a.shape == (4, 6)
         assert out.b.shape == (4, 6, 2)
 
+    def test_pad_inplace_tensorclass_no_warning(self):
+        # pad(..., inplace=True) sets the batch size of a tensorclass, top
+        # level or nested, without the tensorclass fallback warning
+        @tensorclass
+        class _Sample:
+            a: torch.Tensor
+
+        s = _Sample(a=torch.ones(3, 4), batch_size=[3])
+        td = TensorDict(s=_Sample(a=torch.ones(3), batch_size=[3]), batch_size=[3])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert pad(s, [0, 1], inplace=True) is s
+            pad(td, [0, 1], inplace=True)
+        assert s.batch_size == (4,)
+        assert td["s"].batch_size == (4,)
+        assert td["s"].a.shape == (4,)
+
+    def test_pad_tensorclass(self):
+        # pad without inplace=True returns a tensorclass for a tensorclass,
+        # at the top level and nested, like the tensorclass method
+        @tensorclass
+        class _Inner:
+            y: torch.Tensor
+
+        @tensorclass
+        class _Sample:
+            a: torch.Tensor
+            inner: _Inner
+            s: str = "x"
+
+        s = _Sample(
+            a=torch.ones(3, 4),
+            inner=_Inner(y=torch.ones(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        out = pad(s, [0, 1])
+        assert type(out) is _Sample
+        assert type(out.inner) is _Inner
+        assert out.batch_size == (4,)
+        assert out.a.shape == (4, 4)
+        assert out.inner.y.shape == (4,)
+        assert out.s == ["x", "x", "x", None]
+        assert (out.a == s.pad([0, 1]).a).all()
+        assert type(s.pad([0, 1]).inner) is _Inner
+        td = TensorDict(s=s, batch_size=[3])
+        assert type(pad(td, [0, 1])["s"]) is _Sample
+
+        # a tensorclass may override pad with another signature
+        @tensorclass
+        class _CustomPad:
+            x: torch.Tensor
+
+            def pad(self, n):
+                raise AssertionError
+
+        c = _CustomPad(x=torch.ones(3), batch_size=[3])
+        out = pad(c, [0, 1])
+        assert type(out) is _CustomPad
+        assert out.x.shape == (4,)
+        out = pad(TensorDict(c=c, batch_size=[3]), [0, 1])
+        assert type(out["c"]) is _CustomPad
+        assert out["c"].x.shape == (4,)
+
     def test_pad_keeps_names(self):
         td = TensorDict(
             a=torch.ones(3, 4),
