@@ -16,7 +16,9 @@ from __future__ import annotations
 import collections
 import importlib.util
 import numbers
+import sys
 import uuid
+import warnings
 import weakref
 from collections import UserDict
 from copy import copy
@@ -43,6 +45,7 @@ from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
     _maybe_preserve_module_state,
+    _PACKAGE_DIR,
     _set_tensor_dict,
     Buffer,
     is_compiling,
@@ -86,6 +89,37 @@ def _int_batch_dims(batch_dims):
     return None
 
 
+def _pytree_dict_key(key):
+    # Reads a dict key that from_pytree stored. Once the non-tensor entry has
+    # batch dims (e.g. after stack or unsqueeze), td["key"] returns a list, so
+    # read .data. memmap saves tuples as JSON lists, which are not hashable.
+    if is_non_tensor(key):
+        key = key.data
+    if isinstance(key, list):
+        return tuple(_pytree_dict_key(k) for k in key)
+    return key
+
+
+def _warn_structseq_keys(obj) -> None:
+    """Warns that ``from_any`` will key a structseq by its field names."""
+    # point to the first frame outside tensordict: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    obj_type = type(obj)
+    positional = [str(i) for i in range(len(obj))]
+    named = list(obj_type.__match_args__)
+    warnings.warn(
+        f"from_any converts a {obj_type.__module__}.{obj_type.__name__} like a "
+        f"plain tuple, with the keys {positional}. Starting with TensorDict "
+        f"0.17, the default will change to its field names {named}, as "
+        "from_namedtuple gives. Pass it to from_namedtuple to get the field "
+        "names now, or convert it with tuple() to keep the keys of a tuple.",
+        FutureWarning,
+        stacklevel=stacklevel,
+    )
+
+
 class _Conversion:
     """Conversions to and from other containers, file formats and nn.Module parameters."""
 
@@ -101,6 +135,47 @@ class _Conversion:
         names: list[str] | None = None,
         lazy: bool | None = None,
     ) -> Self:
+        """Builds a tensordict by stacking a list of dicts or tensor collections.
+
+        Each dict is converted with :meth:`from_dict` and the results are
+        stacked along a new leading dimension.
+
+        Args:
+            input (list): the dicts or tensor collections to stack.
+
+        Keyword Args:
+            auto_batch_size (bool, optional): if ``True``, the batch size of
+                each element is computed automatically. See :meth:`from_dict`.
+            batch_size (iterable of int, optional): the batch size of the
+                result, with the length of the list first. Each element gets
+                ``batch_size[1:]``.
+            device (torch.device or compatible type, optional): a device for
+                the result.
+            batch_dims (int, optional): the maximum number of batch dimensions
+                of the result, the list dimension included. Exclusive with
+                ``batch_size``.
+            names (list of str, optional): the dimension names of the result,
+                one per batch dimension, with the name of the list dimension
+                first.
+            lazy (bool, optional): if ``True``, the result is a lazy stack;
+                if ``False``, a dense stack. Defaults to ``None``, which builds
+                a dense stack when the elements have the same shape and a lazy
+                stack otherwise.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict.from_list(
+            ...     [{"a": torch.zeros(3)}, {"a": torch.zeros(3)}],
+            ...     batch_size=[2, 3],
+            ...     names=["x", "y"],
+            ... )
+            >>> td.batch_size
+            torch.Size([2, 3])
+            >>> td.names
+            ['x', 'y']
+
+        """
         from tensordict.base import TensorDictBase
 
         if lazy is None:
@@ -121,8 +196,7 @@ class _Conversion:
             bsz = None
         if batch_dims is not None:
             batch_dims -= 1
-        if names is not None:
-            names = names[1:]
+        member_names = names[1:] if names is not None else None
         if cls is TensorDictBase:
             from tensordict import TensorDict
 
@@ -135,14 +209,29 @@ class _Conversion:
                     batch_size=bsz,
                     batch_dims=batch_dims,
                     device=device,
-                    names=names,
+                    names=member_names,
                 )
                 if not is_tensor_collection(d)
                 else d
             )
             for d in input
         ]
-        return stack(input)
+        out = stack(input)
+        if names is not None:
+            # the stack does not name the list dimension, and from_dict does
+            # not apply names with auto_batch_size: name the result
+            if len(names) == out.batch_dims:
+                out.names = names
+            else:
+                warnings.warn(
+                    f"from_list ignores names={names} for a result of batch "
+                    f"size {out.batch_size} today. Starting with TensorDict "
+                    "0.17, the default will change to raising a ValueError, "
+                    "as for a batch_size of another length.",
+                    FutureWarning,
+                    stacklevel=2,
+                )
+        return out
 
     def from_dict_instance(
         self,
@@ -267,7 +356,11 @@ class _Conversion:
         Additional non-tensor keys are added to keep track of each level's identity, providing
         a built-in pytree-to-tensordict bijective transform API.
 
-        Accepted classes currently include lists, tuples, named tuples and dict.
+        Accepted classes currently include lists, tuples, named tuples and dict,
+        and subclasses of these such as :class:`collections.OrderedDict`,
+        :class:`collections.defaultdict` and the results of ``torch.max`` and
+        the other ``torch.return_types``. A ``defaultdict`` is rebuilt without
+        its ``default_factory``.
 
         .. note::
             For dictionaries, non-NestedKey keys are registered separately as :class:`~tensordict.NonTensorData`
@@ -317,6 +410,7 @@ class _Conversion:
             return pytree
 
         from tensordict._td import TensorDict
+        from tensordict.tensorclass import NonTensorData
 
         result = None
         if _is_namedtuple(pytree):
@@ -337,6 +431,9 @@ class _Conversion:
                     source[key] = cls.from_pytree(item)
                 else:
                     subs_key = "<NON_NESTED>" + str(uuid.uuid1())
+                    if not isinstance(key, torch.Tensor):
+                        # The constructor would turn numbers into tensors
+                        key = NonTensorData(key)
                     source[subs_key] = TensorDict(
                         {"value": cls.from_pytree(item), "key": key}
                     )
@@ -367,24 +464,32 @@ class _Conversion:
             key: val if not is_tensor_collection(val) else val.to_pytree()
             for key, val in items.items()
         }
-        if _pytree_type in (list, tuple):
-            return _pytree_type((items[str(i)] for i in range(len(items))))
-        if _pytree_type is dict:
+        if _is_namedtuple_class(_pytree_type):
+            from tensordict._td import TensorDict
+
+            return TensorDict(items).to_namedtuple(dest_cls=_pytree_type)
+        if issubclass(_pytree_type, (list, tuple)):
+            # a list, a tuple or a subclass, such as the torch.return_types
+            # structseqs, which take a sequence
+            return _pytree_type([items[str(i)] for i in range(len(items))])
+        if issubclass(_pytree_type, dict):
             items = dict(
                 (
                     (
-                        (val["key"], val["value"])
+                        (_pytree_dict_key(val.get("key")), val["value"])
                         if key.startswith("<NON_NESTED>")
                         else (key, val)
                     )
                     for (key, val) in items.items()
                 )
             )
+            if _pytree_type is not dict:
+                # an OrderedDict, or a defaultdict, which from_pytree records
+                # without its default_factory
+                result = _pytree_type()
+                result.update(items)
+                items = result
             return items
-        if _is_namedtuple_class(_pytree_type):
-            from tensordict._td import TensorDict
-
-            return TensorDict(items).to_namedtuple(dest_cls=_pytree_type)
         raise NotImplementedError(f"unknown type {_pytree_type}")
 
     @classmethod
@@ -1497,7 +1602,10 @@ class _Conversion:
         """Converts a tensordict to a namedtuple.
 
         Args:
-            dest_cls (Type, optional): an optional namedtuple class to use.
+            dest_cls (Type, optional): an optional namedtuple class to use
+                for the result. A nested tensordict is converted to
+                ``dest_cls`` too if ``dest_cls`` takes its keys, and to a
+                ``GenericDict`` otherwise.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -1510,18 +1618,25 @@ class _Conversion:
 
         """
 
-        def dict_to_namedtuple(dictionary):
+        def dict_to_namedtuple(dictionary, root=False):
             for key, value in dictionary.items():
                 if isinstance(value, dict):
                     dictionary[key] = dict_to_namedtuple(value)
-            cls = (
-                collections.namedtuple("GenericDict", dictionary.keys())
-                if dest_cls is None
-                else dest_cls
-            )
+            cls = dest_cls
+            if cls is not None and not root and hasattr(cls, "_fields"):
+                # a nested level uses dest_cls only if dest_cls takes its keys
+                keys = set(dictionary)
+                defaults = getattr(cls, "_field_defaults", {})
+                if not (
+                    keys <= set(cls._fields)
+                    and set(cls._fields) - keys <= set(defaults)
+                ):
+                    cls = None
+            if cls is None:
+                cls = collections.namedtuple("GenericDict", dictionary.keys())
             return cls(**dictionary)
 
-        return dict_to_namedtuple(self.to_dict(retain_none=False))
+        return dict_to_namedtuple(self.to_dict(retain_none=False), root=True)
 
     @classmethod
     def from_any(
@@ -1562,7 +1677,12 @@ class _Conversion:
         - Dataclasses through :meth:`~.from_dataclass` (dataclasses will be converted to TensorDict instances, not tensorclasses).
         - Namedtuples through :meth:`~.from_namedtuple`.
         - Dictionaries through :meth:`~.from_dict`.
-        - Tuples through :meth:`~.from_tuple`.
+        - Tuples through :meth:`~.from_tuple`. This includes the results of
+          ``torch.return_types`` (``max``, ``sort``, ``topk``, ...), which get
+          the keys ``"0"``, ``"1"``, ... and a :class:`FutureWarning`.
+          Starting with TensorDict 0.17, the default will change to their
+          field names (``"values"``, ``"indices"``, ...), as
+          :meth:`~.from_namedtuple` gives.
         - NumPy's structured arrays through :meth:`~.from_struct_array`.
         - HDF5 objects through :meth:`~.from_h5`.
 
@@ -1612,6 +1732,8 @@ class _Conversion:
                     device=device,
                     batch_size=batch_size,
                 )
+            if is_structseq_instance(obj):
+                _warn_structseq_keys(obj)
             return cls.from_tuple(
                 obj,
                 auto_batch_size=auto_batch_size,
@@ -2606,16 +2728,13 @@ class _Conversion:
         """
         from tensordict.persistent import PersistentTensorDict
 
-        out = PersistentTensorDict.from_dict(
+        return PersistentTensorDict._from_dict(
             self,
             filename=filename,
             backend="zarr",
+            names=self.names if self._has_names() else None,
             **kwargs,
         )
-        if self._has_names():
-            out.names = self.names
-            out._write_attrs_metadata()
-        return out
 
     def to_store(
         self,

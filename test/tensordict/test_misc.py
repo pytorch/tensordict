@@ -26,6 +26,7 @@ from tensordict import (
     UnbatchedTensor,
 )
 from tensordict._td import is_tensor_collection
+from tensordict._torch_func import _POINTWISE_FUNCTIONS
 from tensordict.base import TensorDictBase
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.nn import TensorDictParams
@@ -115,6 +116,59 @@ elif is_npu_available():
 
 
 class TestPointwiseOps:
+    @pytest.mark.parametrize("name", _POINTWISE_FUNCTIONS)
+    def test_torch_pointwise_functions(self, name):
+        # torch.<name>(td) computes torch.<name> on each leaf (#1926)
+        torch.manual_seed(0)
+        x = torch.rand(3, 4) * 0.8 + 0.1
+        y = torch.rand(3, 4) * 0.8 + 0.1
+        args = {
+            "add": (y,),
+            "addcdiv": (y, y),
+            "addcmul": (y, y),
+            "bitwise_and": (y > 0.5,),
+            "clamp": (0.3, 0.6),
+            "clamp_max": (0.5,),
+            "clamp_max_": (0.5,),
+            "clamp_min": (0.5,),
+            "clamp_min_": (0.5,),
+            "div": (y,),
+            "logical_and": (y > 0.5,),
+            "minimum": (y,),
+            "mul": (y,),
+            "pow": (y,),
+            "rsub": (y,),
+            "sub": (y,),
+        }.get(name, ())
+        if name == "bitwise_and":
+            x = x > 0.3
+        func = getattr(torch, name)
+        td = TensorDict(a=x.clone(), nested=TensorDict(b=x.clone()), batch_size=[3, 4])
+        result = func(td, *args)
+        expected = func(x.clone(), *args)
+        if name.endswith("_"):
+            assert result is td
+        assert isinstance(result, TensorDict)
+        torch.testing.assert_close(result["a"], expected)
+        torch.testing.assert_close(result["nested", "b"], expected)
+
+    def test_torch_pointwise_functions_kwargs(self):
+        td = TensorDict(a=torch.arange(4.0), batch_size=[4])
+        torch.testing.assert_close(
+            torch.clamp(td, min=1.5)["a"], td["a"].clamp(min=1.5)
+        )
+        torch.testing.assert_close(
+            torch.sub(td, td, alpha=2)["a"], torch.sub(td["a"], td["a"], alpha=2)
+        )
+        torch.testing.assert_close(
+            torch.add(td, td, alpha=2)["a"], torch.add(td["a"], td["a"], alpha=2)
+        )
+        # a tensor or a number as first argument still raises
+        with pytest.raises(TypeError, match="takes a tensordict"):
+            torch.add(torch.ones(4), td)
+        with pytest.raises(TypeError, match="takes a tensordict"):
+            torch.pow(2, td)
+
     def test_r_ops(self):
         td = TensorDict(a=1)
         # mul
@@ -492,6 +546,42 @@ class TestPointwiseOps:
         assert (td == self._lazy_td * 2).all()
         assert ((td.abs() ** 2).clamp_max(td) == td).all()
 
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize(
+        "name",
+        (
+            "abs acos asin atan ceil cos cosh erf erfc exp expm1 floor frac lgamma "
+            "log log10 log1p log2 reciprocal round sigmoid sign sin sinh sqrt tan "
+            "tanh trunc"
+        ).split(),
+    )
+    def test_unary_no_tensor(self, name, nested):
+        # Without tensor leaves, the structure comes back, as with -td.
+        td = TensorDict({"a": TensorDict({}, [3])} if nested else {}, [3])
+        result = getattr(td, name)()
+        assert result is not td
+        assert result.batch_size == td.batch_size
+        assert list(result.keys(True)) == list(td.keys(True))
+        assert getattr(td, name + "_")() is td
+
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_binary_no_tensor(self, nested):
+        # Without tensor leaves, the structure comes back, as with td + 1.
+        td = TensorDict({"a": TensorDict({}, [3])} if nested else {}, [3])
+        results = [td - 1, 1 - td, td / 2, 2 / td, td**2, td - td, td / td, td**td]
+        results += [td.sub(1, alpha=2), td.rsub(1, alpha=2)]
+        for result in results:
+            assert result is not td
+            assert result.batch_size == td.batch_size
+            assert list(result.keys(True)) == list(td.keys(True))
+        assert td.sub_(1) is td
+        assert td.sub_(td, alpha=2) is td
+        assert td.div_(2) is td
+        assert td.pow_(td) is td
+        norm = td.norm()
+        assert norm.batch_size == ()
+        assert list(norm.keys(True)) == list(td.keys(True))
+
     def test_clamp_min_default(self):
         # Create two tds with different key sets
         td0 = TensorDict(a=2, b=2, c=2)
@@ -861,6 +951,46 @@ class TestPointwiseOps:
             assert (result["a"] == 1).all(), name
             assert (result["n", "b"] == 2).all(), name
 
+    @pytest.mark.parametrize("op", ["lerp", "addcmul", "addcdiv"])
+    @pytest.mark.parametrize("container", ["td", "lazy_stack"])
+    def test_pairs_operands_by_key(self, op, container):
+        # lerp, addcmul and addcdiv pair the leaves of every tensordict operand
+        # by key, also when its keys come in another order (#1980)
+        torch.manual_seed(0)
+
+        def make(*, reverse):
+            if reverse:
+                return TensorDict(n={"b": torch.rand(3) + 1}, a=torch.rand(3) + 1)
+            return TensorDict(a=torch.rand(3) + 1, n={"b": torch.rand(3) + 1})
+
+        if container == "lazy_stack":
+            # the members of each stack differ in key order
+            td = LazyStackedTensorDict(make(reverse=False), make(reverse=True))
+            other1 = LazyStackedTensorDict(make(reverse=True), make(reverse=False))
+            other2 = LazyStackedTensorDict(make(reverse=True), make(reverse=False))
+        else:
+            td = make(reverse=False)
+            other1 = make(reverse=True)
+            other2 = make(reverse=True)
+        if op == "lerp":
+            # a weight below 1 so that the result depends on the pairing
+            other2 = other2 / 4
+        torch_op = getattr(torch, op)
+        result = getattr(td, op)(other1, other2)
+        for key in td.keys(True, True):
+            torch.testing.assert_close(
+                result[key], torch_op(td[key], other1[key], other2[key])
+            )
+
+        # an operand that lacks a key of td raises instead of pairing by position
+        other_keys = TensorDict(a=torch.rand(3), d={"b": torch.rand(3)})
+        if container == "lazy_stack":
+            other_keys = LazyStackedTensorDict(other_keys, other_keys.clone())
+        with pytest.raises(KeyError):
+            getattr(td, op)(other_keys, other2)
+        with pytest.raises(KeyError):
+            getattr(td, op)(other1, other_keys)
+
     @pytest.mark.skipif(not _has_h5py, reason="h5py not available")
     def test_inplace_broadcast_tensor_h5(self, tmp_path):
         # A PersistentTensorDict hands out copies of its datasets: the in-place
@@ -1152,7 +1282,7 @@ class TestTensorDictsRequiresGrad:
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )

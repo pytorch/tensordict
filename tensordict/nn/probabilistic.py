@@ -1017,8 +1017,10 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 f"DETERMINISTIC, MEAN and MODE are not implemented for {type(dist).__name__}."
             )
         if interaction_type is InteractionType.DETERMINISTIC:
-            if hasattr(dist, "deterministic_sample"):
-                return dist.deterministic_sample
+            # One read: ``deterministic_sample`` is often a computed property.
+            deterministic_sample = getattr(dist, "deterministic_sample", None)
+            if deterministic_sample is not None:
+                return deterministic_sample
             else:
                 # Fallbacks
                 tdist = type(dist)

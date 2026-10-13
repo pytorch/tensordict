@@ -62,7 +62,9 @@ class OneHotCategorical(D.Categorical):
     This class behaves exactly as torch.distributions.Categorical except that it reads and produces one-hot encodings
     of the discrete tensors. :meth:`sample`, :attr:`mode` and
     :attr:`deterministic_sample` return ``torch.long`` one-hot tensors, and
-    :meth:`log_prob` takes one.
+    :meth:`log_prob` takes one. When several logits tie for the maximum,
+    :attr:`mode` marks the first, as :class:`torch.distributions.OneHotCategorical`
+    does.
 
     :meth:`rsample` returns a straight-through sample: its values are one-hot,
     and its gradient is the gradient of a
@@ -110,10 +112,9 @@ class OneHotCategorical(D.Categorical):
 
     @property
     def mode(self) -> torch.Tensor:
-        if hasattr(self, "logits"):
-            return (self.logits == self.logits.max(-1, True)[0]).to(torch.long)
-        else:
-            return (self.probs == self.probs.max(-1, True)[0]).to(torch.long)
+        # One-hot of the first maximum: comparing with the max marks every tie.
+        index = self.logits.max(-1).indices
+        return torch.nn.functional.one_hot(index, self.logits.shape[-1])
 
     deterministic_sample = mode
 

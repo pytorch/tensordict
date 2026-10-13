@@ -27,6 +27,7 @@ from tensordict.utils import (
     _is_unbatched,
     _pass_through,
     _shape,
+    _warn_dim_past_batch_dims,
     _zip_strict,
     DeviceType,
     is_non_tensor,
@@ -473,6 +474,8 @@ def _cat(
             f"={dim} and batch_size={batch_size}"
         )
     batch_size[dim] = sum([td.batch_size[dim] for td in list_of_tensordicts])
+    if dim < 0:
+        _warn_dim_past_batch_dims("cat")
     batch_size = TensorDict._parse_batch_size(None, batch_size)
 
     # check that all tensordict match
@@ -600,6 +603,8 @@ def _lazy_cat(
             )
 
     batch_size[dim] = sum(td.batch_size[dim] for td in list_of_tensordicts)
+    if dim < 0:
+        _warn_dim_past_batch_dims("cat")
     batch_size = torch.Size(batch_size)
 
     new_dim = dim
@@ -638,16 +643,21 @@ def _lazy_cat(
             )
         if out.stack_dim != dim:
             index_base = (slice(None),) * out.stack_dim
+            # the members of out lack the stack dim, so later dims shift by one
+            sub_dim = dim - 1 if dim > out.stack_dim else dim
             for i, sub_dest in enumerate(out.tensordicts):
                 index = index_base + (i,)
                 tds_to_cat = [_td[index] for _td in list_of_tensordicts]
-                torch.cat(tds_to_cat, dim, out=sub_dest)
+                torch.cat(tds_to_cat, sub_dim, out=sub_dest)
         else:
             init_idx = 0
             for td_in in list_of_tensordicts:
+                if td_in.shape[dim] == 0:
+                    continue
                 sub_dest = out.tensordicts[init_idx : init_idx + td_in.shape[dim]]
-                init_idx += init_idx + td_in.shape[dim]
-                LazyStackedTensorDict.maybe_dense_stack(sub_dest, out.stack_dim).update(
+                init_idx += td_in.shape[dim]
+                # write into the members of out (a dense stack would copy them)
+                LazyStackedTensorDict.lazy_stack(sub_dest, out.stack_dim).update(
                     td_in, inplace=True
                 )
 
@@ -734,6 +744,8 @@ def _stack(
     batch_size = list_of_tensordicts[0].batch_size
     if dim < 0:
         dim = len(batch_size) + dim + 1
+    if not 0 <= dim <= len(batch_size):
+        _warn_dim_past_batch_dims("stack")
 
     # check that all tensordict match
     # Read lazy_legacy
@@ -1048,6 +1060,106 @@ def _sum(td: T, *args: Any, **kwargs: Any) -> T:
 @implements_for_td(torch.maximum)
 def _maximum(td: T, other: T, *args: Any, **kwargs: Any) -> T:
     return td.maximum(other, *args, **kwargs)
+
+
+def _call_method(name: str) -> Callable:
+    def _method(td: T, *args: Any, **kwargs: Any) -> T:
+        if not _is_tensor_collection(type(td)):
+            # torch.add(tensor, td): a tensor has no method that takes a tensordict
+            raise TypeError(
+                f"torch.{name} takes a tensordict as its first argument, "
+                f"got {type(td).__name__}."
+            )
+        return getattr(td, name)(*args, **kwargs)
+
+    _method.__name__ = f"_{name}"
+    return _method
+
+
+# Pointwise functions whose TensorDict method has the arguments and results of
+# the torch function. Reductions such as torch.max and torch.all are left out:
+# their methods return other results.
+_POINTWISE_FUNCTIONS = (
+    "abs",
+    "abs_",
+    "acos",
+    "acos_",
+    "add",
+    "addcdiv",
+    "addcmul",
+    "asin",
+    "asin_",
+    "atan",
+    "atan_",
+    "bitwise_and",
+    "ceil",
+    "ceil_",
+    "clamp",
+    "clamp_max",
+    "clamp_max_",
+    "clamp_min",
+    "clamp_min_",
+    "cos",
+    "cos_",
+    "cosh",
+    "cosh_",
+    "div",
+    "erf",
+    "erf_",
+    "erfc",
+    "erfc_",
+    "exp",
+    "exp_",
+    "expm1",
+    "expm1_",
+    "floor",
+    "floor_",
+    "frac",
+    "frac_",
+    "isfinite",
+    "isnan",
+    "isneginf",
+    "isposinf",
+    "isreal",
+    "lgamma",
+    "log",
+    "log10",
+    "log10_",
+    "log1p",
+    "log1p_",
+    "log2",
+    "log2_",
+    "log_",
+    "logical_and",
+    "minimum",
+    "mul",
+    "neg",
+    "neg_",
+    "pow",
+    "reciprocal",
+    "reciprocal_",
+    "round",
+    "round_",
+    "rsub",
+    "sigmoid",
+    "sigmoid_",
+    "sign",
+    "sin",
+    "sin_",
+    "sinh",
+    "sinh_",
+    "sqrt",
+    "sqrt_",
+    "sub",
+    "tan",
+    "tan_",
+    "tanh",
+    "tanh_",
+    "trunc",
+    "trunc_",
+)
+for _name in _POINTWISE_FUNCTIONS:
+    implements_for_td(getattr(torch, _name))(_call_method(_name))
 
 
 @implements_for_td(torch.nn.functional.l1_loss)

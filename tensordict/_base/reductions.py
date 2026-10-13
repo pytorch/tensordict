@@ -13,18 +13,69 @@ mixin imports in ``tensordict/base.py`` gives the other rules.
 
 from __future__ import annotations
 
+import sys
+import warnings
 from typing import Callable, Literal, overload, Tuple
 
 import torch
+from tensordict._deprecation import warn_deprecated
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _is_tensor_collection,
     _NESTED_TENSORS_AS_LISTS,
+    _PACKAGE_DIR,
     NO_DEFAULT,
     Self,
 )
 from tensordict.utils import _maybe_correct_neg_dim
+
+# dim=() reduces over every element, as in torch.sum(x, dim=()), except in
+# these reductions, which keep raising for it
+_NO_EMPTY_DIM_REDUCTIONS = frozenset({"max", "min", "cummax", "cummin", "quantile"})
+
+
+def _user_stacklevel() -> int:
+    """Returns the ``stacklevel`` that points the caller's warning to the first frame outside tensordict."""
+    frame, stacklevel = sys._getframe(1), 1
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    return stacklevel
+
+
+def _warn_negative_dim_with_reduce(reduction_name: str, dim) -> None:
+    """Warns that ``reduce=True`` counts a negative dim from the end of the leaves (#2044)."""
+    warnings.warn(
+        f"{reduction_name}(dim={dim}, reduce=True) counts a negative dim from "
+        "the end of each leaf. Starting with TensorDict 0.17, the default will "
+        "change to counting it from the end of the batch dims, as with "
+        "reduce=False. Pass a non-negative dim to get the same result in every "
+        "version.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
+def _warn_tuple_dim(reduction_name: str, dim: tuple) -> None:
+    """Warns that ``reduction_name`` reduces only the first dim of the tuple ``dim`` (#2044)."""
+    if reduction_name in ("amax", "amin"):
+        warnings.warn(
+            f"{reduction_name}(dim={dim}) reduces only the first dim of the "
+            "tuple, and does not check it against the batch dims. Starting with "
+            "TensorDict 0.17, the default will change to reducing every dim of "
+            f"the tuple, counted from the batch dims, as torch.{reduction_name} "
+            "does.",
+            FutureWarning,
+            stacklevel=_user_stacklevel(),
+        )
+    else:
+        warn_deprecated(
+            f"Passing a tuple as the dim of {reduction_name}(), which reduces "
+            "only its first dim,",
+            removal="0.17",
+            replacement=f"an int dim, as torch.{reduction_name} takes",
+            stacklevel=_user_stacklevel(),
+        )
 
 
 class _Reductions:
@@ -121,7 +172,10 @@ class _Reductions:
     ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the minimum values of all elements in the input tensordict.
 
-        Same as :meth:`~.min` with ``return_indices=False``.
+        Same as :meth:`~.min` with ``return_indices=False``. A tuple ``dim``
+        reduces only its first dim. Starting with TensorDict 0.17, the default
+        will change to reducing every dim of the tuple, as :func:`torch.amin`
+        does.
         """
         return self._cast_reduction(
             reduction_name="amin",
@@ -168,12 +222,16 @@ class _Reductions:
                 If integer, `min` is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
                 shape.
+                A tuple reduces only its first dim; passing one is deprecated
+                and will be removed in TensorDict 0.17.
             keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
-                Defaults to ``False``.
+                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
+                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+                the end of the batch dims, as with ``reduce=False``.
             return_indices (bool, optional): :func:`~torch.min` returns a named tuple with values and indices
                 when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a named tuple
                 with ``values`` and ``indices`` tensordicts of identical structure. If ``False``, only the values
@@ -288,7 +346,10 @@ class _Reductions:
     ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the maximum values of all elements in the input tensordict.
 
-        Same as :meth:`~.max` with ``return_indices=False``.
+        Same as :meth:`~.max` with ``return_indices=False``. A tuple ``dim``
+        reduces only its first dim. Starting with TensorDict 0.17, the default
+        will change to reducing every dim of the tuple, as :func:`torch.amax`
+        does.
         """
         return self._cast_reduction(
             reduction_name="amax",
@@ -335,12 +396,16 @@ class _Reductions:
                 If integer, `max` is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
                 shape.
+                A tuple reduces only its first dim; passing one is deprecated
+                and will be removed in TensorDict 0.17.
             keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
-                Defaults to ``False``.
+                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
+                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+                the end of the batch dims, as with ``reduce=False``.
             return_indices (bool, optional): :func:`~torch.max` returns a named tuple with values and indices
                 when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a named tuple
                 with ``values`` and ``indices`` tensordicts of identical structure. If ``False``, only the values
@@ -462,7 +527,9 @@ class _Reductions:
         Keyword Args:
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
-                Defaults to ``False``.
+                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
+                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+                the end of the batch dims, as with ``reduce=False``.
             return_indices (bool, optional): :func:`~torch.cummin` returns a named tuple with values and indices
                 when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a named tuple
                 with ``values`` and ``indices`` tensordicts of identical structure. If ``False``, only the values
@@ -581,7 +648,9 @@ class _Reductions:
         Keyword Args:
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
-                Defaults to ``False``.
+                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
+                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+                the end of the batch dims, as with ``reduce=False``.
             return_indices (bool, optional): :func:`~torch.cummax` returns a named tuple with values and indices
                 when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a named tuple
                 with ``values`` and ``indices`` tensordicts of identical structure. If ``False``, only the values
@@ -727,7 +796,9 @@ class _Reductions:
                 This is useful for preventing data type overflows. Default: ``None``.
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
-                Defaults to ``False``.
+                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
+                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+                the end of the batch dims, as with ``reduce=False``.
             key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
                 If provided, all keys in the result will be transformed using this function.
                 For string keys, the function receives a string. For tuple keys, it receives a tuple.
@@ -887,7 +958,9 @@ class _Reductions:
                 This is useful for preventing data type overflows. Default: ``None``.
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
-                Defaults to ``False``.
+                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
+                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+                the end of the batch dims, as with ``reduce=False``.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -1009,6 +1082,8 @@ class _Reductions:
                 If integer or tuple of integers, `prod` is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
                 shape.
+                A tuple reduces only its first dim; passing one is deprecated
+                and will be removed in TensorDict 0.17.
                 Only the `"feature"` string is currently permitted. Using `dim="feature"` will
                 achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
                 shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
@@ -1021,7 +1096,9 @@ class _Reductions:
                 This is useful for preventing data type overflows. Default: ``None``.
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
-                Defaults to ``False``.
+                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
+                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+                the end of the batch dims, as with ``reduce=False``.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -1179,7 +1256,9 @@ class _Reductions:
                 This is useful for preventing data type overflows. Default: ``None``.
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
-                Defaults to ``False``.
+                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
+                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+                the end of the batch dims, as with ``reduce=False``.
             key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
                 If provided, all keys in the result will be transformed using this function.
                 For string keys, the function receives a string. For tuple keys, it receives a tuple.
@@ -1320,7 +1399,9 @@ class _Reductions:
                 This is useful for preventing data type overflows. Default: ``None``.
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
-                Defaults to ``False``.
+                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
+                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+                the end of the batch dims, as with ``reduce=False``.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -1467,7 +1548,9 @@ class _Reductions:
                 Defaults to Bessel's correction, correction=1.
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
-                Defaults to ``False``.
+                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
+                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+                the end of the batch dims, as with ``reduce=False``.
             key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
                 If provided, all keys in the result will be transformed using this function.
                 For string keys, the function receives a string. For tuple keys, it receives a tuple.
@@ -1621,7 +1704,9 @@ class _Reductions:
                 Defaults to Bessel's correction, correction=1.
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
-                Defaults to ``False``.
+                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
+                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+                the end of the batch dims, as with ``reduce=False``.
             key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
                 If provided, all keys in the result will be transformed using this function.
                 For string keys, the function receives a string. For tuple keys, it receives a tuple.
@@ -1779,7 +1864,9 @@ class _Reductions:
                 Defaults to 'linear'.
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
-                Defaults to ``False``.
+                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
+                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+                the end of the batch dims, as with ``reduce=False``.
             key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
                 If provided, all keys in the result will be transformed using this function.
                 For string keys, the function receives a string. For tuple keys, it receives a tuple.
@@ -1886,6 +1973,13 @@ class _Reductions:
     ):
         from tensordict._td import TensorDict
 
+        if (
+            isinstance(dim, tuple)
+            and not dim
+            and reduction_name not in _NO_EMPTY_DIM_REDUCTIONS
+        ):
+            # dim=() reduces over all the elements, as in torch
+            dim = None
         if dim is None and not keepdim:
             # dim=None reduces over all the elements, as an omitted dim does
             dim = NO_DEFAULT
@@ -1906,6 +2000,16 @@ class _Reductions:
             else:
                 agglomerate = list(
                     self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+                )
+                # With feature dims, a negative dim counts from the end of the
+                # leaves, not of the batch dims
+                warn_negative_dim = (
+                    bool(agglomerate)
+                    and agglomerate[0].ndim != self.ndim
+                    and any(
+                        isinstance(d, int) and d < 0
+                        for d in (dim if isinstance(dim, tuple) else (dim,))
+                    )
                 )
                 if dim == "feature":
                     agglomerate = [
@@ -1930,13 +2034,17 @@ class _Reductions:
                 if reduction_name == "quantile":
                     q = kwargs.pop("q")
                     kwargs_copy.update(kwargs)
-                    return getattr(torch, reduction_name)(
+                    result = getattr(torch, reduction_name)(
                         agglomerate, q, dim=dim, **kwargs_copy
                     )
-                kwargs_copy.update(kwargs)
-                return getattr(torch, reduction_name)(
-                    agglomerate, dim=dim, **kwargs_copy
-                )
+                else:
+                    kwargs_copy.update(kwargs)
+                    result = getattr(torch, reduction_name)(
+                        agglomerate, dim=dim, **kwargs_copy
+                    )
+                if warn_negative_dim:
+                    _warn_negative_dim_with_reduce(reduction_name, dim)
+                return result
 
         # With a 1-d tensor q, torch.quantile adds a first dim of size len(q)
         # to each leaf, so the batch size of the result starts with it too.
@@ -1962,6 +2070,15 @@ class _Reductions:
             return (_maybe_correct_neg_dim(dim, None, batch_dims),)
 
         dim_needs_proc = (dim is not NO_DEFAULT) and (dim not in ("feature",))
+        # Only the first dim of the tuple is reduced, as is. amax and amin
+        # give the same result as torch for one dim inside the batch dims.
+        tuple_dim = None
+        if not tuple_ok and isinstance(dim, tuple) and dim:
+            if reduction_name in ("max", "min", "prod") or (
+                reduction_name in ("amax", "amin")
+                and (len(dim) > 1 or not 0 <= dim[0] < self.batch_dims)
+            ):
+                tuple_dim = dim
         if dim_needs_proc:
             dim = proc_dim(dim, self.batch_dims, tuple_ok=tuple_ok)
             if not tuple_ok and dim is not None:
@@ -2079,13 +2196,16 @@ class _Reductions:
             else:
                 batch_size = [1 for b in self.batch_size]
 
-            return self._fast_apply(
+            result = self._fast_apply(
                 reduction,
                 call_on_nested=call_on_nested,
                 batch_size=torch.Size([*q_dims, *batch_size]),
                 device=self.device,
                 names=names,
             )
+            if tuple_dim is not None:
+                _warn_tuple_dim(reduction_name, tuple_dim)
+            return result
 
         def reduction(val):
             if reduction_name == "quantile":
@@ -2132,6 +2252,12 @@ class _Reductions:
                 f"The dimension {dim} is incompatible with a tensordict with batch_size {self.batch_size}."
             )
         batch_size = self.batch_size
+        names = None
+        if self._has_names():
+            if keepdim:
+                names = list(self.names)
+            else:
+                names = [name for i, name in enumerate(self.names) if i not in new_dim]
         if keepdim:
             batch_size = torch.Size(
                 [b if i not in new_dim else 1 for i, b in enumerate(batch_size)]
@@ -2141,15 +2267,26 @@ class _Reductions:
                 [b for i, b in enumerate(batch_size) if i not in new_dim]
             )
         if out is not None:
+
+            def reduction(x, y):
+                if _is_tensor_collection(type(x)):
+                    return x.logsumexp(new_dim, keepdim=keepdim, out=y)
+                return torch.logsumexp(x, dim=new_dim, keepdim=keepdim, out=y)
+
             result = self._fast_apply(
-                lambda x, y: torch.logsumexp(x, dim=new_dim, keepdim=keepdim, out=y),
+                reduction,
                 out,
                 default=None,
+                call_on_nested=True,
                 batch_size=batch_size,
+                names=names,
             )
             return out.update(result)
 
+        # Nested tensordicts reduce themselves, so that they get their own names
         return self._fast_apply(
-            lambda x: torch.logsumexp(x, dim=new_dim, keepdim=keepdim),
+            lambda x: x.logsumexp(new_dim, keepdim=keepdim),
+            call_on_nested=True,
             batch_size=batch_size,
+            names=names,
         )

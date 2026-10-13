@@ -43,7 +43,7 @@ from tensordict.base import (
     NO_DEFAULT,
     Self,
 )
-from tensordict.memmap import MemoryMappedTensor
+from tensordict.memmap import _raise_if_jagged, MemoryMappedTensor
 from tensordict.utils import (
     _DTYPE_TO_STR_DTYPE,
     _encode_key_for_filesystem,
@@ -63,6 +63,19 @@ from torch._utils import _get_available_device_type, _get_device_module
 
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
+
+
+def _memmap_like_stand_in(key: NestedKey, x: torch.Tensor) -> torch.Tensor:
+    """Returns a leaf that ``memmap_like`` can pass to ``_memmap_(like=True)`` without copying values."""
+    _raise_if_jagged(x, key)
+    if x.is_nested:
+        # A nested tensor has no ``shape`` to expand to. ``_memmap_(like=True)``
+        # reads only its nested sizes and dtype, so the leaf itself works as a
+        # stand-in. Dropping the MemoryMappedTensor subclass makes
+        # ``MemoryMappedTensor.from_tensor`` allocate a new file instead of
+        # reusing an existing memory-mapped one.
+        return x.as_subclass(torch.Tensor)
+    return torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
 
 
 class _Serialization:
@@ -778,6 +791,9 @@ class _Serialization:
                 consolidate_futures = futures
             else:
                 wait(futures)
+                # re-raise the first error of the workers
+                for future in futures:
+                    future.result()
                 if non_blocking and (device is None or device.type != "cuda"):
                     # sync if needed
                     self._sync_all()
@@ -908,8 +924,23 @@ class _Serialization:
         )
 
     def is_consolidated(self):
-        """Checks if a TensorDict has a consolidated storage."""
-        return hasattr(self, "_consolidated")
+        """Checks if a TensorDict has a consolidated storage.
+
+        Returns ``False`` once :meth:`~.memmap_` moves the leaves out of the
+        consolidated storage, or once an in-place write changes a non-tensor
+        entry, as the consolidated storage and metadata no longer match the
+        content. :meth:`~.consolidate` then builds a new consolidated copy.
+        """
+        return hasattr(self, "_consolidated") and not self._consolidated.get(
+            "stale", False
+        )
+
+    def _mark_consolidated_stale(self):
+        """Marks the consolidated state of self and of its lock parents as stale."""
+        for td in (self, *(ref() for ref in self._lock_parents_weakrefs)):
+            consolidated = getattr(td, "_consolidated", None)
+            if consolidated is not None:
+                consolidated["stale"] = True
 
     def memmap_(
         self,
@@ -964,6 +995,14 @@ class _Serialization:
         Note:
             Serialising in this fashion might be slow with deeply nested tensordicts, so
             it is not recommended to call this method inside a training loop.
+
+        Note:
+            A :class:`~tensordict.PersistentTensorDict`, a
+            :class:`~tensordict.store.TensorDictStore` or a
+            :class:`~tensordict.store.LazyStackedTensorDictStore` (or one of its
+            elements) cannot be memory-mapped in-place: this method raises a
+            ``RuntimeError``. Use :meth:`~tensordict.TensorDictBase.memmap` to
+            build a memory-mapped copy instead.
         """
         prefix = Path(prefix) if prefix is not None else self._memmap_prefix
         if num_threads > 1:
@@ -982,6 +1021,9 @@ class _Serialization:
             )
             if not return_early:
                 concurrent.futures.wait(futures)
+                # re-raise the first error of the workers
+                for future in futures:
+                    future.result()
                 return result
             return TensorDictFuture(futures, result)
         return self._memmap_(
@@ -1188,6 +1230,9 @@ class _Serialization:
             )
             if not return_early:
                 concurrent.futures.wait(futures)
+                # re-raise the first error of the workers
+                for future in futures:
+                    future.result()
                 return result
             return TensorDictFuture(futures, result)
 
@@ -1325,10 +1370,7 @@ class _Serialization:
             # we create an empty copy of self
             # This is because calling MMapTensor.from_tensor(mmap_tensor) does nothing
             # if both are in filesystem
-            def empty(x):
-                return torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
-
-            input = self.apply(empty)
+            input = self.apply(_memmap_like_stand_in, named=True, nested_keys=True)
             result = input._memmap_(
                 prefix=prefix,
                 copy_existing=copy_existing,
@@ -1342,13 +1384,13 @@ class _Serialization:
             )
             if not return_early:
                 concurrent.futures.wait(futures)
+                # re-raise the first error of the workers
+                for future in futures:
+                    future.result()
                 return result
             return TensorDictFuture(futures, result)
 
-        def empty_expand(x):
-            return torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
-
-        input = self.apply(empty_expand)
+        input = self.apply(_memmap_like_stand_in, named=True, nested_keys=True)
         return input._memmap_(
             prefix=prefix,
             copy_existing=copy_existing,
@@ -1643,6 +1685,32 @@ class _Serialization:
             out._sync_all()
         return out
 
+    @classmethod
+    def _load_memmap(
+        cls,
+        prefix: Path,
+        metadata: dict,
+        device: torch.device | None = None,
+        out=None,
+        *,
+        robust_key,
+        allow_pickle: bool | None = None,
+        mode: str | None = None,
+    ):
+        # A class that has no memmap layout of its own (a store, a
+        # PersistentTensorDict, TensorDictParams) loads a TensorDict.
+        from tensordict._td import TensorDict
+
+        return TensorDict._load_memmap(
+            prefix,
+            metadata,
+            device,
+            out,
+            robust_key=robust_key,
+            allow_pickle=allow_pickle,
+            mode=mode,
+        )
+
     def load_memmap_(
         self,
         prefix: str | Path,
@@ -1720,7 +1788,8 @@ class _Serialization:
         if num_threads is None:
             # unspecified num_threads should mean 0
             num_threads = 0
-        storage = self._consolidated["storage"]
+        consolidated = self._consolidated
+        storage = consolidated["storage"]
         if pin_memory:
             storage = storage.pin_memory()
         storage_cast = storage.to(device, non_blocking=True)
@@ -1780,6 +1849,10 @@ class _Serialization:
             )
 
         if inplace:
+            # A consolidated tensordict is locked. Every leaf moves to the new
+            # storage, so the keys and the consolidation stay intact: unlock
+            # it for the move, and lock it again below.
+            self.unlock_()
             out = self
         else:
             out = None
@@ -1791,8 +1864,11 @@ class _Serialization:
             out=out,
             checked=True,
         )
+        if inplace:
+            # A lazy stack returns a new stack of its rebound tensordicts
+            result = self
         result._consolidated = {"storage": storage_cast}
-        if "metadata" in self._consolidated:
+        if "metadata" in consolidated:
             # faster than deepcopy
             def copy_dict(d):
                 return {
@@ -1800,7 +1876,7 @@ class _Serialization:
                     for k, v in d.items()
                 }
 
-            result._consolidated["metadata"] = copy_dict(self._consolidated["metadata"])
+            result._consolidated["metadata"] = copy_dict(consolidated["metadata"])
         # Ensure the result remains locked to maintain consolidated state integrity
         result.lock_()
         if non_blocking in (False, None):

@@ -24,6 +24,7 @@ from warnings import warn
 
 import torch
 from tensordict._archive import _memmap_tensor_from_path
+from tensordict._base.unsupported import _NoShapeOps
 from tensordict._indexing import (
     _entry_index,
     _getitem_batch_size,
@@ -41,12 +42,14 @@ from tensordict.base import (
     _holds_its_tensors,
     _is_accepted_class,
     _is_leaf_nontensor,
+    _IS_LEAF_WITHOUT_NODES,
     _is_tensor_collection,
     _load_metadata,
     _NESTED_TENSORS_AS_LISTS,
     _register_tensor_class,
     _select_entry,
     _UNSET,
+    _warn_scalar_over_non_tensor,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
     is_tensor_collection,
@@ -54,7 +57,7 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
-from tensordict.memmap import MemoryMappedTensor
+from tensordict.memmap import _raise_if_jagged, MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
     _BatchedUninitializedBuffer,
@@ -783,8 +786,7 @@ class TensorDict(TensorDictBase):
         **kwargs,
     ) -> Self:
         shape = _get_shape_from_args(*args, **kwargs)
-        if any(dim < 0 for dim in shape):
-            shape = _infer_size_impl(shape, self.batch_size.numel())
+        shape = _infer_size_impl(shape, self.batch_size.numel())
         if torch.Size(shape) == self.shape:
             return self
         batch_dims = self.batch_dims
@@ -1217,13 +1219,21 @@ class TensorDict(TensorDictBase):
                     not value.is_nested and value.shape[: len(batch_size)] == batch_size
                 )
             ) and (device is None or value.device == device)
+        scalar = None
         if not validated:
+            if isinstance(value, (bool, int, float)):
+                scalar = value
             value = self._validate_value(
                 value, check_shape=True, non_blocking=non_blocking, key=key
             )
         if not inplace:
             if self._is_locked and not ignore_lock:
                 raise RuntimeError(_LOCK_ERROR)
+            if scalar is not None and not self._batch_size:
+                # a NonTensorData entry, not a NonTensorStack
+                dest = self._tensordict.get(key)
+                if is_non_tensor(dest) and is_tensorclass(dest):
+                    _warn_scalar_over_non_tensor(key, scalar)
             self._tensordict[key] = value
         else:
             try:
@@ -1308,6 +1318,7 @@ class TensorDict(TensorDictBase):
 
     def _set_at_str(self, key, value, idx, *, validated, non_blocking: bool):
         tensor_in = self._get_str(key, NO_DEFAULT)
+        converted = False
         if not validated:
             if (
                 isinstance(value, Number)
@@ -1318,6 +1329,7 @@ class TensorDict(TensorDictBase):
                 tensor_in[idx] = value
                 return self
             value = _cast_scalar(value, tensor_in)
+            converted = not is_tensor_collection(value)
             value = self._validate_value(
                 value, check_shape=False, non_blocking=non_blocking
             )
@@ -1381,6 +1393,11 @@ class TensorDict(TensorDictBase):
                         device=dest.device,
                     )
                 else:
+                    if converted and is_tensorclass(value):
+                        # The data was converted to a NonTensorData with the
+                        # batch size of self: drop its batch dims, so that it
+                        # broadcasts to dest[idx]
+                        value = value.empty(batch_size=())
                     dest_val[idx] = value
                 if dest_val is not dest:
                     self._set_str(
@@ -1510,55 +1527,6 @@ class TensorDict(TensorDictBase):
             return self
 
         del self._tensordict[key[0]]
-        return self
-
-    @_lock_blocked
-    def rename_key_(
-        self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
-    ) -> Self:
-        # these checks are not perfect, tuples that are not tuples of strings or empty
-        # tuples could go through but (1) it will raise an error anyway and (2)
-        # those checks are expensive when repeated often.
-        if not isinstance(old_key, (str, tuple)):
-            raise TypeError(
-                f"Expected old_name to be a string or a tuple of strings but found {type(old_key)}"
-            )
-        if not isinstance(new_key, (str, tuple)):
-            raise TypeError(
-                f"Expected new_name to be a string or a tuple of strings but found {type(new_key)}"
-            )
-        old_key = unravel_key(old_key)
-        new_key = unravel_key(new_key)
-        if old_key == new_key:
-            if old_key not in self.keys(include_nested=isinstance(old_key, tuple)):
-                raise KeyError(f"Key {old_key} not found in tensordict.")
-            return self
-        if safe and (new_key in self.keys(include_nested=True)):
-            raise KeyError(f"key {new_key} already present in TensorDict.")
-
-        if isinstance(new_key, str):
-            self._set_str(
-                new_key,
-                self.get(old_key, default=NO_DEFAULT),
-                inplace=False,
-                validated=True,
-                non_blocking=False,
-            )
-        else:
-            self._set_tuple(
-                new_key,
-                self.get(old_key, default=NO_DEFAULT),
-                inplace=False,
-                validated=True,
-                non_blocking=False,
-            )
-        new_key_tuple = (new_key,) if isinstance(new_key, str) else new_key
-        if not (
-            isinstance(old_key, tuple)
-            and old_key[: len(new_key_tuple)] == new_key_tuple
-        ):
-            # eg: td.rename_(("0", "1", "2"), ("0", "1")), then ("0", "1", "2") should not be deleted
-            self.del_(old_key)
         return self
 
     # Override: stacks into the existing leaf storages (torch.stack(out=)).
@@ -1707,6 +1675,8 @@ class TensorDict(TensorDictBase):
             self._is_memmap = True
             self._is_shared = False  # since they are mutually exclusive
             self._device = torch.device("cpu")
+            # The leaves leave the consolidated storage
+            self._mark_consolidated_stale()
         else:
             dest._is_memmap = True
             dest._is_shared = False  # since they are mutually exclusive
@@ -1746,6 +1716,9 @@ class TensorDict(TensorDictBase):
                     )
                 continue
             else:
+                # Check on the calling thread: memmap() does not re-raise
+                # errors from executor jobs.
+                _raise_if_jagged(value, key)
                 if executor is None:
                     _populate_memmap(
                         dest=dest,
@@ -2252,19 +2225,34 @@ class TensorDict(TensorDictBase):
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=NO_DEFAULT
     ) -> Self:
         if not recurse:
+            if names is NO_DEFAULT:
+                names = self._maybe_names()
+                if names is not None and batch_size is not None:
+                    # as the batch_size setter: keep the leading names, pad with None
+                    names = (names + [None] * len(batch_size))[: len(batch_size)]
+                    if all(name is None for name in names):
+                        names = None
             return self._new_unsafe(
                 device=self._device if device is NO_DEFAULT else device,
                 batch_size=(
                     self._batch_size if batch_size is None else torch.Size(batch_size)
                 ),
                 source={},
-                names=(
-                    (self.names if self._has_names() else None)
-                    if names is NO_DEFAULT
-                    else names
-                ),
+                names=names,
             )
-        return super().empty(recurse=recurse)
+        # names=None keeps the names, as in TensorDictBase.empty: lazy stacks
+        # pass names=None to their members when no names are given.
+        if names is NO_DEFAULT:
+            names = None
+        if batch_size is None and device is NO_DEFAULT and names is None:
+            return super().empty(recurse=recurse)
+        # super().empty() reuses the entries of self that hold no tensor
+        # (non-tensor data, sub-tensordicts without leaves). Start from a
+        # shallow copy so that the new batch size, device and names do not
+        # reach self.
+        return super(TensorDict, self.copy()).empty(
+            recurse=recurse, batch_size=batch_size, device=device, names=names
+        )
 
     # Override: dense fast path that shares the leaves and supports inplace.
     def _select(
@@ -2436,6 +2424,9 @@ class TensorDict(TensorDictBase):
             return sorted(self._tensordict.items(), key=keyfunc)
         elif include_nested and leaves_only and not sort:
             is_leaf = _default_is_leaf if is_leaf is None else is_leaf
+            # is_leaf only filters: the entries of a tensor collection that it
+            # accepts are listed too
+            accepts_nodes = is_leaf not in _IS_LEAF_WITHOUT_NODES
             result = []
 
             def fast_iter():
@@ -2443,30 +2434,38 @@ class TensorDict(TensorDictBase):
                     # We could easily make this faster, here we're iterating twice over the keys,
                     #  but we could iterate just once.
                     #  Ideally we should make a "dirty" list of items then call unravel_key on all of them.
-                    if not is_leaf(type(val)):
+                    if is_leaf(type(val)):
+                        result.append((key, val))
+                        # Recurse as TensorDictBase.items does: not into
+                        # non-tensor or pass-through values.
+                        if not (
+                            accepts_nodes
+                            and _is_tensor_collection(type(val))
+                            and not is_non_tensor(val)
+                            and not _pass_through(val)
+                        ):
+                            continue
+                    elif (
                         # Skip the values without entries, such as the tensors in
                         # non_tensor_items. The cheap checks come first: a TensorDict
                         # has entries, and the default is_leaf and
                         # _NESTED_TENSORS_AS_LISTS only reject tensor collections.
-                        if (
-                            type(val) is not TensorDict
-                            and is_leaf is not _default_is_leaf
-                            and is_leaf is not _NESTED_TENSORS_AS_LISTS
-                            and not _is_tensor_collection(type(val))
-                        ):
-                            continue
-                        for _key, _val in val.items(
-                            include_nested=include_nested,
-                            leaves_only=leaves_only,
-                            is_leaf=is_leaf,
-                        ):
-                            if isinstance(_key, str):
-                                _key = (key, _key)
-                            else:
-                                _key = (key, *_key)
-                            result.append((_key, _val))
-                    else:
-                        result.append((key, val))
+                        type(val) is not TensorDict
+                        and is_leaf is not _default_is_leaf
+                        and is_leaf is not _NESTED_TENSORS_AS_LISTS
+                        and not _is_tensor_collection(type(val))
+                    ):
+                        continue
+                    for _key, _val in val.items(
+                        include_nested=include_nested,
+                        leaves_only=leaves_only,
+                        is_leaf=is_leaf,
+                    ):
+                        if isinstance(_key, str):
+                            _key = (key, _key)
+                        else:
+                            _key = (key, *_key)
+                        result.append((_key, _val))
                 return result
 
             return fast_iter()
@@ -2505,7 +2504,7 @@ class TensorDict(TensorDictBase):
             )
 
 
-class _SubTensorDict(TensorDictBase):
+class _SubTensorDict(_NoShapeOps, TensorDictBase):
     """A TensorDict that only sees an index of the stored tensors."""
 
     _lazy = True
@@ -3161,6 +3160,7 @@ class _SubTensorDict(TensorDictBase):
     def is_memmap(self) -> bool:
         return self._source.is_memmap()
 
+    # Override: the source checks its lock and the keys, and renames.
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> _SubTensorDict:
@@ -3287,40 +3287,6 @@ class _SubTensorDict(TensorDictBase):
             index,
         )
 
-    def make_memmap(
-        self,
-        key: NestedKey,
-        shape: torch.Size | torch.Tensor,
-        *,
-        dtype: torch.dtype | None = None,
-        robust_key: bool | None = True,
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't currently allowed for _SubTensorDict."
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
-    def make_memmap_from_storage(
-        self,
-        key: NestedKey,
-        storage: torch.UntypedStorage,
-        shape: torch.Size | torch.Tensor,
-        *,
-        dtype: torch.dtype | None = None,
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't currently allowed for _SubTensorDict."
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
-    def make_memmap_from_tensor(
-        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't currently allowed for _SubTensorDict."
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
     # Override: a view over another tensordict cannot be shared.
     def share_memory_(self) -> Self:
         raise RuntimeError(
@@ -3396,37 +3362,6 @@ class _SubTensorDict(TensorDictBase):
             keepdim=keepdim,
             tuple_ok=tuple_ok,
             **kwargs,
-        )
-
-    # TODO: check these implementations
-
-    def _view(self, *args, **kwargs):
-        raise RuntimeError(
-            "Cannot call `view` on a sub-tensordict. Call `reshape` instead."
-        )
-
-    def _transpose(self, dim0, dim1):
-        raise RuntimeError(
-            "Cannot call `transpose` on a sub-tensordict. Make it dense before calling this method by calling `to_tensordict`."
-        )
-
-    def _permute(
-        self,
-        *args,
-        **kwargs,
-    ):
-        raise RuntimeError(
-            "Cannot call `permute` on a sub-tensordict. Make it dense before calling this method by calling `to_tensordict`."
-        )
-
-    def _squeeze(self, dim=None):
-        raise RuntimeError(
-            "Cannot call `squeeze` on a sub-tensordict. Make it dense before calling this method by calling `to_tensordict`."
-        )
-
-    def _unsqueeze(self, dim: int):
-        raise RuntimeError(
-            "Cannot call `unsqueeze` on a sub-tensordict. Make it dense before calling this method by calling `to_tensordict`."
         )
 
     _add_batch_dim = TensorDict._add_batch_dim

@@ -10,6 +10,7 @@ import importlib.util
 import math
 import operator
 import os
+import pickle
 import platform
 import sys
 import warnings
@@ -19,6 +20,7 @@ import numpy as np
 import pytest
 import torch
 from tensordict import (
+    _utils_key_json,
     capture_non_tensor_stack,
     lazy_stack,
     LazyStackedTensorDict,
@@ -67,6 +69,7 @@ except ImportError:
     _has_h5py = False
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
+_has_orjson = importlib.util.find_spec("orjson", None) is not None
 
 PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
 
@@ -363,6 +366,27 @@ class TestNonTensorData:
         with pytest.raises(RuntimeError, match="invalid for input of size 6"):
             grid.reshape(4, 2)
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize(
+        "shape",
+        [(1, -1), (1, 0), (2, 0), (0, 1), (3, 0, 1), (2, 3, 0), (1, 0, 3), (-1,)],
+    )
+    def test_reshape_non_tensor_stack_zero_size(self, shape, stack_dim):
+        # A stack with no entries takes the shape torch gives, and tolist()
+        # nests like torch's tolist()
+        stack = NonTensorStack(
+            *[NonTensorData("a", batch_size=[0]) for _ in range(3)],
+            stack_dim=stack_dim,
+        )
+        expected = torch.zeros(stack.batch_size).reshape(shape)
+        result = stack.reshape(shape)
+        assert isinstance(result, NonTensorStack)
+        assert result.batch_size == expected.shape
+        assert result.tolist() == expected.tolist()
+        assert result.device == stack.device
+        assert not result.is_locked
+        assert stack.lock_().reshape(shape).is_locked
+
     def test_comparison(self, non_tensor_data):
         non_tensor_data = non_tensor_data.exclude(("nested", "str"))
         assert (non_tensor_data | non_tensor_data).get_non_tensor(("nested", "bool"))
@@ -619,6 +643,26 @@ class TestNonTensorData:
         assert stack.expand(4, -1, -1).tolist() == [[[0] * 3, [1] * 3]] * 4
         assert stack.broadcast_to((4, -1, 3)).shape == (4, 2, 3)
 
+    def test_expand_rejected_shape_warns(self):
+        # The shapes that torch.Tensor.expand rejects warn, and give the same
+        # result as before, until they raise in 0.17 (#2175)
+        d = NonTensorData(0, batch_size=(1, 3))
+        for shape, batch_size in [((2, 4), (4, 2, 3)), ((3,), (1, 3))]:
+            with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+                assert d.expand(*shape).batch_size == batch_size
+        for shape in [(5, 3), (2, 1, 3), (-1, 3), (1, 3), (2, 4, 3)]:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                result = d.expand(*shape)
+            assert result.batch_size == torch.zeros(1, 3).expand(shape).shape
+            assert result.data == 0
+        stack = NonTensorStack(
+            *[NonTensorStack(*[NonTensorData(0) for _ in range(5)]) for _ in range(3)]
+        )
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            stack[1] = NonTensorData(1, batch_size=(3,))
+        assert stack.tolist() == [[0] * 5, [1] * 5, [0] * 5]
+
     @pytest.mark.parametrize(
         "in_out", [(None, None), (0, -1), (None, 0), (0, None), (0, 0)]
     )
@@ -819,6 +863,69 @@ class TestNonTensorData:
             == "another string!"
         )
 
+    @pytest.mark.parametrize(
+        "write,key,expected",
+        [
+            (lambda td: td.__setitem__("a", td["a"]), "a", True),
+            (lambda td: td.set("a", 1), "a", 1),
+            (lambda td: td.update({"a": 1.5}), "a", 1.5),
+            (lambda td: td.set(("nested", "a"), False), ("nested", "a"), False),
+        ],
+        ids=["setitem", "set", "update", "nested"],
+    )
+    def test_set_scalar_over_non_tensor_warns(self, write, key, expected):
+        # A Python scalar written over a NonTensorData entry is a 0-d tensor
+        # today, and stays NonTensorData in 0.17 (gh-1199)
+        td = TensorDict(a=NonTensorData(True), nested=TensorDict(a=NonTensorData(True)))
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17") as w:
+            write(td)
+        assert w[0].filename == __file__
+        value = td.get(key)
+        assert type(value) is torch.Tensor
+        assert value.ndim == 0
+        assert value == torch.tensor(expected)
+
+    @pytest.mark.parametrize(
+        "write",
+        [
+            lambda td: td.set("a", "text"),
+            lambda td: td.set("a", torch.tensor(1)),
+            lambda td: td.set("a", NonTensorData(1)),
+            lambda td: td.set("b", 1),
+            lambda td: td.set("c", 1),
+            lambda td: td.set("s", 1),
+            lambda td: td.update(TensorDict(a=1)),
+        ],
+        ids=["str", "tensor", "non-tensor", "tensor-entry", "new", "stack", "td"],
+    )
+    def test_set_over_non_tensor_no_warning(self, write):
+        td = TensorDict(
+            a=NonTensorData(True), b=torch.zeros(()), s=NonTensorStack("x", "y")
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            write(td)
+
+    @pytest.mark.parametrize(
+        "write,batch_size",
+        [
+            (lambda td: td.set("a", 1), [2]),
+            (lambda td: td.set_("a", 1), []),
+            (lambda td: td.update_({"a": 1}), []),
+            (lambda td: td.lock_().set("a", 1), []),
+        ],
+        ids=["batched", "set_", "update_", "locked"],
+    )
+    def test_set_scalar_over_non_tensor_raises_no_warning(self, write, batch_size):
+        # These writes raise today: they do not warn
+        td = TensorDict(
+            a=NonTensorData(True, batch_size=batch_size), batch_size=batch_size
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with pytest.raises((RuntimeError, ValueError)):
+                write(td)
+
     @pytest.mark.parametrize("stacked", [False, True])
     @pytest.mark.parametrize("array", [np.array, torch.tensor], ids=["numpy", "torch"])
     def test_set_at_array_data(self, array, stacked):
@@ -852,6 +959,52 @@ class TestNonTensorData:
         td = TensorDict(a="s0", batch_size=batch_size)
         td[()] = TensorDict(a="s1", batch_size=batch_size)
         assert td.get("a").tolist() == expected
+
+    @pytest.mark.parametrize(
+        "value", [3, 2.5, True, np.int64(3), np.float32(2.5)], ids=type
+    )
+    @pytest.mark.parametrize(
+        "index", [1, slice(0, 2), torch.tensor([0, 2])], ids=["int", "slice", "tensor"]
+    )
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    def test_lazy_set_at_scalar(self, value, index, device):
+        # A scalar written into a non-tensor entry of a lazy stack gives what a
+        # dense tensordict gives. Each member writes it at the index (), which
+        # used to raise AttributeError: stack_dim.
+        def make():
+            return TensorDict(
+                a=NonTensorData("s0", batch_size=[3]),
+                b=torch.zeros(3),
+                batch_size=[3],
+                device=device,
+            )
+
+        dense = make()
+        dense.set_at_("a", value, index)
+        lazy = lazy_stack(list(make().unbind(0)))
+        lazy.set_at_("a", value, index)
+        expected = dense.get("a").tolist()
+        result = lazy.get("a").tolist()
+        assert [type(x) for x in result] == [type(x) for x in expected]
+        for x, y in zip(result, expected):
+            if isinstance(y, torch.Tensor):
+                assert x.dtype == y.dtype
+                assert x == y
+            else:
+                assert x == y == "s0"
+        assert lazy["b"].tolist() == [0.0, 0.0, 0.0]
+        # each member keeps the device of its entries
+        for member in lazy.tensordicts:
+            assert member.get("a").device == member.device
+        assert lazy.to_tensordict().get("a").tolist() == result
+
+    def test_set_at_scalar_no_batch_dims(self):
+        # A member of a lazy stack writes a scalar into its non-tensor entry
+        # at (), which selects the whole entry
+        td = TensorDict(a=NonTensorData("s0"))
+        td.set_at_("a", 3, ())
+        assert type(td.get("a")) is NonTensorData
+        assert td.get("a").data == torch.tensor(3)
 
     @pytest.mark.parametrize("cls", [NonTensorData, MetaData])
     @pytest.mark.parametrize("locked", [False, True])
@@ -918,6 +1071,61 @@ class TestNonTensorData:
             assert t.batch_size == (2, 1)
             s[:, i] = t
             assert s.tolist() == ["2", "3"]
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_setitem_into_members(self, stack_dim, tmpdir):
+        # A write that changes part of a NonTensorData member, along a dim
+        # other than the stack dim, turns the member into a stack.
+        def make(value="s0"):
+            n = 2 if stack_dim == 0 else 3
+            return NonTensorStack(
+                *[NonTensorData(value, batch_size=[5 - n]) for _ in range(n)],
+                stack_dim=stack_dim,
+            )
+
+        s = make()
+        assert s.batch_size == (2, 3)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            s[1] = NonTensorData("x", batch_size=[3])
+        assert s.tolist() == [["s0"] * 3, ["x"] * 3]
+        s = make()
+        s[1, 0] = NonTensorData("x")
+        assert s.tolist() == [["s0"] * 3, ["x", "s0", "s0"]]
+        s = make()
+        s[0, 1:] = NonTensorStack("a", "b")
+        assert s.tolist() == [["s0", "a", "b"], ["s0"] * 3]
+        # an equal value leaves the members as they are
+        s = make()
+        s[1, 0] = NonTensorData("s0")
+        assert all(type(td) is NonTensorData for td in s.tensordicts)
+        assert s.tolist() == [["s0"] * 3] * 2
+        s = make().lock_()
+        with pytest.raises(RuntimeError, match="Cannot modify locked"):
+            s[1, 0] = NonTensorData("x")
+        assert s.tolist() == [["s0"] * 3] * 2
+        # a memmap stack writes the value and saves it
+        s = make().memmap_(tmpdir)
+        s[1, 0] = NonTensorData("x")
+        assert s.tolist() == [["s0"] * 3, ["x", "s0", "s0"]]
+        assert TensorDict.load_memmap(tmpdir).tolist() == s.tolist()
+        # a locked stack takes a value it cannot compare, as before
+        s = make(np.zeros(2)).lock_()
+        with pytest.warns(UserWarning, match="may or may not be equal"):
+            s[1, 0] = NonTensorData(np.zeros(2))
+
+    def test_setitem_other_value_raises(self):
+        # One NonTensorData holds one value: it cannot take another value at
+        # an index
+        data = NonTensorData("s0", batch_size=[3])
+        with pytest.raises(ValueError, match="one value for all its elements"):
+            data[1] = NonTensorData("x")
+        with pytest.raises(ValueError, match="one value for all its elements"):
+            data[1:] = NonTensorStack("s0", "x")
+        assert data.tolist() == ["s0"] * 3
+        data[1] = NonTensorData("s0")
+        data[1:] = NonTensorStack("s0", "s0")
+        assert data.tolist() == ["s0"] * 3
 
     def test_stack(self, non_tensor_data):
         assert (
@@ -1023,6 +1231,67 @@ class TestNonTensorData:
             {"a": torch.zeros(10, dtype=torch.long), "b": "another string!"}, [10]
         )
         assert data.get("b").tolist() == [["another string!"] * 10]
+
+    @pytest.mark.parametrize("consolidated", [False, True])
+    @pytest.mark.parametrize(
+        "write", ["set_", "update_", "update_keys", "copy_", "copy_select"]
+    )
+    def test_locked_inplace_write(self, consolidated, write):
+        # In-place writes of non-tensor entries work on a locked tensordict, as
+        # for tensor entries, and a pickle of a consolidated one sees them (#2288)
+        td = TensorDict(
+            x=torch.zeros(2),
+            s=NonTensorData("hello"),
+            sub=TensorDict(t=NonTensorStack("a", "b"), batch_size=[2]),
+            batch_size=[2],
+        ).lock_()
+        if consolidated:
+            td = td.consolidate(metadata=True)
+        source = TensorDict(
+            x=torch.ones(2),
+            s=NonTensorData("world"),
+            sub=TensorDict(t=NonTensorStack("c", "d"), batch_size=[2]),
+            batch_size=[2],
+        )
+        if write == "set_":
+            td.set_("s", "world")
+            td.set_(("sub", "t"), NonTensorStack("c", "d"))
+        elif write == "update_":
+            td.update_(source)
+        elif write == "update_keys":
+            td.update_(source, keys_to_update=["s", ("sub", "t")])
+        elif write == "copy_":
+            td.copy_(source)
+        else:
+            td.copy_(source.select("s", ("sub", "t")))
+        assert td.is_locked
+        assert td["s"] == "world"
+        assert td["sub", "t"] == ["c", "d"]
+        td_rt = pickle.loads(pickle.dumps(td))
+        assert td_rt["s"] == "world"
+        assert td_rt["sub", "t"] == ["c", "d"]
+        # The consolidated metadata holds the old values
+        assert not td.is_consolidated()
+
+    @pytest.mark.parametrize("mode", ["shared", "memmap", "memmap_shared"])
+    @pytest.mark.parametrize("stack", [False, True])
+    @pytest.mark.parametrize("write", ["update_", "copy_"])
+    def test_shared_inplace_write_skips_non_tensor(self, mode, stack, write):
+        # update_ and copy_ write the tensor leaves of a shared or memmapped
+        # tensordict and skip its non-tensor leaves, which most types cannot
+        # update in place
+        def make(x):
+            s = NonTensorStack(None, None) if stack else NonTensorData(None)
+            return TensorDict(x=torch.full((2,), x), s=s, batch_size=[2])
+
+        td = make(0.0)
+        if mode == "shared":
+            td.share_memory_()
+        else:
+            td.memmap_(share_non_tensor=mode == "memmap_shared")
+        getattr(td, write)(make(1.0))
+        assert (td["x"] == 1).all()
+        assert td.get("s").tolist() == [None, None]
 
     def test_ignore_lock(self):
         td = TensorDict({"a": {"b": "1"}}, batch_size=[10])
@@ -1282,6 +1551,28 @@ class TestNonTensorData:
         loaded = TensorDict.load_memmap(tmp_path, allow_pickle=True)
         assert loaded.tolist() == [{1, 2}, {3}]
 
+    @pytest.mark.parametrize(
+        "backend",
+        [
+            "json",
+            pytest.param(
+                "orjson",
+                marks=pytest.mark.skipif(not _has_orjson, reason="orjson not found"),
+            ),
+        ],
+    )
+    def test_memmap_int_outside_64_bit(self, tmp_path, backend, monkeypatch):
+        # orjson only writes ints that fit in 64 bits
+        monkeypatch.setattr(_utils_key_json, "_JSON_BACKEND", backend)
+        td = TensorDict(n=NonTensorData(2**64), m=NonTensorData(-(2**63) - 1))
+        td.memmap_(tmp_path / "td")
+        loaded = TensorDict.load_memmap(tmp_path / "td", allow_pickle=False)
+        assert loaded["n"] == 2**64
+        assert loaded["m"] == -(2**63) - 1
+        NonTensorStack(2**64, 1).memmap(tmp_path / "stack")
+        loaded = TensorDict.load_memmap(tmp_path / "stack", allow_pickle=False)
+        assert loaded.tolist() == [2**64, 1]
+
     def test_load_memmap_refreshes_non_tensor(self, tmp_path):
         def make(version):
             return TensorDict(
@@ -1526,6 +1817,45 @@ class TestNonTensorData:
             assert type(td["val"]) is type(val1)
             assert td["val"] == val1
 
+    def test_shared_copy(self):
+        # A shallow copy of a shared tensordict reads the values, not the
+        # shared wrappers, and keeps sharing them like the tensors
+        td = TensorDict(
+            a=torch.zeros(3),
+            s="hello",
+            n=NonTensorData(3.5, batch_size=[3]),
+            sub=TensorDict(s="x", batch_size=[3]),
+            batch_size=[3],
+        ).share_memory_()
+        for copy in (td.copy(), td.clone(recurse=False)):
+            assert copy["s"] == "hello"
+            assert copy["n"] == 3.5
+            assert copy["sub", "s"] == "x"
+            assert copy.get("s").is_shared()
+        copy = td.copy()
+        # update_ with tensor entries in the source skips the non-tensor
+        # leaves of a shared tensordict (#2487), so the str and the tensor are
+        # written in two calls
+        copy.update_({"s": "bye"})
+        copy.update_({"a": torch.ones(3)})
+        assert td["s"] == "bye"
+        assert (td["a"] == 1).all()
+
+    def test_memmap_share_non_tensor_copy(self, tmpdir):
+        # A shallow copy of a tensordict memory-mapped with share_non_tensor
+        # reads the values, not the shared wrappers
+        td = TensorDict(
+            a=torch.zeros(3),
+            s="hello",
+            n=NonTensorData(3.5, batch_size=[3]),
+            sub=TensorDict(s="x", batch_size=[3]),
+            batch_size=[3],
+        ).memmap_(tmpdir, share_non_tensor=True)
+        for copy in (td.copy(), td.clone(recurse=False)):
+            assert copy["s"] == "hello"
+            assert copy["n"] == 3.5
+            assert copy["sub", "s"] == "x"
+
     @pytest.mark.parametrize("strategy", ["shared", "memmap"])
     @pytest.mark.parametrize(
         "val1,expected",
@@ -1544,8 +1874,39 @@ class TestNonTensorData:
             td.share_memory_()
         else:
             td.memmap_(tmpdir, share_non_tensor=True)
-        td.update_(TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []))
+        with pytest.warns(UserWarning, match="holds at most 100 bytes"):
+            td.update_(TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []))
         assert td["val"] == expected
+
+    @pytest.mark.parametrize("strategy", ["shared", "memmap"])
+    def test_shared_value_lost_warns(self, strategy, tmpdir):
+        # Writes that do not fit the shared value warn instead of losing data
+        # silently (#2163); writes that fit do not warn.
+        td = TensorDict(s=NonTensorData("abc"), i=NonTensorData(3))
+        if strategy == "shared":
+            td.share_memory_()
+        else:
+            td.memmap_(tmpdir, share_non_tensor=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            td.update_(
+                TensorDict(s=NonTensorData("y" * 100), i=NonTensorData(2**63 - 1))
+            )
+            td.update_(TensorDict(i=NonTensorData(-(2**63))))
+        with pytest.warns(UserWarning, match="the new 120-byte value was cut"):
+            td.update_(TensorDict(s=NonTensorData("y" * 120)))
+        assert td["s"] == "y" * 100
+        with pytest.warns(UserWarning, match="it is stored as 0"):
+            td.update_(TensorDict(i=NonTensorData(2**64)))
+        assert td["i"] == 0
+        with pytest.warns(UserWarning, match="stored as 9223372036854775807"):
+            td.set_("i", NonTensorData(-(2**63) - 1))
+        assert td["i"] == 2**63 - 1
+        if strategy == "shared":
+            td = TensorDict(i=NonTensorData(2**64))
+            with pytest.warns(UserWarning, match="it is stored as 0"):
+                td.share_memory_()
+            assert td["i"] == 0
 
     def _update_stack(self, td):
         td[1::2] = TensorDict({"val": NonTensorData(data=3, batch_size=[5])}, [5])
@@ -1710,8 +2071,7 @@ class TestNonTensorData:
         assert result.tolist() == [["a"], ["a"]]
 
     def test_torch_where_non_tensor_data(self):
-        # NonTensorData.where does not select elementwise, so torch.where
-        # is not passed through to it
+        # torch.where is not passed through to NonTensorData.where
         condition = torch.tensor([True, False])
         with pytest.raises(TypeError, match="Multiple dispatch failed"):
             torch.where(
@@ -1719,6 +2079,52 @@ class TestNonTensorData:
                 NonTensorData("a", batch_size=(2,)),
                 NonTensorData("b", batch_size=(2,)),
             )
+
+    def test_where_non_tensor_data(self):
+        # The condition picks the value of each element (#2071)
+        condition = torch.tensor([True, False, True, False])
+        a = NonTensorData("a", batch_size=(4,))
+        b = NonTensorData("b", batch_size=(4,))
+        result = a.where(condition, b)
+        assert isinstance(result, NonTensorStack)
+        assert result.tolist() == ["a", "b", "a", "b"]
+        assert a.where(~condition, b).tolist() == ["b", "a", "b", "a"]
+        result = a.where(condition, NonTensorStack("w", "x", "y", "z"))
+        assert result.tolist() == ["a", "x", "a", "z"]
+        assert a.where(condition, NonTensorData("b")).tolist() == ["a", "b"] * 2
+        result = NonTensorData("a", batch_size=(4, 2)).where(
+            condition, NonTensorData("b", batch_size=(4, 2))
+        )
+        assert result.tolist() == [["a"] * 2, ["b"] * 2] * 2
+        # A uniform result stays a NonTensorData
+        for cond, other, value in [
+            (torch.ones(4, dtype=torch.bool), b, "a"),
+            (torch.zeros(4, dtype=torch.bool), b, "b"),
+            (condition, a.clone(), "a"),
+            (condition, NonTensorStack("x", "a", "y", "a"), "a"),
+        ]:
+            result = a.where(cond, other)
+            assert isinstance(result, NonTensorData)
+            assert result.batch_size == (4,)
+            assert result.data == value
+        assert NonTensorData("a").where(torch.tensor(False), b[0]).data == "b"
+        # out receives the result if it can hold it
+        out = NonTensorData("c", batch_size=(4,))
+        assert a.where(torch.zeros(4, dtype=torch.bool), b, out=out) is out
+        assert out.data == "b"
+        out = NonTensorStack("1", "2", "3", "4")
+        assert a.where(condition, b, out=out) is out
+        assert out.tolist() == ["a", "b", "a", "b"]
+        # through TensorDict.where, also with out=, as TorchRL's partial reset
+        td = TensorDict(x=torch.zeros(4), s=a, batch_size=(4,))
+        other = TensorDict(x=torch.ones(4), s=b, batch_size=(4,))
+        assert td.where(condition, other).get("s").tolist() == ["a", "b"] * 2
+        td.where(condition, other, out=td, pad=0, update_batch_size=True)
+        assert td["x"].tolist() == [0.0, 1.0, 0.0, 1.0]
+        assert td.get("s").tolist() == ["a", "b", "a", "b"]
+        # an other that does not expand to the batch size raises
+        with pytest.raises(ValueError):
+            a.where(condition, NonTensorData("b", batch_size=(3, 4)))
 
     def test_linked_list_str(self):
         td = TensorDict(a=NonTensorStack("foo", "bar"), batch_size=(2,))
@@ -2084,6 +2490,59 @@ class TestUnbatchedTensor:
         assert td.unflatten_keys(separator="_")["c", "d"] is td["c_d"]
         assert td.unflatten_keys(separator="_").flatten_keys()["c.d"] is td["c_d"]
 
+    @pytest.mark.parametrize(
+        "op",
+        [
+            lambda td: td.exp(),
+            lambda td: td.abs(),
+            lambda td: td.sqrt(),
+            lambda td: td.sigmoid(),
+            lambda td: td.reciprocal(),
+            lambda td: td.floor(),
+            lambda td: td - td,
+            lambda td: 1 - td,
+            lambda td: td / 2,
+            lambda td: td**2,
+            lambda td: td.lerp(td, 0.5),
+            lambda td: td.addcmul(td, td),
+            lambda td: td.addcdiv(td, td),
+        ],
+    )
+    def test_unbatched_pointwise_keeps_batched_leaves(self, op):
+        # Regression test for #2352: the _foreach ops wrapped every leaf in an
+        # UnbatchedTensor and gave each unbatched leaf the same batch size.
+        td = TensorDict(
+            a=torch.ones(3, 2),
+            u=UnbatchedTensor(torch.ones(5)),
+            n=TensorDict(v=UnbatchedTensor(torch.ones(7)), batch_size=[3, 2]),
+            batch_size=[3],
+        )
+        out = op(td)
+        assert type(out.get("a")) is torch.Tensor
+        assert out[0]["a"].shape == (2,)
+        assert isinstance(out.get("u"), UnbatchedTensor)
+        assert out.get("u").batch_size == (3,)
+        assert isinstance(out.get(("n", "v")), UnbatchedTensor)
+        assert out.get(("n", "v")).batch_size == (3, 2)
+
+    def test_unbatched_pointwise_norm(self):
+        td = TensorDict(
+            a=torch.ones(3, 2), u=UnbatchedTensor(torch.ones(5)), batch_size=[3]
+        )
+        out = td.norm()
+        assert type(out.get("a")) is torch.Tensor
+        assert out["a"].shape == ()
+
+    @pytest.mark.parametrize("op", [operator.add, operator.sub, operator.mul])
+    def test_unbatched_pointwise_other_unbatched(self, op):
+        td = TensorDict(a=torch.ones(3, 2), u=torch.ones(3), batch_size=[3])
+        other = TensorDict(
+            a=torch.ones(3, 2), u=UnbatchedTensor(torch.ones(3)), batch_size=[3]
+        )
+        out = op(td, other)
+        assert type(out.get("a")) is torch.Tensor
+        assert out[0]["a"].shape == (2,)
+
     def test_unbatched_view_base(self):
         view = UnbatchedTensor(torch.arange(6.0)).clone().reshape(2, 3)
         base = view._base
@@ -2121,6 +2580,55 @@ class TestUnbatchedTensor:
         assert isinstance(u, UnbatchedTensor)
         assert u.data_ptr() == data.data_ptr()
         assert (u == 7).all()
+
+    @pytest.mark.parametrize(
+        "index",
+        [
+            0,
+            slice(0, 2),
+            (slice(None), slice(0, 2)),
+            ...,
+            torch.tensor([0, 2]),
+            torch.tensor([True, False, True, False]),
+        ],
+    )
+    def test_unbatched_setitem_partial_index(self, index):
+        # #2251: the whole batch shares the payload, so td[index] = value
+        # writes it whole, as td[:] = value does
+        data = torch.zeros(5)
+        td = TensorDict(
+            a=torch.zeros(4, 3),
+            u=UnbatchedTensor(data),
+            nested=TensorDict(u=UnbatchedTensor(torch.zeros(2)), batch_size=[4, 3]),
+            batch_size=[4, 3],
+        )
+        value = td[index].clone()
+        value["a"] += 1
+        value["u"] += 7
+        value["nested", "u"] += 3
+        td[index] = value
+        assert (td["a"][index] == 1).all()
+        u = td.get("u")
+        assert isinstance(u, UnbatchedTensor)
+        assert u.data_ptr() == data.data_ptr()
+        assert (u == 7).all()
+        assert (td["nested", "u"] == 3).all()
+
+    def test_unbatched_setitem_other_shape(self):
+        # A payload of another shape is indexed by the batch index, as before
+        td = TensorDict(
+            a=torch.zeros(3, 4), u=UnbatchedTensor(torch.zeros(3, 5)), batch_size=[3, 4]
+        )
+        td[0:2] = TensorDict(
+            a=torch.ones(2, 4), u=UnbatchedTensor(torch.ones(2, 5)), batch_size=[2, 4]
+        )
+        assert (td.get("u")[:2] == 1).all()
+        assert (td.get("u")[2] == 0).all()
+        td[2] = TensorDict(
+            a=torch.ones(4), u=UnbatchedTensor(torch.full((5,), 2.0)), batch_size=[4]
+        )
+        assert (td.get("u")[:2] == 1).all()
+        assert (td.get("u")[2] == 2).all()
 
     @pytest.mark.parametrize("nested", [False, True])
     @pytest.mark.parametrize(

@@ -2,12 +2,17 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import os
+import sys
+import warnings
+
 # defaultdict stays importable from here for the deprecated
 # tensordict.defaultdict alias of tensordict/__init__.py, until 0.17.
 from collections import defaultdict  # noqa: F401
 from typing import Any, Dict, List, Tuple
 
 import torch
+import torch.utils._pytree
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import _SubTensorDict, TensorDict, TensorDictBase
 from tensordict.base import is_tensor_collection
@@ -32,6 +37,12 @@ PYTREE_REGISTERED_TDS = (
     PersistentTensorDict,
 )
 PYTREE_REGISTERED_LAZY_TDS = (LazyStackedTensorDict,)
+
+# The frames that _warn_non_tensor_stack_rebuilt skips to reach the user's call
+_SKIPPED_DIRS = (
+    os.path.dirname(os.path.abspath(__file__)) + os.sep,
+    os.path.dirname(os.path.abspath(torch.utils._pytree.__file__)) + os.sep,
+)
 
 
 class _PytreeBatchSize:
@@ -93,9 +104,17 @@ def _pytree_non_tensor_data(d: TensorDictBase) -> dict | tuple:
     # NonTensorData.__eq__, which returns a tensor when the entry has a batch
     # size.
     if _is_tensorclass(type(d)):
-        # A dict: the fields of a NonTensorData rebuilt by set_non_tensor are
-        # in another order than those of the original entry.
-        return dict(d.non_tensor_items())
+        # The fields held outside the TensorDict of the tensorclass. A dict:
+        # the fields of a NonTensorData rebuilt by set_non_tensor are in
+        # another order than those of the original entry.
+        non_tensor = dict(d._non_tensordict)
+        if not type(d)._is_non_tensor:
+            # tensorclass imports this module
+            from tensordict.tensorclass import _none_fields
+
+            # A None field is a missing key
+            non_tensor.update(dict.fromkeys(_none_fields(d)))
+        return non_tensor
     items = []
     for key, value in d.non_tensor_items():
         if isinstance(value, LazyStackedTensorDict):
@@ -317,21 +336,56 @@ def _tensordict_constructor(
     )
     for key, item in non_tensor_items:
         if isinstance(item, _PytreeNonTensorStack):
+            leaf = result._get_str(key, None)
             try:
                 result.set_non_tensor(key, item.stack)
             except AttributeError:
                 # The values of the stack are not all equal, so it has no
                 # single value to set: keep the leaf that the stack was
                 # flattened to, already in result.
-                leaf = result._get_str(key, None)
                 if not (
                     is_non_tensor(leaf)
                     and leaf.batch_size[: result.batch_dims] == result.batch_size
                 ):
                     raise
+                continue
+            if (
+                is_non_tensor(leaf)
+                and leaf.batch_size[: result.batch_dims] == result.batch_size
+            ):
+                _warn_non_tensor_stack_rebuilt(key, leaf, result._get_str(key, None))
             continue
         result.set_non_tensor(key, item)
     return result
+
+
+def _warn_non_tensor_stack_rebuilt(key: str, leaf: Any, rebuilt: Any) -> None:
+    """Warns that ``leaf``, the value the pytree function returned for a stack of equal values, was replaced by ``rebuilt``."""
+    if (
+        not isinstance(leaf, LazyStackedTensorDict)
+        and leaf.batch_size == rebuilt.batch_size
+        and leaf.device == rebuilt.device
+    ):
+        # Imported here: tensordict.tensorclass imports this module.
+        from tensordict.tensorclass import _check_equal
+
+        if leaf.data is rebuilt.data or _check_equal(leaf.data, rebuilt.data):
+            return
+    # point to the first frame outside tensordict and torch.utils: the
+    # user's tree_map or tree_unflatten call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_SKIPPED_DIRS):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    warnings.warn(
+        f"The NonTensorStack at key {key!r} holds the same value in every "
+        "element, so tree_unflatten (and tree_map) rebuilds it from the input "
+        "as a NonTensorData and drops the value that the function returned "
+        "for it. Starting with TensorDict 0.17, the default will change to "
+        "keeping that value, as when the values differ: the entry then stays "
+        "a NonTensorStack.",
+        FutureWarning,
+        stacklevel=stacklevel,
+    )
 
 
 def _lazy_tensordict_constructor(
