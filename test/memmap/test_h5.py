@@ -9,8 +9,15 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import tensordict.persistent as tensordict_persistent
 import torch
-from tensordict import NonTensorData, PersistentTensorDict, TensorClass, TensorDict
+from tensordict import (
+    lazy_stack,
+    NonTensorData,
+    PersistentTensorDict,
+    TensorClass,
+    TensorDict,
+)
 from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import is_non_tensor
 from torch import multiprocessing as mp
@@ -445,6 +452,15 @@ def test_inplace_read_only_warns(tmp_path):
     assert (h5td["a"] == -1).all()
     with pytest.raises(OSError):
         h5td.zero_()
+    # masked_fill_ raises on the rows of the file too, as it did before
+    mask = torch.tensor([True, False])
+    for call in (
+        lambda: h5td[0:2].masked_fill_(mask, 0.0),
+        lambda: lazy_stack([h5td[0], h5td[1]]).masked_fill_(mask, 0.0),
+    ):
+        with pytest.raises(OSError):
+            call()
+    assert (h5td["a"] == -1).all()
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
@@ -492,6 +508,86 @@ def test_update_from_h5_reads(tmp_path, monkeypatch, keys_to_update):
     dest.update_(source, keys_to_update=keys_to_update)
     assert reads.count(source.file.filename) == expected
     assert (dest["a"] == 1).all()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_fill_zero_empty(tmp_path):
+    # fill_ and zero_ of a file with batch size [0]
+    td = TensorDict({"a": torch.ones(0, 3), "n": {"b": torch.ones(0)}}, [0])
+    h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+    assert h5td.fill_("a", 2.0) is h5td
+    assert h5td.fill_("n", 1.0) is h5td
+    assert h5td.zero_() is h5td
+    assert h5td["a"].shape == (0, 3)
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_fill_zero_masked_fill_no_read(tmp_path, monkeypatch):
+    # fill_, zero_, masked_fill_ and detach_ write to the file without reading it
+    td = TensorDict(
+        {"a": torch.ones(3, 2), "nested": {"b": torch.ones(3, 2, 4)}}, batch_size=[3]
+    )
+    h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+
+    def no_read(*args, **kwargs):
+        raise AssertionError("the file was read")
+
+    backend = type(h5td._backend)
+    with monkeypatch.context() as patch:
+        patch.setattr(backend, "read_full", no_read)
+        patch.setattr(backend, "read_at", no_read)
+        assert h5td.detach_() is h5td
+        mask = torch.tensor([True, False, True])
+        for dest in (h5td, td):
+            assert dest.fill_("a", 2.0) is dest
+            assert dest.fill_("nested", 3.0) is dest
+            assert dest.masked_fill_(mask, -1.0) is dest
+    torch.testing.assert_close(h5td.to_tensordict(), td)
+    with monkeypatch.context() as patch:
+        patch.setattr(backend, "read_full", no_read)
+        patch.setattr(backend, "read_at", no_read)
+        assert h5td.zero_() is h5td
+    h5td.close()
+    reopened = PersistentTensorDict.from_h5(tmp_path / "file.h5")
+    torch.testing.assert_close(reopened.to_tensordict(), td.zero_())
+    reopened.close()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_fill_write_blocks(tmp_path, monkeypatch):
+    # fill_ writes a dataset in blocks of rows, a 0-d dataset at once, and
+    # nothing into an empty dataset
+    monkeypatch.setattr(tensordict_persistent, "_WRITE_FULL_BLOCK_BYTES", 100)
+    td = TensorDict(
+        {
+            "a": torch.zeros(7, 3, dtype=torch.int64),
+            "big": torch.zeros(2, 40),
+            "s": 0.0,
+            "empty": torch.zeros(0, 3),
+        },
+        batch_size=[],
+    )
+    h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+    for key in td.keys():
+        assert h5td.fill_(key, 2.5) is h5td
+        td.fill_(key, 2.5)
+    torch.testing.assert_close(h5td.to_tensordict(), td)
+    assert h5td.zero_() is h5td
+    torch.testing.assert_close(h5td.to_tensordict(), td.zero_())
+    # a value that is not a scalar is broadcast into the whole dataset, as
+    # before, also when it is larger than one block
+    value = torch.arange(21).view(7, 3)
+    assert h5td.fill_("a", value) is h5td
+    assert (h5td["a"] == value).all()
+    assert h5td.fill_("a", torch.arange(3)) is h5td
+    assert (h5td["a"] == torch.arange(3)).all()
+    with pytest.raises(TypeError, match="Can't broadcast"):
+        h5td.fill_("a", torch.arange(7))
+    # the value is cast as h5py casts it: a complex value raises for a real
+    # dataset, even an empty one
+    for key in ("a", "empty"):
+        with pytest.raises(TypeError, match="complex"):
+            h5td.fill_(key, 1 + 2j)
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
