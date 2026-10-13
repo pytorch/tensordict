@@ -514,10 +514,8 @@ class _ShapeOps:
         """
         inplace = kwargs.pop("inplace", False)
         shape = _get_shape_from_args(*args, **kwargs)
-        if any(dim < 0 for dim in shape):
-            shape = _infer_size_impl(shape, self.batch_size.numel())
-            shape = torch.Size(shape)
-        if torch.Size(shape) == self.shape:
+        shape = torch.Size(_infer_size_impl(shape, self.batch_size.numel()))
+        if shape == self.shape:
             return self
         batch_dims = self.batch_dims
 

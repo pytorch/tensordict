@@ -786,8 +786,7 @@ class TensorDict(TensorDictBase):
         **kwargs,
     ) -> Self:
         shape = _get_shape_from_args(*args, **kwargs)
-        if any(dim < 0 for dim in shape):
-            shape = _infer_size_impl(shape, self.batch_size.numel())
+        shape = _infer_size_impl(shape, self.batch_size.numel())
         if torch.Size(shape) == self.shape:
             return self
         batch_dims = self.batch_dims

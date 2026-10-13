@@ -19,6 +19,7 @@ import torch
 from tensordict import (
     get_defaults_to_none,
     LazyStackedTensorDict,
+    NonTensorData,
     set_get_defaults_to_none,
     TensorDict,
 )
@@ -226,6 +227,36 @@ class TestErrorMessage:
         if lazy:
             td = LazyStackedTensorDict(*td.unbind(0))
         with pytest.raises(RuntimeError, match=re.escape(match)):
+            getattr(td, method)(*shape)
+
+    @staticmethod
+    @pytest.mark.parametrize("shape", [(5,), (2, 7)])
+    @pytest.mark.parametrize(
+        "td_type,method",
+        [
+            ("empty", "view"),
+            ("empty", "reshape"),
+            ("non_tensor", "view"),
+            ("non_tensor", "reshape"),
+            ("lazy", "reshape"),
+            ("tensor", "view"),
+            ("tensor", "reshape"),
+        ],
+    )
+    def test_view_wrong_element_count(shape, td_type, method):
+        # Without tensor leaves, nothing used to check the element count
+        if td_type == "empty":
+            td = TensorDict(batch_size=[4, 3])
+        elif td_type == "non_tensor":
+            td = TensorDict(s=NonTensorData("x", batch_size=[4, 3]), batch_size=[4, 3])
+        elif td_type == "lazy":
+            td = LazyStackedTensorDict(*[TensorDict(batch_size=[3]) for _ in range(4)])
+        else:
+            td = TensorDict(a=torch.zeros(4, 3), batch_size=[4, 3])
+        with pytest.raises(
+            RuntimeError,
+            match=re.escape(f"invalid shape {list(shape)} for a batch of 12 elements"),
+        ):
             getattr(td, method)(*shape)
 
     @staticmethod
