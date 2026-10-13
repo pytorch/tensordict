@@ -69,8 +69,8 @@ tensor.
 
 | [`InteractionType`](generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType)(value[, names, module, ...]) | The rule that a probabilistic module uses to get a value from a distribution. |
 | --- | --- |
-| [`set_interaction_type`](generated/tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type)([type]) | Sets the interaction type of all probabilistic modules inside a block of code, or inside a decorated function. |
-| [`set_composite_lp_aggregate`](generated/tensordict.nn.set_composite_lp_aggregate.html#tensordict.nn.set_composite_lp_aggregate)([mode]) | Controls whether [`CompositeDistribution`](generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution) log-probabilities and entropies will be aggregated in a single tensor. |
+| [`set_interaction_type`](generated/tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type)([type, thread_local]) | Sets the interaction type of all probabilistic modules inside a block of code, or inside a decorated function. |
+| [`set_composite_lp_aggregate`](generated/tensordict.nn.set_composite_lp_aggregate.html#tensordict.nn.set_composite_lp_aggregate)([mode, thread_local]) | Controls whether [`CompositeDistribution`](generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution) log-probabilities and entropies will be aggregated in a single tensor. |
 
 | [`composite_lp_aggregate`](generated/tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate)([nowarn]) | Returns whether a [`CompositeDistribution`](generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution) log-probabilities and entropies will be aggregated in a single tensor. |
 | --- | --- |

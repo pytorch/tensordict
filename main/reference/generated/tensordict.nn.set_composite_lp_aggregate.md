@@ -1,6 +1,6 @@
 # set_composite_lp_aggregate
 
-*class*tensordict.nn.set_composite_lp_aggregate(*mode: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*)
+*class*tensordict.nn.set_composite_lp_aggregate(*mode: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, ***, *thread_local: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
 Bases: `_DecoratorContextManager`
 
@@ -24,6 +24,15 @@ Parameters:
 **mode** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - the value that
 [`composite_lp_aggregate()`](tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate) returns inside the
 block. Defaults to `True`.
+
+Keyword Arguments:
+
+**thread_local** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the mode applies to the
+calling thread only, and blocks that other threads enter do not
+change it. Inside the block, blocks without this flag that the
+same thread enters stay in that thread too. Threads started inside
+the block see the process-wide mode. If `False`, the mode applies
+to the whole process. Defaults to `False`.
 
 Example
 

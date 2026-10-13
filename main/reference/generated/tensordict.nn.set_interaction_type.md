@@ -1,6 +1,6 @@
 # set_interaction_type
 
-*class*tensordict.nn.set_interaction_type(*type: [InteractionType](tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = InteractionType.DETERMINISTIC*)
+*class*tensordict.nn.set_interaction_type(*type: [InteractionType](tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = InteractionType.DETERMINISTIC*, ***, *thread_local: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
 Bases: `_DecoratorContextManager`
 
@@ -17,6 +17,16 @@ Parameters:
 example `InteractionType.RANDOM` or `"random"` (in any case).
 `None` makes each module use its `default_interaction_type`.
 Defaults to `InteractionType.DETERMINISTIC`.
+
+Keyword Arguments:
+
+**thread_local** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the interaction type
+applies to the calling thread only, and blocks that other threads
+enter do not change it. Inside the block, blocks without this flag
+that the same thread enters stay in that thread too. Threads
+started inside the block see the process-wide interaction type.
+If `False`, the interaction type applies to the whole process.
+Defaults to `False`.
 
 Examples
 

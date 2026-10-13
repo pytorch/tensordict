@@ -1,6 +1,6 @@
 # set_skip_existing
 
-*class*tensordict.nn.set_skip_existing(*mode: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [list](https://docs.python.org/3/builtins/stdtypes.html#list)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *in_key_attr='in_keys'*, *out_key_attr='out_keys'*)
+*class*tensordict.nn.set_skip_existing(*mode: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [list](https://docs.python.org/3/builtins/stdtypes.html#list)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *in_key_attr='in_keys'*, *out_key_attr='out_keys'*, ***, *thread_local: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
 Bases: `_DecoratorContextManager`
 
@@ -35,6 +35,15 @@ Defaults to `True`.
 in the module's method being decorated. Defaults to `in_keys`.
 - **out_key_attr** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the name of the output key list attribute
 in the module's method being decorated. Defaults to `out_keys`.
+
+Keyword Arguments:
+
+**thread_local** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the mode applies to the
+calling thread only, and blocks that other threads enter do not
+change it. Inside the block, blocks without this flag that the
+same thread enters stay in that thread too. Threads started inside
+the block see the process-wide mode. If `False`, the mode applies
+to the whole process. Defaults to `False`.
 
 Examples
 
