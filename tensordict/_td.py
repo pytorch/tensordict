@@ -1179,6 +1179,8 @@ class TensorDict(TensorDictBase):
                         break
                 else:
                     self._tensordict.update(source)
+                    if "_consolidated" in self.__dict__:
+                        self._mark_consolidated_stale()
                     return self
         return super().update(
             input_dict_or_td,
@@ -1235,6 +1237,9 @@ class TensorDict(TensorDictBase):
                 if is_non_tensor(dest) and is_tensorclass(dest):
                     _warn_scalar_over_non_tensor(key, scalar)
             self._tensordict[key] = value
+            if "_consolidated" in self.__dict__:
+                # An unpickled consolidated copy is not locked
+                self._mark_consolidated_stale()
         else:
             try:
                 dest = self._get_str(key, default=NO_DEFAULT)
@@ -1257,6 +1262,9 @@ class TensorDict(TensorDictBase):
                                 == value.data.untyped_storage().data_ptr()
                             ):
                                 raise
+                        if "_consolidated" in self.__dict__ and is_non_tensor(dest):
+                            # A non-tensor value is not in the consolidated storage
+                            self._mark_consolidated_stale()
             except KeyError as err:
                 raise err
             except Exception as err:
@@ -1527,6 +1535,8 @@ class TensorDict(TensorDictBase):
             return self
 
         del self._tensordict[key[0]]
+        if "_consolidated" in self.__dict__:
+            self._mark_consolidated_stale()
         return self
 
     # Override: stacks into the existing leaf storages (torch.stack(out=)).

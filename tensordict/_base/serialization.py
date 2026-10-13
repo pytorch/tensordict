@@ -924,9 +924,11 @@ class _Serialization:
         """Checks if a TensorDict has a consolidated storage.
 
         Returns ``False`` once :meth:`~.memmap_` moves the leaves out of the
-        consolidated storage, or once an in-place write changes a non-tensor
-        entry, as the consolidated storage and metadata no longer match the
-        content. :meth:`~.consolidate` then builds a new consolidated copy.
+        consolidated storage, once an in-place write changes a non-tensor
+        entry, or once a write replaces, adds or deletes an entry of an
+        unpickled copy, which is not locked, as the consolidated storage and
+        metadata no longer match the content. :meth:`~.consolidate` then
+        builds a new consolidated copy.
         """
         return hasattr(self, "_consolidated") and not self._consolidated.get(
             "stale", False
@@ -936,8 +938,11 @@ class _Serialization:
         """Marks the consolidated state of self and of its lock parents as stale."""
         for td in (self, *(ref() for ref in self._lock_parents_weakrefs)):
             consolidated = getattr(td, "_consolidated", None)
-            if consolidated is not None:
+            # An unpickled copy is not locked: "parent" links each level to
+            # the consolidated state of the tensordict that holds it.
+            while consolidated is not None:
                 consolidated["stale"] = True
+                consolidated = consolidated.get("parent")
 
     def memmap_(
         self,

@@ -925,6 +925,52 @@ class TestGeneric:
         assert (td_rt["a"] == 1).all()
         assert (td_rt["b", "c"] == 2).all()
 
+    @pytest.mark.parametrize(
+        "write",
+        [
+            "set",
+            "set_new",
+            "set_non_tensor",
+            "set_non_tensor_inplace",
+            "set_nested",
+            "del",
+            "update",
+        ],
+    )
+    def test_consolidated_unpickled_write_pickle(self, write):
+        # https://github.com/pytorch/tensordict/issues/2503
+        td = TensorDict(
+            x=torch.zeros(3), s="hello", n={"z": torch.zeros(3)}, batch_size=[3]
+        ).consolidate()
+        td_rt = pickle.loads(pickle.dumps(td))
+        assert not td_rt.is_locked
+        assert td_rt.is_consolidated()
+        expected = td_rt.to_tensordict()
+        if write == "set":
+            td_rt["x"] = expected["x"] = torch.ones(3)
+        elif write == "set_new":
+            td_rt["y"] = expected["y"] = torch.ones(3)
+        elif write == "set_non_tensor":
+            td_rt["s"] = expected["s"] = "bye"
+        elif write == "set_non_tensor_inplace":
+            td_rt.set_("s", "bye")
+            expected["s"] = "bye"
+        elif write == "set_nested":
+            td_rt["n", "z"] = expected["n", "z"] = torch.ones(3)
+        elif write == "del":
+            del td_rt["x"]
+            del expected["x"]
+        elif write == "update":
+            td_rt.update({"x": torch.ones(3)})
+            expected["x"] = torch.ones(3)
+        assert not td_rt.is_consolidated()
+        td_rt2 = pickle.loads(pickle.dumps(td_rt))
+        assert set(td_rt2.keys(True, True)) == set(expected.keys(True, True))
+        assert_allclose_td(td_rt2.exclude("s"), expected.exclude("s"))
+        assert td_rt2["s"] == expected["s"]
+        # A copy that is not written to stays consolidated
+        assert pickle.loads(pickle.dumps(td)).is_consolidated()
+
     def test_consolidated_locking_behavior(self):
         """Test that consolidated TensorDicts are automatically locked and unlock properly."""
         td = TensorDict(
