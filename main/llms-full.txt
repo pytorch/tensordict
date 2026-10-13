@@ -1949,8 +1949,12 @@ True
 ['cat', 'dog', 'bird']
 ```
 
-That booleans become tensors is tracked in
-[#1199](https://github.com/pytorch/tensordict/issues/1199).
+In a tensordict without batch dimensions, a number or a boolean written over
+an existing [`NonTensorData`](../reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData) entry also becomes a tensor, and
+the write emits a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning). Starting with TensorDict 0.17, the
+default will change to keeping it as [`NonTensorData`](../reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData), like
+the entry it replaces
+([#1199](https://github.com/pytorch/tensordict/issues/1199)).
 
 ### Read a non-tensor entry
 
@@ -9956,7 +9960,10 @@ TensorDictBase.amax(*dim: [int](https://docs.python.org/3/builtins/functions.htm
 
 Returns the maximum values of all elements in the input tensordict.
 
-Same as [`max()`](tensordict.TensorDictBase.max.html#tensordict.TensorDictBase.max) with `return_indices=False`.
+Same as [`max()`](tensordict.TensorDictBase.max.html#tensordict.TensorDictBase.max) with `return_indices=False`. A tuple `dim`
+reduces only its first dim. Starting with TensorDict 0.17, the default
+will change to reducing every dim of the tuple, as [`torch.amax()`](https://docs.pytorch.org/docs/stable/generated/torch.amax.html#torch.amax)
+does.
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).
@@ -9969,7 +9976,10 @@ TensorDictBase.amin(*dim: [int](https://docs.python.org/3/builtins/functions.htm
 
 Returns the minimum values of all elements in the input tensordict.
 
-Same as [`min()`](tensordict.TensorDictBase.min.html#tensordict.TensorDictBase.min) with `return_indices=False`.
+Same as [`min()`](tensordict.TensorDictBase.min.html#tensordict.TensorDictBase.min) with `return_indices=False`. A tuple `dim`
+reduces only its first dim. Starting with TensorDict 0.17, the default
+will change to reducing every dim of the tuple, as [`torch.amin()`](https://docs.pytorch.org/docs/stable/generated/torch.amin.html#torch.amin)
+does.
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).
@@ -11517,7 +11527,9 @@ Keyword Arguments:
 
 - **reduce** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the reduction will occur across all TensorDict values
 and a single reduced tensor will be returned.
-Defaults to `False`.
+Defaults to `False`. With feature dims, a negative `dim` counts from the end of
+each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+the end of the batch dims, as with `reduce=False`.
 - **return_indices** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - [`cummax()`](https://docs.pytorch.org/docs/stable/generated/torch.cummax.html#torch.cummax) returns a named tuple with values and indices
 when the `dim` argument is passed. The `TensorDict` equivalent of this is to return a named tuple
 with `values` and `indices` tensordicts of identical structure. If `False`, only the values
@@ -11598,7 +11610,9 @@ Keyword Arguments:
 
 - **reduce** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the reduction will occur across all TensorDict values
 and a single reduced tensor will be returned.
-Defaults to `False`.
+Defaults to `False`. With feature dims, a negative `dim` counts from the end of
+each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+the end of the batch dims, as with `reduce=False`.
 - **return_indices** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - [`cummin()`](https://docs.pytorch.org/docs/stable/generated/torch.cummin.html#torch.cummin) returns a named tuple with values and indices
 when the `dim` argument is passed. The `TensorDict` equivalent of this is to return a named tuple
 with `values` and `indices` tensordicts of identical structure. If `False`, only the values
@@ -16075,13 +16089,17 @@ tensordict containing the max value of all leaves (if this can be computed).
 If integer, max is called upon the dimension specified if
 and only if this dimension is compatible with the tensordict
 shape.
+A tuple reduces only its first dim; passing one is deprecated
+and will be removed in TensorDict 0.17.
 - **keepdim** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)) - whether the output tensor has dim retained or not.
 
 Keyword Arguments:
 
 - **reduce** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the reduction will occur across all TensorDict values
 and a single reduced tensor will be returned.
-Defaults to `False`.
+Defaults to `False`. With feature dims, a negative `dim` counts from the end of
+each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+the end of the batch dims, as with `reduce=False`.
 - **return_indices** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - [`max()`](https://docs.pytorch.org/docs/stable/generated/torch.max.html#torch.max) returns a named tuple with values and indices
 when the `dim` argument is passed. The `TensorDict` equivalent of this is to return a named tuple
 with `values` and `indices` tensordicts of identical structure. If `False`, only the values
@@ -16250,7 +16268,9 @@ If specified, the input tensor is cast to dtype before the operation is performe
 This is useful for preventing data type overflows. Default: `None`.
 - **reduce** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the reduction will occur across all TensorDict values
 and a single reduced tensor will be returned.
-Defaults to `False`.
+Defaults to `False`. With feature dims, a negative `dim` counts from the end of
+each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+the end of the batch dims, as with `reduce=False`.
 - **key_transform** (*Callable**[**[*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*]**,*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*]**,**optional*) - A function to transform key names.
 If provided, all keys in the result will be transformed using this function.
 For string keys, the function receives a string. For tuple keys, it receives a tuple.
@@ -16640,13 +16660,17 @@ tensordict containing the min value of all leaves (if this can be computed).
 If integer, min is called upon the dimension specified if
 and only if this dimension is compatible with the tensordict
 shape.
+A tuple reduces only its first dim; passing one is deprecated
+and will be removed in TensorDict 0.17.
 - **keepdim** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)) - whether the output tensor has dim retained or not.
 
 Keyword Arguments:
 
 - **reduce** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the reduction will occur across all TensorDict values
 and a single reduced tensor will be returned.
-Defaults to `False`.
+Defaults to `False`. With feature dims, a negative `dim` counts from the end of
+each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+the end of the batch dims, as with `reduce=False`.
 - **return_indices** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - [`min()`](https://docs.pytorch.org/docs/stable/generated/torch.min.html#torch.min) returns a named tuple with values and indices
 when the `dim` argument is passed. The `TensorDict` equivalent of this is to return a named tuple
 with `values` and `indices` tensordicts of identical structure. If `False`, only the values
@@ -17143,7 +17167,9 @@ If specified, the input tensor is cast to dtype before the operation is performe
 This is useful for preventing data type overflows. Default: `None`.
 - **reduce** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the reduction will occur across all TensorDict values
 and a single reduced tensor will be returned.
-Defaults to `False`.
+Defaults to `False`. With feature dims, a negative `dim` counts from the end of
+each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+the end of the batch dims, as with `reduce=False`.
 
 Examples
 
@@ -17255,7 +17281,9 @@ If specified, the input tensor is cast to dtype before the operation is performe
 This is useful for preventing data type overflows. Default: `None`.
 - **reduce** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the reduction will occur across all TensorDict values
 and a single reduced tensor will be returned.
-Defaults to `False`.
+Defaults to `False`. With feature dims, a negative `dim` counts from the end of
+each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+the end of the batch dims, as with `reduce=False`.
 
 Examples
 
@@ -18032,6 +18060,8 @@ tensordict containing the prod value of all leaves (if this can be computed).
 If integer or tuple of integers, prod is called upon the dimension specified if
 and only if this dimension is compatible with the tensordict
 shape.
+A tuple reduces only its first dim; passing one is deprecated
+and will be removed in TensorDict 0.17.
 Only the "feature" string is currently permitted. Using dim="feature" will
 achieve the reduction over all feature dimensions. If reduce=True, a tensor of the
 shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
@@ -18045,7 +18075,9 @@ If specified, the input tensor is cast to dtype before the operation is performe
 This is useful for preventing data type overflows. Default: `None`.
 - **reduce** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the reduction will occur across all TensorDict values
 and a single reduced tensor will be returned.
-Defaults to `False`.
+Defaults to `False`. With feature dims, a negative `dim` counts from the end of
+each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+the end of the batch dims, as with `reduce=False`.
 
 Examples
 
@@ -18180,7 +18212,9 @@ between two data points. Options are 'linear', 'lower', 'higher', 'midpoint', an
 Defaults to 'linear'.
 - **reduce** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the reduction will occur across all TensorDict values
 and a single reduced tensor will be returned.
-Defaults to `False`.
+Defaults to `False`. With feature dims, a negative `dim` counts from the end of
+each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+the end of the batch dims, as with `reduce=False`.
 - **key_transform** (*Callable**[**[*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*]**,*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*]**,**optional*) - A function to transform key names.
 If provided, all keys in the result will be transformed using this function.
 For string keys, the function receives a string. For tuple keys, it receives a tuple.
@@ -19316,6 +19350,12 @@ leading dimensions of the value must match [`batch_size`](tensordict.TensorDictB
 Arrays and numbers are converted to tensors. Strings and other
 objects are stored as [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData).
 
+A Python `bool`, `int` or `float` written over an existing
+[`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) entry is stored as a 0-d tensor,
+and the write emits a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning). Starting with
+TensorDict 0.17, the default will change to storing it as
+[`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData), like the entry it replaces.
+
 Parameters:
 
 - **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the key to set: a string, or a tuple of strings
@@ -20094,7 +20134,9 @@ Keyword Arguments:
 Defaults to Bessel's correction, correction=1.
 - **reduce** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the reduction will occur across all TensorDict values
 and a single reduced tensor will be returned.
-Defaults to `False`.
+Defaults to `False`. With feature dims, a negative `dim` counts from the end of
+each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+the end of the batch dims, as with `reduce=False`.
 - **key_transform** (*Callable**[**[*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*]**,*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*]**,**optional*) - A function to transform key names.
 If provided, all keys in the result will be transformed using this function.
 For string keys, the function receives a string. For tuple keys, it receives a tuple.
@@ -20256,7 +20298,9 @@ If specified, the input tensor is cast to dtype before the operation is performe
 This is useful for preventing data type overflows. Default: `None`.
 - **reduce** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the reduction will occur across all TensorDict values
 and a single reduced tensor will be returned.
-Defaults to `False`.
+Defaults to `False`. With feature dims, a negative `dim` counts from the end of
+each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+the end of the batch dims, as with `reduce=False`.
 - **key_transform** (*Callable**[**[*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*]**,*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*]**,**optional*) - A function to transform key names.
 If provided, all keys in the result will be transformed using this function.
 For string keys, the function receives a string. For tuple keys, it receives a tuple.
@@ -22268,7 +22312,9 @@ Keyword Arguments:
 Defaults to Bessel's correction, correction=1.
 - **reduce** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the reduction will occur across all TensorDict values
 and a single reduced tensor will be returned.
-Defaults to `False`.
+Defaults to `False`. With feature dims, a negative `dim` counts from the end of
+each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+the end of the batch dims, as with `reduce=False`.
 - **key_transform** (*Callable**[**[*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*]**,*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*]**,**optional*) - A function to transform key names.
 If provided, all keys in the result will be transformed using this function.
 For string keys, the function receives a string. For tuple keys, it receives a tuple.
@@ -33554,18 +33600,18 @@ it between processes.
 
 # Computation times
 
-**01:25.491** total execution time for 14 files **from all galleries**:
+**01:25.452** total execution time for 14 files **from all galleries**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
-| [Benchmarking TensorDict serialization speed](tutorials/serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`reference/generated/tutorials/serialization_speed.py`) | 00:39.380 | 0.0 |
-| [Using TensorDict for datasets](tutorials/data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`reference/generated/tutorials/data_fashion.py`) | 00:17.340 | 0.0 |
-| [Building models with TensorDictModule](tutorials/tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`reference/generated/tutorials/tensordict_module.py`) | 00:16.231 | 0.0 |
-| [Building tensordicts from streams](tutorials/streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`reference/generated/tutorials/streamed_tensordict.py`) | 00:06.019 | 0.0 |
-| [Using tensorclasses for datasets](tutorials/tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`reference/generated/tutorials/tensorclass_fashion.py`) | 00:04.712 | 0.0 |
-| [Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`reference/generated/tutorials/tensorclass_imagenet.py`) | 00:01.490 | 0.0 |
-| [Storing TensorDicts in zarr](tutorials/zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`reference/generated/tutorials/zarr_storage.py`) | 00:00.151 | 0.0 |
-| [Exporting tensordict modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:00.129 | 0.0 |
+| [Benchmarking TensorDict serialization speed](tutorials/serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`reference/generated/tutorials/serialization_speed.py`) | 00:39.250 | 0.0 |
+| [Using TensorDict for datasets](tutorials/data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`reference/generated/tutorials/data_fashion.py`) | 00:17.390 | 0.0 |
+| [Building models with TensorDictModule](tutorials/tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`reference/generated/tutorials/tensordict_module.py`) | 00:16.433 | 0.0 |
+| [Building tensordicts from streams](tutorials/streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`reference/generated/tutorials/streamed_tensordict.py`) | 00:06.018 | 0.0 |
+| [Using tensorclasses for datasets](tutorials/tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`reference/generated/tutorials/tensorclass_fashion.py`) | 00:04.562 | 0.0 |
+| [Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`reference/generated/tutorials/tensorclass_imagenet.py`) | 00:01.477 | 0.0 |
+| [Storing TensorDicts in zarr](tutorials/zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`reference/generated/tutorials/zarr_storage.py`) | 00:00.155 | 0.0 |
+| [Exporting tensordict modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:00.127 | 0.0 |
 | [Changing the shape of a TensorDict](tutorials/tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`reference/generated/tutorials/tensordict_shapes.py`) | 00:00.009 | 0.0 |
 | [Getting, setting, and nesting keys](tutorials/tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`reference/generated/tutorials/tensordict_keys.py`) | 00:00.009 | 0.0 |
 | [Functional calls and ensembles with TensorDict](tutorials/functional.html#sphx-glr-tutorials-functional-py) (`reference/generated/tutorials/functional.py`) | 00:00.009 | 0.0 |
@@ -34823,40 +34869,41 @@ test_data = datasets.FashionMNIST(
 
 ```
 0%| | 0.00/26.4M [00:00<?, ?B/s]
- 0%| | 32.8k/26.4M [00:00<01:52, 234kB/s]
- 0%| | 65.5k/26.4M [00:00<01:52, 234kB/s]
- 0%| | 131k/26.4M [00:00<01:17, 340kB/s]
- 1%| | 197k/26.4M [00:00<01:07, 390kB/s]
- 1%| | 262k/26.4M [00:00<01:02, 418kB/s]
- 2%|▏ | 426k/26.4M [00:00<00:38, 673kB/s]
- 3%|▎ | 819k/26.4M [00:00<00:18, 1.37MB/s]
- 6%|▌ | 1.54M/26.4M [00:01<00:09, 2.57MB/s]
- 12%|█▏ | 3.05M/26.4M [00:01<00:04, 5.12MB/s]
- 23%|██▎ | 6.00M/26.4M [00:01<00:02, 10.0MB/s]
- 37%|███▋ | 9.70M/26.4M [00:01<00:01, 15.0MB/s]
- 51%|█████ | 13.4M/26.4M [00:01<00:00, 18.4MB/s]
- 65%|██████▍ | 17.1M/26.4M [00:01<00:00, 20.8MB/s]
- 79%|███████▊ | 20.7M/26.4M [00:01<00:00, 22.4MB/s]
- 92%|█████████▏| 24.4M/26.4M [00:02<00:00, 23.6MB/s]
-100%|██████████| 26.4M/26.4M [00:02<00:00, 12.4MB/s]
+ 0%| | 32.8k/26.4M [00:00<01:54, 230kB/s]
+ 0%| | 65.5k/26.4M [00:00<01:54, 230kB/s]
+ 0%| | 131k/26.4M [00:00<01:18, 334kB/s]
+ 1%| | 197k/26.4M [00:00<01:08, 384kB/s]
+ 1%| | 262k/26.4M [00:00<01:03, 411kB/s]
+ 2%|▏ | 426k/26.4M [00:00<00:39, 661kB/s]
+ 3%|▎ | 754k/26.4M [00:00<00:21, 1.20MB/s]
+ 5%|▌ | 1.41M/26.4M [00:01<00:10, 2.28MB/s]
+ 10%|█ | 2.72M/26.4M [00:01<00:05, 4.44MB/s]
+ 20%|██ | 5.31M/26.4M [00:01<00:02, 8.66MB/s]
+ 34%|███▍ | 9.01M/26.4M [00:01<00:01, 13.9MB/s]
+ 48%|████▊ | 12.7M/26.4M [00:01<00:00, 17.5MB/s]
+ 62%|██████▏ | 16.4M/26.4M [00:01<00:00, 20.0MB/s]
+ 76%|███████▌ | 20.1M/26.4M [00:02<00:00, 21.7MB/s]
+ 90%|████████▉ | 23.7M/26.4M [00:02<00:00, 22.9MB/s]
+100%|██████████| 26.4M/26.4M [00:02<00:00, 12.2MB/s]
 
  0%| | 0.00/29.5k [00:00<?, ?B/s]
 100%|██████████| 29.5k/29.5k [00:00<00:00, 208kB/s]
-100%|██████████| 29.5k/29.5k [00:00<00:00, 207kB/s]
+100%|██████████| 29.5k/29.5k [00:00<00:00, 208kB/s]
 
  0%| | 0.00/4.42M [00:00<?, ?B/s]
- 1%| | 32.8k/4.42M [00:00<00:18, 232kB/s]
- 1%|▏ | 65.5k/4.42M [00:00<00:18, 232kB/s]
- 3%|▎ | 131k/4.42M [00:00<00:12, 337kB/s]
- 4%|▍ | 197k/4.42M [00:00<00:10, 387kB/s]
- 8%|▊ | 360k/4.42M [00:00<00:06, 666kB/s]
- 16%|█▋ | 721k/4.42M [00:00<00:02, 1.31MB/s]
- 32%|███▏ | 1.41M/4.42M [00:00<00:01, 2.47MB/s]
- 64%|██████▎ | 2.82M/4.42M [00:01<00:00, 4.85MB/s]
-100%|██████████| 4.42M/4.42M [00:01<00:00, 3.90MB/s]
+ 1%| | 32.8k/4.42M [00:00<00:19, 231kB/s]
+ 1%|▏ | 65.5k/4.42M [00:00<00:18, 231kB/s]
+ 3%|▎ | 131k/4.42M [00:00<00:12, 336kB/s]
+ 4%|▍ | 197k/4.42M [00:00<00:10, 386kB/s]
+ 6%|▌ | 262k/4.42M [00:00<00:10, 413kB/s]
+ 10%|█ | 459k/4.42M [00:00<00:05, 743kB/s]
+ 19%|█▊ | 819k/4.42M [00:00<00:02, 1.33MB/s]
+ 35%|███▍ | 1.54M/4.42M [00:01<00:01, 2.52MB/s]
+ 67%|██████▋ | 2.98M/4.42M [00:01<00:00, 4.91MB/s]
+100%|██████████| 4.42M/4.42M [00:01<00:00, 3.45MB/s]
 
  0%| | 0.00/5.15k [00:00<?, ?B/s]
-100%|██████████| 5.15k/5.15k [00:00<00:00, 43.2MB/s]
+100%|██████████| 5.15k/5.15k [00:00<00:00, 41.8MB/s]
 ```
 
 Create two tensordicts, one for the training data and one for the test
@@ -34976,8 +35023,8 @@ print(f"TensorDict DataLoader: {time_one_pass(train_dataloader_td):.2f} s")
 ```
 
 ```
-torchvision DataLoader: 1.94 s
-TensorDict DataLoader: 0.09 s
+torchvision DataLoader: 1.89 s
+TensorDict DataLoader: 0.08 s
 ```
 
 ## Model
@@ -35139,7 +35186,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-TensorDict training done! time: 2.2396 s
+TensorDict training done! time: 2.2244 s
 Epoch 1
 -------------------------
 loss: 2.305311 [ 0/60000]
@@ -35149,7 +35196,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Training done! time: 4.5362 s
+Training done! time: 4.4870 s
 ```
 
 ## Conclusion
@@ -35178,7 +35225,7 @@ transforms to whole batches, for a larger image dataset.
 - [Save and load tensordicts](../saving.html#saving) explains how to save the memory-mapped tensordict to disk
 and load it again.
 
-**Total running time of the script:** (0 minutes 17.340 seconds)
+**Total running time of the script:** (0 minutes 17.390 seconds)
 
 [`Download Jupyter notebook: data_fashion.ipynb`](../_downloads/e330622d5b746a093c669dc804b45baf/data_fashion.ipynb)
 
@@ -35537,7 +35584,7 @@ built on `torch.export`.
 [AOTInductor](https://pytorch.org/docs/main/torch.compiler_aot_inductor.html)
 documentation.
 
-**Total running time of the script:** (0 minutes 0.129 seconds)
+**Total running time of the script:** (0 minutes 0.127 seconds)
 
 [`Download Jupyter notebook: export.ipynb`](../_downloads/4e8ac58ef63f1e596d49d1b7366ef9bc/export.ipynb)
 
@@ -36395,7 +36442,7 @@ tracks these operations with `pytest-benchmark`.
 offline version of the format comparison, with larger payloads, more
 layouts, and read timings.
 
-**Total running time of the script:** (0 minutes 39.380 seconds)
+**Total running time of the script:** (0 minutes 39.250 seconds)
 
 [`Download Jupyter notebook: serialization_speed.ipynb`](../_downloads/7587cc1b855a09e68c4f61c6c20f4220/serialization_speed.ipynb)
 
@@ -36409,18 +36456,18 @@ layouts, and read timings.
 
 # Computation times
 
-**01:25.491** total execution time for 14 files **from tutorials**:
+**01:25.452** total execution time for 14 files **from tutorials**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
-| [Benchmarking TensorDict serialization speed](serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`serialization_speed.py`) | 00:39.380 | 0.0 |
-| [Using TensorDict for datasets](data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`data_fashion.py`) | 00:17.340 | 0.0 |
-| [Building models with TensorDictModule](tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`tensordict_module.py`) | 00:16.231 | 0.0 |
-| [Building tensordicts from streams](streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`streamed_tensordict.py`) | 00:06.019 | 0.0 |
-| [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`tensorclass_fashion.py`) | 00:04.712 | 0.0 |
-| [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`tensorclass_imagenet.py`) | 00:01.490 | 0.0 |
-| [Storing TensorDicts in zarr](zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`zarr_storage.py`) | 00:00.151 | 0.0 |
-| [Exporting tensordict modules](export.html#sphx-glr-tutorials-export-py) (`export.py`) | 00:00.129 | 0.0 |
+| [Benchmarking TensorDict serialization speed](serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`serialization_speed.py`) | 00:39.250 | 0.0 |
+| [Using TensorDict for datasets](data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`data_fashion.py`) | 00:17.390 | 0.0 |
+| [Building models with TensorDictModule](tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`tensordict_module.py`) | 00:16.433 | 0.0 |
+| [Building tensordicts from streams](streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`streamed_tensordict.py`) | 00:06.018 | 0.0 |
+| [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`tensorclass_fashion.py`) | 00:04.562 | 0.0 |
+| [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`tensorclass_imagenet.py`) | 00:01.477 | 0.0 |
+| [Storing TensorDicts in zarr](zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`zarr_storage.py`) | 00:00.155 | 0.0 |
+| [Exporting tensordict modules](export.html#sphx-glr-tutorials-export-py) (`export.py`) | 00:00.127 | 0.0 |
 | [Changing the shape of a TensorDict](tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`tensordict_shapes.py`) | 00:00.009 | 0.0 |
 | [Getting, setting, and nesting keys](tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`tensordict_keys.py`) | 00:00.009 | 0.0 |
 | [Functional calls and ensembles with TensorDict](functional.html#sphx-glr-tutorials-functional-py) (`functional.py`) | 00:00.009 | 0.0 |
@@ -36717,7 +36764,7 @@ operations of a lazy stack.
 - The [torch.nested documentation](https://pytorch.org/docs/stable/nested.html)
 explains the jagged layout of nested tensors.
 
-**Total running time of the script:** (0 minutes 6.019 seconds)
+**Total running time of the script:** (0 minutes 6.018 seconds)
 
 [`Download Jupyter notebook: streamed_tensordict.ipynb`](../_downloads/ea350b8ef859f0797dd9ceffacb742e6/streamed_tensordict.ipynb)
 
@@ -36991,7 +37038,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Tensorclass training done! time: 2.3895 s
+Tensorclass training done! time: 2.2808 s
 ```
 
 ## Conclusion
@@ -37012,7 +37059,7 @@ share it between processes.
 - [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) applies random
 transforms to whole batches, for a larger image dataset.
 
-**Total running time of the script:** (0 minutes 4.712 seconds)
+**Total running time of the script:** (0 minutes 4.562 seconds)
 
 [`Download Jupyter notebook: tensorclass_fashion.ipynb`](../_downloads/5a8f2d6b38b250cbfadc2a295255dde6/tensorclass_fashion.ipynb)
 
@@ -37378,8 +37425,8 @@ measure(train_dataloader_tc, "train, tensorclass DataLoader")
 ```
 
 ```
-train, regular DataLoader: 988 images per second, 0.22 s
-train, tensorclass DataLoader: 3753 images per second, 0.06 s
+train, regular DataLoader: 1077 images per second, 0.20 s
+train, tensorclass DataLoader: 3458 images per second, 0.06 s
 ```
 
 The tensorclass data loader reads `uint8` batches from the memory-mapped
@@ -37396,8 +37443,8 @@ measure(val_dataloader_tc, "val, tensorclass DataLoader")
 ```
 
 ```
-val, regular DataLoader: 600 images per second, 0.21 s
-val, tensorclass DataLoader: 17449 images per second, 0.01 s
+val, regular DataLoader: 593 images per second, 0.22 s
+val, tensorclass DataLoader: 19971 images per second, 0.01 s
 ```
 
 The rates above come from the machine that built this page. They depend on
@@ -37444,7 +37491,7 @@ again.
 - [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) applies the same idea to
 a smaller dataset and trains a model on it.
 
-**Total running time of the script:** (0 minutes 1.490 seconds)
+**Total running time of the script:** (0 minutes 1.477 seconds)
 
 [`Download Jupyter notebook: tensorclass_imagenet.ipynb`](../_downloads/a4db2295c156dd86b1f4437d354c9744/tensorclass_imagenet.ipynb)
 
@@ -38535,13 +38582,13 @@ for name, module in [
 
 ```
 Eager
- Regular: 136.6 us
- TDM: 151.6 us
- Sequential: 212.3 us
+ Regular: 134.5 us
+ TDM: 149.8 us
+ Sequential: 208.1 us
 Compiled
- Regular: 152.6 us
- TDM: 165.4 us
- Sequential: 173.4 us
+ Regular: 150.2 us
+ TDM: 164.0 us
+ Sequential: 173.6 us
 ```
 
 The numbers above come from the machine that built this page, which runs on
@@ -38694,7 +38741,7 @@ graph that takes and returns plain tensors.
 and runs ensembles with [`torch.vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap).
 - [tensordict.nn](../reference/nn.html#api-nn) lists all the classes of `tensordict.nn`.
 
-**Total running time of the script:** (0 minutes 16.231 seconds)
+**Total running time of the script:** (0 minutes 16.433 seconds)
 
 [`Download Jupyter notebook: tensordict_module.ipynb`](../_downloads/ba42555713e16dc342a5f3e550dec192/tensordict_module.ipynb)
 
@@ -38896,7 +38943,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7f9742df82f0>
+<torch._C.Generator object at 0x7fa0827b42f0>
 ```
 
 ## Indexing
@@ -39712,7 +39759,7 @@ the other on-disk formats.
 - The [zarr documentation](https://zarr.readthedocs.io) covers stores,
 codecs, and the v3 format in depth.
 
-**Total running time of the script:** (0 minutes 0.151 seconds)
+**Total running time of the script:** (0 minutes 0.155 seconds)
 
 [`Download Jupyter notebook: zarr_storage.ipynb`](../_downloads/299d79c6946d13f056a08f21d56a241b/zarr_storage.ipynb)
 

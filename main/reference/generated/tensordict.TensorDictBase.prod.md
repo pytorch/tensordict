@@ -11,6 +11,8 @@ tensordict containing the prod value of all leaves (if this can be computed).
 If integer or tuple of integers, prod is called upon the dimension specified if
 and only if this dimension is compatible with the tensordict
 shape.
+A tuple reduces only its first dim; passing one is deprecated
+and will be removed in TensorDict 0.17.
 Only the "feature" string is currently permitted. Using dim="feature" will
 achieve the reduction over all feature dimensions. If reduce=True, a tensor of the
 shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
@@ -24,7 +26,9 @@ If specified, the input tensor is cast to dtype before the operation is performe
 This is useful for preventing data type overflows. Default: `None`.
 - **reduce** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the reduction will occur across all TensorDict values
 and a single reduced tensor will be returned.
-Defaults to `False`.
+Defaults to `False`. With feature dims, a negative `dim` counts from the end of
+each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+the end of the batch dims, as with `reduce=False`.
 
 Examples
 

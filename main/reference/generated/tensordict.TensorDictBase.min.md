@@ -11,13 +11,17 @@ tensordict containing the min value of all leaves (if this can be computed).
 If integer, min is called upon the dimension specified if
 and only if this dimension is compatible with the tensordict
 shape.
+A tuple reduces only its first dim; passing one is deprecated
+and will be removed in TensorDict 0.17.
 - **keepdim** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)) - whether the output tensor has dim retained or not.
 
 Keyword Arguments:
 
 - **reduce** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the reduction will occur across all TensorDict values
 and a single reduced tensor will be returned.
-Defaults to `False`.
+Defaults to `False`. With feature dims, a negative `dim` counts from the end of
+each leaf. Starting with TensorDict 0.17, the default will change to counting it from
+the end of the batch dims, as with `reduce=False`.
 - **return_indices** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - [`min()`](https://docs.pytorch.org/docs/stable/generated/torch.min.html#torch.min) returns a named tuple with values and indices
 when the `dim` argument is passed. The `TensorDict` equivalent of this is to return a named tuple
 with `values` and `indices` tensordicts of identical structure. If `False`, only the values
