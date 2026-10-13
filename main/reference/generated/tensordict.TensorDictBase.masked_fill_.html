@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5498+gdb2b814c9.d20261013)">
+<meta name="llm:version" content="main (0.14.0.dev5515+gd17b39eef.d20261013)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5498+gdb2b814c9.d20261013)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5515+gd17b39eef.d20261013)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1648,8 +1648,8 @@ storage. See <a class="reference internal" href="../../concepts/operations.html#
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>mask</strong> (<em>boolean torch.Tensor</em>) – mask of values to be filled. Shape
-must match the tensordict batch-size.</p></li>
+<li><p><strong>mask</strong> (<em>boolean torch.Tensor</em>) – mask of values to be filled. Its
+shape must match the leading dims of the batch size.</p></li>
 <li><p><strong>value</strong> – value to used to fill the tensors.</p></li>
 </ul>
 </dd>
@@ -2030,7 +2030,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.masked_fill",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.masked_fill",
        "url": "/reference/generated/tensordict.TensorDictBase.masked_fill_.html",
-       "articleBody": "TensorDictBase.masked_fill# TensorDictBase.masked_fill_(mask: Tensor, value: float | bool) \u2192 Self# Fills the values corresponding to the mask with the desired value. The values are written into the existing leaves, which keep their storage. See In-place operations. Parameters: mask (boolean torch.Tensor) \u2013 mask of values to be filled. Shape must match the tensordict batch-size. value \u2013 value to used to fill the tensors. Returns: self Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(source={\u0027a\u0027: torch.zeros(3, 4)}, ... batch_size=[3]) \u003e\u003e\u003e mask = torch.tensor([True, False, False]) \u003e\u003e\u003e _ = td.masked_fill_(mask, 1.0) \u003e\u003e\u003e td.get(\"a\") tensor([[1., 1., 1., 1.], [0., 0., 0., 0.], [0., 0., 0., 0.]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.masked_fill# TensorDictBase.masked_fill_(mask: Tensor, value: float | bool) \u2192 Self# Fills the values corresponding to the mask with the desired value. The values are written into the existing leaves, which keep their storage. See In-place operations. Parameters: mask (boolean torch.Tensor) \u2013 mask of values to be filled. Its shape must match the leading dims of the batch size. value \u2013 value to used to fill the tensors. Returns: self Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(source={\u0027a\u0027: torch.zeros(3, 4)}, ... batch_size=[3]) \u003e\u003e\u003e mask = torch.tensor([True, False, False]) \u003e\u003e\u003e _ = td.masked_fill_(mask, 1.0) \u003e\u003e\u003e td.get(\"a\") tensor([[1., 1., 1., 1.], [0., 0., 0., 0.], [0., 0., 0., 0.]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

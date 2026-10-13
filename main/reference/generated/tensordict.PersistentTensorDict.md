@@ -102,19 +102,6 @@ contiguous(***, *canonical: [bool](https://docs.python.org/3/builtins/functions.
 
 Materializes a PersistentTensorDict on a regular TensorDict.
 
-fill_(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *value: [float](https://docs.python.org/3/builtins/functions.html#float) | [bool](https://docs.python.org/3/builtins/functions.html#bool)*) → [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
-
-Fills a tensor pointed by the key with the a given value.
-
-Parameters:
-
-- **key** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - key to be remaned
-- **value** (*Number**,*[*bool*](https://docs.python.org/3/builtins/functions.html#bool)) - value to use for the filling
-
-Returns:
-
-self
-
 flatten_keys(*separator: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = '.'*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → T
 
 Returns an in-memory copy where the nested keys are joined by `separator`.

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5498+gdb2b814c9.d20261013)">
+<meta name="llm:version" content="main (0.14.0.dev5515+gd17b39eef.d20261013)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5498+gdb2b814c9.d20261013)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5515+gd17b39eef.d20261013)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1656,7 +1656,7 @@ tensordicts to be used.</p></li>
 <p>Keyword Args: See <a class="reference internal" href="tensordict.TensorDictBase.apply.html#tensordict.TensorDictBase.apply" title="tensordict.TensorDictBase.apply"><code class="xref py py-meth docutils literal notranslate"><span class="pre">apply()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>self or a copy of self with the function applied</p>
+<dd class="field-odd"><p>self</p>
 </dd>
 </dl>
 </dd></dl>
@@ -2019,7 +2019,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.apply",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.apply",
        "url": "/reference/generated/tensordict.TensorDictBase.apply_.html",
-       "articleBody": "TensorDictBase.apply# TensorDictBase.apply_(fn: Callable, *others, **kwargs) \u2192 Self# Applies a callable to all values stored in the tensordict and re-writes them in-place. Parameters: fn (Callable) \u2013 function to be applied to the tensors in the tensordict. *others (sequence of TensorDictBase, optional) \u2013 the other tensordicts to be used. Keyword Args: See apply(). Returns: self or a copy of self with the function applied Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.apply# TensorDictBase.apply_(fn: Callable, *others, **kwargs) \u2192 Self# Applies a callable to all values stored in the tensordict and re-writes them in-place. Parameters: fn (Callable) \u2013 function to be applied to the tensors in the tensordict. *others (sequence of TensorDictBase, optional) \u2013 the other tensordicts to be used. Keyword Args: See apply(). Returns: self Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -9,8 +9,8 @@ storage. See [In-place operations](../../concepts/operations.html#inplace-conven
 
 Parameters:
 
-- **mask** (*boolean torch.Tensor*) - mask of values to be filled. Shape
-must match the tensordict batch-size.
+- **mask** (*boolean torch.Tensor*) - mask of values to be filled. Its
+shape must match the leading dims of the batch size.
 - **value** - value to used to fill the tensors.
 
 Returns:
