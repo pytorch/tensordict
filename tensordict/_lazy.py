@@ -178,11 +178,14 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
         if not has_first_key or len(item) == 1:
             return has_first_key
         # otherwise take the long way
-        return all(
-            item[1:]
-            in tensordict.get(item[0]).keys(self.include_nested, self.leaves_only)
-            for tensordict in self.tensordict.tensordicts
-        )
+        for tensordict in self.tensordict.tensordicts:
+            sub = tensordict._get_str(item[0], None)
+            # As in TensorDict, a nested key that goes through a tensor is absent
+            if self.include_nested and not _is_tensor_collection(type(sub)):
+                return False
+            if item[1:] not in sub.keys(self.include_nested, self.leaves_only):
+                return False
+        return True
 
     def __repr__(self):
         return f"{type(self).__name__}({tuple(self)})"
@@ -1019,6 +1022,7 @@ class LazyStackedTensorDict(TensorDictBase):
     @_fails_exclusive_keys
     def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> Self: ...
 
+    # Override: the device is the members' common device.
     @property
     def device(self) -> torch.device | None:
         # devices might have changed, so we check that they're all the same
@@ -1050,14 +1054,7 @@ class LazyStackedTensorDict(TensorDictBase):
             td._set_device(device)
         return self
 
-    @property
-    def batch_size(self) -> torch.Size:
-        return self._batch_size
-
-    @batch_size.setter
-    def batch_size(self, new_size: torch.Size) -> None:
-        return self._batch_size_setter(new_size)
-
+    # Override: the names come from the members and the stack dim.
     @property
     @_cache_while_locked  # noqa
     def names(self):
@@ -1080,6 +1077,7 @@ class LazyStackedTensorDict(TensorDictBase):
     def names(self, value):
         self._set_names(value)
 
+    # Override: the names are stored on the members and the stack dim.
     def _set_names(self, names: Sequence[str] | None):
         if names is None:
             for td in self.tensordicts:
@@ -1106,6 +1104,7 @@ class LazyStackedTensorDict(TensorDictBase):
         for td in self.tensordicts:
             td.names = names
 
+    # Override: the names are stored on the members and the stack dim.
     def _has_names(self):
         if not self.tensordicts:
             return self._empty_stack_names is not None
@@ -1119,6 +1118,7 @@ class LazyStackedTensorDict(TensorDictBase):
         # has no non-tensor entry.
         return bool(self.tensordicts) and self.tensordicts[0]._has_non_tensor
 
+    # Override: the names are stored on the members and the stack dim.
     def _erase_names(self):
         self._td_dim_name = None
         self._empty_stack_names = None
@@ -2709,9 +2709,6 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         super()._check_new_batch_size(new_size)
 
-    def _change_batch_size(self, new_size: torch.Size) -> None:
-        self._batch_size = new_size
-
     def keys(
         self,
         include_nested: bool = False,
@@ -3008,6 +3005,11 @@ class LazyStackedTensorDict(TensorDictBase):
         if filter_empty and all(r is None for r in results):
             return
         if not inplace:
+            # A member with no result becomes an empty member, as with filter_empty=False
+            results = [
+                td.empty(device=device) if r is None else r
+                for td, r in zip(self.tensordicts, results)
+            ]
             out = type(self)(
                 *results,
                 stack_dim=self.stack_dim,
@@ -3129,6 +3131,13 @@ class LazyStackedTensorDict(TensorDictBase):
             return
         if not inplace:
             if not results or any(r is not None for r in results):
+                if filter_empty in (None, True):
+                    # A member with no result becomes an empty member, as with
+                    # filter_empty=False
+                    results = [
+                        td.empty(device=device) if r is None else r
+                        for td, r in zip(self.tensordicts, results)
+                    ]
                 try:
                     out = type(self)(
                         *results,
@@ -3758,42 +3767,6 @@ class LazyStackedTensorDict(TensorDictBase):
             i += 1
         return cls(*tensordicts, stack_dim=stack_dim, **kwargs)
 
-    def make_memmap(
-        self,
-        key: NestedKey,
-        shape: torch.Size | torch.Tensor,
-        *,
-        dtype: torch.dtype | None = None,
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't currently allowed for LazyStack as "
-            "it can't return a contiguous view of the lazy stacked tensors. "
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
-    def make_memmap_from_storage(
-        self,
-        key: NestedKey,
-        storage: torch.UntypedStorage,
-        shape: torch.Size | torch.Tensor,
-        *,
-        dtype: torch.dtype | None = None,
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't currently allowed for LazyStack as "
-            "it can't return a contiguous view of the lazy stacked tensors. "
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
-    def make_memmap_from_tensor(
-        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't currently allowed for LazyStack as "
-            "it can't return a contiguous view of the lazy stacked tensors. "
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
     def expand(self, *args: int, inplace: bool = False) -> Self:
         if len(args) == 1 and isinstance(args[0], Sequence):
             shape = tuple(args[0])
@@ -4417,6 +4390,13 @@ class LazyStackedTensorDict(TensorDictBase):
     def _view(self, *args, raise_if_not_view: bool = True, **kwargs) -> Self:
         shape = _get_shape_from_args(*args, **kwargs)
         if any(dim < 0 for dim in shape):
+            if not self.batch_size.numel():
+                # Regrouping the members of an empty batch would lose the
+                # keys: reshape a dense copy, which has the shared keys.
+                shape = torch.Size(_infer_size_impl(shape, 0))
+                if shape == self.batch_size:
+                    return self
+                return self.contiguous().reshape(shape)
             shape = _infer_size_impl(shape, self.numel())
 
         # Then we just need to reorganize the lazy stack
@@ -4707,7 +4687,10 @@ class LazyStackedTensorDict(TensorDictBase):
     def split(self, split_size: int | list[int], dim: int = 0) -> list[TensorDictBase]:
         dim = _maybe_correct_neg_dim(dim, shape=self.shape)
         if dim == self.stack_dim:
-            if isinstance(split_size, int):
+            if isinstance(split_size, int) and split_size >= 0 and not self.tensordicts:
+                # torch.split returns one empty piece along a zero-size dim
+                split_size = [0]
+            elif isinstance(split_size, int):
                 split_size = [split_size] * -(len(self.tensordicts) // -split_size)
                 split_size[-1] = len(self.tensordicts) - sum(split_size[:-1])
 
@@ -4834,6 +4817,7 @@ class _CustomOpTensorDict(TensorDictBase):
     ):
         raise NotImplementedError(f"from_dict not implemented for {cls.__name__}.")
 
+    # Override: the device is the source's.
     @property
     def device(self) -> torch.device | None:
         return self._source.device
@@ -4842,7 +4826,8 @@ class _CustomOpTensorDict(TensorDictBase):
     def device(self, value: DeviceType) -> None:
         self._source.device = value
 
-    @property
+    # Override: the batch size is computed from the source on first read.
+    @TensorDictBase.batch_size.getter
     def batch_size(self) -> torch.Size:
         if self._batch_size is None:
             self._batch_size = getattr(
@@ -4850,13 +4835,21 @@ class _CustomOpTensorDict(TensorDictBase):
             )(**self.custom_op_kwargs).shape
         return self._batch_size
 
-    @batch_size.setter
-    def batch_size(self, new_size: torch.Size) -> None:
-        self._batch_size_setter(new_size)
-
+    # Override: the names are the source's.
     def _has_names(self):
         return self._source._has_names()
 
+    # Override: a lazy view cannot modify the names of its source.
+    def _set_names(self, names: Sequence[str] | None):
+        if names is None:
+            names = [None] * self.batch_dims
+        if names[: self.batch_dims] == self.names:
+            return
+        raise RuntimeError(
+            "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
+        )
+
+    # Override: a lazy view cannot erase the names of its source.
     def _erase_names(self):
         raise RuntimeError(
             f"Cannot erase names of a {type(self).__name__}. "
@@ -4871,9 +4864,6 @@ class _CustomOpTensorDict(TensorDictBase):
                     "nested collections. Convert the instance to a regular "
                     "tensordict by using the `to_tensordict()` method first."
                 )
-
-    def _change_batch_size(self, new_size: torch.Size) -> None:
-        self._batch_size = new_size
 
     def _get_str(self, key, default, **kwargs):
         tensor = self._source._get_str(key, default, **kwargs)
@@ -5424,25 +5414,13 @@ class _UnsqueezedTensorDict(_CustomOpTensorDict):
         ]
         return self._source._stack_onto_(list_item_unsqueeze, dim)
 
-    @property
+    # Override: the names come from the source.
+    @TensorDictBase.names.getter
     def names(self):
         names = list(self._source.names)
         dim = self.custom_op_kwargs.get("dim")
         names.insert(dim, None)
         return names
-
-    @names.setter
-    def names(self, value):
-        self._set_names(value)
-
-    def _set_names(self, names: Sequence[str] | None):
-        if names is None:
-            names = [None] * self.batch_dims
-        if names[: self.batch_dims] == self.names:
-            return
-        raise RuntimeError(
-            "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
-        )
 
 
 class _SqueezedTensorDict(_CustomOpTensorDict):
@@ -5477,26 +5455,14 @@ class _SqueezedTensorDict(_CustomOpTensorDict):
         ]
         return self._source._stack_onto_(list_item_unsqueeze, dim)
 
-    @property
+    # Override: the names come from the source.
+    @TensorDictBase.names.getter
     def names(self):
         names = list(self._source.names)
         dim = self.custom_op_kwargs["dim"]
         if self._source.batch_size[dim] == 1:
             del names[dim]
         return names
-
-    @names.setter
-    def names(self, value):
-        self._set_names(value)
-
-    def _set_names(self, names: Sequence[str] | None):
-        if names is None:
-            names = [None] * self.batch_dims
-        if names[: self.batch_dims] == self.names:
-            return
-        raise RuntimeError(
-            "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
-        )
 
 
 class _ViewedTensorDict(_CustomOpTensorDict):
@@ -5530,22 +5496,10 @@ class _ViewedTensorDict(_CustomOpTensorDict):
             return self._source
         return super()._legacy_view(*shape)
 
-    @property
+    # Override: a view has no dim names.
+    @TensorDictBase.names.getter
     def names(self):
         return [None] * self.ndim
-
-    @names.setter
-    def names(self, value):
-        self._set_names(value)
-
-    def _set_names(self, names: Sequence[str] | None):
-        if names is None:
-            names = [None] * self.batch_dims
-        if names[: self.batch_dims] == self.names:
-            return
-        raise RuntimeError(
-            "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
-        )
 
 
 class _TransposedTensorDict(_CustomOpTensorDict):
@@ -5609,7 +5563,8 @@ class _TransposedTensorDict(_CustomOpTensorDict):
         self._source._stack_onto_(list_permuted_items, dim)
         return self
 
-    @property
+    # Override: the names come from the source.
+    @TensorDictBase.names.getter
     def names(self):
         names = list(self._source.names)
         dim0 = self.custom_op_kwargs["dim0"]
@@ -5619,19 +5574,6 @@ class _TransposedTensorDict(_CustomOpTensorDict):
             for i, name in enumerate(names)
         ]
         return names
-
-    @names.setter
-    def names(self, value):
-        self._set_names(value)
-
-    def _set_names(self, names: Sequence[str] | None):
-        if names is None:
-            names = [None] * self.batch_dims
-        if names[: self.batch_dims] == self.names:
-            return
-        raise RuntimeError(
-            "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
-        )
 
 
 class _PermutedTensorDict(_CustomOpTensorDict):
@@ -5727,23 +5669,11 @@ class _PermutedTensorDict(_CustomOpTensorDict):
         self._source._stack_onto_(list_permuted_items, new_dim)
         return self
 
-    @property
+    # Override: the names come from the source.
+    @TensorDictBase.names.getter
     def names(self):
         names = list(self._source.names)
         return [names[i] for i in self.custom_op_kwargs["dims"]]
-
-    @names.setter
-    def names(self, value):
-        self._set_names(value)
-
-    def _set_names(self, names: Sequence[str] | None):
-        if names is None:
-            names = [None] * self.batch_dims
-        if names[: self.batch_dims] == self.names:
-            return
-        raise RuntimeError(
-            "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
-        )
 
 
 def _iter_items_lazystack(

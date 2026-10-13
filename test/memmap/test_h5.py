@@ -113,6 +113,15 @@ class TestH5Serialization:
         assert set(h5td.keys(True, True)) == {"a", ("b", "c")}
         h5td.close()
 
+    def test_device_setter(self, tmp_path):
+        # as on a TensorDict, the device changes only through to()
+        td = TensorDict({"a": torch.zeros(3)}, [3])
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        with pytest.raises(RuntimeError, match="device cannot be set"):
+            h5td.device = "cpu"
+        assert h5td.device is None
+        h5td.close()
+
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_auto_batch_size(tmpdir):
@@ -336,6 +345,21 @@ def test_kwargs_is_deprecated(tmpdir):
     assert (loaded["b", "c"] == 0).all()
     td.close()
     loaded.close()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_vmap_raises(tmp_path):
+    td = PersistentTensorDict.from_dict(
+        TensorDict(a=torch.zeros(3, 4), batch_size=[3]), filename=tmp_path / "x.h5"
+    )
+    with pytest.raises(RuntimeError, match="cannot be used with vmap"):
+        torch.vmap(lambda x: x)(td)
+    # A function that returns it used to give None, or an entry holding None
+    with pytest.raises(RuntimeError, match="cannot be used with vmap"):
+        torch.vmap(lambda x: td)(torch.zeros(2))
+    with pytest.raises(RuntimeError, match="cannot be used with vmap"):
+        torch.vmap(lambda x: TensorDict(h=td))(torch.zeros(2))
+    td.close()
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
