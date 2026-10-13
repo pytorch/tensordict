@@ -356,7 +356,11 @@ class _Conversion:
         Additional non-tensor keys are added to keep track of each level's identity, providing
         a built-in pytree-to-tensordict bijective transform API.
 
-        Accepted classes currently include lists, tuples, named tuples and dict.
+        Accepted classes currently include lists, tuples, named tuples and dict,
+        and subclasses of these such as :class:`collections.OrderedDict`,
+        :class:`collections.defaultdict` and the results of ``torch.max`` and
+        the other ``torch.return_types``. A ``defaultdict`` is rebuilt without
+        its ``default_factory``.
 
         .. note::
             For dictionaries, non-NestedKey keys are registered separately as :class:`~tensordict.NonTensorData`
@@ -460,9 +464,15 @@ class _Conversion:
             key: val if not is_tensor_collection(val) else val.to_pytree()
             for key, val in items.items()
         }
-        if _pytree_type in (list, tuple):
-            return _pytree_type((items[str(i)] for i in range(len(items))))
-        if _pytree_type is dict:
+        if _is_namedtuple_class(_pytree_type):
+            from tensordict._td import TensorDict
+
+            return TensorDict(items).to_namedtuple(dest_cls=_pytree_type)
+        if issubclass(_pytree_type, (list, tuple)):
+            # a list, a tuple or a subclass, such as the torch.return_types
+            # structseqs, which take a sequence
+            return _pytree_type([items[str(i)] for i in range(len(items))])
+        if issubclass(_pytree_type, dict):
             items = dict(
                 (
                     (
@@ -473,11 +483,13 @@ class _Conversion:
                     for (key, val) in items.items()
                 )
             )
+            if _pytree_type is not dict:
+                # an OrderedDict, or a defaultdict, which from_pytree records
+                # without its default_factory
+                result = _pytree_type()
+                result.update(items)
+                items = result
             return items
-        if _is_namedtuple_class(_pytree_type):
-            from tensordict._td import TensorDict
-
-            return TensorDict(items).to_namedtuple(dest_cls=_pytree_type)
         raise NotImplementedError(f"unknown type {_pytree_type}")
 
     @classmethod
