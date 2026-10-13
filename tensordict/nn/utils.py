@@ -199,6 +199,14 @@ class set_skip_existing(_DecoratorContextManager):
         out_key_attr (str, optional): the name of the output key list attribute
             in the module's method being decorated. Defaults to ``out_keys``.
 
+    Keyword Args:
+        thread_local (bool, optional): if ``True``, the mode applies to the
+            calling thread only, and blocks that other threads enter do not
+            change it. Inside the block, blocks without this flag that the
+            same thread enters stay in that thread too. Threads started inside
+            the block see the process-wide mode. If ``False``, the mode applies
+            to the whole process. Defaults to ``False``.
+
     Examples:
         >>> import torch
         >>> from tensordict.nn import set_skip_existing, skip_existing
@@ -294,15 +302,18 @@ class set_skip_existing(_DecoratorContextManager):
         mode: bool | list[NestedKey] | None = True,
         in_key_attr="in_keys",
         out_key_attr="out_keys",
+        *,
+        thread_local: bool = False,
     ):
         self.mode = unravel_key_list(mode) if isinstance(mode, list) else mode
         self.in_key_attr = in_key_attr
         self.out_key_attr = out_key_attr
+        self.thread_local = thread_local
         self._called = False
 
     def clone(self) -> set_skip_existing:
         # override this method if your children class takes __init__ parameters
-        out = type(self)(self.mode)
+        out = type(self)(self.mode, thread_local=self.thread_local)
         out._called = self._called
         return out
 
@@ -342,9 +353,15 @@ class set_skip_existing(_DecoratorContextManager):
     def __enter__(self) -> None:
         if self.mode and is_compiling():
             raise RuntimeError("skip_existing is not compatible with TorchDynamo.")
-        self.prev = _skip_existing.get_mode()
+        if self.thread_local:
+            self.prev = _skip_existing.get_thread_mode()
+        else:
+            self.prev = _skip_existing.get_mode()
         if self.mode is not None:
-            _skip_existing.set_mode(self.mode)
+            if self.thread_local:
+                _skip_existing.set_thread_mode(self.mode)
+            else:
+                _skip_existing.set_mode(self.mode)
         elif not self._called:
             raise RuntimeError(
                 f"It seems you are using {type(self).__name__} as a context manager with ``None`` input. "
@@ -352,7 +369,10 @@ class set_skip_existing(_DecoratorContextManager):
             )
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
-        _skip_existing.set_mode(self.prev)
+        if self.thread_local:
+            _skip_existing.set_thread_mode(self.prev)
+        else:
+            _skip_existing.set_mode(self.prev)
 
 
 class _set_skip_existing_None(set_skip_existing):
@@ -534,6 +554,14 @@ class set_composite_lp_aggregate(_DecoratorContextManager):
             :func:`~tensordict.nn.composite_lp_aggregate` returns inside the
             block. Defaults to ``True``.
 
+    Keyword Args:
+        thread_local (bool, optional): if ``True``, the mode applies to the
+            calling thread only, and blocks that other threads enter do not
+            change it. Inside the block, blocks without this flag that the
+            same thread enters stay in that thread too. Threads started inside
+            the block see the process-wide mode. If ``False``, the mode applies
+            to the whole process. Defaults to ``False``.
+
     Example:
         >>> import torch
         >>> from tensordict import TensorDict
@@ -574,20 +602,30 @@ class set_composite_lp_aggregate(_DecoratorContextManager):
     def __init__(
         self,
         mode: bool = True,
+        *,
+        thread_local: bool = False,
     ) -> None:
         super().__init__()
         self.mode = mode
+        self.thread_local = thread_local
 
     def clone(self) -> set_composite_lp_aggregate:
         # override this method if your children class takes __init__ parameters
-        return type(self)(self.mode)
+        return type(self)(self.mode, thread_local=self.thread_local)
 
     def __enter__(self) -> None:
-        self.prev = _composite_lp_aggregate.get_mode()
-        _composite_lp_aggregate.set_mode(self.mode)
+        if self.thread_local:
+            self.prev = _composite_lp_aggregate.get_thread_mode()
+            _composite_lp_aggregate.set_thread_mode(self.mode)
+        else:
+            self.prev = _composite_lp_aggregate.get_mode()
+            _composite_lp_aggregate.set_mode(self.mode)
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
-        _composite_lp_aggregate.set_mode(self.prev)
+        if self.thread_local:
+            _composite_lp_aggregate.set_thread_mode(self.prev)
+        else:
+            _composite_lp_aggregate.set_mode(self.prev)
 
     def set(self):
         self.__enter__()

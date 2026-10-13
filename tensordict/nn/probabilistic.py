@@ -166,6 +166,15 @@ class set_interaction_type(_DecoratorContextManager):
             ``None`` makes each module use its ``default_interaction_type``.
             Defaults to ``InteractionType.DETERMINISTIC``.
 
+    Keyword Args:
+        thread_local (bool, optional): if ``True``, the interaction type
+            applies to the calling thread only, and blocks that other threads
+            enter do not change it. Inside the block, blocks without this flag
+            that the same thread enters stay in that thread too. Threads
+            started inside the block see the process-wide interaction type.
+            If ``False``, the interaction type applies to the whole process.
+            Defaults to ``False``.
+
     Examples:
         >>> import torch
         >>> from torch import distributions as d
@@ -197,7 +206,10 @@ class set_interaction_type(_DecoratorContextManager):
     """
 
     def __init__(
-        self, type: InteractionType | str | None = InteractionType.DETERMINISTIC
+        self,
+        type: InteractionType | str | None = InteractionType.DETERMINISTIC,
+        *,
+        thread_local: bool = False,
     ) -> None:
         super().__init__()
         if not isinstance(type, InteractionType) and type is not None:
@@ -206,17 +218,25 @@ class set_interaction_type(_DecoratorContextManager):
             else:
                 raise ValueError(f"{type} is not a valid InteractionType")
         self.type = type
+        self.thread_local = thread_local
 
     def clone(self) -> set_interaction_type:
         # override this method if your children class takes __init__ parameters
-        return type(self)(self.type)
+        return type(self)(self.type, thread_local=self.thread_local)
 
     def __enter__(self) -> None:
-        self.prev = _interaction_type.get_mode()
-        _interaction_type.set_mode(self.type)
+        if self.thread_local:
+            self.prev = _interaction_type.get_thread_mode()
+            _interaction_type.set_thread_mode(self.type)
+        else:
+            self.prev = _interaction_type.get_mode()
+            _interaction_type.set_mode(self.type)
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
-        _interaction_type.set_mode(self.prev)
+        if self.thread_local:
+            _interaction_type.set_thread_mode(self.prev)
+        else:
+            _interaction_type.set_mode(self.prev)
 
 
 @contextlib.contextmanager

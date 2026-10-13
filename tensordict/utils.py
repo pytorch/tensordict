@@ -3196,17 +3196,46 @@ def _is_list_tensor_compatible(t) -> Tuple[bool, tuple | None, type | None]:
         return True, (length_t,), dtype
 
 
+# The per-thread mode of a thread that set none, which reads the process-wide one
+_UNSET_MODE = object()
+
+
+class _ThreadMode(threading.local):
+    # threading.local runs __init__ in each thread on its first access, so
+    # reads never miss the attribute (a miss costs an AttributeError)
+    def __init__(self):
+        self.mode = _UNSET_MODE
+
+
 class _ContextManager:
     # Reading or writing one attribute is atomic, so no lock is needed: the
     # mode is read on every call of a tensordict.nn module.
     def __init__(self, default=None):
         self._mode: Any | None = default
+        self._local = _ThreadMode()
+        # Until a thread sets its own mode, reads skip the slower per-thread slot
+        self._has_thread_modes = False
 
     def get_mode(self) -> Any | None:
+        if self._has_thread_modes:
+            mode = self._local.mode
+            if mode is not _UNSET_MODE:
+                return mode
         return self._mode
 
     def set_mode(self, type: Any | None) -> None:
-        self._mode = type
+        # In a thread that set its own mode, a change stays in that thread
+        if self._has_thread_modes and self._local.mode is not _UNSET_MODE:
+            self._local.mode = type
+        else:
+            self._mode = type
+
+    def get_thread_mode(self) -> Any:
+        return self._local.mode
+
+    def set_thread_mode(self, type: Any) -> None:
+        self._has_thread_modes = True
+        self._local.mode = type
 
 
 def _maybe_correct_neg_dim(
