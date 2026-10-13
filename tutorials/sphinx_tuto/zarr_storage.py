@@ -124,15 +124,18 @@ td.to_zarr(root / "compressed.zarr", chunks=(16, 3, 32, 32), compressors=ZstdCod
 # .. note::
 #
 #    ``to_zarr`` writes the metadata file (``zarr.json``) of each group once,
-#    with its attributes. ``PersistentTensorDict.from_dict`` with a dict and
-#    no ``batch_size`` still writes the ``zarr.json`` of each group twice: it
-#    finds the batch size after writing the data. A zip file cannot replace an
-#    entry, so the zip gets a second entry with the same name, and the
-#    ``zipfile`` module of Python warns
+#    with its attributes. ``PersistentTensorDict.from_dict`` still writes some
+#    of them twice in two cases. With a dict and no ``batch_size``, it writes
+#    the ``zarr.json`` of each group twice: it finds the batch size after
+#    writing the data. With ``names=``, it writes the ``zarr.json`` of each
+#    nested group twice: it sets the names after writing the data. A zip file
+#    cannot replace an entry, so the zip gets a second entry with the same
+#    name, and the ``zipfile`` module of Python warns
 #    ``UserWarning: Duplicate name: 'zarr.json'``
 #    (`#2252 <https://github.com/pytorch/tensordict/issues/2252>`_). Reading
-#    the store works: ``zipfile`` returns the last entry. Pass ``batch_size``
-#    to avoid it.
+#    the store works: ``zipfile`` returns the last entry. To avoid it, pass a
+#    ``TensorDict`` that has its batch size and names, for instance
+#    ``TensorDict(data, batch_size=[4], names=["t"])``.
 
 from zarr.storage import ZipStore
 

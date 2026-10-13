@@ -1037,7 +1037,8 @@ class TensorCollection:
         init_tag: int = 0,
         pseudo_rand: bool = False,
         return_early: bool = False,
-    ) -> int: ...
+        consolidated: bool = False,
+    ) -> int | list[dist.Work] | None: ...
     def irecv(
         self,
         src: int | None = None,
@@ -1047,6 +1048,7 @@ class TensorCollection:
         return_premature: bool = False,
         init_tag: int = 0,
         pseudo_rand: bool = False,
+        consolidated: bool = False,
     ) -> tuple[int, list[torch.Future]] | list[torch.Future] | None: ...
     async def asend(self, dst: TensorDictPipe) -> None: ...
     async def arecv(
