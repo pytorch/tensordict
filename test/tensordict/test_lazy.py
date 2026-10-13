@@ -3622,6 +3622,28 @@ class TestLazyStackedTensorDict:
         lazy = lazy_stack(self._members(2))
         lazy.update(lazy_stack(self._members(3, 10.0)))
         assert lazy.batch_size == (2, 3)
+        # it raises where a TensorDict does, before writing anything
+        lazy = lazy_stack(self._members(2))
+        lazy.set("b", torch.zeros(2, 3))
+        before = lazy["a"].clone()
+        for kwargs, match in (
+            ({}, "Some keys of the dest"),
+            ({"inplace": True}, "inplace=True"),
+            ({"keys_to_update": ["a"]}, "keys_to_update"),
+        ):
+            with pytest.raises(RuntimeError, match=match):
+                lazy.to_tensordict().update(
+                    lazy_stack(self._members(3, 10.0)).to_tensordict(),
+                    update_batch_size=True,
+                    **kwargs,
+                )
+            with pytest.raises(RuntimeError, match=match):
+                lazy.update(
+                    lazy_stack(self._members(3, 10.0)),
+                    update_batch_size=True,
+                    **kwargs,
+                )
+            assert lazy.batch_size == (2, 3) and (lazy["a"] == before).all()
 
     def test_lazy_update_tuple_key_over_tensor(self):
         # A tuple key whose prefix is a tensor of the members raises, as on a

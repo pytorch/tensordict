@@ -1181,19 +1181,21 @@ def _update_at_aliases(update_at_: Callable) -> Callable:
     ``LazyStackedTensorDict`` and ``NonTensorStack`` called the index
     ``index``. ``_SubTensorDict`` called the input ``input_dict``, and took
     ``discard_idx_attr=True`` to write into its source at an index of the
-    source.
+    source: classes with a ``_update_source_at_`` method still take it.
     """
 
     @wraps(update_at_)
     def wrapper(self, *args, **kwargs):
         if kwargs:
+            if "discard_idx_attr" in kwargs and hasattr(
+                type(self), "_update_source_at_"
+            ):
+                if kwargs.pop("discard_idx_attr"):
+                    return self._update_source_at_(*args, **kwargs)
             if "index" in kwargs and len(args) < 2:
                 kwargs["idx"] = kwargs.pop("index")
             if "input_dict" in kwargs and not args:
                 kwargs["input_dict_or_td"] = kwargs.pop("input_dict")
-            if kwargs.pop("discard_idx_attr", False):
-                self._source.update_at_(*args, **kwargs)
-                return self
         return update_at_(self, *args, **kwargs)
 
     return wrapper
@@ -3689,6 +3691,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         (no ``clone``, ``inplace``, ``keys_to_update``, ``update_batch_size``,
         ``ignore_lock`` or custom ``is_leaf``, and no kwargs besides a missing
         source), outside of ``torch.compile``. ``source`` may be ``self``.
+        The lock has not been checked yet: return ``False`` when ``self`` is
+        locked.
         When it returns ``False``, :meth:`update` takes the general path, so a
         class that overrides it must write nothing before it returns
         ``False``. The base returns ``False``.
@@ -4208,7 +4212,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> assert (td[1] == 1).all()
 
         """
-        if idx == ():
+        if isinstance(idx, tuple) and not idx:
             return self.update_(
                 input_dict_or_td=input_dict_or_td,
                 keys_to_update=keys_to_update,

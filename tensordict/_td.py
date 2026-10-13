@@ -104,6 +104,7 @@ from tensordict.utils import (
     is_non_tensor,
     is_tensorclass,
     unravel_key,
+    unravel_key_list,
 )
 from torch import Tensor
 from torch._functorch.vmap import _maybe_remove_batch_dim
@@ -2913,9 +2914,37 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
         non_blocking: bool,
         keys_to_update: list[tuple[str, ...]] | None,
     ) -> _SubTensorDict:
-        if isinstance(input_dict_or_td, dict):
-            input_dict_or_td = _flatten_nested_dicts(input_dict_or_td)
-        for key, value in input_dict_or_td.items():
+        return self._update_source_at_(
+            input_dict_or_td,
+            self.idx,
+            clone=clone,
+            non_blocking=non_blocking,
+            keys_to_update=keys_to_update,
+        )
+
+    def _update_source_at_(
+        self,
+        input_dict: dict[str, CompatibleType] | TensorCollection,
+        idx: IndexType,
+        *,
+        clone: bool = False,
+        non_blocking: bool = False,
+        keys_to_update: Sequence[NestedKey] | None = None,
+    ) -> _SubTensorDict:
+        """Writes the leaves of ``input_dict`` into the source at ``idx``, an index of the source.
+
+        ``update_at_(input_dict, idx, discard_idx_attr=True)`` calls it, and
+        :meth:`_update_` with the index of the view.
+        """
+        if keys_to_update is not None:
+            if len(keys_to_update) == 0:
+                return self
+            keys_to_update = [
+                _unravel_key_to_tuple(key) for key in unravel_key_list(keys_to_update)
+            ]
+        if isinstance(input_dict, dict):
+            input_dict = _flatten_nested_dicts(input_dict)
+        for key, value in input_dict.items():
             key = _unravel_key_to_tuple(key)
             if keys_to_update:
                 value = _select_entry(key, value, keys_to_update)
@@ -2929,7 +2958,7 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
             if clone:
                 value = value.clone()
             self._source._set_at_tuple(
-                key, value, self.idx, non_blocking=non_blocking, validated=False
+                key, value, idx, non_blocking=non_blocking, validated=False
             )
         return self
 

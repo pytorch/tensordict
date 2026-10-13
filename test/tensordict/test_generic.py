@@ -7774,6 +7774,23 @@ class TestGeneric:
         assert (source["a"][0] == 7).all()
         assert sub.update_at_({"a": torch.full((3,), 8.0)}, ()) is sub
         assert (source["a"][0] == 8).all()
+        # a NumPy index is not compared with ()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert sub.update_at_({"a": torch.ones(())}, np.array([0, 1])) is sub
+            assert sub.update_at_({"a": torch.ones(())}, np.int64(2)) is sub
+        assert (source["a"][0] == 1).all()
+        # discard_idx_attr writes leaf by leaf, so a lazy source broadcasts
+        lazy = lazy_stack(
+            [TensorDict(a=torch.zeros(3, 2), batch_size=[3]) for _ in range(2)], 1
+        )
+        sub = lazy._get_sub_tensordict((slice(None), 0))
+        sub.update_at_({"a": torch.tensor(4.0)}, 0, discard_idx_attr=True)
+        assert (lazy["a"][0] == 4).all() and (lazy["a"][1:] == 0).all()
+        # only a _SubTensorDict takes discard_idx_attr
+        for td in (source, lazy, source.permute(1, 0)):
+            with pytest.raises(TypeError, match="discard_idx_attr"):
+                td.update_at_({"a": torch.ones(())}, 0, discard_idx_attr=True)
 
     def test_eager_mutation_custom_validation(self):
         class ValidatedTD(TensorDict):

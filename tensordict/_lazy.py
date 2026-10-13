@@ -3974,24 +3974,31 @@ class LazyStackedTensorDict(TensorDictBase):
         ):
             n = len(self.tensordicts)
             sources = input_dict_or_td.tensordicts
-            if len(sources) > n:
-                for td_dest, td_source in zip(self.tensordicts, sources):
-                    td_dest.update(td_source, **kwargs)
-                if update_batch_size:
-                    # the extra members of the source are appended (#2206)
-                    self.extend([td.copy() for td in sources[n:]])
-                return self
-            if len(sources) != n:
-                if update_batch_size:
-                    keys_source = set(input_dict_or_td.keys(True))
-                    keys_dest = set(self.keys(True))
-                    if not keys_dest.issubset(keys_source):
+            if len(sources) != n and update_batch_size:
+                if len(sources) > n:
+                    # the extra members of the source are appended (#2206), after
+                    # the checks of TensorDictBase._update_entries for a source of
+                    # another batch size
+                    if inplace:
                         raise RuntimeError(
-                            "Some keys of the dest tensordict are not present in the source "
-                            "during update with mismatching batch-size. "
-                            f"batch_size of source={input_dict_or_td.batch_size}, batch_size of dest={self.batch_size}, "
-                            f"keys in dest but not in source: {{{keys_dest - keys_source}}}."
+                            "Source and destination tensor collection shapes mismatch, but "
+                            "update was called with inplace=True, which cannot be achieved."
                         )
+                    if keys_to_update is not None:
+                        raise RuntimeError(
+                            "Updating tensordicts of different batch-size with keys_to_update "
+                            "is currently not supported."
+                        )
+                keys_source = set(input_dict_or_td.keys(True))
+                keys_dest = set(self.keys(True))
+                if not keys_dest.issubset(keys_source):
+                    raise RuntimeError(
+                        "Some keys of the dest tensordict are not present in the source "
+                        "during update with mismatching batch-size. "
+                        f"batch_size of source={input_dict_or_td.batch_size}, batch_size of dest={self.batch_size}, "
+                        f"keys in dest but not in source: {{{keys_dest - keys_source}}}."
+                    )
+                if len(sources) < n:
                     hook_out, hook_in = self._hook_out, self._hook_in
                     self.__init__(
                         *sources,
@@ -4000,13 +4007,16 @@ class LazyStackedTensorDict(TensorDictBase):
                     )
                     self._hook_out, self._hook_in = hook_out, hook_in
                     return self
-
-                else:
-                    raise ValueError(
-                        "cannot update stacked tensordicts with different shapes when update_batch_size=False."
-                    )
-            for td_dest, td_source in _zip_strict(self.tensordicts, sources):
+            elif len(sources) < n:
+                raise ValueError(
+                    "cannot update stacked tensordicts with different shapes when update_batch_size=False."
+                )
+            for td_dest, td_source in zip(self.tensordicts, sources):
                 td_dest.update(td_source, **kwargs)
+            if len(sources) > n and update_batch_size:
+                self.extend([td.copy() for td in sources[n:]])
+            # without update_batch_size, the extra members of a longer source
+            # are left out
             return self
 
         if self._hook_in is not None:
