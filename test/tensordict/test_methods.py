@@ -3460,9 +3460,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert key1 == key2
         assert i == len(td.keys()) - 1
         if td.is_locked:
-            assert td._cache.get("sorted_keys") is not None
-            td.unlock_()
-            assert td._cache is None
+            target = td
         elif td_name not in ("sub_td", "sub_td2"):  # we cannot lock sub tensordicts
             if isinstance(td, _CustomOpTensorDict):
                 target = td._source
@@ -3470,10 +3468,19 @@ class TestTensorDicts(TestTensorDictsBase):
                 target = td
             assert target._cache is None
             td.lock_()
-            _ = td.sorted_keys
-            assert target._cache.get("sorted_keys") is not None
-            td.unlock_()
-            assert target._cache is None
+        else:
+            return
+        sorted_keys = td.sorted_keys
+        assert target._cache.get("_sorted_keys") is not None
+        # Changing the returned list must not change the lock cache (#1946).
+        expected = list(sorted_keys)
+        sorted_keys.append("not_a_key")
+        new_sorted_keys = td.sorted_keys
+        assert isinstance(new_sorted_keys, list)
+        assert new_sorted_keys is not sorted_keys
+        assert new_sorted_keys == expected
+        td.unlock_()
+        assert target._cache is None
 
     @pytest.mark.parametrize("performer", ["torch", "tensordict"])
     @pytest.mark.parametrize("dim", range(4))
