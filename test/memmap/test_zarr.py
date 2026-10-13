@@ -386,6 +386,11 @@ class TestZarrWriteOps:
         assert ztd.rename_key_("a2", ("b", "c")) is ztd
         assert set(ztd.keys(True, True)) == {("b", "c")}
         torch.testing.assert_close(ztd["b", "c"], a2)
+        # an entry replaces the key that holds it, as in TensorDict: it raised
+        # a KeyError
+        ztd.rename_key_(("b", "c"), "b")
+        assert set(ztd.keys(True, True)) == {"b"}
+        torch.testing.assert_close(ztd["b"], a2)
 
     def test_rename_key_locked_warns(self, ztd):
         # a locked PersistentTensorDict renamed its keys without a check:

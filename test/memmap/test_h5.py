@@ -179,17 +179,34 @@ class TestH5Serialization:
         h5td.close()
 
     def test_rename_key_into_own_child(self, tmp_path):
-        # a key is not replaced by one of its own entries: the backends raise,
-        # and the file keeps its data
-        td = TensorDict({"n": {"sub": torch.zeros(3), "c": torch.ones(3)}}, [3])
+        # an entry replaces the key that holds it, as in TensorDict: the file
+        # raised a KeyError
+        td = TensorDict(
+            {
+                "n": {"sub": {"x": torch.full((3,), 2.0)}, "c": torch.ones(3)},
+                "n_": torch.ones(3),
+            },
+            [3],
+        )
         h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
         with pytest.raises(KeyError, match="already present"):
-            h5td.rename_key_(("n", "sub"), "n")
-        assert set(h5td.keys(True, True)) == {("n", "sub"), ("n", "c")}
+            h5td.rename_key_(("n", "sub"), "n", safe=True)
+        h5td.rename_key_(("n", "sub"), "n")
+        assert set(h5td.keys(True, True)) == {("n", "x"), "n_"}
+        h5td.rename_key_(("n", "x"), "n")
+        assert set(h5td.keys(True, True)) == {"n", "n_"}
+        assert (h5td["n"] == 2).all()
+        assert (h5td["n_"] == 1).all()
+        del h5td["n"]
+        h5td["n"] = TensorDict(sub=torch.zeros(3), c=torch.ones(3), batch_size=[3])
         # a key moved into one of its own entries moves there, as in
         # TensorDict: the file raised, or lost the key
         h5td.rename_key_("n", ("n", "sub"))
-        assert set(h5td.keys(True, True)) == {("n", "sub", "sub"), ("n", "sub", "c")}
+        assert set(h5td.keys(True, True)) == {
+            ("n", "sub", "sub"),
+            ("n", "sub", "c"),
+            "n_",
+        }
         assert (h5td["n", "sub", "sub"] == 0).all()
         assert (h5td["n", "sub", "c"] == 1).all()
         h5td.rename_key_(("n", "sub", "c"), ("n", "sub", "c", "d", "e"))
