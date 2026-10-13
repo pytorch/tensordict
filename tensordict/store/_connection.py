@@ -58,8 +58,8 @@ def _client_settings(client) -> tuple | None:
     Returns ``(host, port, db, unix_socket_path, credentials)``, where
     ``credentials`` holds the username and the password of the client, if it
     has them. A copy of a store built with ``client`` (pickled or cloned)
-    connects with these. Returns ``None`` if ``client`` does not expose
-    ``connection_pool.connection_kwargs``, as redis-py does, or is ``None``.
+    connects with these. Returns ``None`` if ``client`` is ``None`` or does not
+    expose ``connection_pool.connection_kwargs`` (redis-py clients do).
     """
     try:
         kwargs = client.connection_pool.connection_kwargs
@@ -115,9 +115,9 @@ class _StoreConnection:
     The mixin owns the background event loop, the ``redis.asyncio`` client and
     the names of the server keys. A store describes its layout with the class
     attributes and the two hooks below (:meth:`_entry_server_keys`,
-    :meth:`_init_local_state`). Its constructor sets the attributes of
-    ``_pickled_attrs``, then calls :meth:`_init_local_state` and
-    :meth:`_open_connection`.
+    :meth:`_init_local_state`). Its constructor sets ``_cache_metadata`` and
+    calls :meth:`_init_local_state`, sets the other attributes of
+    ``_pickled_attrs``, and calls :meth:`_open_connection`.
     """
 
     #: Suffixes of the server keys that describe the whole store (batch size,
