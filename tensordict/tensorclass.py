@@ -3394,6 +3394,30 @@ def _update(
     return self
 
 
+def _update_ignores_keys_to_update(self, source, keys_to_update) -> bool:
+    # Whether update_() with the tensorclass source writes other entries than
+    # it would with keys_to_update, as for a TensorDict source: an entry of
+    # self that keys_to_update leaves out, or none for a selected entry that
+    # self does not have, which raises a KeyError.
+    keys_to_update = [_unravel_key_to_tuple(key) for key in keys_to_update]
+
+    def selected(key):
+        return any(key[: len(prefix)] == prefix for prefix in keys_to_update)
+
+    dest_keys = {
+        _unravel_key_to_tuple(key)
+        for key in self._tensordict.keys(True, True, is_leaf=_is_leaf_nontensor)
+    }
+    for key in source._tensordict.keys(True, True, is_leaf=_is_leaf_nontensor):
+        key = _unravel_key_to_tuple(key)
+        if selected(key) != (key in dest_keys):
+            return True
+    return any(
+        value is not None and not selected((key,))
+        for key, value in source._non_tensordict.items()
+    )
+
+
 def _update_(
     self,
     input_dict_or_td: dict[str, CompatibleType] | T | None = None,
@@ -3404,6 +3428,14 @@ def _update_(
     non_blocking: bool = False,
     **kwargs,
 ):
+    """Writes the entries of a dictionary, a tensordict or a tensorclass into the existing entries.
+
+    See :meth:`~tensordict.TensorDictBase.update_`. A tensorclass or dict
+    source ignores ``keys_to_update``: the entries that it leaves out are
+    written too, and the call warns. Starting with TensorDict 0.17, the default
+    will change to writing only the entries in ``keys_to_update``, as for a
+    TensorDict source.
+    """
     if kwargs:
         if input_dict_or_td is None:
             input_dict_or_td = kwargs
@@ -3433,6 +3465,21 @@ def _update_(
         non_tensordict = {
             k: v for k, v in input_dict_or_td._non_tensordict.items() if v is not None
         }
+        if (
+            keys_to_update is not None
+            and not is_dynamo_compiling()
+            and _update_ignores_keys_to_update(self, input_dict_or_td, keys_to_update)
+        ):
+            warnings.warn(
+                f"{type(self).__name__}.update_() with a tensorclass or dict "
+                "source ignores keys_to_update, and writes the entries that "
+                "it leaves out. Starting with TensorDict 0.17, the default will "
+                "change to writing only the entries in keys_to_update, as for "
+                "a TensorDict source, which raises a KeyError for a selected "
+                "entry that the tensorclass does not have.",
+                FutureWarning,
+                stacklevel=2,
+            )
         self._tensordict.update_(input_dict_or_td._tensordict)
         self._non_tensordict.update(non_tensordict)
         return self
@@ -3455,6 +3502,16 @@ def _update_at_(
     keys_to_update: Sequence[NestedKey] | None = None,
     non_blocking: bool = False,
 ):
+    """Writes the entries of a dictionary, a tensordict or a tensorclass in place at an index.
+
+    See :meth:`~tensordict.TensorDictBase.update_at_`. A tensorclass or dict
+    source that :meth:`update` accepts, such as one with the batch size of
+    the tensorclass, goes to :meth:`update` instead: its entries replace
+    those of the tensorclass whatever the index, and the call warns. Starting
+    with TensorDict 0.17, the default will change to writing such a source in
+    place at the index, as :meth:`~tensordict.TensorDictBase.update_at_`
+    does.
+    """
     # A source that update() accepts still goes to update(), which replaces the
     # entries whatever the index, as writing it at the index could raise.
     # Sources that update() rejects for their batch size are written at the index.
@@ -3515,6 +3572,23 @@ def _update_at_(
             else:
                 self._non_tensordict.update(non_tensordict)
                 _clear_none_entries(self, none_keys)
+                # Dynamo cannot trace warnings.warn, so only eager calls warn.
+                if not is_dynamo_compiling() and (
+                    non_tensordict or not source.is_empty()
+                ):
+                    warnings.warn(
+                        f"{type(self).__name__}.update_at_() with a source that "
+                        "update() accepts, such as one with the batch size of the "
+                        "tensorclass, replaces the entries of the tensorclass by "
+                        "those of the source, whatever the index. Starting with "
+                        "TensorDict 0.17, the default will change to writing the "
+                        "source in place at the index, as "
+                        "TensorDict.update_at_() does: the entries keep their "
+                        "storage, and a source that does not have the shape of "
+                        "the index raises.",
+                        FutureWarning,
+                        stacklevel=2,
+                    )
                 return self
 
     # LazyStackedTensorDict.update_at_ takes no keys_to_update

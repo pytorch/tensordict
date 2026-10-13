@@ -3769,10 +3769,12 @@ class TestTensorClass:
         assert (tc.b == tc.a).all()
 
         if source_type == "tensorclass":
-            # a source whose values have the batch size of tc still replaces them
+            # a source whose values have the batch size of tc still replaces
+            # them, and warns until TensorDict 0.17
             tc = TC(a=torch.zeros(4, 3), b=torch.zeros(4), batch_size=[4])
             source = TC(a=torch.ones(4, 3), b=torch.ones(4), batch_size=[])
-            tc.update_at_(source, 1)
+            with pytest.warns(FutureWarning, match="whatever the index"):
+                tc.update_at_(source, 1)
             assert tc.a is source.a and tc.b is source.b
 
             # an UnbatchedTensor does not have the batch size, but update()
@@ -3785,9 +3787,107 @@ class TestTensorClass:
             source = TC(
                 a=torch.ones(4, 3), b=UnbatchedTensor(torch.ones(5)), batch_size=[]
             )
-            tc.update_at_(source, 1)
+            with pytest.warns(FutureWarning, match="whatever the index"):
+                tc.update_at_(source, 1)
             assert tc.a is source.a
             assert (tc.b == 1).all()
+
+    @pytest.mark.parametrize("source_type", ["tensorclass", "dict"])
+    def test_update_at_full_size_source(self, source_type):
+        # update_at_ sends a source that update() accepts to update(), which
+        # replaces the entries whatever the index. It warns until TensorDict
+        # 0.17, which writes the source at the index.
+        @tensorclass
+        class TC:
+            a: torch.Tensor
+            b: torch.Tensor = None
+
+        tc = TC(a=torch.zeros(4), batch_size=[4])
+        source = TC(a=torch.ones(4), batch_size=[4])
+        if source_type == "dict":
+            source = source.to_dict()
+        with pytest.warns(
+            FutureWarning,
+            match=re.escape(
+                "TC.update_at_() with a source that update() accepts, such as "
+                "one with the batch size of the tensorclass, replaces the entries "
+                "of the tensorclass by those of the source, whatever the index. "
+                "Starting with TensorDict 0.17, the default will change to "
+                "writing the source in place at the index"
+            ),
+        ) as record:
+            assert tc.update_at_(source, 0) is tc
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert (tc.a == 1).all()
+        if source_type == "tensorclass":
+            assert tc.a is source.a
+
+        # a source written at the index
+        tc = TC(a=torch.zeros(4), b=torch.zeros(4), batch_size=[4])
+        source = TC(a=torch.ones(2), b=torch.ones(2), batch_size=[2])
+        if source_type == "dict":
+            source = source.to_dict()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            tc.update_at_(source, slice(1, 3))
+        assert tc.a.tolist() == [0.0, 1.0, 1.0, 0.0]
+
+    @pytest.mark.parametrize("source_type", ["tensorclass", "dict"])
+    def test_update__keys_to_update(self, source_type):
+        # update_ ignores keys_to_update for a tensorclass or dict source. It
+        # warns when that changes the result, until TensorDict 0.17, which
+        # honours keys_to_update as for a TensorDict source.
+        @tensorclass
+        class TC:
+            a: torch.Tensor
+            b: torch.Tensor = None
+            c: torch.Tensor = None
+
+        def source(**kwargs):
+            source = TC(**kwargs, batch_size=[3])
+            if source_type == "dict":
+                source = {
+                    key: value
+                    for key, value in source.to_dict().items()
+                    if value is not None
+                }
+            return source
+
+        # b is written although keys_to_update leaves it out
+        tc = TC(a=torch.zeros(3), b=torch.zeros(3), batch_size=[3])
+        with pytest.warns(
+            FutureWarning,
+            match=re.escape(
+                "TC.update_() with a tensorclass or dict source ignores "
+                "keys_to_update, and writes the entries that it leaves out. "
+                "Starting with TensorDict 0.17, the default will change to "
+                "writing only the entries in keys_to_update"
+            ),
+        ) as record:
+            tc.update_(source(a=torch.ones(3), b=torch.ones(3)), keys_to_update=["a"])
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert (tc.a == 1).all() and (tc.b == 1).all()
+
+        # c is unset in tc: keys_to_update=["c"] will raise a KeyError
+        with pytest.warns(FutureWarning, match="raises a KeyError"):
+            tc.update_(
+                source(a=torch.full((3,), 2.0), c=torch.ones(3)),
+                keys_to_update=["a", "c"],
+            )
+        assert (tc.a == 2).all() and tc.c is None
+
+        # the result does not change: no warning
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            tc.update_(
+                source(a=torch.full((3,), 3.0), b=torch.full((3,), 3.0)),
+                keys_to_update=["a", "b", "c"],
+            )
+            tc.update_(source(a=torch.full((3,), 4.0)), keys_to_update=["a"])
+            tc.update_(source(a=torch.full((3,), 5.0), c=torch.ones(3)))
+        assert (tc.a == 5).all() and (tc.b == 3).all() and tc.c is None
 
     @pytest.mark.parametrize("source_type", ["tensordict", "dict"])
     def test_update_at_lazy_stack(self, source_type):
@@ -6254,15 +6354,21 @@ class TestTensorOnly:
         self._check_none_is_missing_key(x, "c")
         y = self.TensorOnly.from_dict(x.to_dict(), batch_size=[3])
         self._check_none_is_missing_key(y, "c")
-        for update in (
-            lambda z: z.update({"c": None}),
-            lambda z: z.update(c=None),
-            lambda z: z.update_at_({"c": None}, 0),
+        for update, warns in (
+            (lambda z: z.update({"c": None}), False),
+            (lambda z: z.update(c=None), False),
+            # update_at_ unsets the field whatever the index, and warns
+            (lambda z: z.update_at_({"c": None}, 0), True),
         ):
             z = self.TensorOnly(
                 torch.zeros(3), torch.zeros(3), torch.ones(3), batch_size=[3]
             )
-            update(z)
+            with (
+                pytest.warns(FutureWarning, match="whatever the index")
+                if warns
+                else contextlib.nullcontext()
+            ):
+                update(z)
             self._check_none_is_missing_key(z, "c")
         # keys_to_update still selects the entries
         z = self.TensorOnly(
