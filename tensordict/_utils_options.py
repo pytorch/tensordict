@@ -70,6 +70,19 @@ def _restore_env(name: str, old) -> None:
         os.environ[name] = old
 
 
+def _restore_env_from_mode(name: str, mode) -> None:
+    # The environment holds str(mode), or nothing while the option was never
+    # set (the module globals start as the environment's value at import).
+    # Writes it back after a .set() call changed the mode inside a block that
+    # left the environment alone.
+    if is_compiling():
+        return
+    if mode is None:
+        os.environ.pop(name, None)
+    else:
+        os.environ[name] = str(mode)
+
+
 _REPR_OPTIONS = {
     "show_batch_size": True,
     "show_device": True,
@@ -214,9 +227,11 @@ class set_lazy_legacy(_DecoratorContextManager):
         return clone
 
     def __enter__(self) -> None:
+        global _LAZY_OP
         if _has_mode(lazy_legacy, self.mode):
             # the block changes nothing: leave the environment alone
             self._old_mode, self._old_env = _LAZY_OP, _ENV_UNTOUCHED
+            _LAZY_OP = bool(self.mode)
         else:
             self.set()
 
@@ -228,6 +243,9 @@ class set_lazy_legacy(_DecoratorContextManager):
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         global _LAZY_OP
+        if self._old_env is _ENV_UNTOUCHED and _LAZY_OP != bool(self.mode):
+            # a .set() call inside the block changed the mode
+            _restore_env_from_mode("LAZY_LEGACY_OP", self._old_mode)
         _LAZY_OP = self._old_mode
         _restore_env("LAZY_LEGACY_OP", self._old_env)
 
@@ -303,9 +321,11 @@ class _set_capture_non_tensor_stack(_DecoratorContextManager):
         return type(self)(self.mode)
 
     def __enter__(self) -> None:
+        global _CAPTURE_NONTENSOR_STACK
         if _has_mode(capture_non_tensor_stack, self.mode):
             # the block changes nothing: leave the environment alone
             self._old_mode, self._old_env = _CAPTURE_NONTENSOR_STACK, _ENV_UNTOUCHED
+            _CAPTURE_NONTENSOR_STACK = bool(self.mode)
         else:
             self.set()
 
@@ -319,6 +339,11 @@ class _set_capture_non_tensor_stack(_DecoratorContextManager):
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         global _CAPTURE_NONTENSOR_STACK
+        if self._old_env is _ENV_UNTOUCHED and _CAPTURE_NONTENSOR_STACK != bool(
+            self.mode
+        ):
+            # a .set() call inside the block changed the mode
+            _restore_env_from_mode("CAPTURE_NONTENSOR_STACK", self._old_mode)
         _CAPTURE_NONTENSOR_STACK = self._old_mode
         _restore_env("CAPTURE_NONTENSOR_STACK", self._old_env)
 
@@ -418,9 +443,11 @@ class _set_list_to_stack(_DecoratorContextManager):
         return type(self)(self.mode)
 
     def __enter__(self) -> None:
+        global _LIST_TO_STACK
         if _has_mode(list_to_stack, self.mode):
             # the block changes nothing: leave the environment alone
             self._old_mode, self._old_env = _LIST_TO_STACK, _ENV_UNTOUCHED
+            _LIST_TO_STACK = bool(self.mode)
         else:
             self.set()
 
@@ -432,6 +459,9 @@ class _set_list_to_stack(_DecoratorContextManager):
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         global _LIST_TO_STACK
+        if self._old_env is _ENV_UNTOUCHED and _LIST_TO_STACK != bool(self.mode):
+            # a .set() call inside the block changed the mode
+            _restore_env_from_mode("LIST_TO_STACK", self._old_mode)
         _LIST_TO_STACK = self._old_mode
         _restore_env("LIST_TO_STACK", self._old_env)
 

@@ -160,8 +160,64 @@ def test_option_block_with_current_mode_leaves_env(
     with block:
         assert os.environ.get(env_var) == env_value
         assert getattr(_utils_options, getter)() is mode
+        # the option counts as set inside the block, as when it is written
+        assert getattr(_utils_options, getter)(allow_none=True) is mode
     assert os.environ.get(env_var) == env_value
     assert getattr(_utils_options, global_name) == env_value
+
+
+@_OPTIONS
+@pytest.mark.parametrize("env_value", [None, "1", "0"])
+def test_option_set_inside_block_with_current_mode(
+    monkeypatch, context, env_var, global_name, getter, default, env_value
+):
+    # .set() with the other mode inside a block that changed nothing: on exit
+    # the environment is restored with the mode, as when the block writes it
+    from tensordict import _utils_options
+
+    if env_value is None:
+        monkeypatch.delenv(env_var, raising=False)
+        mode = default
+    else:
+        monkeypatch.setenv(env_var, env_value)
+        mode = env_value == "1"
+    monkeypatch.setattr(_utils_options, global_name, env_value)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        block = getattr(_utils_options, context)(mode)
+        other = getattr(_utils_options, context)(not mode)
+    with block:
+        other.set()
+        assert os.environ[env_var] == str(not mode)
+        assert getattr(_utils_options, getter)() is (not mode)
+    assert os.environ.get(env_var) == env_value
+    assert getattr(_utils_options, global_name) == env_value
+    assert getattr(_utils_options, getter)() is mode
+
+
+def test_option_block_changing_mode_compiles(monkeypatch):
+    # A block that changes the mode under torch.compile sets it inside and
+    # restores it after, without writing the environment, which Dynamo
+    # cannot trace
+    from tensordict import _utils_options
+
+    monkeypatch.delenv("LIST_TO_STACK", raising=False)
+    monkeypatch.setattr(_utils_options, "_LIST_TO_STACK", None)
+
+    def get_mode(x):
+        with _utils_options._set_list_to_stack(False):
+            inside = _utils_options.list_to_stack()
+        return x + 1, inside
+
+    torch._dynamo.reset()
+    out, inside = torch.compile(get_mode, fullgraph=True, backend="eager")(
+        torch.zeros(3)
+    )
+    assert (out == 1).all()
+    assert inside is False
+    assert _utils_options.list_to_stack() is True
+    assert _utils_options._LIST_TO_STACK is None
+    assert "LIST_TO_STACK" not in os.environ
 
 
 @pytest.mark.parametrize(
