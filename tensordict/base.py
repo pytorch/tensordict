@@ -5725,6 +5725,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         filter_empty: bool | None = None,
         is_leaf: Callable[[Type], bool] | None = None,
         out: TensorDictBase | None = None,
+        call_on_unbatched: bool = False,
         **constructor_kwargs,
     ) -> Self | None:
         from tensordict._td import _SubTensorDict
@@ -5803,14 +5804,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     filter_empty=filter_empty,
                     is_leaf=is_leaf,
                     out=out._get_str(key, default=None) if out is not None else None,
+                    call_on_unbatched=call_on_unbatched,
                     **constructor_kwargs,
                 )
             else:
                 # Pass-through values (e.g., UnbatchedTensor) with shape-changing ops
                 # (indicated by batch_size being set) keep their payload unchanged
                 # but must expose the new TensorDict-facing batch metadata.
-                # For other ops (data ops like zero_), apply the function normally.
-                if batch_size is not None and _is_unbatched(item):
+                # For other ops (data ops like zero_, and to() with a
+                # batch_size, which passes call_on_unbatched=True), apply the
+                # function normally.
+                unbatched_new_batch = batch_size is not None and _is_unbatched(item)
+                if unbatched_new_batch and not call_on_unbatched:
                     item_trsf = item._with_batch_size(batch_size)
                 else:
                     _others = [
@@ -5825,6 +5830,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                             item_trsf = fn(key, item, *_others)
                     else:
                         item_trsf = fn(item, *_others)
+                    if unbatched_new_batch and _is_unbatched(item_trsf):
+                        item_trsf = item_trsf._with_batch_size(batch_size)
             if item_trsf is not None:
                 if not any_set:
                     if result is None:

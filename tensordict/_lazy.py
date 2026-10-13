@@ -3157,6 +3157,7 @@ class LazyStackedTensorDict(TensorDictBase):
         filter_empty: bool | None = None,
         is_leaf: Callable | None = None,
         out: TensorDictBase | None = None,
+        call_on_unbatched: bool = False,
         **constructor_kwargs,
     ) -> Self | None:
         if inplace and any(
@@ -3205,6 +3206,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 filter_empty=filter_empty,
                 is_leaf=is_leaf,
                 out=out,
+                call_on_unbatched=call_on_unbatched,
                 **constructor_kwargs,
             )
 
