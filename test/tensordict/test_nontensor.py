@@ -766,6 +766,33 @@ class TestNonTensorData:
         result.extend(["baz", "qux"])
         assert result._td() is None
 
+    @set_list_to_stack(True)
+    @pytest.mark.parametrize(
+        "rows,batch_size",
+        [
+            ([["a"], ["b"]], (2, 1)),
+            ([["a"], ["b", "c"]], (2,)),
+            ([[{"role": "user"}], [{"role": "user"}, {"role": "bot"}]], (2,)),
+        ],
+    )
+    @pytest.mark.parametrize("batch_dims", [None, 1])
+    def test_from_dict_auto_batch_size_list_of_lists(
+        self, rows, batch_size, batch_dims
+    ):
+        # Regression test for #2542: the nested NonTensorStack is not resized,
+        # and a ragged dim (-1) does not enter the batch size
+        if batch_dims is not None:
+            batch_size = batch_size[:batch_dims]
+        td = TensorDict.from_dict(
+            {"q": rows}, auto_batch_size=True, batch_dims=batch_dims
+        )
+        assert type(td) is TensorDict
+        assert td.batch_size == batch_size
+        assert isinstance(td.get("q"), NonTensorStack)
+        assert td["q"] == rows
+        td = TensorDict(q=rows).auto_batch_size_(batch_dims=batch_dims)
+        assert td.batch_size == batch_size
+
     def test_new_empty_nontensorstack(self):
         td = TensorDict(a=NonTensorStack("a", "b").unsqueeze(-1), batch_size=(2,))
         assert isinstance(td.new_empty((4,), empty_lazy=True).get("a"), NonTensorStack)
