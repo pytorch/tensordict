@@ -305,6 +305,10 @@ class _Reductions:
             values_only=not return_indices,
             call_on_nested=False,
         )
+        if isinstance(result, torch.return_types.min):
+            # reduce=True with a dim returns what torch.min returns, as in
+            # cummax and cummin
+            return result
         if dim is not NO_DEFAULT and dim is not None and return_indices:
             # Split the tensordict
             from torch.return_types import min
@@ -479,6 +483,10 @@ class _Reductions:
             values_only=not return_indices,
             call_on_nested=False,
         )
+        if isinstance(result, torch.return_types.max):
+            # reduce=True with a dim returns what torch.max returns, as in
+            # cummax and cummin
+            return result
         if dim is not NO_DEFAULT and dim is not None and return_indices:
             # Split the tensordict
             from torch.return_types import max
