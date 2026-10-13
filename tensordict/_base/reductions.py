@@ -30,6 +30,10 @@ from tensordict.base import (
 )
 from tensordict.utils import _maybe_correct_neg_dim
 
+# dim=() reduces over every element, as in torch.sum(x, dim=()), except in
+# these reductions, which keep raising for it
+_NO_EMPTY_DIM_REDUCTIONS = frozenset({"max", "min", "cummax", "cummin", "quantile"})
+
 
 def _user_stacklevel() -> int:
     """Returns the ``stacklevel`` that points the caller's warning to the first frame outside tensordict."""
@@ -71,6 +75,16 @@ def _warn_tuple_dim(reduction_name: str, dim: tuple) -> None:
             removal="0.17",
             replacement=f"an int dim, as torch.{reduction_name} takes",
             stacklevel=_user_stacklevel(),
+        )
+
+
+def _check_has_tensor_leaves(reduction_name: str, leaves: list) -> None:
+    # reduce=True reduces the tensor leaves together; without any, torch.cat
+    # would raise an error that does not say why
+    if not leaves:
+        raise ValueError(
+            f"{reduction_name}(reduce=True) reduces the tensor leaves together, "
+            "and this tensordict has no tensor leaves."
         )
 
 
@@ -314,6 +328,10 @@ class _Reductions:
             values_only=not return_indices,
             call_on_nested=False,
         )
+        if isinstance(result, torch.return_types.min):
+            # reduce=True with a dim returns what torch.min returns, as in
+            # cummax and cummin
+            return result
         if dim is not NO_DEFAULT and dim is not None and return_indices:
             # Split the tensordict
             from torch.return_types import min
@@ -488,6 +506,10 @@ class _Reductions:
             values_only=not return_indices,
             call_on_nested=False,
         )
+        if isinstance(result, torch.return_types.max):
+            # reduce=True with a dim returns what torch.max returns, as in
+            # cummax and cummin
+            return result
         if dim is not NO_DEFAULT and dim is not None and return_indices:
             # Split the tensordict
             from torch.return_types import max
@@ -1982,6 +2004,13 @@ class _Reductions:
     ):
         from tensordict._td import TensorDict
 
+        if (
+            isinstance(dim, tuple)
+            and not dim
+            and reduction_name not in _NO_EMPTY_DIM_REDUCTIONS
+        ):
+            # dim=() reduces over all the elements, as in torch
+            dim = None
         if dim is None and not keepdim:
             # dim=None reduces over all the elements, as an omitted dim does
             dim = NO_DEFAULT
@@ -1994,6 +2023,7 @@ class _Reductions:
                         True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
                     )
                 ]
+                _check_has_tensor_leaves(reduction_name, agglomerate)
                 agglomerate = torch.cat(agglomerate, dim=0)
                 if reduction_name == "quantile":
                     q = kwargs.pop("q")
@@ -2029,6 +2059,7 @@ class _Reductions:
                     cat_dim = dim[0]
                 else:
                     cat_dim = dim
+                _check_has_tensor_leaves(reduction_name, agglomerate)
                 agglomerate = torch.cat(agglomerate, dim=cat_dim)
                 kwargs_copy = {}
                 if keepdim is not NO_DEFAULT:

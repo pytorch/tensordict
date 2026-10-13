@@ -281,6 +281,10 @@ def _make_delegate_wrap(method_name: str) -> Callable:
         result = getattr(self._source, method_name)(*args, **kwargs)
         if result is None:
             return None
+        if result is self._source:
+            # The source returned itself (inplace=True, or a no-op such as
+            # reshape to the same shape): return self, as TensorDict does.
+            return self
         return type(self)._wrap_td(result)
 
     method.__name__ = method_name

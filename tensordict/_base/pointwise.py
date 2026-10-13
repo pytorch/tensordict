@@ -1398,6 +1398,9 @@ class _PointwiseOps:
                 keys = new_keys
         else:
             other_val = other
+        if alpha is not None and isinstance(other_val, numbers.Number):
+            # The _foreach overloads that take a number have no alpha
+            other_val, alpha = other_val * alpha, None
         if alpha is not None:
             vals = _foreach("add", vals, other_val, alpha=alpha)
         else:
@@ -1454,6 +1457,9 @@ class _PointwiseOps:
                 else:
                     self.apply_(lambda x: x.add_(other))
             return self
+        if alpha is not None and isinstance(other_val, numbers.Number):
+            # The _foreach overloads that take a number have no alpha
+            other_val, alpha = other_val * alpha, None
         if alpha is not None:
             _foreach("add_", vals, other_val, alpha=alpha)
         else:
@@ -1717,6 +1723,9 @@ class _PointwiseOps:
         if no_tensors and not vals:
             # No tensor in self, and default fills none in from other.
             return self.copy()
+        if alpha is not None and isinstance(other_val, numbers.Number):
+            # The _foreach overloads that take a number have no alpha
+            other_val, alpha = other_val * alpha, None
         if alpha is not None:
             vals = _foreach("sub", vals, other_val, alpha=alpha)
         else:
@@ -1758,6 +1767,9 @@ class _PointwiseOps:
             other_val = other
         if not vals:
             return self
+        if alpha is not None and isinstance(other_val, numbers.Number):
+            # The _foreach overloads that take a number have no alpha
+            other_val, alpha = other_val * alpha, None
         if alpha is not None:
             _foreach("sub_", vals, other_val, alpha=alpha)
         else:
