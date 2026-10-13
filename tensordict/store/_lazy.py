@@ -372,6 +372,7 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
             "Delete from the parent LazyStackedTensorDictStore instead."
         )
 
+    # Override: a stack element cannot rename the keys it shares with the stack.
     def rename_key_(self, old_key, new_key, safe=False):
         raise RuntimeError(
             "Cannot rename keys on a stack element view. "
@@ -652,6 +653,7 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
     _reads_return_copies = True
     # and each sub-tensordict is a new TensorDict
     _nested_reads_return_copies = True
+    _rename_key_lenient = True
 
     def __init__(
         self,
@@ -1746,9 +1748,8 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
         if self._meta_cache is not None:
             self._meta_cache.pop(key_path, None)
 
-    def rename_key_(
-        self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
-    ) -> LazyStackedTensorDictStore:
+    # Override: renames the keys on the server, without reading the data.
+    def _rename_key(self, old_key: NestedKey, new_key: NestedKey) -> None:
         if isinstance(old_key, str):
             old_path = old_key
         else:
@@ -1757,9 +1758,6 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
             new_path = new_key
         else:
             new_path = _KEY_SEP.join(_unravel_key_to_tuple(new_key))
-
-        if safe and new_path in self._get_all_keys():
-            raise KeyError(f"key {new_key} already present in {type(self).__name__}.")
 
         async def _arename():
             all_keys = await self._aget_all_keys()
@@ -1807,8 +1805,8 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
                 self._meta_cache.pop(src_kp, None)
                 self._meta_cache.pop(dst_kp, None)
         if not found:
-            _warn_missing_key(self, "rename_key_", old_key, stacklevel=2)
-        return self
+            # stacklevel 3: skip rename_key_
+            _warn_missing_key(self, "rename_key_", old_key, stacklevel=3)
 
     @staticmethod
     def _sub_td_renames(

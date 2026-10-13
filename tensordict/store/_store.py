@@ -305,6 +305,7 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
     _masking_on_dense_copy = True
     # each read fetches the entry from the server into a new tensor
     _reads_return_copies = True
+    _rename_key_lenient = True
     # Set on the shallow copies that _clone(recurse=False) returns: they share
     # the data and the metadata keys of the store, but not its batch size.
     _is_shallow_copy = False
@@ -1806,9 +1807,8 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
             return value.to_tensordict()
         return value
 
-    def rename_key_(
-        self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
-    ) -> TensorDictStore:
+    # Override: renames the keys on the server, without reading the data.
+    def _rename_key(self, old_key: NestedKey, new_key: NestedKey) -> None:
         if isinstance(old_key, str):
             old_path = self._full_key_path(old_key)
         else:
@@ -1820,9 +1820,6 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
         else:
             new_key_tuple = _unravel_key_to_tuple(new_key)
             new_path = self._full_key_path(_KEY_SEP.join(new_key_tuple))
-
-        if safe and new_path in self._get_all_keys():
-            raise KeyError(f"key {new_key} already present in {type(self).__name__}.")
 
         async def _arename(old_path, new_path):
             all_keys = await self._aget_all_keys()
@@ -1858,8 +1855,8 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
             if old_meta is not None:
                 self._meta_cache[new_path] = old_meta
         if not found:
-            _warn_missing_key(self, "rename_key_", old_key, stacklevel=2)
-        return self
+            # stacklevel 3: skip rename_key_
+            _warn_missing_key(self, "rename_key_", old_key, stacklevel=3)
 
     def entry_class(self, key: NestedKey) -> type:
         if isinstance(key, str):

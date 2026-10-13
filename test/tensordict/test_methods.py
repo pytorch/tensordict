@@ -2851,6 +2851,17 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td[("nested", "back")] == 0).all()
         assert "second" not in td.keys()
 
+    def test_rename_key_overwrite(self, td_name, device) -> None:
+        # with safe=False (the default), an existing entry is replaced, as in
+        # TensorDict: PersistentTensorDict raised a KeyError
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        td.unlock_()
+        a = td.get("a").clone()
+        assert td.rename_key_("a", "b") is td
+        assert "a" not in td.keys()
+        torch.testing.assert_close(td.get("b"), a)
+
     def test_repeat(self, td_name, device):
         td = getattr(self, td_name)(device)
         assert (td.repeat(1, 1, 1, 1) == td).all()

@@ -1530,55 +1530,6 @@ class TensorDict(TensorDictBase):
         del self._tensordict[key[0]]
         return self
 
-    @_lock_blocked
-    def rename_key_(
-        self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
-    ) -> Self:
-        # these checks are not perfect, tuples that are not tuples of strings or empty
-        # tuples could go through but (1) it will raise an error anyway and (2)
-        # those checks are expensive when repeated often.
-        if not isinstance(old_key, (str, tuple)):
-            raise TypeError(
-                f"Expected old_name to be a string or a tuple of strings but found {type(old_key)}"
-            )
-        if not isinstance(new_key, (str, tuple)):
-            raise TypeError(
-                f"Expected new_name to be a string or a tuple of strings but found {type(new_key)}"
-            )
-        old_key = unravel_key(old_key)
-        new_key = unravel_key(new_key)
-        if old_key == new_key:
-            if old_key not in self.keys(include_nested=isinstance(old_key, tuple)):
-                raise KeyError(f"Key {old_key} not found in tensordict.")
-            return self
-        if safe and (new_key in self.keys(include_nested=True)):
-            raise KeyError(f"key {new_key} already present in TensorDict.")
-
-        if isinstance(new_key, str):
-            self._set_str(
-                new_key,
-                self.get(old_key, default=NO_DEFAULT),
-                inplace=False,
-                validated=True,
-                non_blocking=False,
-            )
-        else:
-            self._set_tuple(
-                new_key,
-                self.get(old_key, default=NO_DEFAULT),
-                inplace=False,
-                validated=True,
-                non_blocking=False,
-            )
-        new_key_tuple = (new_key,) if isinstance(new_key, str) else new_key
-        if not (
-            isinstance(old_key, tuple)
-            and old_key[: len(new_key_tuple)] == new_key_tuple
-        ):
-            # eg: td.rename_(("0", "1", "2"), ("0", "1")), then ("0", "1", "2") should not be deleted
-            self.del_(old_key)
-        return self
-
     # Override: stacks into the existing leaf storages (torch.stack(out=)).
     def _stack_onto_(self, list_item: list[CompatibleType], dim: int) -> TensorDict:
         for key in self.keys():
@@ -3195,6 +3146,7 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
     def is_memmap(self) -> bool:
         return self._source.is_memmap()
 
+    # Override: the source checks its lock and the keys, and renames.
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> _SubTensorDict:

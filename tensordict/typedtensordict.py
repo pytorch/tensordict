@@ -930,6 +930,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
         self._source.del_(key)
         return self
 
+    # Override: the source checks its lock and the keys, and renames.
     def rename_key_(self, old_key, new_key, safe=False):
         self._source.rename_key_(old_key, new_key, safe=safe)
         return self
