@@ -17,7 +17,7 @@ import sys
 import threading
 import warnings
 import weakref
-from collections import namedtuple, UserDict
+from collections import defaultdict, namedtuple, OrderedDict, UserDict
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -1968,6 +1968,24 @@ class TestGeneric:
         assert (pytree_recon.b == nt.b).all()
         # without auto_batch_size, batch_dims is ignored, as for lists and dicts
         assert TensorDict.from_pytree(nt, batch_dims=1).batch_size == ()
+
+    def test_from_pytree_subclasses(self):
+        # https://github.com/pytorch/tensordict/issues/2371
+        pytree = OrderedDict(
+            b=torch.zeros(3, 2).max(1),
+            a=defaultdict(list, c=torch.ones(3)),
+        )
+        pytree_recon = TensorDict.from_pytree(pytree).to_pytree()
+        assert type(pytree_recon) is OrderedDict
+        assert list(pytree_recon) == ["b", "a"]
+        assert type(pytree_recon["b"]) is torch.return_types.max
+        assert type(pytree_recon["a"]) is defaultdict
+        assert pytree_recon["a"].default_factory is None
+
+        def check(v1, v2):
+            assert (v1 == v2).all()
+
+        torch.utils._pytree.tree_map(check, pytree, pytree_recon)
 
     def test_from_struct_array(self):
         x = np.array(
