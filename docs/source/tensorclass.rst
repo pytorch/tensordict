@@ -134,6 +134,13 @@ index always applies to the batch dimensions. To read a field by name, use
   >>> data.get("count").shape
   torch.Size([3, 4, 1])
 
+Assigning a name that is not a field, as an attribute or with ``set()``,
+raises ``AttributeError``. ``set_non_tensor()``, ``setdefault()``,
+``create_nested()``, ``rename_key_()``, and ``update()`` with a
+``TensorDict`` or another tensorclass still store such a key, and warn with a
+``DeprecationWarning``. Starting with TensorDict 0.17, they raise
+``AttributeError`` too.
+
 To test whether an object is a tensordict or a tensorclass, use
 :func:`~tensordict.is_tensor_collection`. ``to_tensordict()`` returns a copy
 of the data as a :class:`~tensordict.TensorDict`.
@@ -321,6 +328,9 @@ string as ``NonTensorData``:
       batch_size=torch.Size([3, 4]),
       device=None,
       is_shared=False)
+
+A field that you delete with ``del obj.field``, ``obj.del_("field")`` or
+``obj.pop("field")`` reads as ``None`` afterwards.
 
 Comparison, item assignment, and concatenation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -281,6 +281,32 @@ def test_tree_leaves_nontensor_stack(values):
     assert (out == 1).all()
 
 
+def test_where_non_tensor_data():
+    # With equal values, NonTensorData.where does not read the condition, and
+    # compiles without a graph break. With differing values, it reads the
+    # condition and breaks the graph (#2071).
+    def fn(td, other, cond):
+        return td.where(cond, other)
+
+    cond = torch.tensor([True, False, True, False])
+    td = TensorDict(
+        x=torch.zeros(4), s=NonTensorData("a", batch_size=[4]), batch_size=[4]
+    )
+    same = TensorDict(
+        x=torch.ones(4), s=NonTensorData("a", batch_size=[4]), batch_size=[4]
+    )
+    other = TensorDict(
+        x=torch.ones(4), s=NonTensorData("b", batch_size=[4]), batch_size=[4]
+    )
+    result = torch.compile(fn, fullgraph=True, backend="eager")(td, same, cond)
+    assert result["x"].tolist() == [0.0, 1.0, 0.0, 1.0]
+    assert result.get("s").tolist() == ["a"] * 4
+    torch._dynamo.reset()
+    result = torch.compile(fn, backend="eager")(td, other, cond)
+    assert result["x"].tolist() == [0.0, 1.0, 0.0, 1.0]
+    assert result.get("s").tolist() == ["a", "b", "a", "b"]
+
+
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
     def test_tensor_output(self, mode):
@@ -826,6 +852,44 @@ class TestTD:
         assert result is td
         assert result.batch_size == torch.Size(batch_size)
         torch.testing.assert_close(result["a"], torch.zeros(2, 3))
+
+    @pytest.mark.parametrize("batch_size", [[2], [2, 3], [5]])
+    def test_to_batch_size_new_device(self, mode, batch_size):
+        def to_meta(td):
+            return td.to("meta", batch_size=batch_size)
+
+        td = TensorDict(
+            nested=TensorDict(a=torch.zeros(2, 3), batch_size=[2]), batch_size=[2]
+        )
+        to_meta_c = torch.compile(to_meta, fullgraph=True, mode=mode)
+        if batch_size == [5]:
+            with pytest.raises(RuntimeError, match="incompatible with the batch-size"):
+                to_meta_c(td)
+            return
+        result = to_meta_c(td)
+        assert result.batch_size == torch.Size(batch_size)
+        assert result["nested"].batch_size == torch.Size(batch_size)
+        assert result["nested", "a"].device == torch.device("meta")
+
+    def test_to_batch_size_new_device_future_warning(self, mode):
+        # eager mode warns on this call; compiled code skips the warning
+        def to_meta(td):
+            return td.to("meta", batch_size=[2, 3])
+
+        td = TensorDict(
+            a=torch.zeros(2, 3, 4),
+            nested=TensorDict(b=torch.zeros(2, 3, 4), batch_size=[2, 3, 4]),
+            batch_size=[2],
+            names=["r"],
+        )
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            expected = to_meta(td)
+        to_meta_c = torch.compile(to_meta, fullgraph=True, mode=mode)
+        result = to_meta_c(td)
+        assert result.batch_size == expected.batch_size
+        assert result["nested"].batch_size == expected["nested"].batch_size
+        assert result.names == expected.names
+        assert result["nested", "b"].device == torch.device("meta")
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="cuda required")
     def test_to_cpu_from_cuda(self, mode):
@@ -1469,6 +1533,27 @@ class TestTC:
         assert data.y is None
         assert (read_c(data) == 0).all()
         # The compiled read sees the field once it holds a tensor again
+        data.y = torch.full((3,), 2.0)
+        assert (read_c(data) == 2).all()
+
+    @pytest.mark.parametrize("shadow", [False, True])
+    def test_tc_deleted_field_read(self, mode, shadow):
+        # #2147: a compiled read of a deleted field gives None, and sees the
+        # field again once it holds a tensor
+        @tensorclass(shadow=shadow)
+        class Regular:
+            x: torch.Tensor
+            y: torch.Tensor = None
+
+        def read(tc):
+            if tc.y is None:
+                return tc.x
+            return tc.x + tc.y
+
+        read_c = torch.compile(read, fullgraph=True, mode=mode)
+        data = Regular(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+        del data.y
+        assert (read_c(data) == 0).all()
         data.y = torch.full((3,), 2.0)
         assert (read_c(data) == 2).all()
 
@@ -2874,6 +2959,38 @@ class TestCudaGraphs:
             ):
                 func(torch.zeros(()), 2.0)
 
+    def test_td_input_nontensor_arg_change_warns(self, compiled):
+        # pytorch/tensordict#2075: the replay of a function that takes a
+        # tensordict reads the captured non-tensor arguments. A call with other
+        # values warns that it will raise in 0.17, and keeps today's result.
+        if not torch.cuda.is_available():
+            pytest.skip("CudaGraphModule only replays graphs on CUDA")
+
+        def update(td, flag, scale=1.0):
+            out = td["x"] + 100 if flag else td["x"] + 1
+            return TensorDict(y=out * scale)
+
+        func = self._make_cudagraph(update, compiled, in_keys=[], out_keys=[])
+        td = TensorDict(x=torch.zeros(()))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            for _ in range(4):
+                assert func(td, True)["y"] == 100
+            assert func(td, flag=True)["y"] == 100
+            assert func(td, 1)["y"] == 100
+        for args, kwargs in [
+            ((False,), {}),
+            ((True,), {"scale": 2.0}),
+            ((True, 2.0), {}),
+        ]:
+            with pytest.warns(
+                FutureWarning, match="Starting with TensorDict 0.17"
+            ) as record:
+                assert func(td, *args, **kwargs)["y"] == 100
+            assert {w.filename for w in record if w.category is FutureWarning} == {
+                __file__
+            }
+
     def test_state_dict(self, compiled):
         # Create a linear layer and wrap it in CudaGraphModule
         linear = torch.nn.Linear(3, 4)
@@ -3112,6 +3229,34 @@ class TestTCDefaultsCompile:
         inp = torch.ones(3)
         assert _NoneDefaultTC(x=inp).y is None
         assert fn(inp) is None
+
+    def test_from_dict_and_update_under_compile(self):
+        # from_dict() checks the fields with a default (#2079) without
+        # breaking the graph, and a compiled call does not warn.
+        @tensorclass
+        class WithDefaults:
+            a: torch.Tensor
+            s: str = "hi"
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def from_dict(x, full):
+            if full:
+                return WithDefaults.from_dict({"a": x, "s": "q"}, batch_size=[3])
+            return WithDefaults.from_dict({"a": x}, batch_size=[3])
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def update(c, x):
+            c.update({"a": x})
+            return c
+
+        inp = torch.ones(3)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            assert from_dict(inp, True).s == "q"
+            assert from_dict(inp, False).s is None
+            c = update(WithDefaults(a=torch.zeros(3), s="q", batch_size=[3]), inp)
+        assert (c.a == 1).all()
+        assert c.s == "q"
 
 
 class TestTCCustomInitCompile:

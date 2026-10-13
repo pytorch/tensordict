@@ -123,34 +123,21 @@ td.to_zarr(root / "compressed.zarr", chunks=(16, 3, 32, 32), compressors=ZstdCod
 #
 # .. note::
 #
-#    ``to_zarr`` writes the metadata file (``zarr.json``) of each group, then
-#    writes it again to add attributes. A zip file cannot replace an entry,
-#    so the zip gets a second entry with the same name
-#    (`#2252 <https://github.com/pytorch/tensordict/issues/2252>`_). For each
-#    group, the ``zipfile`` module of Python warns
-#    ``UserWarning: Duplicate name: 'zarr.json'``, or the same message with
-#    the path of a nested group, such as ``'meta/zarr.json'``. Each array gets
-#    one ``zarr.json``. Reading the store works: ``zipfile`` returns the last
-#    entry, which has all the attributes. The example below hides these
-#    warnings.
+#    ``to_zarr`` writes the metadata file (``zarr.json``) of each group once,
+#    with its attributes. ``PersistentTensorDict.from_dict`` with a dict and
+#    no ``batch_size`` still writes the ``zarr.json`` of each group twice: it
+#    finds the batch size after writing the data. A zip file cannot replace an
+#    entry, so the zip gets a second entry with the same name, and the
+#    ``zipfile`` module of Python warns
+#    ``UserWarning: Duplicate name: 'zarr.json'``
+#    (`#2252 <https://github.com/pytorch/tensordict/issues/2252>`_). Reading
+#    the store works: ``zipfile`` returns the last entry. Pass ``batch_size``
+#    to avoid it.
 
 from zarr.storage import ZipStore
 
-# sphinx_gallery_start_ignore
-import warnings
-
-# to_zarr rewrites the zarr.json of each group, and a zip cannot replace an entry,
-# so zipfile warns "Duplicate name" (see the note above). The archive
-# reads correctly. Hide only this warning, only for this write.
-_zip_warnings = warnings.catch_warnings()
-_zip_warnings.__enter__()
-warnings.filterwarnings("ignore", message="Duplicate name", category=UserWarning)
-# sphinx_gallery_end_ignore
 store = ZipStore(root / "dataset.zarr.zip", mode="w")
 td.to_zarr(store).close()
-# sphinx_gallery_start_ignore
-_zip_warnings.__exit__(None, None, None)
-# sphinx_gallery_end_ignore
 
 td_zip = TensorDict.from_zarr(ZipStore(root / "dataset.zarr.zip", mode="r"))
 assert (td_zip["labels"] == td["labels"]).all()

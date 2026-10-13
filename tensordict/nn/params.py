@@ -42,7 +42,6 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
-from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _BufferLegacy,
     _erase_cache_first,
@@ -991,41 +990,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
     _memmap_ = TensorDict._memmap_
 
-    _load_memmap = TensorDict._load_memmap
-
-    def make_memmap(
-        self,
-        key: NestedKey,
-        shape: torch.Size | torch.Tensor,
-        *,
-        dtype: torch.dtype | None = None,
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't currently allowed for TensorDictParams."
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
-    def make_memmap_from_storage(
-        self,
-        key: NestedKey,
-        storage: torch.UntypedStorage,
-        shape: torch.Size | torch.Tensor,
-        *,
-        dtype: torch.dtype | None = None,
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't currently allowed for TensorDictParams."
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
-    def make_memmap_from_tensor(
-        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't currently allowed for TensorDictParams."
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
     @_fallback_property
     def names(self): ...
 
@@ -1184,8 +1148,14 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback
     def expand(self, *args, **kwargs) -> Self: ...
 
-    @_fallback
-    def masked_select(self, mask: Tensor) -> Self: ...
+    def masked_select(self, mask: Tensor, *, inplace: bool = False) -> Self:
+        if inplace:
+            # the masked leaves would no longer be registered parameters
+            raise NotImplementedError(
+                "masked_select(inplace=True) is not supported on "
+                "TensorDictParams; use inplace=False."
+            )
+        return self._param_td.masked_select(mask)
 
     @_fallback
     def memmap_like(

@@ -366,7 +366,26 @@ class TestZarrWriteOps:
         assert "a2" in ztd.keys()
         assert "a" not in ztd.keys()
         with pytest.raises(KeyError, match="already present"):
-            ztd.rename_key_("a2", ("b", "c"))
+            ztd.rename_key_("a2", ("b", "c"), safe=True)
+        # safe=False replaces the existing entry, as in TensorDict
+        a2 = ztd["a2"].clone()
+        assert ztd.rename_key_("a2", ("b", "c")) is ztd
+        assert set(ztd.keys(True, True)) == {("b", "c")}
+        torch.testing.assert_close(ztd["b", "c"], a2)
+
+    def test_rename_key_locked_warns(self, ztd):
+        # a locked PersistentTensorDict renamed its keys without a check:
+        # it still does, with a warning, until 0.17
+        ztd.lock_()
+        with pytest.warns(
+            FutureWarning,
+            match=r"rename_key_ renames keys of a locked tensordict today\. "
+            r"Starting with TensorDict 0\.17",
+        ) as record:
+            assert ztd.rename_key_("a", "a2") is ztd
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert "a2" in ztd.keys()
 
     def test_rename_nested_group(self, ztd):
         ztd.rename_key_("b", "b2")
@@ -525,6 +544,37 @@ class TestZarrStores:
         assert names.count("s/zarr.json") == 1
         td_recon = TensorDict.from_zarr(ZipStore(str(path), mode="r"))
         assert td_recon["s"] == "a string"
+        td_recon.close()
+
+    @pytest.mark.parametrize("named", [False, True])
+    def test_zip_store_groups_written_once(self, tmp_path, named):
+        # each group's zarr.json is written with its attributes, once
+        import zipfile
+
+        from zarr.storage import ZipStore
+
+        path = tmp_path / "s.zarr.zip"
+        td = TensorDict(
+            {"a": torch.randn(4, 3), "b": {"c": {"d": torch.randn(4, 2, 5)}}},
+            batch_size=[4],
+        )
+        td["b"].batch_size = [4, 2]
+        if named:
+            td.names = ["t"]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            store = ZipStore(str(path), mode="w")
+            td.to_zarr(store).close()
+
+        with zipfile.ZipFile(path) as zf:
+            names = zf.namelist()
+        assert len(names) == len(set(names))
+        td_recon = TensorDict.from_zarr(ZipStore(str(path), mode="r"))
+        assert td_recon.batch_size == torch.Size([4])
+        assert td_recon["b"].batch_size == torch.Size([4, 2])
+        assert td_recon["b", "c"].batch_size == torch.Size([4, 2])
+        assert td_recon.names == (["t"] if named else [None])
+        assert (td_recon["b", "c", "d"] == td["b", "c", "d"]).all()
         td_recon.close()
 
     def test_group_kwarg(self, tmp_path):

@@ -24,13 +24,6 @@ else:
 __all__ = ["CompositeDistribution"]
 
 
-def _entropy(dist):
-    # TruncatedStandardNormal and TruncatedNormal expose entropy as a property,
-    # not as a method like torch.distributions do.
-    e = dist.entropy
-    return e() if callable(e) else e
-
-
 class CompositeDistribution(d.Distribution, Mapping):
     """A composite distribution that groups multiple distributions together using the TensorDict interface.
 
@@ -305,10 +298,6 @@ class CompositeDistribution(d.Distribution, Mapping):
                 if issubclass(tdist, d.Independent):
                     tdist = type(dist.base_dist)
                 interaction_type = _DETERMINISTIC_REGISTER.get(tdist)
-                if interaction_type == "mode":
-                    return dist.mode
-                if interaction_type == "mean":
-                    return dist.mean
                 if interaction_type == "random":
                     return dist.rsample() if dist.has_rsample else dist.sample()
                 if (
@@ -318,7 +307,11 @@ class CompositeDistribution(d.Distribution, Mapping):
                 ):
                     # Independent leaves the samples of its base unchanged
                     return dist.base_dist.deterministic_sample
-                if interaction_type is None:
+                if interaction_type == "mode":
+                    fallback = "mode"
+                elif interaction_type == "mean":
+                    fallback = "mean"
+                elif interaction_type is None:
                     try:
                         support = dist.support
                         fallback = (
@@ -334,18 +327,23 @@ class CompositeDistribution(d.Distribution, Mapping):
                     raise RuntimeError(
                         f"InteractionType {interaction_type} is unaccounted for."
                     )
+                # A registered dist's AttributeError propagates, as before
+                errors = (
+                    (AttributeError, NotImplementedError)
+                    if interaction_type is None
+                    else NotImplementedError
+                )
                 try:
-                    if fallback == "mean":
-                        return dist.mean
-                    elif fallback == "mode":
-                        return dist.mode
-                    else:
-                        raise AttributeError
-                except AttributeError:
+                    result = dist.mean if fallback == "mean" else dist.mode
+                except errors as err:
                     raise NotImplementedError(
-                        f"method {type(dist)}.deterministic_sample is not implemented, no replacement found."
-                    )
-                finally:
+                        f"{type(dist)} has no deterministic_sample, and its {fallback} "
+                        f"is not implemented, so {type(self).__name__} cannot compute "
+                        f"a deterministic sample for it. Use a distribution with a "
+                        f"deterministic_sample attribute (for example TanhNormal), or "
+                        f"another interaction type."
+                    ) from err
+                if interaction_type is None:
                     warnings.warn(
                         f"deterministic_sample wasn't found when queried on {type(dist)}. "
                         f"{type(self).__name__} is falling back on {fallback} instead. "
@@ -354,6 +352,7 @@ class CompositeDistribution(d.Distribution, Mapping):
                         f"to change the InteractionMode to the desired value.",
                         category=UserWarning,
                     )
+                return result
 
         samples = {
             name: maybe_deterministic_sample(dist) for name, dist in self.dists.items()
@@ -534,7 +533,7 @@ class CompositeDistribution(d.Distribution, Mapping):
         se = 0.0
         for dist in self.dists.values():
             try:
-                e = _entropy(dist)
+                e = dist.entropy()
             except NotImplementedError:
                 x = dist.rsample((samples_mc,))
                 e = -dist.log_prob(x).mean(0)
@@ -575,7 +574,7 @@ class CompositeDistribution(d.Distribution, Mapping):
         d = {}
         for name, dist in self.dists.items():
             try:
-                e = _entropy(dist)
+                e = dist.entropy()
             except NotImplementedError:
                 x = dist.rsample((samples_mc,))
                 e = -dist.log_prob(x).mean(0)

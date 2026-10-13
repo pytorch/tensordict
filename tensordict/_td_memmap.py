@@ -9,7 +9,7 @@ from pathlib import Path
 
 import torch
 from tensordict._tensorcollection import TensorCollection
-from tensordict.memmap import MemoryMappedTensor
+from tensordict.memmap import _raise_if_jagged, MemoryMappedTensor
 
 __all__ = [
     "_populate_empty",
@@ -49,6 +49,7 @@ def _populate_memmap(
     """Populate ``dest`` with a memory-mapped copy of ``value``."""
     from .utils import _encode_key_for_filesystem, _get_robust_key_setting_with_warning
 
+    _raise_if_jagged(value, key)
     if prefix is None:
         filename = None
     else:
