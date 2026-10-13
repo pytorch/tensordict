@@ -390,6 +390,86 @@ class TestLazyStackedTensorDict:
         assert isinstance(batch, LazyStackedTensorDict)
         assert [len(td["x"]) for td in batch] == indices
 
+    def test_to_dict_state_dict_exclusive_keys_raise(self):
+        # to_dict and state_dict would silently drop the keys that are not in
+        # every member, so they raise
+        match = "cannot complete when there are exclusive keys"
+        td = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(()), b=torch.ones(())),
+                TensorDict(a=torch.zeros(()), c=torch.ones(())),
+            ]
+        )
+        nested = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(()), n=TensorDict(x=torch.zeros(()))),
+                TensorDict(a=torch.zeros(()), n=TensorDict(y=torch.ones(()))),
+            ]
+        )
+        for data in (td, nested, TensorDict(s=nested)):
+            for call in (data.to_dict, data.state_dict):
+                with pytest.raises(RuntimeError, match=match):
+                    call()
+        for data in (td, nested):
+            with pytest.raises(RuntimeError, match=match):
+                data.to_dict(tolist_first=True)
+        # with tolist_first, a dense tensordict lists the members of the nested
+        # stack, so nothing is lost
+        assert TensorDict(s=nested).to_dict(tolist_first=True) == {
+            "s": [
+                {"a": torch.zeros(()), "n": {"x": torch.zeros(())}},
+                {"a": torch.zeros(()), "n": {"y": torch.ones(())}},
+            ]
+        }
+        same_keys = lazy_stack(
+            [TensorDict(a=torch.zeros(())), TensorDict(a=torch.ones(()))]
+        )
+        assert (same_keys.to_dict()["a"] == torch.tensor([0.0, 1.0])).all()
+        assert list(same_keys.state_dict()) == ["a"]
+
+    def test_repr_exact(self):
+        td = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(3), b=torch.zeros(3, 2), batch_size=[3]),
+                TensorDict(a=torch.ones(3), batch_size=[3]),
+            ],
+            1,
+        )
+        assert repr(td) == (
+            "LazyStackedTensorDict(\n"
+            "    fields={\n"
+            "        a: Tensor(shape=torch.Size([3, 2]), device=cpu, "
+            "dtype=torch.float32, is_shared=False)},\n"
+            "    exclusive_fields={\n"
+            "        0 ->\n"
+            "            b: Tensor(shape=torch.Size([3, 2]), device=cpu, "
+            "dtype=torch.float32, is_shared=False)},\n"
+            "    batch_size=torch.Size([3, 2]),\n"
+            "    device=None,\n"
+            "    is_shared=False,\n"
+            "    stack_dim=1)"
+        )
+
+    def test_to_keeps_nested_tensorclass(self):
+        class MC(TensorClass):
+            x: torch.Tensor
+
+        td = lazy_stack(
+            [
+                TensorDict(tc=MC(x=torch.zeros(3), batch_size=[3]), batch_size=[3])
+                for _ in range(2)
+            ]
+        )
+        out = td.to(torch.float64)
+        assert type(out) is LazyStackedTensorDict
+        assert type(out.tensordicts[0]["tc"]) is MC
+        assert type(out["tc"]) is MC
+        assert out["tc"].x.dtype == torch.float64
+        # to_tensordict converts every tensorclass to a TensorDict
+        dense = td.to_tensordict()
+        assert type(dense) is TensorDict
+        assert type(dense["tc"]) is TensorDict
+
     def test_all_keys(self):
         td = TensorDict({"a": torch.zeros(1)}, [])
         td2 = TensorDict({"a": torch.zeros(2)}, [])

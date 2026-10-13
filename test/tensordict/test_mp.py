@@ -698,6 +698,53 @@ class TestMap:
             )
         assert (output_generator == output_split).all()
 
+    @staticmethod
+    def _add_one(td):
+        return td.apply(lambda x: x + 1)
+
+    @staticmethod
+    def _first_row(td):
+        return td[:1]
+
+    @pytest.fixture
+    def h5_input(self, tmp_path):
+        if not _has_h5py:
+            pytest.skip("h5py not installed")
+        td = TensorDict(a=torch.arange(24).view(8, 3), batch_size=[8, 3])
+        h5td = td.to_h5(tmp_path / "file.h5")
+        yield h5td
+        h5td.close()
+
+    def test_map_without_pool_h5(self, h5_input):
+        # map on a PersistentTensorDict without a pool gives the TensorDict results
+        gc.collect()
+        out = h5_input.map(self._add_one, num_workers=2, mp_start_method=mp_ctx)
+        assert type(out) is TensorDict
+        assert (out["a"] == torch.arange(24).view(8, 3) + 1).all()
+        out = h5_input.map(
+            self._add_one, dim=1, chunksize=0, num_workers=2, mp_start_method=mp_ctx
+        )
+        assert (out["a"] == torch.arange(24).view(8, 3) + 1).all()
+
+    @pytest.mark.xfail(strict=True, reason="map ignores out without a pool")
+    def test_map_without_pool_h5_out(self, h5_input, tmp_path):
+        gc.collect()
+        out = TensorDict(a=torch.zeros(8, 3, dtype=torch.long), batch_size=[8, 3])
+        out.memmap_(tmp_path / "out")
+        result = h5_input.map(
+            self._add_one, num_workers=2, out=out, mp_start_method=mp_ctx
+        )
+        assert result is None
+        assert (out["a"] == torch.arange(24).view(8, 3) + 1).all()
+
+    @pytest.mark.xfail(strict=True, reason="map ignores num_chunks without a pool")
+    def test_map_without_pool_h5_num_chunks(self, h5_input):
+        gc.collect()
+        out = h5_input.map(
+            self._first_row, num_workers=2, num_chunks=4, mp_start_method=mp_ctx
+        )
+        assert out.shape == (4, 3)
+
     def test_map_unbind(self):
         gc.collect()
         if mp.get_start_method(allow_none=True) is None:

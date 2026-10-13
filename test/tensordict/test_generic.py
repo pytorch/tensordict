@@ -2321,6 +2321,14 @@ class TestGeneric:
         if not memmap and params:
             assert set(td.parameters()) == set(net.parameters())
 
+    @pytest.mark.xfail(strict=True, reason="returns None off TensorDict")
+    @pytest.mark.parametrize("cls", [LazyStackedTensorDict, PersistentTensorDict])
+    def test_from_module_other_classes(self, cls):
+        net = nn.Linear(2, 3)
+        td = cls.from_module(net)
+        assert type(td) is TensorDict
+        assert (td == TensorDict.from_module(net)).all()
+
     def test_from_module_state_dict(self):
         net = nn.Transformer(
             d_model=16,
