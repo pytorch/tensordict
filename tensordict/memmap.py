@@ -753,6 +753,7 @@ class MemoryMappedTensor(torch.Tensor):
             if device.type != "cpu":
                 raise RuntimeError("Only CPU tensors are supported.")
         result = torch.zeros((), dtype=dtype, device=device)
+        dtype = result.dtype
         if isinstance(shape, torch.Tensor):
             # nested tensor
             shape_numel = shape.prod(-1).sum()
