@@ -3527,6 +3527,9 @@ class TestLazyStackedTensorDict:
         with pytest.raises(RuntimeError, match="locked"):
             lazy.update({"a": torch.ones(2, 3)})
         assert lazy.update({"a": torch.ones(2, 3)}, inplace=True) is lazy
+        # inplace given by position, as TensorDict accepts it
+        assert lazy.update({"a": torch.zeros(2, 3)}, False, True) is lazy
+        assert (lazy["a"] == 0).all()
 
     def test_lazy_update_vmap(self):
         # Under vmap over the stack dim, update writes each member
