@@ -567,6 +567,42 @@ class TestLazyStackedTensorDict:
         expected = list(_TensorDictKeysView(stack, True, False))
         assert list(stack.keys(True)) == expected
 
+    @pytest.mark.parametrize("filter_empty", [True, None])
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_apply_member_without_result(self, filter_empty, num_threads):
+        # A member for which fn gives no result becomes an empty member, as
+        # with filter_empty=False, when other members give a result (#2136).
+        a0 = torch.zeros(3, requires_grad=True)
+        a1 = torch.zeros(3, requires_grad=True)
+        a0.sum().backward()
+        stack = lazy_stack(
+            [
+                TensorDict(w=a0, batch_size=[3], names=["n"]),
+                TensorDict(w=a1, batch_size=[3], names=["n"]),
+            ]
+        )
+
+        def check(out):
+            assert isinstance(out, LazyStackedTensorDict)
+            assert out.batch_size == stack.batch_size
+            assert out.names == [None, "n"]
+            assert (out.tensordicts[0]["w"] == 1).all()
+            assert out.tensordicts[1].is_empty()
+            assert out.tensordicts[1].batch_size == torch.Size([3])
+
+        check(
+            stack.apply(
+                lambda x: x.grad, filter_empty=filter_empty, num_threads=num_threads
+            )
+        )
+        check(stack.grad)
+        check(TensorDict(s=stack).grad["s"])
+        # All members without a result still give None
+        assert (
+            stack.apply(lambda x: None, filter_empty=True, num_threads=num_threads)
+            is None
+        )
+
     @pytest.mark.parametrize("ragged", [False, True])
     def test_arithmetic_ops(self, ragged):
         td0 = LazyStackedTensorDict(
@@ -609,6 +645,90 @@ class TestLazyStackedTensorDict:
                 td1.norm()
         else:
             td1.norm()
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize(
+        "op,args",
+        [
+            ("add", ()),
+            ("sub", ()),
+            ("rsub", ()),
+            ("mul", ()),
+            ("div", ()),
+            ("pow", ()),
+            ("mod", ()),
+            ("maximum", ()),
+            ("minimum", ()),
+            ("clamp_max", ()),
+            ("clamp_min", ()),
+            ("lerp", (0.3,)),
+            ("addcmul", ("other",)),
+            ("addcdiv", ("other",)),
+            ("add_", ()),
+            ("sub_", ()),
+            ("mul_", ()),
+            ("div_", ()),
+            ("pow_", ()),
+            ("maximum_", ()),
+            ("minimum_", ()),
+            ("clamp_max_", ()),
+            ("clamp_min_", ()),
+            ("lerp_", (0.3,)),
+            ("addcmul_", ("other",)),
+            ("addcdiv_", ("other",)),
+        ],
+    )
+    @pytest.mark.parametrize("lazy_first", [True, False])
+    def test_arithmetic_with_dense(self, stack_dim, op, args, lazy_first):
+        # The pointwise ops pair the leaves of a lazy stack and of a dense
+        # tensordict by key, in both orders (#1932).
+        def make_dense():
+            return TensorDict(
+                a=torch.rand(2, 3) + 1,
+                nested=TensorDict(b=torch.rand(2, 3, 4) + 1, batch_size=[2, 3]),
+                batch_size=[2, 3],
+            )
+
+        stack = lazy_stack(list(make_dense().unbind(stack_dim)), stack_dim)
+        dense = make_dense()
+        self_td, other = (stack, dense) if lazy_first else (dense, stack)
+        expected = getattr(self_td.to_tensordict(), op)(
+            other.to_tensordict(),
+            *[other.to_tensordict() if arg == "other" else arg for arg in args],
+        )
+        args = [other if arg == "other" else arg for arg in args]
+        members = stack.tensordicts if lazy_first else [dense]
+        data_ptrs = [td["nested", "b"].data_ptr() for td in members]
+
+        out = getattr(self_td, op)(other, *args)
+
+        assert isinstance(out, type(self_td))
+        # pow rounds differently on the strided members of a lazy stack
+        for key, value in expected.items(True, True):
+            torch.testing.assert_close(out[key], value)
+        if op.endswith("_"):
+            assert out is self_td
+            assert [td["nested", "b"].data_ptr() for td in members] == data_ptrs
+
+    def test_arithmetic_with_dense_mismatched_keys(self):
+        # As with two dense tensordicts, a key that only one operand has raises
+        dense = TensorDict(a=torch.ones(2, 3), z=torch.ones(2, 3), batch_size=[2, 3])
+        stack = lazy_stack(list(dense.exclude("z").unbind(0)))
+        with pytest.raises(KeyError, match="keys in tensordicts mismatch"):
+            stack + dense
+        with pytest.raises(KeyError, match="keys in tensordicts mismatch"):
+            dense + stack
+
+    @pytest.mark.parametrize("lazy_first", [True, False])
+    def test_arithmetic_with_dense_keeps_lock(self, lazy_first):
+        # As with two dense tensordicts, a locked left operand gives a locked result
+        dense = TensorDict(a=torch.ones(2, 3), batch_size=[2, 3])
+        stack = lazy_stack(list(dense.clone().unbind(0)))
+        self_td, other = (stack, dense) if lazy_first else (dense, stack)
+        self_td.lock_()
+        assert (self_td + other).is_locked
+        assert self_td.lerp(other, 0.5).is_locked
+        assert not (other + self_td).is_locked
 
     def test_auto_device(self):
         # The device of a lazy stack is read from its members, so auto_device_
@@ -697,6 +817,38 @@ class TestLazyStackedTensorDict:
             assert assert_allclose_td(res[index], td_lazy)
             index = (slice(None),) * cat_dim + (slice(td_lazy.shape[cat_dim], None),)
             assert assert_allclose_td(res[index], td_lazy_2)
+
+    @pytest.mark.parametrize("num_inputs", [2, 3])
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("out_stack_dim", [0, 1])
+    @pytest.mark.parametrize("cat_dim", [0, 1])
+    @pytest.mark.parametrize("batch_dims", [2, 3])
+    def test_cat_lazy_stack_out(
+        self, num_inputs, stack_dim, out_stack_dim, cat_dim, batch_dims
+    ):
+        # The members of out have the same shapes, so they could be stacked densely
+        inputs = []
+        for i in range(num_inputs):
+            batch_size = [2, 3, 2][:batch_dims]
+            batch_size[cat_dim] = i + 1
+            td = TensorDict(
+                {
+                    "a": torch.randn(*batch_size, 4),
+                    ("nested", "b"): torch.randn(batch_size),
+                },
+                batch_size,
+            )
+            inputs.append(td.to_lazystack(stack_dim))
+        expected = torch.cat([td.to_tensordict() for td in inputs], cat_dim)
+        out = lazy_stack(
+            [td.clone() for td in torch.zeros_like(expected).unbind(out_stack_dim)],
+            out_stack_dim,
+        )
+        data_ptrs = [td["a"].data_ptr() for td in out.tensordicts]
+
+        assert torch.cat(inputs, cat_dim, out=out) is out
+        assert [td["a"].data_ptr() for td in out.tensordicts] == data_ptrs
+        assert assert_allclose_td(out, expected)
 
     def test_cat_mixed_lazy_dense_stack_dim(self):
         td_lazy = LazyStackedTensorDict(
@@ -2010,6 +2162,30 @@ class TestLazyStackedTensorDict:
             assert ("nested", "sub", "c") in keys
             assert ("nested", "sub") not in keys
 
+    @pytest.mark.parametrize(
+        "is_leaf", [None, is_leaf_nontensor], ids=["default", "nontensor"]
+    )
+    def test_lazy_stacked_contains_nested(self, is_leaf):
+        # A nested key that goes through a tensor is absent, as in TensorDict
+        td = TensorDict(
+            a=torch.zeros(3),
+            nested=TensorDict(b=torch.zeros(3), s="a string", batch_size=[3]),
+            batch_size=[3],
+        )
+        lstd = lazy_stack([td, td.clone()])
+        keys = lstd.keys(include_nested=True, is_leaf=is_leaf)
+        listed = list(keys)
+        for key in [
+            *listed,
+            ("a", "x"),
+            ("a", "x", "y"),
+            ("nested", "x"),
+            ("nested", "b", "x"),
+            ("nested", "s", "data"),
+        ]:
+            assert (key in keys) == (key in listed), key
+            assert (key in keys) == (key in td.keys(True, is_leaf=is_leaf)), key
+
     def test_lazy_stack_keys_tc(self):
         class MC(TensorClass):
             a: torch.Tensor
@@ -2593,6 +2769,17 @@ class TestLazyStackedTensorDict:
         (piece,) = td.split(2, 1)
         assert piece.batch_size == torch.Size([3, 0])
         assert piece["a"].shape == torch.Size([3, 0, 4])
+        # split(0) gives one empty piece and split([]) none, as in torch
+        (piece,) = td.split(0, 1)
+        assert piece.batch_size == torch.Size([3, 0])
+        assert piece["a"].shape == torch.Size([3, 0, 4])
+        assert td.split([], 1) == ()
+        # along the stack dim of a stack with no members
+        empty = LazyStackedTensorDict(batch_size=(3,), stack_dim=0)
+        for split_size in (0, 2):
+            (piece,) = empty.split(split_size, 0)
+            assert piece.batch_size == torch.Size([0, 3])
+        assert empty.split([], 0) == ()
 
     def test_chunk_lazy_zero_size_dim(self):
         # torch.chunk gives `chunks` empty pieces along a zero-size dim
@@ -2612,6 +2799,33 @@ class TestLazyStackedTensorDict:
         out = td.reshape(2, 0, 3)
         assert out.batch_size == torch.Size([2, 0, 3])
         assert out["a"].shape == torch.Size([2, 0, 3, 4])
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_reshape_view_lazy_zero_size_dim(self, stack_dim):
+        # Unbinding a zero-size dim leaves no members to stack, so these
+        # calls build a dense tensordict with the shared keys
+        td = LazyStackedTensorDict(
+            *[
+                TensorDict({"a": torch.zeros(0, 4), "n": {"b": torch.zeros(0)}}, [0])
+                for _ in range(3)
+            ],
+            stack_dim=stack_dim,
+        )
+        ref = torch.zeros(td.batch_size)
+        calls = {
+            "reshape(-1)": (lambda x: x.reshape(-1)),
+            "view(-1)": (lambda x: x.view(-1)),
+            "flatten()": (lambda x: x.flatten()),
+            "reshape(3, -1)": (lambda x: x.reshape(3, -1)),
+            "reshape(-1, 2)": (lambda x: x.reshape(-1, 2)),
+        }
+        for name, call in calls.items():
+            out = call(td)
+            assert out.batch_size == call(ref).shape, name
+            assert out["a"].shape == (*out.batch_size, 4), name
+            assert out["n", "b"].shape == out.batch_size, name
+        # A shape that matches the batch size returns the stack itself
+        assert td.reshape([size or -1 for size in td.batch_size]) is td
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_stack(self, device):

@@ -1710,8 +1710,7 @@ class TestNonTensorData:
         assert result.tolist() == [["a"], ["a"]]
 
     def test_torch_where_non_tensor_data(self):
-        # NonTensorData.where does not select elementwise, so torch.where
-        # is not passed through to it
+        # torch.where is not passed through to NonTensorData.where
         condition = torch.tensor([True, False])
         with pytest.raises(TypeError, match="Multiple dispatch failed"):
             torch.where(
@@ -1719,6 +1718,52 @@ class TestNonTensorData:
                 NonTensorData("a", batch_size=(2,)),
                 NonTensorData("b", batch_size=(2,)),
             )
+
+    def test_where_non_tensor_data(self):
+        # The condition picks the value of each element (#2071)
+        condition = torch.tensor([True, False, True, False])
+        a = NonTensorData("a", batch_size=(4,))
+        b = NonTensorData("b", batch_size=(4,))
+        result = a.where(condition, b)
+        assert isinstance(result, NonTensorStack)
+        assert result.tolist() == ["a", "b", "a", "b"]
+        assert a.where(~condition, b).tolist() == ["b", "a", "b", "a"]
+        result = a.where(condition, NonTensorStack("w", "x", "y", "z"))
+        assert result.tolist() == ["a", "x", "a", "z"]
+        assert a.where(condition, NonTensorData("b")).tolist() == ["a", "b"] * 2
+        result = NonTensorData("a", batch_size=(4, 2)).where(
+            condition, NonTensorData("b", batch_size=(4, 2))
+        )
+        assert result.tolist() == [["a"] * 2, ["b"] * 2] * 2
+        # A uniform result stays a NonTensorData
+        for cond, other, value in [
+            (torch.ones(4, dtype=torch.bool), b, "a"),
+            (torch.zeros(4, dtype=torch.bool), b, "b"),
+            (condition, a.clone(), "a"),
+            (condition, NonTensorStack("x", "a", "y", "a"), "a"),
+        ]:
+            result = a.where(cond, other)
+            assert isinstance(result, NonTensorData)
+            assert result.batch_size == (4,)
+            assert result.data == value
+        assert NonTensorData("a").where(torch.tensor(False), b[0]).data == "b"
+        # out receives the result if it can hold it
+        out = NonTensorData("c", batch_size=(4,))
+        assert a.where(torch.zeros(4, dtype=torch.bool), b, out=out) is out
+        assert out.data == "b"
+        out = NonTensorStack("1", "2", "3", "4")
+        assert a.where(condition, b, out=out) is out
+        assert out.tolist() == ["a", "b", "a", "b"]
+        # through TensorDict.where, also with out=, as TorchRL's partial reset
+        td = TensorDict(x=torch.zeros(4), s=a, batch_size=(4,))
+        other = TensorDict(x=torch.ones(4), s=b, batch_size=(4,))
+        assert td.where(condition, other).get("s").tolist() == ["a", "b"] * 2
+        td.where(condition, other, out=td, pad=0, update_batch_size=True)
+        assert td["x"].tolist() == [0.0, 1.0, 0.0, 1.0]
+        assert td.get("s").tolist() == ["a", "b", "a", "b"]
+        # an other that does not expand to the batch size raises
+        with pytest.raises(ValueError):
+            a.where(condition, NonTensorData("b", batch_size=(3, 4)))
 
     def test_linked_list_str(self):
         td = TensorDict(a=NonTensorStack("foo", "bar"), batch_size=(2,))
@@ -2083,6 +2128,59 @@ class TestUnbatchedTensor:
         assert td.exclude("b")["a"] is td["a"]
         assert td.unflatten_keys(separator="_")["c", "d"] is td["c_d"]
         assert td.unflatten_keys(separator="_").flatten_keys()["c.d"] is td["c_d"]
+
+    @pytest.mark.parametrize(
+        "op",
+        [
+            lambda td: td.exp(),
+            lambda td: td.abs(),
+            lambda td: td.sqrt(),
+            lambda td: td.sigmoid(),
+            lambda td: td.reciprocal(),
+            lambda td: td.floor(),
+            lambda td: td - td,
+            lambda td: 1 - td,
+            lambda td: td / 2,
+            lambda td: td**2,
+            lambda td: td.lerp(td, 0.5),
+            lambda td: td.addcmul(td, td),
+            lambda td: td.addcdiv(td, td),
+        ],
+    )
+    def test_unbatched_pointwise_keeps_batched_leaves(self, op):
+        # Regression test for #2352: the _foreach ops wrapped every leaf in an
+        # UnbatchedTensor and gave each unbatched leaf the same batch size.
+        td = TensorDict(
+            a=torch.ones(3, 2),
+            u=UnbatchedTensor(torch.ones(5)),
+            n=TensorDict(v=UnbatchedTensor(torch.ones(7)), batch_size=[3, 2]),
+            batch_size=[3],
+        )
+        out = op(td)
+        assert type(out.get("a")) is torch.Tensor
+        assert out[0]["a"].shape == (2,)
+        assert isinstance(out.get("u"), UnbatchedTensor)
+        assert out.get("u").batch_size == (3,)
+        assert isinstance(out.get(("n", "v")), UnbatchedTensor)
+        assert out.get(("n", "v")).batch_size == (3, 2)
+
+    def test_unbatched_pointwise_norm(self):
+        td = TensorDict(
+            a=torch.ones(3, 2), u=UnbatchedTensor(torch.ones(5)), batch_size=[3]
+        )
+        out = td.norm()
+        assert type(out.get("a")) is torch.Tensor
+        assert out["a"].shape == ()
+
+    @pytest.mark.parametrize("op", [operator.add, operator.sub, operator.mul])
+    def test_unbatched_pointwise_other_unbatched(self, op):
+        td = TensorDict(a=torch.ones(3, 2), u=torch.ones(3), batch_size=[3])
+        other = TensorDict(
+            a=torch.ones(3, 2), u=UnbatchedTensor(torch.ones(3)), batch_size=[3]
+        )
+        out = op(td, other)
+        assert type(out.get("a")) is torch.Tensor
+        assert out[0]["a"].shape == (2,)
 
     def test_unbatched_view_base(self):
         view = UnbatchedTensor(torch.arange(6.0)).clone().reshape(2, 3)
