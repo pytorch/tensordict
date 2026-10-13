@@ -330,6 +330,9 @@ Slots(
  is_shared=False)
 ```
 
+A field that you delete with `del obj.field`, `obj.del_("field")` or
+`obj.pop("field")` reads as `None` afterwards.
+
 ### Comparison, item assignment, and concatenation
 
 `==` and `!=` compare two tensorclasses field by field, also the nested
