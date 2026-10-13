@@ -487,7 +487,15 @@ def _set_item(
     if not validated:
         raise RuntimeError
     if isinstance(tensor, Tensor):
-        tensor[index] = value
+        if (
+            _is_unbatched(value)
+            and _is_unbatched(tensor)
+            and value.shape == tensor.shape
+        ):
+            # the whole batch shares the payload: write it whole, as td[:] does
+            tensor.copy_(value, non_blocking=non_blocking)
+        else:
+            tensor[index] = value
         return tensor
     from tensordict.tensorclass import NonTensorData, NonTensorStack
 
