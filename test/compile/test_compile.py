@@ -2129,6 +2129,30 @@ class TestNN:
         prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
         prob_mod_c(TensorDict(inp=torch.randn(3)))
 
+    @set_composite_lp_aggregate(False)
+    def test_prob_module_joint_sample_and_log_prob(self, mode):
+        # With return_log_prob=True under RANDOM, the module samples and scores
+        # in one call when the distribution defines rsample_and_log_prob. The
+        # compiled module must take that path without graph breaks.
+        class JointNormal(torch.distributions.Normal):
+            def rsample_and_log_prob(self, sample_shape=()):
+                sample = self.loc.expand(torch.Size(sample_shape) + self.loc.shape)
+                # log_prob(sample) would give about -0.92 here
+                return sample, torch.full_like(sample, 7.0)
+
+        prob_mod = Prob(
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=JointNormal,
+            default_interaction_type=InteractionType.RANDOM,
+            return_log_prob=True,
+        )
+        td = TensorDict(loc=torch.randn(3), scale=torch.ones(3))
+        prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
+        out = prob_mod_c(td.copy())
+        torch.testing.assert_close(out["action"], td["loc"])
+        torch.testing.assert_close(out["action_log_prob"], torch.full((3,), 7.0))
+
     @pytest.mark.parametrize("mean_raises", [False, True])
     def test_prob_module_mean(self, mode, mean_raises):
         class NoMeanNormal(torch.distributions.Normal):

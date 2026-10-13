@@ -258,8 +258,12 @@ def _get_joint_sample_and_log_prob(
 
     ``rsample_and_log_prob`` is used when ``dist.has_rsample``, and
     ``sample_and_log_prob`` otherwise. Returns ``None`` when the distribution
-    does not define the method, as for the :mod:`torch.distributions` classes.
+    does not define the method, as for the :mod:`torch.distributions` classes,
+    and for an object that is not a distribution, which ``_dist_sample``
+    rejects with a ``TypeError``.
     """
+    if not isinstance(dist, D.Distribution):
+        return None
     name = "rsample_and_log_prob" if dist.has_rsample else "sample_and_log_prob"
     if callable(getattr(type(dist), name, None)):
         return getattr(dist, name)

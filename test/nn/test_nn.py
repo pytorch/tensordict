@@ -3240,6 +3240,24 @@ class TestProbabilisticTensorDictModule:
         )
 
     @pytest.mark.parametrize("return_log_prob", [True, False])
+    def test_not_a_distribution(self, return_log_prob):
+        # The check for a joint method must not hide the TypeError for an
+        # object that is not a distribution
+        class NotADist:
+            def __init__(self, loc):
+                self.loc = loc
+
+        module = ProbabilisticTensorDictModule(
+            in_keys=["loc"],
+            out_keys=["action"],
+            distribution_class=NotADist,
+            default_interaction_type="random",
+            return_log_prob=return_log_prob,
+        )
+        with pytest.raises(TypeError, match="Expected Distribution"):
+            module(TensorDict(loc=torch.zeros(3), batch_size=[3]))
+
+    @pytest.mark.parametrize("return_log_prob", [True, False])
     @pytest.mark.parametrize("return_composite", [True, False])
     @pytest.mark.parametrize("default_interaction_type", ["random", "deterministic"])
     @set_composite_lp_aggregate(False)
