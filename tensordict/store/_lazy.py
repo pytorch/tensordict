@@ -203,7 +203,12 @@ class _StoreStackElementView(TensorDictBase):
     ):
         if not validated:
             value = self._validate_value(value, check_shape=True, key=key)
-        if self.is_locked and not ignore_lock and not inplace:
+        if (
+            self.is_locked
+            and not ignore_lock
+            and inplace is not True
+            and not self._convert_inplace(inplace, key)
+        ):
             raise RuntimeError(_LOCK_ERROR)
 
         if is_tensor_collection(value):
@@ -247,7 +252,11 @@ class _StoreStackElementView(TensorDictBase):
         key_path = _KEY_SEP.join(key)
         if not validated:
             value = self._validate_value(value, check_shape=True, key=key)
-        if self.is_locked and not inplace:
+        if (
+            self.is_locked
+            and inplace is not True
+            and not self._convert_inplace(inplace, key_path)
+        ):
             raise RuntimeError(_LOCK_ERROR)
         if isinstance(value, torch.Tensor):
             self._run_sync(
@@ -1608,7 +1617,12 @@ class LazyStackedTensorDictStore(TensorDictBase):
     ):
         if not validated:
             value = self._validate_value(value, check_shape=True, key=key)
-        if self.is_locked and not ignore_lock and not inplace:
+        if (
+            self.is_locked
+            and not ignore_lock
+            and inplace is not True
+            and not self._convert_inplace(inplace, key)
+        ):
             raise RuntimeError(_LOCK_ERROR)
 
         key_path = key
@@ -1665,7 +1679,11 @@ class LazyStackedTensorDictStore(TensorDictBase):
         key_path = _KEY_SEP.join(key)
         if not validated:
             value = self._validate_value(value, check_shape=True, key=key)
-        if self.is_locked and not inplace:
+        if (
+            self.is_locked
+            and inplace is not True
+            and not self._convert_inplace(inplace, key_path)
+        ):
             raise RuntimeError(_LOCK_ERROR)
         if isinstance(value, torch.Tensor):
             self._run_sync(self._aset_full_tensor(key_path, value))
