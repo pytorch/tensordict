@@ -13,9 +13,12 @@ Parameters:
 
 - **old_key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - key to be renamed. A missing key raises
 `KeyError`.
-- **new_key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - new name of the entry.
+- **new_key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - new name of the entry. A key inside
+`old_key`, such as `("a", "b")` for `"a"`, moves the
+entry there, as `td.set(new_key, td.pop(old_key))` does.
 - **safe** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a `KeyError` is raised when
-the new key is already present in the TensorDict. If
+the new key is already present in the TensorDict, unless it
+lies inside `old_key`, which moves with the entry. If
 `False`, the existing entry is overwritten. Defaults to
 `False`.
 
