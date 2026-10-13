@@ -422,6 +422,11 @@ class TestZarrWriteOps:
         assert ztd.rename_key_("a2", ("b", "c")) is ztd
         assert set(ztd.keys(True, True)) == {("b", "c")}
         torch.testing.assert_close(ztd["b", "c"], a2)
+        # an entry replaces the key that holds it, as in TensorDict: it raised
+        # a KeyError
+        ztd.rename_key_(("b", "c"), "b")
+        assert set(ztd.keys(True, True)) == {"b"}
+        torch.testing.assert_close(ztd["b"], a2)
 
     def test_rename_key_locked_warns(self, ztd):
         # a locked PersistentTensorDict renamed its keys without a check:
@@ -440,6 +445,16 @@ class TestZarrWriteOps:
     def test_rename_nested_group(self, ztd):
         ztd.rename_key_("b", "b2")
         assert ("b2", "c") in ztd.keys(True, True)
+
+    def test_rename_key_inside_old_key(self, ztd):
+        # a key moved into one of its own entries moves there, as in
+        # TensorDict: a group raised RecursionError, and an array TypeError
+        expected = ztd.to_tensordict()
+        ztd.rename_key_("b", ("b", "b"))
+        ztd.rename_key_("a", ("a", "x", "y"))
+        assert set(ztd.keys(True, True)) == {("a", "x", "y"), ("b", "b", "c")}
+        torch.testing.assert_close(ztd["a", "x", "y"], expected["a"])
+        torch.testing.assert_close(ztd["b", "b", "c"], expected["b", "c"])
 
     def test_pop_nested(self, ztd):
         # https://github.com/pytorch/tensordict/issues/2089

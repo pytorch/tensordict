@@ -4249,6 +4249,9 @@ class LazyStackedTensorDict(TensorDictBase):
     ) -> Self:
         old = _unravel_key_to_tuple(old_key)
         new = _unravel_key_to_tuple(new_key)
+        # a new key inside the old one moves with the entry: safe does not
+        # raise for it, and the old key is still there after the rename
+        inside = len(new) > len(old) and new[: len(old)] == old
         # Check every tensordict before any renames the key, so that a call
         # that raises leaves the stack unchanged: a tensordict that cannot
         # rename it raises before it changes anything.
@@ -4259,7 +4262,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 td.is_locked
                 or not (old and new)
                 or old not in keys
-                or (safe and new in keys)
+                or (safe and not inside and new in keys)
             ):
                 td.rename_key_(old_key, new_key, safe=safe)
             else:
@@ -4269,7 +4272,9 @@ class LazyStackedTensorDict(TensorDictBase):
             # first time. It is found with `is`, not id(): torch.compile
             # guards on the id of each member and would recompile for every
             # new stack.
-            if old in keys or not any(td is other for other, _ in islice(tds, i)):
+            if (old in keys and not inside) or not any(
+                td is other for other, _ in islice(tds, i)
+            ):
                 td.rename_key_(old_key, new_key, safe=safe)
         return self
 
