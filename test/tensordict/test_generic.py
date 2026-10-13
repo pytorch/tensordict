@@ -4648,6 +4648,40 @@ class TestGeneric:
             lst.unflatten(0, (3, 1), inplace=True)
 
     @pytest.mark.parametrize(
+        "op",
+        [
+            lambda td, **kwargs: td.reshape(6, **kwargs),
+            lambda td, **kwargs: td.reshape(3, 2, **kwargs),
+            lambda td, **kwargs: td.flatten(0, 1, **kwargs),
+            lambda td, **kwargs: td.unflatten(1, (3, 1), **kwargs),
+            lambda td, **kwargs: td.unflatten(0, (1, 2), **kwargs),
+        ],
+        ids=["reshape", "reshape-2d", "flatten", "unflatten", "unflatten-dim0"],
+    )
+    @pytest.mark.parametrize("names", [["a", "b"], [None, "b"], None])
+    def test_inplace_shape_op_names(self, op, names):
+        # inplace=True gives the dim names that the call without it gives
+        def make():
+            # the nested dim beyond the batch dims of td has a name of its own
+            return TensorDict(
+                x=torch.zeros(2, 3, 4),
+                sub=TensorDict(
+                    y=torch.zeros(2, 3, 4),
+                    batch_size=[2, 3, 4],
+                    names=[*(names or [None, None]), "z"],
+                ),
+                batch_size=[2, 3],
+                names=names,
+            )
+
+        ref = op(make())
+        td = make()
+        op(td, inplace=True)
+        assert td.batch_size == ref.batch_size
+        assert td.names == ref.names
+        assert td["sub"].names == ref["sub"].names
+
+    @pytest.mark.parametrize(
         "op,call",
         [
             ("reshape", lambda td: td.reshape(3, 2, inplace=True)),
