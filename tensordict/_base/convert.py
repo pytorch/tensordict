@@ -100,6 +100,23 @@ def _dict_holds_sequence(value: dict) -> bool:
     )
 
 
+def _dict_to_namedtuple(dictionary: dict, dest_cls: type | None, root: bool = False):
+    # the conversion of to_namedtuple(dest_cls=...), at a nested level unless root
+    for key, value in dictionary.items():
+        if isinstance(value, dict):
+            dictionary[key] = _dict_to_namedtuple(value, dest_cls)
+    cls = dest_cls
+    if cls is not None and not root and hasattr(cls, "_fields"):
+        # a nested level uses dest_cls only if dest_cls takes its keys
+        keys = set(dictionary)
+        defaults = getattr(cls, "_field_defaults", {})
+        if not (keys <= set(cls._fields) and set(cls._fields) - keys <= set(defaults)):
+            cls = None
+    if cls is None:
+        cls = collections.namedtuple("GenericDict", dictionary.keys())
+    return cls(**dictionary)
+
+
 def _pytree_dict_key(key):
     # Reads a dict key that from_pytree stored. Once the non-tensor entry has
     # batch dims (e.g. after stack or unsqueeze), td["key"] returns a list, so
@@ -490,12 +507,18 @@ class _Conversion:
         if _is_namedtuple_class(_pytree_type):
             # Build this level only: the nested levels were rebuilt above, and
             # to_namedtuple(dest_cls=...) would apply the class to them too.
-            return _pytree_type(
-                **{
-                    key: val.to_dict() if _is_non_tensor(type(val)) else val
-                    for key, val in items.items()
-                }
-            )
+            fields = {}
+            for key, val in items.items():
+                if _is_non_tensor(type(val)):
+                    val = val.to_dict()
+                elif is_tensor_collection(val):
+                    # from_any built it (e.g. for a dict holding a str), not
+                    # from_pytree: convert it as to_namedtuple did on main
+                    val = _dict_to_namedtuple(
+                        val.to_dict(retain_none=False), _pytree_type
+                    )
+                fields[key] = val
+            return _pytree_type(**fields)
         if issubclass(_pytree_type, (list, tuple)):
             # a list, a tuple or a subclass, such as the torch.return_types
             # structseqs, which take a sequence
@@ -1645,26 +1668,7 @@ class _Conversion:
             GenericDict(a_tensor=tensor([0., 0., 0.]), nested=GenericDict(a_tensor=tensor([0., 0., 0.]), a_string='zero!'))
 
         """
-
-        def dict_to_namedtuple(dictionary, root=False):
-            for key, value in dictionary.items():
-                if isinstance(value, dict):
-                    dictionary[key] = dict_to_namedtuple(value)
-            cls = dest_cls
-            if cls is not None and not root and hasattr(cls, "_fields"):
-                # a nested level uses dest_cls only if dest_cls takes its keys
-                keys = set(dictionary)
-                defaults = getattr(cls, "_field_defaults", {})
-                if not (
-                    keys <= set(cls._fields)
-                    and set(cls._fields) - keys <= set(defaults)
-                ):
-                    cls = None
-            if cls is None:
-                cls = collections.namedtuple("GenericDict", dictionary.keys())
-            return cls(**dictionary)
-
-        return dict_to_namedtuple(self.to_dict(retain_none=False), root=True)
+        return _dict_to_namedtuple(self.to_dict(retain_none=False), dest_cls, root=True)
 
     @classmethod
     def from_any(

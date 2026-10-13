@@ -2495,13 +2495,21 @@ class TestGeneric:
                 assert type(recon.nested) is type(nested)
                 torch.utils._pytree.tree_map(check, pytree, recon)
         # a dict field that from_pytree does not take (here, it holds a str)
-        # goes through from_any, as before, and comes back as a TensorDict
+        # goes through from_any, as before, and comes back as on main: as the
+        # outer class if it takes the keys, and as a GenericDict otherwise
         recon = TensorDict.from_pytree(
             Outer(a=a, nested={"a": torch.ones(3), "nested": "n"})
         ).to_pytree()
         assert type(recon) is Outer
-        assert isinstance(recon.nested, TensorDict)
-        assert recon.nested["nested"] == "n"
+        assert type(recon.nested) is Outer
+        assert recon.nested.nested == "n"
+        for kwargs in ({}, {"batch_size": [3]}):
+            recon = TensorDict.from_pytree(
+                Outer(a=a, nested={"s": "x", "t": torch.ones(3)}), **kwargs
+            ).to_pytree()
+            assert type(recon.nested).__name__ == "GenericDict"
+            assert recon.nested.s == "x"
+            assert (recon.nested.t == 1).all()
         # so does a dict field that holds a list: the list stays a tensor, as
         # on main, rather than a nested TensorDict as from_pytree would make it
         pytree = Outer(a=a, nested={"l": [1, 2, 3]})
@@ -2510,7 +2518,9 @@ class TestGeneric:
         assert (td["nested", "l"] == torch.tensor([1, 2, 3])).all()
         assert TensorDict.from_pytree(pytree, auto_batch_size=True).batch_size == (3,)
         assert TensorDict.from_pytree(pytree, batch_size=[3]).batch_size == (3,)
-        assert isinstance(td.to_pytree().nested, TensorDict)
+        recon = td.to_pytree().nested
+        assert type(recon).__name__ == "GenericDict"
+        assert (recon.l == torch.tensor([1, 2, 3])).all()
 
     def test_from_pytree_subclasses(self):
         # https://github.com/pytorch/tensordict/issues/2371
