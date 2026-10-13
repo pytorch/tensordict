@@ -1880,6 +1880,15 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             # has checked safe): overwrite it, as TensorDict does
             self._backend.delete(self.file, new_path)
             self._forget_nested(new)
+        if old and len(new) > len(old) and new[: len(old)] == old:
+            # the backends cannot move a node inside itself: move it aside
+            # first, as TensorDict pops the entry before it sets it
+            moved_path = old_path + "_"
+            while self._backend.contains(self.file, moved_path):
+                moved_path += "_"
+            self._backend.move(self.file, old_path, moved_path)
+            self._forget_nested(old)
+            old_path = moved_path
         self._backend.move(self.file, old_path, new_path)
         if old:
             self._forget_nested(old)

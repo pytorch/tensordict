@@ -1401,16 +1401,24 @@ class TestTensorClass:
         assert list(data.td.keys()) == ["b"]
 
     def test_rename_key_inside_old_key(self):
-        # a new key inside the old one raises: the field was deleted with
-        # everything below it
+        # a new key inside the old one moves the field there: the field was
+        # deleted with everything below it
+        @tensorclass
+        class Inner:
+            x: torch.Tensor
+
         @tensorclass
         class MyClass:
             td: TensorDict
 
-        data = MyClass(td=TensorDict(a=torch.zeros(3), batch_size=[3]), batch_size=[3])
-        with pytest.raises(KeyError, match="the new key is inside the old one"):
-            data.rename_key_("td", ("td", "td"))
-        assert set(data.keys(True, True)) == {("td", "a")}
+        inner = Inner(x=torch.ones(3), batch_size=[3])
+        data = MyClass(
+            td=TensorDict(a=torch.zeros(3), c=inner, batch_size=[3]), batch_size=[3]
+        )
+        assert data.rename_key_("td", ("td", "td")) is data
+        assert set(data.keys(True, True)) == {("td", "td", "a"), ("td", "td", "c", "x")}
+        assert (data.td["td", "a"] == 0).all()
+        assert data.td["td", "c"] is inner
 
     def test_deleted_field_reads_as_none(self):
         # #2147: a deleted field reads as None, so hasattr() and

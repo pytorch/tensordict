@@ -239,7 +239,9 @@ levels:
 
 If the new key exists, ``rename_key_`` replaces its value. With
 ``safe=True``, it raises a ``KeyError`` instead. A new key inside the old one,
-such as ``("arm", "arm")`` for ``"arm"``, also raises a ``KeyError``.
+such as ``("arm", "arm")`` for ``"arm"``, moves the entry there, as
+``td.set(("arm", "arm"), td.pop("arm"))`` does. Nothing is replaced, so
+``safe=True`` does not raise for it.
 
 Flatten and unflatten the keys
 ------------------------------

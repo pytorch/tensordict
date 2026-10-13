@@ -129,15 +129,21 @@ class TestH5Serialization:
         h5td.close()
 
     def test_rename_key_into_own_child(self, tmp_path):
-        # a key is not moved into, or replaced by, one of its own entries: the
-        # backends raise, and the file keeps its data
+        # a key is not replaced by one of its own entries: the backends raise,
+        # and the file keeps its data
         td = TensorDict({"n": {"sub": torch.zeros(3), "c": torch.ones(3)}}, [3])
         h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
-        with pytest.raises(KeyError, match="the new key is inside the old one"):
-            h5td.rename_key_("n", ("n", "sub"))
         with pytest.raises(KeyError, match="already present"):
             h5td.rename_key_(("n", "sub"), "n")
         assert set(h5td.keys(True, True)) == {("n", "sub"), ("n", "c")}
+        # a key moved into one of its own entries moves there, as in
+        # TensorDict: the file raised, or lost the key
+        h5td.rename_key_("n", ("n", "sub"))
+        assert set(h5td.keys(True, True)) == {("n", "sub", "sub"), ("n", "sub", "c")}
+        assert (h5td["n", "sub", "sub"] == 0).all()
+        assert (h5td["n", "sub", "c"] == 1).all()
+        h5td.rename_key_(("n", "sub", "c"), ("n", "sub", "c", "d", "e"))
+        assert (h5td["n", "sub", "c", "d", "e"] == 1).all()
         h5td.close()
 
     def test_device_setter(self, tmp_path):

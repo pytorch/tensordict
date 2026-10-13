@@ -2781,9 +2781,13 @@ class TestLazyStackedTensorDict:
             )
 
     @pytest.mark.parametrize("safe", [False, True])
-    @pytest.mark.parametrize("key,new_key", [("a", "c"), (("n", "x"), ("n", "y"))])
+    @pytest.mark.parametrize(
+        "key,new_key",
+        [("a", "c"), (("n", "x"), ("n", "y")), ("n", ("n", "m")), ("a", ("a", "b"))],
+    )
     def test_rename_key_repeated_member(self, key, new_key, safe):
-        # A tensordict that is in the stack more than once is renamed once.
+        # A tensordict that is in the stack more than once is renamed once,
+        # also when the old key is still there after the rename.
         def make():
             return TensorDict(
                 a=torch.zeros(3),
@@ -2791,12 +2795,14 @@ class TestLazyStackedTensorDict:
                 batch_size=[3],
             )
 
+        expected = make()
+        expected.set(new_key, expected.pop(key))
+        keys = set(expected.keys(True, True))
         t, u = make(), make()
         td = lazy_stack([t, t, u])
         assert td.rename_key_(key, new_key, safe=safe) is td
         for member in (td, t, u):
-            assert key not in member.keys(True)
-            assert new_key in member.keys(True)
+            assert set(member.keys(True, True)) == keys
 
         # also when a nested lazy stack repeats it, or is repeated
         t = make()
@@ -2805,8 +2811,7 @@ class TestLazyStackedTensorDict:
         td = lazy_stack([inner, inner, lazy_stack(others)])
         td.rename_key_(key, new_key, safe=safe)
         for member in (td, inner, *inner.tensordicts, *others):
-            assert key not in member.keys(True)
-            assert new_key in member.keys(True)
+            assert set(member.keys(True, True)) == keys
 
     @pytest.mark.parametrize("nested", [False, True])
     @pytest.mark.parametrize("error", ["safe", "missing", "locked"])
@@ -2831,6 +2836,21 @@ class TestLazyStackedTensorDict:
             td.rename_key_("a", "c", safe=error == "safe")
         for member in tds[:-1]:
             assert list(member.keys()) == ["a"]
+
+    @pytest.mark.parametrize("safe", [False, True])
+    def test_rename_key_inside_old_key_leaves_stack_unchanged(self, safe):
+        # A new key inside the old one is not taken, even with safe=True, and
+        # a member without the old key raises before any member moves it.
+        tds = [
+            TensorDict(a=TensorDict(b=torch.zeros(3), batch_size=[3]), batch_size=[3])
+            for _ in range(3)
+        ]
+        tds[-1] = TensorDict(c=torch.zeros(3), batch_size=[3])
+        td = lazy_stack(tds)
+        with pytest.raises(KeyError, match='key "a" not found'):
+            td.rename_key_("a", ("a", "b"), safe=safe)
+        for member in tds[:-1]:
+            assert set(member.keys(True, True)) == {("a", "b")}
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize("dim", [0, 1])

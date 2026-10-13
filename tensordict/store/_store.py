@@ -163,7 +163,8 @@ def _rename_plan(all_keys, old_path, new_path, old_key, new_key):
     returns ``(renames, deletes)``: the ``(source, destination)`` pairs of
     leaf paths, ordered so that no leaf is overwritten before it moves, and
     the leaves at or below ``new_path`` that the entry replaces, as
-    ``TensorDict`` does. A destination below a leaf raises ``KeyError``.
+    ``TensorDict`` does. A destination below a leaf raises ``KeyError``,
+    unless that leaf moves.
     """
     old_prefix = old_path + _KEY_SEP
     new_prefix = new_path + _KEY_SEP
@@ -181,7 +182,10 @@ def _rename_plan(all_keys, old_path, new_path, old_key, new_key):
         return [], []
     parts = new_path.split(_KEY_SEP)
     for i in range(1, len(parts)):
-        if _KEY_SEP.join(parts[:i]) in all_keys:
+        parent = _KEY_SEP.join(parts[:i])
+        # a leaf at or below old_path moves away
+        moves = parent == old_path or parent.startswith(old_prefix)
+        if not moves and parent in all_keys:
             raise KeyError(
                 f"Cannot rename {old_key!r} to {new_key!r}: the new key is "
                 "below a leaf."
@@ -192,9 +196,10 @@ def _rename_plan(all_keys, old_path, new_path, old_key, new_key):
         for k in all_keys
         if (k == new_path or k.startswith(new_prefix)) and k not in sources
     ]
-    # When new_path holds old_path, a destination can be the source of
-    # another move, which is shorter: move the shorter sources first.
-    renames.sort(key=lambda pair: len(pair[0]))
+    # A destination can be the source of another move: a shorter one when
+    # new_path holds old_path, a longer one when old_path holds new_path.
+    # Move that source first.
+    renames.sort(key=lambda pair: len(pair[0]), reverse=new_path.startswith(old_prefix))
     return renames, deletes
 
 

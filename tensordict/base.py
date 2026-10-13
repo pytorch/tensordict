@@ -327,6 +327,13 @@ class _InplaceShapeState(local):
 _inplace_shape_state = _InplaceShapeState()
 
 
+def _is_inside(key: NestedKey, other: NestedKey) -> bool:
+    """Returns whether the nested key ``key`` lies strictly inside ``other``."""
+    key = (key,) if isinstance(key, str) else key
+    other = (other,) if isinstance(other, str) else other
+    return len(key) > len(other) and key[: len(other)] == other
+
+
 def _holds_its_tensors(td: TensorDictBase) -> bool:
     """Returns whether ``td`` reads its entries from a ``TensorDict``, which holds its tensors.
 
@@ -4920,10 +4927,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             old_key (NestedKey): key to be renamed. A missing key raises
                 ``KeyError``.
             new_key (NestedKey): new name of the entry. A key inside
-                ``old_key``, such as ``("a", "b")`` for ``"a"``, raises
-                ``KeyError``.
+                ``old_key``, such as ``("a", "b")`` for ``"a"``, moves the
+                entry there, as ``td.set(new_key, td.pop(old_key))`` does.
             safe (bool, optional): if ``True``, a ``KeyError`` is raised when
-                the new key is already present in the TensorDict. If
+                the new key is already present in the TensorDict, unless it
+                lies inside ``old_key``, which moves with the entry. If
                 ``False``, the existing entry is overwritten. Defaults to
                 ``False``.
 
@@ -4967,18 +4975,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             )
         old_key = unravel_key(old_key)
         new_key = unravel_key(new_key)
-        # an unravelled tuple has two strings or more
-        if isinstance(new_key, tuple) and (
-            new_key[0] == old_key
-            if isinstance(old_key, str)
-            else len(new_key) > len(old_key) and new_key[: len(old_key)] == old_key
+        if (
+            safe
+            and old_key != new_key
+            and new_key in self.keys(include_nested=True)
+            # a new key inside the old one moves with the entry
+            and not _is_inside(new_key, old_key)
         ):
-            # moving an entry inside itself would delete it
-            raise KeyError(
-                f"Cannot rename {old_key!r} to {new_key!r}: the new key is "
-                "inside the old one."
-            )
-        if safe and old_key != new_key and new_key in self.keys(include_nested=True):
             raise KeyError(f"key {new_key} already present in TensorDict.")
         self._rename_key(old_key, new_key)
         return self
@@ -4995,6 +4998,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 raise KeyError(f"Key {old_key} not found in tensordict.")
             return
         value = self.get(old_key, default=NO_DEFAULT)
+        inside = _is_inside(new_key, old_key)
+        if inside:
+            # deleting the old entry after the move would delete the moved
+            # entry with it
+            self.del_(old_key)
         if isinstance(new_key, str):
             self._set_str(
                 new_key, value, inplace=False, validated=True, non_blocking=False
@@ -5004,7 +5012,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 new_key, value, inplace=False, validated=True, non_blocking=False
             )
         new_key_tuple = (new_key,) if isinstance(new_key, str) else new_key
-        if not (
+        if not inside and not (
             isinstance(old_key, tuple)
             and old_key[: len(new_key_tuple)] == new_key_tuple
         ):

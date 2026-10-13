@@ -132,11 +132,20 @@ _RENAME_OCCUPIED = [
 _RENAME_INVALID = [
     ("b", ("a", "q"), False, "below a leaf"),
     ("a", ("b", "c", "q"), False, "below a leaf"),
-    ("s", ("s", "s"), False, "inside the old one"),
-    ("s", ("s", "x", "y"), False, "inside the old one"),
-    ("a", ("a", "b"), False, "inside the old one"),
     ("b", "other", True, "already present"),
     ("a", "b", True, "already present"),
+]
+
+# (old_key, new_key): a new key inside the old one, where the entry moves
+_RENAME_INSIDE = [
+    ("s", ("s", "s")),
+    ("s", ("s", "x", "y")),
+    ("a", ("a", "b")),
+    # s.t moves to s.t.u.t: the leaf above the destination moves too
+    ("s", ("s", "t", "u")),
+    # nested.d.d.y moves to nested.d.d.d.y before nested.d.y moves to
+    # nested.d.d.y
+    (("nested", "d"), ("nested", "d", "d")),
 ]
 
 
@@ -928,12 +937,27 @@ class TestTensorDictStore:
     def test_rename_key_invalid_destination(
         self, store_kwargs, old_key, new_key, safe, match
     ):
-        # the store moved the entry below a leaf, or into itself
+        # the store moved the entry below a leaf
         store_td = TensorDictStore.from_tensordict(_rename_source(), **store_kwargs)
         try:
             with pytest.raises(KeyError, match=match):
                 store_td.rename_key_(old_key, new_key, safe=safe)
             _assert_store_matches(store_td, _rename_source())
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize("safe", [False, True])
+    @pytest.mark.parametrize("old_key,new_key", _RENAME_INSIDE)
+    def test_rename_key_inside_old_key(self, store_kwargs, old_key, new_key, safe):
+        # the entry moves, as pop and set do on a TensorDict, and no data is
+        # lost
+        expected = _rename_source()
+        expected.set(new_key, expected.pop(old_key))
+        store_td = TensorDictStore.from_tensordict(_rename_source(), **store_kwargs)
+        try:
+            store_td.rename_key_(old_key, new_key, safe=safe)
+            _assert_store_matches(store_td, expected)
         finally:
             store_td.clear_redis()
             store_td.close()
@@ -2259,8 +2283,8 @@ class TestLazyStackedTensorDictStore:
     def test_rename_key_invalid_destination(
         self, store_kwargs, old_key, new_key, safe, match
     ):
-        # the store moved a leaf below a leaf, or into itself, and was left
-        # unchanged for a sub-tensordict
+        # the store moved a leaf below a leaf, and was left unchanged for a
+        # sub-tensordict
         store_td = LazyStackedTensorDictStore.from_lazy_stack(
             lazy_stack(_rename_source().unbind(0)), **store_kwargs
         )
@@ -2268,6 +2292,23 @@ class TestLazyStackedTensorDictStore:
             with pytest.raises(KeyError, match=match):
                 store_td.rename_key_(old_key, new_key, safe=safe)
             _assert_store_matches(store_td, _rename_source())
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize("safe", [False, True])
+    @pytest.mark.parametrize("old_key,new_key", _RENAME_INSIDE)
+    def test_rename_key_inside_old_key(self, store_kwargs, old_key, new_key, safe):
+        # the entry moves, as pop and set do on a TensorDict, and no data is
+        # lost
+        expected = _rename_source()
+        expected.set(new_key, expected.pop(old_key))
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(_rename_source().unbind(0)), **store_kwargs
+        )
+        try:
+            store_td.rename_key_(old_key, new_key, safe=safe)
+            _assert_store_matches(store_td, expected)
         finally:
             store_td.clear_redis()
             store_td.close()
