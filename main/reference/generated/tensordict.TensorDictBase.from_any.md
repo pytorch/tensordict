@@ -38,7 +38,12 @@ Supported objects:
 - Dataclasses through [`from_dataclass()`](tensordict.TensorDictBase.from_dataclass.html#tensordict.TensorDictBase.from_dataclass) (dataclasses will be converted to TensorDict instances, not tensorclasses).
 - Namedtuples through [`from_namedtuple()`](tensordict.TensorDictBase.from_namedtuple.html#tensordict.TensorDictBase.from_namedtuple).
 - Dictionaries through [`from_dict()`](tensordict.TensorDictBase.from_dict.html#tensordict.TensorDictBase.from_dict).
-- Tuples through [`from_tuple()`](tensordict.TensorDictBase.from_tuple.html#tensordict.TensorDictBase.from_tuple).
+- Tuples through [`from_tuple()`](tensordict.TensorDictBase.from_tuple.html#tensordict.TensorDictBase.from_tuple). This includes the results of
+`torch.return_types` (`max`, `sort`, `topk`, ...), which get
+the keys `"0"`, `"1"`, ... and a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning).
+Starting with TensorDict 0.17, the default will change to their
+field names (`"values"`, `"indices"`, ...), as
+[`from_namedtuple()`](tensordict.TensorDictBase.from_namedtuple.html#tensordict.TensorDictBase.from_namedtuple) gives.
 - NumPy's structured arrays through [`from_struct_array()`](tensordict.TensorDictBase.from_struct_array.html#tensordict.TensorDictBase.from_struct_array).
 - HDF5 objects through [`from_h5()`](tensordict.TensorDictBase.from_h5.html#tensordict.TensorDictBase.from_h5).
 

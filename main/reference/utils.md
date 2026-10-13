@@ -46,13 +46,13 @@ is the type of the indices that a tensordict accepts.
 `print_directory_tree` prints the files of a directory, for example
 the directory of a saved tensordict. `timeit` and `logger` are the
 timer and the logger that tensordict uses in its own code. `Buffer` is
-an empty class, kept so that old imports of `tensordict.utils.Buffer`
-still work. Use [`torch.nn.Buffer`](https://docs.pytorch.org/docs/stable/generated/torch.nn.parameter.Buffer.html#torch.nn.parameter.Buffer) instead.
+[`torch.nn.Buffer`](generated/tensordict.utils.Buffer.html#tensordict.utils.Buffer), kept here so that old
+imports of `tensordict.utils.Buffer` still work.
 
 | [`print_directory_tree`](generated/tensordict.utils.print_directory_tree.html#tensordict.utils.print_directory_tree)(path[, indent, ...]) | Prints the directory tree starting from the specified path. |
 | --- | --- |
 | [`timeit`](generated/tensordict.utils.timeit.html#tensordict.utils.timeit)(name) | Measures the time spent in a function or a block of code, by name. |
-| [`Buffer`](generated/tensordict.utils.Buffer.html#tensordict.utils.Buffer)() | |
+| [`Buffer`](generated/tensordict.utils.Buffer.html#tensordict.utils.Buffer)([data, persistent]) | A kind of Tensor that should not be considered a model parameter. |
 
 tensordict.utils.logger
 

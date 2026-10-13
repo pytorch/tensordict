@@ -78,7 +78,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5275+g9e66927ba.d20261013)">
+<meta name="llm:version" content="main (0.14.0.dev5281+g9df6887dc.d20261013)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -184,7 +184,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5275+g9e66927ba.d20261013)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5281+g9df6887dc.d20261013)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1640,8 +1640,25 @@ document.write(`
 <h1>Buffer<a class="headerlink" href="#buffer" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.utils.Buffer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.utils.</span></span><span class="sig-name descname"><span class="pre">Buffer</span></span><a class="headerlink" href="#tensordict.utils.Buffer" title="Link to this definition">#</a></dt>
-<dd></dd></dl>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.utils.</span></span><span class="sig-name descname"><span class="pre">Buffer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">persistent</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.utils.Buffer" title="Link to this definition">#</a></dt>
+<dd><p>A kind of Tensor that should not be considered a model
+parameter. For example, BatchNorm’s <code class="docutils literal notranslate"><span class="pre">running_mean</span></code> is not a parameter, but is part of the module’s state.</p>
+<p>Buffers are <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> subclasses, that have a
+very special property when used with <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> s – when they’re
+assigned as Module attributes they are automatically added to the list of
+its buffers, and will appear e.g. in <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.buffers" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">buffers()</span></code></a> iterator.
+Assigning a Tensor doesn’t have such effect. One can still assign a Tensor as explicitly by using
+the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.register_buffer" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">register_buffer()</span></code></a> function.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>Tensor</em>) – buffer tensor.</p></li>
+<li><p><strong>persistent</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – whether the buffer is part of the module’s
+<code class="xref py py-attr docutils literal notranslate"><span class="pre">state_dict</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
 
 </section>
 
@@ -1981,7 +1998,7 @@ document.write(`
        "headline": "Buffer",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - Buffer",
        "url": "/reference/generated/tensordict.utils.Buffer.html",
-       "articleBody": "Buffer# class tensordict.utils.Buffer#",
+       "articleBody": "Buffer# class tensordict.utils.Buffer(data=None, *, persistent=True)# A kind of Tensor that should not be considered a model parameter. For example, BatchNorm\u2019s running_mean is not a parameter, but is part of the module\u2019s state. Buffers are Tensor subclasses, that have a very special property when used with Module s \u2013 when they\u2019re assigned as Module attributes they are automatically added to the list of its buffers, and will appear e.g. in buffers() iterator. Assigning a Tensor doesn\u2019t have such effect. One can still assign a Tensor as explicitly by using the register_buffer() function. Parameters: data (Tensor) \u2013 buffer tensor. persistent (bool, optional) \u2013 whether the buffer is part of the module\u2019s state_dict. Default: True",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
