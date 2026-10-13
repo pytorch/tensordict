@@ -7406,21 +7406,29 @@ def _update_shared_nontensor(nontensor, val):
 
 def _shared_nontensor_takes(nontensor, val) -> bool:
     """Whether :func:`_update_shared_nontensor` writes ``val`` into ``nontensor`` without raising."""
-    if isinstance(nontensor, multiprocessing.managers.ListProxy):
-        return isinstance(val, (list, tuple))
-    if isinstance(nontensor, multiprocessing.managers.DictProxy):
-        return isinstance(val, Mapping)
-    if isinstance(nontensor, multiprocessing.sharedctypes.Synchronized):
-        # ctypes takes what has __index__ in an int or bool slot, and also
-        # what has __float__ in a float slot
-        if isinstance(nontensor.get_obj(), ctypes.c_double) and hasattr(
-            type(val), "__float__"
-        ):
-            return True
-        return hasattr(type(val), "__index__")
-    if isinstance(nontensor, multiprocessing.sharedctypes.SynchronizedArray):
-        return isinstance(val, str)
-    return False
+    try:
+        if isinstance(nontensor, multiprocessing.managers.ListProxy):
+            # extend takes any iterable
+            iter(val)
+        elif isinstance(nontensor, multiprocessing.managers.DictProxy):
+            # update takes a mapping or an iterable of pairs
+            dict(val)
+        elif isinstance(nontensor, multiprocessing.sharedctypes.Synchronized):
+            # ctypes converts with __index__ in an int or bool slot, and also
+            # with __float__ in a float slot
+            if isinstance(nontensor.get_obj(), ctypes.c_double) and hasattr(
+                type(val), "__float__"
+            ):
+                float(val)
+            else:
+                operator.index(val)
+        elif isinstance(nontensor, multiprocessing.sharedctypes.SynchronizedArray):
+            return isinstance(val, str)
+        else:
+            return False
+    except (TypeError, ValueError, OverflowError):
+        return False
+    return True
 
 
 def _stores_non_tensor(dest, source) -> bool:

@@ -1365,8 +1365,9 @@ class TestNonTensorData:
         else:
             with pytest.warns(
                 UserWarning, match=r"skipped the non-tensor entries \['s'\]"
-            ):
+            ) as record:
                 getattr(td, write)(make(1.0))
+            assert record[0].filename == __file__
         assert (td["x"] == 1).all()
         assert td.get("s").tolist() == [None, None]
 
@@ -1383,6 +1384,9 @@ class TestNonTensorData:
         td.set_non_tensor("f", 1.5)
         td.set_non_tensor("by", b"xx")
         td.set_non_tensor("n", None)
+        td.set_non_tensor("j", 4)
+        td.set_non_tensor("l", [1])
+        td.set_non_tensor("d", {"x": 1})
         if mode == "shared":
             td.share_memory_()
         else:
@@ -1399,26 +1403,36 @@ class TestNonTensorData:
 
         with warnings.catch_warnings():
             warnings.simplefilter("error")
-            update_({"s": "bye", "i": 7, "f": 2})
+            # a shared list takes any iterable and a shared dict any pairs,
+            # as their extend and update do
+            update_({"s": "bye", "i": 7, "f": 2, "l": "ab", "d": [("k", 2)]})
         assert td["s"] == "bye" and td["i"] == 7 and td["f"] == 2
+        if mode == "memmap":
+            assert td["l"] == "ab" and td["d"] == [("k", 2)]
+        else:
+            assert td["l"] == ["a", "b"] and td["d"] == {"k": 2}
         assert (td["a"] == float(with_tensor)).all()
-        entries = {"s": 5, "i": "x", "f": "y", "by": b"yy", "n": "z"}
+        entries = {"s": 5, "i": "x", "f": "y", "by": b"yy", "n": "z", "l": 5, "d": "ab"}
+        # an array converts to a scalar only if it has one element
+        array = np.array([1, 2])
         if mode == "memmap":
             # without shared buffers, any value is stored
             with warnings.catch_warnings():
                 warnings.simplefilter("error")
-                update_(entries)
+                update_({**entries, "j": array})
             assert {key: td[key] for key in entries} == entries
+            assert td["j"] is array
         else:
             with pytest.warns(
                 UserWarning, match="skipped the non-tensor entries"
             ) as record:
-                update_(entries)
+                update_({**entries, "j": array})
             assert len(record) == 1
-            for key in entries:
-                assert repr(key) in str(record[0].message)
+            assert record[0].filename == __file__
+            assert f"entries {[*entries, 'j']} of" in str(record[0].message)
             assert td["s"] == "bye" and td["i"] == 7 and td["f"] == 2
-            assert td["by"] == b"xx" and td["n"] is None
+            assert td["by"] == b"xx" and td["n"] is None and td["j"] == 4
+            assert td["l"] == ["a", "b"] and td["d"] == {"k": 2}
         if mode == "shared":
             # a shallow copy shares the values
             td.copy().update_({"s": "copied", "a": torch.full((3,), 2.0)})

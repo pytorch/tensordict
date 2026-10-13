@@ -4168,7 +4168,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                                 f"The key {name} was not found in the dest tensordict."
                             )
                         if not isinstance(dest, Tensor) and _cannot_store(source, dest):
-                            skipped.append(name)
+                            # a str for a flat key, as on the other routes
+                            skipped.append(name if len(name) > 1 else name[0])
                             return None
                         dest.copy_(source, non_blocking=non_blocking)
                         if written is not None and isinstance(dest, Tensor):
@@ -4247,11 +4248,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         if written:
             self._write_back(*zip(*written), "update_")
         if skipped:
+            # point to the first frame outside tensordict: the user's call
+            frame, stacklevel = sys._getframe(1), 2
+            while frame is not None and frame.f_code.co_filename.startswith(
+                _PACKAGE_DIR
+            ):
+                frame, stacklevel = frame.f_back, stacklevel + 1
             warnings.warn(
                 f"update_() skipped the non-tensor entries {skipped} of the source: "
                 "the shared or memory-mapped destination cannot store their values.",
                 UserWarning,
-                stacklevel=3,
+                stacklevel=stacklevel,
             )
         return self
 
