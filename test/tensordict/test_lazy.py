@@ -3018,6 +3018,28 @@ class TestLazyStackedTensorDict:
         # A shape that matches the batch size returns the stack itself
         assert td.reshape([size or -1 for size in td.batch_size]) is td
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("method", ["reshape", "view"])
+    @pytest.mark.parametrize(
+        "shape", [(6, 0), (1, 0), (0,), (3, 0, 1), (0, 3), (0, 1, 3), (2, 0, 2)]
+    )
+    def test_reshape_view_lazy_zero_size_dim_explicit(self, stack_dim, method, shape):
+        # Explicit sizes give torch's shape and keep the keys, as -1 does
+        td = LazyStackedTensorDict(
+            *[
+                TensorDict({"a": torch.zeros(0, 4), "n": {"b": torch.zeros(0)}}, [0])
+                for _ in range(3)
+            ],
+            stack_dim=stack_dim,
+        )
+        expected = torch.zeros(td.batch_size).reshape(shape).shape
+        out = getattr(td, method)(shape)
+        assert out.batch_size == expected
+        assert out["a"].shape == (*expected, 4)
+        assert out["n", "b"].shape == expected
+        assert not out.is_locked
+        assert getattr(td.lock_(), method)(shape).is_locked
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_stack(self, device):
         torch.manual_seed(1)
