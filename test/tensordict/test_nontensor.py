@@ -609,6 +609,25 @@ class TestNonTensorData:
         )
         assert batch.get(("metadata", "index")).tolist() == [0, 1]
 
+    @pytest.mark.parametrize("cls", [NonTensorData, MetaData])
+    @pytest.mark.parametrize("old_names", [None, ["m"]])
+    def test_empty_names(self, cls, old_names):
+        # empty() applies the names it is given, as TensorDict.empty() does
+        x = cls(data="x", batch_size=[2], names=old_names)
+        assert x.empty().names == (old_names or [None])
+        assert x.empty(batch_size=[2]).names == [None]
+        for out in (
+            x.empty(names=["n"]),
+            x.empty(batch_size=[2], names=["n"]),
+            TensorDict(batch_size=[2]).empty(names=["n"]),
+        ):
+            assert out.names == ["n"]
+        out = x.empty(batch_size=[2, 3], names=["n", "o"])
+        assert type(out) is cls
+        assert out.batch_size == (2, 3)
+        assert out.names == ["n", "o"]
+        assert out.data == "x"
+
     def test_expand(self):
         d = NonTensorData(0, batch_size=(3,))
         d_expand = d.expand((2, 3))
@@ -2532,6 +2551,28 @@ class TestUnbatchedTensor:
         out = td.norm()
         assert type(out.get("a")) is torch.Tensor
         assert out["a"].shape == ()
+
+    def test_unbatched_to_batch_size(self):
+        # https://github.com/pytorch/tensordict/issues/2499
+        td = TensorDict(
+            a=torch.ones(3, 2),
+            u=UnbatchedTensor(torch.ones(5)),
+            n=TensorDict(v=UnbatchedTensor(torch.ones(7)), batch_size=[3, 2]),
+            batch_size=[3, 2],
+        )
+        with pytest.warns(FutureWarning, match="batch_size"):
+            out = td.to(torch.float64, batch_size=[3])
+        for key in ("u", ("n", "v")):
+            assert isinstance(out.get(key), UnbatchedTensor)
+            assert out.get(key).dtype == torch.float64
+            assert out.get(key).batch_size == (3,)
+        out = td.to(torch.float64, batch_size=[3, 2])
+        assert out.get("u").dtype == torch.float64
+
+        # Shape ops still leave the payload unchanged
+        out = td.reshape(6)
+        assert out["u"].shape == (5,)
+        assert out.get("u").batch_size == (6,)
 
     @pytest.mark.parametrize("op", [operator.add, operator.sub, operator.mul])
     def test_unbatched_pointwise_other_unbatched(self, op):

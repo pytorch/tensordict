@@ -1461,9 +1461,9 @@ class TestTensorClass:
         # A key that no field declares keeps the attribute protocol
         with pytest.raises(AttributeError):
             data.not_a_field
-        # A second delete raises, as for a deleted tensor field
-        with pytest.raises(KeyError):
-            del unset.y
+        # A deleted field is a None field: deleting it again is not an error
+        del unset.y
+        assert unset.y is None
 
     def test_deleted_field_reads_as_none_shadow(self):
         # #2147, for the __getattr__ of a shadow class
@@ -1476,6 +1476,79 @@ class TestTensorClass:
         del shadow.y
         assert shadow.y is None
         assert getattr(shadow, "y", "default") is None
+
+    @pytest.mark.parametrize("shadow", [False, True])
+    def test_none_field_is_missing_key(self, shadow):
+        # #2210: a None field is a key missing from the TensorDict, and
+        # _non_tensordict holds no placeholder for it
+        @tensorclass(shadow=shadow)
+        class Data:
+            x: torch.Tensor
+            y: torch.Tensor | None = None
+
+        @tensorclass(shadow=shadow)
+        class Custom:
+            x: torch.Tensor
+            y: torch.Tensor | None = None
+
+            def __init__(self, x):
+                self.x = x
+                self.y = None
+
+        def check(obj, key="y"):
+            assert getattr(obj, key) is None
+            assert key not in obj._tensordict.keys()
+            assert key not in obj._non_tensordict
+
+        data = Data(x=torch.zeros(3), batch_size=[3])
+        full = Data(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+        cleared = full.clone()
+        cleared.y = None
+        restored = Data.__new__(Data)
+        # pickled by a version that kept a placeholder
+        restored.__setstate__(
+            {"tensordict": data._tensordict.clone(), "non_tensordict": {"y": None}}
+        )
+        for result in (
+            data,
+            cleared,
+            restored,
+            Custom(torch.zeros(3)),
+            data.clone(),
+            data[0],
+            torch.stack([data, data]),
+            data.apply(lambda t: t + 1),
+            Data.from_dict({"x": torch.zeros(3), "y": None}, batch_size=[3]),
+            Data.from_tensordict(TensorDict(x=torch.zeros(3), batch_size=[3])),
+        ):
+            check(result)
+        # The outputs list the None field, as they did with a placeholder
+        assert data.to_dict()["y"] is None
+        assert "y=None" in repr(data)
+        assert data.non_tensor_items() == (("y", None),)
+        assert data.state_dict()._metadata[""]["_non_tensor"] == {"y": None}
+        assert data.__getstate__()["non_tensordict"] == {"y": None}
+
+        # #2230: lazy_stack leaves its inputs as they are
+        stack = lazy_stack([full, data])
+        assert stack[1].y is None
+        assert full._non_tensordict == {}
+        assert isinstance(full.to_dict()["y"], torch.Tensor)
+        check(data)
+
+        # #2171: writing the field through the TensorDict leaves no placeholder
+        for write in (
+            lambda d: d.set_non_tensor("y", "v"),
+            lambda d: d.setdefault("y", torch.ones(3)),
+            lambda d: d.rename_key_("x", "y"),
+        ):
+            d = Data(x=torch.zeros(3), batch_size=[3])
+            write(d)
+            assert d.to_dict()["y"] is not None
+            assert repr(d).count("y=") == 1
+        # the renamed field is None
+        check(d, "x")
+        assert d.to_dict()["x"] is None
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_device(self, device):
@@ -3789,10 +3862,12 @@ class TestTensorClass:
         assert (tc.b == tc.a).all()
 
         if source_type == "tensorclass":
-            # a source whose values have the batch size of tc still replaces them
+            # a source whose values have the batch size of tc still replaces
+            # them, and warns until TensorDict 0.17
             tc = TC(a=torch.zeros(4, 3), b=torch.zeros(4), batch_size=[4])
             source = TC(a=torch.ones(4, 3), b=torch.ones(4), batch_size=[])
-            tc.update_at_(source, 1)
+            with pytest.warns(FutureWarning, match="whatever the index"):
+                tc.update_at_(source, 1)
             assert tc.a is source.a and tc.b is source.b
 
             # an UnbatchedTensor does not have the batch size, but update()
@@ -3805,9 +3880,107 @@ class TestTensorClass:
             source = TC(
                 a=torch.ones(4, 3), b=UnbatchedTensor(torch.ones(5)), batch_size=[]
             )
-            tc.update_at_(source, 1)
+            with pytest.warns(FutureWarning, match="whatever the index"):
+                tc.update_at_(source, 1)
             assert tc.a is source.a
             assert (tc.b == 1).all()
+
+    @pytest.mark.parametrize("source_type", ["tensorclass", "dict"])
+    def test_update_at_full_size_source(self, source_type):
+        # update_at_ sends a source that update() accepts to update(), which
+        # replaces the entries whatever the index. It warns until TensorDict
+        # 0.17, which writes the source at the index.
+        @tensorclass
+        class TC:
+            a: torch.Tensor
+            b: torch.Tensor = None
+
+        tc = TC(a=torch.zeros(4), batch_size=[4])
+        source = TC(a=torch.ones(4), batch_size=[4])
+        if source_type == "dict":
+            source = source.to_dict()
+        with pytest.warns(
+            FutureWarning,
+            match=re.escape(
+                "TC.update_at_() with a source that update() accepts, such as "
+                "one with the batch size of the tensorclass, replaces the entries "
+                "of the tensorclass by those of the source, whatever the index. "
+                "Starting with TensorDict 0.17, the default will change to "
+                "writing the source in place at the index"
+            ),
+        ) as record:
+            assert tc.update_at_(source, 0) is tc
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert (tc.a == 1).all()
+        if source_type == "tensorclass":
+            assert tc.a is source.a
+
+        # a source written at the index
+        tc = TC(a=torch.zeros(4), b=torch.zeros(4), batch_size=[4])
+        source = TC(a=torch.ones(2), b=torch.ones(2), batch_size=[2])
+        if source_type == "dict":
+            source = source.to_dict()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            tc.update_at_(source, slice(1, 3))
+        assert tc.a.tolist() == [0.0, 1.0, 1.0, 0.0]
+
+    @pytest.mark.parametrize("source_type", ["tensorclass", "dict"])
+    def test_update__keys_to_update(self, source_type):
+        # update_ ignores keys_to_update for a tensorclass or dict source. It
+        # warns when that changes the result, until TensorDict 0.17, which
+        # honours keys_to_update as for a TensorDict source.
+        @tensorclass
+        class TC:
+            a: torch.Tensor
+            b: torch.Tensor = None
+            c: torch.Tensor = None
+
+        def source(**kwargs):
+            source = TC(**kwargs, batch_size=[3])
+            if source_type == "dict":
+                source = {
+                    key: value
+                    for key, value in source.to_dict().items()
+                    if value is not None
+                }
+            return source
+
+        # b is written although keys_to_update leaves it out
+        tc = TC(a=torch.zeros(3), b=torch.zeros(3), batch_size=[3])
+        with pytest.warns(
+            FutureWarning,
+            match=re.escape(
+                "TC.update_() with a tensorclass or dict source ignores "
+                "keys_to_update, and writes the entries that it leaves out. "
+                "Starting with TensorDict 0.17, the default will change to "
+                "writing only the entries in keys_to_update"
+            ),
+        ) as record:
+            tc.update_(source(a=torch.ones(3), b=torch.ones(3)), keys_to_update=["a"])
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert (tc.a == 1).all() and (tc.b == 1).all()
+
+        # c is unset in tc: keys_to_update=["c"] will raise a KeyError
+        with pytest.warns(FutureWarning, match="raises a KeyError"):
+            tc.update_(
+                source(a=torch.full((3,), 2.0), c=torch.ones(3)),
+                keys_to_update=["a", "c"],
+            )
+        assert (tc.a == 2).all() and tc.c is None
+
+        # the result does not change: no warning
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            tc.update_(
+                source(a=torch.full((3,), 3.0), b=torch.full((3,), 3.0)),
+                keys_to_update=["a", "b", "c"],
+            )
+            tc.update_(source(a=torch.full((3,), 4.0)), keys_to_update=["a"])
+            tc.update_(source(a=torch.full((3,), 5.0), c=torch.ones(3)))
+        assert (tc.a == 5).all() and (tc.b == 3).all() and tc.c is None
 
     @pytest.mark.parametrize("source_type", ["tensordict", "dict"])
     def test_update_at_lazy_stack(self, source_type):
@@ -3821,6 +3994,47 @@ class TestTensorClass:
             source = source.to_dict()
         tc.update_at_(source, slice(1, 3))
         assert (tc.a[:, 0] == torch.tensor([0.0, 1.0, 1.0, 0.0])).all()
+
+    # max(dim=...), min(dim=...), cummax and cummin return the torch.return_types
+    # that TensorDict returns. Other tuples, such as the output of split, stay
+    # plain tuples, and so does to_namedtuple, whose namedtuple cannot be pickled.
+    @pytest.mark.parametrize("subclass", [False, True])
+    def test_tuple_results(self, subclass):
+        if subclass:
+
+            class MyClass(TensorClass):
+                x: torch.Tensor
+                y: torch.Tensor
+
+        else:
+
+            @tensorclass
+            class MyClass:  # noqa: F811
+                x: torch.Tensor
+                y: torch.Tensor
+
+        data = MyClass(x=torch.randn(3, 4), y=torch.randn(3, 4), batch_size=[3, 4])
+        td = data.to_tensordict()
+        for method, kwargs in [
+            ("max", {"dim": 0}),
+            ("min", {"dim": 1, "keepdim": True}),
+            ("cummax", {"dim": 0}),
+            ("cummin", {"dim": 1}),
+        ]:
+            result = getattr(data, method)(**kwargs)
+            expected = getattr(td, method)(**kwargs)
+            assert type(result) is type(expected)
+            assert type(result.values) is MyClass
+            assert type(result.indices) is MyClass
+            assert (result.values.to_tensordict() == expected.values).all()
+            assert (result.indices.to_tensordict() == expected.indices).all()
+        assert type(data.cummax(0, reduce=True)) is torch.return_types.cummax
+
+        assert type(data.to_namedtuple()) is tuple
+
+        splits = data.split(2, dim=1)
+        assert type(splits) is tuple
+        assert all(type(split) is MyClass for split in splits)
 
     def test_type(self):
         data = MyData(
@@ -6274,15 +6488,21 @@ class TestTensorOnly:
         self._check_none_is_missing_key(x, "c")
         y = self.TensorOnly.from_dict(x.to_dict(), batch_size=[3])
         self._check_none_is_missing_key(y, "c")
-        for update in (
-            lambda z: z.update({"c": None}),
-            lambda z: z.update(c=None),
-            lambda z: z.update_at_({"c": None}, 0),
+        for update, warns in (
+            (lambda z: z.update({"c": None}), False),
+            (lambda z: z.update(c=None), False),
+            # update_at_ unsets the field whatever the index, and warns
+            (lambda z: z.update_at_({"c": None}, 0), True),
         ):
             z = self.TensorOnly(
                 torch.zeros(3), torch.zeros(3), torch.ones(3), batch_size=[3]
             )
-            update(z)
+            with (
+                pytest.warns(FutureWarning, match="whatever the index")
+                if warns
+                else contextlib.nullcontext()
+            ):
+                update(z)
             self._check_none_is_missing_key(z, "c")
         # keys_to_update still selects the entries
         z = self.TensorOnly(

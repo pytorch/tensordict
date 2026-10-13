@@ -744,6 +744,7 @@ class _DeviceOps:
                 apply_kwargs["batch_size"] = None if inplace else batch_size
                 apply_kwargs["out"] = self if inplace else None
                 apply_kwargs["checked"] = True
+                apply_kwargs["call_on_unbatched"] = True
                 if non_blocking_pin:
 
                     def to_pinmem(tensor, _to=to):
