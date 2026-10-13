@@ -13,6 +13,7 @@ import math
 import os
 import queue
 import re
+import sys
 import threading
 import time
 import warnings
@@ -48,6 +49,7 @@ from torch._C._functorch import (  # noqa: F401  # @manual=fbcode//caffe2:torch
 )
 from torch.compiler import allow_in_graph, assume_constant_result, is_compiling
 from torch.nn.parameter import (
+    Buffer,
     UninitializedBuffer,
     UninitializedParameter,
     UninitializedTensorMixin,
@@ -235,16 +237,15 @@ _LOCK_ERROR = (
 )
 
 
-LOGGING_LEVEL = os.environ.get("TD_LOGGING_LEVEL", "DEBUG")
+LOGGING_LEVEL = os.environ.get("TD_LOGGING_LEVEL", "INFO")
 logger = logging.getLogger("tensordict")
-logger.setLevel(getattr(logging, LOGGING_LEVEL))
+logger.setLevel(LOGGING_LEVEL.upper())
 # Disable propagation to the root logger
 logger.propagate = False
 # Remove all attached handlers
 while logger.hasHandlers():
     logger.removeHandler(logger.handlers[0])
 console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s [%(name)s][%(levelname)s] %(message)s")
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
@@ -486,7 +487,15 @@ def _set_item(
     if not validated:
         raise RuntimeError
     if isinstance(tensor, Tensor):
-        tensor[index] = value
+        if (
+            _is_unbatched(value)
+            and _is_unbatched(tensor)
+            and value.shape == tensor.shape
+        ):
+            # the whole batch shares the payload: write it whole, as td[:] does
+            tensor.copy_(value, non_blocking=non_blocking)
+        else:
+            tensor[index] = value
         return tensor
     from tensordict.tensorclass import NonTensorData, NonTensorStack
 
@@ -502,6 +511,20 @@ def _set_item(
                 return tensor
         if isinstance(tensor, NonTensorData):
             tensor = NonTensorStack._from_nontensordata(tensor)
+            if (
+                isinstance(tensor, NonTensorData)
+                and isinstance(value, Tensor)
+                and (index is Ellipsis or (isinstance(index, tuple) and not index))
+            ):
+                # Without batch dims, the index selects the whole entry: the
+                # value replaces it, as NonTensorStack.__setitem__ writes an
+                # element of a stack
+                return type(tensor)(
+                    data=value,
+                    batch_size=tensor.batch_size,
+                    names=tensor._maybe_names(),
+                    device=tensor.device,
+                )
         if tensor.stack_dim != 0:
             tensor = NonTensorStack(*tensor.unbind(0), stack_dim=0)
         tensor[index] = value
@@ -2020,12 +2043,6 @@ def _resolve_expand_shape(shape: Sequence[int], batch_size: torch.Size) -> torch
     return torch.Size(resolved)
 
 
-# Imports of ``tensordict.utils.Buffer`` resolve to this empty placeholder,
-# as they have since torch.nn.Buffer was added (torch 2.5).
-class Buffer:  # noqa: D101
-    ...
-
-
 class _BufferLegacy(torch.nn.Buffer):
     """A buffer subclass that keeps the grad fn history."""
 
@@ -2524,8 +2541,19 @@ _FOREACH_PER_TENSOR_OPS = {
 }
 
 
+def _any_unbatched(tensors) -> bool:
+    # A loop is faster than any() over a generator for short lists. The class
+    # attribute is read directly, as in _is_unbatched, which is slower per call
+    # for the nn.Parameter leaves of TensorDictParams.
+    for tensor in tensors:
+        cls = type(tensor)
+        if cls is not Tensor and getattr(cls, "_pass_through", False):
+            return True
+    return False
+
+
 def _foreach(name: str, tensors, *args, **kwargs):
-    """Calls ``torch._foreach_<name>(tensors, *args, **kwargs)``, one tensor at a time under torch.func.
+    """Calls ``torch._foreach_<name>(tensors, *args, **kwargs)``, one tensor at a time under torch.func or with an unbatched tensor.
 
     functorch has no batching rule for the ``_foreach`` ops, so inside any
     ``torch.func`` transform (``vmap``, ``grad``, ``jacrev``, ``functionalize``,
@@ -2533,10 +2561,18 @@ def _foreach(name: str, tensors, *args, **kwargs):
     without ``vmap``, such as ``grad`` alone, the ``_foreach`` ops would work,
     but they also run one op per tensor. A list or tuple in ``args`` gives one
     value per tensor; any other value is used for every tensor.
+
+    The same per-tensor path is taken when ``tensors`` or a list in ``args``
+    holds an unbatched tensor (e.g. :class:`~tensordict.UnbatchedTensor`): its
+    ``__torch_dispatch__`` would handle the whole ``_foreach`` call and wrap
+    every output in an unbatched tensor of one batch size.
     """
     # Dynamo folds the depth to a guarded constant. Do not test
     # ``peek_interpreter_stack() is None``: Dynamo evaluates it as False.
-    if torch._C._functorch.get_dynamic_layer_stack_depth() == 0:
+    if torch._C._functorch.get_dynamic_layer_stack_depth() == 0 and not (
+        _any_unbatched(tensors)
+        or any(isinstance(arg, (list, tuple)) and _any_unbatched(arg) for arg in args)
+    ):
         return getattr(torch, "_foreach_" + name)(tensors, *args, **kwargs)
     op = _FOREACH_PER_TENSOR_OPS.get(name) or getattr(torch.Tensor, name)
     per_tensor_args = [
@@ -2917,7 +2953,8 @@ def parse_tensor_dict_string(s: str):
 
     Raises:
         ValueError: if a field is not a ``Tensor`` or a ``TensorDict`` printed
-            with the default print options.
+            with the default print options, or if ``s`` is the repr of a lazy
+            stack with exclusive keys.
 
     """
     from tensordict import TensorDict
@@ -2930,6 +2967,10 @@ def parse_tensor_dict_string(s: str):
         re.MULTILINE,
     )
     nested_field_pattern = re.compile(r"^[ \t]*(.*?): TensorDict\(", re.MULTILINE)
+    # A lazy stack prints its exclusive keys in a block that is empty otherwise
+    exclusive_fields_pattern = re.compile(
+        r"^[ \t]*exclusive_fields=\{\n(?![ \t]*\})", re.MULTILINE
+    )
     batch_size_pattern = r"batch_size=torch.Size\((\[(.*?)\])\)"
     device_pattern = r"device=(\w+(?::\d+)?)(?=,|$)"
 
@@ -2981,6 +3022,13 @@ def parse_tensor_dict_string(s: str):
         raise ValueError(
             f"Cannot parse the field {line!r}: parse_tensor_dict_string reads "
             "Tensor and TensorDict fields printed with the default print options."
+        )
+    for match in exclusive_fields_pattern.finditer(s):
+        if any(start <= match.start() <= end for start, end in nested_dict_ranges):
+            continue
+        raise ValueError(
+            "Cannot parse the exclusive_fields of a lazy stack: "
+            "parse_tensor_dict_string does not rebuild lazy stacks with exclusive keys."
         )
 
     # Now add the nested TensorDicts to the fields
@@ -3144,6 +3192,30 @@ def _maybe_correct_neg_dim(
             f"Incompatible dim {new_dim} for tensordict with batch dims {ndim}."
         )
     return new_dim
+
+
+# tensordict, and torch, whose torch function modes (such as the one of
+# torch.set_default_device) can call tensordict's torch.stack and torch.cat
+_LIBRARY_DIRS = (
+    os.path.dirname(os.path.abspath(__file__)) + os.sep,
+    os.path.dirname(os.path.abspath(torch.__file__)) + os.sep,
+)
+
+
+def _warn_dim_past_batch_dims(op: str) -> None:
+    """Warns that ``op`` got a dim outside the batch dims, which raises from 0.17 (#2148)."""
+    # point to the first frame outside tensordict and torch: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_LIBRARY_DIRS):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    warnings.warn(
+        f"{op} got a dim outside the batch dims, and uses it on the dims of "
+        "the leaves instead. Starting with TensorDict 0.17, the default will "
+        "change to raising an IndexError, as torch does for a tensor of the "
+        "batch size.",
+        FutureWarning,
+        stacklevel=stacklevel,
+    )
 
 
 # Check if the new shape is a flatten / unflatten version of the current one

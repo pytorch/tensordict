@@ -20,6 +20,7 @@ from typing import Any, Callable, overload, Tuple, Type, TYPE_CHECKING
 
 import numpy as np
 import torch
+from tensordict._base.unsupported import _NoSetNonTensor, _NoShapeOps, _NoVmap
 from tensordict._deprecation import deprecated
 from tensordict._indexing import _entry_index
 from tensordict._td import (
@@ -138,6 +139,9 @@ class _PersistentBackend:
     """
 
     name: str
+    # set while from_dict writes data with a known batch size: groups then get
+    # their metadata when they are created
+    metadata_on_create = False
 
     def __init__(self, locking=None):
         self.locking = locking
@@ -153,7 +157,7 @@ class _PersistentBackend:
     def open_file(self, filename, mode):
         raise NotImplementedError
 
-    def open_new_file(self, filename):
+    def open_new_file(self, filename, metadata: dict | None = None):
         raise NotImplementedError
 
     def close(self, file) -> None:
@@ -198,7 +202,7 @@ class _PersistentBackend:
     def copy_dataset(self, dest_file, key, src_node, kwargs) -> None:
         raise NotImplementedError
 
-    def create_group(self, file, key) -> None:
+    def create_group(self, file, key, metadata: dict | None = None) -> None:
         raise NotImplementedError
 
     def encode_non_tensor(self, value):
@@ -257,7 +261,7 @@ class _H5Backend(_PersistentBackend):
 
         return h5py.File(filename, mode, locking=self.locking)
 
-    def open_new_file(self, filename):
+    def open_new_file(self, filename, metadata=None):
         import h5py
 
         return h5py.File(filename, "w", locking=self.locking)
@@ -344,7 +348,7 @@ class _H5Backend(_PersistentBackend):
     def copy_dataset(self, dest_file, key, src_node, kwargs) -> None:
         dest_file.create_dataset(key, data=src_node, **kwargs)
 
-    def create_group(self, file, key) -> None:
+    def create_group(self, file, key, metadata=None) -> None:
         file.create_group(key)
 
     def encode_non_tensor(self, value):
@@ -463,13 +467,18 @@ class _ZarrBackend(_PersistentBackend):
             # writable: consolidated metadata would go stale on mutation
             return zarr.open_group(filename, mode=mode, use_consolidated=False)
 
-    def open_new_file(self, filename):
+    def open_new_file(self, filename, metadata=None):
         import zarr
 
         if isinstance(filename, Path):
             filename = str(filename)
         self._store_consolidated = False
-        return zarr.open_group(filename, mode="w", use_consolidated=False)
+        return zarr.open_group(
+            filename,
+            mode="w",
+            use_consolidated=False,
+            attributes=_zarr_metadata_attributes(metadata),
+        )
 
     def finalize(self, file) -> None:
         """Consolidates the store metadata once a bulk write is complete."""
@@ -674,8 +683,10 @@ class _ZarrBackend(_PersistentBackend):
         if src_node.size:
             array[...] = src_node[...]
 
-    def create_group(self, file, key) -> None:
-        file.create_group(key)
+    def create_group(self, file, key, metadata=None) -> None:
+        # the metadata is written with the group so that its zarr.json is
+        # written once: an append-only store (e.g. ZipStore) cannot replace it
+        file.create_group(key, attributes=_zarr_metadata_attributes(metadata))
         self._after_structural_change(file)
 
     def encode_non_tensor(self, value):
@@ -755,10 +766,27 @@ class _ZarrBackend(_PersistentBackend):
 
     def write_attrs_metadata(self, group, metadata: dict) -> None:
         try:
+            if group.attrs.get(_ZARR_METADATA_ATTR) == metadata:
+                # written when the group was created
+                return
             group.attrs[_ZARR_METADATA_ATTR] = metadata
         except Exception:
             # best effort: read-only stores cannot persist metadata
             pass
+
+
+def _zarr_metadata_attributes(metadata: dict | None) -> dict | None:
+    if metadata is None:
+        return None
+    return {_ZARR_METADATA_ATTR: metadata}
+
+
+def _attrs_metadata(batch_size, names) -> dict:
+    """The batch size and names that a group persists in its attributes."""
+    metadata = {"batch_size": list(batch_size), "version": 1}
+    if names is not None:
+        metadata["names"] = list(names)
+    return metadata
 
 
 _BACKENDS: dict[str, Type[_PersistentBackend]] = {
@@ -767,7 +795,7 @@ _BACKENDS: dict[str, Type[_PersistentBackend]] = {
 }
 
 
-class PersistentTensorDict(TensorDictBase):
+class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase):
     """A tensordict whose entries live in an HDF5 file or a Zarr store.
 
     The HDF5 backend (``backend="h5"``) needs ``h5py``. The Zarr backend
@@ -847,6 +875,7 @@ class PersistentTensorDict(TensorDictBase):
 
     _td_dim_names = None
     _masking_on_dense_copy = True
+    _rename_key_lenient = True
     LOCKING = None
     # each read loads the entry from the file into a new tensor
     _reads_return_copies = True
@@ -1073,12 +1102,34 @@ class PersistentTensorDict(TensorDictBase):
             torch.Size([3]) tensor([1., 1., 1.])
 
         """
+        return cls._from_dict(
+            input_dict,
+            filename,
+            batch_size=batch_size,
+            device=device,
+            backend=backend,
+            **kwargs,
+        )
+
+    @classmethod
+    def _from_dict(
+        cls,
+        input_dict,
+        filename,
+        *,
+        batch_size=None,
+        device=None,
+        backend: str = "h5",
+        names=None,
+        **kwargs,
+    ):
+        # from_dict, which also sets the dimension names before writing the
+        # metadata, so that a store that cannot replace an entry gets it once
         backend_cls = _BACKENDS.get(backend)
         if backend_cls is None:
             raise NotImplementedError(
                 f"Unknown backend {backend!r}. Supported backends are {sorted(_BACKENDS)}."
             )
-        file = backend_cls(locking=cls.LOCKING).open_new_file(filename)
         _has_batch_size = True
         if batch_size is None:
             if is_tensor_collection(input_dict):
@@ -1086,27 +1137,32 @@ class PersistentTensorDict(TensorDictBase):
             else:
                 _has_batch_size = False
                 batch_size = torch.Size([])
+        metadata = None
+        if _has_batch_size:
+            metadata = _attrs_metadata(batch_size, _source_names(input_dict, names))
+        file = backend_cls(locking=cls.LOCKING).open_new_file(filename, metadata)
 
         # let's make a tensordict first
         out = cls(
             group=file, batch_size=batch_size, device=device, backend=backend, **kwargs
         )
+        out._backend.metadata_on_create = _has_batch_size
         if is_tensor_collection(input_dict):
             out.update(input_dict)
         else:
             out.update(TensorDict(input_dict, batch_size=batch_size))
+        out._backend.metadata_on_create = False
         if not _has_batch_size:
             _set_max_batch_size(out)
+        if names is not None:
+            out.names = names
         out._write_attrs_metadata()
         out._backend.finalize(out.file)
         return out
 
     def _write_attrs_metadata(self):
         """Persists batch size and names in the storage attributes (best effort)."""
-        metadata = {"batch_size": list(self.batch_size), "version": 1}
-        names = self._td_dim_names
-        if names is not None:
-            metadata["names"] = list(names)
+        metadata = _attrs_metadata(self.batch_size, self._td_dim_names)
         self._backend.write_attrs_metadata(self.file, metadata)
         for td in self._nested_tensordicts.values():
             td._write_attrs_metadata()
@@ -1529,67 +1585,6 @@ class PersistentTensorDict(TensorDictBase):
             )
         return self
 
-    def make_memmap(
-        self,
-        key: NestedKey,
-        shape: torch.Size | torch.Tensor,
-        *,
-        dtype: torch.dtype | None = None,
-        robust_key: bool | None = True,
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't allowed for persistent tensordicts."
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
-    def make_memmap_from_storage(
-        self,
-        key: NestedKey,
-        storage: torch.UntypedStorage,
-        shape: torch.Size | torch.Tensor,
-        *,
-        dtype: torch.dtype | None = None,
-        robust_key: bool | None = True,
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't allowed for persistent tensordicts."
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
-    def make_memmap_from_tensor(
-        self,
-        key: NestedKey,
-        tensor: torch.Tensor,
-        *,
-        copy_data: bool = True,
-        robust_key: bool | None = True,
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't allowed for persistent tensordicts."
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
-    def memmap_(
-        self,
-        prefix: str | None = None,
-        copy_existing: bool = False,
-        num_threads: int = 0,
-    ) -> PersistentTensorDict:
-        """Raises a ``RuntimeError``: a PersistentTensorDict cannot be memory-mapped in-place.
-
-        Use :meth:`~tensordict.TensorDictBase.memmap` to build a memory-mapped copy instead.
-
-        Args:
-            prefix (str, optional): unused.
-            copy_existing (bool, optional): unused.
-            num_threads (int, optional): unused.
-
-        See :meth:`~tensordict.TensorDictBase.memmap_`.
-        """
-        raise RuntimeError(
-            "Cannot build a memmap TensorDict in-place from a PersistentTensorDict. Use `td.memmap()` instead."
-        )
-
     def _memmap_(
         self,
         *,
@@ -1604,7 +1599,10 @@ class PersistentTensorDict(TensorDictBase):
         robust_key,
     ) -> T:
         if inplace:
-            raise RuntimeError("Cannot call memmap inplace in a persistent tensordict.")
+            raise RuntimeError(
+                "Cannot build a memmap TensorDict in-place from a PersistentTensorDict. "
+                "Use `td.memmap()` instead."
+            )
 
         # re-implements this to make it faster using the meta-data
         def save_metadata(data: TensorDictBase, filepath, metadata=None):
@@ -1713,8 +1711,6 @@ class PersistentTensorDict(TensorDictBase):
                     executor.submit(save_metadata, dest, prefix / "meta.json", metadata)
                 )
         return dest
-
-    _load_memmap = TensorDict._load_memmap
 
     # Override: file-backed entries cannot be pinned.
     def pin_memory(self, *args, **kwargs):
@@ -1863,13 +1859,38 @@ class PersistentTensorDict(TensorDictBase):
                 out = torch.cat(imaplist, dim)
         return out
 
-    def rename_key_(
-        self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
-    ) -> PersistentTensorDict:
-        old_key = self._process_key(old_key)
-        new_key = self._process_key(new_key)
-        self._backend.move(self.file, old_key, new_key)
-        return self
+    # Override: moves the node in the file, without reading the data.
+    def _rename_key(self, old_key: NestedKey, new_key: NestedKey) -> None:
+        old = _unravel_key_to_tuple(old_key)
+        new = _unravel_key_to_tuple(new_key)
+        old_path = self._process_key(old)
+        new_path = self._process_key(new)
+        if (
+            old
+            and new
+            and all(old)
+            and all(new)
+            # neither key lies under the other
+            and old[: len(new)] != new
+            and new[: len(old)] != old
+            and self._backend.contains(self.file, new_path)
+            and self._backend.contains(self.file, old_path)
+        ):
+            # the backends refuse to move onto an existing node (rename_key_
+            # has checked safe): overwrite it, as TensorDict does
+            self._backend.delete(self.file, new_path)
+            self._forget_nested(new)
+        self._backend.move(self.file, old_path, new_path)
+        if old:
+            self._forget_nested(old)
+
+    def _forget_nested(self, key: tuple) -> None:
+        """Drops the cached nested tensordicts at or under ``key``, whose node has moved or gone."""
+        for cached in list(self._nested_tensordicts):
+            if cached[: len(key)] == key:
+                del self._nested_tensordicts[cached]
+            elif key[: len(cached)] == cached:
+                self._nested_tensordicts[cached]._forget_nested(key[len(cached) :])
 
     def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
         """Fills a tensor pointed by the key with the a given value.
@@ -2024,7 +2045,10 @@ class PersistentTensorDict(TensorDictBase):
         if is_tensor_collection(value):
             target_td = self._get_str(first_key, default=None)
             if target_td is None:
-                self._backend.create_group(self.file, first_key)
+                metadata = None
+                if self._backend.metadata_on_create:
+                    metadata = _attrs_metadata(value.batch_size, _source_names(value))
+                self._backend.create_group(self.file, first_key, metadata)
                 target_td = self._get_str(first_key, default=NO_DEFAULT)
                 target_td.batch_size = value.batch_size
             elif not is_tensor_collection(target_td):
@@ -2082,11 +2106,6 @@ class PersistentTensorDict(TensorDictBase):
                 )
             inplace = has_key
         return inplace
-
-    def _set_non_tensor(self, key: NestedKey, value: Any):
-        raise NotImplementedError(
-            f"set_non_tensor is not compatible with the tensordict type {type(self).__name__}."
-        )
 
     def _set_str(
         self,
@@ -2250,42 +2269,6 @@ class PersistentTensorDict(TensorDictBase):
             self._is_locked = False
             self.lock_()
 
-    def _add_batch_dim(self, *, in_dim, vmap_level):
-        raise RuntimeError("Persistent tensordicts cannot be used with vmap.")
-
-    def _remove_batch_dim(self, vmap_level, batch_size, out_dim): ...
-
-    def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim): ...
-
-    def _view(self, *args, **kwargs):
-        raise RuntimeError(
-            "Cannot call `view` on a persistent tensordict. Call `reshape` instead."
-        )
-
-    def _transpose(self, dim0, dim1):
-        raise RuntimeError(
-            "Cannot call `transpose` on a persistent tensordict. Make it dense before calling this method by calling `to_tensordict`."
-        )
-
-    def _permute(
-        self,
-        *args,
-        **kwargs,
-    ):
-        raise RuntimeError(
-            "Cannot call `permute` on a persistent tensordict. Make it dense before calling this method by calling `to_tensordict`."
-        )
-
-    def _squeeze(self, dim=None):
-        raise RuntimeError(
-            "Cannot call `squeeze` on a persistent tensordict. Make it dense before calling this method by calling `to_tensordict`."
-        )
-
-    def _unsqueeze(self, dim: int):
-        raise RuntimeError(
-            "Cannot call `unsqueeze` on a persistent tensordict. Make it dense before calling this method by calling `to_tensordict`."
-        )
-
 
 _register_tensor_class(PersistentTensorDict)
 
@@ -2320,6 +2303,13 @@ def _set_max_batch_size(source: PersistentTensorDict):
                 return
         batch_size.append(curr_dim_size)
         curr_dim += 1
+
+
+def _source_names(value, names=None):
+    """The names that a group written from ``value`` is expected to persist."""
+    if names is None and is_tensor_collection(value) and value._has_names():
+        names = value.names
+    return names
 
 
 def _is_non_tensor_h5(val):

@@ -26,12 +26,12 @@ __all__ = [
 ]
 
 
-def _strtobool(val):
+def _strtobool(val: str) -> bool:
     val = val.lower()
     if val in ("y", "yes", "t", "true", "on", "1"):
-        return 1
+        return True
     if val in ("n", "no", "f", "false", "off", "0"):
-        return 0
+        return False
     raise ValueError(f"invalid truth value {val!r}")
 
 
@@ -184,13 +184,17 @@ class set_lazy_legacy(_DecoratorContextManager):
     def set(self) -> None:
         global _LAZY_OP
         self._old_mode = _LAZY_OP
+        self._old_env = os.environ.get("LAZY_LEGACY_OP")
         _LAZY_OP = bool(self.mode)
         os.environ["LAZY_LEGACY_OP"] = str(_LAZY_OP)
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         global _LAZY_OP
         _LAZY_OP = self._old_mode
-        os.environ["LAZY_LEGACY_OP"] = str(_LAZY_OP)
+        if self._old_env is None:
+            os.environ.pop("LAZY_LEGACY_OP", None)
+        else:
+            os.environ["LAZY_LEGACY_OP"] = self._old_env
 
 
 def lazy_legacy(allow_none=False):
@@ -269,13 +273,17 @@ class _set_capture_non_tensor_stack(_DecoratorContextManager):
     def set(self) -> None:
         global _CAPTURE_NONTENSOR_STACK
         self._old_mode = _CAPTURE_NONTENSOR_STACK
+        self._old_env = os.environ.get("CAPTURE_NONTENSOR_STACK")
         _CAPTURE_NONTENSOR_STACK = bool(self.mode)
         os.environ["CAPTURE_NONTENSOR_STACK"] = str(_CAPTURE_NONTENSOR_STACK)
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         global _CAPTURE_NONTENSOR_STACK
         _CAPTURE_NONTENSOR_STACK = self._old_mode
-        os.environ["CAPTURE_NONTENSOR_STACK"] = str(_CAPTURE_NONTENSOR_STACK)
+        if self._old_env is None:
+            os.environ.pop("CAPTURE_NONTENSOR_STACK", None)
+        else:
+            os.environ["CAPTURE_NONTENSOR_STACK"] = self._old_env
 
 
 class set_capture_non_tensor_stack(_set_capture_non_tensor_stack):
@@ -343,7 +351,7 @@ def _warn_list_to_stack(what: str, stacklevel: int) -> None:
     )
 
 
-_DEFAULT_LIST_TO_STACK = "1"
+_DEFAULT_LIST_TO_STACK = True
 _LIST_TO_STACK = os.environ.get("LIST_TO_STACK")
 if _LIST_TO_STACK is not None and _LIST_TO_STACK.lower() in (
     "n",
@@ -377,13 +385,17 @@ class _set_list_to_stack(_DecoratorContextManager):
     def set(self) -> None:
         global _LIST_TO_STACK
         self._old_mode = _LIST_TO_STACK
+        self._old_env = os.environ.get("LIST_TO_STACK")
         _LIST_TO_STACK = bool(self.mode)
         os.environ["LIST_TO_STACK"] = str(_LIST_TO_STACK)
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         global _LIST_TO_STACK
         _LIST_TO_STACK = self._old_mode
-        os.environ["LIST_TO_STACK"] = str(_LIST_TO_STACK)
+        if self._old_env is None:
+            os.environ.pop("LIST_TO_STACK", None)
+        else:
+            os.environ["LIST_TO_STACK"] = self._old_env
 
 
 class set_list_to_stack(_set_list_to_stack):
@@ -412,9 +424,7 @@ class set_list_to_stack(_set_list_to_stack):
 def list_to_stack(allow_none=False):
     """Returns whether assigning a list to a key stores a :class:`~tensordict.NonTensorStack`.
 
-    See :class:`~tensordict.set_list_to_stack`. When the option was never
-    set, the default is returned as the string ``"1"`` (a value that is
-    true), not as ``True``.
+    See :class:`~tensordict.set_list_to_stack`.
 
     Args:
         allow_none (bool, optional): if ``True`` and the option was never

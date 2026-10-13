@@ -83,6 +83,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _zip_strict,
     capture_non_tensor_stack,
     DeviceType,
+    expand_as_right,
     IndexType,
     is_tensorclass,
     LinkedList,
@@ -212,6 +213,7 @@ _METHOD_FROM_TD = [
 ]
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict', no wrap of result
 _FALLBACK_METHOD_FROM_TD_NOWRAP = [
+    "_change_batch_size",
     "_check_batch_size",
     "_check_device",
     "_check_dim_name",
@@ -1027,6 +1029,7 @@ _TENSORCLASS_MEMBER_NAMES = frozenset(dir(TensorDict)).union(
         "fields",
         "from_tensordict",
         "_autocast",
+        "_from_dict_defaults",
         "_from_tensordict",
         "_frozen",
         "_is_tensorclass",
@@ -1233,6 +1236,18 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     expected_keys = cls.__expected_keys__ = {
         field.name for field in dataclasses.fields(cls)
     }
+    # The fields that from_dict() will fill with their defaults in 0.17. A
+    # non-tensor class keeps the input of from_dict() as its data.
+    cls._from_dict_defaults = (
+        ()
+        if _is_non_tensor
+        else tuple(
+            field.name
+            for field in dataclasses.fields(cls)
+            if field.default_factory is not dataclasses.MISSING
+            or (field.default is not dataclasses.MISSING and field.default is not None)
+        )
+    )
 
     if not shadow:
         for attr in expected_keys:
@@ -1444,7 +1459,7 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     if not hasattr(cls, "_load_memmap"):
         cls._load_memmap = classmethod(_load_memmap)
     if not hasattr(cls, "from_dict") and "from_dict" not in expected_keys:
-        cls.from_dict = classmethod(_from_dict)
+        cls.from_dict = classmethod(_from_dict_public)
     if (
         not hasattr(cls, "from_dict_instance")
         and "from_dict_instance" not in expected_keys
@@ -3042,6 +3057,39 @@ def _exit(self, exc_type, exc_val, exc_tb):
     return result
 
 
+# The fallback methods that write a key, with the position and the name of
+# its argument. See _warn_non_field_keys.
+_FIELD_KEY_ARGUMENT = {
+    "create_nested": (0, "key"),
+    "rename_key_": (1, "new_key"),
+    "set_non_tensor": (0, "key"),
+    "setdefault": (0, "key"),
+}
+
+
+def _non_field_keys(self, keys) -> set[str]:
+    # The first keys of the nested keys in keys that are not fields of
+    # type(self). Dynamo cannot trace warnings.warn, so only eager
+    # calls look for them and warn.
+    expected_keys = type(self).__expected_keys__
+    if is_dynamo_compiling() or expected_keys.issuperset(keys):
+        return set()
+    return {_unravel_key_to_tuple(key)[0] for key in keys} - expected_keys
+
+
+def _warn_non_field_keys(self, keys: set[str], method: str) -> None:
+    # set() and attribute assignment reject keys that are not fields with
+    # AttributeError, and so will these methods once the deprecation ends.
+    cls = type(self)
+    warn_deprecated(
+        f"Writing keys that are not fields ({sorted(keys)}) with "
+        f"{cls.__name__}.{method}(), which set() rejects with AttributeError,",
+        removal="0.17",
+        replacement=f"only its fields ({sorted(cls.__expected_keys__)})",
+        stacklevel=3,
+    )
+
+
 def _wrap_td_method(
     funcname, *, copy_non_tensor=False, no_wrap=False, is_property=False
 ):
@@ -3084,6 +3132,21 @@ def _wrap_td_method(
             if isinstance(result, tuple):
                 return tuple(deliver_result(self, r, kwargs) for r in result)
             return deliver_result(self, result, kwargs)
+
+        if funcname not in _FIELD_KEY_ARGUMENT:
+            return wrapped_func
+        position, name = _FIELD_KEY_ARGUMENT[funcname]
+        unchecked_func = wrapped_func
+
+        def wrapped_func(self, *args, **kwargs):
+            result = unchecked_func(self, *args, **kwargs)
+            # The call succeeded, so key is a string or a tuple of strings.
+            key = args[position] if len(args) > position else kwargs.get(name)
+            if key is not None and key not in type(self).__expected_keys__:
+                unknown = _non_field_keys(self, (key,))
+                if unknown:
+                    _warn_non_field_keys(self, unknown, funcname)
+            return result
 
         return wrapped_func
 
@@ -3183,6 +3246,14 @@ def _clear_none_entries(self, keys: list[str], keys_to_update=None) -> None:
         _set_none_tensor_only(self, key)
 
 
+def _update_non_field_keys(self, keys, keys_to_update) -> set[str]:
+    # The keys in keys that are not fields and that update() writes.
+    unknown = _non_field_keys(self, keys)
+    if unknown and keys_to_update is not None:
+        unknown &= {_unravel_key_to_tuple(key)[0] for key in keys_to_update}
+    return unknown
+
+
 def _update(
     self,
     input_dict_or_td: dict[str, CompatibleType] | T | None = None,
@@ -3222,7 +3293,9 @@ def _update(
         is_leaf = _is_leaf_nontensor
     if isinstance(input_dict_or_td, dict):
         none_keys = _dict_none_keys(self, input_dict_or_td)
-        input_dict_or_td = type(self).from_dict(input_dict_or_td, auto_batch_size=False)
+        input_dict_or_td = _from_dict_for_update(
+            type(self), input_dict_or_td, auto_batch_size=False
+        )
         if none_keys:
             _add_none_entries(input_dict_or_td, none_keys)
             _update(
@@ -3270,6 +3343,22 @@ def _update(
                     if key in keys:
                         del self_non_tensordict[key]
         self._non_tensordict.update(non_tensordict)
+        # The keys of the dict of a TensorDict are faster to read than its
+        # keys(), and valid calls only pay for the issuperset checks.
+        source = input_dict_or_td.__dict__["_tensordict"]
+        source_keys = (
+            source._tensordict if type(source) is TensorDict else source.keys()
+        )
+        expected_keys = type(self).__expected_keys__
+        if not (
+            expected_keys.issuperset(source_keys)
+            and expected_keys.issuperset(non_tensordict)
+        ):
+            unknown = _update_non_field_keys(
+                self, source_keys, keys_to_update
+            ) | _non_field_keys(self, non_tensordict)
+            if unknown:
+                _warn_non_field_keys(self, unknown, "update")
         return self
 
     self._tensordict.update(
@@ -3288,6 +3377,15 @@ def _update(
         ntd = {k: val for k, val in self._non_tensordict.items() if k not in keys}
         self._non_tensordict.clear()
         self._non_tensordict.update(ntd)
+    source_keys = (
+        input_dict_or_td._tensordict
+        if type(input_dict_or_td) is TensorDict
+        else input_dict_or_td.keys()
+    )
+    if not type(self).__expected_keys__.issuperset(source_keys):
+        unknown = _update_non_field_keys(self, source_keys, keys_to_update)
+        if unknown:
+            _warn_non_field_keys(self, unknown, "update")
     return self
 
 
@@ -3320,8 +3418,8 @@ def _update_(
         return self
     if isinstance(input_dict_or_td, dict):
         none_keys = _dict_none_keys(self, input_dict_or_td)
-        input_dict_or_td = type(self).from_dict(
-            input_dict_or_td, batch_size=self.batch_size
+        input_dict_or_td = _from_dict_for_update(
+            type(self), input_dict_or_td, batch_size=self._tensordict.batch_size
         )
         # update_() raises for them, as it did before
         _add_none_entries(input_dict_or_td, none_keys)
@@ -3359,14 +3457,14 @@ def _update_at_(
     if isinstance(input_dict_or_td, dict):
         try:
             none_keys = _dict_none_keys(self, input_dict_or_td)
-            input_dict_or_td = type(self).from_dict(
-                input_dict_or_td, batch_size=self.batch_size
+            input_dict_or_td = _from_dict_for_update(
+                type(self), input_dict_or_td, batch_size=self._tensordict.batch_size
             )
             _add_none_entries(input_dict_or_td, none_keys)
         except RuntimeError:
             # write the dict at the index only if its values do not have the
             # batch size of self
-            batch_size = self.batch_size
+            batch_size = self._tensordict.batch_size
             if not any(
                 isinstance(value, torch.Tensor)
                 and value.shape[: len(batch_size)] != batch_size
@@ -3400,7 +3498,7 @@ def _update_at_(
                 self._tensordict.update(source)
             except RuntimeError:
                 # TensorDict.update checks the batch size before it changes anything
-                batch_size = self.batch_size
+                batch_size = self._tensordict.batch_size
                 if (
                     not isinstance(self._tensordict, TensorDict)
                     or is_non_tensor(input_dict_or_td)
@@ -3636,6 +3734,69 @@ def _from_dict(
     non_tensordict = {}
 
     return cls.from_tensordict(tensordict=td, non_tensordict=non_tensordict)
+
+
+def _from_dict_public(
+    cls,
+    input_dict,
+    *,
+    auto_batch_size: bool | None = None,
+    batch_size=None,
+    device=None,
+    batch_dims=None,
+):
+    """Builds an instance of the tensorclass from a dictionary of its fields.
+
+    The fields that ``input_dict`` misses are set to ``None``, also those that
+    declare a default or a default factory. Starting with TensorDict 0.17, the
+    default will change to filling these fields with their defaults, as the
+    constructor does. Until then, a call that misses such a field warns with a
+    :class:`FutureWarning`.
+
+    Args:
+        input_dict (dict): the values of the fields. Nested dictionaries become
+            tensordicts, or tensorclasses for the fields annotated with one.
+
+    Keyword Args:
+        auto_batch_size (bool, optional): whether to infer the batch size.
+        batch_size (torch.Size, optional): the batch size.
+        device (torch.device, optional): the device.
+        batch_dims (int, optional): the number of batch dimensions to infer.
+    """
+    keys = {key[0] if isinstance(key, tuple) else key for key in input_dict}
+    missing = [name for name in cls._from_dict_defaults if name not in keys]
+    # Dynamo cannot trace warnings.warn: a compiled call stays silent.
+    if missing and not is_compiling():
+        warnings.warn(
+            f"{cls.__name__}.from_dict() sets the fields {missing} that the input "
+            "misses to None, not to their declared defaults. Starting with "
+            "TensorDict 0.17, the default will change to filling these fields "
+            "with their defaults and default factories, as the constructor does. "
+            "Pass the fields to from_dict() to choose their values.",
+            FutureWarning,
+            stacklevel=2,
+        )
+    return _from_dict(
+        cls,
+        input_dict,
+        auto_batch_size=auto_batch_size,
+        batch_size=batch_size,
+        device=device,
+        batch_dims=batch_dims,
+    )
+
+
+def _from_dict_for_update(cls, input_dict, **kwargs):
+    # The update methods keep the fields that input_dict misses, so the
+    # defaults that from_dict() fills in 0.17 do not concern them: skip its
+    # warning, unless the class defines its own from_dict(). Dynamo traces
+    # this attribute read, not an identity check on cls.from_dict.__func__.
+    if getattr(cls.from_dict, "_tc_default_from_dict", False):
+        return _from_dict(cls, input_dict, **kwargs)
+    return cls.from_dict(input_dict, **kwargs)
+
+
+_from_dict_public._tc_default_from_dict = True
 
 
 def _from_dict_instance(
@@ -4183,9 +4344,11 @@ def _state_dict(
             )
 
     metadata_key = prefix[:-1] if prefix.endswith(".") else prefix
+    # Read the metadata from the TensorDict: with shadow=True,
+    # self.batch_size and self.device can be fields.
     destination._metadata[metadata_key] = {
-        "batch_size": self.batch_size,
-        "device": self.device,
+        "batch_size": td.batch_size,
+        "device": td.device,
         "_type": type(self).__qualname__,
         "_non_tensor": non_tensor,
     }
@@ -4245,7 +4408,9 @@ def _load_state_dict(
             else:
                 td.set(
                     key,
-                    NonTensorData(data=value, batch_size=self.batch_size),
+                    NonTensorData(
+                        data=value, batch_size=td.batch_size, device=td.device
+                    ),
                     inplace=not assign,
                 )
 
@@ -4536,7 +4701,11 @@ def _non_tensor_items(self, include_nested=False):
 
 
 def _bool(self):
-    raise RuntimeError("Converting a tensorclass to boolean value is not permitted")
+    raise RuntimeError(
+        "Converting a tensorclass to boolean value is not permitted. "
+        "Use len(tc.keys()) to test for keys, tc.is_empty() to test for "
+        "leaves, or (a == b).all() / .any() to reduce a comparison."
+    )
 
 
 def _all_non_td_fields_as_str(src_dict) -> list:
@@ -4605,7 +4774,8 @@ def _patch_tc(cls):
     cls.from_tensordict = _from_tensordict_public
     cls._new_unsafe = classmethod(_new_unsafe)
     cls._load_memmap = classmethod(_load_memmap)
-    cls.from_dict = classmethod(_from_dict)
+    cls.from_dict = classmethod(_from_dict_public)
+    cls._from_dict_defaults = ()
 
     cls.set = _set
     cls.get = _get
@@ -5258,6 +5428,13 @@ class NonTensorDataBase(TensorClass):
                 raise RuntimeError(_LOCK_ERROR)
             if clone:
                 data = deepcopy(data)
+            if inplace and self.is_locked:
+                # Like an in-place tensor write, this keeps the keys of the
+                # locked tensordicts. The consolidated metadata of a parent
+                # holds the old value.
+                self._non_tensordict["data"] = data
+                self._tensordict._mark_consolidated_stale()
+                return self
             self.data = data
         elif isinstance(input_dict_or_td, NonTensorStack):
             raise ValueError(
@@ -5399,8 +5576,9 @@ class NonTensorDataBase(TensorClass):
             issubclass(t, (NonTensorData, NonTensorStack)) for t in types
         ):
             return NonTensorData._cat_non_tensor(*args, **(kwargs or {}))
-        # NonTensorData.where does not select elementwise, so torch.where is
-        # not passed through
+        # torch.where is not passed through: it would run on the tensordict
+        # of the NonTensorData, which does not hold the data. Use
+        # NonTensorData.where instead
         if (
             func not in _TD_PASS_THROUGH
             or func is torch.where
@@ -5509,6 +5687,18 @@ class NonTensorDataBase(TensorClass):
             device=self.device,
             names=self.names if self._has_names() else None,
         )
+
+    def _clone(self, recurse: bool = True):
+        result = TensorClass._clone(self, recurse)
+        if not recurse and self._tensordict._is_shared:
+            # The shallow copy holds the same shared wrapper: mark it shared so
+            # that reads unwrap the value and in-place updates write through it.
+            result._tensordict._is_shared = True
+        elif not recurse and self._tensordict._is_memmap:
+            # memmap_(share_non_tensor=True) wraps the value, and the copy is
+            # not memory-mapped: give it the value.
+            result._non_tensordict["data"] = self.data
+        return result
 
     def share_memory_(self):
         if self._tensordict._is_shared:
@@ -5887,10 +6077,31 @@ class NonTensorData(NonTensorDataBase):
         return result
 
     def expand(self, *args, **kwargs) -> T:
+        """Expands the batch dims of the NonTensorData to the given shape, as :meth:`torch.Tensor.expand` does.
+
+        A shape that :meth:`torch.Tensor.expand` rejects (fewer sizes than
+        batch dims, or a size that differs from a batch dim that is not 1)
+        warns, and the batch size of the result can differ from the shape.
+        Starting with TensorDict 0.17, the default will change to raising a
+        RuntimeError for such shapes, as :meth:`TensorDict.expand` does.
+        """
         # tensordict_dims = self.batch_dims
         shape = _get_shape_from_args(*args, **kwargs)
         if -1 in shape:
             shape = _resolve_expand_shape(shape, self.batch_size)
+        if len(shape) < self.ndim or any(
+            old != 1 and new != old
+            for old, new in zip(self.batch_size, shape[len(shape) - self.ndim :])
+        ):
+            warnings.warn(
+                f"Expanding a NonTensorData of batch size {list(self.batch_size)} "
+                f"to {list(shape)} does not raise today, although "
+                "torch.Tensor.expand rejects this shape. Starting with "
+                "TensorDict 0.17, the default will change to raising a "
+                "RuntimeError, as TensorDict.expand does.",
+                FutureWarning,
+                stacklevel=2,
+            )
 
         # Replicate self until we have the appropriate batch size
         out = self
@@ -5906,6 +6117,79 @@ class NonTensorData(NonTensorDataBase):
 
     def unsqueeze(self, dim: int):
         return torch.stack([self], dim)
+
+    def where(
+        self,
+        condition: Tensor,
+        other: Any,
+        *,
+        out: T | None = None,
+        pad: int | bool | None = None,
+        update_batch_size: bool = False,
+    ) -> T:
+        """Returns the elements of ``self`` where ``condition`` is ``True``, and those of ``other`` elsewhere.
+
+        When ``other`` is a :class:`NonTensorData` with another value, or a
+        :class:`NonTensorStack`, the result is a :class:`NonTensorStack` with
+        the value that ``condition`` picks for each element, or a
+        :class:`NonTensorData` when all the elements have the same value. This
+        reads ``condition``, which breaks the graph under :func:`torch.compile`.
+        Otherwise, the result has the value of ``self`` everywhere.
+
+        ``out`` receives the result if it can hold it. A :class:`NonTensorData`
+        ``out`` cannot hold a :class:`NonTensorStack`: the stack is returned,
+        and ``out`` is left as it is. :meth:`TensorDict.where` then writes the
+        stack in place of the entry of its own ``out``. See
+        :meth:`TensorDictBase.where` for the arguments.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import NonTensorData
+            >>> a = NonTensorData("a", batch_size=[3])
+            >>> b = NonTensorData("b", batch_size=[3])
+            >>> a.where(torch.tensor([True, False, True]), b).tolist()
+            ['a', 'b', 'a']
+        """
+        if not is_non_tensor(other) or (
+            isinstance(other, NonTensorDataBase) and _check_equal(self.data, other.data)
+        ):
+            # every element has the value of self
+            return super().where(
+                condition,
+                other,
+                out=out,
+                pad=pad,
+                update_batch_size=update_batch_size,
+            )
+        if other.batch_size != self.batch_size:
+            other = other.expand(self.batch_size)
+
+        def pick(cond, other_values):
+            if isinstance(cond, bool):
+                return self.data if cond else other_values
+            return [pick(c, o) for c, o in _zip_strict(cond, other_values)]
+
+        values = pick(expand_as_right(condition, self).tolist(), other.tolist())
+        flat = [values]
+        for _ in range(self.ndim):
+            flat = [value for sublist in flat for value in sublist]
+        if not flat or all(_check_equal(value, flat[0]) for value in flat[1:]):
+            result = type(self)(
+                data=flat[0] if flat else self.data,
+                batch_size=self.batch_size,
+                names=self._maybe_names(),
+                device=self.device,
+            )
+        else:
+            result = NonTensorStack._from_list(
+                values, device=self.device, ndim=self.ndim
+            )
+        if out is None or (
+            isinstance(result, NonTensorStack) and not isinstance(out, NonTensorStack)
+        ):
+            return result
+        out.update_(result)
+        return out
 
     @classmethod
     def _stack_non_tensor(
@@ -6188,6 +6472,13 @@ class NonTensorStack(LazyStackedTensorDict):
     element holds the same value, :attr:`data` returns it. To keep one shared
     value for the whole batch, use :class:`~tensordict.MetaData`. See
     :ref:`non-tensor-data`.
+
+    ``torch.utils._pytree.tree_unflatten`` and ``tree_map`` rebuild a
+    :class:`NonTensorStack` entry of a tensordict whose values are all equal
+    from the input, as a :class:`~tensordict.NonTensorData`, and drop the value
+    that the function returned for it; they warn when that changes the result.
+    Starting with TensorDict 0.17, the default will change to keeping the
+    returned value, as they do when the values differ.
 
     Examples:
         >>> import torch
@@ -6647,9 +6938,6 @@ class NonTensorStack(LazyStackedTensorDict):
         update_batch_size: bool = False,
         ignore_lock: bool = False,
     ) -> T:
-        if inplace and self.is_locked and not (self._is_shared or self._is_memmap):
-            raise RuntimeError(_LOCK_ERROR)
-
         if isinstance(input_dict_or_td, NonTensorData):
             datalist = input_dict_or_td.data
             for d in reversed(self.batch_size):
@@ -6809,6 +7097,7 @@ def _share_memory_nontensor(data, manager: Manager):
     if isinstance(data, bool):
         return mp.Value(ctypes.c_bool, data)
     if isinstance(data, int):
+        _warn_if_int_wraps(data)
         return mp.Value(ctypes.c_longlong, data)
     if isinstance(data, float):
         return mp.Value(ctypes.c_double, data)
@@ -6830,6 +7119,15 @@ def _share_memory_nontensor(data, manager: Manager):
     # will be passed to the remote process using regular serialization. We will
     # lock the update in _update_shared_nontensor though.
     return data
+
+
+def _warn_if_int_wraps(val: int) -> None:
+    if not -(2**63) <= val < 2**63:
+        warnings.warn(
+            "An integer outside the signed 64-bit range was written to a shared "
+            f"non-tensor entry: it is stored as {ctypes.c_longlong(val).value}.",
+            UserWarning,
+        )
 
 
 def _from_shared_nontensor(nontensor):
@@ -6857,17 +7155,26 @@ def _update_shared_nontensor(nontensor, val):
         nontensor.clear()
         nontensor.update(val)
     elif isinstance(nontensor, multiprocessing.sharedctypes.Synchronized):
-        if isinstance(nontensor.get_obj(), ctypes.c_bool):
+        obj = nontensor.get_obj()
+        if isinstance(obj, ctypes.c_bool):
             # c_bool stores the truth value of any object: take only what an
             # int slot takes
             val = operator.index(val)
+        elif isinstance(obj, ctypes.c_longlong) and isinstance(val, int):
+            _warn_if_int_wraps(val)
         nontensor.value = val
     elif isinstance(nontensor, multiprocessing.sharedctypes.SynchronizedArray):
         val = val.encode("utf-8")
         if len(val) > len(nontensor):
             # The array has a fixed size. Cut on a character boundary so that
             # the stored bytes stay valid UTF-8 and can be read back.
+            n_bytes = len(val)
             val = val[: len(nontensor)].decode("utf-8", "ignore").encode("utf-8")
+            warnings.warn(
+                f"A shared non-tensor string holds at most {len(nontensor)} bytes: "
+                f"the new {n_bytes}-byte value was cut to its first {len(val)} bytes.",
+                UserWarning,
+            )
         for i, byte in enumerate(nontensor):
             if i < len(val):
                 v = val[i]
