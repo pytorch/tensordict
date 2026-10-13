@@ -1735,8 +1735,39 @@ class TestNonTensorData:
             td.share_memory_()
         else:
             td.memmap_(tmpdir, share_non_tensor=True)
-        td.update_(TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []))
+        with pytest.warns(UserWarning, match="holds at most 100 bytes"):
+            td.update_(TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []))
         assert td["val"] == expected
+
+    @pytest.mark.parametrize("strategy", ["shared", "memmap"])
+    def test_shared_value_lost_warns(self, strategy, tmpdir):
+        # Writes that do not fit the shared value warn instead of losing data
+        # silently (#2163); writes that fit do not warn.
+        td = TensorDict(s=NonTensorData("abc"), i=NonTensorData(3))
+        if strategy == "shared":
+            td.share_memory_()
+        else:
+            td.memmap_(tmpdir, share_non_tensor=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            td.update_(
+                TensorDict(s=NonTensorData("y" * 100), i=NonTensorData(2**63 - 1))
+            )
+            td.update_(TensorDict(i=NonTensorData(-(2**63))))
+        with pytest.warns(UserWarning, match="the new 120-byte value was cut"):
+            td.update_(TensorDict(s=NonTensorData("y" * 120)))
+        assert td["s"] == "y" * 100
+        with pytest.warns(UserWarning, match="it is stored as 0"):
+            td.update_(TensorDict(i=NonTensorData(2**64)))
+        assert td["i"] == 0
+        with pytest.warns(UserWarning, match="stored as 9223372036854775807"):
+            td.set_("i", NonTensorData(-(2**63) - 1))
+        assert td["i"] == 2**63 - 1
+        if strategy == "shared":
+            td = TensorDict(i=NonTensorData(2**64))
+            with pytest.warns(UserWarning, match="it is stored as 0"):
+                td.share_memory_()
+            assert td["i"] == 0
 
     def _update_stack(self, td):
         td[1::2] = TensorDict({"val": NonTensorData(data=3, batch_size=[5])}, [5])
