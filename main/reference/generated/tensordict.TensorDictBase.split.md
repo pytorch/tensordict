@@ -6,6 +6,12 @@ Splits each tensor in the TensorDict with the specified size in the given dimens
 
 Returns a list of `TensorDict` instances with the view of split chunks of items.
 
+On a [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict), sizes along the stack
+dim that are negative or do not add up to the stack size emit a
+[`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning), and the pieces miss members or have a wrong
+batch size. Starting with TensorDict 0.17, the default will change to
+raising a `RuntimeError`, as `TensorDict.split` does.
+
 Parameters:
 
 - **split_size** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*or**List**(*[*int*](https://docs.python.org/3/builtins/functions.html#int)*)*) - size of a single chunk or list of sizes for each chunk.

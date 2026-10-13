@@ -1,11 +1,13 @@
 # TensorDictBase.rename_key
 
-*abstract*TensorDictBase.rename_key_(*old_key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *new_key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *safe: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
+TensorDictBase.rename_key_(*old_key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *new_key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *safe: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
 
 Renames a key with a new string and returns the same tensordict with the updated key name.
 
 The value is not copied. A locked tensordict raises `RuntimeError`
-(see [`lock_()`](tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_)).
+(see [`lock_()`](tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_)). Until 0.17, a locked
+[`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) or store renames the key and
+warns instead.
 
 Parameters:
 

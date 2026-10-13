@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5344+g49db41f96.d20261013)">
+<meta name="llm:version" content="main (0.14.0.dev5346+gb5ddb3be7.d20261013)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5344+g49db41f96.d20261013)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5346+gb5ddb3be7.d20261013)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1644,6 +1644,11 @@ document.write(`
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">split</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">split_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.split" title="Link to this definition">#</a></dt>
 <dd><p>Splits each tensor in the TensorDict with the specified size in the given dimension, like <cite>torch.split</cite>.</p>
 <p>Returns a list of <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> instances with the view of split chunks of items.</p>
+<p>On a <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>, sizes along the stack
+dim that are negative or do not add up to the stack size emit a
+<a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#FutureWarning" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">FutureWarning</span></code></a>, and the pieces miss members or have a wrong
+batch size. Starting with TensorDict 0.17, the default will change to
+raising a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>, as <code class="docutils literal notranslate"><span class="pre">TensorDict.split</span></code> does.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -2033,7 +2038,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.split",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.split",
        "url": "/reference/generated/tensordict.TensorDictBase.split.html",
-       "articleBody": "TensorDictBase.split# TensorDictBase.split(split_size: int | list[int], dim: int = 0) \u2192 tuple[TensorDictBase, ...]# Splits each tensor in the TensorDict with the specified size in the given dimension, like torch.split. Returns a list of TensorDict instances with the view of split chunks of items. Parameters: split_size (int or List(int)) \u2013 size of a single chunk or list of sizes for each chunk. dim (int) \u2013 dimension along which to split the tensor. Returns: A list of TensorDict with specified size in given dimension. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({ ... \u0027x\u0027: torch.arange(12).reshape(3, 4), ... }, batch_size=[3, 4]) \u003e\u003e\u003e td0, td1 = td.split([1, 2], dim=0) \u003e\u003e\u003e print(td0[\u0027x\u0027]) tensor([[0, 1, 2, 3]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use split# Changing the shape of a TensorDict Changing the shape of a TensorDict",
+       "articleBody": "TensorDictBase.split# TensorDictBase.split(split_size: int | list[int], dim: int = 0) \u2192 tuple[TensorDictBase, ...]# Splits each tensor in the TensorDict with the specified size in the given dimension, like torch.split. Returns a list of TensorDict instances with the view of split chunks of items. On a LazyStackedTensorDict, sizes along the stack dim that are negative or do not add up to the stack size emit a FutureWarning, and the pieces miss members or have a wrong batch size. Starting with TensorDict 0.17, the default will change to raising a RuntimeError, as TensorDict.split does. Parameters: split_size (int or List(int)) \u2013 size of a single chunk or list of sizes for each chunk. dim (int) \u2013 dimension along which to split the tensor. Returns: A list of TensorDict with specified size in given dimension. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({ ... \u0027x\u0027: torch.arange(12).reshape(3, 4), ... }, batch_size=[3, 4]) \u003e\u003e\u003e td0, td1 = td.split([1, 2], dim=0) \u003e\u003e\u003e print(td0[\u0027x\u0027]) tensor([[0, 1, 2, 3]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use split# Changing the shape of a TensorDict Changing the shape of a TensorDict",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
