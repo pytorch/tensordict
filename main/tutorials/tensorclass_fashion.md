@@ -260,7 +260,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Tensorclass training done! time: 2.3372 s
+Tensorclass training done! time: 2.2899 s
 ```
 
 ## Conclusion

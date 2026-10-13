@@ -72,7 +72,7 @@ Methods
 | [`TensorDictBase.from_tuple`](generated/tensordict.TensorDictBase.from_tuple.html#tensordict.TensorDictBase.from_tuple)(obj, *[, ...]) | Converts a tuple to a TensorDict. |
 | [`TensorDictBase.from_pytree`](generated/tensordict.TensorDictBase.from_pytree.html#tensordict.TensorDictBase.from_pytree)(pytree, *[, ...]) | Converts a pytree to a TensorDict instance. |
 | [`TensorDictBase.from_dataclass`](generated/tensordict.TensorDictBase.from_dataclass.html#tensordict.TensorDictBase.from_dataclass)(dataclass, *) | Converts a dataclass into a TensorDict instance. |
-| [`TensorDictBase.from_list`](generated/tensordict.TensorDictBase.from_list.html#tensordict.TensorDictBase.from_list)(input, *[, ...]) | |
+| [`TensorDictBase.from_list`](generated/tensordict.TensorDictBase.from_list.html#tensordict.TensorDictBase.from_list)(input, *[, ...]) | Builds a tensordict by stacking a list of dicts or tensor collections. |
 | [`TensorDictBase.from_schema`](generated/tensordict.TensorDictBase.from_schema.html#tensordict.TensorDictBase.from_schema)(schema, *[, ...]) | Pre-allocate a zero-filled TensorDict from a schema. |
 | [`TensorDictBase.fromkeys`](generated/tensordict.TensorDictBase.fromkeys.html#tensordict.TensorDictBase.fromkeys)(keys[, value]) | Creates a tensordict from a list of keys and a single value. |
 | [`TensorDictBase.empty`](generated/tensordict.TensorDictBase.empty.html#tensordict.TensorDictBase.empty)([recurse, batch_size, ...]) | Returns a new, empty tensordict with the same device and batch size. |
