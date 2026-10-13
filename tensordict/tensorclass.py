@@ -7440,8 +7440,9 @@ def _shared_nontensor_takes(nontensor, val) -> bool:
 def _stores_non_tensor(dest, source) -> bool:
     """Whether ``dest.copy_(source)`` can store the values of ``source`` in ``dest``, a shared or memory-mapped non-tensor leaf.
 
-    A memory-mapped value that does not share its data takes any value. The
-    pairs that ``copy_`` rejects whatever the storage are left to ``copy_``.
+    A memory-mapped value that does not share its data takes any value that it
+    can write to its files: JSON or pickle. The pairs that ``copy_`` rejects
+    whatever the storage are left to ``copy_``.
     """
     if not is_non_tensor(source):
         return True
@@ -7456,9 +7457,16 @@ def _stores_non_tensor(dest, source) -> bool:
             _stores_non_tensor(member, value)
             for member, value in zip(dest.tensordicts, sources)
         )
-    if isinstance(source, NonTensorStack) or not (
-        dest._tensordict._is_shared
-        or (dest._is_memmap and dest._metadata.get("_share_non_tensor"))
-    ):
+    if isinstance(source, NonTensorStack):
         return True
-    return _shared_nontensor_takes(dest._non_tensordict["data"], source.data)
+    if dest._tensordict._is_shared or (
+        dest._is_memmap and dest._metadata.get("_share_non_tensor")
+    ):
+        return _shared_nontensor_takes(dest._non_tensordict["data"], source.data)
+    if dest._is_memmap and not _is_json_serializable(source.data):
+        # the write pickles the value: try it before any entry is written
+        try:
+            pickle.dumps(source.data)
+        except (TypeError, pickle.PicklingError, AttributeError):
+            return False
+    return True

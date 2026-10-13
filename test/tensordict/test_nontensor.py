@@ -1483,20 +1483,37 @@ class TestNonTensorData:
             td.copy().update_({"s": "copied", "a": torch.full((3,), 2.0)})
             assert td["s"] == "copied" and (td["a"] == 2).all()
 
-    @pytest.mark.parametrize("route", ["update_", "update_no_tensor", "copy_"])
+    @pytest.mark.parametrize(
+        "route", ["update_", "update_no_tensor", "copy_", "keys_to_update"]
+    )
     def test_memmap_update__unpicklable(self, route, tmp_path):
-        # A value that cannot be pickled raises before the non-tensor files of
-        # a memmapped tensordict are rewritten, so the folder still loads
+        # A value that cannot be pickled is one that a memmapped tensordict
+        # cannot store: update_ skips it with a warning and writes the others
         td = TensorDict(a=torch.zeros(3), batch_size=[3])
         td.set_non_tensor("o", 1)
+        td.set_non_tensor("s", "old")
         td.memmap_(tmp_path)
         source = TensorDict(batch_size=[3])
         source.set_non_tensor("o", threading.Lock())
+        source.set_non_tensor("s", "new")
         if route != "update_no_tensor":
             source["a"] = torch.ones(3)
-        with pytest.raises(TypeError, match="pickle"):
-            getattr(td, "copy_" if route == "copy_" else "update_")(source)
-        assert TensorDict.load_memmap(tmp_path, allow_pickle=True)["o"] == 1
+        with pytest.warns(
+            UserWarning, match=r"skipped the non-tensor entries \['o'\]"
+        ) as record:
+            if route == "copy_":
+                td.copy_(source)
+            elif route == "keys_to_update":
+                td.update_(source, keys_to_update=list(source.keys()))
+            else:
+                td.update_(source)
+        assert record[0].filename == __file__
+        expected_a = 0.0 if route == "update_no_tensor" else 1.0
+        assert (td["a"] == expected_a).all() and td["s"] == "new"
+        assert td["o"] == 1 and td.get("o").is_memmap()
+        loaded = TensorDict.load_memmap(tmp_path, allow_pickle=True)
+        assert loaded["o"] == 1 and loaded["s"] == "new"
+        assert (loaded["a"] == expected_a).all()
 
     def test_ignore_lock(self):
         td = TensorDict({"a": {"b": "1"}}, batch_size=[10])
