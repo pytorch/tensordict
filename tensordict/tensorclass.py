@@ -6614,31 +6614,6 @@ class NonTensorStack(LazyStackedTensorDict):
         device = indent(f"device={self.device}", prefix=4 * " ")
         return f"NonTensorStack(\n{selfrepr},\n{batch_size},\n{device})"
 
-    @classmethod
-    def lazy_stack(
-        cls,
-        items: Sequence[TensorCollection],
-        dim: int = 0,
-        *,
-        device: DeviceType | None = None,
-        out: T | None = None,
-        stack_dim_name: str | None = None,
-        **kwargs,
-    ) -> T:
-        result = super().lazy_stack(
-            items=items,
-            dim=dim,
-            out=out,
-            stack_dim_name=stack_dim_name,
-            device=device,
-            **kwargs,
-        )
-        if not isinstance(result, cls):
-            raise RuntimeError(
-                f"Unexpected result type: {type(result)} - expected one of {cls}."
-            )
-        return result
-
     def to_dict(
         self,
         *,
@@ -6665,14 +6640,11 @@ class NonTensorStack(LazyStackedTensorDict):
         # TensorDict, silently dropping the data.
         return self
 
-    # flip, roll, rot90, tile, narrow and broadcast_to are inherited from
-    # TensorDictBase, which builds the result from the tensor leaves, and
-    # reshape falls back to the same code when the new shape is not a flatten
-    # or unflatten of the stack. A stack of non-tensor entries has no tensor
-    # leaves, so the result used to be an empty TensorDict. The overrides below
-    # move the entries instead: they run the operation on a tensor holding the
-    # flat position of each entry, then pick the entries at the resulting
-    # positions.
+    # The shape operations of TensorDictBase build their result from the
+    # tensor leaves, and a stack of non-tensor entries has none: the result
+    # would be an empty TensorDict. The hooks below move the entries instead:
+    # they run the operation on a tensor holding the flat position of each
+    # entry, then pick the entries at the resulting positions.
     def _positions(self) -> torch.Tensor:
         return torch.arange(self.batch_size.numel()).reshape(self.batch_size)
 
@@ -6684,51 +6656,33 @@ class NonTensorStack(LazyStackedTensorDict):
         # advanced indexing copies the selected entries
         return self[tuple(reversed(index))]
 
-    def flip(self, dims: int | tuple[int, ...]) -> NonTensorStack:
-        return self._select_positions(self._positions().flip(dims))
-
-    def roll(
+    # Override: move the entries, as there are no tensor leaves.
+    def _batch_op(
         self,
-        shifts: int | tuple[int, ...],
-        dims: int | tuple[int, ...] | None = None,
+        fn: Callable[[torch.Tensor], torch.Tensor],
+        batch_size: torch.Size,
+        names: list | None,
         *,
-        inplace: bool = False,
+        index: tuple | None = None,
     ) -> NonTensorStack:
-        result = self._select_positions(self._positions().roll(shifts, dims))
-        if inplace:
-            return self.update_(result)
-        return result
+        if index is not None:
+            # Let torch check the arguments, then select a slice, which shares
+            # the entries the same way narrowing a tensor returns a view.
+            fn(self._positions())
+            return self[index]
+        return self._select_positions(fn(self._positions()))
 
-    def rot90(self, k: int = 1, dims: tuple[int, int] = (0, 1)) -> NonTensorStack:
-        return self._select_positions(self._positions().rot90(k, dims))
+    # Override: regroup the stack when the new shape allows it, which shares
+    # the entries like a view, and move the entries otherwise.
+    def _reshape(self, shape: torch.Size, names: list | None) -> NonTensorStack:
+        result = self._regroup(shape)
+        if result is not None:
+            return result
+        return self._batch_op(lambda positions: positions.reshape(shape), shape, names)
 
-    def tile(self, dims: tuple[int, ...]) -> NonTensorStack:
-        return self._select_positions(self._positions().tile(dims))
-
-    def narrow(self, dim: int, start: int, length: int) -> NonTensorStack:
-        # Let torch check the arguments, then select a slice, which shares the
-        # entries the same way narrowing a tensor returns a view.
-        self._positions().narrow(dim, start, length)
-        dim = dim % self.ndim
-        if start < 0:
-            start += self.batch_size[dim]
-        return self[(slice(None),) * dim + (slice(start, start + length),)]
-
-    def broadcast_to(self, shape: tuple[int, ...]) -> NonTensorStack:
-        return self.expand(shape)
-
-    def reshape(self, *args, **kwargs) -> NonTensorStack:
-        if kwargs.get("inplace", False):
-            return super().reshape(*args, **kwargs)
-        kwargs.pop("inplace", None)
-        positions = self._positions().reshape(_get_shape_from_args(*args, **kwargs))
-        if positions.shape == self.batch_size:
-            return self
-        try:
-            # regrouping the stack shares the entries, like a view
-            return self._view(positions.shape)
-        except RuntimeError:
-            return self._select_positions(positions)
+    # Override: a NonTensorStack is the dense form of stacked non-tensor data.
+    def _densify(self, layout: torch.layout) -> NonTensorStack:
+        return self
 
     def _memmap_(
         self,
@@ -6865,10 +6819,6 @@ class NonTensorStack(LazyStackedTensorDict):
             ),
             stack_dim=0,
         )
-
-    def densify(self, layout: torch.layout = torch.strided):
-        # No need to do anything with a non tensor stack
-        return self
 
     def update(
         self,

@@ -363,7 +363,9 @@ class TestNonTensorData:
         grid = NonTensorStack.from_list([["a", "b", "c"], ["d", "e", "f"]])
         assert grid.reshape(2, 3) is grid
         assert grid.reshape(6, 1).tolist() == [["a"], ["b"], ["c"], ["d"], ["e"], ["f"]]
-        with pytest.raises(RuntimeError, match="invalid for input of size 6"):
+        with pytest.raises(
+            RuntimeError, match=r"invalid shape \[4, 2\] for a batch of 6"
+        ):
             grid.reshape(4, 2)
 
     def test_non_tensor_stack_shape_op_types(self):
@@ -419,7 +421,7 @@ class TestNonTensorData:
         stack = NonTensorStack.from_list([["a", "b", "c"], ["d", "e", "f"]])
         with pytest.raises(
             NotImplementedError,
-            match="reshape.inplace=True. is not supported on LazyStackedTensorDict",
+            match="reshape.inplace=True. is not supported on NonTensorStack",
         ):
             stack.reshape(6, inplace=True)
         assert stack.batch_size == (2, 3)
@@ -435,8 +437,9 @@ class TestNonTensorData:
         assert out.tolist() == [["a", "c"], ["b", "d"]]
         out = LazyStackedTensorDict.lazy_stack([NonTensorData("a"), NonTensorData("b")])
         assert type(out) is NonTensorStack
-        with pytest.raises(RuntimeError, match="Unexpected result type"):
-            NonTensorStack.lazy_stack([TensorDict(), TensorDict()])
+        # tensordicts give a lazy stack, as LazyStackedTensorDict.lazy_stack
+        out = NonTensorStack.lazy_stack([TensorDict(), TensorDict()])
+        assert type(out) is LazyStackedTensorDict
 
     def test_comparison(self, non_tensor_data):
         non_tensor_data = non_tensor_data.exclude(("nested", "str"))

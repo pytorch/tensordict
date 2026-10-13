@@ -6601,12 +6601,13 @@ class TestGeneric:
                     td["a"].untyped_storage().data_ptr()
                 )
             assert out.expand(-1, *sub.batch_size).batch_size == out.batch_size
-        # names: main misplaces them on the nested sub-tensordict
+        # names, as for a TensorDict
         td.names = ["x", "y", "z"]
         sub = td._get_sub_tensordict(1)
         out = sub.expand(2, 4, 3)
-        assert out.names == ["y", "z", None]
-        assert out["n"].names == ["y", "z", None]
+        assert out.names == sub.to_tensordict().expand(2, 4, 3).names
+        assert out.names == [None, "y", "z"]
+        assert out["n"].names == [None, "y", "z"]
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_subtensordict_construction(self, device):

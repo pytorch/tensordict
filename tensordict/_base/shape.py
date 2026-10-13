@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import math
 import operator
-from typing import List, overload, Sequence, TYPE_CHECKING
+from collections.abc import Iterable
+from typing import Callable, List, overload, Sequence, TYPE_CHECKING
 
 import torch
 from tensordict._nestedkey import NestedKey
@@ -32,6 +33,7 @@ from tensordict.utils import (
     _maybe_correct_neg_dim,
     _resolve_expand_shape,
     _warn_dim_past_batch_dims,
+    _warn_lazy_shape_args,
     _zip_strict,
     is_non_tensor,
     lazy_legacy,
@@ -41,6 +43,16 @@ from torch import Tensor
 
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
+
+
+def _squeeze_dim(dim: int | None = None) -> int | None:
+    # the arguments of squeeze, which takes *args and **kwargs
+    return dim
+
+
+def _unsqueeze_dim(dim: int) -> int:
+    # the arguments of unsqueeze, which takes *args and **kwargs
+    return dim
 
 
 class _ShapeOps:
@@ -99,6 +111,23 @@ class _ShapeOps:
             names = [None] * (len(shape) - tensordict_dims) + self.names
         else:
             names = None
+        return self._expand(shape, names)
+
+    def _expand(self, shape: torch.Size, names: list | None) -> Self:
+        """Returns a tensordict whose batch size is ``shape``, by expanding the batch dims.
+
+        Called by :meth:`expand` after it has resolved ``-1`` and checked that
+        ``shape`` keeps each batch dim or expands a dim of size 1, and adds
+        leading dims only. ``names`` are the names of the result, or ``None``.
+        The leaves of the result are expanded views of the leaves of ``self``.
+
+        The default expands each leaf and gives the result the lock of
+        ``self``. ``LazyStackedTensorDict`` expands each member and, when the
+        stack dim grows from 1, repeats its single member; its result is a
+        ``TensorDict`` when the expanded members have the same keys and
+        shapes.
+        """
+        tensordict_dims = self.batch_dims
 
         def _expand(tensor):
             tensor_shape = tensor.shape
@@ -344,7 +373,16 @@ class _ShapeOps:
         if _lazy_legacy:
             return self._legacy_unsqueeze(*args, **kwargs)
         else:
-            result = self._unsqueeze(*args, **kwargs)
+            dim = _unsqueeze_dim(*args, **kwargs)
+            batch_dims = self.batch_dims
+            newdim = batch_dims + dim + 1 if dim < 0 else dim
+            if newdim > batch_dims or newdim < 0:
+                raise RuntimeError(
+                    f"unsqueezing is allowed for dims comprised between "
+                    f"`-td.batch_dims - 1` and `td.batch_dims` only. Got "
+                    f"dim={dim} with a batch size of {self.batch_size}."
+                )
+            result = self._unsqueeze(newdim)
             if result._is_memmap or result._is_shared:
                 result.lock_()
             return result
@@ -420,7 +458,13 @@ class _ShapeOps:
         if _lazy_legacy:
             return self._legacy_squeeze(*args, **kwargs)
         else:
-            result = self._squeeze(*args, **kwargs)
+            dim = _squeeze_dim(*args, **kwargs)
+            if dim is not None:
+                dim = _maybe_correct_neg_dim(dim, self.batch_size)
+            if dim is not None and self.batch_size[dim] != 1:
+                result = self
+            else:
+                result = self._squeeze(dim)
             if result._is_memmap or result._is_shared:
                 result.lock_()
             return result
@@ -513,6 +557,8 @@ class _ShapeOps:
 
         """
         inplace = kwargs.pop("inplace", False)
+        if inplace:
+            self._raise_if_inplace_shape_ops_unsupported("reshape")
         shape = _get_shape_from_args(*args, **kwargs)
         shape = torch.Size(_infer_size_impl(shape, self.batch_size.numel()))
         if shape == self.shape:
@@ -529,12 +575,60 @@ class _ShapeOps:
                 nested.reshape((*shape, *nested.batch_size[batch_dims:]), inplace=True)
 
             return self._inplace_rebind_leaves(_reshape, nested_fn, torch.Size(shape))
+        return self._reshape(shape, None)
+
+    def _reshape(self, shape: torch.Size, names: list | None) -> Self:
+        """Returns a tensordict whose batch size is ``shape``.
+
+        Called by :meth:`reshape`, :meth:`flatten` and :meth:`unflatten` for
+        ``inplace=False``, after they have resolved ``-1`` and checked that
+        ``shape`` has as many elements as the batch and differs from the batch
+        size. Each leaf keeps its feature
+        dims and is a view of the original leaf when the layout allows it, a
+        copy otherwise. ``names`` (one per dim of ``shape``, or ``None``) are
+        the names of the result. The result has the lock of ``self``.
+
+        The default reshapes each leaf. ``LazyStackedTensorDict`` regroups its
+        members when the new shape only flattens or unflattens dims, which
+        keeps the stack lazy, and falls back on the default otherwise;
+        ``NonTensorStack`` moves its entries instead.
+        """
+        batch_dims = self.batch_dims
+
+        def _reshape(tensor):
+            new_shape = (*shape, *tensor.shape[batch_dims:])
+            if (
+                names is not None
+                and type(tensor) is not Tensor
+                and _is_tensor_collection(type(tensor))
+                and not is_non_tensor(tensor)
+                and tensor._has_names()
+            ):
+                # a nested tensordict gets the names of the result for its
+                # first dims, as flatten and unflatten give it
+                nested_names = [*names, *tensor.names[batch_dims:]]
+                if not _is_tensorclass(type(tensor)):
+                    return tensor._reshape(torch.Size(new_shape), nested_names)
+                out = tensor.reshape(new_shape)
+                out.names = nested_names
+                return out
+            return tensor.reshape(new_shape)
+
         return self._fast_apply(
             _reshape,
             batch_size=shape,
             call_on_nested=True,
             propagate_lock=True,
+            names=names,
         )
+
+    def _raise_if_inplace_shape_ops_unsupported(self, op_name: str) -> None:
+        if self._inplace_shape_ops_unsupported:
+            raise NotImplementedError(
+                f"{op_name}(inplace=True) is not supported on "
+                f"{type(self).__name__}; call .to_tensordict() first or use "
+                "inplace=False."
+            )
 
     def repeat_interleave(
         self,
@@ -598,6 +692,8 @@ class _ShapeOps:
                 is_shared=False)
 
         """
+        if inplace:
+            self._raise_if_inplace_shape_ops_unsupported("repeat_interleave")
         if self.ndim == 0:
             if inplace:
                 raise RuntimeError(
@@ -660,9 +756,37 @@ class _ShapeOps:
                 )
 
             return self._inplace_rebind_leaves(rep, nested_fn, new_batch_size)
+        return self._repeat_interleave(
+            repeats, dim_corrected, output_size, new_batch_size
+        )
+
+    def _repeat_interleave(
+        self,
+        repeats: torch.Tensor | int,
+        dim: int,
+        output_size: int | None,
+        batch_size: torch.Size,
+    ) -> Self:
+        """Repeats the elements of the batch along ``dim``, as :meth:`torch.Tensor.repeat_interleave` does.
+
+        Called by :meth:`repeat_interleave` for ``inplace=False`` after it has
+        handled a 0-d tensordict and ``dim=None``, made ``dim`` non-negative
+        (warning for a ``dim`` past the batch dims, until 0.17) and computed
+        the new ``batch_size``. The result keeps the names of ``self``.
+
+        The default repeats each leaf. ``LazyStackedTensorDict`` repeats its
+        members along the stack dim, after checking ``repeats`` as torch
+        does, and calls each member along the other dims.
+        """
+
+        def rep(leaf):
+            return leaf.repeat_interleave(
+                repeats=repeats, dim=dim, output_size=output_size
+            )
+
         return self._fast_apply(
             rep,
-            batch_size=new_batch_size,
+            batch_size=batch_size,
             call_on_nested=True,
             propagate_lock=True,
             names=self._maybe_names(),
@@ -1153,7 +1277,6 @@ class _ShapeOps:
             >>> print(td0['x'])
             tensor([[0, 1, 2, 3]])
         """
-        # we must use slices to keep the storage of the tensors
         WRONG_TYPE = "split(): argument 'split_size' must be int or list of ints"
         batch_size = self.batch_size
         dim = _maybe_correct_neg_dim(dim, batch_size)
@@ -1163,34 +1286,58 @@ class _ShapeOps:
                 raise ValueError(
                     f"TensorDict.split: split_size must be positive, got {split_size}."
                 )
-            split_size = min(split_size, max_size)
             if max_size == 0:
                 # torch.split returns one empty piece along a zero-size dim
-                segments = [(0, 0)]
+                split_sizes = [0]
             else:
-                segments = _create_segments_from_int(split_size, max_size)
-            splits_list = [end - start for start, end in segments]
-            num_splits = len(splits_list)
-            splits = {
-                k: (v,) * num_splits if _is_unbatched(v) else v.split(splits_list, dim)
-                for k, v in self.items()
-            }
+                split_size = min(split_size, max_size)
+                split_sizes = [
+                    end - start
+                    for start, end in _create_segments_from_int(split_size, max_size)
+                ]
         elif isinstance(split_size, (list, tuple)):
-            if len(split_size) == 0:
-                if max_size == 0:
-                    # torch.split returns no pieces along a zero-size dim
-                    return ()
-                raise RuntimeError("Insufficient number of elements in split_size.")
             if not all(isinstance(x, int) for x in split_size):
                 raise TypeError(WRONG_TYPE)
-            num_splits = len(split_size)
-            splits = {
-                k: (v,) * num_splits if _is_unbatched(v) else v.split(split_size, dim)
-                for k, v in self.items()
-            }
-            segments = _create_segments_from_list(split_size, max_size)
+            split_sizes = list(split_size)
+        elif isinstance(split_size, Iterable):
+            # LazyStackedTensorDict.split took any iterable of sizes
+            split_sizes = list(split_size)
+            if not all(isinstance(x, int) for x in split_sizes):
+                raise TypeError(WRONG_TYPE)
         else:
             raise TypeError(WRONG_TYPE)
+        return self._split(split_sizes, dim)
+
+    def _split(self, split_sizes: list[int], dim: int) -> tuple[TensorDictBase, ...]:
+        """Splits the batch along ``dim`` into pieces of the sizes ``split_sizes``.
+
+        Called by :meth:`split` (and so by the default :meth:`_chunk`) after it
+        has checked the type of ``split_size``, made ``dim`` non-negative and
+        turned an int ``split_size`` into the list of sizes. The default
+        raises, as :func:`torch.split` does, when the sizes are empty or do
+        not add up to ``batch_size[dim]``; a ``LazyStackedTensorDict`` split
+        along its stack dim warns instead until TensorDict 0.17. Each piece
+        keeps the names, device and lock of ``self``, and its leaves are views
+        of the leaves of ``self``.
+
+        The default splits each leaf. ``LazyStackedTensorDict`` slices its
+        list of members along the stack dim and splits each member along the
+        other dims.
+        """
+        # we must use slices to keep the storage of the tensors
+        batch_size = self.batch_size
+        max_size = batch_size[dim]
+        if len(split_sizes) == 0:
+            if max_size == 0:
+                # torch.split returns no pieces along a zero-size dim
+                return ()
+            raise RuntimeError("Insufficient number of elements in split_size.")
+        num_splits = len(split_sizes)
+        splits = {
+            k: (v,) * num_splits if _is_unbatched(v) else v.split(split_sizes, dim)
+            for k, v in self.items()
+        }
+        segments = _create_segments_from_list(split_sizes, max_size)
         names = self._maybe_names()
         batch_sizes = [
             torch.Size(
@@ -1398,7 +1545,12 @@ class _ShapeOps:
         if _lazy_legacy:
             return self._legacy_view(*shape, size=size)
         else:
-            result = self._view(size=size) if size is not None else self._view(*shape)
+            shape = torch.Size(
+                _get_shape_from_args(size=size)
+                if size is not None
+                else _get_shape_from_args(*shape)
+            )
+            result = self if shape == self.batch_size else self._view(shape)
             if result._is_shared or result._is_memmap:
                 result.lock_()
             return result
@@ -1568,7 +1720,10 @@ class _ShapeOps:
         if _lazy_legacy:
             return self._legacy_permute(*args, **kwargs)
         else:
-            result = self._permute(*args, **kwargs)
+            dims = _get_shape_from_args(*args, kwarg_name="dims", **kwargs)
+            ndim = self.batch_dims
+            dims = [dim if dim >= 0 else ndim + dim for dim in dims]
+            result = self._permute(dims)
             if result._is_shared or result._is_memmap:
                 result.lock_()
             return result
@@ -1737,17 +1892,7 @@ class _ShapeOps:
         def _flip(tensor):
             return tensor.flip(dims)
 
-        result = self._fast_apply(
-            _flip,
-            batch_size=self.batch_size,
-            call_on_nested=True,
-            names=self._maybe_names(),
-            propagate_lock=True,
-        )
-        self._maybe_set_shared_attributes(result)
-        if result._is_shared or result._is_memmap:
-            result.lock_()
-        return result
+        return self._batch_op(_flip, self.batch_size, self._maybe_names())
 
     @_as_context_manager()
     def fliplr(self):
@@ -1875,6 +2020,10 @@ class _ShapeOps:
                 return tensor.roll(shifts, dims)
 
         if inplace:
+            if self._is_non_tensor:
+                # a NonTensorStack has no tensor leaves to rebind: write the
+                # rolled entries into it
+                return self.update_(self._batch_op(_roll, self.batch_size, None))
 
             def nested_fn(nested):
                 if dims is not None:
@@ -1891,17 +2040,7 @@ class _ShapeOps:
 
             return self._inplace_rebind_leaves(_roll, nested_fn, None)
 
-        result = self._fast_apply(
-            _roll,
-            batch_size=self.batch_size,
-            call_on_nested=True,
-            names=self._maybe_names(),
-            propagate_lock=True,
-        )
-        self._maybe_set_shared_attributes(result)
-        if result._is_shared or result._is_memmap:
-            result.lock_()
-        return result
+        return self._batch_op(_roll, self.batch_size, self._maybe_names())
 
     @_as_context_manager()
     def rot90(self, k: int = 1, dims: tuple[int, int] = (0, 1)):
@@ -1959,17 +2098,7 @@ class _ShapeOps:
         def _rot90(tensor):
             return tensor.rot90(k, dims)
 
-        result = self._fast_apply(
-            _rot90,
-            batch_size=torch.Size(batch_size),
-            call_on_nested=True,
-            names=names,
-            propagate_lock=True,
-        )
-        self._maybe_set_shared_attributes(result)
-        if result._is_shared or result._is_memmap:
-            result.lock_()
-        return result
+        return self._batch_op(_rot90, torch.Size(batch_size), names)
 
     def narrow(self, dim: int, start: int, length: int):
         """Returns a new tensordict that is a narrowed version of the input.
@@ -2009,17 +2138,13 @@ class _ShapeOps:
         def _narrow(tensor):
             return tensor.narrow(dim, start, length)
 
-        result = self._fast_apply(
+        index_start = start + self.batch_size[dim] if start < 0 else start
+        return self._batch_op(
             _narrow,
-            batch_size=torch.Size(batch_size),
-            call_on_nested=True,
-            names=self._maybe_names(),
-            propagate_lock=True,
+            torch.Size(batch_size),
+            self._maybe_names(),
+            index=(slice(None),) * dim + (slice(index_start, index_start + length),),
         )
-        self._maybe_set_shared_attributes(result)
-        if result._is_shared or result._is_memmap:
-            result.lock_()
-        return result
 
     def tile(self, dims: tuple[int, ...]):
         """Construct a tensordict by repeating the elements.
@@ -2068,11 +2193,39 @@ class _ShapeOps:
         def _tile(tensor):
             return tensor.tile(reps + (1,) * (tensor.ndim - ndim))
 
+        # tile invalidates names
+        return self._batch_op(_tile, torch.Size(new_batch_size), None)
+
+    def _batch_op(
+        self,
+        fn: Callable[[Tensor], Tensor],
+        batch_size: torch.Size,
+        names: list | None,
+        *,
+        index: tuple | None = None,
+    ) -> Self:
+        """Returns the result of a shape operation that moves the elements of the batch.
+
+        Called by :meth:`flip`, :meth:`roll`, :meth:`rot90`, :meth:`tile`,
+        :meth:`narrow` and :meth:`broadcast_to` after they have checked their
+        arguments and computed the ``batch_size`` and ``names`` of the result.
+        ``fn`` takes a tensor whose leading dims are the batch dims, moves its
+        elements and leaves the feature dims alone. ``index``, when given, is
+        a basic index (slices) that selects the same elements, so that a class
+        can select them instead.
+
+        The default applies ``fn`` to every leaf and gives the result the
+        lock and the shared and memory-mapped flags of ``self``, and locks a
+        shared or memory-mapped result. ``NonTensorStack``, which has no
+        tensor leaves, applies ``fn`` to a tensor of the flat positions of its
+        entries and selects the entries at the positions ``fn`` returns (a
+        copy), or returns ``self[index]`` (shared entries).
+        """
         result = self._fast_apply(
-            _tile,
-            batch_size=torch.Size(new_batch_size),
+            fn,
+            batch_size=batch_size,
             call_on_nested=True,
-            names=None,  # tile invalidates names
+            names=names,
             propagate_lock=True,
         )
         self._maybe_set_shared_attributes(result)
@@ -2105,17 +2258,8 @@ class _ShapeOps:
         def _broadcast_to(tensor):
             return tensor.broadcast_to(shape + tensor.shape[self.ndim :])
 
-        result = self._fast_apply(
-            _broadcast_to,
-            batch_size=shape,
-            call_on_nested=True,
-            names=None,  # broadcast invalidates names
-            propagate_lock=True,
-        )
-        self._maybe_set_shared_attributes(result)
-        if result._is_shared or result._is_memmap:
-            result.lock_()
-        return result
+        # broadcast invalidates names
+        return self._batch_op(_broadcast_to, shape, None)
 
     @_as_context_manager()
     def atleast_1d(self):
@@ -2196,6 +2340,18 @@ class _ShapeOps:
                 :class:`~torch.strided`.
 
         """
+        return self._densify(layout)
+
+    def _densify(self, layout: torch.layout) -> TensorCollection:
+        """Returns the tensordict with its lazy stacks replaced by dense entries.
+
+        Called by :meth:`densify`. The default densifies each nested tensor
+        collection and returns ``self`` when nothing changes.
+        ``LazyStackedTensorDict`` builds a ``TensorDict`` that stacks the
+        entries of its members, with nested tensors of ``layout`` along stack
+        dim 0 when their shapes differ. ``NonTensorStack`` returns ``self``:
+        it is the dense form of stacked non-tensor data.
+        """
         any_set = False
         out_dict = {}
         for key, val in self.items():
@@ -2267,10 +2423,20 @@ class _ShapeOps:
         """
         if start_dim in (None, 0) and end_dim in (None, -1, 0) and not self.ndim:
             return self.unsqueeze(0)
+        if inplace and self._lazy:
+            raise NotImplementedError(
+                "flatten(inplace=True) is not supported on "
+                "LazyStackedTensorDict; call .to_tensordict() first or use "
+                "inplace=False."
+            )
         if start_dim is None:
             start_dim = 0
         if end_dim is None:
             end_dim = -1
+        if self._flatten_lenient:
+            # the members have no dims past the batch dims of the stack
+            start_dim = _maybe_correct_neg_dim(start_dim, self.batch_size)
+            end_dim = _maybe_correct_neg_dim(end_dim, self.batch_size)
         if start_dim < 0:
             start_dim = self.ndim + start_dim
         if end_dim < 0:
@@ -2280,11 +2446,23 @@ class _ShapeOps:
                     f"Incompatible end_dim {end_dim} for tensordict with shape {self.shape}."
                 )
         if end_dim < start_dim:
-            raise ValueError(
-                "The end dimension must be greater or equal to the start dim."
+            if not self._flatten_lenient:
+                raise ValueError(
+                    "The end dimension must be greater or equal to the start dim."
+                )
+            # LazyStackedTensorDict.flatten inserted a dim of size 1
+            _warn_lazy_shape_args(
+                "flatten", f"start_dim={start_dim} > end_dim={end_dim}"
             )
-        if start_dim < 0 or end_dim >= self.ndim:
+            batch_size = list(self.batch_size)
+            batch_size.insert(start_dim, 1)
+            return self._reshape(torch.Size(batch_size), None)
+        past_batch_dims = start_dim < 0 or end_dim >= self.ndim
+        if past_batch_dims:
             _warn_dim_past_batch_dims("flatten")
+        elif start_dim == end_dim:
+            # a no-op, which returns the input, as torch.flatten does
+            return self
 
         def flatten(tensor):
             return torch.flatten(tensor, start_dim, end_dim)
@@ -2309,12 +2487,6 @@ class _ShapeOps:
         else:
             names = None
         if inplace:
-            if self._lazy:
-                raise NotImplementedError(
-                    "flatten(inplace=True) is not supported on "
-                    "LazyStackedTensorDict; call .to_tensordict() first or use "
-                    "inplace=False."
-                )
             self._raise_if_holds_lazy_stack("flatten")
 
             def nested_fn(nested):
@@ -2323,6 +2495,8 @@ class _ShapeOps:
             return self._inplace_rebind_leaves(
                 flatten, nested_fn, torch.Size(batch_size)
             )
+        if not past_batch_dims:
+            return self._reshape(torch.Size(batch_size), names)
         out = self._fast_apply(
             flatten,
             batch_size=batch_size,
@@ -2354,6 +2528,19 @@ class _ShapeOps:
             >>> assert (td == td_unflat).all()
         """
         dim = _maybe_correct_neg_dim(dim, self.batch_size)
+        if (
+            -1 not in unflattened_size
+            and -1 not in self.batch_size
+            and math.prod(unflattened_size) != self.batch_size[dim]
+            and not self.is_empty()
+        ):
+            # the error of torch.unflatten, which the leaves raised before
+            # unflatten went through _reshape
+            raise RuntimeError(
+                f"unflatten: Provided sizes {list(unflattened_size)} don't "
+                f"multiply up to the size of dim {dim} ({self.batch_size[dim]}) "
+                "in the input tensor"
+            )
         if -1 in unflattened_size and -1 not in self.batch_size:
             # Infer the -1 as torch.unflatten does, which raises for sizes that
             # don't fit. A batch with a -1 (a ragged dim) is left as it is.
@@ -2394,15 +2581,13 @@ class _ShapeOps:
             return self._inplace_rebind_leaves(
                 unflatten, nested_fn, torch.Size(batch_size)
             )
-        out = self._fast_apply(
-            unflatten, batch_size=batch_size, propagate_lock=True, call_on_nested=True
-        )
         if self._has_names():
             names = list(self.names)
             for _ in range(len(unflattened_size) - 1):
                 names.insert(dim, None)
-            out.names = names
-        return out
+        else:
+            names = None
+        return self._reshape(torch.Size(batch_size), names)
 
     def scatter(
         self,
