@@ -1366,6 +1366,75 @@ class TestGeneric:
         assert len(list(td_empty.keys())) == 1
         assert len(list(td_empty.get("b").keys())) == 1
 
+    @pytest.mark.parametrize(
+        "batch_size,names",
+        [([3], ["x"]), ([3, 2, 4], ["x", "y", None]), ([5, 6], ["x", "y"])],
+    )
+    def test_empty_batch_size_names(self, batch_size, names):
+        # A new batch size keeps the leading names, as the batch_size setter does
+        td = TensorDict(a=torch.zeros(3, 2), batch_size=[3, 2], names=["x", "y"])
+        td_empty = td.empty(batch_size=batch_size)
+        assert td_empty.batch_size == torch.Size(batch_size)
+        assert td_empty.names == names
+        assert td_empty.unsqueeze(0).names == [None, *names]
+        td = TensorDict(a=torch.zeros(3, 2), batch_size=[3, 2], names=[None, "y"])
+        assert not td.empty(batch_size=[3])._has_names()
+
+    @pytest.mark.parametrize("shared", [None, "memory", "memmap"])
+    def test_empty_recurse_kwargs(self, shared, tmpdir):
+        # empty(recurse=True) keeps the entries without tensors ("b", "c", "d").
+        # The new batch size, names and device must not reach those of td.
+        td = TensorDict(
+            a=torch.zeros(3, 2),
+            b=TensorDict(batch_size=[3, 2]),
+            c=NonTensorData("c", batch_size=[3, 2]),
+            d=TensorDict(e=torch.zeros(3, 2, 5), batch_size=[3, 2]),
+            batch_size=[3, 2],
+            names=["x", "y"],
+            device="cpu",
+        )
+        if shared == "memory":
+            td.share_memory_()
+        elif shared == "memmap":
+            td.memmap_(tmpdir, share_non_tensor=True)
+        td_empty = td.empty(
+            recurse=True, batch_size=[3, 2, 4], names=["p", "q", "r"], device=None
+        )
+        assert td_empty.batch_size == torch.Size([3, 2, 4])
+        assert td_empty.names == ["p", "q", "r"]
+        assert td_empty.device is None
+        assert set(td_empty.keys(True)) == {"b", "c", "d"}
+        assert td_empty["c"] == "c"
+        for key in ("b", "c", "d"):
+            assert td_empty.get(key).batch_size == torch.Size([3, 2, 4])
+            assert td_empty.get(key).names == ["p", "q", "r"]
+            assert td_empty.get(key).device is None
+            assert td.get(key).batch_size == torch.Size([3, 2])
+            assert td.get(key).names == ["x", "y"]
+            assert td.get(key).device == torch.device("cpu")
+        td_empty = td.empty(recurse=True, batch_size=[3])
+        assert td_empty.batch_size == torch.Size([3])
+        assert td_empty["d"].batch_size == torch.Size([3, 2])
+
+    @pytest.mark.parametrize(
+        "batch_size,key",
+        [([10, 4], "'sub'"), ([10], "'sub'"), ([4, 5], r"\('sub', 'nested'\)")],
+    )
+    def test_empty_recurse_batch_size_mismatch(self, batch_size, key):
+        # A sub-tensordict whose batch size does not start with the new one raises
+        td = TensorDict(
+            a=torch.zeros(4),
+            sub=TensorDict(
+                nested=TensorDict(b=torch.zeros(4, 3), batch_size=[4, 3]),
+                batch_size=[4],
+            ),
+            batch_size=[4],
+        )
+        with pytest.raises(RuntimeError, match=f"to the entry {key}"):
+            td.empty(recurse=True, batch_size=batch_size)
+        # the source is unchanged
+        assert td["sub"].batch_size == torch.Size([4])
+
     @pytest.mark.parametrize("inplace", [True, False])
     def test_exclude_nested(self, inplace):
         tensor_1 = torch.rand(4, 5, 6, 7)

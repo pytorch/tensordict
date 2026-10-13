@@ -7225,6 +7225,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         Keyword Args:
             batch_size (torch.Size, optional): a new batch-size for the tensordict.
+                With ``recurse=True``, a sub-tensordict whose batch size is the
+                start of the new one gets the new one, a sub-tensordict whose
+                batch size starts with the new one keeps it, and any other
+                sub-tensordict raises a ``RuntimeError``.
             device (torch.device, optional): a new device.
             names (list of str, optional): dimension names.
 
@@ -7246,6 +7250,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # unpacking the view would call its __len__, which walks them too.
             leaves = [key for key in self.keys(True, True)]  # noqa: C416
             result = self._exclude(*leaves, set_shared=False)
+            if batch_size is not None:
+                # The batch_size setter gives the new batch size to the shorter
+                # sub-tensordicts and skips the empty ones of other shapes:
+                # those must already fit it.
+                batch_size = torch.Size(batch_size)
+                for key, value in result.items(True):
+                    ndim = min(value.batch_dims, len(batch_size))
+                    if value.batch_size[:ndim] != batch_size[:ndim]:
+                        raise RuntimeError(
+                            f"empty(recurse=True) cannot give the batch size "
+                            f"{batch_size} to the entry {key!r}, whose batch size "
+                            f"{value.batch_size} does not start with it."
+                        )
         if batch_size is not None:
             result.batch_size = batch_size
         if device is not NO_DEFAULT:

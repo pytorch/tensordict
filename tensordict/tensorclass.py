@@ -5688,6 +5688,18 @@ class NonTensorDataBase(TensorClass):
             names=self.names if self._has_names() else None,
         )
 
+    def _clone(self, recurse: bool = True):
+        result = TensorClass._clone(self, recurse)
+        if not recurse and self._tensordict._is_shared:
+            # The shallow copy holds the same shared wrapper: mark it shared so
+            # that reads unwrap the value and in-place updates write through it.
+            result._tensordict._is_shared = True
+        elif not recurse and self._tensordict._is_memmap:
+            # memmap_(share_non_tensor=True) wraps the value, and the copy is
+            # not memory-mapped: give it the value.
+            result._non_tensordict["data"] = self.data
+        return result
+
     def share_memory_(self):
         if self._tensordict._is_shared:
             return self
