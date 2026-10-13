@@ -16,7 +16,9 @@ from __future__ import annotations
 import collections
 import importlib.util
 import numbers
+import sys
 import uuid
+import warnings
 import weakref
 from collections import UserDict
 from copy import copy
@@ -43,6 +45,7 @@ from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
     _maybe_preserve_module_state,
+    _PACKAGE_DIR,
     _set_tensor_dict,
     Buffer,
     is_compiling,
@@ -84,6 +87,26 @@ def _int_batch_dims(batch_dims):
     if isinstance(batch_dims, numbers.Integral) and not isinstance(batch_dims, bool):
         return batch_dims
     return None
+
+
+def _warn_structseq_keys(obj) -> None:
+    """Warns that ``from_any`` will key a structseq by its field names."""
+    # point to the first frame outside tensordict: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    obj_type = type(obj)
+    positional = [str(i) for i in range(len(obj))]
+    named = list(obj_type.__match_args__)
+    warnings.warn(
+        f"from_any converts a {obj_type.__module__}.{obj_type.__name__} like a "
+        f"plain tuple, with the keys {positional}. Starting with TensorDict "
+        f"0.17, the default will change to its field names {named}, as "
+        "from_namedtuple gives. Pass it to from_namedtuple to get the field "
+        "names now, or convert it with tuple() to keep the keys of a tuple.",
+        FutureWarning,
+        stacklevel=stacklevel,
+    )
 
 
 class _Conversion:
@@ -1562,7 +1585,12 @@ class _Conversion:
         - Dataclasses through :meth:`~.from_dataclass` (dataclasses will be converted to TensorDict instances, not tensorclasses).
         - Namedtuples through :meth:`~.from_namedtuple`.
         - Dictionaries through :meth:`~.from_dict`.
-        - Tuples through :meth:`~.from_tuple`.
+        - Tuples through :meth:`~.from_tuple`. This includes the results of
+          ``torch.return_types`` (``max``, ``sort``, ``topk``, ...), which get
+          the keys ``"0"``, ``"1"``, ... and a :class:`FutureWarning`.
+          Starting with TensorDict 0.17, the default will change to their
+          field names (``"values"``, ``"indices"``, ...), as
+          :meth:`~.from_namedtuple` gives.
         - NumPy's structured arrays through :meth:`~.from_struct_array`.
         - HDF5 objects through :meth:`~.from_h5`.
 
@@ -1612,6 +1640,8 @@ class _Conversion:
                     device=device,
                     batch_size=batch_size,
                 )
+            if is_structseq_instance(obj):
+                _warn_structseq_keys(obj)
             return cls.from_tuple(
                 obj,
                 auto_batch_size=auto_batch_size,
@@ -2606,16 +2636,13 @@ class _Conversion:
         """
         from tensordict.persistent import PersistentTensorDict
 
-        out = PersistentTensorDict.from_dict(
+        return PersistentTensorDict._from_dict(
             self,
             filename=filename,
             backend="zarr",
+            names=self.names if self._has_names() else None,
             **kwargs,
         )
-        if self._has_names():
-            out.names = self.names
-            out._write_attrs_metadata()
-        return out
 
     def to_store(
         self,

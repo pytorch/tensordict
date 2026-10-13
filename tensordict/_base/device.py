@@ -343,19 +343,31 @@ class _DeviceOps:
         """
         return self.to("cpu", **kwargs)
 
-    def cuda(self, device: int | None = None, **kwargs) -> Self:
+    def cuda(self, device: int | str | torch.device | None = None, **kwargs) -> Self:
         """Casts a tensordict to a cuda device (if not already on it).
 
         Args:
-            device (int, optional): if provided, the cuda device on which the
-                tensor should be cast.
+            device (int, str or torch.device, optional): if provided, the cuda
+                device on which the tensor should be cast. An integer is a cuda
+                device index. Defaults to the current cuda device.
 
         This function also supports all the keyword arguments of :meth:`~.to`.
 
+        Raises:
+            RuntimeError: if ``device`` is not a cuda device.
+
         """
         if device is None:
-            return self.to(torch.device("cuda"))
-        return self.to(f"cuda:{device}", **kwargs)
+            device = torch.device("cuda")
+        elif isinstance(device, torch.device) or (
+            isinstance(device, str) and not device.isdigit()
+        ):
+            device = torch.device(device)
+            if device.type != "cuda":
+                raise RuntimeError(f"Invalid device {device}, must be a cuda device.")
+        else:
+            device = f"cuda:{device}"
+        return self.to(device, **kwargs)
 
     def is_shared(self) -> bool:
         """Checks if tensordict is in shared memory.
