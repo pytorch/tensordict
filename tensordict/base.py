@@ -939,6 +939,23 @@ def _warn_read_only(method: str) -> None:
     )
 
 
+def _warn_scalar_over_non_tensor(key: str, value: bool | int | float) -> None:
+    """Warns that ``value``, written over the non-tensor entry ``key``, becomes a tensor today."""
+    # point to the first frame outside tensordict: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    warnings.warn(
+        f"The {type(value).__name__} written over the NonTensorData entry "
+        f"{key!r} is stored as a 0-d tensor today. Starting with TensorDict "
+        "0.17, the default will change to storing it as NonTensorData, like "
+        "the entry it replaces. Write torch.tensor(value) to keep the tensor, "
+        "or NonTensorData(value) to keep the non-tensor entry now.",
+        FutureWarning,
+        stacklevel=stacklevel,
+    )
+
+
 def _has_lazy_stack(td: TensorDictBase) -> bool:
     """Whether ``td`` or one of its nested tensordicts is a lazy stack, which ``_apply_nest`` splits.
 
@@ -2856,6 +2873,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         leading dimensions of the value must match :attr:`~.batch_size`.
         Arrays and numbers are converted to tensors. Strings and other
         objects are stored as :class:`~tensordict.NonTensorData`.
+
+        A Python ``bool``, ``int`` or ``float`` written over an existing
+        :class:`~tensordict.NonTensorData` entry is stored as a 0-d tensor,
+        and the write emits a :class:`FutureWarning`. Starting with
+        TensorDict 0.17, the default will change to storing it as
+        :class:`~tensordict.NonTensorData`, like the entry it replaces.
 
         Args:
             key (NestedKey): the key to set: a string, or a tuple of strings

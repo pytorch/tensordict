@@ -1739,7 +1739,9 @@ class TestTensorClass:
         with pytest.raises(TypeError, match="unhashable"):
             _ = {x: 0}
         assert not x.is_locked
-        x.y = 0
+        # a scalar over a NonTensorData entry: a tensor until 0.17 (gh-1199)
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            x.y = 0
 
     @pytest.mark.parametrize("from_torch", [True, False])
     def test_gather(self, from_torch):
