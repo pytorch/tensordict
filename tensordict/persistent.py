@@ -130,7 +130,8 @@ class _PersistentTDKeysView(_TensorDictKeysView):
         return self._accepts(key, metadata)
 
 
-# The largest block that _H5Backend.write_full allocates.
+# The largest block that _H5Backend.write_full allocates, unless one row of
+# the dataset is larger.
 _WRITE_FULL_BLOCK_BYTES = 64 << 20
 
 
@@ -347,10 +348,15 @@ class _H5Backend(_PersistentBackend):
 
     def write_full(self, node, value) -> None:
         # h5py writes a broadcast scalar much more slowly than a full array:
-        # write blocks of rows of at most _WRITE_FULL_BLOCK_BYTES, so that a
-        # dataset larger than memory can be filled too
+        # write blocks of rows of at most _WRITE_FULL_BLOCK_BYTES (or one row,
+        # if a row is larger), so that a dataset larger than memory can be
+        # filled too
         if not node.shape:
             node[()] = value
+            return
+        # cast as h5py casts a scalar: a complex value raises for a real dataset
+        value = np.asarray(value, dtype=node.dtype)
+        if not node.size:
             return
         row_bytes = node.dtype.itemsize * math.prod(node.shape[1:])
         rows = min(node.shape[0], max(1, _WRITE_FULL_BLOCK_BYTES // max(row_bytes, 1)))

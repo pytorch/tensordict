@@ -359,6 +359,17 @@ def test_update_from_h5_reads(tmp_path, monkeypatch, keys_to_update):
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_fill_zero_empty(tmp_path):
+    # fill_ and zero_ of a file with batch size [0]
+    td = TensorDict({"a": torch.ones(0, 3), "n": {"b": torch.ones(0)}}, [0])
+    h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+    assert h5td.fill_("a", 2.0) is h5td
+    assert h5td.fill_("n", 1.0) is h5td
+    assert h5td.zero_() is h5td
+    assert h5td["a"].shape == (0, 3)
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_fill_zero_masked_fill_no_read(tmp_path, monkeypatch):
     # fill_, zero_, masked_fill_ and detach_ write to the file without reading it
     td = TensorDict(
@@ -392,13 +403,15 @@ def test_fill_zero_masked_fill_no_read(tmp_path, monkeypatch):
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_fill_write_blocks(tmp_path, monkeypatch):
-    # fill_ writes a dataset in blocks of rows, and a 0-d dataset at once
+    # fill_ writes a dataset in blocks of rows, a 0-d dataset at once, and
+    # nothing into an empty dataset
     monkeypatch.setattr(tensordict_persistent, "_WRITE_FULL_BLOCK_BYTES", 100)
     td = TensorDict(
         {
             "a": torch.zeros(7, 3, dtype=torch.int64),
             "big": torch.zeros(2, 40),
             "s": 0.0,
+            "empty": torch.zeros(0, 3),
         },
         batch_size=[],
     )
@@ -407,6 +420,13 @@ def test_fill_write_blocks(tmp_path, monkeypatch):
         assert h5td.fill_(key, 2.5) is h5td
         td.fill_(key, 2.5)
     torch.testing.assert_close(h5td.to_tensordict(), td)
+    assert h5td.zero_() is h5td
+    torch.testing.assert_close(h5td.to_tensordict(), td.zero_())
+    # the value is cast as h5py casts it: a complex value raises for a real
+    # dataset, even an empty one
+    for key in ("a", "empty"):
+        with pytest.raises(TypeError, match="complex"):
+            h5td.fill_(key, 1 + 2j)
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")

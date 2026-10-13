@@ -2365,6 +2365,25 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    def test_masked_fill_entry_shaped_mask(self, store_kwargs):
+        """A mask of the shape of every entry fills it as TensorDict does, without a warning."""
+        lazy_td = lazy_stack(
+            [TensorDict(a=torch.zeros(3, 2), batch_size=[3]) for _ in range(4)]
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            mask = torch.zeros(4, 3, 2, dtype=torch.bool)
+            mask[1, 2, 0] = True
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", FutureWarning)
+                assert store_td.masked_fill_(mask, 1.0) is store_td
+            torch.testing.assert_close(
+                store_td["a"], torch.zeros(4, 3, 2).masked_fill(mask, 1.0)
+            )
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     def test_masked_fill_heterogeneous(self, store_kwargs):
         """masked_fill_ on a store whose elements differ in shape (#2030).
 
