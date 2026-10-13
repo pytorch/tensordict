@@ -479,6 +479,33 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     other = other.expand(shape)
                 others_map.append(other)
             if any(isinstance(other, torch.Tensor) for other in others_map):
+                from tensordict._lazy import LazyStackedTensorDict
+
+                if isinstance(self_expand, LazyStackedTensorDict) and not is_non_tensor(
+                    self_expand
+                ):
+                    # The leaves of each member lack the stack dim: give each
+                    # member its slice of the operands.
+                    stack_dim = self_expand.stack_dim
+                    others_split = [
+                        other.unbind(stack_dim)
+                        if other is not None
+                        else [None] * self_expand.shape[stack_dim]
+                        for other in others_map
+                    ]
+                    results = [
+                        getattr(td, op)(*member_others, *args, **kwargs)
+                        for td, *member_others in zip(
+                            self_expand.tensordicts, *others_split
+                        )
+                    ]
+                    if inplace and self_expand is self:
+                        return self
+                    return self_expand._new_lazy_unsafe(
+                        *results,
+                        stack_dim=stack_dim,
+                        stack_dim_name=self_expand._td_dim_name,
+                    )
                 result = self_expand._fast_apply(
                     lambda x: leaf_op(
                         x,
