@@ -3803,6 +3803,21 @@ class TestEnsembleModule:
         assert out.batch_size == params.batch_size
         assert (out == params).all()
 
+    @pytest.mark.parametrize("batch_size", [[4], [2, 3], [2, 3, 2]])
+    def test_reset_parameters_recursive_requires_grad(self, batch_size):
+        """Ensure parameters that require grad are reset in place for any batch dims"""
+        module = TensorDictModule(nn.Linear(2, 3), in_keys=["a"], out_keys=["b"])
+        ens = EnsembleModule(module, num_copies=2)
+        params = TensorDict.from_module(module).expand(*batch_size).clone()
+        assert params["module", "weight"].requires_grad
+        before = params.detach().clone()
+        out = ens.reset_parameters_recursive(params)
+        assert out.batch_size == params.batch_size
+        assert (out == params).all()
+        weight = params["module", "weight"].reshape(-1, 3, 2)
+        assert (weight != before["module", "weight"].reshape(-1, 3, 2)).any()
+        assert (weight[0] != weight[1:]).any(dim=(-2, -1)).all()
+
 
 class TestTensorDictParams:
     @pytest.mark.parametrize(
