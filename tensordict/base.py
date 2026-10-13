@@ -1268,7 +1268,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # than flattening leaves: flatten(d, d) returns self, and for
     # start_dim > end_dim it inserted a dim of size 1 before 0.15: until 0.17
     # it still does, with a FutureWarning, where the others raise a ValueError.
-    # Its unflatten checks the sizes even when it has no keys.
     _flatten_lenient: bool = False
 
     @classmethod

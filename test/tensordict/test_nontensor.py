@@ -474,6 +474,7 @@ class TestNonTensorData:
             (lambda x: x.unflatten(1, (3, 1)), (0, 3, 1, 0)),
             (lambda x: x.unflatten(0, (2, 0)), (2, 0, 3, 0)),
         ],
+        ids=["flatten", "unflatten_3_1", "unflatten_2_0"],
     )
     def test_flatten_unflatten_non_tensor_stack_zero_size(self, call, shape):
         # flatten and unflatten give the stack that reshape gives, locked
