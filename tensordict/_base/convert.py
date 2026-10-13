@@ -86,6 +86,17 @@ def _int_batch_dims(batch_dims):
     return None
 
 
+def _dict_holds_sequence(value: dict) -> bool:
+    # from_pytree turns a list or tuple inside a dict into a nested TensorDict,
+    # where from_any (used for namedtuple fields on main) keeps a tensor
+    return any(
+        _dict_holds_sequence(val)
+        if isinstance(val, dict)
+        else isinstance(val, (list, tuple)) and not _is_namedtuple(val)
+        for val in value.values()
+    )
+
+
 class _Conversion:
     """Conversions to and from other containers, file formats and nn.Module parameters."""
 
@@ -320,11 +331,23 @@ class _Conversion:
 
         result = None
         if _is_namedtuple(pytree):
-            result = TensorDict.from_namedtuple(named_tuple=pytree)
-            # Without batch_dims, batch_size is ignored here, unlike for lists
-            # and dicts: applying it would raise when it does not fit the leaves.
-            if batch_dims is not None and batch_size is not None:
-                result.batch_size = batch_size
+            # Dict and namedtuple fields go through from_pytree, so that
+            # to_pytree can rebuild them. The other fields, the dicts that hold
+            # a list or tuple, and the fields that from_pytree does not take
+            # (such as a dict holding a str) go through from_any, as on main.
+            nested = {}
+            for key, value in pytree._asdict().items():
+                if (
+                    isinstance(value, dict) and not _dict_holds_sequence(value)
+                ) or _is_namedtuple(value):
+                    try:
+                        nested[key] = cls.from_pytree(value)
+                    except NotImplementedError:
+                        pass
+            result = TensorDict.from_namedtuple(named_tuple=pytree._replace(**nested))
+            if batch_size is not None:
+                # parsed as the TensorDict constructor does, so that ints work
+                result.batch_size = TensorDict._parse_batch_size(None, batch_size)
             result["_pytree_type"] = type(pytree)
         elif isinstance(pytree, (list, tuple)):
             source = {str(i): cls.from_pytree(elt) for i, elt in enumerate(pytree)}
@@ -382,9 +405,14 @@ class _Conversion:
             )
             return items
         if _is_namedtuple_class(_pytree_type):
-            from tensordict._td import TensorDict
-
-            return TensorDict(items).to_namedtuple(dest_cls=_pytree_type)
+            # Build this level only: the nested levels were rebuilt above, and
+            # to_namedtuple(dest_cls=...) would apply the class to them too.
+            return _pytree_type(
+                **{
+                    key: val.to_dict() if _is_non_tensor(type(val)) else val
+                    for key, val in items.items()
+                }
+            )
         raise NotImplementedError(f"unknown type {_pytree_type}")
 
     @classmethod

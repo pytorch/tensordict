@@ -1968,6 +1968,63 @@ class TestGeneric:
         assert (pytree_recon.b == nt.b).all()
         # without auto_batch_size, batch_dims is ignored, as for lists and dicts
         assert TensorDict.from_pytree(nt, batch_dims=1).batch_size == ()
+        # an int batch_size with batch_dims gives the same batch size as for lists
+        td = TensorDict.from_pytree(nt, batch_size=3, batch_dims=1)
+        assert td.batch_size == (3,)
+        assert (
+            td.batch_size
+            == TensorDict.from_pytree(list(nt), batch_size=3, batch_dims=1).batch_size
+        )
+        # batch_size applies without batch_dims too, as for lists and dicts
+        for batch_size in ([3], 3):
+            td = TensorDict.from_pytree(nt, batch_size=batch_size)
+            assert td.batch_size == (3,)
+            assert type(td.to_pytree()) is NT
+        # and a batch size that does not fit the leaves raises, as for lists
+        with pytest.raises(RuntimeError):
+            TensorDict.from_pytree(list(nt), batch_size=[4])
+        with pytest.raises(RuntimeError):
+            TensorDict.from_pytree(nt, batch_size=[4])
+
+    def test_from_pytree_namedtuple_nested(self):
+        # dict and namedtuple fields come back with their own type
+        Outer = namedtuple("Outer", ["a", "nested"])
+        Same = namedtuple("Same", ["a", "nested"])
+        Inner = namedtuple("Inner", ["p", "name"])
+        a = torch.zeros(3)
+
+        def check(v1, v2):
+            assert (v1 == v2).all() if torch.is_tensor(v1) else v1 == v2
+
+        for nested in (
+            {"x": torch.ones(3), "y": {"z": torch.ones(3)}},
+            Inner(p=torch.ones(3), name="n"),
+            Same(a=torch.ones(3), nested="n"),
+            Outer(a=torch.ones(3), nested=None),
+        ):
+            pytree = Outer(a=a, nested=nested)
+            for kwargs in ({}, {"batch_size": [3]}):
+                recon = TensorDict.from_pytree(pytree, **kwargs).to_pytree()
+                assert type(recon) is Outer
+                assert type(recon.nested) is type(nested)
+                torch.utils._pytree.tree_map(check, pytree, recon)
+        # a dict field that from_pytree does not take (here, it holds a str)
+        # goes through from_any, as before, and comes back as a TensorDict
+        recon = TensorDict.from_pytree(
+            Outer(a=a, nested={"a": torch.ones(3), "nested": "n"})
+        ).to_pytree()
+        assert type(recon) is Outer
+        assert isinstance(recon.nested, TensorDict)
+        assert recon.nested["nested"] == "n"
+        # so does a dict field that holds a list: the list stays a tensor, as
+        # on main, rather than a nested TensorDict as from_pytree would make it
+        pytree = Outer(a=a, nested={"l": [1, 2, 3]})
+        td = TensorDict.from_pytree(pytree)
+        assert isinstance(td["nested", "l"], torch.Tensor)
+        assert (td["nested", "l"] == torch.tensor([1, 2, 3])).all()
+        assert TensorDict.from_pytree(pytree, auto_batch_size=True).batch_size == (3,)
+        assert TensorDict.from_pytree(pytree, batch_size=[3]).batch_size == (3,)
+        assert isinstance(td.to_pytree().nested, TensorDict)
 
     def test_from_struct_array(self):
         x = np.array(
