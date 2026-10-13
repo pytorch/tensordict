@@ -162,6 +162,19 @@ def _compose_index(shape, first, second) -> tuple:
     return tuple(index)
 
 
+def _raise_if_jagged(tensor: torch.Tensor, key: str | None = None) -> None:
+    """Raise a clear error for a jagged nested tensor, which memmap cannot store."""
+    if tensor.is_nested and tensor.layout == torch.jagged:
+        where = "" if key is None else f" (key {key!r})"
+        raise NotImplementedError(
+            f"memmap does not support nested tensors with the torch.jagged layout{where}. "
+            "Convert it to the torch.strided layout first, for example with "
+            "LazyStackedTensorDict.densify(layout=torch.strided), or with "
+            "torch.nested.nested_tensor(list(tensor.unbind()), layout=torch.strided) "
+            "for a tensor that is already jagged."
+        )
+
+
 class MemoryMappedTensor(torch.Tensor):
     """A CPU tensor whose storage is a file on disk, or anonymous shared memory when no filename is given.
 
@@ -380,6 +393,7 @@ class MemoryMappedTensor(torch.Tensor):
             raise RuntimeError(
                 "MemoryMappedTensor.from_tensor is incompatible with tensor.requires_grad."
             )
+        _raise_if_jagged(input)
         if shape is None:
             shape = _shape(input, nested_shape=True)
         if isinstance(shape, torch.Tensor):
@@ -753,6 +767,7 @@ class MemoryMappedTensor(torch.Tensor):
             if device.type != "cpu":
                 raise RuntimeError("Only CPU tensors are supported.")
         result = torch.zeros((), dtype=dtype, device=device)
+        dtype = result.dtype
         if isinstance(shape, torch.Tensor):
             # nested tensor
             shape_numel = shape.prod(-1).sum()

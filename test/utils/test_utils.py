@@ -8,10 +8,12 @@ import ast
 import collections
 import importlib
 import inspect
+import os
 import pkgutil
 import queue
 import random
 import re
+import subprocess
 import sys
 import types
 import warnings
@@ -699,6 +701,20 @@ def test_utils_deprecated_names_behave_as_before():
     assert is_seq_of_nested_key([("a", "b"), "c"])
 
 
+def test_utils_buffer_is_torch_buffer():
+    # tensordict.utils.Buffer is torch.nn.Buffer, and reading it does not warn.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        buffer_cls = tensordict.utils.Buffer
+    assert buffer_cls is torch.nn.Buffer
+    tensor = torch.zeros(3)
+    assert isinstance(torch.nn.Buffer(tensor), buffer_cls)
+    buffer = buffer_cls(tensor, persistent=False)
+    assert isinstance(buffer, torch.nn.Buffer)
+    assert not buffer.persistent
+    torch.testing.assert_close(buffer, tensor)
+
+
 def test_tensordict_module_deprecated_names():
     legacy_module = tensordict.tensordict
     # Importing the legacy module, and the names that it still exports, does not warn.
@@ -1190,6 +1206,36 @@ def test_get_shared_executor():
     td = TensorDict({"a": torch.zeros(2), "b": torch.ones(3)})
     td.consolidate(num_threads=2)
     assert executor.submit(lambda: 2).result() == 2
+
+
+@pytest.mark.parametrize(
+    "level,expected_level,shows_debug",
+    [
+        (None, 20, False),
+        ("info", 20, False),
+        ("INFO", 20, False),
+        ("debug", 10, True),
+        ("DEBUG", 10, True),
+    ],
+)
+def test_logging_level_env_var(level, expected_level, shows_debug):
+    # The logger is set up at import, so each level needs a fresh process.
+    code = (
+        "from tensordict.utils import logger\n"
+        "logger.debug('debug message')\n"
+        "logger.info('info message')\n"
+        "print(logger.level)\n"
+    )
+    env = {k: v for k, v in os.environ.items() if k != "TD_LOGGING_LEVEL"}
+    if level is not None:
+        env["TD_LOGGING_LEVEL"] = level
+    result = subprocess.run(
+        [sys.executable, "-c", code], env=env, capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(expected_level)
+    assert "[tensordict][INFO] info message" in result.stderr
+    assert ("[tensordict][DEBUG] debug message" in result.stderr) is shows_debug
 
 
 def test_pin_mem_stops_when_another_thread_took_the_last_input(monkeypatch):

@@ -348,6 +348,21 @@ def test_kwargs_is_deprecated(tmpdir):
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_vmap_raises(tmp_path):
+    td = PersistentTensorDict.from_dict(
+        TensorDict(a=torch.zeros(3, 4), batch_size=[3]), filename=tmp_path / "x.h5"
+    )
+    with pytest.raises(RuntimeError, match="cannot be used with vmap"):
+        torch.vmap(lambda x: x)(td)
+    # A function that returns it used to give None, or an entry holding None
+    with pytest.raises(RuntimeError, match="cannot be used with vmap"):
+        torch.vmap(lambda x: td)(torch.zeros(2))
+    with pytest.raises(RuntimeError, match="cannot be used with vmap"):
+        torch.vmap(lambda x: TensorDict(h=td))(torch.zeros(2))
+    td.close()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 class TestH5Indexing:
     @pytest.fixture
     def data(self, tmp_path):

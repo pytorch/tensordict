@@ -65,6 +65,7 @@ from tensordict.nn.probabilistic import (
     set_interaction_type,
 )
 from tensordict.nn.utils import (
+    _dispatch_td_nn_modules,
     _set_dispatch_td_nn_modules,
     composite_lp_aggregate,
     set_composite_lp_aggregate,
@@ -1037,6 +1038,48 @@ class TestTDModule:
         # checks that things are back in place
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
         tdm(a=torch.zeros(1, 1))
+
+    def test_dispatch_deactivate_restores_mode(self):
+        # Leaving the block restores the previous mode, not the global
+        # _ContextManager object (#1948).
+        mode = _dispatch_td_nn_modules()
+        with _set_dispatch_td_nn_modules(not mode):
+            assert _dispatch_td_nn_modules() == (not mode)
+        assert _dispatch_td_nn_modules() == mode
+
+        tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
+        with _set_dispatch_td_nn_modules(True):
+            with _set_dispatch_td_nn_modules(False):
+                with _set_dispatch_td_nn_modules(True):
+                    assert _dispatch_td_nn_modules()
+                assert not _dispatch_td_nn_modules()
+                with pytest.raises(
+                    TypeError, match="missing 1 required positional argument"
+                ):
+                    tdm(a=torch.zeros(1, 1))
+
+            # A reused instance that changes nothing on entry restores nothing.
+            set_dispatch_off = _set_dispatch_td_nn_modules(False)
+            with set_dispatch_off:
+                assert not _dispatch_td_nn_modules()
+            with _set_dispatch_td_nn_modules(False):
+                with set_dispatch_off:
+                    pass
+                assert not _dispatch_td_nn_modules()
+
+            # An instance nested in itself restores the mode of the outer block.
+            with set_dispatch_off:
+                with set_dispatch_off:
+                    assert not _dispatch_td_nn_modules()
+                assert not _dispatch_td_nn_modules()
+            assert _dispatch_td_nn_modules()
+
+            # The mode is restored when the block raises.
+            with pytest.raises(RuntimeError, match="inside"):
+                with set_dispatch_off:
+                    raise RuntimeError("inside")
+            assert _dispatch_td_nn_modules()
+        assert _dispatch_td_nn_modules() == mode
 
     def test_dispatch_deactivate_function(self):
         @dispatch(source=["a"], dest=["b"])
@@ -3802,6 +3845,21 @@ class TestEnsembleModule:
         out = ens.reset_parameters_recursive(params)
         assert out.batch_size == params.batch_size
         assert (out == params).all()
+
+    @pytest.mark.parametrize("batch_size", [[4], [2, 3], [2, 3, 2]])
+    def test_reset_parameters_recursive_requires_grad(self, batch_size):
+        """Ensure parameters that require grad are reset in place for any batch dims"""
+        module = TensorDictModule(nn.Linear(2, 3), in_keys=["a"], out_keys=["b"])
+        ens = EnsembleModule(module, num_copies=2)
+        params = TensorDict.from_module(module).expand(*batch_size).clone()
+        assert params["module", "weight"].requires_grad
+        before = params.detach().clone()
+        out = ens.reset_parameters_recursive(params)
+        assert out.batch_size == params.batch_size
+        assert (out == params).all()
+        weight = params["module", "weight"].reshape(-1, 3, 2)
+        assert (weight != before["module", "weight"].reshape(-1, 3, 2)).any()
+        assert (weight[0] != weight[1:]).any(dim=(-2, -1)).all()
 
 
 class TestTensorDictParams:

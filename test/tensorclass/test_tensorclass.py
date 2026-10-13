@@ -1467,6 +1467,17 @@ class TestTensorClass:
         ):
             data.device = torch.device("cpu")
 
+    def test_is_meta(self):
+        data = MyData(
+            X=torch.ones(3, 4, 5),
+            y=torch.zeros(3, 4, 5, dtype=torch.bool),
+            z="test_tensorclass",
+            batch_size=[3, 4],
+            device="cpu",
+        )
+        assert data.is_meta is False
+        assert data.to("meta").is_meta is True
+
     def test_disallowed_attributes(self):
         with pytest.raises(
             AttributeError,
@@ -4799,6 +4810,71 @@ class TestShadow:
         c.device = "other"
         assert c.batch_size == 5
         assert c.device == "other"
+
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize("batched", [False, True])
+    def test_shadow_state_dict(self, batched, nested):
+        # The state dict must store the batch size and device of the
+        # TensorDict, not the shadowed fields, and load the fields as entries.
+        @tensorclass(shadow=True)
+        class MyClass:
+            x: torch.Tensor
+            batch_size: Any
+            device: Any
+            name: str
+
+        shape = (10,) if batched else ()
+        src = MyClass(
+            torch.zeros(10, 4),
+            batch_size=torch.full(shape, 4),
+            device=torch.zeros(shape),
+            name="graph",
+        )
+        dst = MyClass(
+            torch.ones(10, 4),
+            batch_size=torch.ones(shape, dtype=torch.long),
+            device=torch.ones(shape),
+            name="other",
+        )
+        if batched:
+            src._tensordict.batch_size = [10]
+            src = src.to("cpu")
+        if nested:
+            src = TensorDict(c=src)
+            dst = TensorDict(c=dst)
+        sd = src.state_dict()
+        metadata = sd._metadata["c" if nested else ""]
+        assert metadata["batch_size"] == torch.Size(shape)
+        assert metadata["device"] == (torch.device("cpu") if batched else None)
+        dst.load_state_dict(sd)
+        if nested:
+            dst = dst["c"]
+        assert (dst.x == 0).all()
+        assert (dst.batch_size == 4).all()
+        assert (dst.device == 0).all()
+        assert dst.name == "graph"
+        assert dst._tensordict.batch_size == torch.Size(shape)
+        assert dst._tensordict.device is None
+
+    def test_shadow_update_dict(self):
+        # update_ and update_at_ with a dict must use the batch size of the
+        # TensorDict, not the shadowed batch_size field.
+        @tensorclass(shadow=True)
+        class MyClass:
+            x: torch.Tensor
+            batch_size: Any
+            device: Any
+
+        c = MyClass(torch.zeros(10, 4), batch_size="abc", device="cpu")
+        c._tensordict.batch_size = [10]
+        c.update_({"x": torch.ones(10, 4)})
+        assert (c.x == 1).all()
+        c.update_at_({"x": torch.full((4,), 2.0)}, 0)
+        assert (c.x[0] == 2).all()
+        assert (c.x[1:] == 1).all()
+        assert c.batch_size == "abc"
+        assert c.device == "cpu"
+        assert c._tensordict.batch_size == torch.Size([10])
 
     def test_shadow_values_dec_subcls(self):
         @tensorclass(shadow=True)
