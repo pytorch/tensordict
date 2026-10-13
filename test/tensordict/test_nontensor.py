@@ -1341,6 +1341,50 @@ class TestNonTensorData:
         if mode.startswith("memmap"):
             assert TensorDict.load_memmap(tmpdir).get("s").tolist() == expected
 
+    @pytest.mark.parametrize("layout", ["1d", "nd_members", "stack_dim1", "nested"])
+    @pytest.mark.parametrize("locked", [False, True])
+    @pytest.mark.parametrize("write", ["update_", "copy_"])
+    def test_update__data_into_stack_with_tensor(self, layout, locked, write):
+        # With a tensor entry in the source, update_ takes its fast route,
+        # which writes the NonTensorData into every member of the stack (#2263)
+        if layout == "1d":
+            s = NonTensorStack("a", "b", "c")
+        elif layout == "nd_members":
+            s = torch.stack([NonTensorData(f"m{i}", batch_size=[3]) for i in range(4)])
+        elif layout == "stack_dim1":
+            s = NonTensorStack(
+                *[NonTensorData(f"m{i}", batch_size=[4]) for i in range(3)],
+                stack_dim=1,
+            )
+        else:
+            s = NonTensorStack(
+                *[NonTensorStack(*[f"m{i}{j}" for j in range(3)]) for i in range(4)]
+            )
+        assert isinstance(s, NonTensorStack)
+        td = TensorDict(x=torch.zeros(s.batch_size), s=s, batch_size=s.batch_size)
+        if locked:
+            td.lock_()
+        source = TensorDict(
+            x=torch.ones(s.batch_size),
+            s=NonTensorData("w", batch_size=s.batch_size),
+            batch_size=s.batch_size,
+        )
+        getattr(td, write)(source)
+        assert (td["x"] == 1).all()
+        assert isinstance(td.get("s"), NonTensorStack)
+        assert (
+            td.get("s").tolist() == NonTensorData("w", batch_size=s.batch_size).tolist()
+        )
+
+    def test_update__stack_into_data_still_skipped(self):
+        # A NonTensorStack in the source stays skipped where the destination
+        # holds a NonTensorData
+        td = TensorDict(x=torch.zeros(2), s=NonTensorData("hello"), batch_size=[2])
+        source = TensorDict(x=torch.ones(2), s=NonTensorStack("a", "b"), batch_size=[2])
+        td.update_(source)
+        assert (td["x"] == 1).all()
+        assert td["s"] == "hello"
+
     @pytest.mark.parametrize("mode", ["shared", "memmap", "memmap_shared"])
     @pytest.mark.parametrize("stack", [False, True])
     @pytest.mark.parametrize("write", ["update_", "copy_"])
