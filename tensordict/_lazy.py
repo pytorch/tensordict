@@ -3005,6 +3005,11 @@ class LazyStackedTensorDict(TensorDictBase):
         if filter_empty and all(r is None for r in results):
             return
         if not inplace:
+            # A member with no result becomes an empty member, as with filter_empty=False
+            results = [
+                td.empty(device=device) if r is None else r
+                for td, r in zip(self.tensordicts, results)
+            ]
             out = type(self)(
                 *results,
                 stack_dim=self.stack_dim,
@@ -3126,6 +3131,13 @@ class LazyStackedTensorDict(TensorDictBase):
             return
         if not inplace:
             if not results or any(r is not None for r in results):
+                if filter_empty in (None, True):
+                    # A member with no result becomes an empty member, as with
+                    # filter_empty=False
+                    results = [
+                        td.empty(device=device) if r is None else r
+                        for td, r in zip(self.tensordicts, results)
+                    ]
                 try:
                     out = type(self)(
                         *results,
