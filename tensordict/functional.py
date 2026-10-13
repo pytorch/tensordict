@@ -105,6 +105,14 @@ def pad(
         the input; otherwise a new tensordict, or a new tensorclass of the
         same type for a tensorclass input.
 
+    .. note::
+        With ``inplace=False``, a lazy stack gives a
+        :class:`~tensordict.TensorDict`. If the stacked tensordicts have no
+        names, it has no names either, even when the stack dimension has a
+        name (from ``stack_dim_name`` or the ``names`` setter). To keep that
+        name, name the dimension of the result again with
+        :meth:`~tensordict.TensorDict.refine_names`.
+
     Examples:
         >>> from tensordict import TensorDict, pad
         >>> import torch

@@ -424,6 +424,10 @@ def from_consolidated(filename):
     :meth:`~tensordict.TensorDictBase.consolidate` writes when you pass it a
     ``filename``. Same as :meth:`tensordict.TensorDict.from_consolidated`.
 
+    The batch sizes and names are as they were when the file was written.
+    To write later changes into the file, call
+    ``consolidate(filename=filename)`` again on the consolidated tensordict.
+
     Args:
         filename (str or Path): the path of the file.
 

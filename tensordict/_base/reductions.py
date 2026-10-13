@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import sys
 import warnings
-from typing import Callable, Literal, overload, Tuple
+from typing import Callable, Iterable, Literal, overload, Tuple
 
 import torch
 from tensordict._deprecation import warn_deprecated
@@ -111,18 +111,13 @@ class _Reductions:
             )
         if dim is not None:
             dim = _maybe_correct_neg_dim(dim, self.batch_size)
-
-            names = None
-            if self._has_names():
-                names = [name for i, name in enumerate(self.names) if i != dim]
-
             return TensorDict(
                 source={key: value.all(dim=dim) for key, value in self.items()},
                 batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
                 device=self.device,
-                names=names,
+                names=self._reduced_names(dim),
             )
-        return all(value.all() for value in self.values())
+        return all(value.all() for value in self._reduction_parts())
 
     def any(self, dim: int | None = None) -> bool | TensorCollection:
         """Checks if any value is True/non-null in the tensordict.
@@ -144,18 +139,36 @@ class _Reductions:
             )
         if dim is not None:
             dim = _maybe_correct_neg_dim(dim, self.batch_size)
-
-            names = None
-            if self._has_names():
-                names = [name for i, name in enumerate(self.names) if i != dim]
-
             return TensorDict(
                 source={key: value.any(dim=dim) for key, value in self.items()},
                 batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
                 device=self.device,
-                names=names,
+                names=self._reduced_names(dim),
             )
-        return any([value.any() for value in self.values()])
+        # A loop, not any() of a generator, which is slower when no part holds a True
+        for value in self._reduction_parts():
+            if value.any():
+                return True
+        return False
+
+    def _reduction_parts(self) -> Iterable:
+        """The parts whose ``all()`` or ``any()`` give the result of :meth:`all` or :meth:`any` without a dim.
+
+        The base returns the values. :class:`~tensordict.LazyStackedTensorDict`
+        returns its members, which need not stack into dense tensors.
+        """
+        return self.values()
+
+    def _reduced_names(self, dim: int) -> list[str | None] | None:
+        """The dim names of the result of :meth:`all` or :meth:`any` along the batch dim ``dim``, or ``None``.
+
+        ``dim`` is already non-negative. The base drops the name of ``dim``.
+        :class:`~tensordict.LazyStackedTensorDict` returns ``None`` when its
+        members' names differ or the names left are not unique.
+        """
+        if self._has_names():
+            return [name for i, name in enumerate(self.names) if i != dim]
+        return None
 
     @overload
     def amin(

@@ -108,6 +108,29 @@ write to it does not change the original tensordicts:
 ``contiguous()`` raises a ``RuntimeError`` if the stacked entries have
 different shapes. See :ref:`stacking-variable-size` for that case.
 
+A lazy stack can name its stack dimension, with ``stack_dim_name`` in
+:func:`~tensordict.lazy_stack`, or by setting its ``names``. If the stacked
+tensordicts have no names, ``contiguous()``, ``to_tensordict()`` and
+:func:`~tensordict.pad` give a TensorDict without that name. ``clone()``,
+which returns a lazy stack, and
+:meth:`~tensordict.LazyStackedTensorDict.densify` keep it. To keep it in a
+TensorDict, call ``densify()``, or name the dimension again with
+:meth:`~tensordict.TensorDict.refine_names`:
+
+  >>> named = lazy_stack(tds, stack_dim_name="robot")
+  >>> named.names
+  ['robot', None]
+  >>> named.contiguous().names
+  [None, None]
+  >>> named.contiguous().refine_names("robot", ...).names
+  ['robot', None]
+  >>> named.densify().names
+  ['robot', None]
+  >>> named.clone().names
+  ['robot', None]
+
+If the stacked tensordicts have names, all of these methods keep every name.
+
 .. note::
 
    Only stacking is lazy. Shape operations such as ``squeeze``, ``unsqueeze``,

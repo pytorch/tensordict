@@ -328,6 +328,13 @@ class _InplaceShapeState(local):
 _inplace_shape_state = _InplaceShapeState()
 
 
+def _is_inside(key: NestedKey, other: NestedKey) -> bool:
+    """Returns whether the nested key ``key`` lies strictly inside ``other``."""
+    key = (key,) if isinstance(key, str) else key
+    other = (other,) if isinstance(other, str) else other
+    return len(key) > len(other) and key[: len(other)] == other
+
+
 def _holds_its_tensors(td: TensorDictBase) -> bool:
     """Returns whether ``td`` reads its entries from a ``TensorDict``, which holds its tensors.
 
@@ -383,7 +390,11 @@ def _mixes_lazy_stacks(td: TensorDictBase, others: tuple) -> bool:
     # a cheap filter first: lazy stacks set _lazy, numbers and tensors do not have it
     lazy = td._lazy
     for other in others:
-        lazy = lazy or getattr(type(other), "_lazy", False)
+        other_lazy = getattr(type(other), "_lazy", None)
+        if other_lazy is None and _is_tensorclass(type(other)):
+            # a tensorclass counts as the tensordict it wraps
+            other_lazy = other._tensordict._lazy
+        lazy = lazy or other_lazy
     if not lazy:
         return False
     from tensordict._lazy import LazyStackedTensorDict
@@ -392,14 +403,31 @@ def _mixes_lazy_stacks(td: TensorDictBase, others: tuple) -> bool:
     return any(
         isinstance(other, TensorDictBase)
         and isinstance(other, LazyStackedTensorDict) is not is_stack
-        for other in others
+        for other in map(_unwrap_tensorclass, others)
     )
+
+
+def _unwrap_tensorclass(other: Any) -> Any:
+    """Returns the tensordict behind a tensorclass ``other``, and any other ``other`` as it is."""
+    return other._tensordict if _is_tensorclass(type(other)) else other
+
+
+def _same_leaf_keys(td: TensorDictBase, others: tuple) -> bool:
+    """Returns whether ``others`` holds tensordicts, all with the leaf keys of ``td``."""
+    tds = [
+        other
+        for other in map(_unwrap_tensorclass, others)
+        if isinstance(other, TensorDictBase)
+    ]
+    keys = set(td.keys(True, True))
+    return bool(tds) and all(set(other.keys(True, True)) == keys for other in tds)
 
 
 def _apply_pointwise(
     td: TensorDictBase, fn: Callable, others: tuple, inplace: bool
 ) -> TensorDictBase:
     """Computes ``fn(leaf, *others)`` leaf by leaf, pairing the leaves of the tensordicts in ``others`` by key."""
+    others = tuple(map(_unwrap_tensorclass, others))
     is_td = [isinstance(other, TensorDictBase) for other in others]
 
     def leaf_fn(x, *leaves):
@@ -424,8 +452,6 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
     """Ensures that elementwise ops are broadcast when an nd tensor is passed."""
     # add_, mul_, ... are in-place; __eq__, __lt__, ... also end with "_".
     inplace = op.endswith("_") and not op.endswith("__")
-    # The comparisons pair a lazy stack with a dense operand by key already
-    pairs_by_apply = op == "__mod__" or not op.startswith("__")
     # torch.Tensor has no rsub method: call torch.rsub on the leaves instead.
     torch_op = None if hasattr(torch.Tensor, op) else getattr(torch, op)
 
@@ -433,6 +459,13 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
         if torch_op is None:
             return getattr(x, op)(*args, **kwargs)
         return torch_op(x, *args, **kwargs)
+
+    def pointwise(self, others, args, kwargs):
+        # alpha=None and default=None are the defaults of the ops
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        return _apply_pointwise(
+            self, lambda x, *xs: leaf_op(x, *xs, *args, **kwargs), others, inplace
+        )
 
     def wrap_func(func):
         @wraps(func)
@@ -450,20 +483,22 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     need_broadcast = True
                     break
             if not need_broadcast:
-                if (
-                    pairs_by_apply
-                    and kwargs.get("default") is None
-                    and _mixes_lazy_stacks(self, others)
-                ):
-                    # alpha=None and default=None are the defaults of the ops
-                    kwargs = {k: v for k, v in kwargs.items() if v is not None}
-                    return _apply_pointwise(
-                        self,
-                        lambda x, *xs: leaf_op(x, *xs, *args, **kwargs),
-                        others,
-                        inplace,
-                    )
-                return func(self, *others, *args, **kwargs)
+                if kwargs.get("default") is None and _mixes_lazy_stacks(self, others):
+                    return pointwise(self, others, args, kwargs)
+                try:
+                    return func(self, *others, *args, **kwargs)
+                except KeyError:
+                    # A lazy stack nested in a dense tensordict gives keys such
+                    # as ("n", "0", "a"), which a dense operand lacks (#1932).
+                    if kwargs.get("default") is not None or not _same_leaf_keys(
+                        self, others
+                    ):
+                        raise
+                    if inplace:
+                        # apply_ writes as it goes: raise for a leaf that only
+                        # some members of a lazy stack have before any write
+                        _apply_pointwise(self, lambda *xs: None, others, False)
+                    return pointwise(self, others, args, kwargs)
             others_map = []
             shape = self.shape
             self_expand = self
@@ -682,6 +717,19 @@ def _set_tensor_dict(
     else:
         __dict__[name] = tensor
     return out
+
+
+def _wrap_extra_state(state: Any) -> Any:
+    # Wrap the non-tensor objects that get_extra_state() returns, also inside
+    # dicts, in NonTensorData: the tensordict stays valid and to_dict() gives
+    # them back unchanged.
+    from tensordict.tensorclass import NonTensorData
+
+    if isinstance(state, dict):
+        return {key: _wrap_extra_state(val) for key, val in state.items()}
+    if isinstance(state, Tensor) or _is_tensor_collection(type(state)):
+        return state
+    return NonTensorData(state)
 
 
 def _new_parameter(tensor: torch.Tensor, *, requires_grad: bool) -> torch.nn.Parameter:
@@ -1131,6 +1179,13 @@ def _expand_to_match_shape(
     else:
         # tensordict
         batch_size = torch.Size([*parent_batch_size, *_shape(data)[self_batch_dims:]])
+        if is_non_tensor(data):
+            from tensordict.tensorclass import NonTensorData, NonTensorStack
+
+            if isinstance(data, NonTensorStack):
+                # The rows that are not written hold None, as a tensor gets
+                #  zeros (a NonTensorData keeps its one value for all rows)
+                return NonTensorData(None, batch_size=batch_size, device=self_device)
         result = data.empty(batch_size=batch_size)
     return result
 
@@ -1275,6 +1330,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # ``to_tensordict()`` copy: the stores read it in one round trip, and on
     # all of them the result is a new, unlocked TensorDict.
     _masking_on_dense_copy: bool = False
+    # Set by the stores, on which ``masked_select`` masks a
+    # ``to_tensordict()`` copy, read in one round trip. On the views and h5
+    # files, that is slower than masking each entry.
+    _masked_select_on_dense_copy: bool = False
+    # Set by the backends on which ``masked_select(inplace=True)`` raises (the
+    # lazy stacks raise too).
+    _masked_select_inplace_unsupported: bool = False
     # Whether the tensors that items() returns are copies of the stored data,
     # as for an h5 or zarr file or a store. The in-place methods then write
     # their results back (see _write_back_inplace and _write_back).
@@ -1295,6 +1357,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Whether get() ignores as_list and as_nested_tensor, and warns about them
     # (see _warn_get_kwargs). False for lazy stacks, which honor them.
     _get_ignores_kwargs: bool = True
+    # Set by the files and stores, which hold no autograd history: detach_
+    # returns without reading their entries.
+    _storage_holds_no_gradients: bool = False
+    # Set by PersistentTensorDict, which writes a constant without reading the
+    # array: zero_ fills each entry through _fill_ instead of reading copies.
+    _fills_without_reading: bool = False
 
     @classmethod
     def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
@@ -4665,6 +4733,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """
         from tensordict._td import TensorDict
 
+        # the public name of a hook such as _masked_fill_
+        name = method.__name__.lstrip("_")
         if self._storage_is_read_only():
             # the method runs on self, which writes nothing
             running = getattr(_READ_ONLY_CALL, "running", False)
@@ -4673,7 +4743,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 result = method(self, *args, **kwargs)
             finally:
                 _READ_ONLY_CALL.running = running
-            _warn_read_only(method.__name__)
+            _warn_read_only(name)
             return result
         try:
             items = list(self.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS))
@@ -4702,7 +4772,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # broadcasting self returns a new tensordict and writes nothing
             return result
         keys, values = leaves._items_list(True, True)
-        self._write_back(keys, values, method.__name__)
+        self._write_back(keys, values, name)
         return self
 
     def _write_back(self, keys, values, method: str) -> None:
@@ -5016,9 +5086,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Args:
             old_key (NestedKey): key to be renamed. A missing key raises
                 ``KeyError``.
-            new_key (NestedKey): new name of the entry.
+            new_key (NestedKey): new name of the entry. A key inside
+                ``old_key``, such as ``("a", "b")`` for ``"a"``, moves the
+                entry there, as ``td.set(new_key, td.pop(old_key))`` does.
             safe (bool, optional): if ``True``, a ``KeyError`` is raised when
-                the new key is already present in the TensorDict. If
+                the new key is already present in the TensorDict, unless it
+                lies inside ``old_key``, which moves with the entry. If
                 ``False``, the existing entry is overwritten. Defaults to
                 ``False``.
 
@@ -5062,7 +5135,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             )
         old_key = unravel_key(old_key)
         new_key = unravel_key(new_key)
-        if safe and old_key != new_key and new_key in self.keys(include_nested=True):
+        if (
+            safe
+            and old_key != new_key
+            and new_key in self.keys(include_nested=True)
+            # a new key inside the old one moves with the entry
+            and not _is_inside(new_key, old_key)
+        ):
             raise KeyError(f"key {new_key} already present in TensorDict.")
         self._rename_key(old_key, new_key)
         return self
@@ -5079,6 +5158,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 raise KeyError(f"Key {old_key} not found in tensordict.")
             return
         value = self.get(old_key, default=NO_DEFAULT)
+        # only a tuple can lie inside another key; skipping the check for a
+        # str keeps the common renames as fast as before
+        inside = isinstance(new_key, tuple) and _is_inside(new_key, old_key)
+        if inside:
+            # deleting the old entry after the move would delete the moved
+            # entry with it
+            self.del_(old_key)
         if isinstance(new_key, str):
             self._set_str(
                 new_key, value, inplace=False, validated=True, non_blocking=False
@@ -5088,7 +5174,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 new_key, value, inplace=False, validated=True, non_blocking=False
             )
         new_key_tuple = (new_key,) if isinstance(new_key, str) else new_key
-        if not (
+        if not inside and not (
             isinstance(old_key, tuple)
             and old_key[: len(new_key_tuple)] == new_key_tuple
         ):
@@ -5121,10 +5207,22 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Keyword Args: See :meth:`~.apply`.
 
         Returns:
-            self or a copy of self with the function applied
+            self
 
         """
-        return self.apply(fn, *others, inplace=True, **kwargs)
+        self._apply_(fn, *others, **kwargs)
+        return self
+
+    def _apply_(self, fn: Callable, *others, **kwargs) -> None:
+        """Applies ``fn`` to the leaves and writes each result into its leaf.
+
+        Called by :meth:`apply_` with its arguments, which returns ``self``
+        afterwards. The base implementation calls :meth:`apply` with
+        ``inplace=True``. Override it when the class can write the results
+        faster than through :meth:`apply` (a lazy stack applies ``fn`` to each
+        member).
+        """
+        self.apply(fn, *others, inplace=True, **kwargs)
 
     def apply(
         self,
@@ -7396,8 +7494,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         storage. See :ref:`inplace-conventions`.
 
         Args:
-            mask (boolean torch.Tensor): mask of values to be filled. Shape
-                must match the tensordict batch-size.
+            mask (boolean torch.Tensor): mask of values to be filled. Its
+                shape must match the leading dims of the batch size.
             value: value to used to fill the tensors.
 
         Returns:
@@ -7414,6 +7512,22 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             tensor([[1., 1., 1., 1.],
                     [0., 0., 0., 0.],
                     [0., 0., 0., 0.]])
+        """
+        self._masked_fill_(mask, value)
+        return self
+
+    @_write_back_inplace
+    def _masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
+        """Writes ``value`` into each tensor leaf where ``mask`` is True.
+
+        Called by :meth:`masked_fill_`, which returns ``self`` afterwards.
+        ``mask`` is aligned with the leading dims of each leaf
+        (:func:`~tensordict.utils.expand_as_right`). The base implementation
+        fills the leaves in place and must return ``self``; through
+        ``_write_back_inplace`` the classes whose reads return copies run it
+        on the copies and write them back. Override it when the storage can
+        fill without reading the leaves (a file) or must split the mask over
+        its members (a lazy stack).
         """
         for item in self.values():
             mask_expand = expand_as_right(mask, item)
@@ -8555,9 +8669,21 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self.
 
         """
+        if not self._storage_holds_no_gradients:
+            self._detach_()
+        return self
+
+    def _detach_(self) -> None:
+        """Detaches the tensor leaves in place.
+
+        Called by :meth:`detach_`, which returns ``self`` afterwards, unless
+        ``_storage_holds_no_gradients`` is set. The base implementation calls
+        ``detach_`` on each value. Override it when the values are not the
+        stored tensors (a lazy stack detaches each member) or when the leaves
+        cannot be detached in place (a sub-tensordict raises).
+        """
         for value in self.values():
             value.detach_()
-        return self
 
     @_cache_while_locked  # noqa: B019
     def detach(self) -> Self:
