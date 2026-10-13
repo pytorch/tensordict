@@ -10,10 +10,8 @@ which re-exports the classes of this module.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import struct
-import threading
 import uuid
 from numbers import Number
 from typing import Any, Callable, Sequence, Tuple, Type
@@ -35,6 +33,12 @@ from tensordict.base import (
     is_tensor_collection,
     T,
     TensorDictBase,
+)
+from tensordict.store._connection import (
+    _client_settings,
+    _connect_kwargs,
+    _read_stored_metadata,
+    _StoreConnection,
 )
 from tensordict.store._store import (
     _has_redis,
@@ -635,7 +639,7 @@ class _LazyStackedStoreKeysView(_TensorDictKeysView):
         return sum(1 for _ in self)
 
 
-class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
+class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
     """A lazy stack of tensordicts whose entries live on a Redis-compatible server.
 
     .. warning::
@@ -720,6 +724,22 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
     _nested_reads_return_copies = True
     _rename_key_lenient = True
 
+    _global_key_suffixes = (
+        "__type__",
+        "__count__",
+        "__stack_dim__",
+        "__inner_batch_size__",
+        "__device__",
+    )
+    _pickled_attrs = _StoreConnection._pickled_attrs + (
+        "_count",
+        "_stack_dim",
+        "_inner_batch_size",
+    )
+    # each call reads the key registry from the server, so that keys that
+    # another handle adds are visible
+    _caches_keys = False
+
     def __init__(
         self,
         *,
@@ -742,19 +762,10 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
             raise ModuleNotFoundError(
                 "Could not import redis. Install it with: pip install redis"
             )
-        import redis.asyncio as aioredis
-
-        self._locked_tensordicts = []
-        self._lock_id = set()
-        self._is_shared = False
-        self._is_memmap = False
 
         self._backend = backend
-
         self._cache_metadata = cache_metadata
-        self._meta_cache: dict[str, tuple[list[int] | None, torch.dtype]] | None = (
-            {} if cache_metadata else None
-        )
+        self._init_local_state()
 
         self._td_id = td_id or str(uuid.uuid4())
         self._namespace = prefix
@@ -772,52 +783,25 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
         self._db = db
         self._unix_socket_path = unix_socket_path
         self._redis_kwargs = redis_kwargs
-
-        self._loop = asyncio.new_event_loop()
-        self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
-        self._thread.start()
-        self._owns_loop = True
-
-        if client is not None:
-            self._client = client
-        else:
-            connect_kwargs = dict(redis_kwargs)
-            if unix_socket_path is not None:
-                connect_kwargs["unix_socket_path"] = unix_socket_path
-            else:
-                connect_kwargs["host"] = host
-                connect_kwargs["port"] = port
-            connect_kwargs["db"] = db
-            self._client = aioredis.Redis(**connect_kwargs)
+        self._open_connection(client)
 
         self._device = torch.device(device) if device is not None else None
 
         self._run_sync(self._apersist_global_metadata())
 
-    # ---- sync bridge ----
-
-    def _run_sync(self, coro):
-        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
-        return future.result()
-
     # ---- Redis key helpers ----
-
-    def _redis_key(self, suffix: str) -> str:
-        return f"{self._namespace}:{{{self._td_id}}}:{suffix}"
-
-    def _data_key(self, key_path: str) -> str:
-        return self._redis_key(f"d:{key_path}")
 
     def _idx_key(self, key_path: str) -> str:
         """Redis key for the offset table of a leaf key."""
         return self._redis_key(f"d:{key_path}:idx")
 
-    def _meta_key(self, key_path: str) -> str:
-        return self._redis_key(f"m:{key_path}")
-
-    @property
-    def _keys_registry_key(self) -> str:
-        return self._redis_key("__keys__")
+    # Override: a key whose elements differ in shape also has an offset table.
+    def _entry_server_keys(self, key_path: str) -> tuple[str, ...]:
+        return (
+            self._data_key(key_path),
+            self._idx_key(key_path),
+            self._meta_key(key_path),
+        )
 
     # ---- async metadata persistence ----
 
@@ -834,49 +818,7 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
         pipe.set(self._redis_key("__device__"), device_str)
         await pipe.execute()
 
-    async def _aget_all_keys(self) -> set[str]:
-        raw = await self._client.smembers(self._keys_registry_key)
-        return {k.decode() if isinstance(k, bytes) else k for k in raw}
-
-    def _get_all_keys(self) -> set[str]:
-        return self._run_sync(self._aget_all_keys())
-
-    async def _aget_metadata_batch(
-        self, key_paths: list[str]
-    ) -> dict[str, tuple[list[int] | None, torch.dtype]]:
-        """Returns the stacked shape and the dtype of each key.
-
-        The shape is ``None`` for a key whose elements differ in shape or dtype.
-        """
-        result: dict[str, tuple[list[int] | None, torch.dtype]] = {}
-        uncached: list[str] = []
-        for kp in key_paths:
-            if self._meta_cache is not None and kp in self._meta_cache:
-                result[kp] = self._meta_cache[kp]
-            else:
-                uncached.append(kp)
-        if uncached:
-            pipe = self._client.pipeline()
-            for kp in uncached:
-                pipe.hgetall(self._meta_key(kp))
-            raw_metas = await pipe.execute()
-            for kp, raw_meta in zip(uncached, raw_metas):
-                meta = _decode_meta(raw_meta)
-                shape = (
-                    json.loads(meta["shape"])
-                    if self._is_key_homogeneous(meta)
-                    else None
-                )
-                dtype = _str_to_dtype(meta["dtype"])
-                result[kp] = (shape, dtype)
-                if self._meta_cache is not None:
-                    self._meta_cache[kp] = (shape, dtype)
-        return result
-
     # ---- key-level homogeneity check helpers ----
-
-    def _is_key_homogeneous(self, meta: dict) -> bool:
-        return meta.get("homogeneous", "1") == "1"
 
     async def _ais_homogeneous(self, key_paths: list[str]) -> list[bool]:
         """Reads from the metadata which keys hold elements of one shape and dtype."""
@@ -1820,7 +1762,12 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
         return self
 
     def _get_at_str(self, key, idx, default=NO_DEFAULT, **kwargs):
-        result = self._run_sync(self._abatch_get_at([key], idx))
+        try:
+            result = self._run_sync(self._abatch_get_at([key], idx))
+        except KeyError:
+            # not a leaf: a sub-tensordict, or a missing key
+            value = self._get_str(key, default, **kwargs)
+            return value if value is default else value[idx]
         tensor = result.get(key)
         if tensor is None:
             if default is not NO_DEFAULT:
@@ -1833,7 +1780,13 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
         if len(key) == 1:
             return self._get_at_str(key[0], idx, default=default, **kwargs)
         key_path = _KEY_SEP.join(key)
-        result = self._run_sync(self._abatch_get_at([key_path], idx))
+        try:
+            result = self._run_sync(self._abatch_get_at([key_path], idx))
+        except KeyError:
+            # not a leaf: a sub-tensordict, a path through a tensor, or a
+            # missing key
+            value = self._get_tuple(key, default, **kwargs)
+            return value if value is default else value[idx]
         tensor = result.get(key_path)
         if tensor is None:
             if default is not NO_DEFAULT:
@@ -1891,16 +1844,6 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
             # stacklevel 3: skip the _lock_blocked wrapper
             _warn_missing_key(self, "del_", key, stacklevel=3)
         return self
-
-    async def _adel_key(self, key_path: str):
-        pipe = self._client.pipeline()
-        pipe.delete(self._data_key(key_path))
-        pipe.delete(self._idx_key(key_path))
-        pipe.delete(self._meta_key(key_path))
-        pipe.srem(self._keys_registry_key, key_path)
-        await pipe.execute()
-        if self._meta_cache is not None:
-            self._meta_cache.pop(key_path, None)
 
     # Override: renames the keys on the server, without reading the data.
     def _rename_key(self, old_key: NestedKey, new_key: NestedKey) -> None:
@@ -2137,39 +2080,27 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
         Returns:
             A :class:`LazyStackedTensorDictStore` connected to the existing data.
         """
-        import redis.asyncio as aioredis
-
         # ``client`` and ``cache_metadata`` go to the constructor only.
-        connect_kwargs = {
+        redis_kwargs = {
             k: v for k, v in kwargs.items() if k not in ("client", "cache_metadata")
         }
-        if unix_socket_path is not None:
-            connect_kwargs["unix_socket_path"] = unix_socket_path
-        else:
-            connect_kwargs["host"] = host
-            connect_kwargs["port"] = port
-        connect_kwargs["db"] = db
-
-        client = aioredis.Redis(**connect_kwargs)
-
-        async def _read_meta():
-            pipe = client.pipeline()
-            pipe.get(f"{prefix}:{{{td_id}}}:__type__")
-            pipe.get(f"{prefix}:{{{td_id}}}:__count__")
-            pipe.get(f"{prefix}:{{{td_id}}}:__stack_dim__")
-            pipe.get(f"{prefix}:{{{td_id}}}:__inner_batch_size__")
-            pipe.get(f"{prefix}:{{{td_id}}}:__device__")
-            results = await pipe.execute()
-            await client.aclose()
-            return results
-
-        loop = asyncio.new_event_loop()
-        try:
-            raw_type, raw_count, raw_sd, raw_ibs, raw_dev = loop.run_until_complete(
-                _read_meta()
-            )
-        finally:
-            loop.close()
+        settings = _client_settings(kwargs.get("client"))
+        if settings is not None:
+            # the store is on the server of the client
+            host, port, db, unix_socket_path, credentials = settings
+            redis_kwargs = {**redis_kwargs, **credentials}
+        raw_type, raw_count, raw_sd, raw_ibs, raw_dev = _read_stored_metadata(
+            _connect_kwargs(host, port, db, unix_socket_path, redis_kwargs),
+            prefix,
+            td_id,
+            (
+                "__type__",
+                "__count__",
+                "__stack_dim__",
+                "__inner_batch_size__",
+                "__device__",
+            ),
+        )
 
         if raw_type is None:
             raise KeyError(f"No LazyStackedTensorDictStore with td_id={td_id!r} found.")
@@ -2218,10 +2149,7 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
     def _clone(self, recurse: bool = True) -> LazyStackedTensorDictStore:
         if recurse:
             new_td = LazyStackedTensorDictStore(
-                host=self._host,
-                port=self._port,
-                db=self._db,
-                unix_socket_path=self._unix_socket_path,
+                **self._connection_kwargs(),
                 prefix=self._namespace,
                 count=self._count,
                 stack_dim=self._stack_dim,
@@ -2232,10 +2160,7 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
             return new_td
         # Shallow: same data, new wrapper
         return LazyStackedTensorDictStore(
-            host=self._host,
-            port=self._port,
-            db=self._db,
-            unix_socket_path=self._unix_socket_path,
+            **self._connection_kwargs(),
             prefix=self._namespace,
             count=self._count,
             stack_dim=self._stack_dim,
@@ -2440,123 +2365,6 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
                 f"inplace=False."
             )
         return self.to_tensordict().masked_select(mask)
-
-    # ---- Pickling ----
-
-    def __getstate__(self):
-        return {
-            "_backend": self._backend,
-            "_host": self._host,
-            "_port": self._port,
-            "_db": self._db,
-            "_unix_socket_path": self._unix_socket_path,
-            "_namespace": self._namespace,
-            "_td_id": self._td_id,
-            "_count": self._count,
-            "_stack_dim": self._stack_dim,
-            "_inner_batch_size": self._inner_batch_size,
-            "_batch_size": self._batch_size,
-            "_device": self._device,
-            "_redis_kwargs": self._redis_kwargs,
-            "_is_locked": self._is_locked,
-            "_td_dim_names": self._td_dim_names,
-            "_cache_metadata": self._cache_metadata,
-        }
-
-    def __setstate__(self, state):
-        import redis.asyncio as aioredis
-
-        self._backend = state.get("_backend", "redis")
-        self._host = state["_host"]
-        self._port = state["_port"]
-        self._db = state["_db"]
-        self._unix_socket_path = state["_unix_socket_path"]
-        self._namespace = state["_namespace"]
-        self._td_id = state["_td_id"]
-        self._count = state["_count"]
-        self._stack_dim = state["_stack_dim"]
-        self._inner_batch_size = state["_inner_batch_size"]
-        self._batch_size = state["_batch_size"]
-        self._device = state["_device"]
-        self._redis_kwargs = state["_redis_kwargs"]
-        self._td_dim_names = state["_td_dim_names"]
-
-        self._locked_tensordicts = []
-        self._lock_id = set()
-        self._is_shared = False
-        self._is_memmap = False
-        self._cache_metadata = state.get("_cache_metadata", True)
-        self._meta_cache = {} if self._cache_metadata else None
-
-        self._loop = asyncio.new_event_loop()
-        self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
-        self._thread.start()
-        self._owns_loop = True
-
-        connect_kwargs = dict(self._redis_kwargs)
-        if self._unix_socket_path is not None:
-            connect_kwargs["unix_socket_path"] = self._unix_socket_path
-        else:
-            connect_kwargs["host"] = self._host
-            connect_kwargs["port"] = self._port
-        connect_kwargs["db"] = self._db
-        self._client = aioredis.Redis(**connect_kwargs)
-
-        was_locked = state.get("_is_locked", False)
-        self._is_locked = False
-        if was_locked:
-            self.lock_()
-
-    # ---- Cleanup ----
-
-    def close(self):
-        if hasattr(self, "_owns_loop") and self._owns_loop:
-            if (
-                hasattr(self, "_client")
-                and hasattr(self, "_loop")
-                and self._loop.is_running()
-            ):
-                try:
-                    future = asyncio.run_coroutine_threadsafe(
-                        self._client.aclose(), self._loop
-                    )
-                    future.result(timeout=2)
-                except Exception:
-                    pass
-            if hasattr(self, "_loop") and self._loop.is_running():
-                self._loop.call_soon_threadsafe(self._loop.stop)
-            if hasattr(self, "_thread") and self._thread.is_alive():
-                self._thread.join(timeout=2)
-            if hasattr(self, "_loop") and not self._loop.is_running():
-                # releases the selector and the self-pipe sockets of the loop
-                self._loop.close()
-            self._owns_loop = False
-
-    def clear_redis(self):
-        """Delete all keys associated with this TensorDict from Redis."""
-
-        async def _aclear():
-            all_keys = await self._aget_all_keys()
-            pipe = self._client.pipeline()
-            for key_path in all_keys:
-                pipe.delete(self._data_key(key_path))
-                pipe.delete(self._idx_key(key_path))
-                pipe.delete(self._meta_key(key_path))
-            pipe.delete(self._keys_registry_key)
-            pipe.delete(self._redis_key("__type__"))
-            pipe.delete(self._redis_key("__count__"))
-            pipe.delete(self._redis_key("__stack_dim__"))
-            pipe.delete(self._redis_key("__inner_batch_size__"))
-            pipe.delete(self._redis_key("__device__"))
-            await pipe.execute()
-
-        self._run_sync(_aclear())
-
-    def __del__(self):
-        try:
-            self.close()
-        except Exception:
-            pass
 
     def __repr__(self):
         keys_str = list(self.keys())

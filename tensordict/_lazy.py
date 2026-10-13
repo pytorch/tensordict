@@ -5508,9 +5508,6 @@ class _CustomOpTensorDict(TensorDictBase):
     def _propagate_unlock(self):
         return self._source._propagate_unlock()
 
-    def __del__(self):
-        pass
-
     @property
     def sorted_keys(self):
         return self._source.sorted_keys
