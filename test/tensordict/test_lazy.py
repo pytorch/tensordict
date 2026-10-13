@@ -32,7 +32,7 @@ from tensordict import (
 from tensordict._indexing import _getitem_batch_size
 from tensordict._lazy import _LazyStackedTensorDictKeysView
 from tensordict._reductions import _reduce_td
-from tensordict._td import _TensorDictKeysView
+from tensordict._td import _SubTensorDict, _TensorDictKeysView
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import (
     _default_is_leaf,
@@ -1397,6 +1397,21 @@ class TestLazyStackedTensorDict:
         assert assert_allclose_td(td_c_device.cpu(), td)
         assert td_c_device["njt_lengths"]._lengths is not None
 
+    def test_batch_size_equal_list(self):
+        lazy = lazy_stack(
+            [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)]
+        )
+        sub = _SubTensorDict(
+            TensorDict(a=torch.zeros(4, 3), batch_size=[4, 3]), (slice(0, 2),)
+        )
+        for td in (lazy, sub):
+            td.batch_size = torch.Size([2, 3])
+            with pytest.raises(RuntimeError, match="Modifying the batch size"):
+                td.batch_size = [2, 3]
+            with pytest.raises(RuntimeError, match="Modifying the batch size"):
+                td.batch_size = [2]
+            assert td.batch_size == torch.Size([2, 3])
+
     def test_create_empty(self):
         td = LazyStackedTensorDict(stack_dim=0)
         assert td.device is None
@@ -1407,6 +1422,16 @@ class TestLazyStackedTensorDict:
         for clone in (td.clone(), td.clone(recurse=False)):
             assert clone.shape == torch.Size([1, 0, 2])
             assert clone.device == torch.device("cpu")
+
+    def test_create_empty_state(self):
+        empty = LazyStackedTensorDict(stack_dim=0, batch_size=[3], device="cpu")
+        assert empty._is_shared
+        assert empty._is_memmap
+        assert empty.is_shared() is None
+        with pytest.raises(IndexError):
+            empty.is_memmap()
+        assert empty.clear_device_() is empty
+        assert empty.device == torch.device("cpu")
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize("names", [None, ["a"]])
@@ -3092,6 +3117,28 @@ class TestLazyStackedTensorDict:
         for dim in (2, -3):
             with pytest.raises(RuntimeError, match="dim must be greater than"):
                 getattr(lazy, op)(dim)
+
+    @pytest.mark.parametrize("method", ["rename_", "refine_names"])
+    def test_rename_locked_names(self, method):
+        tds = [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)]
+        lazy = lazy_stack(tds).lock_()
+        assert lazy.names == [None, None]
+        getattr(lazy, method)("s", "x")
+        assert tds[0].names == ["x"]
+        # the names read before the call are cached while the stack is locked
+        assert lazy.names == [None, None]
+        lazy.unlock_()
+        assert lazy.names == ["s", "x"]
+
+    def test_views_is_shared_mixed_members(self):
+        tds = [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)]
+        tds[0].share_memory_()
+        lazy = lazy_stack(tds)
+        sub = _SubTensorDict(lazy, (slice(0, 1),))
+        for td in (lazy, sub):
+            with pytest.raises(RuntimeError, match="shared status mismatch"):
+                td.is_shared()
+            assert not td.is_memmap()
 
     @pytest.mark.parametrize("safe", [False, True])
     @pytest.mark.parametrize("key,new_key", [("a", "c"), (("n", "x"), ("n", "y"))])

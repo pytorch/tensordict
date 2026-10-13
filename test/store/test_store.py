@@ -78,6 +78,19 @@ def _stored_batch_size(store, store_kwargs):
         reader.close()
 
 
+def _count_round_trips(store, monkeypatch):
+    """Patch ``type(store)._run_sync`` to count the round trips to the server."""
+    calls = []
+    run_sync = type(store)._run_sync
+
+    def counting_run_sync(self, coro):
+        calls.append(None)
+        return run_sync(self, coro)
+
+    monkeypatch.setattr(type(store), "_run_sync", counting_run_sync)
+    return calls
+
+
 @pytest.mark.parametrize(
     "cls,what",
     [
@@ -230,6 +243,25 @@ class TestTensorDictStore:
         store_td.batch_size = []
         assert store_td.batch_size == torch.Size([])
 
+    def test_batch_size_list_no_read(self, store_td, monkeypatch):
+        """Setting an unchanged batch size as a list reads no entry."""
+        store_td["obs"] = torch.zeros(10, 3)
+        store_td["nested", "x"] = torch.zeros(10, 2)
+        calls = []
+        aget_tensor = TensorDictStore._aget_tensor
+
+        async def counting_aget_tensor(self, *args, **kwargs):
+            calls.append(None)
+            return await aget_tensor(self, *args, **kwargs)
+
+        monkeypatch.setattr(TensorDictStore, "_aget_tensor", counting_aget_tensor)
+        store_td.batch_size = [10]
+        store_td.batch_size = (10,)
+        assert store_td.batch_size == torch.Size([10])
+        assert not calls
+        store_td["obs"]
+        assert calls
+
     def test_from_dict(self, store_kwargs):
         """Construct from a dict."""
 
@@ -325,6 +357,29 @@ class TestTensorDictStore:
         local = store_td.contiguous()
         assert isinstance(local, TensorDict)
         assert torch.allclose(local["x"], tensor)
+
+    @pytest.mark.parametrize("canonical", [False, True])
+    def test_contiguous_one_round_trip(self, store_td, monkeypatch, canonical):
+        """contiguous() reads the store as to_tensordict() does."""
+        store_td["x"] = torch.randn(10, 3)
+        store_td["nested", "y"] = torch.randn(10, 2)
+        calls = _count_round_trips(store_td, monkeypatch)
+        expected = store_td.to_tensordict()
+        round_trips = len(calls)
+        calls.clear()
+        out = store_td.contiguous(canonical=canonical)
+        assert len(calls) == round_trips
+        assert type(out) is TensorDict
+        assert_allclose_td(out, expected)
+        with pytest.raises(TypeError, match="unexpected keyword argument 'inplace'"):
+            store_td.contiguous(inplace=True)
+
+    def test_pin_memory_raises(self, store_td):
+        store_td["x"] = torch.randn(10, 3)
+        with pytest.raises(
+            RuntimeError, match=r"^Cannot pin memory of a TensorDictStore\."
+        ):
+            store_td.pin_memory()
 
     def test_chunk_zero_size_dim(self, store_kwargs):
         # torch.chunk gives `chunks` empty pieces along a zero-size dim
@@ -620,6 +675,18 @@ class TestTensorDictStore:
         store_td["nested", "a"] = torch.randn(10, 2)
         assert store_td.entry_class("obs") is torch.Tensor
         assert store_td.entry_class("nested") is TensorDictStore
+
+    def test_store_device_setter_moves_reads(self, store_td):
+        """The device of a store is the device of what it reads."""
+        store_td["x"] = torch.randn(10, 3)
+        store_td["nested", "y"] = torch.randn(10, 2)
+        store_td.device = "meta"
+        assert store_td.device == torch.device("meta")
+        assert store_td["x"].device == torch.device("meta")
+        assert store_td["nested", "y"].device == torch.device("meta")
+        store_td.device = None
+        assert store_td.device is None
+        assert store_td["x"].device == torch.device("cpu")
 
     def test_device(self, store_kwargs):
         """Test device attribute."""
@@ -3259,6 +3326,81 @@ class TestLazyStackedTensorDictStore:
         out = store_td.contiguous(canonical=canonical)
         assert type(out) is TensorDict
         assert_allclose_td(out, lazy_td.contiguous(canonical=canonical))
+
+    @pytest.mark.parametrize("element", [False, True])
+    @pytest.mark.parametrize("canonical", [False, True])
+    def test_contiguous_one_round_trip(
+        self, store_stack, monkeypatch, element, canonical
+    ):
+        """contiguous() reads the store as to_tensordict() does."""
+        store_td, tds, _ = store_stack
+        td = store_td[0] if element else store_td
+        calls = _count_round_trips(store_td, monkeypatch)
+        expected = td.to_tensordict()
+        round_trips = len(calls)
+        calls.clear()
+        out = td.contiguous(canonical=canonical)
+        assert len(calls) == round_trips
+        assert type(out) is TensorDict
+        assert_allclose_td(out, expected)
+        assert td.is_contiguous() is False
+        with pytest.raises(TypeError, match="unexpected keyword argument 'inplace'"):
+            td.contiguous(inplace=True)
+
+    @pytest.mark.parametrize("element", [False, True])
+    def test_pin_memory_raises(self, store_stack, element):
+        store_td, _, _ = store_stack
+        td = store_td[0] if element else store_td
+        with pytest.raises(
+            RuntimeError, match=rf"^Cannot pin memory of a {type(td).__name__}\."
+        ):
+            td.pin_memory()
+
+    def test_store_device_setter_moves_reads(self, store_stack):
+        """The device of the store is the device of what it reads; the device
+        of an element is a label."""
+        store_td, _, _ = store_stack
+        store_td.device = "meta"
+        assert store_td.device == torch.device("meta")
+        assert store_td["a"].device == torch.device("meta")
+        assert store_td[0]["a"].device == torch.device("meta")
+        store_td.device = None
+        element = store_td[0]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            element.device = "meta"
+        assert element.device == torch.device("meta")
+        assert element["a"].device == torch.device("cpu")
+
+    def test_batch_size_setter(self, store_stack):
+        store_td, _, _ = store_stack
+        store_td.batch_size = [5]
+        assert store_td.batch_size == torch.Size([5])
+        assert store_td.to_tensordict().batch_size == torch.Size([5])
+        store_td.batch_size = [5, 4]
+        element = store_td[0]
+        element.batch_size = []
+        assert element.batch_size == torch.Size([])
+        element.batch_size = [4]
+        # a batch size that the entries do not have is accepted
+        store_td.batch_size = [17]
+        assert store_td.batch_size == torch.Size([17])
+        element.batch_size = [17]
+        assert element.batch_size == torch.Size([17])
+
+    def test_lock_names(self, store_stack):
+        store_td, _, _ = store_stack
+        element = store_td[0]
+        assert element.lock_() is element
+        assert element.is_locked
+        assert element.unlock_() is element
+        assert not element.is_locked
+        store_td.names = ["s", "x"]
+        assert store_td.names == ["s", "x"]
+        element.names = ["y"]
+        assert element.names == ["y"]
+        store_td.names = None
+        assert store_td.names == [None, None]
 
     def test_popitem(self, store_stack):
         """popitem removes and returns the last key, as on a lazy stack."""

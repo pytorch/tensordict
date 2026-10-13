@@ -14,9 +14,14 @@
  "memmap_td reductions": [],
  "memmap_td select": [],
  "memmap_td serialization": [],
- "memmap_td shape": [],
+ "memmap_td shape": [
+  "unbind(0)",
+  "unbind(1)"
+ ],
  "nested_stacked_td apply": [],
- "nested_stacked_td keys": [],
+ "nested_stacked_td keys": [
+  "is_contiguous()"
+ ],
  "nested_stacked_td masking": [],
  "nested_stacked_td pointwise": [],
  "nested_stacked_td reductions": [],
@@ -43,7 +48,9 @@
  ],
  "nested_tensorclass shape": [],
  "nested_typed_td apply": [],
- "nested_typed_td keys": [],
+ "nested_typed_td keys": [
+  "clear_device_()"
+ ],
  "nested_typed_td masking": [],
  "nested_typed_td pointwise": [],
  "nested_typed_td reductions": [],
@@ -51,7 +58,9 @@
  "nested_typed_td serialization": [],
  "nested_typed_td shape": [],
  "permute_td apply": [],
- "permute_td keys": [],
+ "permute_td keys": [
+  "clear_device_()"
+ ],
  "permute_td masking": [],
  "permute_td pointwise": [],
  "permute_td reductions": [],
@@ -66,7 +75,9 @@
   "unsqueeze(0)"
  ],
  "squeezed_td apply": [],
- "squeezed_td keys": [],
+ "squeezed_td keys": [
+  "clear_device_()"
+ ],
  "squeezed_td masking": [],
  "squeezed_td pointwise": [],
  "squeezed_td reductions": [],
@@ -82,7 +93,9 @@
   "view(-1)"
  ],
  "stacked_td apply": [],
- "stacked_td keys": [],
+ "stacked_td keys": [
+  "is_contiguous()"
+ ],
  "stacked_td masking": [],
  "stacked_td pointwise": [],
  "stacked_td reductions": [],
@@ -90,7 +103,9 @@
  "stacked_td serialization": [],
  "stacked_td shape": [],
  "sub_td apply": [],
- "sub_td keys": [],
+ "sub_td keys": [
+  "clear_device_()"
+ ],
  "sub_td masking": [],
  "sub_td pointwise": [],
  "sub_td reductions": [],
@@ -106,7 +121,10 @@
   "view(-1)"
  ],
  "sub_td2 apply": [],
- "sub_td2 keys": [],
+ "sub_td2 keys": [
+  "clear_device_()",
+  "is_contiguous()"
+ ],
  "sub_td2 masking": [],
  "sub_td2 pointwise": [],
  "sub_td2 reductions": [],
@@ -131,6 +149,7 @@
  "td shape": [],
  "td_h5 apply": [],
  "td_h5 keys": [
+  "is_contiguous()",
   "keys(True)"
  ],
  "td_h5 masking": [],
@@ -157,7 +176,9 @@
   "view(-1)"
  ],
  "td_params apply": [],
- "td_params keys": [],
+ "td_params keys": [
+  "clear_device_()"
+ ],
  "td_params masking": [],
  "td_params pointwise": [],
  "td_params reductions": [],
@@ -197,7 +218,9 @@
  "td_with_unbatched serialization": [],
  "td_with_unbatched shape": [],
  "typed_td apply": [],
- "typed_td keys": [],
+ "typed_td keys": [
+  "clear_device_()"
+ ],
  "typed_td masking": [],
  "typed_td pointwise": [],
  "typed_td reductions": [],
@@ -205,7 +228,9 @@
  "typed_td serialization": [],
  "typed_td shape": [],
  "unsqueezed_td apply": [],
- "unsqueezed_td keys": [],
+ "unsqueezed_td keys": [
+  "clear_device_()"
+ ],
  "unsqueezed_td masking": [],
  "unsqueezed_td pointwise": [],
  "unsqueezed_td reductions": [],

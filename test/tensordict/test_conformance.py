@@ -93,6 +93,8 @@ _OPS = {
         "values(True, True)": lambda td: list(td.values(True, True)),
         "len()": len,
         "batch_size, names, device": lambda td: [td.batch_size, td.names, td.device],
+        "is_contiguous()": lambda td: td.is_contiguous(),
+        "clear_device_()": _inplace(lambda td: td.clear_device_()),
         "get('a')": lambda td: td.get("a"),
         "get('missing', None)": lambda td: td.get("missing", None),
         "entry_class(key) is type(get(key))": _entry_class_mismatches,
@@ -115,6 +117,7 @@ _OPS = {
         "clone()": lambda td: td.clone(),
         "clone(recurse=False)": lambda td: td.clone(recurse=False),
         "contiguous()": lambda td: td.contiguous(),
+        "contiguous(canonical=True)": lambda td: td.contiguous(canonical=True),
     },
     "pointwise": {
         "abs()": lambda td: td.abs(),
@@ -212,6 +215,7 @@ def _normalize(value):
             "batch size": list(td.batch_size),
             "names": list(td.names),
             "device": td.device,
+            "locked": value.is_locked,
             "leaves": {
                 key: _normalize(leaf)
                 for key, leaf in td.items(True, True, is_leaf=_is_leaf_nontensor)
@@ -287,6 +291,8 @@ def _compare(make, op):
     torch.manual_seed(0)
     td = make("cpu")
     dense = td.to_tensordict()
+    if td.is_locked:
+        dense.lock_()
     expected, dense_error = _run(op, dense)
     result, error = _run(op, td)
     if dense_error is not None:
