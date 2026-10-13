@@ -1771,7 +1771,8 @@ class _Serialization:
         if num_threads is None:
             # unspecified num_threads should mean 0
             num_threads = 0
-        storage = self._consolidated["storage"]
+        consolidated = self._consolidated
+        storage = consolidated["storage"]
         if pin_memory:
             storage = storage.pin_memory()
         storage_cast = storage.to(device, non_blocking=True)
@@ -1831,6 +1832,10 @@ class _Serialization:
             )
 
         if inplace:
+            # A consolidated tensordict is locked. Every leaf moves to the new
+            # storage, so the keys and the consolidation stay intact: unlock
+            # it for the move, and lock it again below.
+            self.unlock_()
             out = self
         else:
             out = None
@@ -1842,8 +1847,11 @@ class _Serialization:
             out=out,
             checked=True,
         )
+        if inplace:
+            # A lazy stack returns a new stack of its rebound tensordicts
+            result = self
         result._consolidated = {"storage": storage_cast}
-        if "metadata" in self._consolidated:
+        if "metadata" in consolidated:
             # faster than deepcopy
             def copy_dict(d):
                 return {
@@ -1851,7 +1859,7 @@ class _Serialization:
                     for k, v in d.items()
                 }
 
-            result._consolidated["metadata"] = copy_dict(self._consolidated["metadata"])
+            result._consolidated["metadata"] = copy_dict(consolidated["metadata"])
         # Ensure the result remains locked to maintain consolidated state integrity
         result.lock_()
         if non_blocking in (False, None):

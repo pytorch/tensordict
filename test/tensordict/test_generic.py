@@ -632,6 +632,45 @@ class TestGeneric:
         assert td_meta["b", "c"].device.type == "meta"
         assert td_meta["b", "c"].shape == (3, 2)
 
+    @pytest.mark.parametrize("lazy", [False, True])
+    @pytest.mark.parametrize("device", ["meta", f"{cur_device}:0"])
+    def test_consolidate_to_inplace(self, device, lazy):
+        # to(device, inplace=True) moves a consolidated tensordict, which is
+        # locked, and keeps it consolidated and locked (#2325)
+        if device.startswith("cpu"):
+            pytest.skip("no cuda or npu device detected")
+        td = TensorDict(
+            {"a": torch.zeros(3), "b": {"c": torch.ones(3, 2)}, "d": "a string!"},
+            batch_size=[3],
+        )
+        if lazy:
+            td = LazyStackedTensorDict(*td.unbind(0))
+        td = td.consolidate(metadata=True)
+        result = td.to(device, inplace=True)
+        assert result is td
+        assert td.device == torch.device(device)
+        assert td.is_consolidated()
+        assert td.is_locked
+        assert td["b"].is_locked
+        storage = td._consolidated["storage"]
+        assert storage.device == torch.device(device)
+        # A lazy stack's values are stacked copies: check the leaves of the
+        # stacked tensordicts, which are views of the storage
+        for sub_td in td.tensordicts if lazy else [td]:
+            for value in sub_td.values(True, True):
+                assert value.device == torch.device(device)
+                assert value.untyped_storage().data_ptr() == storage.data_ptr()
+        assert td["b", "c"].shape == (3, 2)
+        assert td[0]["d"] == "a string!"
+        if device != "meta":
+            assert (td["b", "c"] == 1).all()
+
+    def test_consolidate_to_inplace_locked_raises(self):
+        # A tensordict that the user locked keeps raising
+        td = TensorDict(a=torch.zeros(3), batch_size=[3]).lock_()
+        with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+            td.to("meta", inplace=True)
+
     def test_consolidate_to_no_device(self):
         # Without a device or dtype, to() returns the consolidated tensordict
         # itself, as for other tensordicts, and changes its batch size in place
