@@ -4555,18 +4555,19 @@ class LazyStackedTensorDict(TensorDictBase):
         has_neg_dim = any(dim < 0 for dim in shape)
         if not self.batch_size.numel() and (has_neg_dim or not is_non_tensor(self)):
             # With no elements, the flatten and unflatten checks match shapes
-            # they cannot regroup, and regrouping can lose the keys. _reshape
-            # keeps the regrouped stack only for a shape it gets right; with a
-            # -1, reshape a dense copy, which has the shared keys. A
+            # they cannot regroup, and regrouping can lose the keys. Keep the
+            # regrouped stack only for a -1-free shape it gets right;
+            # otherwise reshape a dense copy, which has the shared keys. A
             # NonTensorStack is its own contiguous(), whose reshape gives
             # torch's shape: only a -1 is sent there, and a view to explicit
             # sizes regroups or raises as for a non-empty stack.
             shape = torch.Size(_infer_size_impl(shape, 0))
             if shape == self.batch_size:
                 return self
-            if has_neg_dim:
+            result = None if has_neg_dim else self._regroup_empty(shape)
+            if result is None:
                 return self._reshape_dense(shape)
-            return self._reshape(shape, None)
+            return result
         if has_neg_dim:
             shape = _infer_size_impl(shape, self.numel())
         shape = torch.Size(shape)
@@ -4632,28 +4633,16 @@ class LazyStackedTensorDict(TensorDictBase):
         leaf_fn: Callable[[Tensor], Tensor] | None = None,
     ) -> Self:
         if not self.batch_size.numel():
-            # With no elements, the flatten and unflatten checks match shapes
-            # that regrouping gets wrong, and regrouping can lose the keys or
-            # leave no members (which lose the device and the lock): keep the
-            # regrouped stack only for a shape it gets right, and reshape a
-            # dense copy, which has the shared keys, otherwise.
-            try:
-                result = self._regroup(shape)
-            except ValueError:
-                # chunk(0) in the unflatten branch
-                result = None
-            if result is None and shape == self.batch_size:
-                # an identity unflatten
-                return self
-            if (
-                result is not None
-                and result.batch_size == shape
-                and set(result.keys()) == set(self.keys())
-                and (
-                    not isinstance(result, LazyStackedTensorDict) or result.tensordicts
-                )
+            # Unlike view, also reshape a dense copy when regrouping leaves no
+            # members, which lose the device and the lock.
+            result = self._regroup_empty(shape)
+            if result is not None and (
+                not isinstance(result, LazyStackedTensorDict) or result.tensordicts
             ):
                 return result
+            if shape == self.batch_size:
+                # an identity unflatten
+                return self
             return self._reshape_dense(shape)
         result = self._regroup(shape)
         if result is None:
@@ -4667,6 +4656,24 @@ class LazyStackedTensorDict(TensorDictBase):
                 # those of other dims
                 result._erase_names()
         return result
+
+    def _regroup_empty(self, shape: torch.Size) -> TensorDictBase | None:
+        # _regroup for a stack with no elements, where the flatten and
+        # unflatten checks match shapes that regrouping gets wrong and
+        # regrouping can lose the keys: None unless the result has ``shape``
+        # and the keys of self.
+        try:
+            result = self._regroup(shape)
+        except ValueError:
+            # chunk(0) in the unflatten branch
+            return None
+        if (
+            result is not None
+            and result.batch_size == shape
+            and set(result.keys()) == set(self.keys())
+        ):
+            return result
+        return None
 
     def _reshape_dense(self, shape: torch.Size) -> TensorDictBase:
         # A dense copy of self reshaped to ``shape``, with the lock of self
