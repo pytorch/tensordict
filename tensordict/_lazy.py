@@ -4414,6 +4414,13 @@ class LazyStackedTensorDict(TensorDictBase):
     def _view(self, *args, raise_if_not_view: bool = True, **kwargs) -> Self:
         shape = _get_shape_from_args(*args, **kwargs)
         if any(dim < 0 for dim in shape):
+            if not self.batch_size.numel():
+                # Regrouping the members of an empty batch would lose the
+                # keys: reshape a dense copy, which has the shared keys.
+                shape = torch.Size(_infer_size_impl(shape, 0))
+                if shape == self.batch_size:
+                    return self
+                return self.contiguous().reshape(shape)
             shape = _infer_size_impl(shape, self.numel())
 
         # Then we just need to reorganize the lazy stack
