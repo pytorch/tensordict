@@ -3055,6 +3055,11 @@ class TestLazyStackedTensorDict:
         empty = LazyStackedTensorDict(*[TensorDict(batch_size=[0])] * 2, stack_dim=1)
         with pytest.raises(RuntimeError, match="don't multiply up"):
             empty.unflatten(1, (3, 1))
+        # with no keys to lose, the members are regrouped, as on a non-empty
+        # stack
+        for out in (empty.flatten(), empty.unflatten(-1, (1, -1))):
+            assert type(out) is LazyStackedTensorDict
+        assert empty.unflatten(-1, (1, -1)).batch_size == (0, 1, 2)
         out = TensorDict(batch_size=[3, 2]).unflatten(1, (3, 1))
         assert out.batch_size == (3, 3, 1)
 
