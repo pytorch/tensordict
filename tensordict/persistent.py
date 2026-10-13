@@ -1480,8 +1480,7 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
 
     # Overrides: with inplace=True, these ops rewrite every dataset and only
     # then set the new batch size, which _change_batch_size refuses. Raise
-    # before writing. An empty TensorDict gives the new batch size and checks
-    # the arguments.
+    # before writing. An empty TensorDict gives the new batch size.
     def reshape(self, *args, **kwargs) -> Self:
         if kwargs.get("inplace", False):
             shape_kwargs = {k: v for k, v in kwargs.items() if k != "inplace"}
