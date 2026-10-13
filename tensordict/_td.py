@@ -1725,6 +1725,8 @@ class TensorDict(TensorDictBase):
             self._is_memmap = True
             self._is_shared = False  # since they are mutually exclusive
             self._device = torch.device("cpu")
+            # The leaves leave the consolidated storage
+            self._mark_consolidated_stale()
         else:
             dest._is_memmap = True
             dest._is_shared = False  # since they are mutually exclusive
