@@ -428,6 +428,13 @@ class _H5Backend(_PersistentBackend):
 
         if _all_of_type(values, len(shape), str):
             array = np.array(values, dtype=h5py.string_dtype())
+            if any("\x00" in value for value in array.ravel()):
+                # h5py would raise, and the dataset would not be written
+                raise ValueError(
+                    "Cannot write a NonTensorStack of str that contains a NUL "
+                    "character to h5: h5 strings cannot hold it. Use bytes, zarr, "
+                    "or a TensorDict saved with memmap."
+                )
         elif any(
             _all_of_type(values, len(shape), cls) for cls in (bytes, bool, int, float)
         ):

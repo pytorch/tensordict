@@ -208,6 +208,9 @@ class TestH5Serialization:
         # values that h5 cannot keep exactly raise
         with pytest.raises(TypeError, match="single type"):
             copy.set("mixed", NonTensorStack("a", 1, "c"))
+        with pytest.raises(ValueError, match="NUL"):
+            copy.set("nul", NonTensorStack("a\x00b", "c", "d"))
+        assert "nul" not in copy.keys()
         copy.close()
         h5td.close()
 
