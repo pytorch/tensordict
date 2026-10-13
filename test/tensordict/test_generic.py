@@ -9,6 +9,7 @@ import contextlib
 import gc
 import importlib.util
 import inspect
+import io
 import os
 import pickle
 import platform
@@ -735,6 +736,67 @@ class TestGeneric:
         with pytest.raises(RuntimeError, match="incompatible with the batch-size"):
             td.to("meta", batch_size=[5])
         assert td.batch_size == (2,)
+
+    @pytest.mark.parametrize("how", ["setter", "to", "to_cpu", "to_meta"])
+    def test_consolidated_batch_size_names_serialized(self, how):
+        # pickle and torch.save rebuild a consolidated tensordict from the
+        # metadata of consolidate(), so the setters must update it
+        td = TensorDict(
+            a=torch.zeros(2, 3),
+            b={"c": torch.ones(2, 3, 4)},
+            d="a string",
+            batch_size=[2],
+            device="cpu",
+        ).consolidate()
+        if how == "setter":
+            td.batch_size = [2, 3]
+        elif how == "to":
+            td = td.to(batch_size=[2, 3])
+        elif how == "to_cpu":
+            td = td.to("cpu", batch_size=[2, 3])
+        else:
+            td = td.to("meta", batch_size=[2, 3])
+            metadata = td._consolidated["metadata"]
+            assert metadata["cls_metadata"]["batch_size"] == [2, 3]
+            assert metadata["b"]["cls_metadata"]["batch_size"] == [2, 3]
+            assert metadata["non_tensors"]["d"][1] == [2, 3]
+            return
+        td.names = ["x", "y"]
+        assert td.is_consolidated()
+        buffer = io.BytesIO()
+        torch.save(td, buffer)
+        buffer.seek(0)
+        for result in (
+            pickle.loads(pickle.dumps(td)),
+            torch.load(buffer, weights_only=False),
+        ):
+            assert result.batch_size == (2, 3)
+            assert result["b"].batch_size == (2, 3)
+            assert result.get("d").batch_size == (2, 3)
+            assert result.names == ["x", "y"]
+            assert result["b"].names == ["x", "y"]
+            assert result.is_consolidated()
+
+    def test_consolidated_nested_batch_size_consolidate_again(self):
+        td = TensorDict(
+            a=torch.zeros(2, 3), b={"c": torch.ones(2, 3, 4)}, batch_size=[2]
+        ).consolidate()
+        td["b"].batch_size = [2, 3, 4]
+        # consolidate() on a consolidated tensordict refreshes its metadata
+        assert td.consolidate() is td
+        assert pickle.loads(pickle.dumps(td))["b"].batch_size == (2, 3, 4)
+
+    def test_consolidated_lazy_stack_names_serialized(self):
+        td = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(3), b={"c": torch.zeros(3, 2)}, batch_size=[3])
+                for _ in range(2)
+            ]
+        ).consolidate()
+        td.names = ["x", "y"]
+        result = pickle.loads(pickle.dumps(td))
+        assert result.names == ["x", "y"]
+        assert result[0]["b"].names == ["y"]
 
     def test_to_device_batch_size_nested_only(self):
         # When the device changes and the root holds only nested tensordicts,
