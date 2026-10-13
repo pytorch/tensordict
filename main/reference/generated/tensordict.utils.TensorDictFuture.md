@@ -15,3 +15,5 @@ completing.
 result()
 
 Wait and returns the resulting tensordict.
+
+Raises the first error of the futures, if any.

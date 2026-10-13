@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5423+g40a30e8c8.d20261013)">
+<meta name="llm:version" content="main (0.14.0.dev5425+g4883c6146.d20261013)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5423+g40a30e8c8.d20261013)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5425+g4883c6146.d20261013)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1657,6 +1657,7 @@ completing.</p></li>
 <dt class="sig sig-object py" id="tensordict.utils.TensorDictFuture.result">
 <span class="sig-name descname"><span class="pre">result</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.utils.TensorDictFuture.result" title="Link to this definition">#</a></dt>
 <dd><p>Wait and returns the resulting tensordict.</p>
+<p>Raises the first error of the futures, if any.</p>
 </dd></dl>
 
 </dd></dl>
@@ -2020,7 +2021,7 @@ completing.</p></li>
        "headline": "TensorDictFuture",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictFuture",
        "url": "/reference/generated/tensordict.utils.TensorDictFuture.html",
-       "articleBody": "TensorDictFuture# class tensordict.utils.TensorDictFuture(futures, resulting_td)# Bases: object A custom future class for TensorDict multithreaded operations. Parameters: futures (list of futures) \u2013 a list of concurrent.futures.Future objects to wait for. resulting_td (TensorDictBase) \u2013 instance that will result from the futures completing. result()# Wait and returns the resulting tensordict.",
+       "articleBody": "TensorDictFuture# class tensordict.utils.TensorDictFuture(futures, resulting_td)# Bases: object A custom future class for TensorDict multithreaded operations. Parameters: futures (list of futures) \u2013 a list of concurrent.futures.Future objects to wait for. resulting_td (TensorDictBase) \u2013 instance that will result from the futures completing. result()# Wait and returns the resulting tensordict. Raises the first error of the futures, if any.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
