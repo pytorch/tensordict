@@ -222,7 +222,7 @@ class TestTensorDicts(TestTensorDictsBase):
         fun = vmap(lambda x: x)
         if td_name == "td_h5":
             with pytest.raises(
-                RuntimeError, match="Persistent tensordicts cannot be used with vmap"
+                RuntimeError, match="PersistentTensorDict cannot be used with vmap"
             ):
                 fun(td)
             return
@@ -2641,7 +2641,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -3460,9 +3460,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert key1 == key2
         assert i == len(td.keys()) - 1
         if td.is_locked:
-            assert td._cache.get("sorted_keys") is not None
-            td.unlock_()
-            assert td._cache is None
+            target = td
         elif td_name not in ("sub_td", "sub_td2"):  # we cannot lock sub tensordicts
             if isinstance(td, _CustomOpTensorDict):
                 target = td._source
@@ -3470,10 +3468,19 @@ class TestTensorDicts(TestTensorDictsBase):
                 target = td
             assert target._cache is None
             td.lock_()
-            _ = td.sorted_keys
-            assert target._cache.get("sorted_keys") is not None
-            td.unlock_()
-            assert target._cache is None
+        else:
+            return
+        sorted_keys = td.sorted_keys
+        assert target._cache.get("_sorted_keys") is not None
+        # Changing the returned list must not change the lock cache (#1946).
+        expected = list(sorted_keys)
+        sorted_keys.append("not_a_key")
+        new_sorted_keys = td.sorted_keys
+        assert isinstance(new_sorted_keys, list)
+        assert new_sorted_keys is not sorted_keys
+        assert new_sorted_keys == expected
+        td.unlock_()
+        assert target._cache is None
 
     @pytest.mark.parametrize("performer", ["torch", "tensordict"])
     @pytest.mark.parametrize("dim", range(4))
@@ -3596,7 +3603,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -3628,7 +3635,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -3668,7 +3675,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -3720,7 +3727,7 @@ class TestTensorDicts(TestTensorDictsBase):
             and not lazy_legacy()
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -4198,7 +4205,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -4239,7 +4246,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -4270,7 +4277,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -4316,7 +4323,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -4341,7 +4348,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -4577,7 +4584,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -4606,7 +4613,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -5220,10 +5227,10 @@ class TestPointwise(TestTensorDictsBase):
         td.apply_(lambda x: x.uniform_(*value_range))
         return td
 
-    def _operand(self, td, value_range):
-        # A tensordict of the same structure as td, with other values. A lazy
-        # stack gets a lazy stack: arithmetic with a dense tensordict raises (#1932).
-        if isinstance(td, PersistentTensorDict):
+    def _operand(self, td, value_range, operand_type):
+        # A tensordict of the same structure as td, with other values: of the
+        # same type as td (a lazy stack for a lazy stack), or dense (#1932)
+        if operand_type == "dense" or isinstance(td, PersistentTensorDict):
             other = td.to_tensordict()
         else:
             other = td.clone()
@@ -5249,14 +5256,16 @@ class TestPointwise(TestTensorDictsBase):
         for key, val in expected.items():
             torch.testing.assert_close(td.get(key), val)
 
+    @pytest.mark.parametrize("operand_type", ["same", "dense"])
     @pytest.mark.parametrize("inplace", [False, True])
     @pytest.mark.parametrize("op", sorted(_POINTWISE_BINARY_OPS))
-    def test_binary(self, td_name, device, op, inplace):
+    def test_binary(self, td_name, device, op, inplace, operand_type):
         num_operands, args, kwargs = _POINTWISE_BINARY_OPS[op]
         # addcdiv divides by its second operand, which must not be close to 0
         td = self._float_td(td_name, device, _POINTWISE_POSITIVE_RANGE)
         operands = [
-            self._operand(td, _POINTWISE_POSITIVE_RANGE) for _ in range(num_operands)
+            self._operand(td, _POINTWISE_POSITIVE_RANGE, operand_type)
+            for _ in range(num_operands)
         ]
         expected = {
             key: getattr(torch, op)(
