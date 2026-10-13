@@ -1568,6 +1568,22 @@ class TestNonTensorData:
         assert _PICKLE_LOAD_EXECUTED
         assert td["value"] == "loaded"
 
+    def test_nts_update_kwargs_typeerror(self):
+        # A NonTensorStack is a value: update and update_ take no entries as
+        # keyword arguments
+        stack = NonTensorStack("a", "b")
+        with pytest.raises(TypeError, match="keyword-argument"):
+            stack.update(x=NonTensorData("c"))
+        with pytest.raises(TypeError, match="keyword-argument"):
+            stack.update_(x=NonTensorData("c"))
+        assert stack.update(None) is stack and stack.update_(None) is stack
+        with pytest.warns(DeprecationWarning, match="ignore_lock") as record:
+            assert stack.update(NonTensorStack("c", "d"), ignore_lock=True) is stack
+        assert record[0].filename == __file__
+        assert stack.tolist() == ["c", "d"]
+        assert stack.update_at_(NonTensorData("e"), index=1) is stack
+        assert stack.tolist() == ["c", "e"]
+
     @pytest.mark.skipif(IS_FB, reason="deactivating on fbcode")
     def test_memmap_stack_updates(self, tmpdir):
         data = torch.stack([NonTensorData(data=0), NonTensorData(data=1)], 0)

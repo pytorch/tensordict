@@ -180,6 +180,55 @@ _OPS = {
         "masked_fill(mask, -1)": lambda td: td.masked_fill(_MASK, -1),
         "masked_fill_(mask, -1)": _inplace(lambda td: td.masked_fill_(_MASK, -1)),
     },
+    "update": {
+        "update({'a': zeros})": _inplace(
+            lambda td: td.update({"a": torch.zeros(4, 3, 2, 1, 5)})
+        ),
+        "update({'new': zeros})": _inplace(
+            lambda td: td.update({"new": torch.zeros(4, 3, 2, 1)})
+        ),
+        "update(new=zeros)": _inplace(
+            lambda td: td.update(new=torch.zeros(4, 3, 2, 1))
+        ),
+        "update(dense + 1)": _inplace(lambda td: td.update(td.to_tensordict() + 1)),
+        "update(dense + 1, inplace=True)": _inplace(
+            lambda td: td.update(td.to_tensordict() + 1, inplace=True)
+        ),
+        "update(dense + 1, keys_to_update=['a'])": _inplace(
+            lambda td: td.update(td.to_tensordict() + 1, keys_to_update=["a"])
+        ),
+        "update({('n', 'x'): zeros})": _inplace(
+            lambda td: td.update({("n", "x"): torch.zeros(4, 3, 2, 1)})
+        ),
+        "update(dense[0], update_batch_size=True)": _inplace(
+            lambda td: td.update(td.to_tensordict()[0], update_batch_size=True)
+        ),
+        "update_({'a': zeros})": _inplace(
+            lambda td: td.update_({"a": torch.zeros(4, 3, 2, 1, 5)})
+        ),
+        "update_(dense * 0)": _inplace(lambda td: td.update_(td.to_tensordict() * 0)),
+        "update_({'a': tensor(0.)})": _inplace(
+            lambda td: td.update_({"a": torch.tensor(0.0)})
+        ),
+        "update_(dense * 0, keys_to_update=['a'])": _inplace(
+            lambda td: td.update_(td.to_tensordict() * 0, keys_to_update=["a"])
+        ),
+        "update_({'missing': zeros})": _inplace(
+            lambda td: td.update_({"missing": torch.zeros(4, 3, 2, 1)})
+        ),
+        "update_at_({'a': zeros}, 0)": _inplace(
+            lambda td: td.update_at_({"a": torch.zeros(3, 2, 1, 5)}, 0)
+        ),
+        "update_at_(dense[1:3] * 0, slice(1, 3))": _inplace(
+            lambda td: td.update_at_(td.to_tensordict()[1:3] * 0, slice(1, 3))
+        ),
+        "update_at_({'a': tensor(0.)}, (..., 0))": _inplace(
+            lambda td: td.update_at_({"a": torch.tensor(0.0)}, (Ellipsis, 0))
+        ),
+        "update_at_(dense[0] * 0, 0, keys_to_update=['a'])": _inplace(
+            lambda td: td.update_at_(td.to_tensordict()[0] * 0, 0, keys_to_update=["a"])
+        ),
+    },
     "apply": {
         "apply(x + 1)": lambda td: td.apply(lambda x: x + 1),
         "apply(x + y, td)": lambda td: td.apply(lambda x, y: x + y, td),

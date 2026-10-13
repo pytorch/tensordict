@@ -2409,6 +2409,38 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    def test_lstore_update__heterogeneous_missing_key(self, store_kwargs):
+        """update_ of a store whose elements differ in shape, with keys that the store lacks."""
+        tds = [
+            TensorDict(a=torch.zeros(3), h=torch.zeros(3, 2 + i), batch_size=[3])
+            for i in range(2)
+        ]
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            # without keys_to_update, a missing key is ignored
+            assert store_td.update_({"zz": torch.ones(2, 3)}) is store_td
+            assert "zz" not in store_td.keys()
+            store_td.update_({"a": torch.ones(2, 3), "zz": torch.ones(2, 3)})
+            torch.testing.assert_close(store_td["a"], torch.ones(2, 3))
+            store_td.update_(
+                {"a": torch.full((2, 3), 2.0), "zz": torch.ones(2, 3)},
+                keys_to_update=["a"],
+            )
+            torch.testing.assert_close(store_td["a"], torch.full((2, 3), 2.0))
+            store_td.update_(
+                TensorDict(a=torch.zeros(2, 3), batch_size=[2, 3]),
+                a=torch.full((2, 3), 3.0),
+            )
+            torch.testing.assert_close(store_td["a"], torch.full((2, 3), 3.0))
+            with pytest.raises(KeyError, match="zz"):
+                store_td.update_({"zz": torch.ones(2, 3)}, keys_to_update=["zz"])
+            assert "zz" not in store_td.keys()
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     def test_inplace_methods_write(self, store_kwargs):
         """The in-place methods and update_ write to the server, as on a lazy stack (#2242).
 
