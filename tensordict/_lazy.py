@@ -4840,6 +4840,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
             def iter_across_tds():
                 start = 0
+                negative = False
                 for s in split_size:
                     if s == 0:
                         batch_size = list(self._batch_size)
@@ -4850,11 +4851,25 @@ class LazyStackedTensorDict(TensorDictBase):
                             stack_dim=self.stack_dim,
                         )
                         continue
+                    if s < 0:
+                        negative = True
                     stop = start + s
                     yield self._new_lazy_unsafe(
                         *self.tensordicts[slice(start, stop)], stack_dim=self.stack_dim
                     )
                     start = stop
+                if negative or start != len(self.tensordicts):
+                    # stacklevel 3: skip split, which runs this generator
+                    warnings.warn(
+                        f"LazyStackedTensorDict.split got the sizes {split_size} "
+                        "along the stack dim, which are negative or do not add up "
+                        f"to the stack size {len(self.tensordicts)}. Today the "
+                        "pieces miss members or have a wrong batch size. Starting "
+                        "with TensorDict 0.17, the default will change to raising "
+                        "a RuntimeError, as TensorDict.split and torch.split do.",
+                        FutureWarning,
+                        stacklevel=3,
+                    )
 
             return tuple(iter_across_tds())
         tds = []

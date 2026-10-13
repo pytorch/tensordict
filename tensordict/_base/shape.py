@@ -1132,6 +1132,12 @@ class _ShapeOps:
 
         Returns a list of ``TensorDict`` instances with the view of split chunks of items.
 
+        On a :class:`~tensordict.LazyStackedTensorDict`, sizes along the stack
+        dim that are negative or do not add up to the stack size emit a
+        :class:`FutureWarning`, and the pieces miss members or have a wrong
+        batch size. Starting with TensorDict 0.17, the default will change to
+        raising a ``RuntimeError``, as ``TensorDict.split`` does.
+
         Args:
             split_size (int or List(int)): size of a single chunk or list of sizes for each chunk.
             dim (int): dimension along which to split the tensor.
