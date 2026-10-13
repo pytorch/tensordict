@@ -1071,7 +1071,7 @@ class TensorClass(_TensorClassInitArgs):
         pseudo_rand: bool = False,
         return_early: bool = False,
         consolidated: bool = False,
-    ) -> int: ...
+    ) -> int | list[dist.Work] | None: ...
     def irecv(
         self,
         src: int | None = None,
