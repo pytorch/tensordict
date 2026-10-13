@@ -245,7 +245,7 @@ own. With chunks, the store is smaller and still supports partial reads.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 117-136
+.. GENERATED FROM PYTHON SOURCE LINES 117-139
 
 Alternative stores
 ------------------
@@ -257,17 +257,20 @@ entry.
 .. note::
 
    ``to_zarr`` writes the metadata file (``zarr.json``) of each group once,
-   with its attributes. ``PersistentTensorDict.from_dict`` with a dict and
-   no ``batch_size`` still writes the ``zarr.json`` of each group twice: it
-   finds the batch size after writing the data. A zip file cannot replace an
-   entry, so the zip gets a second entry with the same name, and the
-   ``zipfile`` module of Python warns
+   with its attributes. ``PersistentTensorDict.from_dict`` still writes some
+   of them twice in two cases. With a dict and no ``batch_size``, it writes
+   the ``zarr.json`` of each group twice: it finds the batch size after
+   writing the data. With ``names=``, it writes the ``zarr.json`` of each
+   nested group twice: it sets the names after writing the data. A zip file
+   cannot replace an entry, so the zip gets a second entry with the same
+   name, and the ``zipfile`` module of Python warns
    ``UserWarning: Duplicate name: 'zarr.json'``
    (`#2252 <https://github.com/pytorch/tensordict/issues/2252>`_). Reading
-   the store works: ``zipfile`` returns the last entry. Pass ``batch_size``
-   to avoid it.
+   the store works: ``zipfile`` returns the last entry. To avoid it, pass a
+   ``TensorDict`` that has its batch size and names, for instance
+   ``TensorDict(data, batch_size=[4], names=["t"])``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 136-146
+.. GENERATED FROM PYTHON SOURCE LINES 139-149
 
 .. code-block:: Python
 
@@ -288,7 +291,7 @@ entry.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 147-158
+.. GENERATED FROM PYTHON SOURCE LINES 150-161
 
 Remote object stores work in the same way, through the fsspec support of
 zarr. To write to S3-compatible storage, pass
@@ -302,7 +305,7 @@ Like the other backends, zarr supports
 dtypes first, then fill the buffer row by row. The full dataset is never in
 memory.
 
-.. GENERATED FROM PYTHON SOURCE LINES 158-170
+.. GENERATED FROM PYTHON SOURCE LINES 161-173
 
 .. code-block:: Python
 
@@ -325,7 +328,7 @@ memory.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 171-188
+.. GENERATED FROM PYTHON SOURCE LINES 174-191
 
 Conclusion
 ----------
