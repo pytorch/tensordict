@@ -3593,6 +3593,16 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
         or (item is None)
     ) and self.batch_size == ():
         return self.update(value.squeeze(0))
+    if (
+        isinstance(self, NonTensorData)
+        and is_non_tensor(value)
+        and _non_tensor_value_differs(self, value)
+    ):
+        raise ValueError(
+            "A NonTensorData holds one value for all its elements, so it "
+            "cannot take another value at an index. Call maybe_to_stack() "
+            "to get a NonTensorStack, which holds a value per element."
+        )
 
     if not is_tensorclass(value) and not isinstance(
         value, (TensorDictBase, numbers.Number, Tensor)
@@ -6456,6 +6466,26 @@ class TensorAttrs(TensorClass):
         return cls(batch_size=(), **kwargs)
 
 
+def _non_tensor_value_differs(dest: NonTensorData, value: Any) -> bool | None:
+    """Whether the non-tensor ``value`` holds a value other than the value of ``dest``.
+
+    Returns ``None`` if the values do not compare to a single bool, as arrays
+    and tensors do.
+    """
+    data = dest.data
+    try:
+        other = value.data
+    except AttributeError:
+        # a NonTensorStack of different values
+        return True
+    if other is data:
+        return False
+    try:
+        return bool(other != data)
+    except Exception:
+        return None
+
+
 # For __setitem__ and _update_at_ we don't pass a kwarg but use a global variable instead
 _BREAK_ON_MEMMAP = True
 
@@ -7038,6 +7068,19 @@ class NonTensorStack(LazyStackedTensorDict):
                 )
         finally:
             _BREAK_ON_MEMMAP = True
+
+    def _setitem_member(self, member: int, member_index: IndexType, piece) -> None:
+        td = self.tensordicts[member]
+        if isinstance(td, NonTensorData):
+            differs = _non_tensor_value_differs(td, piece)
+            # A NonTensorData holds one value for all its elements: to take
+            # other values in a part of it, the member becomes a stack. A
+            # memmap stack saves itself again after the write.
+            if differs is not False and (not self.is_locked or self._is_memmap):
+                td = self.tensordicts[member] = td.maybe_to_stack()
+            elif differs:
+                raise RuntimeError(_LOCK_ERROR)
+        td[member_index] = piece
 
     def update_at_(
         self,
