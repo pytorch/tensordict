@@ -281,6 +281,32 @@ def test_tree_leaves_nontensor_stack(values):
     assert (out == 1).all()
 
 
+def test_where_non_tensor_data():
+    # With equal values, NonTensorData.where does not read the condition, and
+    # compiles without a graph break. With differing values, it reads the
+    # condition and breaks the graph (#2071).
+    def fn(td, other, cond):
+        return td.where(cond, other)
+
+    cond = torch.tensor([True, False, True, False])
+    td = TensorDict(
+        x=torch.zeros(4), s=NonTensorData("a", batch_size=[4]), batch_size=[4]
+    )
+    same = TensorDict(
+        x=torch.ones(4), s=NonTensorData("a", batch_size=[4]), batch_size=[4]
+    )
+    other = TensorDict(
+        x=torch.ones(4), s=NonTensorData("b", batch_size=[4]), batch_size=[4]
+    )
+    result = torch.compile(fn, fullgraph=True, backend="eager")(td, same, cond)
+    assert result["x"].tolist() == [0.0, 1.0, 0.0, 1.0]
+    assert result.get("s").tolist() == ["a"] * 4
+    torch._dynamo.reset()
+    result = torch.compile(fn, backend="eager")(td, other, cond)
+    assert result["x"].tolist() == [0.0, 1.0, 0.0, 1.0]
+    assert result.get("s").tolist() == ["a", "b", "a", "b"]
+
+
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
     def test_tensor_output(self, mode):

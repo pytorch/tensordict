@@ -3005,6 +3005,11 @@ class LazyStackedTensorDict(TensorDictBase):
         if filter_empty and all(r is None for r in results):
             return
         if not inplace:
+            # A member with no result becomes an empty member, as with filter_empty=False
+            results = [
+                td.empty(device=device) if r is None else r
+                for td, r in zip(self.tensordicts, results)
+            ]
             out = type(self)(
                 *results,
                 stack_dim=self.stack_dim,
@@ -3126,6 +3131,13 @@ class LazyStackedTensorDict(TensorDictBase):
             return
         if not inplace:
             if not results or any(r is not None for r in results):
+                if filter_empty in (None, True):
+                    # A member with no result becomes an empty member, as with
+                    # filter_empty=False
+                    results = [
+                        td.empty(device=device) if r is None else r
+                        for td, r in zip(self.tensordicts, results)
+                    ]
                 try:
                     out = type(self)(
                         *results,
@@ -3755,42 +3767,6 @@ class LazyStackedTensorDict(TensorDictBase):
             i += 1
         return cls(*tensordicts, stack_dim=stack_dim, **kwargs)
 
-    def make_memmap(
-        self,
-        key: NestedKey,
-        shape: torch.Size | torch.Tensor,
-        *,
-        dtype: torch.dtype | None = None,
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't currently allowed for LazyStack as "
-            "it can't return a contiguous view of the lazy stacked tensors. "
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
-    def make_memmap_from_storage(
-        self,
-        key: NestedKey,
-        storage: torch.UntypedStorage,
-        shape: torch.Size | torch.Tensor,
-        *,
-        dtype: torch.dtype | None = None,
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't currently allowed for LazyStack as "
-            "it can't return a contiguous view of the lazy stacked tensors. "
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
-    def make_memmap_from_tensor(
-        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't currently allowed for LazyStack as "
-            "it can't return a contiguous view of the lazy stacked tensors. "
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
     def expand(self, *args: int, inplace: bool = False) -> Self:
         if len(args) == 1 and isinstance(args[0], Sequence):
             shape = tuple(args[0])
@@ -4414,6 +4390,13 @@ class LazyStackedTensorDict(TensorDictBase):
     def _view(self, *args, raise_if_not_view: bool = True, **kwargs) -> Self:
         shape = _get_shape_from_args(*args, **kwargs)
         if any(dim < 0 for dim in shape):
+            if not self.batch_size.numel():
+                # Regrouping the members of an empty batch would lose the
+                # keys: reshape a dense copy, which has the shared keys.
+                shape = torch.Size(_infer_size_impl(shape, 0))
+                if shape == self.batch_size:
+                    return self
+                return self.contiguous().reshape(shape)
             shape = _infer_size_impl(shape, self.numel())
 
         # Then we just need to reorganize the lazy stack

@@ -427,26 +427,34 @@ def _dispatch_td_nn_modules():
     return _dispatch_tdnn_modules.get_mode()
 
 
+_NO_RESTORE = object()
+
+
 class _set_dispatch_td_nn_modules(_DecoratorContextManager):
     """Controls whether @dispatch should be used. Not using dispatch is faster and also better compatible with torch.compile."""
 
     def __init__(self, mode):
         self.mode = mode
-        self._saved_mode = None
+        # One saved mode per open block, so that an instance can be reused
+        # in sequence or nested in itself.
+        self._saved_modes = []
 
     def clone(self):
         return type(self)(self.mode)
 
     def __enter__(self):
         # We want to avoid changing global variables because compile puts guards on them
-        if _dispatch_tdnn_modules.get_mode() != self.mode:
-            self._saved_mode = _dispatch_tdnn_modules
+        prev = _dispatch_tdnn_modules.get_mode()
+        if prev != self.mode:
+            self._saved_modes.append(prev)
             _dispatch_tdnn_modules.set_mode(self.mode)
+        else:
+            self._saved_modes.append(_NO_RESTORE)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self._saved_mode is None:
-            return
-        _dispatch_tdnn_modules.set_mode(self._saved_mode)
+        prev = self._saved_modes.pop()
+        if prev is not _NO_RESTORE:
+            _dispatch_tdnn_modules.set_mode(prev)
 
 
 # Reproduce StrEnum for python<3.11

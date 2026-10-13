@@ -1710,8 +1710,7 @@ class TestNonTensorData:
         assert result.tolist() == [["a"], ["a"]]
 
     def test_torch_where_non_tensor_data(self):
-        # NonTensorData.where does not select elementwise, so torch.where
-        # is not passed through to it
+        # torch.where is not passed through to NonTensorData.where
         condition = torch.tensor([True, False])
         with pytest.raises(TypeError, match="Multiple dispatch failed"):
             torch.where(
@@ -1719,6 +1718,52 @@ class TestNonTensorData:
                 NonTensorData("a", batch_size=(2,)),
                 NonTensorData("b", batch_size=(2,)),
             )
+
+    def test_where_non_tensor_data(self):
+        # The condition picks the value of each element (#2071)
+        condition = torch.tensor([True, False, True, False])
+        a = NonTensorData("a", batch_size=(4,))
+        b = NonTensorData("b", batch_size=(4,))
+        result = a.where(condition, b)
+        assert isinstance(result, NonTensorStack)
+        assert result.tolist() == ["a", "b", "a", "b"]
+        assert a.where(~condition, b).tolist() == ["b", "a", "b", "a"]
+        result = a.where(condition, NonTensorStack("w", "x", "y", "z"))
+        assert result.tolist() == ["a", "x", "a", "z"]
+        assert a.where(condition, NonTensorData("b")).tolist() == ["a", "b"] * 2
+        result = NonTensorData("a", batch_size=(4, 2)).where(
+            condition, NonTensorData("b", batch_size=(4, 2))
+        )
+        assert result.tolist() == [["a"] * 2, ["b"] * 2] * 2
+        # A uniform result stays a NonTensorData
+        for cond, other, value in [
+            (torch.ones(4, dtype=torch.bool), b, "a"),
+            (torch.zeros(4, dtype=torch.bool), b, "b"),
+            (condition, a.clone(), "a"),
+            (condition, NonTensorStack("x", "a", "y", "a"), "a"),
+        ]:
+            result = a.where(cond, other)
+            assert isinstance(result, NonTensorData)
+            assert result.batch_size == (4,)
+            assert result.data == value
+        assert NonTensorData("a").where(torch.tensor(False), b[0]).data == "b"
+        # out receives the result if it can hold it
+        out = NonTensorData("c", batch_size=(4,))
+        assert a.where(torch.zeros(4, dtype=torch.bool), b, out=out) is out
+        assert out.data == "b"
+        out = NonTensorStack("1", "2", "3", "4")
+        assert a.where(condition, b, out=out) is out
+        assert out.tolist() == ["a", "b", "a", "b"]
+        # through TensorDict.where, also with out=, as TorchRL's partial reset
+        td = TensorDict(x=torch.zeros(4), s=a, batch_size=(4,))
+        other = TensorDict(x=torch.ones(4), s=b, batch_size=(4,))
+        assert td.where(condition, other).get("s").tolist() == ["a", "b"] * 2
+        td.where(condition, other, out=td, pad=0, update_batch_size=True)
+        assert td["x"].tolist() == [0.0, 1.0, 0.0, 1.0]
+        assert td.get("s").tolist() == ["a", "b", "a", "b"]
+        # an other that does not expand to the batch size raises
+        with pytest.raises(ValueError):
+            a.where(condition, NonTensorData("b", batch_size=(3, 4)))
 
     def test_linked_list_str(self):
         td = TensorDict(a=NonTensorStack("foo", "bar"), batch_size=(2,))
