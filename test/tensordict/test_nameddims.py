@@ -337,6 +337,22 @@ class TestNamedDims(TestTensorDictsBase):
             pytest.param(
                 lambda td: td.memmap_like(), ["a", "b", "c"], id="memmap_like"
             ),
+            pytest.param(lambda td: td.empty(), ["a", "b", "c"], id="empty"),
+            pytest.param(
+                lambda td: td.empty(recurse=True),
+                ["a", "b", "c"],
+                id="empty-recurse",
+            ),
+            pytest.param(
+                lambda td: td.empty(batch_size=[3, 4, 5, 2]),
+                ["a", "b", "c", None],
+                id="empty-batch-size",
+            ),
+            pytest.param(
+                lambda td: td.empty(batch_size=[2, 4, 5]),
+                ["a", "b", "c"],
+                id="empty-batch-size-leading",
+            ),
         ],
     )
     def test_lazy_stack_op_names(self, stack_dim, op, names):
