@@ -98,10 +98,18 @@ class _HeterogeneousKeyError(RuntimeError):
         )
 
 
-def _element_index(idx) -> tuple[int, tuple] | None:
-    """Splits an index whose first item is an int into that item and the rest, or returns None."""
+def _element_index(idx, count: int) -> tuple[int, tuple] | None:
+    """Splits an index that picks one stack element into that element and the index into it.
+
+    Returns None for an index that picks several elements or none.
+    """
     first, rest = (idx[0], idx[1:]) if isinstance(idx, tuple) and idx else (idx, ())
-    if isinstance(first, int) and not isinstance(first, bool):
+    if isinstance(first, slice):
+        picked = range(count)[first]
+        if len(picked) == 1:
+            # the slice keeps the stack dim, of size 1
+            return picked[0], (None, *rest)
+    elif isinstance(first, int) and not isinstance(first, bool):
         return first, rest
     return None
 
@@ -1251,7 +1259,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
         if heterogeneous:
             # one element of these keys is read with its own shape, as on a
             # lazy stack; several elements cannot be stacked
-            element = _element_index(idx) if self._stack_dim == 0 else None
+            element = _element_index(idx, self._count) if self._stack_dim == 0 else None
             if element is None:
                 raise _HeterogeneousKeyError(heterogeneous[0])
             pos, rest = element
@@ -1415,7 +1423,9 @@ class LazyStackedTensorDictStore(TensorDictBase):
             # one element of these keys is written with its own shape, as on
             # a lazy stack; several elements cannot be written as one tensor
             elements[kp] = (
-                _element_index(items[kp][1]) if self._stack_dim == 0 else None
+                _element_index(items[kp][1], self._count)
+                if self._stack_dim == 0
+                else None
             )
             if elements[kp] is None:
                 raise _HeterogeneousKeyError(kp)
@@ -1665,7 +1675,17 @@ class LazyStackedTensorDictStore(TensorDictBase):
             try:
                 return self._get_str(_KEY_SEP.join(key), NO_DEFAULT, **kwargs)
             except KeyError:
-                pass
+                all_keys = self._get_all_keys()
+                for i in range(1, len(key)):
+                    if _KEY_SEP.join(key[:i]) in all_keys:
+                        rest = key[i] if len(key) == i + 1 else key[i:]
+                        raise ValueError(
+                            f"{key[i - 1]!r} is a Tensor, not a tensordict, "
+                            f"so it has no entry {rest!r}."
+                        )
+                if default is not NO_DEFAULT:
+                    return default
+                raise
         return super()._get_tuple(key, default, **kwargs)
 
     def _set_str(
@@ -1710,7 +1730,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
         self, key_path: str, tensor: torch.Tensor, inplace: bool = False
     ):
         """Set a full (stacked) tensor for a key."""
-        if inplace and not (await self._ais_homogeneous([key_path]))[0]:
+        if inplace is True and not (await self._ais_homogeneous([key_path]))[0]:
             # as on a lazy stack, set_ cannot write one tensor to elements
             # of different shapes
             raise _HeterogeneousKeyError(key_path)
@@ -2249,7 +2269,9 @@ class LazyStackedTensorDictStore(TensorDictBase):
         def split(arg):
             if is_tensor_collection(arg) and arg.batch_size == self.batch_size:
                 return arg.unbind(self._stack_dim)
-            if isinstance(arg, torch.Tensor) or is_tensor_collection(arg):
+            if is_tensor_collection(arg) or (
+                isinstance(arg, torch.Tensor) and arg.ndim
+            ):
                 raise RuntimeError(
                     f"{method.__name__} cannot split this argument over the "
                     f"elements of the entry {error.key_path!r}, which differ in "
@@ -2279,7 +2301,10 @@ class LazyStackedTensorDictStore(TensorDictBase):
     ) -> Self:
         # Override: without keys_to_update, TensorDictBase.update_ reads every
         # entry of self, and a key whose elements differ in shape cannot be
-        # read as one tensor. Only the keys of the input are then read.
+        # read as one tensor, and with keys_to_update it reads the whole
+        # sub-tensordicts of self. Each leaf of the input is then written
+        # alone, and the leaves that self lacks are handled as in
+        # TensorDictBase.update_.
         try:
             return super().update_(
                 input_dict_or_td,
@@ -2289,22 +2314,29 @@ class LazyStackedTensorDictStore(TensorDictBase):
                 **kwargs,
             )
         except _HeterogeneousKeyError:
-            if keys_to_update is not None:
-                raise
-        keys_to_update = list(kwargs)
-        if input_dict_or_td is not None:
-            if not is_tensor_collection(input_dict_or_td):
-                input_dict_or_td = TensorDict.from_dict(
-                    input_dict_or_td, batch_dims=self.batch_dims
-                )
-            keys_to_update += list(input_dict_or_td.keys(True, True))
-        return super().update_(
-            input_dict_or_td,
-            clone,
-            non_blocking=non_blocking,
-            keys_to_update=keys_to_update,
-            **kwargs,
-        )
+            pass
+        if keys_to_update is not None:
+            keys_to_update = [_unravel_key_to_tuple(key) for key in keys_to_update]
+        all_keys = self._get_all_keys()
+        # kwargs come last: they win on key conflict
+        for source in (input_dict_or_td, kwargs):
+            if source is None:
+                continue
+            if not is_tensor_collection(source):
+                source = TensorDict.from_dict(source, batch_dims=self.batch_dims)
+            for key, value in source.items(True, True):
+                key = _unravel_key_to_tuple(key)
+                if keys_to_update is not None and not any(
+                    key[: len(k)] == k for k in keys_to_update
+                ):
+                    continue
+                if _KEY_SEP.join(key) in all_keys:
+                    self.set_(key, value, non_blocking=non_blocking)
+                elif keys_to_update is not None:
+                    raise KeyError(
+                        f"The key {key} was not found in the dest tensordict."
+                    )
+        return self
 
     def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
         existing = self.get(key)

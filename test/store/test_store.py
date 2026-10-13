@@ -1858,6 +1858,9 @@ class TestLazyStackedTensorDictStore:
             TensorDict(
                 a=torch.arange(12.0 * (i + 1)).view(3, 4 * (i + 1)) - 1,
                 b=torch.ones(3),
+                n=TensorDict(
+                    c=torch.zeros(3, 2), h=torch.ones(3, i + 1), batch_size=[3]
+                ),
                 batch_size=[3],
             )
             for i in range(2)
@@ -1879,14 +1882,32 @@ class TestLazyStackedTensorDictStore:
                     read()
             torch.testing.assert_close(store_td[1, 0]["a"], tds[1]["a"][0])
             torch.testing.assert_close(store_td.get_at("a", 1), tds[1]["a"])
+            torch.testing.assert_close(store_td[1:2]["a"], lazy_td[1:2]["a"])
+            assert store_td.get(("n", "zz"), None) is None
+            with pytest.raises(ValueError, match="not a tensordict"):
+                store_td.get(("a", "x"), None)
             for td in (store_td, lazy_td):
                 td[1, 0] = 7.0
+                td[0:1] = 3.0
+                td["b"] = torch.full((2, 3), 2.0)
                 td.abs_()
                 td.mul_(2)
-                td.update_({"b": torch.zeros(2, 3)})
+                td.mul_(torch.tensor(2.0))
+                td.update_(
+                    {
+                        "b": torch.zeros(2, 3),
+                        "n": {"c": torch.ones(2, 3, 2)},
+                        "extra": torch.ones(2, 3),
+                    }
+                )
+                td.update_(
+                    {"n": {"c": torch.full((2, 3, 2), 2.0)}},
+                    keys_to_update=[("n", "c")],
+                )
             for i in range(2):
                 torch.testing.assert_close(store_td[i]["a"], lazy_td[i]["a"])
                 torch.testing.assert_close(store_td[i]["b"], lazy_td[i]["b"])
+                assert (store_td[i]["n"] == lazy_td[i]["n"]).all()
             assert store_td.zero_() is store_td
             for i in range(2):
                 assert store_td[i]["a"].shape == tds[i]["a"].shape
