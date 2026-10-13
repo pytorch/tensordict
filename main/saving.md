@@ -473,10 +473,17 @@ RuntimeError: Refusing to load pickled non-tensor data from a memory-mapped Tens
 datetime.date(2024, 1, 1)
 ```
 
-Data without a pickle file loads with `allow_pickle=False`. `load_memmap_`
-and `memmap_refresh_` take the same argument. For [`torch.load()`](https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load), keep
-`weights_only=True` and allowlist only the classes that you trust (see
-torch.save and torch.load).
+Data without a pickle file loads with `allow_pickle=False`. So does the
+output of [`from_pytree()`](reference/generated/tensordict.TensorDictBase.from_pytree.html#tensordict.TensorDictBase.from_pytree), such as a module
+`state_dict()`, when its containers are only `dict`,
+`collections.OrderedDict`, `list` and `tuple`: tensordict pickles these
+classes for older versions, and also saves their names in a
+`json_types.json` file, which `load_memmap` reads instead of the pickle
+file. Other classes, such as namedtuples, and the stacked results of
+`from_pytree` (for example after [`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack)) load only from the
+pickle file. `load_memmap_` and `memmap_refresh_` take the same
+argument. For [`torch.load()`](https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load), keep `weights_only=True` and allowlist
+only the classes that you trust (see torch.save and torch.load).
 
 tensordict also protects the paths that it writes:
 

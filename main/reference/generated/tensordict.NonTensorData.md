@@ -127,8 +127,12 @@ a `NonTensorData`, and [`load_memmap()`](tensordict.TensorDictBase.load_memmap.h
 loads it. If JSON can encode the value, it goes to the `meta.json`
 file of the entry (a tuple is loaded back as a list). Other values, such
 as a `set` or an instance of another class, are pickled to an
-`other.pickle` file. Pickle can execute arbitrary code when it loads,
-so [`load_memmap()`](tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap) warns when it loads a
+`other.pickle` file. The classes `dict`, `collections.OrderedDict`,
+`list` and `tuple`, which [`from_pytree()`](tensordict.TensorDictBase.from_pytree.html#tensordict.TensorDictBase.from_pytree)
+records, are pickled for older versions and also saved by name, and
+[`load_memmap()`](tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap) reads them without pickle.
+Pickle can execute arbitrary code when it loads, so
+[`load_memmap()`](tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap) warns when it loads a
 pickled value. Pass `allow_pickle=True` for data that you trust. From
 TensorDict 0.16, the default is `allow_pickle=False`, which raises a
 `RuntimeError` for pickled values.

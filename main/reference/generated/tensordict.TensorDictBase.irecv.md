@@ -1,6 +1,6 @@
 # TensorDictBase.irecv
 
-TensorDictBase.irecv(*src: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *group: 'torch.distributed.ProcessGroup' | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *group_src: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *return_premature: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *init_tag: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *pseudo_rand: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[int](https://docs.python.org/3/builtins/functions.html#int), [list](https://docs.python.org/3/builtins/stdtypes.html#list)[torch.Future]] | [list](https://docs.python.org/3/builtins/stdtypes.html#list)[torch.Future] | [None](https://docs.python.org/3/builtins/constants.html#None)
+TensorDictBase.irecv(*src: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *group: 'torch.distributed.ProcessGroup' | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *group_src: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *return_premature: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *init_tag: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *pseudo_rand: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *consolidated: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[int](https://docs.python.org/3/builtins/functions.html#int), [list](https://docs.python.org/3/builtins/stdtypes.html#list)[torch.Future]] | [list](https://docs.python.org/3/builtins/stdtypes.html#list)[torch.Future] | [None](https://docs.python.org/3/builtins/constants.html#None)
 
 Receives the content of a tensordict and updates content with it asynchronously.
 
@@ -37,6 +37,14 @@ without overlap. Notice that the generation of these pseudo-random
 numbers is expensive (1e-5 sec/number), meaning that it could
 slow down the runtime of your algorithm.
 This value must match the one passed to [`isend()`](tensordict.TensorDictBase.isend.html#tensordict.TensorDictBase.isend).
+Defaults to `False`.
+- **consolidated** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)) - if True, receives a single consolidated storage
+tensor directly into `self._consolidated["storage"]`, as
+[`recv()`](tensordict.TensorDictBase.recv.html#tensordict.TensorDictBase.recv) does. The tensordict must already be consolidated
+(e.g. from a prior [`from_remote_init()`](tensordict.TensorDictBase.from_remote_init.html#tensordict.TensorDictBase.from_remote_init) call), and all
+leaf tensor views update in-place. With
+`return_premature=True`, the returned list holds the single
+future. `init_tag` and `pseudo_rand` are ignored.
 Defaults to `False`.
 
 Returns:

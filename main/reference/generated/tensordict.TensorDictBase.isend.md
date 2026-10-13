@@ -1,6 +1,6 @@
 # TensorDictBase.isend
 
-TensorDictBase.isend(*dst: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *group: 'torch.distributed.ProcessGroup' | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *group_dst: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *init_tag: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *pseudo_rand: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [int](https://docs.python.org/3/builtins/functions.html#int) | List['Work']
+TensorDictBase.isend(*dst: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *group: 'torch.distributed.ProcessGroup' | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *group_dst: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *init_tag: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *pseudo_rand: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *consolidated: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [int](https://docs.python.org/3/builtins/functions.html#int) | List['Work'] | [None](https://docs.python.org/3/builtins/constants.html#None)
 
 Sends the content of the tensordict asynchronously.
 
@@ -36,6 +36,18 @@ slow down the runtime of your algorithm.
 Defaults to `False`.
 - **return_early** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if True, a list of futures
 will be returned instead of the tag of the last tensor sent.
+Defaults to `False`.
+- **consolidated** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)) - if True, sends the consolidated storage as a
+single tensor (1 message), as [`send()`](tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send) does. The tensordict
+is consolidated first if needed, which copies every leaf on
+each call: a sender that keeps a consolidated copy and
+refreshes it with [`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_) avoids that copy. The
+receiver must use `irecv(consolidated=True)` or
+`recv(consolidated=True)` and must already hold a
+consolidated tensordict with matching schema. With
+`return_early=True`, the returned list holds the single
+future; otherwise `None` is returned once the message is
+sent. `init_tag` and `pseudo_rand` are ignored.
 Defaults to `False`.
 
 Example
