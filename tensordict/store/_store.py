@@ -2533,7 +2533,9 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
         return self
 
     # Override: to_tensordict reads all the entries in one round trip.
-    def masked_select(self, mask):
+    def masked_select(self, mask, *, inplace=False):
+        if inplace:
+            return super().masked_select(mask, inplace=True)
         return self.to_tensordict().masked_select(mask)
 
     # ---- Pickling ----

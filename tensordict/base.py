@@ -5975,14 +5975,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         ``_inplace_rebind_leaves`` rewrites the leaves in key order, and the
         ``LazyStackedTensorDict`` (and ``NonTensorStack``) versions of
         ``reshape``, ``flatten``, ``unflatten``, ``repeat``,
-        ``repeat_interleave`` and ``gather`` refuse ``inplace=True``. Finding a
-        lazy stack halfway through would leave the earlier leaves rewritten
-        while ``batch_size`` is unchanged, so the whole tree is checked first.
-        The check tests ``_lazy``, so it also catches ``_SubTensorDict``, which
-        refuses these ops too. The legacy lazy views (``_CustomOpTensorDict``)
-        refuse ``flatten``, ``unflatten``, ``repeat`` and ``gather`` but not
-        ``reshape`` and ``repeat_interleave``, so the check lets them through
-        for those two.
+        ``repeat_interleave``, ``gather`` and ``masked_select`` refuse
+        ``inplace=True``. Finding a lazy stack halfway through would leave the
+        earlier leaves rewritten while ``batch_size`` is unchanged, so the
+        whole tree is checked first. The check tests ``_lazy``, so it also
+        catches ``_SubTensorDict``, which refuses these ops too. The legacy
+        lazy views (``_CustomOpTensorDict``) refuse ``flatten``, ``unflatten``,
+        ``repeat``, ``gather`` and ``masked_select`` but not ``reshape`` and
+        ``repeat_interleave``, so the check lets them through for those two.
         The calls on nested tensordicts skip the walk, which the top-level
         call has done.
         """
