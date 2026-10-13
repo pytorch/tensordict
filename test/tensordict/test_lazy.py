@@ -1494,6 +1494,24 @@ class TestLazyStackedTensorDict:
         td.names = None
         assert td.names == [None, None]
 
+    def test_create_names_with_members_warns(self):
+        # With members, the constructor ignores names until 0.17 (#2559).
+        tds = [TensorDict(batch_size=[3]), TensorDict(batch_size=[3])]
+        with pytest.warns(
+            FutureWarning,
+            match=r"ignores the names when tensordicts are given.*"
+            r"Starting with TensorDict 0\.17, the default will change",
+        ) as record:
+            td = LazyStackedTensorDict(*tds, names=["s", None])
+        assert record[0].filename == __file__
+        assert td.names == [None, None]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            td = LazyStackedTensorDict(*tds, stack_dim_name="s")
+            assert td.names == ["s", None]
+            td = LazyStackedTensorDict(batch_size=[3], names=["a"])
+            assert td.names == [None, "a"]
+
     @pytest.mark.parametrize("key", ["a", ("n", "x"), "n"])
     @pytest.mark.parametrize("op", ["del", "pop"])
     def test_del_repeated_member(self, key, op):
