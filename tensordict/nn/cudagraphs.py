@@ -20,8 +20,9 @@ from tensordict.nn.functional_modules import (
     PYTREE_REGISTERED_LAZY_TDS,
     PYTREE_REGISTERED_TDS,
 )
+from tensordict.nn.probabilistic import interaction_type, ProbabilisticTensorDictModule
 from tensordict.utils import _zip_strict, logger as tensordict_logger
-from torch import Tensor
+from torch import nn, Tensor
 from torch.utils._pytree import (
     tree_flatten as _pytree_flatten,
     tree_leaves as _pytree_leaves,
@@ -148,6 +149,11 @@ class CudaGraphModule:
           CUDA operation, inputs written on another stream must be ordered before the call by the caller, e.g. with
           ``torch.cuda.current_stream().wait_stream(producer_stream)``. Consecutive calls share the graph's buffers:
           issue them from one stream, or order each call after the previous one in the same way.
+
+        - The replay repeats the branch that each :class:`~tensordict.nn.ProbabilisticTensorDictModule` took at
+          capture: a graph captured under ``set_interaction_type("random")`` keeps sampling under
+          ``set_interaction_type("deterministic")``. The first replay under another interaction type emits a
+          ``UserWarning``. Capture one ``CudaGraphModule`` per interaction type.
 
     .. warning::
         ``CudaGraphModule`` is not an :class:`~torch.nn.Module` by design, to discourage gathering parameters
@@ -279,6 +285,10 @@ class CudaGraphModule:
                     # capture-time input leaves are copied; extra keys are ignored.
                     if args or kwargs or self._graph_args:
                         self._warn_if_args_changed(args, kwargs)
+                    if self._prob_modules:
+                        self._warn_if_interaction_type_changed(
+                            self._args_warning_stacklevel
+                        )
                     if tensordict.batch_size != self._graph_batch_size:
                         raise ValueError(
                             f"{self.__class__.__name__} was captured with batch_size="
@@ -371,6 +381,7 @@ class CudaGraphModule:
                     # The replay reads the captured arguments: keep them to
                     # warn when a later call passes others.
                     self._graph_args = _tree_leaves((args, kwargs))
+                    self._record_interaction_types()
 
                     torch.cuda.synchronize(self.device)
                     kwargs = kwargs.copy()
@@ -452,6 +463,8 @@ class CudaGraphModule:
                         self._maybe_copy_onto_(arg_src, arg_dest, srcs, dests)
                     if dests:
                         torch._foreach_copy_(dests, srcs)
+                    if self._prob_modules:
+                        self._warn_if_interaction_type_changed(4)
                     self.graph.replay()
                     if self._return_unchanged:
                         result = self._out
@@ -481,6 +494,7 @@ class CudaGraphModule:
                     return out
                 else:
                     tensordict_logger.info("Registering CUDA graph...")
+                    self._record_interaction_types()
                     self._flat_tree, self._tree_spec = _tree_flatten((args, kwargs))
 
                     self._flat_tree = tuple(
@@ -566,6 +580,39 @@ class CudaGraphModule:
                 "value (pytorch/tensordict#2075).",
                 FutureWarning,
                 stacklevel=self._args_warning_stacklevel,
+            )
+
+    def _interaction_types(self):
+        # The interaction type each probabilistic module samples with.
+        current = interaction_type()
+        return [
+            module.default_interaction_type if current is None else current
+            for module in self._prob_modules
+        ]
+
+    def _record_interaction_types(self):
+        modules = self.module.modules() if isinstance(self.module, nn.Module) else ()
+        self._prob_modules = [
+            module
+            for module in modules
+            if isinstance(module, ProbabilisticTensorDictModule)
+        ]
+        self._graph_interaction_types = self._interaction_types()
+
+    def _warn_if_interaction_type_changed(self, stacklevel):
+        interaction_types = self._interaction_types()
+        if interaction_types != self._graph_interaction_types:
+            # Warn once: later replays skip the check.
+            self._prob_modules = []
+            warnings.warn(
+                f"{type(self).__name__} was captured with the interaction types "
+                f"{[str(t) for t in self._graph_interaction_types]} but is called "
+                f"with {[str(t) for t in interaction_types]}. The replay ignores "
+                "the interaction type and repeats the captured branch. Capture one "
+                f"{type(self).__name__} per interaction type "
+                "(pytorch/tensordict#2547).",
+                UserWarning,
+                stacklevel=stacklevel,
             )
 
     @staticmethod
