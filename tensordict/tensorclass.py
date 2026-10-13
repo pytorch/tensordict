@@ -7106,20 +7106,16 @@ class NonTensorStack(LazyStackedTensorDict):
         ignore_lock: bool = False,
     ) -> T:
         if isinstance(input_dict_or_td, NonTensorData):
-            datalist = input_dict_or_td.data
-            for d in reversed(self.batch_size):
-                datalist = [datalist] * d
-            reconstructed = self._from_list(
-                datalist, device=self.device, ndim=self.ndim
-            )
-            return self.update(
-                reconstructed,
-                clone=clone,
-                inplace=inplace,
-                keys_to_update=keys_to_update,
-                is_leaf=is_leaf,
-                update_batch_size=update_batch_size,
-                ignore_lock=ignore_lock,
+            # One NonTensorData per member, with the member's batch size: a
+            # member that is a NonTensorData with batch dims cannot be updated
+            # with a NonTensorStack
+            data = input_dict_or_td.data
+            input_dict_or_td = NonTensorStack(
+                *[
+                    NonTensorData(data, batch_size=td.batch_size, device=td.device)
+                    for td in self.tensordicts
+                ],
+                stack_dim=self.stack_dim,
             )
 
         memmap = False
