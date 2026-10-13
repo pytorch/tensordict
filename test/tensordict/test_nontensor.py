@@ -619,6 +619,26 @@ class TestNonTensorData:
         assert stack.expand(4, -1, -1).tolist() == [[[0] * 3, [1] * 3]] * 4
         assert stack.broadcast_to((4, -1, 3)).shape == (4, 2, 3)
 
+    def test_expand_rejected_shape_warns(self):
+        # The shapes that torch.Tensor.expand rejects warn, and give the same
+        # result as before, until they raise in 0.17 (#2175)
+        d = NonTensorData(0, batch_size=(1, 3))
+        for shape, batch_size in [((2, 4), (4, 2, 3)), ((3,), (1, 3))]:
+            with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+                assert d.expand(*shape).batch_size == batch_size
+        for shape in [(5, 3), (2, 1, 3), (-1, 3), (1, 3), (2, 4, 3)]:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                result = d.expand(*shape)
+            assert result.batch_size == torch.zeros(1, 3).expand(shape).shape
+            assert result.data == 0
+        stack = NonTensorStack(
+            *[NonTensorStack(*[NonTensorData(0) for _ in range(5)]) for _ in range(3)]
+        )
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            stack[1] = NonTensorData(1, batch_size=(3,))
+        assert stack.tolist() == [[0] * 5, [1] * 5, [0] * 5]
+
     @pytest.mark.parametrize(
         "in_out", [(None, None), (0, -1), (None, 0), (0, None), (0, 0)]
     )

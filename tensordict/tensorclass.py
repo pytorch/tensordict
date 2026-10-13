@@ -5893,10 +5893,31 @@ class NonTensorData(NonTensorDataBase):
         return result
 
     def expand(self, *args, **kwargs) -> T:
+        """Expands the batch dims of the NonTensorData to the given shape, as :meth:`torch.Tensor.expand` does.
+
+        A shape that :meth:`torch.Tensor.expand` rejects (fewer sizes than
+        batch dims, or a size that differs from a batch dim that is not 1)
+        warns, and the batch size of the result can differ from the shape.
+        Starting with TensorDict 0.17, the default will change to raising a
+        RuntimeError for such shapes, as :meth:`TensorDict.expand` does.
+        """
         # tensordict_dims = self.batch_dims
         shape = _get_shape_from_args(*args, **kwargs)
         if -1 in shape:
             shape = _resolve_expand_shape(shape, self.batch_size)
+        if len(shape) < self.ndim or any(
+            old != 1 and new != old
+            for old, new in zip(self.batch_size, shape[len(shape) - self.ndim :])
+        ):
+            warnings.warn(
+                f"Expanding a NonTensorData of batch size {list(self.batch_size)} "
+                f"to {list(shape)} does not raise today, although "
+                "torch.Tensor.expand rejects this shape. Starting with "
+                "TensorDict 0.17, the default will change to raising a "
+                "RuntimeError, as TensorDict.expand does.",
+                FutureWarning,
+                stacklevel=2,
+            )
 
         # Replicate self until we have the appropriate batch size
         out = self
