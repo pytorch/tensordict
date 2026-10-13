@@ -140,6 +140,13 @@ ValueError: Invalid indexing arguments: 'count'. A tensorclass is indexed along 
 torch.Size([3, 4, 1])
 ```
 
+Assigning a name that is not a field, as an attribute or with `set()`,
+raises `AttributeError`. `set_non_tensor()`, `setdefault()`,
+`create_nested()`, `rename_key_()`, and `update()` with a
+`TensorDict` or another tensorclass still store such a key, and warn with a
+`DeprecationWarning`. Starting with TensorDict 0.17, they raise
+`AttributeError` too.
+
 To test whether an object is a tensordict or a tensorclass, use
 [`is_tensor_collection()`](reference/generated/tensordict.is_tensor_collection.html#tensordict.is_tensor_collection). `to_tensordict()` returns a copy
 of the data as a [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict).
