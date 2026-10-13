@@ -1387,6 +1387,63 @@ class TestTensorClass:
         assert data.del_(("td", "a")) is data
         assert list(data.td.keys()) == ["b"]
 
+    def test_deleted_field_reads_as_none(self):
+        # #2147: a deleted field reads as None, so hasattr() and
+        # getattr(obj, name, default) work after a delete instead of raising
+        # KeyError.
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            y: torch.Tensor = None
+
+        data = MyClass(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+        del data.y
+        assert data.y is None
+        assert getattr(data, "y", "default") is None
+        assert hasattr(data, "y")
+        assert "y" not in data.keys()
+        assert data.get("y") is None
+        assert data.get("y", "default") is None
+        assert data.get_at("y", 0, "default") is None
+
+        # Deleting a field that is None is not an error
+        unset = MyClass(x=torch.zeros(3), batch_size=[3])
+        del unset.y
+        assert unset.y is None
+        assert "y" not in unset.keys()
+        # ... unless the instance is locked
+        locked = MyClass(x=torch.zeros(3), batch_size=[3]).lock_()
+        with pytest.raises(RuntimeError, match="locked"):
+            del locked.y
+        assert "y" in locked.to_dict()
+
+        # del_ and pop remove the field, which reads as None too
+        cleared = MyClass(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+        assert cleared.del_("y") is cleared
+        assert cleared.y is None
+        popped = MyClass(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+        torch.testing.assert_close(popped.pop("y"), torch.ones(3))
+        assert popped.y is None
+
+        # A key that no field declares keeps the attribute protocol
+        with pytest.raises(AttributeError):
+            data.not_a_field
+        # A second delete raises, as for a deleted tensor field
+        with pytest.raises(KeyError):
+            del unset.y
+
+    def test_deleted_field_reads_as_none_shadow(self):
+        # #2147, for the __getattr__ of a shadow class
+        @tensorclass(shadow=True)
+        class Shadow:
+            x: torch.Tensor
+            y: torch.Tensor = None
+
+        shadow = Shadow(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+        del shadow.y
+        assert shadow.y is None
+        assert getattr(shadow, "y", "default") is None
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_device(self, device):
         data = MyData(
