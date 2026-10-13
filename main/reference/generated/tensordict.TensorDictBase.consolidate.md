@@ -54,6 +54,16 @@ Note
 If the tensordict is already consolidated, all arguments are ignored and `self`
 is returned. Call [`contiguous()`](tensordict.TensorDictBase.contiguous.html#tensordict.TensorDictBase.contiguous) to re-consolidate.
 
+Note
+
+A pickle (or [`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save), [`send()`](tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send), [`broadcast()`](tensordict.TensorDictBase.broadcast.html#tensordict.TensorDictBase.broadcast)) of a
+consolidated tensordict is rebuilt from metadata recorded here. Setting
+`batch_size` or `names` on the consolidated tensordict updates that
+metadata; setting them directly on a nested tensordict, as in
+`td["nested"].batch_size = ...`, may not. Call `consolidate()` again
+afterwards: on a consolidated tensordict, it writes the current batch sizes
+and names into that metadata.
+
 Examples
 
 ```
