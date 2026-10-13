@@ -1073,6 +1073,7 @@ class LazyStackedTensorDict(TensorDictBase):
     @_erase_cache_first  # a nested lazy stacked tensordict is not apparent to the root
     def names(self, value):
         self._set_names(value)
+        self._update_consolidated_metadata()
 
     # Override: the names are stored on the members and the stack dim.
     def _set_names(self, names: Sequence[str] | None):

@@ -1569,6 +1569,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     @batch_size.setter
     def batch_size(self, new_size: torch.Size) -> None:
         self._batch_size_setter(new_size)
+        self._update_consolidated_metadata()
 
     def size(self, dim: int | None = None) -> torch.Size | int:
         """Returns the batch size, or the size of one batch dimension.
@@ -2291,6 +2292,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     @names.setter
     def names(self, value):
         self._set_names(value)
+        self._update_consolidated_metadata()
 
     def _get_names_idx(self, idx):
         if not self._has_names():
