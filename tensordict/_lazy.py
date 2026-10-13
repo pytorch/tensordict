@@ -322,6 +322,59 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
             yield key if prefix is None else full_key
 
 
+def _pad_tensors(
+    tensors: list[Tensor], padding_value: float | int | bool, padding_side: str
+) -> Tensor:
+    try:
+        return pad_sequence(
+            tensors,
+            padding_value=padding_value,
+            padding_side=padding_side,
+            batch_first=True,
+        )
+    except RuntimeError:
+        # pad_sequence pads only dim 0 and needs the other dims to match.
+        # A lazy stack of lazy stacks gets here with tensors that the inner
+        # stacks have padded, or members can be ragged after dim 0: pad every
+        # other dim to its largest size, then pad dim 0 as before.
+        ndim = tensors[0].ndim
+        if ndim < 2 or any(t.ndim != ndim for t in tensors):
+            raise
+    max_shape = [max(sizes) for sizes in zip(*(t.shape[1:] for t in tensors))]
+    padded = []
+    for t in tensors:
+        pad = []
+        for size, max_size in zip(reversed(t.shape[1:]), reversed(max_shape)):
+            pad += (
+                [0, max_size - size]
+                if padding_side == "right"
+                else [max_size - size, 0]
+            )
+        padded.append(torch.nn.functional.pad(t, pad, value=padding_value))
+    return pad_sequence(
+        padded,
+        padding_value=padding_value,
+        padding_side=padding_side,
+        batch_first=True,
+    )
+
+
+def _as_nested_tensor(tensors: list[Tensor], layout: torch.layout | None) -> Tensor:
+    if layout is None:
+        layout = torch.jagged
+    try:
+        return torch.nested.as_nested_tensor(tensors, layout=layout)
+    except (RuntimeError, NotImplementedError) as err:
+        if not any(t.is_nested for t in tensors):
+            raise
+        raise ValueError(
+            "Cannot build a nested tensor from entries that are nested tensors "
+            "themselves, as the inner stacks of a lazy stack of lazy stacks "
+            "return: a nested tensor has a single nested level. Flatten the "
+            "lazy stack with view(-1) first, or use as_padded_tensor=True."
+        ) from err
+
+
 def _shared_keys(tensordicts: list[TensorDict]) -> list[str]:
     # LazyStackedTensorDict._key_list() for members that are TensorDict
     # instances: the keys that every member has, in the order of the first one
@@ -1955,14 +2008,17 @@ class LazyStackedTensorDict(TensorDictBase):
                 Exclusive with ``as_padded_tensor`` and ``as_nested_tensor``.
                 Defaults to ``False``.
             as_padded_tensor (bool, optional): if ``True``, the entries are
-                padded to the largest shape and returned as one tensor.
-                ``padding_value`` sets the padding value and ``padding_side``
-                sets the side.
+                padded to the largest shape and returned as one tensor: each
+                dim is padded to its largest size, also across the levels of
+                a lazy stack of lazy stacks. ``padding_value`` sets the
+                padding value and ``padding_side`` sets the side of every
+                padded dim.
                 Exclusive with ``as_list`` and ``as_nested_tensor``.
                 Defaults to ``False``.
             as_nested_tensor (bool, optional): if ``True``, the entries are
                 returned as a nested tensor (:mod:`torch.nested`). ``layout``
-                sets its layout.
+                sets its layout. A lazy stack of lazy stacks raises a
+                ``ValueError``, as a nested tensor has a single nested level.
                 Exclusive with ``as_list`` and ``as_padded_tensor``.
                 Defaults to ``False``.
             layout (torch.layout, optional): the layout of the nested tensor
@@ -2046,19 +2102,12 @@ class LazyStackedTensorDict(TensorDictBase):
         if as_nested_tensor:
             # If all collected items are plain tensors, convert directly to nested tensor
             if all(isinstance(item, torch.Tensor) for item in tensors):
-                if layout is None:
-                    layout = torch.jagged
-                return torch.nested.as_nested_tensor(tensors, layout=layout)
+                return _as_nested_tensor(tensors, layout)
             # Otherwise, pass to lazy_stack to handle nested structures
         if as_padded_tensor:
             # If all collected items are plain tensors, convert directly to padded tensor
             if all(isinstance(item, torch.Tensor) for item in tensors):
-                return pad_sequence(
-                    tensors,
-                    padding_value=padding_value,
-                    padding_side=padding_side,
-                    batch_first=True,
-                )
+                return _pad_tensors(tensors, padding_value, padding_side)
             # Otherwise, pass to lazy_stack to handle nested structures
         try:
             out = self.lazy_stack(
@@ -2233,16 +2282,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             elif special_return:
                 if as_padded_tensor:
-                    return pad_sequence(
-                        items,
-                        padding_value=padding_value,
-                        padding_side=padding_side,
-                        batch_first=True,
-                    )
+                    return _pad_tensors(items, padding_value, padding_side)
                 if as_nested_tensor:
-                    if layout is None:
-                        layout = torch.jagged
-                    return torch.nested.as_nested_tensor(items, layout=layout)
+                    return _as_nested_tensor(items, layout)
                 if as_list:
                     return items
             if _is_unbatched(items[0]):
