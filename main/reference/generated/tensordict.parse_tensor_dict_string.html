@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5330+gcf60022e2.d20261013)">
+<meta name="llm:version" content="main (0.14.0.dev5331+g00ade1e23.d20261013)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5330+gcf60022e2.d20261013)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5331+g00ade1e23.d20261013)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1651,7 +1651,8 @@ given its printed version, and should not be used in real applications.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – if a field is not a <code class="docutils literal notranslate"><span class="pre">Tensor</span></code> or a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> printed
-    with the default print options.</p>
+    with the default print options, or if <code class="docutils literal notranslate"><span class="pre">s</span></code> is the repr of a lazy
+    stack with exclusive keys.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -2012,7 +2013,7 @@ given its printed version, and should not be used in real applications.</p>
        "headline": "parse_tensor_dict_string",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - parse_tensor_dict_string",
        "url": "/reference/generated/tensordict.parse_tensor_dict_string.html",
-       "articleBody": "parse_tensor_dict_string# tensordict.parse_tensor_dict_string(s: str)# Parse a TensorDict repr to a TensorDict. Note This functions is intended to be used for debugging, to reproduce a tensordict given its printed version, and should not be used in real applications. Raises: ValueError \u2013 if a field is not a Tensor or a TensorDict printed with the default print options.",
+       "articleBody": "parse_tensor_dict_string# tensordict.parse_tensor_dict_string(s: str)# Parse a TensorDict repr to a TensorDict. Note This functions is intended to be used for debugging, to reproduce a tensordict given its printed version, and should not be used in real applications. Raises: ValueError \u2013 if a field is not a Tensor or a TensorDict printed with the default print options, or if s is the repr of a lazy stack with exclusive keys.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
