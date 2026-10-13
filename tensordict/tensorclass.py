@@ -3321,7 +3321,7 @@ def _update_(
     if isinstance(input_dict_or_td, dict):
         none_keys = _dict_none_keys(self, input_dict_or_td)
         input_dict_or_td = type(self).from_dict(
-            input_dict_or_td, batch_size=self.batch_size
+            input_dict_or_td, batch_size=self._tensordict.batch_size
         )
         # update_() raises for them, as it did before
         _add_none_entries(input_dict_or_td, none_keys)
@@ -3360,13 +3360,13 @@ def _update_at_(
         try:
             none_keys = _dict_none_keys(self, input_dict_or_td)
             input_dict_or_td = type(self).from_dict(
-                input_dict_or_td, batch_size=self.batch_size
+                input_dict_or_td, batch_size=self._tensordict.batch_size
             )
             _add_none_entries(input_dict_or_td, none_keys)
         except RuntimeError:
             # write the dict at the index only if its values do not have the
             # batch size of self
-            batch_size = self.batch_size
+            batch_size = self._tensordict.batch_size
             if not any(
                 isinstance(value, torch.Tensor)
                 and value.shape[: len(batch_size)] != batch_size
@@ -3400,7 +3400,7 @@ def _update_at_(
                 self._tensordict.update(source)
             except RuntimeError:
                 # TensorDict.update checks the batch size before it changes anything
-                batch_size = self.batch_size
+                batch_size = self._tensordict.batch_size
                 if (
                     not isinstance(self._tensordict, TensorDict)
                     or is_non_tensor(input_dict_or_td)
@@ -4183,9 +4183,11 @@ def _state_dict(
             )
 
     metadata_key = prefix[:-1] if prefix.endswith(".") else prefix
+    # Read the metadata from the TensorDict: with shadow=True,
+    # self.batch_size and self.device can be fields.
     destination._metadata[metadata_key] = {
-        "batch_size": self.batch_size,
-        "device": self.device,
+        "batch_size": td.batch_size,
+        "device": td.device,
         "_type": type(self).__qualname__,
         "_non_tensor": non_tensor,
     }
@@ -4245,7 +4247,9 @@ def _load_state_dict(
             else:
                 td.set(
                     key,
-                    NonTensorData(data=value, batch_size=self.batch_size),
+                    NonTensorData(
+                        data=value, batch_size=td.batch_size, device=td.device
+                    ),
                     inplace=not assign,
                 )
 
