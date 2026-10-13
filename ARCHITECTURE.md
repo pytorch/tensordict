@@ -180,6 +180,40 @@ implementations of operations such as `reshape`, `split`, `__setitem__`,
 `_index_tensordict`, `_apply_nest` and the comparison operators, which a class
 overrides only when it can do better.
 
+When only part of an operation depends on the storage, the public method is
+written once, with its argument checks and error messages, and calls a small
+private hook that a class overrides:
+
+- `chunk` calls `_chunk`. `TensorDict` overrides it with a loop over its
+  leaves, and a store element with a single read from the server.
+- `rename_key_` checks the lock, the key types and `safe`, then calls
+  `_rename_key`. `PersistentTensorDict` and the stores override it to move the
+  entry without reading it.
+- `pop` and `popitem` pass the value they remove through `_popped_value`,
+  which a store or a zarr group overrides to copy a nested view before `del_`
+  deletes its data.
+- `lock_` and `unlock_` walk the sub-tensordicts that `_lock_sub_tensordicts`
+  returns. A store returns the ones it has cached, so that locking reads
+  nothing from the server.
+- `contiguous(inplace=True)` calls `_contiguous_inplace`, which raises unless
+  the class supports it.
+
+The `batch_size` and `device` properties read the `_batch_size` and `_device`
+attributes, which each class sets, and `_change_batch_size` writes
+`_batch_size`. A class that derives one of them (a lazy stack, a view, a store
+that persists it) replaces only the accessor it needs, with
+`@TensorDictBase.batch_size.getter` or `@TensorDictBase.device.setter`.
+
+The generic `_select` and `_exclude` return a `TensorDict` copy of the entries
+they keep. `TensorDict` and `LazyStackedTensorDict` override them to share the
+values instead. With `_masking_on_dense_copy = True`, `where` and
+`masked_fill` work on a `to_tensordict()` copy: the stores set it because they
+read the copy in one round trip, and `PersistentTensorDict` and the views
+because that copy is the result they return.
+
+Each override that a class keeps says why in a comment that starts with
+`# Override:`.
+
 The implementations also reuse code in two ways:
 
 - A few class-level aliases still borrow TensorDict's code where it is
@@ -252,7 +286,9 @@ touches these places:
 1. The method and its docstring, on `TensorDictBase`: in the mixin of
    `_base/` for its area, or in `base.py` for core operations. If it can be
    written with other methods, write it once there. Make it abstract only if
-   each backend needs its own code. Abstract methods, properties,
+   each backend needs its own code. If only part of it depends on the
+   storage, write the public method once and let it call a private hook, as
+   in "The TensorDictBase contract". Abstract methods, properties,
    `implement_for` overloads and methods that read a global that `base.py`
    rebinds stay in `base.py`. The comment above the mixin imports in
    `base.py` gives the rules for code in a mixin. In particular, a mixin
