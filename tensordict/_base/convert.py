@@ -1497,7 +1497,10 @@ class _Conversion:
         """Converts a tensordict to a namedtuple.
 
         Args:
-            dest_cls (Type, optional): an optional namedtuple class to use.
+            dest_cls (Type, optional): an optional namedtuple class to use
+                for the result. A nested tensordict is converted to
+                ``dest_cls`` too if ``dest_cls`` takes its keys, and to a
+                ``GenericDict`` otherwise.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -1510,18 +1513,25 @@ class _Conversion:
 
         """
 
-        def dict_to_namedtuple(dictionary):
+        def dict_to_namedtuple(dictionary, root=False):
             for key, value in dictionary.items():
                 if isinstance(value, dict):
                     dictionary[key] = dict_to_namedtuple(value)
-            cls = (
-                collections.namedtuple("GenericDict", dictionary.keys())
-                if dest_cls is None
-                else dest_cls
-            )
+            cls = dest_cls
+            if cls is not None and not root and hasattr(cls, "_fields"):
+                # a nested level uses dest_cls only if dest_cls takes its keys
+                keys = set(dictionary)
+                defaults = getattr(cls, "_field_defaults", {})
+                if not (
+                    keys <= set(cls._fields)
+                    and set(cls._fields) - keys <= set(defaults)
+                ):
+                    cls = None
+            if cls is None:
+                cls = collections.namedtuple("GenericDict", dictionary.keys())
             return cls(**dictionary)
 
-        return dict_to_namedtuple(self.to_dict(retain_none=False))
+        return dict_to_namedtuple(self.to_dict(retain_none=False), root=True)
 
     @classmethod
     def from_any(

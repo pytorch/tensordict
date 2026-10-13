@@ -1929,6 +1929,23 @@ class TestGeneric:
         for name in fields:
             assert (td[name] == getattr(result, name)).all()
 
+    def test_to_namedtuple_dest_cls(self):
+        # https://github.com/pytorch/tensordict/issues/2372
+        Outer = namedtuple("Outer", ["a", "nested"])
+        td = TensorDict(a=torch.zeros(2), nested=TensorDict(p=torch.ones(2)))
+        nt = td.to_namedtuple(dest_cls=Outer)
+        assert type(nt) is Outer
+        assert type(nt.nested).__name__ == "GenericDict"
+        assert nt.nested._fields == ("p",)
+        assert (nt.nested.p == 1).all()
+        # a nested level that dest_cls takes keeps dest_cls
+        Same = namedtuple("Same", ["a", "b"], defaults=[None])
+        td = TensorDict(a=torch.zeros(2), b=TensorDict(a=torch.ones(2)))
+        nt = td.to_namedtuple(dest_cls=Same)
+        assert type(nt) is Same
+        assert type(nt.b) is Same
+        assert nt.b.b is None
+
     def test_from_pytree(self):
         class WeirdLookingClass:
             pass
