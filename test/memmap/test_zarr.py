@@ -391,6 +391,16 @@ class TestZarrWriteOps:
         ztd.rename_key_("b", "b2")
         assert ("b2", "c") in ztd.keys(True, True)
 
+    def test_rename_key_inside_old_key(self, ztd):
+        # a key moved into one of its own entries moves there, as in
+        # TensorDict: a group raised RecursionError, and an array TypeError
+        expected = ztd.to_tensordict()
+        ztd.rename_key_("b", ("b", "b"))
+        ztd.rename_key_("a", ("a", "x", "y"))
+        assert set(ztd.keys(True, True)) == {("a", "x", "y"), ("b", "b", "c")}
+        torch.testing.assert_close(ztd["a", "x", "y"], expected["a"])
+        torch.testing.assert_close(ztd["b", "b", "c"], expected["b", "c"])
+
     def test_pop_nested(self, ztd):
         # https://github.com/pytorch/tensordict/issues/2089
         c = ztd["b", "c"].clone()
