@@ -204,6 +204,11 @@ torch.serialization.add_safe_globals(
         NonTensorData,
         NonTensorStack,
         _LockedSchema,
+        # The results of max(dim=...), min(dim=...), cummax and cummin
+        torch.return_types.max,
+        torch.return_types.min,
+        torch.return_types.cummax,
+        torch.return_types.cummin,
         # Pickles from tensordict<=0.4, where this was a dict subclass
         (dict, "tensordict.utils._StringOnlyDict"),
     ]

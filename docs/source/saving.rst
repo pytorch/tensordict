@@ -348,8 +348,9 @@ torch.save and torch.load
 tensordict, it allowlists the classes and functions that these files
 reference, with :func:`torch.serialization.add_safe_globals`. The list covers
 :class:`~tensordict.TensorDict`, :class:`~tensordict.LazyStackedTensorDict`,
-consolidated tensordicts, and non-tensor values made of Python builtins, such
-as strings, numbers, lists, and dicts:
+consolidated tensordicts, non-tensor values made of Python builtins, such
+as strings, numbers, lists, and dicts, and the ``torch.return_types`` that
+``max(dim=...)``, ``min(dim=...)``, ``cummax`` and ``cummin`` return:
 
   >>> batch = TensorDict({"loss": torch.zeros(3), "meta": {"split": "train"}}, batch_size=[3])
   >>> torch.save(batch, root / "batch.pt")

@@ -3062,6 +3062,29 @@ def _exit(self, exc_type, exc_val, exc_tb):
     return result
 
 
+# The torch.return_types that TensorDict.max, min, cummax and cummin return
+_TD_RETURN_TYPES = (
+    torch.return_types.max,
+    torch.return_types.min,
+    torch.return_types.cummax,
+    torch.return_types.cummin,
+)
+
+
+def _tuple_like(result: tuple, items: list) -> tuple:
+    """Returns ``items`` in a plain tuple, or in a tuple of the type of ``result``.
+
+    The ``torch.return_types`` of ``max``, ``min``, ``cummax`` and ``cummin`` keep
+    their type. ``torch.load(weights_only=True)`` accepts them, see
+    ``tensordict/_reductions.py``. Other tuples stay plain tuples, such as the
+    namedtuples of ``to_namedtuple``: their classes are made at call time and
+    cannot be pickled.
+    """
+    if isinstance(result, _TD_RETURN_TYPES):
+        return type(result)(items)
+    return tuple(items)
+
+
 # The fallback methods that write a key, with the position and the name of
 # its argument. See _warn_non_field_keys.
 _FIELD_KEY_ARGUMENT = {
@@ -3135,7 +3158,9 @@ def _wrap_td_method(
                 return self
 
             if isinstance(result, tuple):
-                return tuple(deliver_result(self, r, kwargs) for r in result)
+                return _tuple_like(
+                    result, [deliver_result(self, r, kwargs) for r in result]
+                )
             return deliver_result(self, result, kwargs)
 
         if funcname not in _FIELD_KEY_ARGUMENT:
@@ -3169,7 +3194,7 @@ def _wrap_td_method(
             return self
 
         if isinstance(result, tuple):
-            return tuple(deliver_result(self, r, {}) for r in result)
+            return _tuple_like(result, [deliver_result(self, r, {}) for r in result])
         return deliver_result(self, result, {})
 
     def wrapped_func_setter(self, value):
