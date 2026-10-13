@@ -6071,6 +6071,16 @@ class NonTensorData(NonTensorDataBase):
                 update_batch_size=update_batch_size,
             )
         if other.batch_size != self.batch_size:
+            if other.ndim > self.ndim or any(
+                old != 1 and new != old
+                for old, new in zip(
+                    other.batch_size, self.batch_size[self.ndim - other.ndim :]
+                )
+            ):
+                raise ValueError(
+                    f"other of batch size {list(other.batch_size)} cannot be "
+                    f"expanded to the batch size {list(self.batch_size)}."
+                )
             other = other.expand(self.batch_size)
 
         def pick(cond, other_values):
