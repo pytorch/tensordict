@@ -175,6 +175,10 @@ class _PointwiseOps:
             A new TensorDict instance with the same key set as the original,
             but with all tensors having performed a AND operation with the given value.
         """
+        if _mixes_lazy_stacks(self, (other,)):
+            # as for | and ^: the foreach path below flattens a lazy stack
+            # into keys such as ("0", "a"), which a dense operand lacks
+            return self._compare(other, "__and__", "__and__", default=False)
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(True, True, sorting_keys=keys)

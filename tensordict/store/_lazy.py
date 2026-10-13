@@ -45,6 +45,7 @@ from tensordict.store._store import (
     _has_redis,
     _iter_registry_keys,
     _KEY_SEP,
+    _rename_plan,
     Self,
     STORE_BACKENDS,
 )
@@ -1836,15 +1837,10 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
 
         async def _arename():
             all_keys = await self._aget_all_keys()
-            if old_path in all_keys:
-                renames = [(old_path, new_path)]
-            else:
-                renames = self._sub_td_renames(all_keys, old_path, new_path)
-            if not renames:
-                # a sub-tensordict at old_path may still exist, with a
-                # destination that is not free
-                old_prefix = old_path + _KEY_SEP
-                return renames, any(k.startswith(old_prefix) for k in all_keys)
+            plan = _rename_plan(all_keys, old_path, new_path, old_key, new_key)
+            if plan is None:
+                return None
+            renames, deletes = plan
             moves = []
             for src_kp, dst_kp in renames:
                 moves += [
@@ -1861,6 +1857,12 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
                 pipe.exists(src)
             found = await pipe.execute()
             pipe = self._client.pipeline()
+            # the entry replaces what is stored at new_path, as in TensorDict
+            for kp in deletes:
+                pipe.delete(self._data_key(kp))
+                pipe.delete(self._idx_key(kp))
+                pipe.delete(self._meta_key(kp))
+                pipe.srem(self._keys_registry_key, kp)
             for (src, dst), src_found in zip(moves, found):
                 if src_found:
                     pipe.rename(src, dst)
@@ -1870,41 +1872,21 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
                 pipe.srem(self._keys_registry_key, src_kp)
                 pipe.sadd(self._keys_registry_key, dst_kp)
             await pipe.execute()
-            return renames, True
+            return plan
 
-        renamed, found = self._run_sync(_arename())
-        if self._meta_cache is not None:
-            # the old paths are gone, and a leaf at new_path may have been
+        plan = self._run_sync(_arename())
+        if plan is not None and self._meta_cache is not None:
+            # the old paths are gone, and the leaves at new_path may have been
             # replaced
-            for src_kp, dst_kp in renamed:
+            renames, deletes = plan
+            for kp in deletes:
+                self._meta_cache.pop(kp, None)
+            for src_kp, dst_kp in renames:
                 self._meta_cache.pop(src_kp, None)
                 self._meta_cache.pop(dst_kp, None)
-        if not found:
+        if plan is None:
             # stacklevel 3: skip rename_key_
             _warn_missing_key(self, "rename_key_", old_key, stacklevel=3)
-
-    @staticmethod
-    def _sub_td_renames(
-        all_keys: set[str], old_path: str, new_path: str
-    ) -> list[tuple[str, str]]:
-        """Leaf renames for moving the sub-tensordict at old_path to new_path.
-
-        Only a move to a free destination is done: nothing may be stored at
-        or below new_path, no leaf may be stored above it, and new_path may
-        not be inside old_path. Otherwise the list is empty and the store is
-        left unchanged.
-        """
-        old_prefix = old_path + _KEY_SEP
-        new_prefix = new_path + _KEY_SEP
-        nested = [k for k in all_keys if k.startswith(old_prefix)]
-        if not nested or new_path == old_path or new_path.startswith(old_prefix):
-            return []
-        if new_path in all_keys or any(k.startswith(new_prefix) for k in all_keys):
-            return []
-        parts = new_path.split(_KEY_SEP)
-        if any(_KEY_SEP.join(parts[:i]) in all_keys for i in range(1, len(parts))):
-            return []
-        return [(k, new_prefix + k[len(old_prefix) :]) for k in nested]
 
     def entry_class(self, key: NestedKey) -> type:
         if isinstance(key, str):

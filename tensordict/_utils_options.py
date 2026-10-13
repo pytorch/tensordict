@@ -10,6 +10,7 @@ import warnings
 from typing import Any
 
 from tensordict._deprecation import warn_deprecated, warn_deprecated_env_var
+from torch.compiler import is_compiling
 from torch.utils._contextlib import _DecoratorContextManager
 
 __all__ = [
@@ -33,6 +34,53 @@ def _strtobool(val: str) -> bool:
     if val in ("n", "no", "f", "false", "off", "0"):
         return False
     raise ValueError(f"invalid truth value {val!r}")
+
+
+# Returned by _set_env when it leaves the environment alone.
+_ENV_UNTOUCHED = object()
+
+
+def _has_mode(getter, mode) -> bool:
+    # Whether the option already has ``mode``, so that a block setting it
+    # changes nothing.
+    try:
+        return getter() == bool(mode)
+    except ValueError:
+        # an invalid environment value: let the block set the mode
+        return False
+
+
+def _set_env(name: str, value: str):
+    # Writes the option to the environment, which subprocesses inherit, and
+    # returns the old value. Dynamo cannot trace environment writes, so
+    # under torch.compile the environment is left alone.
+    if is_compiling():
+        return _ENV_UNTOUCHED
+    old = os.environ.get(name)
+    os.environ[name] = value
+    return old
+
+
+def _restore_env(name: str, old) -> None:
+    if old is _ENV_UNTOUCHED:
+        return
+    if old is None:
+        os.environ.pop(name, None)
+    else:
+        os.environ[name] = old
+
+
+def _restore_env_from_mode(name: str, mode) -> None:
+    # The environment holds str(mode), or nothing while the option was never
+    # set (the module globals start as the environment's value at import).
+    # Writes it back after a .set() call changed the mode inside a block that
+    # left the environment alone.
+    if is_compiling():
+        return
+    if mode is None:
+        os.environ.pop(name, None)
+    else:
+        os.environ[name] = str(mode)
 
 
 _REPR_OPTIONS = {
@@ -179,22 +227,27 @@ class set_lazy_legacy(_DecoratorContextManager):
         return clone
 
     def __enter__(self) -> None:
-        self.set()
+        global _LAZY_OP
+        if _has_mode(lazy_legacy, self.mode):
+            # the block changes nothing: leave the environment alone
+            self._old_mode, self._old_env = _LAZY_OP, _ENV_UNTOUCHED
+            _LAZY_OP = bool(self.mode)
+        else:
+            self.set()
 
     def set(self) -> None:
         global _LAZY_OP
         self._old_mode = _LAZY_OP
-        self._old_env = os.environ.get("LAZY_LEGACY_OP")
         _LAZY_OP = bool(self.mode)
-        os.environ["LAZY_LEGACY_OP"] = str(_LAZY_OP)
+        self._old_env = _set_env("LAZY_LEGACY_OP", str(_LAZY_OP))
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         global _LAZY_OP
+        if self._old_env is _ENV_UNTOUCHED and _LAZY_OP != bool(self.mode):
+            # a .set() call inside the block changed the mode
+            _restore_env_from_mode("LAZY_LEGACY_OP", self._old_mode)
         _LAZY_OP = self._old_mode
-        if self._old_env is None:
-            os.environ.pop("LAZY_LEGACY_OP", None)
-        else:
-            os.environ["LAZY_LEGACY_OP"] = self._old_env
+        _restore_env("LAZY_LEGACY_OP", self._old_env)
 
 
 def lazy_legacy(allow_none=False):
@@ -268,22 +321,31 @@ class _set_capture_non_tensor_stack(_DecoratorContextManager):
         return type(self)(self.mode)
 
     def __enter__(self) -> None:
-        self.set()
+        global _CAPTURE_NONTENSOR_STACK
+        if _has_mode(capture_non_tensor_stack, self.mode):
+            # the block changes nothing: leave the environment alone
+            self._old_mode, self._old_env = _CAPTURE_NONTENSOR_STACK, _ENV_UNTOUCHED
+            _CAPTURE_NONTENSOR_STACK = bool(self.mode)
+        else:
+            self.set()
 
     def set(self) -> None:
         global _CAPTURE_NONTENSOR_STACK
         self._old_mode = _CAPTURE_NONTENSOR_STACK
-        self._old_env = os.environ.get("CAPTURE_NONTENSOR_STACK")
         _CAPTURE_NONTENSOR_STACK = bool(self.mode)
-        os.environ["CAPTURE_NONTENSOR_STACK"] = str(_CAPTURE_NONTENSOR_STACK)
+        self._old_env = _set_env(
+            "CAPTURE_NONTENSOR_STACK", str(_CAPTURE_NONTENSOR_STACK)
+        )
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         global _CAPTURE_NONTENSOR_STACK
+        if self._old_env is _ENV_UNTOUCHED and _CAPTURE_NONTENSOR_STACK != bool(
+            self.mode
+        ):
+            # a .set() call inside the block changed the mode
+            _restore_env_from_mode("CAPTURE_NONTENSOR_STACK", self._old_mode)
         _CAPTURE_NONTENSOR_STACK = self._old_mode
-        if self._old_env is None:
-            os.environ.pop("CAPTURE_NONTENSOR_STACK", None)
-        else:
-            os.environ["CAPTURE_NONTENSOR_STACK"] = self._old_env
+        _restore_env("CAPTURE_NONTENSOR_STACK", self._old_env)
 
 
 class set_capture_non_tensor_stack(_set_capture_non_tensor_stack):
@@ -294,7 +356,8 @@ class set_capture_non_tensor_stack(_set_capture_non_tensor_stack):
         or ``CAPTURE_NONTENSOR_STACK=1``) is deprecated and will be removed in
         TensorDict 0.17. Use :attr:`NonTensorStack.data <tensordict.NonTensorStack.data>`
         to get the single value of a stack of identical values.
-        ``set_capture_non_tensor_stack(False)``, the default, does not warn.
+        ``set_capture_non_tensor_stack(False)``, the default, does not warn,
+        and will keep working, doing nothing, after the removal.
     """
 
     def __init__(self, mode: bool) -> None:
@@ -380,22 +443,27 @@ class _set_list_to_stack(_DecoratorContextManager):
         return type(self)(self.mode)
 
     def __enter__(self) -> None:
-        self.set()
+        global _LIST_TO_STACK
+        if _has_mode(list_to_stack, self.mode):
+            # the block changes nothing: leave the environment alone
+            self._old_mode, self._old_env = _LIST_TO_STACK, _ENV_UNTOUCHED
+            _LIST_TO_STACK = bool(self.mode)
+        else:
+            self.set()
 
     def set(self) -> None:
         global _LIST_TO_STACK
         self._old_mode = _LIST_TO_STACK
-        self._old_env = os.environ.get("LIST_TO_STACK")
         _LIST_TO_STACK = bool(self.mode)
-        os.environ["LIST_TO_STACK"] = str(_LIST_TO_STACK)
+        self._old_env = _set_env("LIST_TO_STACK", str(_LIST_TO_STACK))
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         global _LIST_TO_STACK
+        if self._old_env is _ENV_UNTOUCHED and _LIST_TO_STACK != bool(self.mode):
+            # a .set() call inside the block changed the mode
+            _restore_env_from_mode("LIST_TO_STACK", self._old_mode)
         _LIST_TO_STACK = self._old_mode
-        if self._old_env is None:
-            os.environ.pop("LIST_TO_STACK", None)
-        else:
-            os.environ["LIST_TO_STACK"] = self._old_env
+        _restore_env("LIST_TO_STACK", self._old_env)
 
 
 class set_list_to_stack(_set_list_to_stack):
@@ -406,7 +474,7 @@ class set_list_to_stack(_set_list_to_stack):
         ``LIST_TO_STACK=0``) is deprecated and will be removed in TensorDict 0.17.
         Use :meth:`td.set_non_tensor(key, value) <tensordict.TensorDictBase.set_non_tensor>`
         to store a list as one value. ``set_list_to_stack(True)``, the default,
-        does not warn.
+        does not warn, and will keep working, doing nothing, after the removal.
     """
 
     def __init__(self, mode: bool) -> None:

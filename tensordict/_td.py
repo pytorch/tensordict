@@ -54,6 +54,7 @@ from tensordict.base import (
     _UNSET,
     _warn_scalar_over_non_tensor,
     _warn_set_at_cast,
+    _wrap_extra_state,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
     is_tensor_collection,
@@ -116,6 +117,7 @@ from tensordict.utils import (
 from torch import Tensor
 from torch._functorch.vmap import _maybe_remove_batch_dim
 from torch.compiler import is_compiling
+from torch.nn.modules.module import _EXTRA_STATE_KEY_SUFFIX
 from torch.utils._pytree import tree_map
 
 try:
@@ -543,6 +545,10 @@ class TensorDict(TensorDictBase):
                 hook_result = hook(module, destination, prefix, local_metadata)
                 if hook_result is not None:
                     destination = hook_result
+            if _EXTRA_STATE_KEY_SUFFIX in destination:
+                destination[_EXTRA_STATE_KEY_SUFFIX] = _wrap_extra_state(
+                    destination[_EXTRA_STATE_KEY_SUFFIX]
+                )
         if not filter_empty or destination:
             destination_set = True
             if cls is TensorDict and not use_state_dict:
@@ -1419,7 +1425,12 @@ class TensorDict(TensorDictBase):
                 # result has no single truth value: write the value anyway.
                 is_diff = True
             if is_diff:
-                dest_val = dest.maybe_to_stack()
+                if _is_stack_of_batchless_non_tensors(dest):
+                    # Write into the stack: rebuilding it with
+                    # maybe_to_stack() would cost O(size) per write
+                    dest_val = dest
+                else:
+                    dest_val = dest.maybe_to_stack()
                 if (
                     idx is Ellipsis
                     and dest_val is dest
@@ -3625,6 +3636,22 @@ class _TensorDictKeysView:
         include_nested = f"include_nested={self.include_nested}"
         leaves_only = f"leaves_only={self.leaves_only}"
         return f"{type(self).__name__}({list(self)},\n{indent(include_nested, 4 * ' ')},\n{indent(leaves_only, 4 * ' ')})"
+
+
+def _is_stack_of_batchless_non_tensors(dest) -> bool:
+    # A NonTensorStack whose NonTensorData leaves have no batch dims, which
+    # maybe_to_stack() would rebuild unchanged. The members of a stack are
+    # NonTensorData (tensorclasses) or NonTensorStacks.
+    if not is_non_tensor(dest) or is_tensorclass(dest):
+        return False
+    batch_dims = dest.batch_dims
+    if batch_dims == 1:
+        return True
+    members = dest.tensordicts
+    # read the class attribute: is_tensorclass is slower, once per member
+    if any(getattr(type(td), "_is_tensorclass", False) for td in members):
+        return False
+    return batch_dims == 2 or all(map(_is_stack_of_batchless_non_tensors, members))
 
 
 def _index_to_str(index: IndexType) -> Any:

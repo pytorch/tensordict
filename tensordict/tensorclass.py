@@ -6,11 +6,14 @@
 from __future__ import annotations
 
 import abc
+import collections
 import concurrent
 import ctypes
 import dataclasses
 import functools
+import hashlib
 import inspect
+import json
 import multiprocessing.managers
 import multiprocessing.sharedctypes
 import numbers
@@ -93,7 +96,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
 from torch import multiprocessing as mp, Tensor
 from torch.compiler import is_compiling, is_dynamo_compiling
 from torch.multiprocessing import Manager
-from torch.utils._pytree import tree_map
+from torch.utils._pytree import tree_is_leaf, tree_map
 
 if TYPE_CHECKING:
     from typing import Self
@@ -159,6 +162,19 @@ _TENSOR_ONLY_TYPE_ERR = TypeError(
 _TENSORCLASS_FLAGS = ("autocast", "nocast", "frozen", "tensor_only", "shadow")
 # methods where non_tensordict data should be cleared in the return value
 _CLEAR_METADATA = {"all", "any"}
+
+# The container types that from_pytree records under _pytree_type. memmap
+# pickles them to other.pickle, which older versions read, and also saves their
+# names to _JSON_TYPES_FILE, so that load_memmap needs no pickle for them.
+_JSON_TYPES = {
+    "dict": dict,
+    "OrderedDict": collections.OrderedDict,
+    "list": list,
+    "tuple": tuple,
+}
+_JSON_TYPE_NAMES = {value: key for key, value in _JSON_TYPES.items()}
+_JSON_TYPES_FILE = "json_types.json"
+
 # torch functions where we can wrap the corresponding TensorDict version
 _TD_PASS_THROUGH = {
     torch.atleast_1d: True,
@@ -1300,6 +1316,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
                             # see above: only for the guard, as keys() can be
                             # costly (e.g. on a lazy stack)
                             out = td._get_str(key, None)
+                        if out is _UNSET:
+                            out = _partial_field(td, key)
                     if out is _UNSET:
                         # A field missing from the TensorDict is None
                         non_tensordict = self._non_tensordict
@@ -2541,10 +2559,13 @@ def _memmap_(
                 else:
                     f.write(json_str)
                 if to_pickle:
+                    pickled = pickle.dumps(to_pickle)
                     with open(prefix / "other.pickle", "wb") as pickle_file:
-                        pickle.dump(to_pickle, pickle_file)
+                        pickle_file.write(pickled)
+                    _save_json_types(prefix, to_pickle, pickled)
                 else:
                     (prefix / "other.pickle").unlink(missing_ok=True)
+                    (prefix / _JSON_TYPES_FILE).unlink(missing_ok=True)
 
         if executor is None:
             save_metadata()
@@ -2594,6 +2615,47 @@ def _share_memory_(self):
     return self
 
 
+def _save_json_types(prefix: Path, to_pickle: dict, pickled: bytes) -> None:
+    # When other.pickle holds only classes of _JSON_TYPES, save their names
+    # with the hash of other.pickle, so that a file that an older version
+    # rewrote later is not read with stale names.
+    path = prefix / _JSON_TYPES_FILE
+    if not all(
+        isinstance(value, type) and value in _JSON_TYPE_NAMES
+        for value in to_pickle.values()
+    ):
+        path.unlink(missing_ok=True)
+        return
+    saved = {
+        "types": {key: _JSON_TYPE_NAMES[value] for key, value in to_pickle.items()},
+        "pickle_sha256": hashlib.sha256(pickled).hexdigest(),
+    }
+    with open(path, "w") as f:
+        json.dump(saved, f)
+
+
+def _load_json_types(prefix: Path) -> dict | None:
+    # The classes that other.pickle holds, read without pickle, or None if
+    # the save did not record them (e.g. files written by older versions).
+    path = prefix / _JSON_TYPES_FILE
+    if not path.exists() or not (prefix / "other.pickle").exists():
+        return None
+    with path.open("rb") as f:
+        saved = json.loads(f.read())
+    with (prefix / "other.pickle").open("rb") as f:
+        if hashlib.sha256(f.read()).hexdigest() != saved.get("pickle_sha256"):
+            return None
+    types = {}
+    for key, name in saved["types"].items():
+        if name not in _JSON_TYPES:
+            raise ValueError(
+                f"Unknown type name {name!r} for the field {key!r} in {path}. "
+                f"Expected one of {sorted(_JSON_TYPES)}."
+            )
+        types[key] = _JSON_TYPES[name]
+    return types
+
+
 def _load_pickle_file(path, *, allow_pickle: bool | None):
     if allow_pickle is False:
         raise RuntimeError(
@@ -2628,7 +2690,10 @@ def _load_memmap(
     del non_tensordict["_type"]
     # Path methods (rather than os.path) so that archive paths can be
     # traversed through the same code path as regular directories.
-    if (prefix / "other.pickle").exists():
+    json_types = _load_json_types(prefix)
+    if json_types is not None:
+        non_tensordict.update(json_types)
+    elif (prefix / "other.pickle").exists():
         non_tensordict.update(
             _load_pickle_file(
                 prefix / "other.pickle",
@@ -2758,6 +2823,51 @@ def _none_fields(self) -> list[str]:
     ]
 
 
+def _partial_field(td, key: str) -> Any:
+    # A lazy stack's keys() lists only the keys every member holds. A field
+    # that only some members set reads as the list of the members' values,
+    # with None for a member that does not set it, like get(key, as_list=True).
+    # Returns _UNSET if no member sets it.
+    if not isinstance(td, LazyStackedTensorDict):
+        return _UNSET
+    values = []
+    found = False
+    for member in td.tensordicts:
+        if type(member) is TensorDict:
+            # cheaper than _get_str, which raises a KeyError for a miss
+            out = member._tensordict.get(key)
+        else:
+            out = member._get_str(key, _UNSET)
+            if out is _UNSET:
+                out = _partial_field(member, key)
+                if out is _UNSET:
+                    out = None
+        if out is not None:
+            found = True
+            if is_non_tensor(out):
+                out = (
+                    out.data
+                    if not isinstance(out, NonTensorStack)
+                    else out.tolist(as_linked_list=True)
+                )
+        values.append(out)
+    return values if found else _UNSET
+
+
+def _del_partial_field(td, key: str) -> None:
+    # Deletes key from the members of a lazy stack that hold it, when the
+    # stack's keys() does not list it because other members do not.
+    if isinstance(td, LazyStackedTensorDict):
+        for member in td.tensordicts:
+            if type(member) is TensorDict:
+                if key in member._tensordict:
+                    member.del_(key)
+            elif key in member.keys():
+                member.del_(key)
+            else:
+                _del_partial_field(member, key)
+
+
 def _non_tensor_keys(self):
     # The fields that the TensorDict of self does not hold
     if not type(self)._is_non_tensor:
@@ -2832,6 +2942,8 @@ def _getattr(self, item: str, **kwargs) -> Any:
             out = td._get_str(item, _UNSET, **kwargs)
             if out is _UNSET and is_compiling() and item in td.keys():
                 out = td._get_str(item, None, **kwargs)
+            if out is _UNSET:
+                out = _partial_field(td, item)
         if out is _UNSET:
             # A declared field that neither store holds is None
             return None
@@ -2891,6 +3003,8 @@ class _FieldGetter:
             out = td._get_str(name, _UNSET)
             if out is _UNSET and is_compiling() and name in td.keys():
                 out = td._get_str(name, None)
+            if out is _UNSET:
+                out = _partial_field(td, name)
         if out is _UNSET:
             # A declared field that neither store holds is None
             return None
@@ -3005,6 +3119,8 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
         td = self._tensordict
         if key in (td._tensordict if type(td) is TensorDict else td.keys()):
             td.del_(key)
+        elif type(td) is not TensorDict:
+            _del_partial_field(td, key)
         # _set_none_field, inlined
         if __dict__ is None:
             __dict__ = self.__dict__
@@ -4205,6 +4321,12 @@ def _set(
                         f"Cannot update an existing entry of type {type(self._tensordict.get(key))} with a value of type {value_type}."
                     )
                 self._tensordict.del_(key)
+            elif (
+                not self_is_non_tensor
+                and not inplace
+                and type(self._tensordict) is not TensorDict
+            ):
+                _del_partial_field(self._tensordict, key)
             if self_is_non_tensor:
                 self._non_tensordict[key] = value
             # _set_none_field, inlined: a None field is a missing key
@@ -5838,8 +5960,22 @@ class NonTensorDataBase(TensorClass):
             names=self.names if self._has_names() else None,
         )
 
+    def copy(self):
+        """Return a shallow copy, equivalent to ``_clone(recurse=False)``."""
+        return self._clone(recurse=False)
+
     def _clone(self, recurse: bool = True):
-        result = TensorClass._clone(self, recurse)
+        non_tensordict = self._non_tensordict
+        if not recurse and all(map(tree_is_leaf, non_tensordict.values())):
+            # TensorClass._clone would copy the values with tree_map, which
+            # returns pytree leaves unchanged: skip it.
+            result = self._from_tensordict(
+                self._tensordict._clone(recurse=False),
+                dict(non_tensordict),
+                safe=False,
+            )
+        else:
+            result = TensorClass._clone(self, recurse)
         if not recurse and self._tensordict._is_shared:
             # The shallow copy holds the same shared wrapper: mark it shared so
             # that reads unwrap the value and in-place updates write through it.
@@ -6032,8 +6168,12 @@ class NonTensorData(NonTensorDataBase):
     loads it. If JSON can encode the value, it goes to the ``meta.json``
     file of the entry (a tuple is loaded back as a list). Other values, such
     as a ``set`` or an instance of another class, are pickled to an
-    ``other.pickle`` file. Pickle can execute arbitrary code when it loads,
-    so :meth:`~tensordict.TensorDictBase.load_memmap` warns when it loads a
+    ``other.pickle`` file. The classes ``dict``, ``collections.OrderedDict``,
+    ``list`` and ``tuple``, which :meth:`~tensordict.TensorDict.from_pytree`
+    records, are pickled for older versions and also saved by name, and
+    :meth:`~tensordict.TensorDictBase.load_memmap` reads them without pickle.
+    Pickle can execute arbitrary code when it loads, so
+    :meth:`~tensordict.TensorDictBase.load_memmap` warns when it loads a
     pickled value. Pass ``allow_pickle=True`` for data that you trust. From
     TensorDict 0.16, the default is ``allow_pickle=False``, which raises a
     ``RuntimeError`` for pickled values.
