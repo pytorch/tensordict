@@ -204,6 +204,28 @@ See also
 - [`TensorClassModuleBase`](tensordict.nn.TensorClassModuleBase.html#tensordict.nn.TensorClassModuleBase) for typed `nn.Module` I/O backed by
 tensorclasses.
 
+*classmethod*from_dict(*input_dict*, ***, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_size=None*, *device=None*, *batch_dims=None*)
+
+Builds an instance of the tensorclass from a dictionary of its fields.
+
+The fields that `input_dict` misses are set to `None`, also those that
+declare a default or a default factory. Starting with TensorDict 0.17, the
+default will change to filling these fields with their defaults, as the
+constructor does. Until then, a call that misses such a field warns with a
+[`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning).
+
+Parameters:
+
+**input_dict** ([*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)) - the values of the fields. Nested dictionaries become
+tensordicts, or tensorclasses for the fields annotated with one.
+
+Keyword Arguments:
+
+- **auto_batch_size** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - whether to infer the batch size.
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - the batch size.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - the device.
+- **batch_dims** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the number of batch dimensions to infer.
+
 from_tensordict(*tensordict: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *safe: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
