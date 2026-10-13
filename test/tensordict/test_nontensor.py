@@ -1146,6 +1146,36 @@ class TestNonTensorData:
         data[1:] = NonTensorStack("s0", "s0")
         assert data.tolist() == ["s0"] * 3
 
+    @pytest.mark.parametrize(
+        "index,rows",
+        [
+            (torch.tensor([0, 2]), [0, 2]),
+            (torch.tensor([True, False, True, False]), [0, 2]),
+            (slice(0, 2), [0, 1]),
+        ],
+    )
+    @pytest.mark.parametrize("source", ["stack", "data", "nested"])
+    def test_setitem_new_key(self, index, rows, source):
+        # A non-tensor stack that the destination lacks gets the full batch
+        # size, with None in the rows not written, as a tensor key gets zeros
+        if source == "data":
+            # A NonTensorData keeps its one value for all rows
+            text, values, rows = NonTensorData("a", batch_size=[2]), ["a"] * 4, range(4)
+        else:
+            text, values = NonTensorStack("a", "b"), ["a", "b"]
+        src = TensorDict(obs=torch.ones(2), text=text, batch_size=[2])
+        key = "text"
+        if source == "nested":
+            src = TensorDict(nested=src, batch_size=[2])
+            key = ("nested", "text")
+        out = TensorDict(obs=torch.zeros(4), batch_size=[4])
+        out[index] = src
+        expected = [None] * 4
+        for row, value in zip(rows, values):
+            expected[row] = value
+        assert out.get(key).batch_size == out.batch_size
+        assert out.get(key).tolist() == expected
+
     def test_stack(self, non_tensor_data):
         assert (
             LazyStackedTensorDict.lazy_stack([non_tensor_data, non_tensor_data], 0).get(
