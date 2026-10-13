@@ -162,16 +162,16 @@ entry.
 
 Note
 
-`to_zarr` writes the metadata file (`zarr.json`) of each group, then
-writes it again to add attributes. A zip file cannot replace an entry,
-so the zip gets a second entry with the same name
-([#2252](https://github.com/pytorch/tensordict/issues/2252)). For each
-group, the `zipfile` module of Python warns
-`UserWarning: Duplicate name: 'zarr.json'`, or the same message with
-the path of a nested group, such as `'meta/zarr.json'`. Each array gets
-one `zarr.json`. Reading the store works: `zipfile` returns the last
-entry, which has all the attributes. The example below hides these
-warnings.
+`to_zarr` writes the metadata file (`zarr.json`) of each group once,
+with its attributes. `PersistentTensorDict.from_dict` with a dict and
+no `batch_size` still writes the `zarr.json` of each group twice: it
+finds the batch size after writing the data. A zip file cannot replace an
+entry, so the zip gets a second entry with the same name, and the
+`zipfile` module of Python warns
+`UserWarning: Duplicate name: 'zarr.json'`
+([#2252](https://github.com/pytorch/tensordict/issues/2252)). Reading
+the store works: `zipfile` returns the last entry. Pass `batch_size`
+to avoid it.
 
 ```
 from zarr.storage import ZipStore
@@ -226,7 +226,7 @@ the other on-disk formats.
 - The [zarr documentation](https://zarr.readthedocs.io) covers stores,
 codecs, and the v3 format in depth.
 
-**Total running time of the script:** (0 minutes 0.165 seconds)
+**Total running time of the script:** (0 minutes 0.172 seconds)
 
 [`Download Jupyter notebook: zarr_storage.ipynb`](../_downloads/299d79c6946d13f056a08f21d56a241b/zarr_storage.ipynb)
 

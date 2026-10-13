@@ -7,7 +7,7 @@ documentation.
 
 *class*tensordict.PersistentTensorDict(***, *batch_size=None*, *filename=None*, *group=None*, *mode='r'*, *backend='h5'*, *device=None*, *validate_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, ***kwargs*)
 
-Bases: [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
+Bases: `_NoShapeOps`, `_NoVmap`, `_NoSetNonTensor`, [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 A tensordict whose entries live in an HDF5 file or a Zarr store.
 
@@ -292,20 +292,6 @@ See [`get_at()`](tensordict.TensorDictBase.get_at.html#tensordict.TensorDictBase
 The keyword arguments that the tensordict passes to the backend when it creates a dataset.
 
 Deprecated since version 0.15: This is internal and has no replacement.
-
-memmap_(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*) → PersistentTensorDict
-
-Raises a `RuntimeError`: a PersistentTensorDict cannot be memory-mapped in-place.
-
-Use [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) to build a memory-mapped copy instead.
-
-Parameters:
-
-- **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - unused.
-- **copy_existing** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - unused.
-- **num_threads** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - unused.
-
-See [`memmap_()`](tensordict.TensorDictBase.memmap_.html#tensordict.TensorDictBase.memmap_).
 
 ## Tutorials that use `PersistentTensorDict`
 

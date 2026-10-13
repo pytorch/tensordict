@@ -1,6 +1,6 @@
 # TensorDictBase.make_memmap_from_tensor
 
-*abstract*TensorDictBase.make_memmap_from_tensor(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *tensor: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *copy_data: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*) → [MemoryMappedTensor](tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor)
+TensorDictBase.make_memmap_from_tensor(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *tensor: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *copy_data: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*) → [MemoryMappedTensor](tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor)
 
 Creates an empty memory-mapped tensor given a tensor.
 

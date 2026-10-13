@@ -7,7 +7,7 @@ documentation.
 
 *class*tensordict.store.TensorDictStore(***, *backend: [Literal](https://docs.python.org/3/library/typing.html#typing.Literal)['redis', 'dragonfly'] = 'redis'*, *host: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'localhost'*, *port: [int](https://docs.python.org/3/builtins/functions.html#int) = 6379*, *db: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *unix_socket_path: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'tensordict'*, *batch_size=None*, *device=None*, *client=None*, *td_id: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *cache_metadata: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, ***redis_kwargs*)
 
-Bases: [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
+Bases: `_StoreUnsupported`, [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 A TensorDict whose entries live on a Redis-compatible server.
 
@@ -384,20 +384,6 @@ torch.Size([10, 84])
 >>> remote.clear_redis()
 >>> remote.close()
 ```
-
-memmap_(*prefix=None*, *copy_existing=False*, *num_threads=0*)
-
-Raises a `RuntimeError`: a TensorDictStore cannot be memory-mapped in-place.
-
-Use [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) to build a memory-mapped copy instead.
-
-Parameters:
-
-- **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - unused.
-- **copy_existing** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - unused.
-- **num_threads** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - unused.
-
-See [`memmap_()`](tensordict.TensorDictBase.memmap_.html#tensordict.TensorDictBase.memmap_).
 
 to_local() → [TensorDict](tensordict.TensorDict.html#tensordict.TensorDict)
 

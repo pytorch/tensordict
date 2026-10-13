@@ -256,16 +256,16 @@ entry.
 
 .. note::
 
-   ``to_zarr`` writes the metadata file (``zarr.json``) of each group, then
-   writes it again to add attributes. A zip file cannot replace an entry,
-   so the zip gets a second entry with the same name
-   (`#2252 <https://github.com/pytorch/tensordict/issues/2252>`_). For each
-   group, the ``zipfile`` module of Python warns
-   ``UserWarning: Duplicate name: 'zarr.json'``, or the same message with
-   the path of a nested group, such as ``'meta/zarr.json'``. Each array gets
-   one ``zarr.json``. Reading the store works: ``zipfile`` returns the last
-   entry, which has all the attributes. The example below hides these
-   warnings.
+   ``to_zarr`` writes the metadata file (``zarr.json``) of each group once,
+   with its attributes. ``PersistentTensorDict.from_dict`` with a dict and
+   no ``batch_size`` still writes the ``zarr.json`` of each group twice: it
+   finds the batch size after writing the data. A zip file cannot replace an
+   entry, so the zip gets a second entry with the same name, and the
+   ``zipfile`` module of Python warns
+   ``UserWarning: Duplicate name: 'zarr.json'``
+   (`#2252 <https://github.com/pytorch/tensordict/issues/2252>`_). Reading
+   the store works: ``zipfile`` returns the last entry. Pass ``batch_size``
+   to avoid it.
 
 .. GENERATED FROM PYTHON SOURCE LINES 136-146
 
@@ -288,7 +288,7 @@ entry.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 160-171
+.. GENERATED FROM PYTHON SOURCE LINES 147-158
 
 Remote object stores work in the same way, through the fsspec support of
 zarr. To write to S3-compatible storage, pass
@@ -302,7 +302,7 @@ Like the other backends, zarr supports
 dtypes first, then fill the buffer row by row. The full dataset is never in
 memory.
 
-.. GENERATED FROM PYTHON SOURCE LINES 171-183
+.. GENERATED FROM PYTHON SOURCE LINES 158-170
 
 .. code-block:: Python
 
@@ -325,7 +325,7 @@ memory.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 184-201
+.. GENERATED FROM PYTHON SOURCE LINES 171-188
 
 Conclusion
 ----------
@@ -348,7 +348,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.165 seconds)
+   **Total running time of the script:** (0 minutes 0.172 seconds)
 
 
 .. _sphx_glr_download_tutorials_zarr_storage.py:

@@ -7,7 +7,7 @@ documentation.
 
 *class*tensordict.store.LazyStackedTensorDictStore(***, *backend: [Literal](https://docs.python.org/3/library/typing.html#typing.Literal)['redis', 'dragonfly'] = 'redis'*, *host: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'localhost'*, *port: [int](https://docs.python.org/3/builtins/functions.html#int) = 6379*, *db: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *unix_socket_path: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'tensordict'*, *count: [int](https://docs.python.org/3/builtins/functions.html#int)*, *stack_dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *inner_batch_size: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[int](https://docs.python.org/3/builtins/functions.html#int)]*, *device=None*, *client=None*, *td_id: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *cache_metadata: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, ***redis_kwargs*)
 
-Bases: [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
+Bases: `_StoreUnsupported`, [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 A lazy stack of tensordicts whose entries live on a Redis-compatible server.
 
@@ -166,18 +166,6 @@ tensors. If `None`, uses the device stored on the server.
 Returns:
 
 A `LazyStackedTensorDictStore` connected to the existing data.
-
-memmap_(*prefix=None*, *copy_existing=False*, *num_threads=0*)
-
-Raises a `RuntimeError`: a LazyStackedTensorDictStore cannot be memory-mapped in-place.
-
-Parameters:
-
-- **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - unused.
-- **copy_existing** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - unused.
-- **num_threads** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - unused.
-
-See [`memmap_()`](tensordict.TensorDictBase.memmap_.html#tensordict.TensorDictBase.memmap_).
 
 to_local() → [TensorDict](tensordict.TensorDict.html#tensordict.TensorDict)
 

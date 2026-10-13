@@ -49,6 +49,15 @@ Note
 Serialising in this fashion might be slow with deeply nested tensordicts, so
 it is not recommended to call this method inside a training loop.
 
+Note
+
+A [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict), a
+[`TensorDictStore`](tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) or a
+[`LazyStackedTensorDictStore`](tensordict.store.LazyStackedTensorDictStore.html#tensordict.store.LazyStackedTensorDictStore) (or one of its
+elements) cannot be memory-mapped in-place: this method raises a
+`RuntimeError`. Use [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) to
+build a memory-mapped copy instead.
+
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).
 

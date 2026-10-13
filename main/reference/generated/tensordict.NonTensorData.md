@@ -370,3 +370,31 @@ Examples
 >>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
 'Pose'
 ```
+
+where(*condition: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *other: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*, ***, *out: T | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *pad: [int](https://docs.python.org/3/builtins/functions.html#int) | [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *update_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → T
+
+Returns the elements of `self` where `condition` is `True`, and those of `other` elsewhere.
+
+When `other` is a `NonTensorData` with another value, or a
+[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack), the result is a [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) with
+the value that `condition` picks for each element, or a
+`NonTensorData` when all the elements have the same value. This
+reads `condition`, which breaks the graph under [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile).
+Otherwise, the result has the value of `self` everywhere.
+
+`out` receives the result if it can hold it. A `NonTensorData`
+`out` cannot hold a [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack): the stack is returned,
+and `out` is left as it is. [`TensorDict.where()`](tensordict.TensorDictBase.where.html#tensordict.TensorDictBase.where) then writes the
+stack in place of the entry of its own `out`. See
+[`TensorDictBase.where()`](tensordict.TensorDictBase.where.html#tensordict.TensorDictBase.where) for the arguments.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import NonTensorData
+>>> a = NonTensorData("a", batch_size=[3])
+>>> b = NonTensorData("b", batch_size=[3])
+>>> a.where(torch.tensor([True, False, True]), b).tolist()
+['a', 'b', 'a']
+```
