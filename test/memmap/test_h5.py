@@ -219,6 +219,39 @@ class TestH5Serialization:
         assert h5td.device is None
         h5td.close()
 
+    @pytest.mark.parametrize(
+        "op_name,args,same_args",
+        [
+            ("reshape", (6,), (2, 3)),
+            ("flatten", (0, 1), (0, 0)),
+            ("repeat", (2, 1), (1, 1)),
+            ("unflatten", (1, (3, 1)), (1, (3,))),
+            ("repeat_interleave", (2, 0), (1, 0)),
+            ("gather", (1, torch.zeros(2, 1, dtype=torch.long)), None),
+            ("masked_select", (torch.ones(2, 3, dtype=torch.bool),), None),
+        ],
+    )
+    def test_inplace_shape_op_raises_before_writing(
+        self, tmp_path, op_name, args, same_args
+    ):
+        # The file cannot change its batch size in place: the call raises
+        # before it rewrites any dataset
+        td = TensorDict(
+            {"x": torch.zeros(2, 3, 4), "n": {"y": torch.zeros(2, 3)}}, [2, 3]
+        )
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        with pytest.raises(
+            NotImplementedError, match="changes the batch size.*to_tensordict"
+        ):
+            getattr(h5td, op_name)(*args, inplace=True)
+        assert h5td.batch_size == (2, 3)
+        assert h5td["x"].shape == (2, 3, 4)
+        assert h5td["n", "y"].shape == (2, 3)
+        if same_args is not None:
+            # a call that keeps the batch size still works
+            assert getattr(h5td, op_name)(*same_args, inplace=True) is h5td
+        h5td.close()
+
     def test_batch_size_setter_incompatible(self, tmp_path):
         # as on a TensorDict, an incompatible batch size raises and the old
         # one stays

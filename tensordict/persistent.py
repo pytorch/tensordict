@@ -912,6 +912,9 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     LOCKING = None
     # each read loads the entry from the file into a new tensor
     _reads_return_copies = True
+    # _change_batch_size raises, so an in-place shape method that changes the
+    # batch size raises before it rewrites the datasets
+    _inplace_batch_size_change = False
 
     @property
     @deprecated("PersistentTensorDict.kwargs", removal="0.17")

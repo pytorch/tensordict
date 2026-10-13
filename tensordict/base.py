@@ -1240,6 +1240,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # from the stored data, as in the lazy stores. update() then writes the
     # leaves it merges into the sub-tensordict back (see _update_write_back).
     _nested_reads_return_copies = False
+    # Whether the in-place shape methods (reshape, flatten, repeat, ... with
+    # inplace=True) can change the batch size after they rewrite the leaves.
+    # If not, _inplace_rebind_leaves raises before it writes anything.
+    _inplace_batch_size_change = True
     # Set by PersistentTensorDict and the stores, whose rename_key_ did not
     # check the lock or the type of the old key before 0.15: until 0.17 they
     # rename in a locked tensordict with a warning, and pass an old key that is
@@ -5973,6 +5977,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         provided and differs from the current one — bypassing the redundant
         shape check in ``_batch_size_setter``.
         """
+        if (
+            not self._inplace_batch_size_change
+            and new_batch_size is not None
+            and tuple(new_batch_size) != tuple(self.batch_size)
+        ):
+            raise NotImplementedError(
+                "An in-place shape operation that changes the batch size is not "
+                f"supported on {type(self).__name__}: call to_tensordict() first, "
+                "or use inplace=False."
+            )
         keys = list(self.keys())
         for key in keys:
             leaf = self._get_str(key, default=None)
