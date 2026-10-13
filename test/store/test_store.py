@@ -2405,6 +2405,14 @@ class TestLazyStackedTensorDictStore:
             store_td[1].update({"n": {"h": torch.zeros(3, 3)}})
             torch.testing.assert_close(store_td[1]["n", "h"], torch.zeros(3, 3))
             torch.testing.assert_close(store_td[0]["n", "h"], tds[0]["n", "h"])
+            # a locked store takes an in-place update of an existing leaf only
+            store_td.lock_()
+            store_td.update({"n": {"b": torch.full((2, 3), 7.0)}}, inplace=True)
+            torch.testing.assert_close(store_td["n", "b"], torch.full((2, 3), 7.0))
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                store_td.update({"n": {"e": torch.ones(2, 3)}}, inplace=True)
+            assert ("n", "e") not in store_td.keys(True)
+            store_td.unlock_()
         finally:
             store_td.clear_redis()
             store_td.close()
