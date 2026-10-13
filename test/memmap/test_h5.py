@@ -343,6 +343,38 @@ def test_update_from_h5_reads(tmp_path, monkeypatch, keys_to_update):
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_fill_zero_masked_fill_no_read(tmp_path, monkeypatch):
+    # fill_, zero_, masked_fill_ and detach_ write to the file without reading it
+    td = TensorDict(
+        {"a": torch.ones(3, 2), "nested": {"b": torch.ones(3, 2, 4)}}, batch_size=[3]
+    )
+    h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+
+    def no_read(*args, **kwargs):
+        raise AssertionError("the file was read")
+
+    backend = type(h5td._backend)
+    with monkeypatch.context() as patch:
+        patch.setattr(backend, "read_full", no_read)
+        patch.setattr(backend, "read_at", no_read)
+        assert h5td.detach_() is h5td
+        mask = torch.tensor([True, False, True])
+        for dest in (h5td, td):
+            assert dest.fill_("a", 2.0) is dest
+            assert dest.fill_("nested", 3.0) is dest
+            assert dest.masked_fill_(mask, -1.0) is dest
+    torch.testing.assert_close(h5td.to_tensordict(), td)
+    with monkeypatch.context() as patch:
+        patch.setattr(backend, "read_full", no_read)
+        patch.setattr(backend, "read_at", no_read)
+        assert h5td.zero_() is h5td
+    h5td.close()
+    reopened = PersistentTensorDict.from_h5(tmp_path / "file.h5")
+    torch.testing.assert_close(reopened.to_tensordict(), td.zero_())
+    reopened.close()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_kwargs_is_deprecated(tmpdir):
     filename = Path(tmpdir) / "file.h5"
     td = PersistentTensorDict(

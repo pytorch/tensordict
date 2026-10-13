@@ -605,6 +605,76 @@ class TestLazyStackedTensorDict:
             is None
         )
 
+    def test_apply_returns_self_and_kwargs(self):
+        tds = [
+            TensorDict(
+                a=torch.arange(3.0) + i, n={"b": torch.zeros(3, 2)}, batch_size=[3]
+            )
+            for i in range(4)
+        ]
+        stack = lazy_stack(tds)
+        dense = stack.to_tensordict()
+        # fn returning None: the stack returns itself, a TensorDict None
+        assert stack.apply_(lambda x: None) is stack
+        assert dense.apply_(lambda x: None) is None
+        # batch_size, names and device are accepted and ignored, as by TensorDict
+        for kwargs in (
+            {"batch_size": [4]},
+            {"names": ["x", "y"]},
+            {"device": "cpu"},
+        ):
+            for td in (stack, dense):
+                assert td.apply_(lambda x: x + 1, **kwargs) is td
+        assert stack.names == dense.names == [None, None]
+        torch.testing.assert_close(stack.to_tensordict(), dense)
+        with pytest.raises(TypeError, match="propagate_lock"):
+            stack.apply_(lambda x: x + 1, propagate_lock=True)
+        assert dense.apply_(lambda x: x + 1, propagate_lock=True) is dense
+        # a fn that changes the shape of the leaves leaves the members unchanged
+        before = stack.to_tensordict()
+        assert stack.apply_(lambda x: x[..., :1]) is stack
+        torch.testing.assert_close(stack.to_tensordict(), before)
+        with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+            dense.apply_(lambda x: x[..., :1])
+
+    @pytest.mark.parametrize("heterogeneous", [False, True])
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_detach_members(self, heterogeneous, stack_dim):
+        w = torch.ones(3, requires_grad=True)
+        tds = [
+            TensorDict(
+                a=w * 2,
+                n={"b": w[:, None].expand(3, 2 + heterogeneous * i) * 3},
+                batch_size=[3],
+            )
+            for i in range(4)
+        ]
+        stack = lazy_stack(tds, stack_dim)
+        assert stack.detach_() is stack
+        for td in tds:
+            for value in td.values(True, True):
+                assert not value.requires_grad
+        assert not stack["a"].requires_grad
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("mask_dims", [2, 1, 0])
+    def test_masked_fill_mask_shapes(self, stack_dim, mask_dims):
+        # a mask aligned with the leading batch dims, as in TensorDict
+        td = TensorDict(
+            a=torch.zeros(4, 3, 5), n={"b": torch.zeros(4, 3)}, batch_size=[4, 3]
+        )
+        stack = lazy_stack(list(td.unbind(stack_dim)), stack_dim)
+        mask = (torch.arange(12).view(4, 3) % 3 == 0)[
+            (Ellipsis,) + (0,) * (2 - mask_dims)
+        ]
+        if mask_dims <= stack_dim:
+            # the mask has no stack dim to split it over the members
+            with pytest.raises(IndexError):
+                stack.masked_fill_(mask, 1.0)
+            return
+        assert stack.masked_fill_(mask, 1.0) is stack
+        torch.testing.assert_close(stack.to_tensordict(), td.masked_fill_(mask, 1.0))
+
     @pytest.mark.parametrize("ragged", [False, True])
     def test_arithmetic_ops(self, ragged):
         td0 = LazyStackedTensorDict(

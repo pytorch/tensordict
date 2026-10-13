@@ -5130,6 +5130,21 @@ class TestTensorDicts(TestTensorDictsBase):
         for k in td.keys():
             assert (td.get(k) == 0).all()
 
+    def test_detach_(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if td_name in ("sub_td", "sub_td2"):
+            with pytest.raises(RuntimeError, match="sub-tensordict in-place"):
+                td.detach_()
+            return
+        if td_name in ("idx_td", "memmap_td", "td_with_unbatched"):
+            # the leaves are views, which torch cannot detach in place
+            with pytest.raises(RuntimeError, match="Can't detach views in-place"):
+                td.detach_()
+            return
+        assert td.detach_() is td
+        for value in td.values(True, True):
+            assert not value.requires_grad
+
     @pytest.mark.parametrize("set_to_none", [True, False])
     def test_zero_grad(self, td_name, device, set_to_none):
         td = getattr(self, td_name)(device)

@@ -337,6 +337,33 @@ class TestZarrWriteOps:
         assert (ztd["a"][0] == 3).all()
         assert (ztd["a"][1:] == 0).all()
 
+    def test_fill_zero_masked_fill_no_read(self, ztd, tmp_path, monkeypatch):
+        # fill_, zero_, masked_fill_ and detach_ write to the store without
+        # reading it
+        td = ztd.to_tensordict()
+
+        def no_read(*args, **kwargs):
+            raise AssertionError("the store was read")
+
+        backend = type(ztd._backend)
+        with monkeypatch.context() as patch:
+            patch.setattr(backend, "read_full", no_read)
+            patch.setattr(backend, "read_at", no_read)
+            assert ztd.detach_() is ztd
+            mask = torch.tensor([True, False, True])
+            for dest in (ztd, td):
+                assert dest.fill_("a", 2.0) is dest
+                assert dest.fill_("b", 3.0) is dest
+                assert dest.masked_fill_(mask, -1.0) is dest
+        reopened = PersistentTensorDict.from_zarr(tmp_path / "s.zarr")
+        torch.testing.assert_close(reopened.to_tensordict(), td)
+        with monkeypatch.context() as patch:
+            patch.setattr(backend, "read_full", no_read)
+            patch.setattr(backend, "read_at", no_read)
+            assert ztd.zero_() is ztd
+        reopened = PersistentTensorDict.from_zarr(tmp_path / "s.zarr")
+        torch.testing.assert_close(reopened.to_tensordict(), td.zero_())
+
     def test_del(self, ztd):
         ztd.del_("a")
         assert "a" not in ztd.keys()
