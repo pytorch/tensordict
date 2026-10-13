@@ -23,6 +23,7 @@ from tensordict import (
 )
 from tensordict.base import TensorDictBase
 from tensordict.store import LazyStackedTensorDictStore, TensorDictStore
+from tensordict.store._connection import _client_settings
 from tensordict.store._lazy import _StoreStackElementView
 
 _has_redis = importlib.util.find_spec("redis", None) is not None
@@ -1818,9 +1819,34 @@ def test_client_without_settings(store_kwargs, stacked):
             pickle.dumps(store)
         with pytest.raises(RuntimeError, match="Cannot connect a copy"):
             store.clone()
+        if stacked:
+            # a shallow copy of a lazy stack opens its own connection too
+            with pytest.raises(RuntimeError, match="Cannot connect a copy"):
+                store.copy()
     finally:
         store.clear_redis()
         store.close()
+
+
+def test_client_settings():
+    """_client_settings reads the server and the credentials of a client."""
+    if not _has_redis:
+        pytest.skip("redis package not installed")
+    import redis.asyncio as aioredis
+
+    # building a client does not connect, so no server is needed
+    client = aioredis.Redis(port=6380, db=3, username="u", password="p")
+    assert _client_settings(client) == (
+        "localhost",
+        6380,
+        3,
+        None,
+        {"username": "u", "password": "p"},
+    )
+    client = aioredis.Redis(unix_socket_path="/tmp/redis.sock", db=2)
+    host, port, db, path, credentials = _client_settings(client)
+    assert (db, path, credentials) == (2, "/tmp/redis.sock", {})
+    assert _client_settings(None) is None
 
 
 class TestLazyStackedTensorDictStore:
