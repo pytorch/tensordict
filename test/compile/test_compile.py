@@ -2207,6 +2207,29 @@ class TestNN:
             sample = prob_mod_c(td.copy())["sample"]
         torch.testing.assert_close(sample, td["loc"])
 
+    def test_prob_module_thread_local_interaction_type(self, mode):
+        # A thread_local interaction type is read from a threading.local slot:
+        # the compiled module must follow it, and fall back to the
+        # process-wide one outside of the block.
+        prob_mod = Prob(
+            in_keys=["loc", "scale"],
+            out_keys=["sample"],
+            distribution_class=torch.distributions.Normal,
+        )
+        td = TensorDict(loc=torch.zeros(1000), scale=torch.ones(1000))
+        prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
+        with set_interaction_type(InteractionType.MEAN):
+            sample = prob_mod_c(td.copy())["sample"]
+            torch.testing.assert_close(sample, td["loc"])
+            with set_interaction_type(InteractionType.RANDOM, thread_local=True):
+                sample = prob_mod_c(td.copy())["sample"]
+            assert (sample != td["loc"]).all()
+            sample = prob_mod_c(td.copy())["sample"]
+            torch.testing.assert_close(sample, td["loc"])
+            with set_interaction_type(InteractionType.RANDOM, thread_local=True):
+                sample = prob_mod_c(td.copy())["sample"]
+            assert (sample != td["loc"]).all()
+
 
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestFunctional:

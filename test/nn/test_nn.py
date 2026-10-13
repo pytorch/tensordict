@@ -11,6 +11,7 @@ import importlib
 import os
 import pathlib
 import pickle
+import threading
 import unittest
 import warnings
 import weakref
@@ -183,6 +184,102 @@ class TestInteractionType:
     def test_from_str_correct_raise(self, unsupported_type_str):
         with pytest.raises(ValueError, match=" is not a valid InteractionType"):
             InteractionType.from_str(unsupported_type_str)
+
+    # Each switch, the function that reads it, and two values with the mode
+    # that each gives
+    _SWITCHES = [
+        (
+            set_interaction_type,
+            interaction_type,
+            ("random", InteractionType.RANDOM),
+            ("mean", InteractionType.MEAN),
+        ),
+        (set_skip_existing, skip_existing, (True, True), (["out"], ["out"])),
+        (
+            set_composite_lp_aggregate,
+            composite_lp_aggregate,
+            (True, True),
+            (False, False),
+        ),
+    ]
+
+    @pytest.mark.parametrize("switch, read, first, second", _SWITCHES)
+    def test_thread_local(self, switch, read, first, second):
+        # A thread_local block changes the mode of its own thread only, and
+        # blocks that overlap in two threads restore their own thread's mode.
+        base = read()
+        in_block, release = threading.Event(), threading.Event()
+        seen = {}
+
+        def other_thread():
+            with switch(first[0], thread_local=True):
+                seen["inside"] = read()
+                # a block without the flag stays in this thread too
+                with switch(second[0]):
+                    seen["nested"] = read()
+                    in_block.set()
+                    release.wait(10)
+            seen["after"] = read()
+
+        thread = threading.Thread(target=other_thread)
+        thread.start()
+        try:
+            assert in_block.wait(10)
+            assert read() == base
+            with switch(second[0], thread_local=True):
+                assert read() == second[1]
+                release.set()
+                thread.join(10)
+                assert read() == second[1]
+            assert read() == base
+        finally:
+            release.set()
+            thread.join(10)
+        assert seen == {"inside": first[1], "nested": second[1], "after": base}
+        assert switch(first[0], thread_local=True).clone().thread_local
+
+    @pytest.mark.parametrize("switch, read, first, second", _SWITCHES)
+    def test_process_wide_default(self, switch, read, first, second):
+        # Without thread_local, the mode that a thread sets applies to all
+        # threads, as before.
+        base = read()
+        seen = {}
+
+        def other_thread():
+            seen["thread"] = read()
+
+        with switch(first[0]):
+            thread = threading.Thread(target=other_thread)
+            thread.start()
+            thread.join(10)
+        assert seen == {"thread": first[1]}
+        assert read() == base
+
+    def test_thread_local_module(self):
+        # The policy of a thread outside the block returns the mean while
+        # another thread samples.
+        policy = ProbabilisticTensorDictModule(
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=Normal,
+            default_interaction_type="deterministic",
+        )
+        obs = TensorDict(loc=torch.zeros(3), scale=torch.ones(3))
+        in_block, release = threading.Event(), threading.Event()
+
+        def learner():
+            with set_interaction_type("random", thread_local=True):
+                in_block.set()
+                release.wait(10)
+
+        thread = threading.Thread(target=learner)
+        thread.start()
+        try:
+            assert in_block.wait(10)
+            assert (policy(obs.clone())["action"] == 0).all()
+        finally:
+            release.set()
+            thread.join(10)
 
     def test_str_enum(self):
         # InteractionType derives from enum.StrEnum, or from the backport
