@@ -84,12 +84,8 @@ True
 ['cat', 'dog', 'bird']
 ```
 
-In a tensordict without batch dimensions, a number or a boolean written over
-an existing [`NonTensorData`](../reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData) entry also becomes a tensor, and
-the write emits a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning). Starting with TensorDict 0.17, the
-default will change to keeping it as [`NonTensorData`](../reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData), like
-the entry it replaces
-([#1199](https://github.com/pytorch/tensordict/issues/1199)).
+That booleans become tensors is tracked in
+[#1199](https://github.com/pytorch/tensordict/issues/1199).
 
 ### Read a non-tensor entry
 
