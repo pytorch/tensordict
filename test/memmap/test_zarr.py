@@ -218,7 +218,7 @@ class TestZarrNonTensor:
         assert root["text"].shape == (3,)
         assert root["text"].attrs["__tensordict_stack__"] == [3]
         assert root["n/grid"].shape == (3, 2)
-        ztd = PersistentTensorDict.from_zarr(tmp_path / "s.zarr")
+        ztd = PersistentTensorDict.from_zarr(tmp_path / "s.zarr", mode="r+")
         assert ztd.entry_class("text") is NonTensorStack
         text = ztd.get("text")
         assert isinstance(text, NonTensorStack)
@@ -230,6 +230,9 @@ class TestZarrNonTensor:
         assert ztd[2]["n", "grid"] == ["20", "21"]
         assert ztd.get("dicts").tolist() == [{"a": 1}, {"b": 2}, {"c": 3}]
         assert ztd.to_tensordict()["text"] == ["a", "b", "c"]
+        ztd["text"] = NonTensorStack("x", "yy", "z")
+        assert ztd.get("text").tolist() == ["x", "yy", "z"]
+        ztd.close()
 
 
 @pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")

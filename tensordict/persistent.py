@@ -272,11 +272,11 @@ class _NonTensorStackArray:
         self.shape = shape
 
 
-def _all_str(values, ndim) -> bool:
-    """Whether every element of the ``ndim``-deep nested list ``values`` is a str."""
+def _all_of_type(values, ndim, cls) -> bool:
+    """Whether every element of the ``ndim``-deep nested list ``values`` is exactly of type ``cls``."""
     if ndim == 0:
-        return isinstance(values, str)
-    return all(_all_str(value, ndim - 1) for value in values)
+        return type(values) is cls
+    return all(_all_of_type(value, ndim - 1, cls) for value in values)
 
 
 class _H5Backend(_PersistentBackend):
@@ -426,16 +426,27 @@ class _H5Backend(_PersistentBackend):
     def encode_non_tensor_stack(self, values, shape):
         import h5py
 
-        if _all_str(values, len(shape)):
+        if _all_of_type(values, len(shape), str):
             array = np.array(values, dtype=h5py.string_dtype())
-        else:
+        elif any(
+            _all_of_type(values, len(shape), cls) for cls in (bytes, bool, int, float)
+        ):
+            # the opaque encoding keeps these values and their type
             array = self.encode_non_tensor(values)
+        else:
+            raise TypeError(
+                "Cannot write a NonTensorStack to h5 unless its elements are all "
+                "str, bytes, bool, int or float, of a single type. Use zarr, or a "
+                "TensorDict saved with memmap, for other values."
+            )
         return _NonTensorStackArray(array, shape)
 
     def read_non_tensor_stack(self, node):
         import h5py
 
-        if h5py.check_string_dtype(node.dtype):
+        string_info = h5py.check_string_dtype(node.dtype)
+        if string_info is not None and string_info.length is None:
+            # the variable-length strings written for a stack of str
             return node.asstr()[()].tolist()
         return node[()].tolist()
 
@@ -794,7 +805,7 @@ class _ZarrBackend(_PersistentBackend):
         return _ZarrNonTensorPayload(pickle.dumps(value), "pickle")
 
     def encode_non_tensor_stack(self, values, shape):
-        if _all_str(values, len(shape)):
+        if _all_of_type(values, len(shape), str):
             array = np.array(values)
         else:
             array = self.encode_non_tensor(values)
@@ -1466,6 +1477,14 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                 "array": True,
             }
         elif self._backend.is_array(array):
+            stack_shape = self._backend.non_tensor_stack_shape(array)
+            if stack_shape is not None:
+                # a stack has a shape, which counts towards the batch size
+                return {
+                    "non_tensor": True,
+                    "shape": stack_shape,
+                    "dim": len(stack_shape),
+                }
             return {"non_tensor": True}
         else:
             val = self.get(key)
@@ -2211,20 +2230,28 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             # could be called before but will go under further refactoring of set
             key = self._process_key(key)
             array = self.file[key]
-            if non_tensor and (
+            stack = non_tensor and (
                 isinstance(value, _NonTensorStackArray)
                 or self._backend.non_tensor_stack_shape(array) is not None
-            ):
+            )
+            if stack and idx is not None:
                 raise RuntimeError(
                     f"Cannot write {key!r} in place: a {type(self).__name__} "
                     "writes a stack of different non-tensor values as a whole. "
                     "Set the entry with inplace=False instead."
                 )
-            if idx is None:
-                idx = ()
+            elif stack:
+                # a stack is written as a whole: replace the array
+                self._backend.delete(self.file, key)
+                self._backend.try_create_dataset(
+                    self.file, key, value, self._dataset_kwargs
+                )
             else:
-                idx = self._process_index(idx, array)
-            self._backend.write_at(array, idx, value)
+                if idx is None:
+                    idx = ()
+                else:
+                    idx = self._process_index(idx, array)
+                self._backend.write_at(array, idx, value)
         else:
             key = self._process_key(key)
             if not self._backend.try_create_dataset(
@@ -2436,8 +2463,10 @@ def _set_max_batch_size(source: PersistentTensorDict):
     # We need to reload this list because the value have changed
     tensor_data = list(source._items_metadata())
     tensor_keys, tensor_data = zip(*tensor_data)
-    # Filter out the non-tensor data
-    tensor_data = [data for data in tensor_data if not data.get("non_tensor")]
+    # Filter out the non-tensor data, except the stacks, which have a shape
+    tensor_data = [
+        data for data in tensor_data if not data.get("non_tensor") or "shape" in data
+    ]
     while True:
         if tensor_data[0]["dim"] > curr_dim:
             curr_dim_size = tensor_data[0]["shape"][curr_dim]
