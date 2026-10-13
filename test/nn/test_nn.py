@@ -57,6 +57,7 @@ from tensordict.nn.distributions import (
     TruncatedNormal,
 )
 from tensordict.nn.distributions.composite import CompositeDistribution
+from tensordict.nn.distributions.truncated_normal import TruncatedStandardNormal
 from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.probabilistic import (
     interaction_type,
@@ -64,6 +65,7 @@ from tensordict.nn.probabilistic import (
     set_interaction_type,
 )
 from tensordict.nn.utils import (
+    _dispatch_td_nn_modules,
     _set_dispatch_td_nn_modules,
     composite_lp_aggregate,
     set_composite_lp_aggregate,
@@ -1036,6 +1038,48 @@ class TestTDModule:
         # checks that things are back in place
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
         tdm(a=torch.zeros(1, 1))
+
+    def test_dispatch_deactivate_restores_mode(self):
+        # Leaving the block restores the previous mode, not the global
+        # _ContextManager object (#1948).
+        mode = _dispatch_td_nn_modules()
+        with _set_dispatch_td_nn_modules(not mode):
+            assert _dispatch_td_nn_modules() == (not mode)
+        assert _dispatch_td_nn_modules() == mode
+
+        tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
+        with _set_dispatch_td_nn_modules(True):
+            with _set_dispatch_td_nn_modules(False):
+                with _set_dispatch_td_nn_modules(True):
+                    assert _dispatch_td_nn_modules()
+                assert not _dispatch_td_nn_modules()
+                with pytest.raises(
+                    TypeError, match="missing 1 required positional argument"
+                ):
+                    tdm(a=torch.zeros(1, 1))
+
+            # A reused instance that changes nothing on entry restores nothing.
+            set_dispatch_off = _set_dispatch_td_nn_modules(False)
+            with set_dispatch_off:
+                assert not _dispatch_td_nn_modules()
+            with _set_dispatch_td_nn_modules(False):
+                with set_dispatch_off:
+                    pass
+                assert not _dispatch_td_nn_modules()
+
+            # An instance nested in itself restores the mode of the outer block.
+            with set_dispatch_off:
+                with set_dispatch_off:
+                    assert not _dispatch_td_nn_modules()
+                assert not _dispatch_td_nn_modules()
+            assert _dispatch_td_nn_modules()
+
+            # The mode is restored when the block raises.
+            with pytest.raises(RuntimeError, match="inside"):
+                with set_dispatch_off:
+                    raise RuntimeError("inside")
+            assert _dispatch_td_nn_modules()
+        assert _dispatch_td_nn_modules() == mode
 
     def test_dispatch_deactivate_function(self):
         @dispatch(source=["a"], dest=["b"])
@@ -2938,13 +2982,32 @@ class TestProbabilisticTensorDictModule:
             torch.tensor(0.0), torch.tensor(2.0), torch.tensor(-1.0), torch.tensor(1.0)
         )
         assert dist.batch_shape == ref.batch_shape == torch.Size([])
-        for attr in ("scale", "mean", "variance", "entropy"):
+        for attr in ("scale", "mean", "variance"):
             torch.testing.assert_close(getattr(dist, attr), getattr(ref, attr))
+        torch.testing.assert_close(dist.entropy(), ref.entropy())
         value = torch.tensor(0.5)
         torch.testing.assert_close(dist.log_prob(value), ref.log_prob(value))
         assert TruncatedNormal(torch.zeros(3), 2.0, -1.0, 1.0).batch_shape == (3,)
         # a Number scale is clamped as a tensor scale is
         assert TruncatedNormal(0.0, 0.0, -1.0, 1.0).scale == TruncatedNormal.eps
+
+    def test_truncated_normal_entropy(self):
+        # entropy is a method, as in torch.distributions.Distribution
+        loc = torch.tensor([0.0, 1.0, -0.5])
+        scale = torch.tensor([1.0, 2.0, 0.5])
+        a, b = loc - 2 * scale, loc + 1.5 * scale
+        dist = TruncatedNormal(loc, scale, a, b)
+        entropy = dist.entropy()
+        assert entropy.shape == dist.batch_shape == (3,)
+        # the closed form matches a Monte Carlo estimate of -E[log p(x)]
+        torch.manual_seed(0)
+        sample = dist.rsample((200_000,))
+        torch.testing.assert_close(
+            entropy, -dist.log_prob(sample).mean(0), atol=2e-2, rtol=0
+        )
+        # the standard distribution exposes entropy() too
+        std = TruncatedStandardNormal(a, b)
+        assert std.entropy().shape == std.batch_shape == (3,)
 
     @set_composite_lp_aggregate(False)
     @pytest.mark.parametrize("inplace", [True, False, None])
@@ -3782,6 +3845,21 @@ class TestEnsembleModule:
         out = ens.reset_parameters_recursive(params)
         assert out.batch_size == params.batch_size
         assert (out == params).all()
+
+    @pytest.mark.parametrize("batch_size", [[4], [2, 3], [2, 3, 2]])
+    def test_reset_parameters_recursive_requires_grad(self, batch_size):
+        """Ensure parameters that require grad are reset in place for any batch dims"""
+        module = TensorDictModule(nn.Linear(2, 3), in_keys=["a"], out_keys=["b"])
+        ens = EnsembleModule(module, num_copies=2)
+        params = TensorDict.from_module(module).expand(*batch_size).clone()
+        assert params["module", "weight"].requires_grad
+        before = params.detach().clone()
+        out = ens.reset_parameters_recursive(params)
+        assert out.batch_size == params.batch_size
+        assert (out == params).all()
+        weight = params["module", "weight"].reshape(-1, 3, 2)
+        assert (weight != before["module", "weight"].reshape(-1, 3, 2)).any()
+        assert (weight[0] != weight[1:]).any(dim=(-2, -1)).all()
 
 
 class TestTensorDictParams:
@@ -4626,7 +4704,6 @@ class TestCompositeDist:
 
     @pytest.mark.parametrize("lp_aggregate", [True, False])
     def test_entropy_truncated_normal(self, lp_aggregate):
-        # TruncatedNormal.entropy is a property, not a method (#2103)
         params = TensorDict(
             x=TensorDict(
                 loc=torch.zeros(3),
@@ -4640,7 +4717,7 @@ class TestCompositeDist:
         dist = CompositeDistribution(params, distribution_map={"x": TruncatedNormal})
         expected = TruncatedNormal(
             torch.zeros(3), torch.ones(3), -torch.ones(3), torch.ones(3)
-        ).entropy
+        ).entropy()
         with set_composite_lp_aggregate(lp_aggregate):
             ent = dist.entropy()
         if lp_aggregate:

@@ -56,6 +56,87 @@ def test_context_options_share_state():
         assert not options_module.list_to_stack()
 
 
+def test_list_to_stack_returns_bool(monkeypatch):
+    from tensordict import _utils_options, list_to_stack, set_list_to_stack
+
+    # CI sets LIST_TO_STACK=1: start from an unset option
+    monkeypatch.delenv("LIST_TO_STACK", raising=False)
+    monkeypatch.setattr(_utils_options, "_LIST_TO_STACK", None)
+    assert list_to_stack() is True
+    with set_list_to_stack(True):
+        assert list_to_stack() is True
+    assert list_to_stack() is True
+    assert list_to_stack(allow_none=True) is None
+
+
+@pytest.mark.parametrize("value", ["1", "0"])
+def test_option_env_vars_give_bool(value):
+    code = (
+        "import warnings\n"
+        "warnings.simplefilter('ignore')\n"
+        "from tensordict import capture_non_tensor_stack, lazy_legacy, list_to_stack\n"
+        "print(repr((list_to_stack(), capture_non_tensor_stack(), lazy_legacy())))\n"
+    )
+    env = {
+        **os.environ,
+        "LIST_TO_STACK": value,
+        "CAPTURE_NONTENSOR_STACK": value,
+        "LAZY_LEGACY_OP": value,
+    }
+    result = subprocess.run(
+        [sys.executable, "-c", code], env=env, capture_output=True, text=True
+    )
+    assert result.stdout.strip() == repr((value == "1",) * 3), result.stderr
+
+
+@pytest.mark.parametrize(
+    "context,env_var,global_name",
+    [
+        ("_set_list_to_stack", "LIST_TO_STACK", "_LIST_TO_STACK"),
+        (
+            "_set_capture_non_tensor_stack",
+            "CAPTURE_NONTENSOR_STACK",
+            "_CAPTURE_NONTENSOR_STACK",
+        ),
+        ("set_lazy_legacy", "LAZY_LEGACY_OP", "_LAZY_OP"),
+    ],
+)
+def test_option_block_restores_env(monkeypatch, context, env_var, global_name):
+    from tensordict import _utils_options
+
+    monkeypatch.delenv(env_var, raising=False)
+    monkeypatch.setattr(_utils_options, global_name, None)
+    with getattr(_utils_options, context)(False):
+        assert os.environ[env_var] == "False"
+    assert env_var not in os.environ
+
+    # an option read from the environment at import keeps its value
+    monkeypatch.setenv(env_var, "0")
+    monkeypatch.setattr(_utils_options, global_name, "0")
+    with getattr(_utils_options, context)(False):
+        assert os.environ[env_var] == "False"
+    assert os.environ[env_var] == "0"
+
+
+def test_lazy_legacy_block_keeps_child_process_working(monkeypatch):
+    from tensordict import _utils_options, set_lazy_legacy
+
+    monkeypatch.delenv("LAZY_LEGACY_OP", raising=False)
+    monkeypatch.setattr(_utils_options, "_LAZY_OP", None)
+    with set_lazy_legacy(False):
+        pass
+    code = (
+        "from tensordict import TensorDict, lazy_legacy\n"
+        "TensorDict(batch_size=[2, 3]).permute(1, 0)\n"
+        "print(lazy_legacy())\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "False"
+
+
 def test_set_lazy_legacy_is_deprecated():
     from tensordict import lazy_legacy, set_lazy_legacy
 
