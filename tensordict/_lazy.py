@@ -1034,6 +1034,11 @@ class LazyStackedTensorDict(TensorDictBase):
                         stacklevel=stacklevel,
                     )
 
+        if stack_dim < 0 and tensordicts:
+            # count from the end of the stack's dims, as __init__ does
+            ndim = tensordicts[0].batch_dims + 1
+            if stack_dim >= -ndim:
+                stack_dim += ndim
         return cls._new_lazy_unsafe(
             *tensordicts,
             stack_dim=stack_dim,
