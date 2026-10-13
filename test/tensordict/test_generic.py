@@ -6469,11 +6469,13 @@ class TestGeneric:
             getattr(td_flat, reduction)(*args, dim=-1, reduce=True)
             getattr(td, reduction)(*args, dim=-1)
 
-    @pytest.mark.parametrize("reduction", ["amax", "amin", "max", "min", "prod"])
+    @pytest.mark.parametrize(
+        "reduction", ["amax", "amin", "max", "min", "prod", "cummax", "cummin"]
+    )
     def test_reduction_tuple_dim_warns(self, reduction):
-        # amax, amin, max, min and prod reduce only the first dim of a tuple. amax
-        # and amin will reduce every dim in 0.17, max, min and prod reject a
-        # tuple, as torch does (#2044).
+        # amax, amin, max, min, prod, cummax and cummin use only the first dim of
+        # a tuple. amax and amin will reduce every dim in 0.17, the others reject
+        # a tuple, as torch does (#2044).
         x = torch.rand(3, 4, 5)
         td = TensorDict(a=x, batch_size=(3, 4))
         category, match = (
@@ -6481,9 +6483,13 @@ class TestGeneric:
             if reduction in ("amax", "amin")
             else (DeprecationWarning, "will be removed in TensorDict 0.17")
         )
-        kwargs = {"return_indices": False} if reduction in ("max", "min") else {}
+        kwargs = (
+            {"return_indices": False}
+            if reduction in ("max", "min", "cummax", "cummin")
+            else {}
+        )
         tuples = [(0, 1), (-1,)]
-        if reduction in ("max", "min", "prod"):
+        if reduction not in ("amax", "amin"):
             tuples.append((1,))
         for dim in tuples:
             with pytest.warns(category, match=match) as record:
@@ -6491,6 +6497,8 @@ class TestGeneric:
             assert record[0].filename == __file__
             torch_reduction = {"max": "amax", "min": "amin"}.get(reduction, reduction)
             expected = getattr(torch, torch_reduction)(x, dim=dim[0])
+            if reduction in ("cummax", "cummin"):
+                expected = expected.values
             # the first dim of the tuple, not checked against the batch dims
             torch.testing.assert_close(result["a"], expected)
         with warnings.catch_warnings():
@@ -6607,6 +6615,26 @@ class TestGeneric:
             expected = td.quantile(0.5, **kwargs)
             assert result.names == [None, *expected.names]
             assert result["b"].names == [None, *expected["b"].names]
+
+    @pytest.mark.parametrize("keepdim", [False, True])
+    @pytest.mark.parametrize("batch_size", [(3, 4), (3, 4, 5)])
+    def test_quantile_tuple_dim(self, batch_size, keepdim):
+        # torch.quantile takes one dim: a tuple reduces the leaves and the batch
+        # size over its first dim only. Passing one is deprecated, and will be
+        # rejected in 0.17, as torch does (#2044).
+        x = torch.rand(3, 4, 5)
+        td = TensorDict(a=x, batch_size=batch_size)
+        for dim in [(0, 1), (-1,)]:
+            with pytest.warns(
+                DeprecationWarning, match="will be removed in TensorDict 0.17"
+            ) as record:
+                result = td.quantile(0.5, dim=dim, keepdim=keepdim)
+            assert record[0].filename == __file__
+            expected = td.quantile(0.5, dim=dim[0], keepdim=keepdim)
+            assert result.batch_size == expected.batch_size
+            assert_allclose_td(result, expected)
+            assert result["a"].shape[: result.batch_dims] == result.batch_size
+            result.unbind(0)
 
     def test_subclassing(self):
         class SubTD(TensorDict): ...
