@@ -3896,7 +3896,8 @@ class LazyStackedTensorDict(TensorDictBase):
         return cls(*tensordicts, stack_dim=stack_dim, **kwargs)
 
     # Override: expand each member, which keeps the stack lazy when the
-    # expanded members differ.
+    # expanded members differ. The names come from the members and the stack
+    # dim name, so ``names`` is not used.
     def _expand(self, shape: torch.Size, names: list | None) -> TensorDictBase:
         # We need to reprod the elements if shape is (1,)
         if shape[self.stack_dim - self.ndim] != len(self.tensordicts):
@@ -3918,10 +3919,10 @@ class LazyStackedTensorDict(TensorDictBase):
                 if result.stack_dim == stack_dim:
                     result._td_dim_name = self._td_dim_name
             elif isinstance(result, TensorDict):
-                names = result.names
-                names[stack_dim] = self._td_dim_name
+                result_names = result.names
+                result_names[stack_dim] = self._td_dim_name
                 try:
-                    result.names = names
+                    result.names = result_names
                 except (IndexError, ValueError):
                     # it holds a lazy stack whose members have different
                     # names, which can't be renamed: leave the dim unnamed
@@ -4520,7 +4521,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
         return "\n" + exclusive_key_str
 
-    def _view(self, shape: torch.Size, raise_if_not_view: bool = True) -> Self:
+    def _view(self, shape: torch.Size) -> Self:
         if any(dim < 0 for dim in shape):
             if not self.batch_size.numel():
                 # Regrouping the members of an empty batch would lose the
@@ -4534,11 +4535,9 @@ class LazyStackedTensorDict(TensorDictBase):
         result = self._regroup(shape)
         if result is not None:
             return result
-        if raise_if_not_view:
-            raise RuntimeError(
-                "Cannot call `view` on a lazy stacked tensordict. Call `reshape` instead."
-            )
-        return TensorDictBase._reshape(self, shape, None)
+        raise RuntimeError(
+            "Cannot call `view` on a lazy stacked tensordict. Call `reshape` instead."
+        )
 
     def _regroup(self, shape: torch.Size) -> Self | None:
         # A stack of batch size ``shape`` made of the members, or None if

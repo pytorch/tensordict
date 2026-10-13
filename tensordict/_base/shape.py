@@ -1292,15 +1292,13 @@ class _ShapeOps:
                 split_size = min(split_size, max_size)
                 num_full, rest = divmod(max_size, split_size)
                 split_sizes = [split_size] * num_full + ([rest] if rest else [])
-        elif isinstance(split_size, (list, tuple)):
-            if not all(isinstance(x, int) for x in split_size):
-                raise TypeError(WRONG_TYPE)
-            split_sizes = list(split_size)
-        elif isinstance(split_size, Iterable):
-            # LazyStackedTensorDict.split took any iterable of sizes
-            split_sizes = list(split_size)
-            if not all(isinstance(x, int) for x in split_sizes):
-                raise TypeError(WRONG_TYPE)
+        elif isinstance(split_size, (list, tuple)) or isinstance(split_size, Iterable):
+            # LazyStackedTensorDict.split took any iterable of sizes, such as
+            # a tensor, a numpy array or a list of 0-d tensors
+            try:
+                split_sizes = [operator.index(x) for x in split_size]
+            except TypeError:
+                raise TypeError(WRONG_TYPE) from None
         else:
             raise TypeError(WRONG_TYPE)
         return self._split(split_sizes, dim)
@@ -2135,13 +2133,18 @@ class _ShapeOps:
         def _narrow(tensor):
             return tensor.narrow(dim, start, length)
 
-        index_start = start + self.batch_size[dim] if start < 0 else start
-        return self._batch_op(
-            _narrow,
-            torch.Size(batch_size),
-            self._maybe_names(),
-            index=(slice(None),) * dim + (slice(index_start, index_start + length),),
-        )
+        if self._is_non_tensor:
+            # A NonTensorStack selects self[index], which keeps the names:
+            # skip computing them, which walks over the members.
+            index_start = start + self.batch_size[dim] if start < 0 else start
+            return self._batch_op(
+                _narrow,
+                torch.Size(batch_size),
+                None,
+                index=(slice(None),) * dim
+                + (slice(index_start, index_start + length),),
+            )
+        return self._batch_op(_narrow, torch.Size(batch_size), self._maybe_names())
 
     def tile(self, dims: tuple[int, ...]):
         """Construct a tensordict by repeating the elements.
@@ -2207,9 +2210,11 @@ class _ShapeOps:
         :meth:`narrow` and :meth:`_broadcast_to` after they have checked their
         arguments and computed the ``batch_size`` and ``names`` of the result.
         ``fn`` takes a tensor whose leading dims are the batch dims, moves its
-        elements and leaves the feature dims alone. ``index``, when given, is
-        a basic index (slices) that selects the same elements, so that a class
-        can select them instead.
+        elements and leaves the feature dims alone. ``index``, which
+        :meth:`narrow` gives a ``NonTensorStack``, is a basic index (slices)
+        that selects the same elements, so that the class can select them
+        instead; ``names`` is then ``None``, as ``self[index]`` keeps the
+        names.
 
         The default applies ``fn`` to every leaf and gives the result the
         lock and the shared and memory-mapped flags of ``self``, and locks a
@@ -2549,10 +2554,11 @@ class _ShapeOps:
             -1 not in unflattened_size
             and -1 not in self.batch_size
             and math.prod(unflattened_size) != self.batch_size[dim]
-            and not self.is_empty()
+            and (self._flatten_lenient or not self.is_empty())
         ):
             # the error of torch.unflatten, which the leaves raised before
-            # unflatten went through _reshape
+            # unflatten went through _reshape (a tensordict with no leaves
+            # returned, a lazy stack, which regroups its members, raised)
             raise RuntimeError(
                 f"unflatten: Provided sizes {list(unflattened_size)} don't "
                 f"multiply up to the size of dim {dim} ({self.batch_size[dim]}) "

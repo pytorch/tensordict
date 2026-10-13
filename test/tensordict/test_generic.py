@@ -6028,6 +6028,11 @@ class TestGeneric:
             td.split("1", 0)
         with pytest.raises(TypeError, match="must be int or list of ints"):
             td.split(["1", 2], 0)
+        with pytest.raises(TypeError, match="must be int or list of ints"):
+            td.split(torch.tensor([1.0, 2.0]), 0)
+        # integer sizes in a tensor or a numpy array
+        for sizes in (torch.tensor([1, 2]), np.array([1, 2])):
+            assert [t.shape[0] for t in td.split(sizes, 0)] == [1, 2]
 
         # Test invalid split_size sum
         with pytest.raises(

@@ -3019,6 +3019,20 @@ class TestLazyStackedTensorDict:
         # A shape that matches the batch size returns the stack itself
         assert td.reshape([size or -1 for size in td.batch_size]) is td
 
+    def test_reshape_same_shape_returns_self(self):
+        # a 1-D stack returns itself, as a multi-dim stack (which raised
+        # before) and a TensorDict do
+        td = LazyStackedTensorDict(
+            *[TensorDict(a=torch.zeros(2) + i) for i in range(3)]
+        )
+        for call in (
+            lambda x: x.reshape(3),
+            lambda x: x.view(3),
+            lambda x: x.flatten(),
+            lambda x: x.flatten(0, 0),
+        ):
+            assert call(td) is td
+
     @pytest.mark.parametrize("sizes", [(3, 3), (2, 2)])
     def test_unflatten_lazy_zero_size_dim_bad_sizes(self, sizes):
         # Sizes that don't multiply up to the dim raise, as on TensorDict.
@@ -3031,6 +3045,18 @@ class TestLazyStackedTensorDict:
             td.unflatten(0, sizes)
         with pytest.raises(RuntimeError, match="don't multiply up"):
             td.to_tensordict().unflatten(0, sizes)
+
+    def test_unflatten_lazy_no_keys_bad_sizes(self):
+        # A stack with no keys raises too: it can't regroup its members into
+        # these sizes. A TensorDict with no keys returns, as before.
+        td = LazyStackedTensorDict(*[TensorDict(batch_size=[3])] * 2, stack_dim=1)
+        with pytest.raises(RuntimeError, match="don't multiply up"):
+            td.unflatten(1, (3, 1))
+        empty = LazyStackedTensorDict(*[TensorDict(batch_size=[0])] * 2, stack_dim=1)
+        with pytest.raises(RuntimeError, match="don't multiply up"):
+            empty.unflatten(1, (3, 1))
+        out = TensorDict(batch_size=[3, 2]).unflatten(1, (3, 1))
+        assert out.batch_size == (3, 3, 1)
 
     @staticmethod
     def _shape_stack(stack_dim=1, n=2, hetero=False, **kwargs):
@@ -3056,6 +3082,17 @@ class TestLazyStackedTensorDict:
         assert [p.batch_size[stack_dim] for p in pieces] == [1, 2]
         members = [m for p in pieces for m in p.tensordicts]
         assert all(m is orig for m, orig in zip(members, td.tensordicts))
+        # sizes given as a tensor, a numpy array or integer scalars, as
+        # TorchRL's TopKRewardSelector passes them
+        for sizes in (
+            torch.tensor([1, 2]),
+            np.array([1, 2]),
+            [torch.tensor(1), torch.tensor(2)],
+            [np.int64(1), np.int64(2)],
+        ):
+            pieces = td.split(sizes, stack_dim)
+            assert [p.batch_size[stack_dim] for p in pieces] == [1, 2]
+            assert pieces[1].tensordicts[0] is td.tensordicts[1]
         # along another dim, the pieces stay lazy and share the leaves
         other = 1 - stack_dim
         pieces = td.split(2, other)
