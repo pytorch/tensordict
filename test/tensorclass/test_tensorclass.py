@@ -1441,9 +1441,9 @@ class TestTensorClass:
         # A key that no field declares keeps the attribute protocol
         with pytest.raises(AttributeError):
             data.not_a_field
-        # A second delete raises, as for a deleted tensor field
-        with pytest.raises(KeyError):
-            del unset.y
+        # A deleted field is a None field: deleting it again is not an error
+        del unset.y
+        assert unset.y is None
 
     def test_deleted_field_reads_as_none_shadow(self):
         # #2147, for the __getattr__ of a shadow class
@@ -1456,6 +1456,79 @@ class TestTensorClass:
         del shadow.y
         assert shadow.y is None
         assert getattr(shadow, "y", "default") is None
+
+    @pytest.mark.parametrize("shadow", [False, True])
+    def test_none_field_is_missing_key(self, shadow):
+        # #2210: a None field is a key missing from the TensorDict, and
+        # _non_tensordict holds no placeholder for it
+        @tensorclass(shadow=shadow)
+        class Data:
+            x: torch.Tensor
+            y: torch.Tensor | None = None
+
+        @tensorclass(shadow=shadow)
+        class Custom:
+            x: torch.Tensor
+            y: torch.Tensor | None = None
+
+            def __init__(self, x):
+                self.x = x
+                self.y = None
+
+        def check(obj, key="y"):
+            assert getattr(obj, key) is None
+            assert key not in obj._tensordict.keys()
+            assert key not in obj._non_tensordict
+
+        data = Data(x=torch.zeros(3), batch_size=[3])
+        full = Data(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+        cleared = full.clone()
+        cleared.y = None
+        restored = Data.__new__(Data)
+        # pickled by a version that kept a placeholder
+        restored.__setstate__(
+            {"tensordict": data._tensordict.clone(), "non_tensordict": {"y": None}}
+        )
+        for result in (
+            data,
+            cleared,
+            restored,
+            Custom(torch.zeros(3)),
+            data.clone(),
+            data[0],
+            torch.stack([data, data]),
+            data.apply(lambda t: t + 1),
+            Data.from_dict({"x": torch.zeros(3), "y": None}, batch_size=[3]),
+            Data.from_tensordict(TensorDict(x=torch.zeros(3), batch_size=[3])),
+        ):
+            check(result)
+        # The outputs list the None field, as they did with a placeholder
+        assert data.to_dict()["y"] is None
+        assert "y=None" in repr(data)
+        assert data.non_tensor_items() == (("y", None),)
+        assert data.state_dict()._metadata[""]["_non_tensor"] == {"y": None}
+        assert data.__getstate__()["non_tensordict"] == {"y": None}
+
+        # #2230: lazy_stack leaves its inputs as they are
+        stack = lazy_stack([full, data])
+        assert stack[1].y is None
+        assert full._non_tensordict == {}
+        assert isinstance(full.to_dict()["y"], torch.Tensor)
+        check(data)
+
+        # #2171: writing the field through the TensorDict leaves no placeholder
+        for write in (
+            lambda d: d.set_non_tensor("y", "v"),
+            lambda d: d.setdefault("y", torch.ones(3)),
+            lambda d: d.rename_key_("x", "y"),
+        ):
+            d = Data(x=torch.zeros(3), batch_size=[3])
+            write(d)
+            assert d.to_dict()["y"] is not None
+            assert repr(d).count("y=") == 1
+        # the renamed field is None
+        check(d, "x")
+        assert d.to_dict()["x"] is None
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_device(self, device):
@@ -2436,6 +2509,7 @@ class TestTensorClass:
             (torch.abs(data), torch.ones(3, 4)),
             (torch.add(data, data), -2 * torch.ones(3, 4)),
             (torch.clamp(data, min=-0.5), -0.5 * torch.ones(3, 4)),
+            (torch.lerp(data, torch.zeros(3, 4), 0.5), -0.5 * torch.ones(3, 4)),
         ):
             assert type(result) is MyData
             assert result.z == "test"
@@ -3447,6 +3521,37 @@ class TestTensorClass:
         mc = MC(foo=torch.zeros(3), bar=torch.ones(3), batch_size=[3])
         for name in ("stack", "cat", "lazy_stack", "maybe_dense_stack"):
             assert type(getattr(MC, name)([mc, mc])) is MC, name
+
+    @pytest.mark.parametrize(
+        "flags", [{}, {"tensor_only": True}, {"shadow": True}], ids=str
+    )
+    def test_td_classmethods_on_decorated_class(self, flags):
+        # https://github.com/pytorch/tensordict/issues/2524: on a @tensorclass,
+        # MC.stack([...]) bound the list to self and raised AttributeError.
+        @tensorclass(**flags)
+        class MC:
+            foo: torch.Tensor
+            bar: torch.Tensor
+
+        class MCChild(MC):
+            pass
+
+        out = MC.from_list(
+            [{"foo": torch.zeros(()), "bar": 2}, {"foo": 3, "bar": torch.ones(())}]
+        )
+        assert type(out) is MC
+        assert out.batch_size == (2,)
+        assert (out.foo == torch.tensor([0, 3])).all()
+        assert type(MCChild.from_list([{"foo": 1, "bar": 2}])) is MCChild
+        assert type(MC.fromkeys(["foo", "bar"], 0)) is MC
+        assert type(MC.from_any({"foo": torch.zeros(3), "bar": 1})) is MC
+        mc = MC(foo=torch.zeros(3), bar=torch.ones(3), batch_size=[3])
+        for name in ("stack", "cat", "lazy_stack", "maybe_dense_stack"):
+            assert type(getattr(MC, name)([mc, mc])) is MC, name
+            # the call on an instance keeps working
+            assert type(getattr(mc, name)([mc, mc])) is MC, name
+        assert MC.stack([mc, mc], 1).batch_size == (3, 2)
+        assert MC.cat([mc, mc]).batch_size == (6,)
 
     def test_to_lazystack(self):
         class MyTensorClass(TensorClass):

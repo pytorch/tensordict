@@ -810,6 +810,33 @@ class TestTensorDictStore:
         for key in expected.keys(include_nested=True, leaves_only=True):
             torch.testing.assert_close(store_td[key], expected[key])
 
+    def test_masked_select_copy(self, store_td, monkeypatch):
+        """masked_select returns a dense copy, read in one to_tensordict call."""
+        source = TensorDict(
+            {
+                "a": torch.arange(10.0),
+                "nested": TensorDict({"d": torch.ones(10, 4)}, [10]),
+            },
+            [10],
+        )
+        store_td.update(source)
+        mask = torch.zeros(10, dtype=torch.bool)
+        mask[[1, 4, 7]] = True
+        calls = []
+        to_tensordict = TensorDictStore.to_tensordict
+
+        def counting_to_tensordict(self, *args, **kwargs):
+            calls.append(self)
+            return to_tensordict(self, *args, **kwargs)
+
+        monkeypatch.setattr(TensorDictStore, "to_tensordict", counting_to_tensordict)
+        result = store_td.masked_select(mask)
+        assert len(calls) == 1 and calls[0] is store_td
+        assert type(result) is TensorDict
+        assert (result == source.masked_select(mask)).all()
+        assert store_td.batch_size == (10,)
+        assert (store_td.to_tensordict() == source).all()
+
     def test_is_contiguous(self, store_td):
         """Redis TDs are not contiguous."""
         assert not store_td.is_contiguous()
@@ -2617,11 +2644,45 @@ class TestLazyStackedTensorDictStore:
     def test_masked_select_inplace_raises(self, store_stack):
         """masked_select(inplace=True) raises on the stack and its element views."""
         store_td, tds, lazy_td = store_stack
-        with pytest.raises(NotImplementedError, match="masked_select"):
+        with pytest.raises(
+            NotImplementedError,
+            match="masked_select.inplace=True. is not supported on "
+            "LazyStackedTensorDictStore",
+        ):
             store_td.masked_select(torch.ones(5, 4, dtype=torch.bool), inplace=True)
-        with pytest.raises(NotImplementedError, match="masked_select"):
+        with pytest.raises(
+            NotImplementedError,
+            match="masked_select.inplace=True. is not supported on "
+            "_StoreStackElementView",
+        ):
             store_td[1].masked_select(torch.ones(4, dtype=torch.bool), inplace=True)
         assert store_td.batch_size == torch.Size([5, 4])
+        # the store is still readable
+        assert (store_td.to_tensordict() == lazy_td).all()
+
+    @pytest.mark.parametrize("element", [False, True])
+    def test_masked_select_copy(self, store_stack, element, monkeypatch):
+        """masked_select returns a dense copy, read in one to_tensordict call."""
+        store_td, tds, lazy_td = store_stack
+        target, expected = (store_td[1], tds[1]) if element else (store_td, lazy_td)
+        mask = torch.zeros(target.shape, dtype=torch.bool)
+        mask[1] = True
+        mask[-1] = True
+        calls = []
+        cls = type(target)
+        to_tensordict = cls.to_tensordict
+
+        def counting_to_tensordict(self, *args, **kwargs):
+            calls.append(self)
+            return to_tensordict(self, *args, **kwargs)
+
+        monkeypatch.setattr(cls, "to_tensordict", counting_to_tensordict)
+        result = target.masked_select(mask)
+        assert len(calls) == 1 and calls[0] is target
+        assert type(result) is TensorDict
+        assert (result == expected.masked_select(mask)).all()
+        monkeypatch.undo()
+        assert (store_td.to_tensordict() == lazy_td).all()
 
     @pytest.mark.parametrize("key", ["missing", ("missing", "x")])
     def test_fill_missing_key(self, store_stack, key):
@@ -3049,6 +3110,54 @@ class TestLazyStackedTensorDictStore:
                     td["n", "m"] = TensorDict(c=td["a"], batch_size=td.shape)
                 td.unlock_()
             assert_allclose_td(store_td.to_tensordict(), lazy_td.to_tensordict())
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_view_of_locked_store(self, store_kwargs):
+        """The view of an element of a locked store raises for a new key and writes the keys the store has (#2404)."""
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(
+                [
+                    TensorDict(a=torch.zeros(3), n=TensorDict(b=torch.zeros(3)))
+                    for _ in range(2)
+                ]
+            ),
+            **store_kwargs,
+        )
+        try:
+            store_td.lock_()
+            view = store_td[1]
+            for key in ("x", ("n", "x")):
+                with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                    view.set(key, torch.ones(3))
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                view.update({"x": torch.ones(3)}, inplace=True)
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                view["n"] = TensorDict(c=torch.ones(3))
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                view.set("n", TensorDict(b=torch.ones(3), c=torch.ones(3)))
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                view["n"] = torch.ones(3)
+            assert list(store_td.keys(True, True)) == ["a", ("n", "b")]
+            # the keys the store has are written, with or without inplace
+            view.set("a", torch.ones(3))
+            view.set(("n", "b"), torch.ones(3))
+            view.update({"a": view["a"] + 1})
+            view.update({"a": view["a"] + 1}, inplace=True)
+            torch.testing.assert_close(store_td["a"][1], torch.full((3,), 3.0))
+            torch.testing.assert_close(store_td["n", "b"][1], torch.ones(3))
+            torch.testing.assert_close(store_td["a"][0], torch.zeros(3))
+            # the view follows the lock of the store
+            store_td.unlock_()
+            view.set("x", torch.ones(3))
+            torch.testing.assert_close(store_td["x"][1], torch.ones(3))
+            # a locked view still needs inplace for the keys the store has
+            view.lock_()
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                view.set("a", torch.ones(3))
+            view.set("a", torch.zeros(3), inplace=True)
+            torch.testing.assert_close(store_td["a"][1], torch.zeros(3))
         finally:
             store_td.clear_redis()
             store_td.close()

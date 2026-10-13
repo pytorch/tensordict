@@ -98,6 +98,7 @@ from tensordict.utils import (
     _td_fields,
     _unravel_key_to_tuple,
     _UPDATE_IGNORE_LOCK_WARNED,
+    _warn_dim_past_batch_dims,
     _warn_update_ignore_lock,
     _zip_strict,
     DeviceType,
@@ -454,6 +455,16 @@ def _broadcasts(shape: torch.Size, other_shape: torch.Size) -> bool:
     except RuntimeError:
         return False
     return True
+
+
+def _broadcasts_to(shape: torch.Size, target: torch.Size) -> bool:
+    """Whether ``shape`` broadcasts to ``target``, without growing it."""
+    try:
+        return torch.broadcast_shapes(shape, target) == target
+    except (RuntimeError, ValueError):
+        # ValueError: the batch size of a stack of members of different shapes
+        # holds -1
+        return False
 
 
 def _fits_stack(
@@ -1002,6 +1013,13 @@ class LazyStackedTensorDict(TensorDictBase):
             )
             for i in range(len(input_dict))
         ]
+        if names is not None and stack_dim_name is not None and tensordicts:
+            # the stack inserts stack_dim_name into the names of its members,
+            # which must all match: it must not name one of their dims already
+            stack_names = list(tensordicts[0].names)
+            if stack_dim_name in stack_names:
+                stack_names.insert(stack_dim % (len(stack_names) + 1), stack_dim_name)
+                raise ValueError(f"Some dimension names are non-unique: {stack_names}.")
         if names is not None and batch_size is None:
             # TensorDict.from_dict dropped the names: say when that changes
             dropped = list(names)
@@ -1034,6 +1052,11 @@ class LazyStackedTensorDict(TensorDictBase):
                         stacklevel=stacklevel,
                     )
 
+        if stack_dim < 0 and tensordicts:
+            # count from the end of the stack's dims, as __init__ does
+            ndim = tensordicts[0].batch_dims + 1
+            if stack_dim >= -ndim:
+                stack_dim += ndim
         return cls._new_lazy_unsafe(
             *tensordicts,
             stack_dim=stack_dim,
@@ -1722,10 +1745,12 @@ class LazyStackedTensorDict(TensorDictBase):
             feature_ndim = entry.ndim
             if not _is_unbatched(entry):
                 feature_ndim -= entry_batch_dims
-            if value.numel() == 1 or value.ndim <= feature_ndim:
+            if value.numel() == 1 or value.ndim <= feature_ndim or is_non_tensor(entry):
                 # The value is the same for every element, so each member
                 # writes it as it is, as torch does. torch casts a value of one
                 # element to the dtype of the entry, but not an expanded one.
+                # A non-tensor entry holds the whole value in each element, as
+                # in a tensordict.
                 self._set_at_members(
                     key, value, index, validated=validated, non_blocking=non_blocking
                 )
@@ -2166,7 +2191,10 @@ class LazyStackedTensorDict(TensorDictBase):
             items (Sequence of TensorDictBase instances): the tensordicts to
                 stack. It must not be empty, or a ``RuntimeError`` is raised.
             dim (int, optional): the dim along which to perform the lazy stack.
-                Defaults to 0.
+                Defaults to 0. A ``dim`` below ``-batch_dims - 1`` warns and
+                wraps around once more (and raises if it is still out of
+                range). Starting with TensorDict 0.17, the default will change
+                to raising an ``IndexError``, as for a tensor.
 
         Keyword Args:
             device (torch.device, optional): not used: the stack takes the
@@ -2275,6 +2303,8 @@ class LazyStackedTensorDict(TensorDictBase):
         batch_size = items[0].batch_size
         if dim < 0:
             dim = len(batch_size) + dim + 1
+            if dim < 0:
+                _warn_dim_past_batch_dims("lazy_stack")
 
         if strict_shape:
             for td in items[1:]:
@@ -3454,35 +3484,11 @@ class LazyStackedTensorDict(TensorDictBase):
 
     __getitems__ = __getitem__
 
-    def __eq__(self, other):
-        return self._dispatch_comparison(other, "__eq__", "__eq__", default=False)
-
-    def __ne__(self, other):
-        return self._dispatch_comparison(other, "__ne__", "__ne__", default=True)
-
-    def __or__(self, other):
-        return self._dispatch_comparison(other, "__or__", "__or__", default=NO_DEFAULT)
-
-    def __xor__(self, other):
-        return self._dispatch_comparison(
-            other, "__xor__", "__xor__", default=NO_DEFAULT
-        )
-
-    def __ge__(self, other):
-        return self._dispatch_comparison(other, "__ge__", "__le__", default=NO_DEFAULT)
-
-    def __gt__(self, other):
-        return self._dispatch_comparison(other, "__gt__", "__lt__", default=NO_DEFAULT)
-
-    def __le__(self, other):
-        return self._dispatch_comparison(other, "__le__", "__ge__", default=NO_DEFAULT)
-
-    def __lt__(self, other):
-        return self._dispatch_comparison(other, "__lt__", "__gt__", default=NO_DEFAULT)
-
-    def _dispatch_comparison(self, other, comparison_str, inverse_str, default):
+    # Override: compares each member, so that members with different shapes
+    # work, and stacks the results lazily.
+    def _compare(self, other, op, reflected_op, default):
         if is_tensorclass(other):
-            return getattr(other, inverse_str)(self)
+            return getattr(other, reflected_op)(self)
         if isinstance(other, (dict,)):
             # we may want to broadcast it instead
             other = TensorDict.from_dict(other, batch_size=self.batch_size)
@@ -3502,22 +3508,32 @@ class LazyStackedTensorDict(TensorDictBase):
                     self_expand = self.expand(shape)
                     if not isinstance(self_expand, LazyStackedTensorDict):
                         # expand returns a dense TensorDict when it can
-                        return getattr(self_expand, comparison_str)(other)
+                        return getattr(self_expand, op)(other)
             out = []
             for td0, td1 in _zip_strict(
                 self_expand.tensordicts, other.unbind(self_expand.stack_dim)
             ):
-                out.append(getattr(td0, comparison_str)(td1))
+                out.append(getattr(td0, op)(td1))
             return LazyStackedTensorDict.lazy_stack(out, self_expand.stack_dim)
         if isinstance(other, (numbers.Number, Tensor)):
-            return LazyStackedTensorDict.lazy_stack(
-                [getattr(td, comparison_str)(other) for td in self.tensordicts],
-                self.stack_dim,
-            )
-        if default is NO_DEFAULT:
-            raise ValueError(
-                f"Incompatible value {type(other)} for op {comparison_str}."
-            )
+            if (
+                isinstance(other, Tensor)
+                and other.ndim
+                and _broadcasts_to(other.shape, self.batch_size)
+            ):
+                # Each member gets its slice, as each row of a TensorDict does
+                others = other.expand(self.batch_size).unbind(self.stack_dim)
+                out = [
+                    getattr(td, op)(_other)
+                    for td, _other in _zip_strict(self.tensordicts, others)
+                ]
+            else:
+                # A number, a 0-dim tensor or a tensor that only broadcasts
+                # against the members goes whole to each member
+                out = [getattr(td, op)(other) for td in self.tensordicts]
+            return LazyStackedTensorDict.lazy_stack(out, self.stack_dim)
+        if op not in ("__eq__", "__ne__"):
+            raise ValueError(f"Incompatible value {type(other)} for op {op}.")
         return default
 
     def _cast_reduction(
@@ -3530,6 +3546,9 @@ class LazyStackedTensorDict(TensorDictBase):
         further_reduce: bool,
         **kwargs,
     ):
+        if dim is None and not keepdim:
+            # dim=None reduces over all the elements, as an omitted dim does
+            dim = NO_DEFAULT
         if further_reduce and (dim is NO_DEFAULT or dim is None or dim == "feature"):
             # Options for a tensordict result, which torch doesn't take
             for key in ("values_only", "call_on_nested", "batch_size"):
@@ -3595,63 +3614,26 @@ class LazyStackedTensorDict(TensorDictBase):
             **kwargs,
         )
 
-    def all(self, dim: int | None = None) -> bool | TensorDictBase:
-        if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
-            raise RuntimeError(
-                "dim must be greater than or equal to -tensordict.batch_dims and "
-                "smaller than tensordict.batch_dims"
-            )
-        if dim is not None:
-            # TODO: we need to adapt this to LazyStackedTensorDict too
-            if dim < 0:
-                dim = self.batch_dims + dim
-            try:
-                names = self._maybe_names()
-            except (IndexError, ValueError):
-                # a stack without members, or members with different names
-                names = None
-            if names is not None:
-                names = [name for i, name in enumerate(names) if i != dim]
-                # the stack dim may have the name of a member dim
-                named = [name for name in names if name is not None]
-                if len(set(named)) != len(named):
-                    names = None
-            return TensorDict(
-                source={key: value.all(dim=dim) for key, value in self.items()},
-                batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
-                device=self.device,
-                names=names,
-            )
-        return all(value.all() for value in self.tensordicts)
+    # Override: all()/any() without a dim combine the members, which need not
+    # stack into dense tensors.
+    def _reduction_parts(self):
+        return self.tensordicts
 
-    def any(self, dim: int | None = None) -> bool | TensorDictBase:
-        if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
-            raise RuntimeError(
-                "dim must be greater than or equal to -tensordict.batch_dims and "
-                "smaller than tensordict.batch_dims"
-            )
-        if dim is not None:
-            # TODO: we need to adapt this to LazyStackedTensorDict too
-            if dim < 0:
-                dim = self.batch_dims + dim
-            try:
-                names = self._maybe_names()
-            except (IndexError, ValueError):
-                # a stack without members, or members with different names
-                names = None
-            if names is not None:
-                names = [name for i, name in enumerate(names) if i != dim]
-                # the stack dim may have the name of a member dim
-                named = [name for name in names if name is not None]
-                if len(set(named)) != len(named):
-                    names = None
-            return TensorDict(
-                source={key: value.any(dim=dim) for key, value in self.items()},
-                batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
-                device=self.device,
-                names=names,
-            )
-        return any(value.any() for value in self.tensordicts)
+    # Override: the members may have different names.
+    def _reduced_names(self, dim):
+        try:
+            names = self._maybe_names()
+        except (IndexError, ValueError):
+            # a stack without members, or members with different names
+            return None
+        if names is None:
+            return None
+        names = [name for i, name in enumerate(names) if i != dim]
+        # the stack dim may have the name of a member dim
+        named = [name for name in names if name is not None]
+        if len(set(named)) != len(named):
+            return None
+        return names
 
     def _send(
         self,
@@ -4257,15 +4239,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     # Override: where runs on each member, so that members with different
     # shapes work, and the result is a lazy stack.
-    def where(
-        self,
-        condition: Tensor,
-        other: Tensor | TensorDictBase,
-        *,
-        out: TensorDictBase | None = None,
-        pad: int | bool = None,
-        update_batch_size: bool = False,
-    ):
+    def _where(self, condition, other, *, out, pad, update_batch_size):
         if condition.ndim < self.ndim:
             condition = expand_right(condition, self.batch_size)
         condition = condition.unbind(self.stack_dim)
@@ -5545,30 +5519,9 @@ class _CustomOpTensorDict(TensorDictBase):
             "Cannot call `unsqueeze` on a lazy tensordict. Make it dense before calling this method by calling `to_tensordict`."
         )
 
-    def _cast_reduction(
-        self,
-        *,
-        reduction_name,
-        dim=NO_DEFAULT,
-        keepdim=NO_DEFAULT,
-        tuple_ok=True,
-        **kwargs,
-    ):
-        try:
-            td = self.to_tensordict()
-        except Exception:
-            raise RuntimeError(
-                f"{reduction_name} requires this object to be cast to a regular TensorDict. "
-                f"If you need {type(self).__name__} to support {reduction_name}, help us by filing an issue"
-                f" on github!"
-            )
-        return td._cast_reduction(
-            reduction_name=reduction_name,
-            dim=dim,
-            keepdim=keepdim,
-            tuple_ok=tuple_ok,
-            **kwargs,
-        )
+    # Override: reduces a dense copy, which is faster than reading each
+    # entry through the view.
+    _cast_reduction = _SubTensorDict._cast_reduction
 
     _add_batch_dim = TensorDict._add_batch_dim
 

@@ -424,8 +424,6 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
     """Ensures that elementwise ops are broadcast when an nd tensor is passed."""
     # add_, mul_, ... are in-place; __eq__, __lt__, ... also end with "_".
     inplace = op.endswith("_") and not op.endswith("__")
-    # The comparisons pair a lazy stack with a dense operand by key already
-    pairs_by_apply = op == "__mod__" or not op.startswith("__")
     # torch.Tensor has no rsub method: call torch.rsub on the leaves instead.
     torch_op = None if hasattr(torch.Tensor, op) else getattr(torch, op)
 
@@ -450,11 +448,7 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     need_broadcast = True
                     break
             if not need_broadcast:
-                if (
-                    pairs_by_apply
-                    and kwargs.get("default") is None
-                    and _mixes_lazy_stacks(self, others)
-                ):
+                if kwargs.get("default") is None and _mixes_lazy_stacks(self, others):
                     # alpha=None and default=None are the defaults of the ops
                     kwargs = {k: v for k, v in kwargs.items() if v is not None}
                     return _apply_pointwise(
@@ -467,12 +461,17 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
             others_map = []
             shape = self.shape
             self_expand = self
-            shapes = [shape, *[other.shape for other in others if other is not None]]
+            # None and numbers, such as the weight of lerp, are passed as they are
+            is_operand = [
+                isinstance(other, torch.Tensor) or _is_tensor_collection(type(other))
+                for other in others
+            ]
+            shapes = [shape, *[o.shape for o, f in zip(others, is_operand) if f]]
             shape = torch.broadcast_shapes(*shapes)
             if shape != self_expand.shape:
                 self_expand = self_expand.expand(shape)
-            for other in others:
-                if other is None:
+            for other, flag in zip(others, is_operand):
+                if not flag:
                     others_map.append(other)
                     continue
                 # broadcast dims
@@ -490,9 +489,9 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     stack_dim = self_expand.stack_dim
                     others_split = [
                         other.unbind(stack_dim)
-                        if other is not None
-                        else [None] * self_expand.shape[stack_dim]
-                        for other in others_map
+                        if flag
+                        else [other] * self_expand.shape[stack_dim]
+                        for other, flag in zip(others_map, is_operand)
                     ]
                     results = [
                         getattr(td, op)(*member_others, *args, **kwargs)
@@ -511,8 +510,8 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     lambda x: leaf_op(
                         x,
                         *[
-                            expand_as_right(other, x) if other is not None else None
-                            for other in others_map
+                            expand_as_right(other, x) if flag else other
+                            for other, flag in zip(others_map, is_operand)
                         ],
                         *args,
                         **kwargs,
@@ -1002,7 +1001,13 @@ def _warn_read_only(method: str) -> None:
     )
 
 
-def _warn_scalar_over_non_tensor(key: str, value: bool | int | float) -> None:
+# the scalars that _warn_scalar_over_non_tensor warns about
+_SCALAR_TYPES = (bool, int, float, np.bool_, np.integer, np.floating)
+
+
+def _warn_scalar_over_non_tensor(
+    key: str, value: bool | int | float | np.bool_ | np.integer | np.floating
+) -> None:
     """Warns that ``value``, written over the non-tensor entry ``key``, becomes a tensor today."""
     # point to the first frame outside tensordict: the user's call
     frame, stacklevel = sys._getframe(1), 2
@@ -1232,6 +1237,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # ``to_tensordict()`` copy: the stores read it in one round trip, and on
     # all of them the result is a new, unlocked TensorDict.
     _masking_on_dense_copy: bool = False
+    # Set by the stores, on which ``masked_select`` masks a
+    # ``to_tensordict()`` copy, read in one round trip. On the views and h5
+    # files, that is slower than masking each entry.
+    _masked_select_on_dense_copy: bool = False
+    # Set by the backends on which ``masked_select(inplace=True)`` raises (the
+    # lazy stacks raise too).
+    _masked_select_inplace_unsupported: bool = False
     # Whether the tensors that items() returns are copies of the stored data,
     # as for an h5 or zarr file or a store. The in-place methods then write
     # their results back (see _write_back_inplace and _write_back).
@@ -2958,11 +2970,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Arrays and numbers are converted to tensors. Strings and other
         objects are stored as :class:`~tensordict.NonTensorData`.
 
-        A Python ``bool``, ``int`` or ``float`` written over an existing
-        :class:`~tensordict.NonTensorData` entry is stored as a 0-d tensor,
-        and the write emits a :class:`FutureWarning`. Starting with
-        TensorDict 0.17, the default will change to storing it as
-        :class:`~tensordict.NonTensorData`, like the entry it replaces.
+        A ``bool``, ``int`` or ``float``, or a NumPy scalar of one of these
+        kinds, written over an existing :class:`~tensordict.NonTensorData`
+        entry is stored as a 0-d tensor, and the write emits a
+        :class:`FutureWarning`. Starting with TensorDict 0.17, the default will
+        change to storing it as :class:`~tensordict.NonTensorData`, like the
+        entry it replaces.
 
         Args:
             key (NestedKey): the key to set: a string, or a tuple of strings
