@@ -333,10 +333,12 @@ def _pad_tensors(
             batch_first=True,
         )
     except RuntimeError:
-        # pad_sequence pads only dim 0 and needs the other dims to match.
-        # A lazy stack of lazy stacks gets here with tensors that the inner
-        # stacks have padded, or members can be ragged after dim 0: pad every
-        # other dim to its largest size, then pad dim 0 as before.
+        # pad_sequence pads only dim 0 and needs the other dims to match (or
+        # to broadcast, as size-1 dims do: it is tried first so that those
+        # inputs keep their result). A lazy stack of lazy stacks gets here with
+        # tensors that the inner stacks have padded, or members can be ragged
+        # after dim 0: pad every other dim to its largest size, then pad dim 0
+        # as before.
         ndim = tensors[0].ndim
         if ndim < 2 or any(t.ndim != ndim for t in tensors):
             raise
@@ -2238,14 +2240,17 @@ class LazyStackedTensorDict(TensorDictBase):
                 Exclusive with ``as_padded_tensor`` and ``as_nested_tensor``.
                 Defaults to ``False``.
             as_padded_tensor (bool, optional): if ``True``, the tensors are
-                padded to the largest shape and stacked into one tensor.
-                ``padding_value`` sets the padding value and ``padding_side``
-                sets the side.
+                padded to the largest shape and stacked into one tensor: each
+                dim is padded to its largest size. ``padding_value`` sets the
+                padding value and ``padding_side`` sets the side of every
+                padded dim.
                 Exclusive with ``as_list`` and ``as_nested_tensor``.
                 Defaults to ``False``.
             as_nested_tensor (bool, optional): if ``True``, the tensors are
                 returned as a nested tensor (:mod:`torch.nested`). ``layout``
-                sets its layout.
+                sets its layout. Tensors that are nested tensors themselves
+                raise a ``ValueError``, as a nested tensor has a single nested
+                level.
                 Exclusive with ``as_list`` and ``as_padded_tensor``.
                 Defaults to ``False``.
             layout (torch.layout, optional): the layout of the nested tensor
