@@ -1032,37 +1032,32 @@ def _warn_scalar_over_non_tensor(
 
 # the values that set_at_ casts to a tensor in a non-tensor entry, and warns about
 _SET_AT_CAST_TYPES = (list, *_SCALAR_TYPES)
-# Set while a lazy stack writes a scalar into its members, each of which casts
-# it, or while td[index] = value writes each entry, so that the call warns
-# once: ``warned`` is False until the first warning, then True. ``setitem`` is
-# True in td[index] = value, which warns of its own default change.
-_SET_AT_CAST_CALL = local()
 
 
 def _warn_set_at_cast(
-    key: str, value: list | bool | int | float | np.bool_ | np.integer | np.floating
+    key: str | None,
+    value: list | bool | int | float | np.bool_ | np.integer | np.floating,
 ) -> None:
-    """Warns that ``value``, written at an index of the non-tensor entry ``key``, becomes a tensor today."""
+    """Warns that ``value``, written at an index of a non-tensor entry, becomes a tensor today.
+
+    ``key`` is the entry for a direct ``set_at_``, and ``None`` for
+    ``td[index] = value``, which announces its own default change.
+    """
     if is_compiling():
         # Dynamo can trace neither the frame walk nor warnings.warn
         return
-    warned = getattr(_SET_AT_CAST_CALL, "warned", None)
-    if warned:
-        return
-    if warned is False:
-        _SET_AT_CAST_CALL.warned = True
     # point to the first frame outside tensordict: the user's call
     frame, stacklevel = sys._getframe(1), 2
     while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
         frame, stacklevel = frame.f_back, stacklevel + 1
-    if getattr(_SET_AT_CAST_CALL, "setitem", False):
+    if key is None:
         message = (
             f"The {type(value).__name__} written with [index] = value is cast "
-            f"to a tensor in the non-tensor entry {key!r} today. Starting with "
-            "TensorDict "
-            "0.17, the default will change to leaving the non-tensor entries "
-            "unchanged, as a TensorDictStore does. Write into "
-            "td.exclude(<non-tensor keys>)[index] to leave them unchanged now."
+            "to a tensor in the non-tensor entries today. Starting with "
+            "TensorDict 0.17, the default will change to leaving the non-tensor "
+            "entries unchanged, as a TensorDictStore does for a number. Write "
+            "into td.exclude(<non-tensor keys>)[index] to leave them unchanged "
+            "now."
         )
     else:
         message = (
@@ -1075,28 +1070,57 @@ def _warn_set_at_cast(
     warnings.warn(message, FutureWarning, stacklevel=stacklevel)
 
 
-def _set_at_each_key(td: TensorDictBase, value: Any, index: IndexType) -> None:
-    """Writes ``value`` at ``index`` of each entry of ``td``, for ``td[index] = value``.
+def _set_at_each_key(
+    td: TensorDictBase, value: Any, index: IndexType, *, warn_cast: bool = True
+) -> None:
+    """Writes ``value`` at ``index`` of every entry of ``td``: the write step of ``td[index] = value``.
 
-    A cast of a list or a scalar to a tensor in a non-tensor entry warns once
-    for the call, of the default change of ``td[index] = value``.
+    ``value`` is not a tensor collection, and ``index`` has been read by
+    ``__setitem__`` (no Ellipsis, no new dim left to add). Every entry is
+    written: a tensor entry casts the value to its dtype, a nested tensordict
+    writes it into each of its entries, and a non-tensor entry casts a list or
+    a number to a tensor. No entry is skipped.
+
+    When ``warn_cast`` is ``True`` and the call casts a list or a number into a
+    non-tensor entry, at any depth, it emits one :class:`FutureWarning` at the
+    user's line, before the writes: from TensorDict 0.17 the non-tensor entries
+    are left unchanged. It decides from the type of ``value`` and the types of
+    the entries, never from tensor data. It does not warn under
+    ``torch.compile``, nor for a shared or memmap container, which refuses
+    these writes. The writes of the entries do not warn: the nested calls get
+    ``warn_cast=False``. Containers whose ``_set_at_str`` does not take
+    ``warn_cast`` (``_set_at_warns_cast`` is ``False``) write each entry with
+    ``set_at_`` and do not warn.
     """
-    if not isinstance(value, _SET_AT_CAST_TYPES):
+    if not type(td)._set_at_warns_cast:
+        # these containers never warn of the cast
         for key in td.keys():
             td.set_at_(key, value, index)
         return
-    warned = getattr(_SET_AT_CAST_CALL, "warned", None)
-    setitem = getattr(_SET_AT_CAST_CALL, "setitem", False)
-    if warned is None:
-        _SET_AT_CAST_CALL.warned = False
-    _SET_AT_CAST_CALL.setitem = True
-    try:
-        for key in td.keys():
-            td.set_at_(key, value, index)
-    finally:
-        _SET_AT_CAST_CALL.setitem = setitem
-        if warned is None:
-            _SET_AT_CAST_CALL.warned = None
+    if (
+        warn_cast
+        and isinstance(value, _SET_AT_CAST_TYPES)
+        and td._has_non_tensor
+        and _set_at_casts(td, value)
+    ):
+        _warn_set_at_cast(None, value)
+    if not isinstance(index, (int, slice, Tensor)):
+        # a lazy stack passes the index on as it is
+        index = _entry_index(index)
+    for key in td.keys():
+        td._set_at_str(
+            key, value, index, validated=False, non_blocking=False, warn_cast=False
+        )
+
+
+def _set_at_casts(td: TensorDictBase, value: Any) -> bool:
+    """Whether writing the list or number ``value`` at an index of every entry of ``td``, which has a non-tensor entry, casts it to a tensor there."""
+    if is_compiling() or td._is_shared or td._is_memmap:
+        return False
+    if isinstance(value, list):
+        # a list of strings, for instance, is stored as non-tensor data
+        return not is_tensor_collection(td._validate_value(value, check_shape=False))
+    return True
 
 
 def _has_lazy_stack(td: TensorDictBase) -> bool:
@@ -1292,6 +1316,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     _is_locked: bool = False
     _is_shared: bool = False
     _is_memmap: bool = False
+    # whether _set_at_str takes warn_cast and may warn of a list or a number
+    # cast to a tensor in a non-tensor entry (gh-2522)
+    _set_at_warns_cast: bool = False
     _cache: bool | None = None
     _is_non_tensor: bool = False
     _memmap_prefix = None
@@ -1492,7 +1519,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         too. That write emits a :class:`FutureWarning`: starting with
         TensorDict 0.17, the default will change to leaving the non-tensor
         entries unchanged, as a :class:`~tensordict.store.TensorDictStore`
-        does. To leave them unchanged now, write into
+        does for a number. To leave them unchanged now, write into
         ``td.exclude(<non-tensor keys>)[index]``, which shares the tensors of
         ``td``.
         """

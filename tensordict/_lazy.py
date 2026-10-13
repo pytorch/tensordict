@@ -65,7 +65,6 @@ from tensordict.base import (
     _PACKAGE_DIR,
     _register_tensor_class,
     _SELF_NESTING_ERROR,
-    _SET_AT_CAST_CALL,
     _SET_AT_CAST_TYPES,
     _set_at_each_key,
     _warn_set_at_cast,
@@ -681,6 +680,7 @@ class LazyStackedTensorDict(TensorDictBase):
     _empty_stack_names = None
     _safe = False
     _lazy = True
+    _set_at_warns_cast = True
 
     def __init__(
         self,
@@ -1688,7 +1688,16 @@ class LazyStackedTensorDict(TensorDictBase):
             batch_size=constituent_batch_size,
         )
 
-    def _set_at_str(self, key, value, index, *, validated, non_blocking: bool):
+    def _set_at_str(
+        self,
+        key,
+        value,
+        index,
+        *,
+        validated,
+        non_blocking: bool,
+        warn_cast: bool = True,
+    ):
         if not self._is_vmapped and self._ellipsis_covers_entry_dims(key, index):
             # torch reads the index on the entry, where the Ellipsis also
             # covers the dims after the batch dims: write through the stacked
@@ -1701,18 +1710,16 @@ class LazyStackedTensorDict(TensorDictBase):
             return self
         if not validated and not self._is_vmapped and isinstance(value, numbers.Number):
             # each member writes a Python scalar in the dtype of its entry, as
-            # torch does. A non-tensor entry casts it to a tensor, which warns
-            # once for the whole stack.
-            outermost = getattr(_SET_AT_CAST_CALL, "warned", None) is None
-            if outermost:
-                _SET_AT_CAST_CALL.warned = False
-            try:
-                self._set_at_members(
-                    key, value, index, validated=False, non_blocking=non_blocking
-                )
-            finally:
-                if outermost:
-                    _SET_AT_CAST_CALL.warned = None
+            # torch does. A non-tensor entry casts it to a tensor: only the
+            # first member warns, once for the whole stack.
+            self._set_at_members(
+                key,
+                value,
+                index,
+                validated=False,
+                non_blocking=non_blocking,
+                warn_cast=warn_cast,
+            )
             return self
         converted = False
         original = None
@@ -1747,7 +1754,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 self._get_str(key, NO_DEFAULT)[index] = value
                 return self
             if (
-                getattr(type(entry), "_is_non_tensor", False)
+                warn_cast
+                and getattr(type(entry), "_is_non_tensor", False)
                 and isinstance(original, _SET_AT_CAST_TYPES)
                 # shared and memmap members refuse the write
                 and not (self._is_shared or self._is_memmap)
@@ -1799,16 +1807,35 @@ class LazyStackedTensorDict(TensorDictBase):
             and entry.ndim > entry_batch_dims
         )
 
-    def _set_at_members(self, key, value, index, *, validated, non_blocking: bool):
-        """Write ``value``, the same for every element, at ``index`` of each member that the index reaches."""
+    def _set_at_members(
+        self, key, value, index, *, validated, non_blocking: bool, warn_cast=False
+    ):
+        """Write ``value``, the same for every element, at ``index`` of each member that the index reaches.
+
+        With ``warn_cast``, the first member may warn of a cast to a tensor in
+        a non-tensor entry, and the others do not.
+        """
         for member, member_index, _ in self._split_index(index).parts:
-            self.tensordicts[member]._set_at_str(
-                key,
-                value,
-                () if member_index is None else member_index,
-                validated=validated,
-                non_blocking=non_blocking,
-            )
+            td = self.tensordicts[member]
+            member_index = () if member_index is None else member_index
+            if type(td)._set_at_warns_cast:
+                td._set_at_str(
+                    key,
+                    value,
+                    member_index,
+                    validated=validated,
+                    non_blocking=non_blocking,
+                    warn_cast=warn_cast,
+                )
+                warn_cast = False
+            else:
+                td._set_at_str(
+                    key,
+                    value,
+                    member_index,
+                    validated=validated,
+                    non_blocking=non_blocking,
+                )
 
     def _member_entry(self, key: str):
         """The entry ``key`` of the first member that has it and the batch dims of that member, or ``(None, None)``."""
