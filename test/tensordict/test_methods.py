@@ -440,8 +440,15 @@ class TestTensorDicts(TestTensorDictsBase):
         except Exception as err:
             error = err
         if error is not None:
-            with pytest.raises(type(error)):
+            # the batch size cannot change: auto_batch_size_ raises, unless it
+            # finds the batch size that the tensordict has
+            try:
                 td.auto_batch_size_()
+            except type(error):
+                pass
+            assert td.batch_size == batch_size
+            with pytest.raises(type(error)):
+                td.auto_batch_size_(1)
             return
         td.auto_batch_size_()
         assert td.batch_size[: len(batch_size)] == batch_size

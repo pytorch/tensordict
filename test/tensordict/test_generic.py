@@ -234,8 +234,10 @@ class TestGeneric:
                 "Modifying the batch size of a lazy representation of a tensordict is not permitted. Consider instantiating the tensordict first by calling `td = td.to_tensordict()` before resetting the batch size."
             ),
         ):
-            subtd.batch_size = [3, 2]
-        subtd.to_tensordict(retain_none=True).batch_size = [3, 2]
+            subtd.batch_size = [3]
+        # an unchanged batch size returns, also as a list
+        subtd.batch_size = [3, 2]
+        subtd.to_tensordict(retain_none=True).batch_size = [3]
 
         td = TensorDict({"a": torch.randn(3, 4)}, [3, 4])
         with legacy_lazy_mode():
