@@ -520,6 +520,39 @@ class TestGeneric:
             assert actual.shape == expected.shape
             assert actual.dtype == expected.dtype
 
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_consolidate_column_slice(self, num_threads):
+        # x[:, :1] has strides (4, 1) and reshape(-1) returns a stride-4
+        # view of it, which cannot be viewed as bytes
+        x = torch.arange(12, dtype=torch.float32).reshape(3, 4)
+        td = TensorDict(
+            {
+                "column": x[:, :1],
+                "strided": x[:, ::2],
+                "transposed": x.t()[:3],
+                "expanded": torch.ones(()).expand(3, 1),
+            },
+            batch_size=[3],
+        )
+        td_c = td.consolidate(num_threads=num_threads)
+        td_p = pickle.loads(pickle.dumps(td_c))
+
+        for key, expected in td.items():
+            assert torch.equal(td_c[key], expected)
+            assert torch.equal(td_p[key], expected)
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_consolidate_one_element_strided(self, device, num_threads):
+        # x[:, 0] of a (1, 5) tensor counts as contiguous, but view(-1) keeps
+        # its stride of 5, which cannot be viewed as bytes. A CPU source with
+        # a CUDA device and threads takes the per-leaf copy path.
+        x = torch.arange(5, dtype=torch.float32).reshape(1, 5)
+        td = TensorDict(column=x[:, 0], other=torch.randn(2), batch_size=[])
+        td_c = td.consolidate(device=device, num_threads=num_threads)
+        for key, expected in td.items():
+            assert torch.equal(td_c[key].cpu(), expected)
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_consolidate_non_contiguous_requires_grad(self, device):
         base = torch.arange(24, dtype=torch.float32, device=device, requires_grad=True)
@@ -785,6 +818,49 @@ class TestGeneric:
         # consolidate() on a consolidated tensordict refreshes its metadata
         assert td.consolidate() is td
         assert pickle.loads(pickle.dumps(td))["b"].batch_size == (2, 3, 4)
+
+    @pytest.mark.parametrize("use_buffer", [False, True])
+    def test_consolidated_file_batch_size_names_consolidate_again(
+        self, tmp_path, use_buffer
+    ):
+        # the file keeps the batch sizes and names of consolidate(filename=...):
+        # calling it again with the same file writes the current ones
+        filename = tmp_path / "td.bin"
+        td = TensorDict(
+            a=torch.zeros(2, 3), b={"c": torch.ones(2, 3, 4)}, batch_size=[2]
+        ).consolidate(filename=filename, use_buffer=use_buffer)
+        td.batch_size = [2, 3]
+        td.names = ["x" * 100, "y"]
+        td["b"].batch_size = [2, 3, 4]
+        assert td.consolidate(filename=filename) is td
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.batch_size == (2, 3)
+        assert loaded.names == ["x" * 100, "y"]
+        assert loaded["b"].batch_size == (2, 3, 4)
+        assert (loaded == td).all()
+        # a shorter metadata
+        td.names = None
+        td.batch_size = [2]
+        assert td.consolidate(filename=str(filename)) is td
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.batch_size == (2,)
+        assert loaded.names == [None]
+        assert (loaded == td).all()
+        # another file name writes nothing
+        assert td.consolidate(filename=tmp_path / "other.bin") is td
+        assert not (tmp_path / "other.bin").exists()
+        # nor does a file that was replaced, or deleted
+        os.remove(filename)
+        td2 = TensorDict(z=torch.ones(2), batch_size=[2]).consolidate(filename=filename)
+        td.batch_size = []
+        assert td.consolidate(filename=filename) is td
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.batch_size == (2,)
+        assert (loaded == td2).all()
+        del td2, loaded
+        os.remove(filename)
+        assert td.consolidate(filename=filename) is td
+        assert not filename.exists()
 
     def test_consolidated_lazy_stack_names_serialized(self):
         td = lazy_stack(
@@ -2594,6 +2670,81 @@ class TestGeneric:
         assert (pytree_recon.b == nt.b).all()
         # without auto_batch_size, batch_dims is ignored, as for lists and dicts
         assert TensorDict.from_pytree(nt, batch_dims=1).batch_size == ()
+        # an int batch_size with batch_dims gives the same batch size as for lists
+        td = TensorDict.from_pytree(nt, batch_size=3, batch_dims=1)
+        assert td.batch_size == (3,)
+        assert (
+            td.batch_size
+            == TensorDict.from_pytree(list(nt), batch_size=3, batch_dims=1).batch_size
+        )
+        # batch_size applies without batch_dims too, as for lists and dicts
+        for batch_size in ([3], 3):
+            td = TensorDict.from_pytree(nt, batch_size=batch_size)
+            assert td.batch_size == (3,)
+            assert type(td.to_pytree()) is NT
+        # and a batch size that does not fit the leaves raises, as for lists
+        with pytest.raises(RuntimeError):
+            TensorDict.from_pytree(list(nt), batch_size=[4])
+        with pytest.raises(RuntimeError):
+            TensorDict.from_pytree(nt, batch_size=[4])
+
+    def test_from_pytree_namedtuple_nested(self):
+        # dict and namedtuple fields come back with their own type
+        Outer = namedtuple("Outer", ["a", "nested"])
+        Same = namedtuple("Same", ["a", "nested"])
+        Inner = namedtuple("Inner", ["p", "name"])
+        a = torch.zeros(3)
+
+        def check(v1, v2):
+            assert (v1 == v2).all() if torch.is_tensor(v1) else v1 == v2
+
+        for nested in (
+            {"x": torch.ones(3), "y": {"z": torch.ones(3)}},
+            Inner(p=torch.ones(3), name="n"),
+            Same(a=torch.ones(3), nested="n"),
+            Outer(a=torch.ones(3), nested=None),
+        ):
+            pytree = Outer(a=a, nested=nested)
+            for kwargs in ({}, {"batch_size": [3]}):
+                recon = TensorDict.from_pytree(pytree, **kwargs).to_pytree()
+                assert type(recon) is Outer
+                assert type(recon.nested) is type(nested)
+                torch.utils._pytree.tree_map(check, pytree, recon)
+        # a dict field that from_pytree does not take (here, it holds a str)
+        # goes through from_any, as before, and comes back as on main: as the
+        # outer class if it takes the keys, and as a GenericDict otherwise
+        recon = TensorDict.from_pytree(
+            Outer(a=a, nested={"a": torch.ones(3), "nested": "n"})
+        ).to_pytree()
+        assert type(recon) is Outer
+        assert type(recon.nested) is Outer
+        assert recon.nested.nested == "n"
+        for kwargs in ({}, {"batch_size": [3]}):
+            recon = TensorDict.from_pytree(
+                Outer(a=a, nested={"s": "x", "t": torch.ones(3)}), **kwargs
+            ).to_pytree()
+            assert type(recon.nested).__name__ == "GenericDict"
+            assert recon.nested.s == "x"
+            assert (recon.nested.t == 1).all()
+        # so does a dict field that holds a list: the list stays a tensor, as
+        # on main, rather than a nested TensorDict as from_pytree would make it
+        pytree = Outer(a=a, nested={"l": [1, 2, 3]})
+        td = TensorDict.from_pytree(pytree)
+        assert isinstance(td["nested", "l"], torch.Tensor)
+        assert (td["nested", "l"] == torch.tensor([1, 2, 3])).all()
+        assert TensorDict.from_pytree(pytree, auto_batch_size=True).batch_size == (3,)
+        assert TensorDict.from_pytree(pytree, batch_size=[3]).batch_size == (3,)
+        recon = td.to_pytree().nested
+        assert type(recon).__name__ == "GenericDict"
+        assert (recon.l == torch.tensor([1, 2, 3])).all()
+        # so does a field that holds an empty dict or namedtuple: as on main,
+        # it does not stop auto_batch_size from finding the batch dims
+        Empty = namedtuple("Empty", [])
+        for nested in ({}, Empty(), {"x": torch.ones(3), "y": {}}, Inner(a, {})):
+            pytree = Outer(a=a, nested=nested)
+            td = TensorDict.from_pytree(pytree, auto_batch_size=True)
+            assert td.batch_size == (3,)
+            assert type(td.to_pytree().nested).__name__ == "GenericDict"
 
     def test_from_pytree_subclasses(self):
         # https://github.com/pytorch/tensordict/issues/2371
@@ -4458,6 +4609,7 @@ class TestGeneric:
             "maybe_dense_stack",
             "cat",
             "cat_lazy",
+            "lazy_stack",
         ],
     )
     def test_dim_past_batch_dims_warns(self, op):
@@ -4516,6 +4668,12 @@ class TestGeneric:
                 (2, 6),
                 torch.cat([x, x], 1),
                 lambda: torch.cat([lazy, lazy], -1),
+            ),
+            "lazy_stack": (
+                lambda: lazy_stack(tds, -3),
+                (3, 2),
+                torch.stack([x[0], x[1]], 1),
+                lambda: lazy_stack(tds, -2),
             ),
         }
         call, batch_size, leaf, in_range = calls[op]
@@ -4709,6 +4867,15 @@ class TestGeneric:
         )
         with pytest.raises(NotImplementedError, match="masked_select"):
             lst.masked_select(torch.ones(3, 4, dtype=torch.bool), inplace=True)
+
+    def test_masked_select_inplace_sub_tensordict_raises(self):
+        sub = TensorDict({"x": torch.zeros(4, 3)}, [4])._get_sub_tensordict(slice(0, 2))
+        with pytest.raises(
+            NotImplementedError,
+            match="masked_select.inplace=True. is not supported on _SubTensorDict",
+        ):
+            sub.masked_select(torch.ones(2, dtype=torch.bool), inplace=True)
+        assert sub.batch_size == (2,)
 
     @pytest.mark.parametrize(
         "op",
@@ -6751,11 +6918,13 @@ class TestGeneric:
             getattr(td_flat, reduction)(*args, dim=-1, reduce=True)
             getattr(td, reduction)(*args, dim=-1)
 
-    @pytest.mark.parametrize("reduction", ["amax", "amin", "max", "min", "prod"])
+    @pytest.mark.parametrize(
+        "reduction", ["amax", "amin", "max", "min", "prod", "cummax", "cummin"]
+    )
     def test_reduction_tuple_dim_warns(self, reduction):
-        # amax, amin, max, min and prod reduce only the first dim of a tuple. amax
-        # and amin will reduce every dim in 0.17, max, min and prod reject a
-        # tuple, as torch does (#2044).
+        # amax, amin, max, min, prod, cummax and cummin use only the first dim of
+        # a tuple. amax and amin will reduce every dim in 0.17, the others reject
+        # a tuple, as torch does (#2044).
         x = torch.rand(3, 4, 5)
         td = TensorDict(a=x, batch_size=(3, 4))
         category, match = (
@@ -6763,9 +6932,13 @@ class TestGeneric:
             if reduction in ("amax", "amin")
             else (DeprecationWarning, "will be removed in TensorDict 0.17")
         )
-        kwargs = {"return_indices": False} if reduction in ("max", "min") else {}
+        kwargs = (
+            {"return_indices": False}
+            if reduction in ("max", "min", "cummax", "cummin")
+            else {}
+        )
         tuples = [(0, 1), (-1,)]
-        if reduction in ("max", "min", "prod"):
+        if reduction not in ("amax", "amin"):
             tuples.append((1,))
         for dim in tuples:
             with pytest.warns(category, match=match) as record:
@@ -6773,6 +6946,8 @@ class TestGeneric:
             assert record[0].filename == __file__
             torch_reduction = {"max": "amax", "min": "amin"}.get(reduction, reduction)
             expected = getattr(torch, torch_reduction)(x, dim=dim[0])
+            if reduction in ("cummax", "cummin"):
+                expected = expected.values
             # the first dim of the tuple, not checked against the batch dims
             torch.testing.assert_close(result["a"], expected)
         with warnings.catch_warnings():
@@ -6889,6 +7064,26 @@ class TestGeneric:
             expected = td.quantile(0.5, **kwargs)
             assert result.names == [None, *expected.names]
             assert result["b"].names == [None, *expected["b"].names]
+
+    @pytest.mark.parametrize("keepdim", [False, True])
+    @pytest.mark.parametrize("batch_size", [(3, 4), (3, 4, 5)])
+    def test_quantile_tuple_dim(self, batch_size, keepdim):
+        # torch.quantile takes one dim: a tuple reduces the leaves and the batch
+        # size over its first dim only. Passing one is deprecated, and will be
+        # rejected in 0.17, as torch does (#2044).
+        x = torch.rand(3, 4, 5)
+        td = TensorDict(a=x, batch_size=batch_size)
+        for dim in [(0, 1), (-1,)]:
+            with pytest.warns(
+                DeprecationWarning, match="will be removed in TensorDict 0.17"
+            ) as record:
+                result = td.quantile(0.5, dim=dim, keepdim=keepdim)
+            assert record[0].filename == __file__
+            expected = td.quantile(0.5, dim=dim[0], keepdim=keepdim)
+            assert result.batch_size == expected.batch_size
+            assert_allclose_td(result, expected)
+            assert result["a"].shape[: result.batch_dims] == result.batch_size
+            result.unbind(0)
 
     def test_subclassing(self):
         class SubTD(TensorDict): ...
@@ -7377,6 +7572,69 @@ class TestGeneric:
         assert (params_reg == 0).all()
         assert set(params_reg.flatten_keys(".").keys()) == set(sd.keys())
         assert_allclose_td(params_reg.flatten_keys("."), TensorDict(sd, []))
+
+    @pytest.mark.parametrize("use_state_dict", [True, False])
+    @pytest.mark.parametrize("kind", ["dict", "tensor", "inplace", "object"])
+    def test_to_module_extra_state(self, kind, use_state_dict):
+        # to_module loads the extra state that from_module(use_state_dict=True)
+        # saves, also for nested modules, and the context manager restores it,
+        # also when set_extra_state copies into the tensors get_extra_state
+        # returned ("inplace").
+        class Counter(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.lin = nn.Linear(2, 2)
+                self.state = torch.zeros(())
+
+            @property
+            def count(self):
+                return int(self.state)
+
+            @count.setter
+            def count(self, value):
+                self.state.fill_(value)
+
+            def get_extra_state(self):
+                if kind == "dict":
+                    return {"count": torch.tensor(self.count), "n": self.count}
+                if kind == "tensor":
+                    return torch.tensor(self.count)
+                if kind == "inplace":
+                    return self.state
+                return self.count
+
+            def set_extra_state(self, state):
+                if kind == "dict":
+                    assert isinstance(state["n"], int)
+                    self.count = int(state["count"])
+                    assert state["n"] == self.count
+                elif kind == "tensor":
+                    assert isinstance(state, torch.Tensor)
+                    self.count = int(state)
+                elif kind == "inplace":
+                    self.state.copy_(state)
+                else:
+                    assert isinstance(state, int)
+                    self.count = state
+
+        def make():
+            return nn.Sequential(nn.Linear(2, 2), nn.Sequential(Counter()))
+
+        src = make()
+        src[1][0].count = 7
+        params = TensorDict.from_module(src, use_state_dict=True)
+        assert (params.clone() == params).all()
+
+        dst = make()
+        params.to_module(dst, use_state_dict=use_state_dict)
+        assert dst[1][0].count == 7
+        assert (dst[0].weight == src[0].weight).all()
+
+        dst = make()
+        with params.to_module(dst, use_state_dict=use_state_dict):
+            assert dst[1][0].count == 7
+            dst[1][0].count = 8
+        assert dst[1][0].count == 0
 
     @pytest.mark.parametrize("mask_key", [None, "mask"])
     def test_to_padded_tensor(self, mask_key):
@@ -7887,6 +8145,30 @@ class TestGeneric:
         td.set("x", value)
         td.update({"y": value})
         assert (td["x"] == 1).all() and (td["y"] == 1).all()
+
+    @pytest.mark.parametrize("operand", [None, "abc"])
+    def test_comparison_unsupported_operand(self, operand):
+        # An operand that is not a tensor, number, dict or tensor collection
+        # gives a bool: True for != and ^, False for the other ops
+        td = TensorDict(a=torch.zeros(3, dtype=torch.long), batch_size=[3])
+        for op in ("__eq__", "__lt__", "__le__", "__gt__", "__ge__", "__or__"):
+            assert getattr(td, op)(operand) is False
+        for op in ("__ne__", "__xor__"):
+            assert getattr(td, op)(operand) is True
+
+    @pytest.mark.parametrize("op", ["__ne__", "__xor__", "__or__"])
+    def test_comparison_mismatched_keys_keyerror(self, op):
+        td = TensorDict(a=torch.zeros(3, dtype=torch.long), batch_size=[3])
+        other = TensorDict(b=torch.zeros(3, dtype=torch.long), batch_size=[3])
+        with pytest.raises(KeyError, match="keys in TensorDict.* mismatch, got"):
+            getattr(td, op)(other)
+
+    @pytest.mark.parametrize("op", ["__eq__", "__lt__", "__le__", "__gt__", "__ge__"])
+    def test_comparison_mismatched_keys(self, op):
+        td = TensorDict(a=torch.zeros(3, dtype=torch.long), batch_size=[3])
+        other = TensorDict(b=torch.zeros(3, dtype=torch.long), batch_size=[3])
+        with pytest.raises(KeyError, match="keys in tensordicts mismatch. The first"):
+            getattr(td, op)(other)
 
     @pytest.mark.parametrize("nested", [False, True])
     def test_where_out_without_leaves(self, nested):

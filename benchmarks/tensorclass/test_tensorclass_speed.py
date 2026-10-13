@@ -10,6 +10,7 @@ from dataclasses import make_dataclass
 import pytest
 import torch
 from tensordict import (
+    lazy_stack,
     NonTensorData,
     TensorClass,
     tensorclass,
@@ -230,6 +231,22 @@ def test_nontensordata_init(benchmark):
 def test_nontensordata_data(benchmark):
     d = NonTensorData("a string", batch_size=[4])
     benchmark(lambda: d.data)
+
+
+def test_nontensordata_copy(benchmark):
+    d = NonTensorData("a string", batch_size=[4])
+    benchmark(d.copy)
+
+
+def test_nontensor_lazy_stack_copy(benchmark):
+    # a [64, 10] chat history: role and content strings per message
+    td = lazy_stack(
+        [
+            lazy_stack([TensorDict(role="user", content=f"m{i}{j}") for j in range(10)])
+            for i in range(64)
+        ]
+    )
+    benchmark(td.copy)
 
 
 if __name__ == "__main__":
