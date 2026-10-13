@@ -2907,6 +2907,38 @@ class TestCudaGraphs:
             ):
                 func(torch.zeros(()), 2.0)
 
+    def test_td_input_nontensor_arg_change_warns(self, compiled):
+        # pytorch/tensordict#2075: the replay of a function that takes a
+        # tensordict reads the captured non-tensor arguments. A call with other
+        # values warns that it will raise in 0.17, and keeps today's result.
+        if not torch.cuda.is_available():
+            pytest.skip("CudaGraphModule only replays graphs on CUDA")
+
+        def update(td, flag, scale=1.0):
+            out = td["x"] + 100 if flag else td["x"] + 1
+            return TensorDict(y=out * scale)
+
+        func = self._make_cudagraph(update, compiled, in_keys=[], out_keys=[])
+        td = TensorDict(x=torch.zeros(()))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            for _ in range(4):
+                assert func(td, True)["y"] == 100
+            assert func(td, flag=True)["y"] == 100
+            assert func(td, 1)["y"] == 100
+        for args, kwargs in [
+            ((False,), {}),
+            ((True,), {"scale": 2.0}),
+            ((True, 2.0), {}),
+        ]:
+            with pytest.warns(
+                FutureWarning, match="Starting with TensorDict 0.17"
+            ) as record:
+                assert func(td, *args, **kwargs)["y"] == 100
+            assert {w.filename for w in record if w.category is FutureWarning} == {
+                __file__
+            }
+
     def test_state_dict(self, compiled):
         # Create a linear layer and wrap it in CudaGraphModule
         linear = torch.nn.Linear(3, 4)
