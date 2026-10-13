@@ -1498,6 +1498,44 @@ class TestLazyStackedTensorDict:
         assert td.batch_size == torch.Size([3, 2, 4])
         assert td.names == ["s", None, None]
 
+    @pytest.mark.parametrize(
+        "batch_size,stack_dim,names,stack_names",
+        [
+            ([3], 0, ["x"], ["x", "x"]),
+            ([3], 0, ["x", "x"], ["x", "x"]),
+            ([3, 4], 0, ["s", None], ["s", "s", None]),
+            ([3, 4], 1, [None, "s"], [None, "s", "s"]),
+        ],
+    )
+    def test_from_dict_names_non_unique(
+        self, batch_size, stack_dim, names, stack_names
+    ):
+        # names that would name two dimensions of the stack alike are rejected
+        # as TensorDict rejects them, instead of building an invalid stack
+        members = [{"a": torch.zeros(3, 4)}, {"a": torch.ones(3, 4)}]
+        with pytest.raises(ValueError) as excinfo:
+            LazyStackedTensorDict.from_dict(
+                members, batch_size=batch_size, stack_dim=stack_dim, names=names
+            )
+        assert str(excinfo.value) == (
+            f"Some dimension names are non-unique: {stack_names}."
+        )
+
+    def test_from_dict_names_tensordict_members(self):
+        # TensorDict members keep their own names and batch size: the check
+        # looks at the names they have, not at the names that were asked for
+        td = TensorDict(a=torch.zeros(3, 4), batch_size=[3], names=["t"])
+        stack = LazyStackedTensorDict.from_list(
+            [td, td.clone()], batch_size=[3], names=["x"]
+        )
+        assert stack.names == ["x", "t"]
+        assert stack.to_tensordict().names == ["x", "t"]
+        stack = LazyStackedTensorDict.from_list([], batch_size=[3], names=["x"])
+        assert stack.names == ["x"]
+        td = TensorDict(a=torch.zeros(3, 4), batch_size=[3], names=["x"])
+        with pytest.raises(ValueError, match="names are non-unique: \\['x', 'x'\\]"):
+            LazyStackedTensorDict.from_list([td, td.clone()], names=["x"])
+
     @pytest.mark.parametrize("from_list", [False, True])
     def test_from_dict_names_without_batch_size(self, from_list):
         # without a batch_size the members get no names today; the calls that
