@@ -32,10 +32,11 @@ limits" section).
 
 Warning
 
-Writes to nested entries through [`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update), [`zero_()`](tensordict.TensorDictBase.zero_.html#tensordict.TensorDictBase.zero_),
-[`fill_()`](tensordict.TensorDictBase.fill_.html#tensordict.TensorDictBase.fill_) or `store["nested"].set_` are dropped without an
-error (see #2154). Write a full element instead, for example
-`store[1] = TensorDict(...)`.
+`store["nested"]` is an in-memory copy of the nested entry: writes
+through it, for example `store["nested"].set_(...)` or
+`store["nested"].zero_()`, change the copy only, not the store.
+Write with the full key, `store.set(("nested", "b"), ...)`, or with
+[`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update).
 
 Stores each leaf key as a single concatenated blob in the store,
 regardless of how many stack elements there are. For *N* elements and
