@@ -8107,7 +8107,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             value._propagate_lock(lock_parents_weakrefs, is_compiling=is_compiling)
 
     def _lock_sub_tensordicts(self):
-        """The sub-tensordicts that lock_() and unlock_() reach from this one."""
+        """The sub-tensordicts that lock_(), unlock_() and the default _rename_subtds reach from this one."""
         return [value for value in self.values() if _is_tensor_collection(type(value))]
 
     def _build_lock_schema(self) -> None:
