@@ -1030,12 +1030,17 @@ def _warn_scalar_over_non_tensor(
     )
 
 
-# the keyword arguments of LazyStackedTensorDict.get, and those of them that
-# give the same result on a dense tensordict
-_GET_KWARGS_DENSE = frozenset(
-    ("as_padded_tensor", "padding_side", "layout", "padding_value")
+# the keyword arguments of LazyStackedTensorDict.get
+_GET_KWARGS = frozenset(
+    (
+        "as_list",
+        "as_padded_tensor",
+        "as_nested_tensor",
+        "padding_side",
+        "layout",
+        "padding_value",
+    )
 )
-_GET_KWARGS = _GET_KWARGS_DENSE | {"as_list", "as_nested_tensor"}
 
 
 def _warn_get_kwargs(
@@ -1307,6 +1312,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # rename in a locked tensordict with a warning, and pass an old key that is
     # not a str or tuple to _rename_key (which raises or warns as before).
     _rename_key_lenient: bool = False
+    # Whether get() ignores as_list, as_nested_tensor and unknown keywords, and
+    # warns about them (see _warn_get_kwargs). False for lazy stacks, which
+    # honor them.
+    _get_ignores_kwargs: bool = True
 
     @classmethod
     def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
@@ -3474,12 +3483,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         result = self._get_tuple(key_tuple, default=default, **kwargs)
         if (
             kwargs
-            and not _GET_KWARGS_DENSE.issuperset(kwargs)
+            and self._get_ignores_kwargs
             and (
-                kwargs.get("as_list")
-                or kwargs.get("as_nested_tensor")
+                ("as_list" in kwargs and kwargs["as_list"])
+                or ("as_nested_tensor" in kwargs and kwargs["as_nested_tensor"])
                 or not _GET_KWARGS.issuperset(kwargs)
             )
+            and not is_compiling()
         ):
             _warn_get_kwargs(self, kwargs, result, default)
         return result
