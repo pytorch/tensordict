@@ -4006,6 +4006,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             parameters (``clone``, ``non_blocking``, ``keys_to_update``) must be passed through the positional
             dict form.
 
+        .. note:: On a shared or memory-mapped tensordict, a non-tensor value that its shared buffer cannot
+            store (for instance ``None``, or an int where a string is shared) is skipped, with a
+            :class:`UserWarning` that names its key.
+
         Returns:
             self
 
@@ -4081,8 +4085,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         dict or a tensor collection, and ``keys_to_update`` is ``None`` or a
         list of key tuples. A key of the input that ``self`` lacks raises
         ``KeyError``; without ``keys_to_update``, the base ignores such keys
-        when another key matches. The base reads a dict as a ``TensorDict``
-        with ``batch_dims=self.batch_dims``. Returns ``self``.
+        when another key matches. A non-tensor value that a shared or
+        memory-mapped leaf of ``self`` cannot store is skipped, and the base
+        warns once with the keys it skipped. The base reads a dict as a
+        ``TensorDict`` with ``batch_dims=self.batch_dims``. Returns ``self``.
         """
         if not _is_tensor_collection(type(input_dict_or_td)):
             from tensordict import TensorDict
