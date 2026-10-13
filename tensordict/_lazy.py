@@ -3490,17 +3490,15 @@ class LazyStackedTensorDict(TensorDictBase):
             ):
                 # Each member gets its slice, as each row of a TensorDict does
                 others = other.expand(self.batch_size).unbind(self.stack_dim)
+                out = [
+                    getattr(td, op)(_other)
+                    for td, _other in _zip_strict(self.tensordicts, others)
+                ]
             else:
                 # A number, a 0-dim tensor or a tensor that only broadcasts
                 # against the members goes whole to each member
-                others = [other] * len(self.tensordicts)
-            return LazyStackedTensorDict.lazy_stack(
-                [
-                    getattr(td, op)(_other)
-                    for td, _other in _zip_strict(self.tensordicts, others)
-                ],
-                self.stack_dim,
-            )
+                out = [getattr(td, op)(other) for td in self.tensordicts]
+            return LazyStackedTensorDict.lazy_stack(out, self.stack_dim)
         if op not in ("__eq__", "__ne__"):
             raise ValueError(f"Incompatible value {type(other)} for op {op}.")
         return default
