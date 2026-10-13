@@ -1720,10 +1720,12 @@ class LazyStackedTensorDict(TensorDictBase):
             feature_ndim = entry.ndim
             if not _is_unbatched(entry):
                 feature_ndim -= entry_batch_dims
-            if value.numel() == 1 or value.ndim <= feature_ndim:
+            if value.numel() == 1 or value.ndim <= feature_ndim or is_non_tensor(entry):
                 # The value is the same for every element, so each member
                 # writes it as it is, as torch does. torch casts a value of one
                 # element to the dtype of the entry, but not an expanded one.
+                # A non-tensor entry holds the whole value in each element, as
+                # in a tensordict.
                 self._set_at_members(
                     key, value, index, validated=validated, non_blocking=non_blocking
                 )
