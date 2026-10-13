@@ -65,6 +65,7 @@ from tensordict.utils import (
     _canonicalize_tensor,
     _CloudpickleWrapper,
     _convert_list_to_stack,
+    _copy_cached_result,
     _erase_cache_first,
     _foreach,
     _GENERIC_NESTED_ERR,
@@ -486,6 +487,33 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     other = other.expand(shape)
                 others_map.append(other)
             if any(isinstance(other, torch.Tensor) for other in others_map):
+                from tensordict._lazy import LazyStackedTensorDict
+
+                if isinstance(self_expand, LazyStackedTensorDict) and not is_non_tensor(
+                    self_expand
+                ):
+                    # The leaves of each member lack the stack dim: give each
+                    # member its slice of the operands.
+                    stack_dim = self_expand.stack_dim
+                    others_split = [
+                        other.unbind(stack_dim)
+                        if other is not None
+                        else [None] * self_expand.shape[stack_dim]
+                        for other in others_map
+                    ]
+                    results = [
+                        getattr(td, op)(*member_others, *args, **kwargs)
+                        for td, *member_others in zip(
+                            self_expand.tensordicts, *others_split
+                        )
+                    ]
+                    if inplace and self_expand is self:
+                        return self
+                    return self_expand._new_lazy_unsafe(
+                        *results,
+                        stack_dim=stack_dim,
+                        stack_dim_name=self_expand._td_dim_name,
+                    )
                 result = self_expand._fast_apply(
                     lambda x: leaf_op(
                         x,
@@ -5512,7 +5540,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             if out.is_locked:
                 raise RuntimeError(_LOCK_ERROR)
             is_locked = False
-            if batch_size is not None and batch_size != out.batch_size:
+            if batch_size is not None and torch.Size(batch_size) != out.batch_size:
                 raise RuntimeError(
                     "batch_size and out.batch_size must be equal when both are provided."
                 )
@@ -5760,7 +5788,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             if out.is_locked:
                 raise RuntimeError(_LOCK_ERROR)
             is_locked = False
-            if batch_size is not None and batch_size != out.batch_size:
+            if batch_size is not None and torch.Size(batch_size) != out.batch_size:
                 raise RuntimeError(
                     "batch_size and out.batch_size must be equal when both are provided."
                 )
@@ -6559,7 +6587,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             get,
             named=True,
             nested_keys=True,
-            batch_size=[],
+            batch_size=torch.Size([]),
             propagate_lock=True,
             out=out,
         )
@@ -7412,8 +7440,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             "Call .to_tensordict() first or use inplace=False."
         )
 
-    @_cache_while_locked  # noqa: B019
     @_as_context_manager()
+    @_copy_cached_result
+    @_cache_while_locked  # noqa: B019
     def flatten_keys(
         self,
         separator: str = ".",
@@ -7581,8 +7610,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         self.exclude(*root_keys, inplace=True)
         return self
 
-    @_cache_while_locked  # noqa: B019
     @_as_context_manager()
+    @_copy_cached_result
+    @_cache_while_locked  # noqa: B019
     def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> Self:
         """Converts a flat tensordict into a nested one, recursively.
 

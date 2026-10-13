@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import itertools
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -100,6 +101,55 @@ class TestH5Serialization:
         assert is_non_tensor(td_recover.get("f"))
         assert is_non_tensor(td_recover.get(("g", "h")))
 
+    def test_h5_str_read_as_bytes_warns(self, tmp_path):
+        # strings that tensordict writes are marked; reading one still gives
+        # bytes and warns that it will give str
+        td = TensorDict(
+            {
+                "label": "cat",
+                "a": torch.zeros(3),
+                ("n", "s"): "dog",
+                "i": NonTensorData(1, batch_size=[3]),
+            },
+            [3],
+        )
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        match = (
+            r"Starting with TensorDict 0\.17, the default will change to "
+            r"reading it as str"
+        )
+        for call, expected in (
+            (lambda: h5td["label"], b"cat"),
+            (lambda: h5td.get("label").data, b"cat"),
+            (lambda: h5td["n", "s"], b"dog"),
+            (lambda: h5td.to_tensordict()["label"], b"cat"),
+            (lambda: h5td.clone(newfile=tmp_path / "copy.h5")["label"], b"cat"),
+        ):
+            with pytest.warns(FutureWarning, match=match) as record:
+                assert call() == expected
+            # one warning per string read, which points to the caller
+            assert {r.filename for r in record} == {__file__}
+        # other entries do not warn
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert (h5td["a"] == 0).all()
+            assert h5td["i"] == 1
+            h5td["label"] = "pig"
+        with pytest.warns(FutureWarning, match=match):
+            assert h5td["label"] == b"pig"
+        h5td.close()
+
+        # strings that another writer stored stay bytes, without a warning
+        with h5py.File(tmp_path / "other.h5", "w") as f:
+            f["s"] = "dog"
+            f["x"] = np.zeros(3)
+        h5td = PersistentTensorDict.from_h5(tmp_path / "other.h5")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert h5td["s"] == b"dog"
+            assert h5td.to_tensordict()["s"] == b"dog"
+        h5td.close()
+
     def test_rename_key_missing(self, tmp_path):
         # the error names the missing source key, not the free destination
         td = TensorDict({"a": torch.zeros(3), ("b", "c"): torch.zeros(3)}, [3])
@@ -153,6 +203,25 @@ class TestH5Serialization:
         with pytest.raises(RuntimeError, match="device cannot be set"):
             h5td.device = "cpu"
         assert h5td.device is None
+        h5td.close()
+
+    def test_batch_size_setter_incompatible(self, tmp_path):
+        # as on a TensorDict, an incompatible batch size raises and the old
+        # one stays
+        td = TensorDict({"a": torch.zeros(2, 3)}, [2])
+        h5td = PersistentTensorDict.from_dict(
+            td, filename=tmp_path / "file.h5", device="cpu"
+        )
+        with pytest.raises(RuntimeError, match="batch size and array size mismatch"):
+            h5td.batch_size = [5]
+        assert h5td.batch_size == (2,)
+        with pytest.raises(RuntimeError, match="batch size and array size mismatch"):
+            h5td.to(batch_size=[5])
+        with pytest.raises(RuntimeError, match="batch size and array size mismatch"):
+            h5td.to("cpu", batch_size=[5])
+        assert h5td.batch_size == (2,)
+        h5td.batch_size = [2, 3]
+        assert h5td.batch_size == (2, 3)
         h5td.close()
 
 
