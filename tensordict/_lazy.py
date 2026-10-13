@@ -64,6 +64,7 @@ from tensordict.base import (
     _NESTED_TENSORS_AS_LISTS,
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
     _PACKAGE_DIR,
+    _READ_ONLY_CALL,
     _register_tensor_class,
     _SELF_NESTING_ERROR,
     _warn_read_only,
@@ -3042,6 +3043,23 @@ class LazyStackedTensorDict(TensorDictBase):
     @property
     def _reads_return_copies(self) -> bool:
         return any(td._reads_return_copies for td in self.tensordicts)
+
+    # Override: where a member reads copies, each member zeros itself, so that
+    # a file member writes zeros without reading its data, as one file does
+    # (_fills_without_reading). A read-only member warns once for the call.
+    def zero_(self) -> Self:
+        if not self._reads_return_copies:
+            return self._zero_()
+        running = getattr(_READ_ONLY_CALL, "running", False)
+        _READ_ONLY_CALL.running = True
+        try:
+            for td in self.tensordicts:
+                td.zero_()
+        finally:
+            _READ_ONLY_CALL.running = running
+        if self._storage_is_read_only():
+            _warn_read_only("zero_")
+        return self
 
     # Override: the base implementation reads the leaves of the stack under
     # keys such as ("0", "a"), which it cannot write back. The method runs on

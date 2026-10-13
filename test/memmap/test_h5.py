@@ -488,6 +488,9 @@ def test_inplace_read_only_warns(tmp_path):
     assert (h5td["a"] == -1).all()
     with pytest.raises(OSError):
         h5td.zero_()
+    # #2570: as on a lazy stack of the file
+    with pytest.raises(OSError):
+        lazy_stack([h5td, h5td]).zero_()
     # masked_fill_ raises on the rows of the file too, as it did before
     mask = torch.tensor([True, False])
     for call in (
@@ -582,6 +585,9 @@ def test_fill_zero_masked_fill_no_read(tmp_path, monkeypatch):
     with monkeypatch.context() as patch:
         patch.setattr(backend, "read_full", no_read)
         patch.setattr(backend, "read_at", no_read)
+        # #2570: so does zero_ on a lazy stack of the file and a dense member
+        stack = lazy_stack([h5td, td.clone()])
+        assert stack.zero_() is stack
         assert h5td.zero_() is h5td
     h5td.close()
     reopened = PersistentTensorDict.from_h5(tmp_path / "file.h5")
