@@ -868,6 +868,43 @@ class TestFromTensordict:
         state.copy_(other)
         torch.testing.assert_close(state.to_tensordict(), other)
 
+    def _make_nested_lazy_state(self):
+        class NestedState(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        tds = [
+            TensorDict(
+                a=torch.arange(3.0), n={"x": torch.ones(3, 2) * i}, batch_size=[3]
+            )
+            for i in range(4)
+        ]
+        return NestedState.from_tensordict(lazy_stack(tds)), tds
+
+    def test_from_tensordict_lazy_stack_nested_masked_fill_detach_(self):
+        # masked_fill_ and detach_ write into the members of a stack with a
+        # nested entry
+        state, tds = self._make_nested_lazy_state()
+        expected = state.to_tensordict()
+        mask = torch.tensor([[True, False, True]] * 2 + [[False] * 3] * 2)
+        for td in (state, expected):
+            assert td.masked_fill_(mask, -1.0) is td
+            assert td.detach_() is td
+        torch.testing.assert_close(state.to_tensordict(), expected)
+        torch.testing.assert_close(lazy_stack(tds).to_tensordict(), expected)
+
+    @pytest.mark.xfail(
+        strict=True,
+        raises=ValueError,
+        reason="the in-place methods that write back read the nested members "
+        "of the lazy source as lists of their own leaves",
+    )
+    def test_from_tensordict_lazy_stack_nested_zero_(self):
+        state, tds = self._make_nested_lazy_state()
+        assert state.zero_() is state
+        for td in tds:
+            assert (td == 0).all()
+
     @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
     def test_from_tensordict_lazy_stack_read_only_inplace(self, tmp_path):
         # A stack of files opened read-only stays unchanged, and warns

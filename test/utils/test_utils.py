@@ -597,8 +597,13 @@ def test_unravel_key_list_rejects_non_sequences(keys):
 
 def test_C_module_is_deprecated():
     sys.modules.pop("tensordict._C", None)
-    with pytest.warns(DeprecationWarning, match="tensordict._C is deprecated"):
+    with pytest.warns(DeprecationWarning, match="tensordict._C is deprecated") as w:
         import tensordict._C as _C
+    # The message names only public replacements.
+    (message,) = [str(r.message) for r in w if "tensordict._C" in str(r.message)]
+    assert "Use tensordict.unravel_key (also for unravel_keys) and" in message
+    assert "tensordict.unravel_key_list." in message
+    assert "from tensordict.utils" not in message
     assert _C.unravel_key is unravel_key
     assert _C.unravel_key_list is unravel_key_list
     assert _C._unravel_key_to_tuple is _unravel_key_to_tuple

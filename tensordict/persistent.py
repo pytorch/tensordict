@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import math
 import os
 import pickle
 import sys
@@ -131,6 +132,11 @@ class _PersistentTDKeysView(_TensorDictKeysView):
         return self._accepts(key, metadata)
 
 
+# The largest block that _H5Backend.write_full allocates, unless one row of
+# the dataset is larger.
+_WRITE_FULL_BLOCK_BYTES = 64 << 20
+
+
 class _PersistentBackend:
     """Internal adapter encapsulating the storage dialect of a :class:`PersistentTensorDict`.
 
@@ -193,6 +199,10 @@ class _PersistentBackend:
         raise NotImplementedError
 
     def write_masked(self, node, mask, value) -> None:
+        raise NotImplementedError
+
+    def write_full(self, node, value) -> None:
+        """Writes the scalar ``value`` into every element of the array ``node``."""
         raise NotImplementedError
 
     def is_read_only(self, file) -> bool:
@@ -358,6 +368,29 @@ class _H5Backend(_PersistentBackend):
 
     def write_masked(self, node, mask, value) -> None:
         node[mask] = value
+
+    def write_full(self, node, value) -> None:
+        # h5py writes a broadcast scalar much more slowly than a full array:
+        # write blocks of rows of at most _WRITE_FULL_BLOCK_BYTES (or one row,
+        # if a row is larger), so that a dataset larger than memory can be
+        # filled too
+        if not node.shape:
+            node[()] = value
+            return
+        if np.ndim(value):
+            # not a scalar: h5py broadcasts it into the whole dataset, as before
+            node[:] = value
+            return
+        # cast as h5py casts a scalar: a complex value raises for a real dataset
+        value = np.asarray(value, dtype=node.dtype)
+        if not node.size:
+            return
+        row_bytes = node.dtype.itemsize * math.prod(node.shape[1:])
+        rows = min(node.shape[0], max(1, _WRITE_FULL_BLOCK_BYTES // max(row_bytes, 1)))
+        block = np.full((rows, *node.shape[1:]), value, dtype=node.dtype)
+        for start in range(0, node.shape[0], rows):
+            stop = min(start + rows, node.shape[0])
+            node[start:stop] = block[: stop - start]
 
     def try_create_dataset(self, file, key, value, kwargs) -> bool:
         try:
@@ -644,6 +677,9 @@ class _ZarrBackend(_PersistentBackend):
     def write_masked(self, node, mask, value) -> None:
         node[mask] = value
 
+    def write_full(self, node, value) -> None:
+        node[...] = value
+
     def _parent_and_name(self, file, key):
         if "/" in key:
             path, name = key.rsplit("/", 1)
@@ -912,6 +948,8 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     LOCKING = None
     # each read loads the entry from the file into a new tensor
     _reads_return_copies = True
+    _storage_holds_no_gradients = True
+    _fills_without_reading = True
     # _change_batch_size raises, so an in-place shape method that changes the
     # batch size raises before it rewrites the datasets
     _inplace_batch_size_change = False
@@ -1518,9 +1556,26 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     def _rename_subtds(self, names):
         if names is None:
             names = [None] * self.ndim
-        for item in self._nested_tensordicts.values():
+        for key, item in self._nested_tensordicts.items():
             if is_tensor_collection(item):
                 td_names = list(names) + list(item.names)[self.ndim :]
+                clash = [
+                    n for n in td_names[self.ndim :] if n is not None and n in names
+                ]
+                if clash:
+                    # nested names were dropped before #2252, so this did not raise
+                    warnings.warn(
+                        f"The new names {list(names)} clash with the names "
+                        f"{clash} of the nested tensordict at key {key!r}, so "
+                        "those dims are left unnamed. Starting with TensorDict "
+                        "0.17, the default will change to raising a "
+                        "ValueError, as TensorDict does.",
+                        FutureWarning,
+                        stacklevel=4,
+                    )
+                    td_names = list(names) + [
+                        None if n in clash else n for n in td_names[self.ndim :]
+                    ]
                 item.rename_(*td_names)
 
     # Override: materializes with one read of the file.
@@ -1550,11 +1605,6 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                 FutureWarning,
                 stacklevel=3,
             )
-        return self
-
-    # Override: a file holds no gradients.
-    def detach_(self):
-        # PersistentTensorDict do not carry gradients. This is a no-op
         return self
 
     # Override: a TensorDict skeleton, built without reading the data.
@@ -1591,12 +1641,6 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     def _lock_sub_tensordicts(self):
         return list(self._nested_tensordicts.values())
 
-    def zero_(self) -> Self:
-        # Override: fill_ writes each array without reading it first
-        for key in self.keys():
-            self.fill_(key, 0)
-        return self
-
     def _storage_is_read_only(self) -> bool:
         return self._backend.is_read_only(self.file)
 
@@ -1617,7 +1661,7 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
 
     # Override: the file reads give copies, so the fill is written to the
     # arrays directly, without reading them.
-    def masked_fill_(self, mask, value):
+    def _masked_fill_(self, mask, value):
         for key in self.keys(include_nested=True, leaves_only=True):
             array = self._get_array(key)
             self._backend.write_masked(
@@ -1920,6 +1964,30 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             # has checked safe): overwrite it, as TensorDict does
             self._backend.delete(self.file, new_path)
             self._forget_nested(new)
+        if (
+            new
+            and len(old) > len(new)
+            and old[: len(new)] == new
+            and self._backend.contains(self.file, old_path)
+        ):
+            # the entry replaces the key that holds it, as in TensorDict: move
+            # it out of that key before the key is deleted
+            moved_path = new_path + "_"
+            while self._backend.contains(self.file, moved_path):
+                moved_path += "_"
+            self._backend.move(self.file, old_path, moved_path)
+            self._backend.delete(self.file, new_path)
+            self._forget_nested(new)
+            old_path = moved_path
+        if old and len(new) > len(old) and new[: len(old)] == old:
+            # the backends cannot move a node inside itself: move it aside
+            # first, as TensorDict pops the entry before it sets it
+            moved_path = old_path + "_"
+            while self._backend.contains(self.file, moved_path):
+                moved_path += "_"
+            self._backend.move(self.file, old_path, moved_path)
+            self._forget_nested(old)
+            old_path = moved_path
         self._backend.move(self.file, old_path, new_path)
         if old:
             self._forget_nested(old)
@@ -1932,26 +2000,15 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             elif key[: len(cached)] == cached:
                 self._nested_tensordicts[cached]._forget_nested(key[len(cached) :])
 
-    def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
-        """Fills a tensor pointed by the key with the a given value.
-
-        Args:
-            key (str): key to be remaned
-            value (Number, bool): value to use for the filling
-
-        Returns:
-            self
-
-        """
+    # Override: writes the arrays without reading them.
+    def _fill_(self, key: tuple[str, ...], value: float | bool) -> None:
         md = self._get_metadata(key)
         if md.get("array"):
-            array = self._get_array(key)
-            array[:] = value
+            self._backend.write_full(self._get_array(key), value)
         else:
             nested = self.get(key)
             for subkey in nested.keys():
-                nested.fill_(subkey, value)
-        return self
+                nested._fill_((subkey,), value)
 
     def _create_nested_str(self, key):
         self._backend.create_group(self.file, key)
@@ -2091,6 +2148,8 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                 self._backend.create_group(self.file, first_key, metadata)
                 target_td = self._get_str(first_key, default=NO_DEFAULT)
                 target_td.batch_size = value.batch_size
+                if value._has_names():
+                    target_td.names = value.names
             elif not is_tensor_collection(target_td):
                 raise RuntimeError(
                     f"cannot set a tensor collection in place of a non-tensor collection in {type(self).__name__}. "
