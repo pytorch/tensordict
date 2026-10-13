@@ -2985,11 +2985,13 @@ class LazyStackedTensorDict(TensorDictBase):
         # through the members, such as rows of a file opened read-only
         return any(td._storage_is_read_only() for td in self.tensordicts)
 
-    def apply_(self, fn: Callable, *others, **kwargs):
+    # Override: applies fn to each member in place, which is faster than
+    # apply(inplace=True) and accepts the keyword arguments of TensorDict.apply.
+    def _apply_(self, fn: Callable, *others, **kwargs) -> None:
+        kwargs.pop("propagate_lock", None)
         others = (other.unbind(self.stack_dim) for other in others)
         for td, *_others in _zip_strict(self.tensordicts, *others):
             td._fast_apply(fn, *_others, inplace=True, propagate_lock=True, **kwargs)
-        return self
 
     def _multithread_apply_nest(self, *args, **kwargs):
         if kwargs.get("batch_size") is not None:
@@ -3727,10 +3729,9 @@ class LazyStackedTensorDict(TensorDictBase):
         self.lock_()
 
     # Override: detaches each member.
-    def detach_(self) -> Self:
+    def _detach_(self) -> None:
         for td in self.tensordicts:
             td.detach_()
-        return self
 
     def _memmap_(
         self,
@@ -4253,7 +4254,10 @@ class LazyStackedTensorDict(TensorDictBase):
 
     # Override: each member is filled with its slice of the mask, so that
     # members with different shapes work.
-    def masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
+    def _masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
+        if mask.ndim < self.batch_dims:
+            # a mask of the leading dims, which may not include the stack dim
+            mask = expand_right(mask, self.batch_size)
         mask_unbind = mask.unbind(dim=self.stack_dim)
         for _mask, td in _zip_strict(mask_unbind, self.tensordicts):
             td.masked_fill_(_mask, value)

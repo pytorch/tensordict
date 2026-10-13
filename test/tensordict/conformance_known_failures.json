@@ -1,5 +1,8 @@
 {
  "idx_td apply": [],
+ "idx_td filling": [
+  "detach_()"
+ ],
  "idx_td keys": [],
  "idx_td masking": [],
  "idx_td pointwise": [],
@@ -8,6 +11,9 @@
  "idx_td serialization": [],
  "idx_td shape": [],
  "memmap_td apply": [],
+ "memmap_td filling": [
+  "detach_()"
+ ],
  "memmap_td keys": [],
  "memmap_td masking": [],
  "memmap_td pointwise": [],
@@ -19,6 +25,7 @@
   "unbind(1)"
  ],
  "nested_stacked_td apply": [],
+ "nested_stacked_td filling": [],
  "nested_stacked_td keys": [
   "is_contiguous()"
  ],
@@ -29,6 +36,7 @@
  "nested_stacked_td serialization": [],
  "nested_stacked_td shape": [],
  "nested_td apply": [],
+ "nested_td filling": [],
  "nested_td keys": [],
  "nested_td masking": [],
  "nested_td pointwise": [],
@@ -37,6 +45,7 @@
  "nested_td serialization": [],
  "nested_td shape": [],
  "nested_tensorclass apply": [],
+ "nested_tensorclass filling": [],
  "nested_tensorclass keys": [],
  "nested_tensorclass masking": [],
  "nested_tensorclass pointwise": [],
@@ -48,6 +57,7 @@
  ],
  "nested_tensorclass shape": [],
  "nested_typed_td apply": [],
+ "nested_typed_td filling": [],
  "nested_typed_td keys": [
   "clear_device_()"
  ],
@@ -58,10 +68,14 @@
  "nested_typed_td serialization": [],
  "nested_typed_td shape": [],
  "permute_td apply": [],
+ "permute_td filling": [],
  "permute_td keys": [
   "clear_device_()"
  ],
- "permute_td masking": [],
+ "permute_td masking": [
+  "masked_fill_(mask[:, 0, 0, 0], -1)",
+  "masked_fill_(tensor(True), -1)"
+ ],
  "permute_td pointwise": [],
  "permute_td reductions": [],
  "permute_td select": [],
@@ -75,10 +89,14 @@
   "unsqueeze(0)"
  ],
  "squeezed_td apply": [],
+ "squeezed_td filling": [],
  "squeezed_td keys": [
   "clear_device_()"
  ],
- "squeezed_td masking": [],
+ "squeezed_td masking": [
+  "masked_fill_(mask[:, 0, 0, 0], -1)",
+  "masked_fill_(tensor(True), -1)"
+ ],
  "squeezed_td pointwise": [],
  "squeezed_td reductions": [],
  "squeezed_td select": [],
@@ -93,6 +111,7 @@
   "view(-1)"
  ],
  "stacked_td apply": [],
+ "stacked_td filling": [],
  "stacked_td keys": [
   "is_contiguous()"
  ],
@@ -103,6 +122,9 @@
  "stacked_td serialization": [],
  "stacked_td shape": [],
  "sub_td apply": [],
+ "sub_td filling": [
+  "detach_()"
+ ],
  "sub_td keys": [
   "clear_device_()"
  ],
@@ -121,6 +143,9 @@
   "view(-1)"
  ],
  "sub_td2 apply": [],
+ "sub_td2 filling": [
+  "detach_()"
+ ],
  "sub_td2 keys": [
   "clear_device_()",
   "is_contiguous()"
@@ -140,6 +165,7 @@
   "view(-1)"
  ],
  "td apply": [],
+ "td filling": [],
  "td keys": [],
  "td masking": [],
  "td pointwise": [],
@@ -148,6 +174,7 @@
  "td serialization": [],
  "td shape": [],
  "td_h5 apply": [],
+ "td_h5 filling": [],
  "td_h5 keys": [
   "is_contiguous()",
   "keys(True)"
@@ -176,6 +203,7 @@
   "view(-1)"
  ],
  "td_params apply": [],
+ "td_params filling": [],
  "td_params keys": [],
  "td_params masking": [],
  "td_params pointwise": [],
@@ -184,6 +212,7 @@
  "td_params serialization": [],
  "td_params shape": [],
  "td_reset_bs apply": [],
+ "td_reset_bs filling": [],
  "td_reset_bs keys": [],
  "td_reset_bs masking": [],
  "td_reset_bs pointwise": [],
@@ -192,6 +221,7 @@
  "td_reset_bs serialization": [],
  "td_reset_bs shape": [],
  "td_with_non_tensor apply": [],
+ "td_with_non_tensor filling": [],
  "td_with_non_tensor keys": [],
  "td_with_non_tensor masking": [],
  "td_with_non_tensor pointwise": [],
@@ -200,6 +230,7 @@
  "td_with_non_tensor serialization": [],
  "td_with_non_tensor shape": [],
  "td_with_non_tensor_and_metadata apply": [],
+ "td_with_non_tensor_and_metadata filling": [],
  "td_with_non_tensor_and_metadata keys": [],
  "td_with_non_tensor_and_metadata masking": [],
  "td_with_non_tensor_and_metadata pointwise": [],
@@ -208,6 +239,9 @@
  "td_with_non_tensor_and_metadata serialization": [],
  "td_with_non_tensor_and_metadata shape": [],
  "td_with_unbatched apply": [],
+ "td_with_unbatched filling": [
+  "detach_()"
+ ],
  "td_with_unbatched keys": [],
  "td_with_unbatched masking": [],
  "td_with_unbatched pointwise": [],
@@ -216,6 +250,7 @@
  "td_with_unbatched serialization": [],
  "td_with_unbatched shape": [],
  "typed_td apply": [],
+ "typed_td filling": [],
  "typed_td keys": [
   "clear_device_()"
  ],
@@ -226,10 +261,14 @@
  "typed_td serialization": [],
  "typed_td shape": [],
  "unsqueezed_td apply": [],
+ "unsqueezed_td filling": [],
  "unsqueezed_td keys": [
   "clear_device_()"
  ],
- "unsqueezed_td masking": [],
+ "unsqueezed_td masking": [
+  "masked_fill_(mask[:, 0, 0, 0], -1)",
+  "masked_fill_(tensor(True), -1)"
+ ],
  "unsqueezed_td pointwise": [],
  "unsqueezed_td reductions": [],
  "unsqueezed_td select": [],

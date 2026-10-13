@@ -34,6 +34,7 @@ import pytest
 import torch
 from _utils_internal import TestTensorDictsBase
 from tensordict import is_tensor_collection, TensorDict, UnbatchedTensor
+from tensordict._unbatched import _HAS_WRAPPER_SUBCLASS_FIX
 from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import is_non_tensor
 
@@ -42,6 +43,14 @@ _KNOWN_FAILURES_FILE = pathlib.Path(__file__).with_name(
 )
 _KNOWN_FAILURES = json.loads(_KNOWN_FAILURES_FILE.read_text())
 _UPDATE_KNOWN_FAILURES = bool(os.environ.get("TENSORDICT_UPDATE_KNOWN_FAILURES"))
+# Known failures that agree where UnbatchedTensor falls back to
+# __torch_function__ (torch without pytorch/pytorch#176977, such as 2.13, where
+# _HAS_WRAPPER_SUBCLASS_FIX is False). Remove this with that flag.
+# - detach_() on td_with_unbatched (#2565): the UnbatchedTensor in the
+#   tensordict is a view (an alias that keeps its batch size), so detach_()
+#   raises. Without the fix its dense copy is a view too (results are made by
+#   as_subclass) and raises the same way.
+_AGREE_WITHOUT_WRAPPER_SUBCLASS_FIX = {"td_with_unbatched filling": {"detach_()"}}
 
 pytestmark = pytest.mark.filterwarnings(
     "ignore:A destination should be provided when cloning a PersistentTensorDict"
@@ -189,11 +198,30 @@ _OPS = {
         "masked_fill(mask, -1)": lambda td: td.masked_fill(_MASK, -1),
         "masked_select(mask)": lambda td: td.masked_select(_MASK),
         "masked_fill_(mask, -1)": _inplace(lambda td: td.masked_fill_(_MASK, -1)),
+        "masked_fill_(mask[:, 0, 0, 0], -1)": _inplace(
+            lambda td: td.masked_fill_(_MASK[:, 0, 0, 0], -1)
+        ),
+        "masked_fill_(tensor(True), -1)": _inplace(
+            lambda td: td.masked_fill_(torch.tensor(True), -1)
+        ),
+    },
+    "filling": {
+        "fill_('a', 2.0)": _inplace(lambda td: td.fill_("a", 2.0)),
+        "fill_('my_nested_td', 2.0)": _inplace(
+            lambda td: td.fill_("my_nested_td", 2.0)
+        ),
+        "fill_('missing', 2.0)": _inplace(lambda td: td.fill_("missing", 2.0)),
+        "zero_()": _inplace(lambda td: td.zero_()),
+        "detach_()": _inplace(lambda td: td.detach_()),
     },
     "apply": {
         "apply(x + 1)": lambda td: td.apply(lambda x: x + 1),
         "apply(x + y, td)": lambda td: td.apply(lambda x, y: x + y, td),
         "apply_(x + 1)": _inplace(lambda td: td.apply_(lambda x: x + 1)),
+        "apply_(None)": _inplace(lambda td: td.apply_(lambda x: None)),
+        "apply_(x + 1, propagate_lock=True)": _inplace(
+            lambda td: td.apply_(lambda x: x + 1, propagate_lock=True)
+        ),
     },
     "serialization": {
         "to_dict()": lambda td: td.to_dict(),
@@ -309,14 +337,17 @@ def _compare(make, op):
 
 def _check_known_failures(key, failures):
     """Compare ``failures`` ({case: reason}) with the known failures of ``key``."""
+    agree = set()
+    if not _HAS_WRAPPER_SUBCLASS_FIX:
+        agree = _AGREE_WITHOUT_WRAPPER_SUBCLASS_FIX.get(key, set())
     if _UPDATE_KNOWN_FAILURES:
         known = json.loads(_KNOWN_FAILURES_FILE.read_text())
-        known[key] = sorted(failures)
+        known[key] = sorted(set(failures) | agree)
         _KNOWN_FAILURES_FILE.write_text(
             json.dumps(dict(sorted(known.items())), indent=1) + "\n"
         )
         return
-    known = set(_KNOWN_FAILURES.get(key, ()))
+    known = set(_KNOWN_FAILURES.get(key, ())) - agree
     new = {case: reason for case, reason in failures.items() if case not in known}
     fixed = sorted(known.difference(failures))
     message = []

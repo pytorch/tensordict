@@ -19,7 +19,7 @@ from typing import Any, Callable, Sequence, Tuple, Type
 
 import torch
 from tensordict._base.unsupported import _StoreUnsupported
-from tensordict._deprecation import deprecated
+from tensordict._deprecation import deprecated, deprecation_message
 from tensordict._indexing import _as_tuple, _getitem_batch_size, convert_ellipsis_to_idx
 from tensordict._td import (
     _TensorDictKeysView,
@@ -71,7 +71,6 @@ from tensordict.utils import (
     _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
-    expand_as_right,
     is_non_tensor,
     NestedKey,
     unravel_key,
@@ -172,6 +171,7 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
     _leaves_built_on_read = True
     _contiguous_via_to_tensordict = True
     _pin_memory_unsupported = True
+    _storage_holds_no_gradients = True
 
     def __init__(self, parent, element_idx: int):
         self._parent = parent
@@ -513,25 +513,10 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
     def to_local(self) -> TensorDict:
         return self.to_tensordict()
 
-    # Override: the server holds no gradients.
-    def detach_(self) -> Self:
-        return self
-
     # Override: not supported on a view of one element.
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         raise RuntimeError("Cannot popitem from a stack element view.")
-
-    def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
-        existing = self.get(key)
-        if is_tensor_collection(existing):
-            for subkey in existing.keys():
-                existing.fill_(subkey, value)
-        else:
-            existing = existing.fill_(value)
-        # a nested entry is read as a new TensorDict, so it is written back too
-        self.set_(key, existing)
-        return self
 
     # Override: a TensorDict skeleton, built from the stored keys without reading data.
     def empty(
@@ -543,15 +528,6 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
             batch_size=self.batch_size if batch_size is None else batch_size,
             names=self.names if names is None and self._has_names() else names,
         )
-
-    # Override: reads give copies, so each filled entry is written back with
-    # set_.
-    def masked_fill_(self, mask, value):
-        for key in self.keys(include_nested=True, leaves_only=True):
-            tensor = self.get(key)
-            tensor = tensor.masked_fill(expand_as_right(mask, tensor), value)
-            self.set_(key, tensor)
-        return self
 
     # ---- pickling: materialize, don't try to serialize the view ----
 
@@ -740,6 +716,7 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
     _leaves_built_on_read = True
     _contiguous_via_to_tensordict = True
     _pin_memory_unsupported = True
+    _storage_holds_no_gradients = True
     _rename_key_lenient = True
 
     _global_key_suffixes = (
@@ -2209,10 +2186,6 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
 
     # ---- Misc required overrides ----
 
-    # Override: the server holds no gradients.
-    def detach_(self) -> Self:
-        return self
-
     def _inplace_on_copies(self, method: Callable, *args, **kwargs) -> Self:
         # Override: a key whose elements differ in shape cannot be read as one
         # tensor. The method then runs on each element, as on a lazy stack.
@@ -2227,11 +2200,13 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             if is_tensor_collection(arg) or (
                 isinstance(arg, torch.Tensor) and arg.ndim
             ):
+                # the public name of a hook such as _masked_fill_
+                name = method.__name__.lstrip("_")
                 raise RuntimeError(
-                    f"{method.__name__} cannot split this argument over the "
+                    f"{name} cannot split this argument over the "
                     f"elements of the entry {error.key_path!r}, which differ in "
                     "shape. Call it on each element instead, for example "
-                    f"store[i].{method.__name__}(...)."
+                    f"store[i].{name}(...)."
                 ) from error
             return [arg] * self._count
 
@@ -2352,19 +2327,6 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
                     )
         return self
 
-    def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
-        existing = self.get(key)
-        if is_tensor_collection(existing):
-            # existing is a new TensorDict: write its leaves back under their
-            # full keys
-            key = _unravel_key_to_tuple(key)
-            for subkey, leaf in existing.items(include_nested=True, leaves_only=True):
-                self.set_(key + _unravel_key_to_tuple(subkey), leaf.fill_(value))
-        else:
-            existing = existing.fill_(value)
-            self.set_(key, existing)
-        return self
-
     # Override: a TensorDict skeleton, built from the stored keys without reading data.
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
@@ -2376,18 +2338,35 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             names=self.names if names is None and self._has_names() else names,
         )
 
-    # Override: reads give copies, so each filled entry is written back with
-    # set_.
-    def masked_fill_(self, mask, value):
-        # A batch-shaped mask is aligned with the leading dims of each entry,
-        # as in TensorDict.masked_fill_. Other masks keep torch's broadcasting
-        # from the right, as before.
-        batch_shaped = mask.shape == self.batch_size
-        for key in self.keys(include_nested=True, leaves_only=True):
-            tensor = self.get(key)
-            entry_mask = expand_as_right(mask, tensor) if batch_shaped else mask
-            tensor = tensor.masked_fill(entry_mask, value)
-            self.set_(key, tensor)
+    # Override: until 0.17, a mask that is not batch-shaped broadcasts from
+    # the right, as before 0.15.
+    def _masked_fill_(self, mask, value):
+        if mask.shape == self.batch_size or not mask.ndim:
+            return super()._masked_fill_(mask, value)
+        # an entry with as many dims as the mask is filled the same way when the
+        # mask is aligned with its leading dims; the warning comes before any
+        # write
+        entries = [
+            (key, self.get(key))
+            for key in self.keys(include_nested=True, leaves_only=True)
+        ]
+        if any(tensor.ndim != mask.ndim for _, tensor in entries):
+            warnings.warn(
+                deprecation_message(
+                    f"Calling {type(self).__name__}.masked_fill_ with a mask of "
+                    f"shape {tuple(mask.shape)}, which is not the batch size "
+                    f"{tuple(self.batch_size)}, broadcasts the mask from the right "
+                    "against each entry. This",
+                    removal="0.17",
+                )
+                + " From then on, the mask is aligned with the leading batch dims, "
+                "as in TensorDict.masked_fill_. Expand the mask to the shape of "
+                "the entries to keep today's result.",
+                FutureWarning,
+                stacklevel=3,
+            )
+        for key, tensor in entries:
+            self.set_(key, tensor.masked_fill(mask, value))
         return self
 
     def __repr__(self):
