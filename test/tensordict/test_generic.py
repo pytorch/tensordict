@@ -5608,6 +5608,26 @@ class TestGeneric:
         assert (td == 1).all()
         assert (TensorDict.load_memmap(tmpdir) == 1).all()
 
+    @pytest.mark.parametrize("method", ["memmap", "memmap_", "memmap_like"])
+    @pytest.mark.parametrize("return_early", [False, True])
+    def test_memmap_threads_raise_worker_error(
+        self, tmpdir, monkeypatch, method, return_early
+    ):
+        # An error in a worker thread is raised, as with num_threads=0
+        populate_memmap = tensordict._td._populate_memmap
+
+        def failing_populate_memmap(*args, key, **kwargs):
+            if key == "b":
+                raise OSError("failed to write b")
+            return populate_memmap(*args, key=key, **kwargs)
+
+        monkeypatch.setattr(tensordict._td, "_populate_memmap", failing_populate_memmap)
+        td = TensorDict(a=torch.zeros(3), b=torch.ones(3))
+        with pytest.raises(OSError, match="failed to write b"):
+            out = getattr(td, method)(tmpdir, num_threads=2, return_early=return_early)
+            if return_early:
+                out.result()
+
     @set_list_to_stack(True)
     @set_capture_non_tensor_stack(False)
     @pytest.mark.parametrize("like", [True, False])

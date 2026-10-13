@@ -2178,8 +2178,13 @@ class TensorDictFuture:
         self.resulting_td = resulting_td
 
     def result(self):
-        """Wait and returns the resulting tensordict."""
+        """Wait and returns the resulting tensordict.
+
+        Raises the first error of the futures, if any.
+        """
         concurrent.futures.wait(self.futures)
+        for future in self.futures:
+            future.result()
         return self.resulting_td
 
 
