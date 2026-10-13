@@ -754,18 +754,16 @@ class _DeviceOps:
                         to_pinmem, propagate_lock=True, **apply_kwargs
                     )
                 else:
-                    # result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
-                    keys, tensors = self._items_list(True, True)
-                    tensors = [to(t) for t in tensors]
-                    items = dict(zip(keys, tensors))
+                    if dtype is None and convert_to_format is None:
 
-                    def get(name, val):
-                        return items.get(name, val)
+                        def to(tensor, _to=to):
+                            # Skip the call for leaves already on the device
+                            if tensor.device == device:
+                                return tensor
+                            return _to(tensor)
 
                     result = self._fast_apply(
-                        get,
-                        named=True,
-                        nested_keys=True,
+                        to,
                         is_leaf=_NESTED_TENSORS_AS_LISTS,
                         propagate_lock=True,
                         **apply_kwargs,
