@@ -820,6 +820,112 @@ class TestLazyStackedTensorDict:
         assert self_td.lerp(other, 0.5).is_locked
         assert not (other + self_td).is_locked
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("lazy_first", [True, False])
+    def test_and_with_dense(self, stack_dim, lazy_first):
+        # & pairs the leaves by key, as | and ^ do (#1932)
+        def make_dense():
+            return TensorDict(
+                a=torch.rand(2, 3) > 0.5,
+                nested=TensorDict(b=torch.rand(2, 3, 4) > 0.5, batch_size=[2, 3]),
+                batch_size=[2, 3],
+            )
+
+        stack = lazy_stack(list(make_dense().unbind(stack_dim)), stack_dim)
+        dense = make_dense()
+        self_td, other = (stack, dense) if lazy_first else (dense, stack)
+        expected = self_td.to_tensordict() & other.to_tensordict()
+
+        out = self_td & other
+
+        assert isinstance(out, type(self_td))
+        assert_allclose_td(out.to_tensordict(), expected)
+
+    @pytest.mark.parametrize("op", ["add", "add_", "lerp_", "__and__"])
+    @pytest.mark.parametrize("lazy_first", [True, False])
+    @pytest.mark.parametrize("wrap", ["both", "other"])
+    def test_arithmetic_with_dense_tensorclass(self, op, lazy_first, wrap):
+        # A tensorclass operand counts as the tensordict it wraps (#1932)
+        class MC(TensorClass):
+            a: torch.Tensor
+
+        dtype = torch.bool if op == "__and__" else torch.float
+        dense = TensorDict(a=torch.rand(2, 3) + 1, batch_size=[2, 3]).to(dtype)
+        stack = lazy_stack(
+            list(TensorDict(a=torch.rand(2, 3) + 1, batch_size=[2, 3]).unbind(0))
+        ).to(dtype)
+        self_td, other = (stack, dense) if lazy_first else (dense, stack)
+        args = (0.3,) if op == "lerp_" else ()
+        expected = getattr(self_td.to_tensordict(), op)(other.to_tensordict(), *args)
+        if wrap == "both":
+            self_td = MC._from_tensordict(self_td)
+        other = MC._from_tensordict(other)
+
+        out = getattr(self_td, op)(other, *args)
+
+        if op.endswith("_") and not op.endswith("__"):
+            assert out is self_td
+        if wrap == "both" or op == "__and__":
+            # as with |, & with a tensorclass operand gives a tensorclass
+            assert isinstance(out, MC)
+            out = out._tensordict
+        torch.testing.assert_close(out["a"], expected["a"])
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize(
+        "op,args", [("add", ()), ("mul", ()), ("lerp", (0.3,)), ("add_", ())]
+    )
+    @pytest.mark.parametrize("lazy_first", [True, False])
+    def test_arithmetic_with_nested_dense(self, stack_dim, op, args, lazy_first):
+        # A lazy stack nested in a dense tensordict pairs with the dense
+        # tensordict under the same key (#1932)
+        def make_dense():
+            return TensorDict(
+                a=torch.rand(2, 3) + 1,
+                nested=TensorDict(b=torch.rand(2, 3, 4) + 1, batch_size=[2, 3]),
+                batch_size=[2, 3],
+            )
+
+        stack = lazy_stack(list(make_dense().unbind(stack_dim)), stack_dim)
+        dense = make_dense()
+        first, second = (stack, dense) if lazy_first else (dense, stack)
+        self_td = TensorDict(x=torch.ones(2, 3), n=first, batch_size=[2, 3])
+        other = TensorDict(x=torch.ones(2, 3), n=second, batch_size=[2, 3])
+        expected = getattr(self_td.to_tensordict(), op)(other.to_tensordict(), *args)
+
+        out = getattr(self_td, op)(other, *args)
+
+        if op.endswith("_"):
+            assert out is self_td
+        assert_allclose_td(out.to_tensordict(), expected)
+
+    def test_arithmetic_with_nested_dense_mismatched_keys(self):
+        # A key that only one operand has still raises, before any write
+        dense = TensorDict(a=torch.ones(2, 3), z=torch.ones(2, 3), batch_size=[2, 3])
+        stack = lazy_stack(list(dense.exclude("z").unbind(0)))
+        self_td = TensorDict(n=stack, batch_size=[2, 3])
+        other = TensorDict(n=dense, batch_size=[2, 3])
+        with pytest.raises(KeyError):
+            self_td + other
+        with pytest.raises(KeyError):
+            other + self_td
+        with pytest.raises(KeyError):
+            self_td.add_(other)
+        assert (self_td["n", "a"] == 1).all()
+
+    @pytest.mark.parametrize("op", ["add", "add_", "mul_"])
+    def test_arithmetic_with_nested_dense_member_key(self, op):
+        # A key that only one member of the lazy stack has raises with that
+        # key, and an in-place op writes nothing first
+        dense = TensorDict(a=torch.ones(2, 3), batch_size=[2, 3])
+        members = list(dense.clone().unbind(0))
+        members[1].set("z", torch.ones(3))
+        self_td = TensorDict(n=lazy_stack(members), batch_size=[2, 3])
+        other = TensorDict(n=dense * 2, batch_size=[2, 3])
+        with pytest.raises(KeyError, match="z"):
+            getattr(self_td, op)(other)
+        assert (self_td["n", "a"] == 1).all()
+
     def test_auto_device(self):
         # The device of a lazy stack is read from its members, so auto_device_
         # sets it on them, also when the lazy stack is nested in a tensordict.
