@@ -1,14 +1,13 @@
 # from_module
 
-tensordict.from_module(*module*, *as_module: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *lock: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *use_state_dict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
+tensordict.from_module(*module*, *as_module: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *lock: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *use_state_dict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *filter_empty: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*)
 
 Puts the parameters and buffers of a module in a tensordict.
 
 Same as [`tensordict.TensorDict.from_module()`](tensordict.TensorDict.html#tensordict.TensorDict.from_module), except for the default
 of `lock`: this function locks the result by default, and the method
-does not (see #1954). This function does not take `filter_empty`. The
-entries are the parameters and buffers of the module
-themselves, not copies. Submodules become nested tensordicts.
+does not. The entries are the parameters and buffers of the
+module themselves, not copies. Submodules become nested tensordicts.
 
 Parameters:
 
@@ -23,6 +22,10 @@ locked. Defaults to `True`.
 module is used and unflattened into a TensorDict with the tree
 structure of the model. Use it when the module has state-dict
 hooks. Defaults to `False`.
+- **filter_empty** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, submodules without
+parameters or buffers (`nn.ReLU`, for example) get no entry.
+If `False`, they get an empty tensordict. Defaults to
+`True`.
 
 Returns:
 

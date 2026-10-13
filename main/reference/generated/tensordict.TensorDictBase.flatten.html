@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5321+g6de343819.d20261013)">
+<meta name="llm:version" content="main (0.14.0.dev5324+g6c1bcca69.d20261013)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5321+g6de343819.d20261013)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5324+g6c1bcca69.d20261013)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1650,8 +1650,13 @@ document.write(`
 <li><p><strong>end_dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the last dim to flatten</p></li>
 </ul>
 </dd>
-<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>inplace</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, this tensordict’s identity
+</dl>
+<p>A <code class="docutils literal notranslate"><span class="pre">start_dim</span></code> or <code class="docutils literal notranslate"><span class="pre">end_dim</span></code> outside the batch dims warns, and is
+used on the dims of the leaves. Starting with TensorDict 0.17, the
+default will change to raising an <code class="docutils literal notranslate"><span class="pre">IndexError</span></code>, as for a tensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>inplace</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, this tensordict’s identity
 and key set are preserved; each leaf is flattened one at a
 time. <code class="docutils literal notranslate"><span class="pre">torch.flatten</span></code> may return a view when the flattened
 range is contiguous in memory; in that case leaves share
@@ -2047,7 +2052,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.flatten",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.flatten",
        "url": "/reference/generated/tensordict.TensorDictBase.flatten.html",
-       "articleBody": "TensorDictBase.flatten# TensorDictBase.flatten(start_dim: int | None = None, end_dim: int | None = None, *, inplace: bool = False)# Flattens all the tensors of a tensordict. Parameters: start_dim (int) \u2013 the first dim to flatten end_dim (int) \u2013 the last dim to flatten Keyword Arguments: inplace (bool, optional) \u2013 If True, this tensordict\u2019s identity and key set are preserved; each leaf is flattened one at a time. torch.flatten may return a view when the flattened range is contiguous in memory; in that case leaves share storage with the originals and the memory benefit does not materialize. Not supported on LazyStackedTensorDict. Defaults to False. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({ ... \"a\": torch.arange(60).view(3, 4, 5), ... \"b\": torch.arange(12).view(3, 4)}, batch_size=[3, 4]) \u003e\u003e\u003e td_flat = td.flatten(0, 1) \u003e\u003e\u003e td_flat.batch_size torch.Size([12]) \u003e\u003e\u003e td_flat[\"a\"] tensor([[ 0, 1, 2, 3, 4], [ 5, 6, 7, 8, 9], [10, 11, 12, 13, 14], [15, 16, 17, 18, 19], [20, 21, 22, 23, 24], [25, 26, 27, 28, 29], [30, 31, 32, 33, 34], [35, 36, 37, 38, 39], [40, 41, 42, 43, 44], [45, 46, 47, 48, 49], [50, 51, 52, 53, 54], [55, 56, 57, 58, 59]]) \u003e\u003e\u003e td_flat[\"b\"] tensor([ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.flatten# TensorDictBase.flatten(start_dim: int | None = None, end_dim: int | None = None, *, inplace: bool = False)# Flattens all the tensors of a tensordict. Parameters: start_dim (int) \u2013 the first dim to flatten end_dim (int) \u2013 the last dim to flatten A start_dim or end_dim outside the batch dims warns, and is used on the dims of the leaves. Starting with TensorDict 0.17, the default will change to raising an IndexError, as for a tensor. Keyword Arguments: inplace (bool, optional) \u2013 If True, this tensordict\u2019s identity and key set are preserved; each leaf is flattened one at a time. torch.flatten may return a view when the flattened range is contiguous in memory; in that case leaves share storage with the originals and the memory benefit does not materialize. Not supported on LazyStackedTensorDict. Defaults to False. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({ ... \"a\": torch.arange(60).view(3, 4, 5), ... \"b\": torch.arange(12).view(3, 4)}, batch_size=[3, 4]) \u003e\u003e\u003e td_flat = td.flatten(0, 1) \u003e\u003e\u003e td_flat.batch_size torch.Size([12]) \u003e\u003e\u003e td_flat[\"a\"] tensor([[ 0, 1, 2, 3, 4], [ 5, 6, 7, 8, 9], [10, 11, 12, 13, 14], [15, 16, 17, 18, 19], [20, 21, 22, 23, 24], [25, 26, 27, 28, 29], [30, 31, 32, 33, 34], [35, 36, 37, 38, 39], [40, 41, 42, 43, 44], [45, 46, 47, 48, 49], [50, 51, 52, 53, 54], [55, 56, 57, 58, 59]]) \u003e\u003e\u003e td_flat[\"b\"] tensor([ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

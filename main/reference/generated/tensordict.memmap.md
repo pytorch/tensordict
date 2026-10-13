@@ -1,13 +1,12 @@
 # memmap
 
-tensordict.memmap(*data: TensorCollection*, *prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*) → TensorCollection
+tensordict.memmap(*data: TensorCollection*, *prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → TensorCollection
 
 Writes all tensors onto memory-mapped tensors in a new tensordict.
 
 Same as [`save()`](tensordict.save.html#tensordict.save), and as
 [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap), which holds the full text of
-every argument and also takes `archive` and `compression` (see
-#1954). Use it to share a tensordict between processes without
+every argument. Use it to share a tensordict between processes without
 copies, or to keep data that is larger than RAM on disk. To convert the
 tensordict in place, use [`memmap_()`](tensordict.TensorDictBase.memmap_.html#tensordict.TensorDictBase.memmap_).
 See [Save and load tensordicts](../../saving.html#saving) and [Load data and share it between processes](../../data_loading.html#data-loading).
@@ -30,9 +29,21 @@ files. Defaults to `0`.
 a future of the result is returned. Defaults to `False`.
 - **share_non_tensor** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, non-tensor entries are
 shared between the processes of a node. Defaults to `False`.
+- **existsok** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `False`, a tensor file that already
+exists under `prefix` raises an error. Defaults to `True`.
 - **robust_key** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, keys that hold path
 separators or special characters are encoded in the file names.
 Defaults to `True`.
+- **archive** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, `prefix` is a file and the
+tensordict is written as a single zip archive that
+[`load()`](tensordict.load.html#tensordict.load) can memory-map. If `None`, an archive
+is written when `prefix` ends with `".tdz"`. Defaults to
+`None`.
+- **compression** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the compression of the archive
+entries: `"stored"`, `"deflate"`, `"bzip2"`, `"lzma"` or a
+[`zipfile`](https://docs.python.org/3/library/zipfile.html#module-zipfile) constant. Only valid for an archive. Defaults to
+`None`, which stores them uncompressed. Only uncompressed
+entries load without a copy.
 
 Returns:
 

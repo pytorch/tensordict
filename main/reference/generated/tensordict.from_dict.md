@@ -1,19 +1,12 @@
 # from_dict
 
-tensordict.from_dict(*d*, ***, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_dims: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
+tensordict.from_dict(*d*, ***, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_dims: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *names: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[str](https://docs.python.org/3/builtins/stdtypes.html#str)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Converts a dictionary to a TensorDict.
 
 See also
 
 [`TensorDictBase.from_dict()`](tensordict.TensorDictBase.from_dict.html#tensordict.TensorDictBase.from_dict) for more information.
-
-Note
-
-The defaults differ from [`TensorDict.from_dict`](tensordict.TensorDictBase.from_dict.html#tensordict.TensorDictBase.from_dict). Here `auto_batch_size`
-defaults to `False` even if `batch_dims` is passed, so
-`batch_dims` has no effect unless you also pass
-`auto_batch_size=True`.
 
 Examples
 
@@ -45,7 +38,7 @@ TensorDict(
  batch_size=torch.Size([3]),
  device=None,
  is_shared=False)
->>> # Without auto_batch_size=True, the batch size is empty.
+>>> # Without auto_batch_size=True or batch_dims, the batch size is empty.
 >>> from_dict(input_dict).batch_size
 torch.Size([])
 >>> # To work out the batch size of an existing tensordict, use auto_batch_size_

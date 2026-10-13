@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5321+g6de343819.d20261013)">
+<meta name="llm:version" content="main (0.14.0.dev5324+g6c1bcca69.d20261013)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5321+g6de343819.d20261013)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5324+g6c1bcca69.d20261013)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1653,7 +1653,9 @@ document.write(`
 <li><p><strong>repeats</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – The number of repetitions for each element. <cite>repeats</cite> is broadcast to fit
 the shape of the given axis.</p></li>
 <li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – The dimension along which to repeat values. By default, use the flattened input
-array, and return a flat output array.</p></li>
+array, and return a flat output array. A <code class="docutils literal notranslate"><span class="pre">dim</span></code> past the batch dims warns, and is used on the
+dims of the leaves. Starting with TensorDict 0.17, the default will change to raising an
+<code class="docutils literal notranslate"><span class="pre">IndexError</span></code>, as for a tensor.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
@@ -2061,7 +2063,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.repeat_interleave",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.repeat_interleave",
        "url": "/reference/generated/tensordict.TensorDictBase.repeat_interleave.html",
-       "articleBody": "TensorDictBase.repeat_interleave# TensorDictBase.repeat_interleave(repeats: Tensor | int, dim: int | None = None, *, output_size: int | None = None, inplace: bool = False) \u2192 Self# Repeat elements of a TensorDict. Warning This is different from repeat() but similar to numpy.repeat(). Parameters: repeats (Tensor or int) \u2013 The number of repetitions for each element. repeats is broadcast to fit the shape of the given axis. dim (int, optional) \u2013 The dimension along which to repeat values. By default, use the flattened input array, and return a flat output array. Keyword Arguments: output_size (int, optional) \u2013 Total output size for the given axis (e.g. sum of repeats). If given, it will avoid stream synchronization needed to calculate output shape of the tensordict. inplace (bool, optional) \u2013 If True, this tensordict\u2019s identity and key set are preserved; each leaf storage is replaced by its repeated counterpart one leaf at a time. Not supported on LazyStackedTensorDict (call to_tensordict() first). Defaults to False. Returns: Repeated TensorDict which has the same shape as input, except along the given axis. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e \u003e\u003e\u003e td = TensorDict( ... { ... \"a\": torch.randn(3, 4, 5), ... \"b\": TensorDict({ ... \"c\": torch.randn(3, 4, 10, 1), ... \"a string\": \"a string!\", ... }, batch_size=[3, 4, 10]) ... }, batch_size=[3, 4], ... ) \u003e\u003e\u003e print(td.repeat_interleave(2, dim=0)) TensorDict( fields={ a: Tensor(shape=torch.Size([6, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False), b: TensorDict( fields={ a string: NonTensorData(data=a string!, batch_size=torch.Size([6, 4, 10]), device=None), c: Tensor(shape=torch.Size([6, 4, 10, 1]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([6, 4, 10]), device=None, is_shared=False)}, batch_size=torch.Size([6, 4]), device=None, is_shared=False) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.repeat_interleave# TensorDictBase.repeat_interleave(repeats: Tensor | int, dim: int | None = None, *, output_size: int | None = None, inplace: bool = False) \u2192 Self# Repeat elements of a TensorDict. Warning This is different from repeat() but similar to numpy.repeat(). Parameters: repeats (Tensor or int) \u2013 The number of repetitions for each element. repeats is broadcast to fit the shape of the given axis. dim (int, optional) \u2013 The dimension along which to repeat values. By default, use the flattened input array, and return a flat output array. A dim past the batch dims warns, and is used on the dims of the leaves. Starting with TensorDict 0.17, the default will change to raising an IndexError, as for a tensor. Keyword Arguments: output_size (int, optional) \u2013 Total output size for the given axis (e.g. sum of repeats). If given, it will avoid stream synchronization needed to calculate output shape of the tensordict. inplace (bool, optional) \u2013 If True, this tensordict\u2019s identity and key set are preserved; each leaf storage is replaced by its repeated counterpart one leaf at a time. Not supported on LazyStackedTensorDict (call to_tensordict() first). Defaults to False. Returns: Repeated TensorDict which has the same shape as input, except along the given axis. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e \u003e\u003e\u003e td = TensorDict( ... { ... \"a\": torch.randn(3, 4, 5), ... \"b\": TensorDict({ ... \"c\": torch.randn(3, 4, 10, 1), ... \"a string\": \"a string!\", ... }, batch_size=[3, 4, 10]) ... }, batch_size=[3, 4], ... ) \u003e\u003e\u003e print(td.repeat_interleave(2, dim=0)) TensorDict( fields={ a: Tensor(shape=torch.Size([6, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False), b: TensorDict( fields={ a string: NonTensorData(data=a string!, batch_size=torch.Size([6, 4, 10]), device=None), c: Tensor(shape=torch.Size([6, 4, 10, 1]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([6, 4, 10]), device=None, is_shared=False)}, batch_size=torch.Size([6, 4]), device=None, is_shared=False) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

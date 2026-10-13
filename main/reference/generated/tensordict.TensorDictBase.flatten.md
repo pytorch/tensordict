@@ -9,6 +9,10 @@ Parameters:
 - **start_dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the first dim to flatten
 - **end_dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the last dim to flatten
 
+A `start_dim` or `end_dim` outside the batch dims warns, and is
+used on the dims of the leaves. Starting with TensorDict 0.17, the
+default will change to raising an `IndexError`, as for a tensor.
+
 Keyword Arguments:
 
 **inplace** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - If `True`, this tensordict's identity

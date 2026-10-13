@@ -13,7 +13,9 @@ Parameters:
 - **repeats** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)) - The number of repetitions for each element. repeats is broadcast to fit
 the shape of the given axis.
 - **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - The dimension along which to repeat values. By default, use the flattened input
-array, and return a flat output array.
+array, and return a flat output array. A `dim` past the batch dims warns, and is used on the
+dims of the leaves. Starting with TensorDict 0.17, the default will change to raising an
+`IndexError`, as for a tensor.
 
 Keyword Arguments:
 

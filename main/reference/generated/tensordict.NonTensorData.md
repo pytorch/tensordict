@@ -280,6 +280,16 @@ A `NonTensorData` can hold a callable. Calling the
 >>> assert td["b"] == 1
 ```
 
+expand(**args*, ***kwargs*) → T
+
+Expands the batch dims of the NonTensorData to the given shape, as [`torch.Tensor.expand()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.expand.html#torch.Tensor.expand) does.
+
+A shape that [`torch.Tensor.expand()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.expand.html#torch.Tensor.expand) rejects (fewer sizes than
+batch dims, or a size that differs from a batch dim that is not 1)
+warns, and the batch size of the result can differ from the shape.
+Starting with TensorDict 0.17, the default will change to raising a
+RuntimeError for such shapes, as [`TensorDict.expand()`](tensordict.TensorDictBase.expand.html#tensordict.TensorDictBase.expand) does.
+
 *classmethod*fields() → [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[Field](https://docs.python.org/3/library/dataclasses.html#dataclasses.Field), ...]
 
 Returns the fields of the tensorclass.

@@ -15,7 +15,10 @@ Parameters:
 
 - **input** (*sequence**of*[*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*or**tensorclass instances*) - the
 tensordicts to stack.
-- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the new dimension. Defaults to `0`.
+- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the new dimension. Defaults to `0`. A `dim` outside
+`[-batch_dims - 1, batch_dims]` warns, and is used on the dims
+of the leaves. Starting with TensorDict 0.17, the default will
+change to raising an `IndexError`, as for a tensor.
 
 Keyword Arguments:
 

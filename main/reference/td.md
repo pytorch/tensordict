@@ -567,7 +567,7 @@ Functions
 | [`unpack_memmap`](generated/tensordict.unpack_memmap.html#tensordict.unpack_memmap)(archive_path, prefix) | Extracts a memmap tensordict archive into a memmap directory. |
 | [`is_memmap_archive`](generated/tensordict.is_memmap_archive.html#tensordict.is_memmap_archive)(path) | Checks whether `path` points to a memmap tensordict archive. |
 | [`refresh_archive_checksums`](generated/tensordict.refresh_archive_checksums.html#tensordict.refresh_archive_checksums)(archive_path) | Recomputes the CRC-32 checksums of a memmap archive after in-place writes. |
-| [`from_h5`](generated/tensordict.from_h5.html#tensordict.from_h5)(h5_file, *[, auto_batch_size, ...]) | Converts an HDF5 file to a TensorDict. |
+| [`from_h5`](generated/tensordict.from_h5.html#tensordict.from_h5)(h5_file, *[, mode, auto_batch_size, ...]) | Converts an HDF5 file to a TensorDict. |
 | [`from_zarr`](generated/tensordict.from_zarr.html#tensordict.from_zarr)(zarr_file, *[, mode, ...]) | Converts a zarr store to a TensorDict. |
 | [`from_csv`](generated/tensordict.from_csv.html#tensordict.from_csv)(path, *[, auto_batch_size, ...]) | Creates a TensorDict from a CSV file. |
 | [`from_json`](generated/tensordict.from_json.html#tensordict.from_json)(path, *[, auto_batch_size, ...]) | Creates a TensorDict from a JSON file. |
