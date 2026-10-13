@@ -1125,7 +1125,10 @@ class TensorDict(TensorDictBase):
     # Override: O(1) on the dict of entries, which keeps the insertion order.
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
-        return self._tensordict.popitem()
+        item = self._tensordict.popitem()
+        if "_consolidated" in self.__dict__:
+            self._mark_consolidated_stale()
+        return item
 
     def update(
         self,
@@ -2313,6 +2316,8 @@ class TensorDict(TensorDictBase):
         )
         if inplace:
             self._tensordict = result._tensordict
+            if "_consolidated" in self.__dict__:
+                self._mark_consolidated_stale()
             return self
         # If this is uncommented, a shallow copy of a shared/memmap will be shared and locked too
         # This may be undesirable, not sure if this should be the default behaviour
@@ -2355,6 +2360,8 @@ class TensorDict(TensorDictBase):
                     if not inplace:
                         _tensordict[key] = val
         if inplace:
+            if "_consolidated" in self.__dict__:
+                self._mark_consolidated_stale()
             return self
         result = self._new_unsafe(
             _tensordict,

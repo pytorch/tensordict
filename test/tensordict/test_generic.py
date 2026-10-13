@@ -935,6 +935,11 @@ class TestGeneric:
             "set_nested",
             "del",
             "update",
+            "select",
+            "select_nested",
+            "exclude",
+            "exclude_nested",
+            "popitem",
         ],
     )
     def test_consolidated_unpickled_write_pickle(self, write):
@@ -963,6 +968,21 @@ class TestGeneric:
         elif write == "update":
             td_rt.update({"x": torch.ones(3)})
             expected["x"] = torch.ones(3)
+        elif write == "select":
+            td_rt.select("x", "s", inplace=True)
+            expected = expected.select("x", "s")
+        elif write == "select_nested":
+            td_rt.select("s", ("n", "z"), inplace=True)
+            expected = expected.select("s", ("n", "z"))
+        elif write == "exclude":
+            td_rt.exclude("x", inplace=True)
+            expected = expected.exclude("x")
+        elif write == "exclude_nested":
+            td_rt.exclude(("n", "z"), inplace=True)
+            expected = expected.exclude(("n", "z"))
+        elif write == "popitem":
+            key, _ = td_rt.popitem()
+            del expected[key]
         assert not td_rt.is_consolidated()
         td_rt2 = pickle.loads(pickle.dumps(td_rt))
         assert set(td_rt2.keys(True, True)) == set(expected.keys(True, True))
