@@ -1125,7 +1125,10 @@ class TensorDict(TensorDictBase):
     # Override: O(1) on the dict of entries, which keeps the insertion order.
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
-        return self._tensordict.popitem()
+        item = self._tensordict.popitem()
+        if "_consolidated" in self.__dict__:
+            self._mark_consolidated_stale()
+        return item
 
     def update(
         self,
@@ -1179,6 +1182,8 @@ class TensorDict(TensorDictBase):
                         break
                 else:
                     self._tensordict.update(source)
+                    if "_consolidated" in self.__dict__:
+                        self._mark_consolidated_stale()
                     return self
         return super().update(
             input_dict_or_td,
@@ -1235,6 +1240,9 @@ class TensorDict(TensorDictBase):
                 if is_non_tensor(dest) and is_tensorclass(dest):
                     _warn_scalar_over_non_tensor(key, scalar)
             self._tensordict[key] = value
+            if "_consolidated" in self.__dict__:
+                # An unpickled consolidated copy is not locked
+                self._mark_consolidated_stale()
         else:
             try:
                 dest = self._get_str(key, default=NO_DEFAULT)
@@ -1257,6 +1265,9 @@ class TensorDict(TensorDictBase):
                                 == value.data.untyped_storage().data_ptr()
                             ):
                                 raise
+                        if "_consolidated" in self.__dict__ and is_non_tensor(dest):
+                            # A non-tensor value is not in the consolidated storage
+                            self._mark_consolidated_stale()
             except KeyError as err:
                 raise err
             except Exception as err:
@@ -1527,6 +1538,8 @@ class TensorDict(TensorDictBase):
             return self
 
         del self._tensordict[key[0]]
+        if "_consolidated" in self.__dict__:
+            self._mark_consolidated_stale()
         return self
 
     # Override: stacks into the existing leaf storages (torch.stack(out=)).
@@ -2303,6 +2316,8 @@ class TensorDict(TensorDictBase):
         )
         if inplace:
             self._tensordict = result._tensordict
+            if "_consolidated" in self.__dict__:
+                self._mark_consolidated_stale()
             return self
         # If this is uncommented, a shallow copy of a shared/memmap will be shared and locked too
         # This may be undesirable, not sure if this should be the default behaviour
@@ -2345,6 +2360,8 @@ class TensorDict(TensorDictBase):
                     if not inplace:
                         _tensordict[key] = val
         if inplace:
+            if "_consolidated" in self.__dict__:
+                self._mark_consolidated_stale()
             return self
         result = self._new_unsafe(
             _tensordict,
