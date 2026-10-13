@@ -1418,7 +1418,11 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             setattr(cls, method_name, _unchecked_copy(getattr(TensorDict, method_name)))
     for method_name in _FALLBACK_METHOD_FROM_TD:
         if not hasattr(cls, method_name):
-            setattr(cls, method_name, _wrap_td_method(method_name))
+            if inspect.ismethod(getattr(TensorDict, method_name)):
+                # classmethod: TC.stack(...) must not take its input as self
+                setattr(cls, method_name, _wrap_td_classmethod(method_name))
+            else:
+                setattr(cls, method_name, _wrap_td_method(method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD_FORCE:
         setattr(cls, method_name, _wrap_td_method(method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD_NOWRAP:
@@ -3636,6 +3640,26 @@ def _wrap_classmethod(td_cls, cls, func):
         return res
 
     return wrapped_func
+
+
+class _wrap_td_classmethod:
+    """A TensorDict classmethod (e.g. ``stack``, ``from_list``) on a tensorclass.
+
+    Accessed on the class, it calls the TensorDict classmethod and returns an
+    instance of that class, as ``_wrap_classmethod`` does. Accessed on an
+    instance, it calls the method on the instance's tensordict, as
+    ``_wrap_td_method`` does.
+    """
+
+    def __init__(self, funcname):
+        self.funcname = funcname
+        self.instance_method = _wrap_td_method(funcname)
+
+    def __get__(self, instance, owner=None):
+        if instance is None:
+            func = getattr(TensorDict, self.funcname)
+            return _wrap_classmethod(TensorDict, owner, func)
+        return self.instance_method.__get__(instance, owner)
 
 
 def _getitem(self, item: NestedKey) -> Tensor | TensorCollection | Any:
