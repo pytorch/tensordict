@@ -11,6 +11,7 @@ which re-exports the classes of this module.
 from __future__ import annotations
 
 import json
+import math
 import struct
 import uuid
 import warnings
@@ -134,6 +135,15 @@ def _element_index(idx, count: int) -> tuple[int, tuple] | None:
     elif isinstance(first, int) and not isinstance(first, bool):
         return first, rest
     return None
+
+
+def _getranges(pipe, key: str, ranges: list[tuple[int, int]]) -> None:
+    """Queues on ``pipe`` the read of the concatenated byte ranges of ``key``."""
+    if len(ranges) == 1:
+        (offset, length), *_ = ranges
+        pipe.getrange(key, offset, offset + length - 1)
+    else:
+        pipe.eval(_LUA_GETRANGES, 1, key, *[n for r in ranges for n in r])
 
 
 # ---------------------------------------------------------------------------
@@ -813,6 +823,60 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             for kp in key_paths
         ]
 
+    def _init_local_state(self) -> None:
+        super()._init_local_state()
+        # the layout field of the metadata of each entry, or None
+        self._layouts: dict[str, str | None] = {}
+
+    def _stack_first(self, shape: list[int], layout: str | None) -> bool | None:
+        """Whether a homogeneous entry of stored ``shape`` holds its elements stack dim first.
+
+        ``from_lazy_stack`` and the element writes store an entry stack dim
+        first, and ``set`` and ``update`` in the batch layout; each also
+        writes ``layout`` (``"stack"`` or ``"batch"``) in the metadata. The
+        shape tells the layouts apart unless it fits both, and the field
+        decides then. The shape comes first because a version without the
+        field leaves it unchanged when it rewrites the entry. ``None`` when
+        neither decides, as for an entry written before the field existed:
+        each reader then keeps its behaviour from before, the indexed reads
+        and writes taking the batch layout and the element views stack dim
+        first.
+        """
+        if not self._stack_pos:
+            # the two layouts are the same
+            return None
+        prefix = list(shape[: len(self._batch_size)])
+        stack = prefix == [self._count, *self._inner_batch_size]
+        batch = prefix == list(self._batch_size)
+        if stack != batch:
+            return stack
+        if stack and layout is not None:
+            return layout == "stack"
+        return None
+
+    @property
+    def _stack_pos(self) -> int:
+        # the position of the stack dim in the batch size, as __init__ inserts it
+        if self._stack_dim >= 0:
+            return self._stack_dim
+        return max(len(self._inner_batch_size) + self._stack_dim, 0)
+
+    def _element_ranges(
+        self, shape: list[int], dtype: torch.dtype, layout: str | None, pos: int
+    ) -> tuple[list[int], list[tuple[int, int]]]:
+        """The shape of element ``pos`` of a homogeneous entry, and the byte ranges that hold it."""
+        if self._stack_first(shape, layout) is False:
+            # batch layout: the element is one block of the dims after the
+            # stack dim in each row of the dims before it
+            sd = self._stack_pos
+            block = self._row_bytes(shape[sd + 1 :], dtype)
+            rows = range(math.prod(shape[:sd]))
+            return shape[:sd] + shape[sd + 1 :], [
+                ((row * self._count + pos) * block, block) for row in rows
+            ]
+        row_bytes = self._row_bytes(shape[1:], dtype)
+        return shape[1:], [(pos * row_bytes, row_bytes)]
+
     def _row_bytes(self, shape: list[int], dtype: torch.dtype) -> int:
         """Byte size of one stack element for a homogeneous key."""
         elem_size = torch.tensor([], dtype=dtype).element_size()
@@ -872,12 +936,14 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             "shape": json.dumps(full_shape),
             "dtype": _dtype_to_str(dtype),
             "homogeneous": "1",
+            "layout": "stack",
         }
         pipe = self._client.pipeline()
         pipe.hset(self._meta_key(key_path), mapping=meta)
         pipe.sadd(self._keys_registry_key, key_path)
         await pipe.execute()
 
+        self._layouts[key_path] = "stack"
         if self._meta_cache is not None:
             self._meta_cache[key_path] = (full_shape, dtype)
 
@@ -936,6 +1002,7 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             "dtype": _dtype_to_str(dtype),
             "homogeneous": "0",
             "shapes": json.dumps(shapes),
+            "layout": "stack",
         }
         pipe = self._client.pipeline()
         pipe.set(self._idx_key(key_path), offset_bytes)
@@ -943,6 +1010,7 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         pipe.sadd(self._keys_registry_key, key_path)
         await pipe.execute()
 
+        self._layouts[key_path] = "stack"
         if self._meta_cache is not None:
             self._meta_cache[key_path] = (None, dtype)
 
@@ -972,11 +1040,10 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             homogeneous = self._is_key_homogeneous(meta)
 
             if homogeneous:
-                full_shape = json.loads(meta["shape"])
-                elem_shape = full_shape[1:]
-                row_bytes = self._row_bytes(elem_shape, dtype)
-                offset = pos * row_bytes
-                pipe.getrange(self._data_key(kp), offset, offset + row_bytes - 1)
+                elem_shape, ranges = self._element_ranges(
+                    json.loads(meta["shape"]), dtype, meta.get("layout"), pos
+                )
+                _getranges(pipe, self._data_key(kp), ranges)
                 key_info.append((kp, elem_shape, dtype, True))
             else:
                 # Need offset table lookup first
@@ -1041,11 +1108,10 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             homogeneous = self._is_key_homogeneous(meta)
 
             if homogeneous:
-                full_shape = json.loads(meta["shape"])
-                elem_shape = full_shape[1:]
-                row_bytes = self._row_bytes(elem_shape, dtype)
-                offset = pos * row_bytes
-                pipe.getrange(self._data_key(kp), offset, offset + row_bytes - 1)
+                elem_shape, ranges = self._element_ranges(
+                    json.loads(meta["shape"]), dtype, meta.get("layout"), pos
+                )
+                _getranges(pipe, self._data_key(kp), ranges)
                 key_info.append((kp, elem_shape, dtype, True))
             else:
                 pipe.getrange(self._idx_key(kp), pos * 8, (pos + 2) * 8 - 1)
@@ -1115,9 +1181,11 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
                     "shape": json.dumps(full_shape),
                     "dtype": str(value.dtype),
                     "homogeneous": "1",
+                    "layout": "stack",
                 },
             )
             await pipe.execute()
+            self._layouts[key_path] = "stack"
             if self._meta_cache is not None:
                 self._meta_cache[key_path] = (full_shape, value.dtype)
             return
@@ -1125,15 +1193,22 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         dtype = _str_to_dtype(raw_meta["dtype"])
         homogeneous = self._is_key_homogeneous(raw_meta)
 
-        shape = (
-            json.loads(raw_meta["shape"])
-            if homogeneous
-            else [self._count] + json.loads(raw_meta["shapes"])[pos]
-        )
+        if homogeneous:
+            elem_shape, ranges = self._element_ranges(
+                json.loads(raw_meta["shape"]), dtype, raw_meta.get("layout"), pos
+            )
+            shape = [self._count] + elem_shape
+        else:
+            shape = [self._count] + json.loads(raw_meta["shapes"])[pos]
         value = _prepare_indexed_value(value, shape, dtype, pos)
         raw_bytes = _tensor_to_bytes(value)
 
-        if homogeneous:
+        if homogeneous and len(ranges) > 1:
+            argv: list = []
+            for i, (offset, length) in enumerate(ranges):
+                argv += [offset, raw_bytes[i * length : (i + 1) * length]]
+            await self._client.eval(_LUA_SETRANGES, 1, self._data_key(key_path), *argv)
+        elif homogeneous:
             offset = pos * len(raw_bytes)
             await self._client.setrange(self._data_key(key_path), offset, raw_bytes)
         else:
@@ -1154,11 +1229,17 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
     async def _abatch_get_at(
         self, key_paths: list[str], idx
     ) -> dict[str, torch.Tensor]:
-        """Batch fetch indexed slices of multiple keys using GETRANGE."""
+        """Batch fetch indexed slices of multiple keys using GETRANGE.
+
+        ``idx`` is in the batch layout. An entry stored in it (written by
+        ``set``) is read by byte ranges; an entry stored stack dim first
+        (written by ``from_lazy_stack``), when the stack dim is not 0, is read
+        whole and moved into the batch layout. See ``_stack_first``.
+        """
         if not key_paths:
             return {}
 
-        meta_map = await self._aget_metadata_batch(key_paths)
+        meta_map = await self._aget_metadata_batch(key_paths, layouts=self._layouts)
 
         result: dict[str, torch.Tensor] = {}
         heterogeneous = [kp for kp in key_paths if meta_map[kp][0] is None]
@@ -1179,8 +1260,16 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
 
         scattered = _is_scattered_index(idx)
 
+        stack_first = {
+            kp
+            for kp in key_paths
+            if self._stack_first(meta_map[kp][0], self._layouts.get(kp))
+        }
         for kp in key_paths:
             full_shape, dtype = meta_map[kp]
+            if kp in stack_first:
+                fallback_kps.append(kp)
+                continue
             result_shape = _getitem_result_shape(full_shape, idx)
             local_idx = _get_local_idx(idx, full_shape[0])
 
@@ -1242,9 +1331,10 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
 
         for kp in fallback_kps:
             full_shape, dtype = meta_map[kp]
-            tensor = _bytes_to_tensor(raw_results[ri], full_shape, dtype)[
-                _as_tuple(idx)
-            ]
+            tensor = _bytes_to_tensor(raw_results[ri], full_shape, dtype)
+            if kp in stack_first:
+                tensor = tensor.movedim(0, self._stack_pos)
+            tensor = tensor[_as_tuple(idx)]
             ri += 1
             if self._device is not None:
                 tensor = tensor.to(self._device)
@@ -1316,12 +1406,19 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         await write_pipe.execute()
 
     async def _abatch_set_at(self, items: dict[str, tuple[torch.Tensor, object]]):
-        """Batch-write indexed slices using SETRANGE / Lua."""
+        """Batch-write indexed slices using SETRANGE / Lua.
+
+        Each index is in the batch layout. An entry stored in it (written by
+        ``set``) is written by byte ranges; an entry stored stack dim first
+        (written by ``from_lazy_stack``), when the stack dim is not 0, by a
+        read-modify-write of the whole entry, which keeps its layout. See
+        ``_stack_first``.
+        """
         if not items:
             return
 
         key_paths = list(items.keys())
-        meta_map = await self._aget_metadata_batch(key_paths)
+        meta_map = await self._aget_metadata_batch(key_paths, layouts=self._layouts)
 
         heterogeneous = [kp for kp in key_paths if meta_map[kp][0] is None]
         elements = {}
@@ -1345,10 +1442,17 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         lua_kps: list[str] = []
         rmw_kps: list[str] = []
 
+        stack_first = {
+            kp
+            for kp in key_paths
+            if self._stack_first(meta_map[kp][0], self._layouts.get(kp))
+        }
         for kp in key_paths:
             _, idx = items[kp]
             shape, dtype = meta_map[kp]
-            ranges = _compute_byte_ranges(shape, dtype, idx)
+            ranges = (
+                None if kp in stack_first else _compute_byte_ranges(shape, dtype, idx)
+            )
             if ranges is None:
                 rmw_kps.append(kp)
             elif not ranges:
@@ -1401,13 +1505,22 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             for kp in rmw_kps:
                 shape, dtype = meta_map[kp]
                 _, idx = items[kp]
-                cr = _compute_covering_range(shape, dtype, idx)
+                cr = (
+                    None
+                    if kp in stack_first
+                    else _compute_covering_range(shape, dtype, idx)
+                )
                 if cr is None:
                     # Full read-modify-write
                     data = await self._client.get(self._data_key(kp))
                     tensor = _bytes_to_tensor(data, shape, dtype)
                     value, idx = items[kp]
-                    tensor[_as_tuple(idx)] = value
+                    target = (
+                        tensor.movedim(0, self._stack_pos)
+                        if kp in stack_first
+                        else tensor
+                    )
+                    target[_as_tuple(idx)] = value
                     await self._client.set(self._data_key(kp), _tensor_to_bytes(tensor))
                     continue
                 byte_offset, byte_length = cr
@@ -1655,12 +1768,14 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             "shape": json.dumps(shape),
             "dtype": _dtype_to_str(dtype),
             "homogeneous": "1",
+            "layout": "batch",
         }
         pipe = self._client.pipeline()
         pipe.set(self._data_key(key_path), data)
         pipe.hset(self._meta_key(key_path), mapping=meta)
         pipe.sadd(self._keys_registry_key, key_path)
         await pipe.execute()
+        self._layouts[key_path] = "batch"
         if self._meta_cache is not None:
             self._meta_cache[key_path] = (shape, dtype)
 
