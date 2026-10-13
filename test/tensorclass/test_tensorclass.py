@@ -3448,6 +3448,37 @@ class TestTensorClass:
         for name in ("stack", "cat", "lazy_stack", "maybe_dense_stack"):
             assert type(getattr(MC, name)([mc, mc])) is MC, name
 
+    @pytest.mark.parametrize(
+        "flags", [{}, {"tensor_only": True}, {"shadow": True}], ids=str
+    )
+    def test_td_classmethods_on_decorated_class(self, flags):
+        # https://github.com/pytorch/tensordict/issues/2524: on a @tensorclass,
+        # MC.stack([...]) bound the list to self and raised AttributeError.
+        @tensorclass(**flags)
+        class MC:
+            foo: torch.Tensor
+            bar: torch.Tensor
+
+        class MCChild(MC):
+            pass
+
+        out = MC.from_list(
+            [{"foo": torch.zeros(()), "bar": 2}, {"foo": 3, "bar": torch.ones(())}]
+        )
+        assert type(out) is MC
+        assert out.batch_size == (2,)
+        assert (out.foo == torch.tensor([0, 3])).all()
+        assert type(MCChild.from_list([{"foo": 1, "bar": 2}])) is MCChild
+        assert type(MC.fromkeys(["foo", "bar"], 0)) is MC
+        assert type(MC.from_any({"foo": torch.zeros(3), "bar": 1})) is MC
+        mc = MC(foo=torch.zeros(3), bar=torch.ones(3), batch_size=[3])
+        for name in ("stack", "cat", "lazy_stack", "maybe_dense_stack"):
+            assert type(getattr(MC, name)([mc, mc])) is MC, name
+            # the call on an instance keeps working
+            assert type(getattr(mc, name)([mc, mc])) is MC, name
+        assert MC.stack([mc, mc], 1).batch_size == (3, 2)
+        assert MC.cat([mc, mc]).batch_size == (6,)
+
     def test_to_lazystack(self):
         class MyTensorClass(TensorClass):
             foo: Tensor
