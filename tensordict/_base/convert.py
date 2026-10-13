@@ -1367,7 +1367,12 @@ class _Conversion:
         get a regular, unlocked tensordict in memory from a lazy stack, a
         memory-mapped or locked tensordict, a
         :class:`~tensordict.PersistentTensorDict` or a tensorclass. The batch
-        size, device and dimension names are kept.
+        size, device and dimension names are kept, with one exception: if the
+        tensordicts of a lazy stack have no names, the result has no names
+        either, even when the stack dimension has a name (from
+        ``stack_dim_name`` or the ``names`` setter). ``densify()`` and
+        ``clone()`` of the lazy stack keep that name. To keep it here, name
+        the dimension again with :meth:`refine_names`.
 
         Keyword Args:
             retain_none (bool, optional): if ``True``, the ``None`` fields of
@@ -1386,6 +1391,11 @@ class _Conversion:
             >>> td = stack.to_tensordict()
             >>> type(td).__name__, td.batch_size
             ('TensorDict', torch.Size([2]))
+            >>> stack.names = ["s"]
+            >>> stack.to_tensordict().names
+            [None]
+            >>> stack.to_tensordict().refine_names("s").names
+            ['s']
 
         """
         from tensordict import TensorDict
