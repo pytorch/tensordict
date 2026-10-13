@@ -2166,9 +2166,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 stack. It must not be empty, or a ``RuntimeError`` is raised.
             dim (int, optional): the dim along which to perform the lazy stack.
                 Defaults to 0. A ``dim`` below ``-batch_dims - 1`` warns and
-                wraps around once more (and raises if it is still out of range). Starting with TensorDict 0.17, the
-                default will change to raising an ``IndexError``, as for a
-                tensor.
+                wraps around once more (and raises if it is still out of
+                range). Starting with TensorDict 0.17, the default will change
+                to raising an ``IndexError``, as for a tensor.
 
         Keyword Args:
             device (torch.device, optional): not used: the stack takes the
