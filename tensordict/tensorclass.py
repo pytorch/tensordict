@@ -53,7 +53,7 @@ from tensordict._nestedkey import NestedKey
 from tensordict._pytree import _register_td_node
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._tensorcollection import TensorCollection
-from tensordict._torch_func import TD_HANDLED_FUNCTIONS
+from tensordict._torch_func import _POINTWISE_FUNCTIONS, TD_HANDLED_FUNCTIONS
 from tensordict._utils_options import _set_capture_non_tensor_stack
 from tensordict.base import (
     _is_accepted_class,
@@ -65,6 +65,7 @@ from tensordict.base import (
     CompatibleType,
 )
 from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
+    _expands_to,
     _GENERIC_NESTED_ERR,
     _get_shape_from_args,
     _is_dataclass as is_dataclass,
@@ -199,6 +200,14 @@ _TD_PASS_THROUGH = {
     torch.zeros_like: True,
     torch.autograd.grad: True,
 }
+# pointwise torch functions, without the in-place forms, which would return a
+# new tensorclass. NonTensorData does not pass them through.
+_POINTWISE_PASS_THROUGH = {
+    getattr(torch, name): True
+    for name in _POINTWISE_FUNCTIONS
+    if not name.endswith("_")
+}
+_TD_PASS_THROUGH.update(_POINTWISE_PASS_THROUGH)
 # Methods to be executed from tensordict, any ref to self means 'tensorclass'
 _METHOD_FROM_TD = [
     "__enter__",
@@ -4686,18 +4695,12 @@ def _xor(self, other: object) -> bool:
 
 
 def _non_tensor_items(self, include_nested=False):
-    if include_nested:
-        return self.non_tensor_items() + self._tensordict.non_tensor_items(
-            include_nested=True
-        )
-    elif is_tensorclass(self):
-        items = list(self._non_tensordict.items())
-        if type(self)._tensor_only:
-            # A None field of a tensor_only class is a missing key
-            items.extend((key, None) for key in _none_fields(self))
-        return items
-    else:
-        return self._tensordict.non_tensor_items()
+    # The fields held outside the TensorDict, then its non-tensor leaves
+    items = tuple(self._non_tensordict.items())
+    if type(self)._tensor_only:
+        # A None field of a tensor_only class is a missing key
+        items += tuple((key, None) for key in _none_fields(self))
+    return items + self._tensordict.non_tensor_items(include_nested)
 
 
 def _bool(self):
@@ -5578,10 +5581,12 @@ class NonTensorDataBase(TensorClass):
             return NonTensorData._cat_non_tensor(*args, **(kwargs or {}))
         # torch.where is not passed through: it would run on the tensordict
         # of the NonTensorData, which does not hold the data. Use
-        # NonTensorData.where instead
+        # NonTensorData.where instead. The pointwise math functions are not
+        # passed through either
         if (
             func not in _TD_PASS_THROUGH
             or func is torch.where
+            or func in _POINTWISE_PASS_THROUGH
             or not all(issubclass(t, (Tensor, cls)) for t in types)
         ):
             from torch._ops import HigherOrderOperator
@@ -6089,10 +6094,7 @@ class NonTensorData(NonTensorDataBase):
         shape = _get_shape_from_args(*args, **kwargs)
         if -1 in shape:
             shape = _resolve_expand_shape(shape, self.batch_size)
-        if len(shape) < self.ndim or any(
-            old != 1 and new != old
-            for old, new in zip(self.batch_size, shape[len(shape) - self.ndim :])
-        ):
+        if not _expands_to(self.batch_size, shape):
             warnings.warn(
                 f"Expanding a NonTensorData of batch size {list(self.batch_size)} "
                 f"to {list(shape)} does not raise today, although "
@@ -6162,6 +6164,11 @@ class NonTensorData(NonTensorDataBase):
                 update_batch_size=update_batch_size,
             )
         if other.batch_size != self.batch_size:
+            if not _expands_to(other.batch_size, self.batch_size):
+                raise ValueError(
+                    f"other of batch size {list(other.batch_size)} cannot be "
+                    f"expanded to the batch size {list(self.batch_size)}."
+                )
             other = other.expand(self.batch_size)
 
         def pick(cond, other_values):
