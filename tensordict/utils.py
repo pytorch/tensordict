@@ -511,6 +511,20 @@ def _set_item(
                 return tensor
         if isinstance(tensor, NonTensorData):
             tensor = NonTensorStack._from_nontensordata(tensor)
+            if (
+                isinstance(tensor, NonTensorData)
+                and isinstance(value, Tensor)
+                and (index is Ellipsis or (isinstance(index, tuple) and not index))
+            ):
+                # Without batch dims, the index selects the whole entry: the
+                # value replaces it, as NonTensorStack.__setitem__ writes an
+                # element of a stack
+                return type(tensor)(
+                    data=value,
+                    batch_size=tensor.batch_size,
+                    names=tensor._maybe_names(),
+                    device=tensor.device,
+                )
         if tensor.stack_dim != 0:
             tensor = NonTensorStack(*tensor.unbind(0), stack_dim=0)
         tensor[index] = value
