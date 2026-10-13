@@ -4506,7 +4506,7 @@ class TestGeneric:
         sub = TensorDict({"x": torch.zeros(4, 3)}, [4])._get_sub_tensordict(slice(0, 2))
         with pytest.raises(
             NotImplementedError,
-            match="masked_select.inplace=True. is not supported on LazyStackedTensorDict",
+            match="masked_select.inplace=True. is not supported on _SubTensorDict",
         ):
             sub.masked_select(torch.ones(2, dtype=torch.bool), inplace=True)
         assert sub.batch_size == (2,)

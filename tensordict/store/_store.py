@@ -303,6 +303,7 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
 
     _td_dim_names = None
     _masking_on_dense_copy = True
+    _masked_select_on_dense_copy = True
     # each read fetches the entry from the server into a new tensor
     _reads_return_copies = True
     _rename_key_lenient = True
@@ -2531,12 +2532,6 @@ class TensorDictStore(_StoreUnsupported, TensorDictBase):
             tensor = tensor.masked_fill(expand_as_right(mask, tensor), value)
             self.set_(key, tensor)
         return self
-
-    # Override: to_tensordict reads all the entries in one round trip.
-    def masked_select(self, mask, *, inplace=False):
-        if inplace:
-            return super().masked_select(mask, inplace=True)
-        return self.to_tensordict().masked_select(mask)
 
     # ---- Pickling ----
 

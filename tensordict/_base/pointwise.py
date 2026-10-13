@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import numbers
+import operator
 from typing import Any, TYPE_CHECKING
 
 import torch
@@ -83,7 +84,6 @@ class _PointwiseOps:
         """
         return self.neg()
 
-    @_maybe_broadcast_other("__ne__")
     def __ne__(self, other: Any) -> Self | bool:
         """NOT operation over two tensordicts, for evey key.
 
@@ -97,32 +97,8 @@ class _PointwiseOps:
             tensors of the same shape as the original tensors.
 
         """
-        from tensordict._td import TensorDict
+        return self._compare(other, "__ne__", "__ne__", default=True)
 
-        if is_tensorclass(other):
-            return other != self
-        if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other, auto_batch_size=False)
-        if _is_tensor_collection(type(other)):
-            keys1 = set(self.keys())
-            keys2 = set(other.keys())
-            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-                raise KeyError(
-                    f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
-                )
-            d = {}
-            for key, item1 in self.items():
-                d[key] = item1 != other.get(key)
-            return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
-        if isinstance(other, (numbers.Number, Tensor)):
-            return TensorDict(
-                {key: value != other for key, value in self.items()},
-                self.batch_size,
-                device=self.device,
-            )
-        return True
-
-    @_maybe_broadcast_other("__xor__")
     def __xor__(self, other: Any) -> Self | bool:
         """XOR operation over two tensordicts, for evey key.
 
@@ -136,30 +112,7 @@ class _PointwiseOps:
             tensors of the same shape as the original tensors.
 
         """
-        from tensordict._td import TensorDict
-
-        if is_tensorclass(other):
-            return other ^ self
-        if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other, auto_batch_size=False)
-        if _is_tensor_collection(type(other)):
-            keys1 = set(self.keys())
-            keys2 = set(other.keys())
-            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-                raise KeyError(
-                    f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
-                )
-            d = {}
-            for key, item1 in self.items():
-                d[key] = item1 ^ other.get(key)
-            return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
-        if isinstance(other, (numbers.Number, Tensor)):
-            return TensorDict(
-                {key: value ^ other for key, value in self.items()},
-                self.batch_size,
-                device=self.device,
-            )
-        return True
+        return self._compare(other, "__xor__", "__xor__", default=True)
 
     def __rxor__(self, other: TensorCollection | torch.Tensor | float):
         """XOR operation over two tensordicts, for evey key.
@@ -168,7 +121,6 @@ class _PointwiseOps:
         """
         return self.__xor__(other)
 
-    @_maybe_broadcast_other("__or__")
     def __or__(self, other: Any) -> Self | bool:
         """OR operation over two tensordicts, for evey key.
 
@@ -182,30 +134,7 @@ class _PointwiseOps:
             tensors of the same shape as the original tensors.
 
         """
-        from tensordict._td import TensorDict
-
-        if is_tensorclass(other):
-            return other | self
-        if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other, auto_batch_size=False)
-        if _is_tensor_collection(type(other)):
-            keys1 = set(self.keys())
-            keys2 = set(other.keys())
-            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-                raise KeyError(
-                    f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
-                )
-            d = {}
-            for key, item1 in self.items():
-                d[key] = item1 | other.get(key)
-            return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
-        if isinstance(other, (numbers.Number, Tensor)):
-            return TensorDict(
-                {key: value | other for key, value in self.items()},
-                self.batch_size,
-                device=self.device,
-            )
-        return False
+        return self._compare(other, "__or__", "__or__", default=False)
 
     def __ror__(self, other: TensorCollection | torch.Tensor) -> Self:
         """Right-side OR operation over two tensordicts, for evey key.
@@ -272,7 +201,6 @@ class _PointwiseOps:
 
     __rand__ = __and__
 
-    @_maybe_broadcast_other("__eq__")
     def __eq__(self, other: Any) -> Self | bool:
         """Compares two tensordicts against each other, for every key. The two tensordicts must have the same key set.
 
@@ -281,30 +209,8 @@ class _PointwiseOps:
             tensors of the same shape as the original tensors.
 
         """
-        from tensordict._td import TensorDict
+        return self._compare(other, "__eq__", "__eq__", default=False)
 
-        if is_tensorclass(other):
-            return other == self
-        if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other, auto_batch_size=False)
-        if _is_tensor_collection(type(other)):
-            keys1 = set(self.keys())
-            keys2 = set(other.keys())
-            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-                _mismatch_keys(keys1, keys2)
-            d = {}
-            for key, item1 in self.items():
-                d[key] = item1 == other.get(key)
-            return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
-        if isinstance(other, (numbers.Number, Tensor)):
-            return TensorDict(
-                {key: value == other for key, value in self.items()},
-                self.batch_size,
-                device=self.device,
-            )
-        return False
-
-    @_maybe_broadcast_other("__ge__")
     def __ge__(self, other: Any) -> Self | bool:
         """Compares two tensordicts against each other using the "greater or equal" operator, for every key. The two tensordicts must have the same key set.
 
@@ -313,30 +219,8 @@ class _PointwiseOps:
             tensors of the same shape as the original tensors.
 
         """
-        from tensordict._td import TensorDict
+        return self._compare(other, "__ge__", "__le__", default=False)
 
-        if is_tensorclass(other):
-            return other <= self
-        if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other, auto_batch_size=False)
-        if _is_tensor_collection(type(other)):
-            keys1 = set(self.keys())
-            keys2 = set(other.keys())
-            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-                _mismatch_keys(keys1, keys2)
-            d = {}
-            for key, item1 in self.items():
-                d[key] = item1 >= other.get(key)
-            return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
-        if isinstance(other, (numbers.Number, Tensor)):
-            return TensorDict(
-                {key: value >= other for key, value in self.items()},
-                self.batch_size,
-                device=self.device,
-            )
-        return False
-
-    @_maybe_broadcast_other("__gt__")
     def __gt__(self, other: Any) -> Self | bool:
         """Compares two tensordicts against each other using the "greater than" operator, for every key. The two tensordicts must have the same key set.
 
@@ -345,30 +229,8 @@ class _PointwiseOps:
             tensors of the same shape as the original tensors.
 
         """
-        from tensordict._td import TensorDict
+        return self._compare(other, "__gt__", "__lt__", default=False)
 
-        if is_tensorclass(other):
-            return other < self
-        if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other, auto_batch_size=False)
-        if _is_tensor_collection(type(other)):
-            keys1 = set(self.keys())
-            keys2 = set(other.keys())
-            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-                _mismatch_keys(keys1, keys2)
-            d = {}
-            for key, item1 in self.items():
-                d[key] = item1 > other.get(key)
-            return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
-        if isinstance(other, (numbers.Number, Tensor)):
-            return TensorDict(
-                {key: value > other for key, value in self.items()},
-                self.batch_size,
-                device=self.device,
-            )
-        return False
-
-    @_maybe_broadcast_other("__le__")
     def __le__(self, other: Any) -> Self | bool:
         """Compares two tensordicts against each other using the "lower or equal" operator, for every key. The two tensordicts must have the same key set.
 
@@ -377,30 +239,8 @@ class _PointwiseOps:
             tensors of the same shape as the original tensors.
 
         """
-        from tensordict._td import TensorDict
+        return self._compare(other, "__le__", "__ge__", default=False)
 
-        if is_tensorclass(other):
-            return other >= self
-        if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other, auto_batch_size=False)
-        if _is_tensor_collection(type(other)):
-            keys1 = set(self.keys())
-            keys2 = set(other.keys())
-            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-                _mismatch_keys(keys1, keys2)
-            d = {}
-            for key, item1 in self.items():
-                d[key] = item1 <= other.get(key)
-            return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
-        if isinstance(other, (numbers.Number, Tensor)):
-            return TensorDict(
-                {key: value <= other for key, value in self.items()},
-                self.batch_size,
-                device=self.device,
-            )
-        return False
-
-    @_maybe_broadcast_other("__lt__")
     def __lt__(self, other: Any) -> Self | bool:
         """Compares two tensordicts against each other using the "lower than" operator, for every key. The two tensordicts must have the same key set.
 
@@ -409,28 +249,69 @@ class _PointwiseOps:
             tensors of the same shape as the original tensors.
 
         """
+        return self._compare(other, "__lt__", "__gt__", default=False)
+
+    def _compare(
+        self, other: Any, op: str, reflected_op: str, default: bool
+    ) -> TensorDictBase | bool:
+        """Computes the comparison or logical ``op`` (``"__eq__"``, ``"__lt__"``, ``"__or__"``, ...) of ``self`` and ``other``.
+
+        The comparison dunders call this with their ``op``, the op that gives
+        the same result with the operands swapped (``reflected_op``), called
+        on a tensorclass ``other``, and the value to return for an operand that
+        is not a tensor, number, dict or tensor collection (``default``).
+
+        The base broadcasts the batch shapes against a tensor or a tensor
+        collection, then pairs the leaves by key into a new dense
+        :class:`~tensordict.TensorDict`, and raises ``KeyError`` on mismatched
+        key sets. :class:`~tensordict.LazyStackedTensorDict` compares each
+        member and stacks the results lazily; it returns ``default`` only for
+        ``==`` and ``!=``, and raises ``ValueError`` for the other ops.
+        """
         from tensordict._td import TensorDict
 
+        if (isinstance(other, Tensor) and other.ndim) or (
+            _is_tensor_collection(type(other))
+            and other.ndim
+            and other.shape != self.shape
+        ):
+            # Broadcast, as _maybe_broadcast_other does for the arithmetic ops.
+            # The dunders do not use it, so that a lazy stack reaches its own
+            # _compare, which goes member by member, with any operand.
+            shape = torch.broadcast_shapes(self.shape, other.shape)
+            self_expand = self if shape == self.shape else self.expand(shape)
+            if other.shape != shape:
+                other = other.expand(shape)
+            if isinstance(other, Tensor):
+                return self_expand._fast_apply(
+                    lambda x: getattr(x, op)(expand_as_right(other, x))
+                )
+            return getattr(self_expand, op)(other)
+        compare = getattr(operator, op)
         if is_tensorclass(other):
-            return other > self
+            return getattr(operator, reflected_op)(other, self)
         if isinstance(other, (dict,)):
             other = self.from_dict_instance(other, auto_batch_size=False)
         if _is_tensor_collection(type(other)):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
             if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                if op in ("__ne__", "__xor__", "__or__"):
+                    raise KeyError(
+                        f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
+                    )
                 _mismatch_keys(keys1, keys2)
             d = {}
             for key, item1 in self.items():
-                d[key] = item1 < other.get(key)
+                d[key] = compare(item1, other.get(key))
             return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
         if isinstance(other, (numbers.Number, Tensor)):
             return TensorDict(
-                {key: value < other for key, value in self.items()},
+                {key: compare(value, other) for key, value in self.items()},
                 self.batch_size,
                 device=self.device,
             )
-        return False
+        return default
 
     def isfinite(self) -> Self:
         """Returns a new tensordict with boolean elements representing if each element is finite or not.
@@ -2816,6 +2697,27 @@ class _PointwiseOps:
                 pad=pad,
                 update_batch_size=update_batch_size,
             )
+        return self._where(
+            condition, other, out=out, pad=pad, update_batch_size=update_batch_size
+        )
+
+    def _where(
+        self,
+        condition: Tensor,
+        other: Tensor | TensorDictBase,
+        *,
+        out: TensorDictBase | None,
+        pad: int | bool | None,
+        update_batch_size: bool,
+    ) -> TensorDictBase:
+        """Storage-specific part of :meth:`where`, called when ``_masking_on_dense_copy`` is False.
+
+        Takes the arguments of :meth:`where` as they are and returns its result,
+        written into ``out`` when ``out`` is given. The base pairs the entries
+        by key. :class:`~tensordict.LazyStackedTensorDict` splits ``condition``
+        (and a tensordict or batch-shaped tensor ``other``) along the stack dim,
+        runs :meth:`where` on each member and stacks the results lazily.
+        """
         if _is_tensor_collection(type(other)):
 
             def func(tensor, _other, key):

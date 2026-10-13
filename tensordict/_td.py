@@ -3339,31 +3339,6 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
         # the id of out changes
         return self._get_str(key, default=NO_DEFAULT)
 
-    def _cast_reduction(
-        self,
-        *,
-        reduction_name,
-        dim=NO_DEFAULT,
-        keepdim=NO_DEFAULT,
-        tuple_ok=True,
-        **kwargs,
-    ):
-        try:
-            td = self.to_tensordict()
-        except Exception:
-            raise RuntimeError(
-                f"{reduction_name} requires this object to be cast to a regular TensorDict. "
-                f"If you need {type(self).__name__} to support {reduction_name}, help us by filing an issue"
-                f" on github!"
-            )
-        return td._cast_reduction(
-            reduction_name=reduction_name,
-            dim=dim,
-            keepdim=keepdim,
-            tuple_ok=tuple_ok,
-            **kwargs,
-        )
-
     _add_batch_dim = TensorDict._add_batch_dim
 
     def _index_tensordict(

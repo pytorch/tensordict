@@ -2582,12 +2582,14 @@ class _ShapeOps:
         """
         from tensordict._td import TensorDict
 
-        if inplace and self._lazy:
+        if inplace and (self._lazy or self._masked_select_inplace_unsupported):
             raise NotImplementedError(
-                "masked_select(inplace=True) is not supported on "
-                "LazyStackedTensorDict; call .to_tensordict() first or use "
-                "inplace=False."
+                f"masked_select(inplace=True) is not supported on "
+                f"{type(self).__name__}; call .to_tensordict() first or use "
+                f"inplace=False."
             )
+        if not inplace and self._masked_select_on_dense_copy:
+            return self.to_tensordict().masked_select(mask)
 
         d = {}
         mask_expand = mask

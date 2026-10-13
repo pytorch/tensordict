@@ -130,6 +130,10 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
 
     _td_dim_names = None
     _masking_on_dense_copy = True
+    _masked_select_on_dense_copy = True
+    # masked_select(inplace=True) cannot change the batch size of the stored
+    # members
+    _masked_select_inplace_unsupported = True
     # each read fetches the entry from the server into a new tensor
     _reads_return_copies = True
     # and each sub-tensordict is a new TensorDict
@@ -493,16 +497,6 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
             self.set_(key, tensor)
         return self
 
-    # Override: to_tensordict reads all the entries in one round trip.
-    def masked_select(self, mask, *, inplace=False):
-        if inplace:
-            raise NotImplementedError(
-                f"masked_select(inplace=True) is not supported on "
-                f"{type(self).__name__}; call .to_tensordict() first or use "
-                f"inplace=False."
-            )
-        return self.to_tensordict().masked_select(mask)
-
     # ---- pickling: materialize, don't try to serialize the view ----
 
     def __reduce__(self):
@@ -683,6 +677,10 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
 
     _td_dim_names = None
     _masking_on_dense_copy = True
+    _masked_select_on_dense_copy = True
+    # masked_select(inplace=True) cannot change the batch size of the stored
+    # members
+    _masked_select_inplace_unsupported = True
     # each read fetches the entry from the server into a new tensor
     _reads_return_copies = True
     # and each sub-tensordict is a new TensorDict
@@ -2325,16 +2323,6 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
             tensor = tensor.masked_fill(entry_mask, value)
             self.set_(key, tensor)
         return self
-
-    # Override: to_tensordict reads all the entries in one round trip.
-    def masked_select(self, mask, *, inplace=False):
-        if inplace:
-            raise NotImplementedError(
-                f"masked_select(inplace=True) is not supported on "
-                f"{type(self).__name__}; call .to_tensordict() first or use "
-                f"inplace=False."
-            )
-        return self.to_tensordict().masked_select(mask)
 
     # ---- Pickling ----
 
