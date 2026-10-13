@@ -524,6 +524,7 @@ class _ShapeOps:
             return tensor.reshape((*shape, *tensor.shape[batch_dims:]))
 
         if inplace:
+            self._raise_if_holds_lazy_stack("reshape")
 
             def nested_fn(nested):
                 nested.reshape((*shape, *nested.batch_size[batch_dims:]), inplace=True)
@@ -645,6 +646,7 @@ class _ShapeOps:
             )
 
         if inplace:
+            self._raise_if_holds_lazy_stack("repeat_interleave")
 
             def nested_fn(nested):
                 nested.repeat_interleave(
@@ -738,6 +740,7 @@ class _ShapeOps:
                     "repeat(inplace=True) is not supported on LazyStackedTensorDict; "
                     "call .to_tensordict() first or use inplace=False."
                 )
+            self._raise_if_holds_lazy_stack("repeat")
             new_batch_size = torch.Size(
                 [s * r for s, r in zip(self.batch_size, repeats)]
             )
@@ -1282,6 +1285,7 @@ class _ShapeOps:
                     "gather(inplace=True) is not supported on LazyStackedTensorDict; "
                     "call .to_tensordict() first or use inplace=False."
                 )
+            self._raise_if_holds_lazy_stack("gather")
             if index.ndim != self.batch_dims:
                 raise NotImplementedError(
                     f"gather(inplace=True) requires index.ndim == self.batch_dims "
@@ -2296,6 +2300,7 @@ class _ShapeOps:
                     "LazyStackedTensorDict; call .to_tensordict() first or use "
                     "inplace=False."
                 )
+            self._raise_if_holds_lazy_stack("flatten")
 
             def nested_fn(nested):
                 nested.flatten(start_dim, end_dim, inplace=True)
@@ -2366,6 +2371,7 @@ class _ShapeOps:
                     "LazyStackedTensorDict; call .to_tensordict() first or use "
                     "inplace=False."
                 )
+            self._raise_if_holds_lazy_stack("unflatten")
 
             def nested_fn(nested):
                 nested.unflatten(dim, unflattened_size, inplace=True)
