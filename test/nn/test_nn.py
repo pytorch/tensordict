@@ -3413,6 +3413,45 @@ class TestProbabilisticTensorDictModule:
         assert torch.equal(sample, td["loc"])
 
     @pytest.mark.parametrize("param", ["logits", "probs"])
+    def test_onehot_categorical_mode_ties(self, param):
+        # Tied logits, e.g. from a zero-initialised head, give the first
+        # maximum, as torch's OneHotCategorical does (pytorch/tensordict#2145).
+        logits = torch.tensor([[0.0, 0.0, -1.0], [0.0, 0.0, 0.0], [0.3, 2.0, 1.0]])
+        expected = torch.tensor([[1, 0, 0], [1, 0, 0], [0, 1, 0]])
+        kwargs = {param: logits if param == "logits" else logits.softmax(-1)}
+        dist = OneHotCategorical(**kwargs)
+        assert dist.mode.dtype == torch.long
+        assert torch.equal(dist.mode, expected)
+        assert torch.equal(dist.deterministic_sample, expected)
+        assert torch.equal(dist.mode, distributions.OneHotCategorical(**kwargs).mode)
+        module = ProbabilisticTensorDictModule(
+            in_keys=[param],
+            out_keys=["action"],
+            distribution_class=OneHotCategorical,
+        )
+        td = module(TensorDict(kwargs, batch_size=[3]))
+        assert torch.equal(td["action"], expected)
+
+    def test_deterministic_sample_read_once(self):
+        reads = []
+
+        class CountingDelta(Delta):
+            @property
+            def deterministic_sample(self):
+                reads.append(None)
+                return super().deterministic_sample
+
+        module = ProbabilisticTensorDictModule(
+            in_keys=["param"],
+            out_keys=["out"],
+            distribution_class=CountingDelta,
+            default_interaction_type="deterministic",
+        )
+        td = module(TensorDict(param=torch.ones(3)))
+        assert torch.equal(td["out"], torch.ones(3))
+        assert len(reads) == 1
+
+    @pytest.mark.parametrize("param", ["logits", "probs"])
     def test_onehot_categorical_rsample(self, param):
         torch.manual_seed(0)
         logits = torch.randn(3, 4, requires_grad=True)
