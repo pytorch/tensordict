@@ -65,6 +65,19 @@ if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
 
 
+def _memmap_like_stand_in(key: NestedKey, x: torch.Tensor) -> torch.Tensor:
+    """Returns a leaf that ``memmap_like`` can pass to ``_memmap_(like=True)`` without copying values."""
+    _raise_if_jagged(x, key)
+    if x.is_nested:
+        # A nested tensor has no ``shape`` to expand to. ``_memmap_(like=True)``
+        # reads only its nested sizes and dtype, so the leaf itself works as a
+        # stand-in. Dropping the MemoryMappedTensor subclass makes
+        # ``MemoryMappedTensor.from_tensor`` allocate a new file instead of
+        # reusing an existing memory-mapped one.
+        return x.as_subclass(torch.Tensor)
+    return torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
+
+
 class _Serialization:
     """TensorDict's own storage formats: memory-mapping, saving, loading, consolidation and state dicts."""
 
@@ -1348,11 +1361,7 @@ class _Serialization:
             # we create an empty copy of self
             # This is because calling MMapTensor.from_tensor(mmap_tensor) does nothing
             # if both are in filesystem
-            def empty(key, x):
-                _raise_if_jagged(x, key)
-                return torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
-
-            input = self.apply(empty, named=True, nested_keys=True)
+            input = self.apply(_memmap_like_stand_in, named=True, nested_keys=True)
             result = input._memmap_(
                 prefix=prefix,
                 copy_existing=copy_existing,
@@ -1369,11 +1378,7 @@ class _Serialization:
                 return result
             return TensorDictFuture(futures, result)
 
-        def empty_expand(key, x):
-            _raise_if_jagged(x, key)
-            return torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
-
-        input = self.apply(empty_expand, named=True, nested_keys=True)
+        input = self.apply(_memmap_like_stand_in, named=True, nested_keys=True)
         return input._memmap_(
             prefix=prefix,
             copy_existing=copy_existing,
