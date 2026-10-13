@@ -2887,29 +2887,38 @@ class LazyStackedTensorDict(TensorDictBase):
         data_type = type(self.tensordicts[0].get(key))
         if not _is_tensor_collection(data_type):
             return data_type
-        # The class that get() builds with lazy_stack(): non-tensor data and
-        # tensorclasses keep their type only if every member holds one.
+        if data_type is TensorDict:
+            return LazyStackedTensorDict
         non_tensor = getattr(data_type, "_is_non_tensor", False)
         if non_tensor or getattr(data_type, "_is_tensorclass", False):
-            if isinstance(key, str):
-                entries = (
-                    td._tensordict.get(key)
-                    if type(td) is TensorDict
-                    else td._get_str(key, None)
-                    for td in self.tensordicts[1:]
-                )
-            else:
-                entries = (td.get(key, None) for td in self.tensordicts[1:])
-            if non_tensor:
-                if all(
-                    type(entry) is data_type or is_non_tensor(entry)
-                    for entry in entries
-                ):
-                    from tensordict.tensorclass import NonTensorStack
+            return self._entry_class_exact(key, data_type, non_tensor)
+        return LazyStackedTensorDict
 
-                    return NonTensorStack
-            elif all(type(entry) is data_type for entry in entries):
-                return data_type
+    def _entry_class_exact(
+        self, key: NestedKey, data_type: type, non_tensor: bool
+    ) -> type:
+        # The class that get() builds with lazy_stack(): non-tensor data and
+        # tensorclasses keep their type only if every member holds one. Kept
+        # out of entry_class() so that its generators' closure cells do not
+        # slow down the tensor path.
+        if isinstance(key, str):
+            entries = (
+                td._tensordict.get(key)
+                if type(td) is TensorDict
+                else td._get_str(key, None)
+                for td in self.tensordicts[1:]
+            )
+        else:
+            entries = (td.get(key, None) for td in self.tensordicts[1:])
+        if non_tensor:
+            if all(
+                type(entry) is data_type or is_non_tensor(entry) for entry in entries
+            ):
+                from tensordict.tensorclass import NonTensorStack
+
+                return NonTensorStack
+        elif all(type(entry) is data_type for entry in entries):
+            return data_type
         return LazyStackedTensorDict
 
     def _storage_is_read_only(self) -> bool:
