@@ -268,7 +268,8 @@ def lazy_stack(input: Sequence["T"], dim: int = 0, *, out=None, **kwargs) -> "T"
             have the same number of dimensions. If a dimension differs
             between inputs, it is ``-1`` in the stacked batch size.
         dim (int, optional): the new dimension. Defaults to ``0``. A ``dim``
-            below ``-batch_dims - 1`` warns, and wraps around a second time.
+            below ``-batch_dims - 1`` warns and wraps around once more (and
+            raises if it is still out of range).
             Starting with TensorDict 0.17, the default will change to raising
             an ``IndexError``, as for a tensor.
 
