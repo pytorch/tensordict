@@ -190,6 +190,26 @@ class TestH5Serialization:
         assert set(h5td.keys(True, True)) == {("n", "sub"), ("n", "c")}
         h5td.close()
 
+    def test_del_read_group_then_set(self, tmp_path):
+        # a sub-tensordict read before del_ must not catch the new entry at its key
+        td = TensorDict(
+            a=torch.zeros(3),
+            nested=TensorDict(d=torch.ones(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        h5td.get("nested")
+        h5td.del_("nested")
+        h5td.set("nested", TensorDict(z=torch.zeros(3), batch_size=[3]))
+        assert set(h5td.keys(True, True)) == {"a", ("nested", "z")}
+        assert set(h5td["nested"].keys()) == {"z"}
+        # the same one level down
+        h5td.get("nested")
+        h5td.del_(("nested", "z"))
+        h5td.set(("nested", "w"), torch.ones(3))
+        assert set(h5td.keys(True, True)) == {"a", ("nested", "w")}
+        h5td.close()
+
     def test_device_setter(self, tmp_path):
         # as on a TensorDict, the device changes only through to()
         td = TensorDict({"a": torch.zeros(3)}, [3])
@@ -227,6 +247,39 @@ class TestH5Serialization:
         with pytest.warns(FutureWarning, match="TensorDict 0.17"):
             h5td.names = ["x"]
         assert h5td["s"].names == ["x", None]
+        h5td.close()
+
+    @pytest.mark.parametrize(
+        "op_name,args,same_args",
+        [
+            ("reshape", (6,), (2, 3)),
+            ("flatten", (0, 1), (0, 0)),
+            ("repeat", (2, 1), (1, 1)),
+            ("unflatten", (1, (3, 1)), (1, (3,))),
+            ("repeat_interleave", (2, 0), (1, 0)),
+            ("gather", (1, torch.zeros(2, 1, dtype=torch.long)), None),
+            ("masked_select", (torch.ones(2, 3, dtype=torch.bool),), None),
+        ],
+    )
+    def test_inplace_shape_op_raises_before_writing(
+        self, tmp_path, op_name, args, same_args
+    ):
+        # The file cannot change its batch size in place: the call raises
+        # before it rewrites any dataset
+        td = TensorDict(
+            {"x": torch.zeros(2, 3, 4), "n": {"y": torch.zeros(2, 3)}}, [2, 3]
+        )
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        with pytest.raises(
+            NotImplementedError, match="changes the batch size.*to_tensordict"
+        ):
+            getattr(h5td, op_name)(*args, inplace=True)
+        assert h5td.batch_size == (2, 3)
+        assert h5td["x"].shape == (2, 3, 4)
+        assert h5td["n", "y"].shape == (2, 3)
+        if same_args is not None:
+            # a call that keeps the batch size still works
+            assert getattr(h5td, op_name)(*same_args, inplace=True) is h5td
         h5td.close()
 
     def test_batch_size_setter_incompatible(self, tmp_path):

@@ -588,6 +588,15 @@ class _Serialization:
             If the tensordict is already consolidated, all arguments are ignored and ``self``
             is returned. Call :meth:`~.contiguous` to re-consolidate.
 
+        .. note::
+            A pickle (or :func:`torch.save`, :meth:`~.send`, :meth:`~.broadcast`) of a
+            consolidated tensordict is rebuilt from metadata recorded here. Setting
+            ``batch_size`` or ``names`` on the consolidated tensordict updates that
+            metadata; setting them directly on a nested tensordict, as in
+            ``td["nested"].batch_size = ...``, may not. Call ``consolidate()`` again
+            afterwards: on a consolidated tensordict, it writes the current batch sizes
+            and names into that metadata.
+
         Examples:
             >>> import pickle
             >>> import torch
@@ -607,6 +616,7 @@ class _Serialization:
 
         """
         if self.is_consolidated():
+            self._update_consolidated_metadata()
             return self
 
         (
@@ -941,6 +951,15 @@ class _Serialization:
             consolidated = getattr(td, "_consolidated", None)
             if consolidated is not None:
                 consolidated["stale"] = True
+
+    def _update_consolidated_metadata(self) -> None:
+        # pickle, torch.save and send rebuild a consolidated tensordict from
+        # the metadata of consolidate(): write the current batch sizes and
+        # names into it
+        consolidated = getattr(self, "_consolidated", None)
+        if consolidated is None or consolidated.get("metadata") is None:
+            return
+        _update_consolidated_metadata(self, consolidated["metadata"])
 
     def memmap_(
         self,
@@ -1902,3 +1921,31 @@ class _Serialization:
                     device_module.synchronize()
 
         return result
+
+
+def _update_consolidated_metadata(td, metadata: dict) -> None:
+    """Writes the batch sizes and names of ``td``'s tree into its consolidated ``metadata``, in place."""
+    cls_metadata = metadata["cls_metadata"]
+    if "stack_dim" in cls_metadata:
+        # a lazy stack records its members under "0", "1", ...
+        cls_metadata["stack_dim_name"] = td._td_dim_name
+
+        def get(key):
+            return td.tensordicts[int(key)]
+
+    else:
+        cls_metadata["batch_size"] = list(td.batch_size)
+        cls_metadata["names"] = td.names
+
+        def get(key):
+            return td._get_str(key, NO_DEFAULT)
+
+    non_tensors = metadata["non_tensors"]
+    for key, (data, _, device) in list(non_tensors.items()):
+        non_tensors[key] = (data, list(get(key).batch_size), device)
+    for key, value in metadata.items():
+        if key in ("cls_metadata", "non_tensors", "leaves") or not isinstance(
+            value, dict
+        ):
+            continue
+        _update_consolidated_metadata(get(key), value)
