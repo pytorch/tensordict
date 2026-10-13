@@ -319,8 +319,9 @@ layout to send a tensordict as one message. See
 tensordict, it allowlists the classes and functions that these files
 reference, with [`torch.serialization.add_safe_globals()`](https://docs.pytorch.org/docs/stable/notes/serialization.html#torch.serialization.add_safe_globals). The list covers
 [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), [`LazyStackedTensorDict`](reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict),
-consolidated tensordicts, and non-tensor values made of Python builtins, such
-as strings, numbers, lists, and dicts:
+consolidated tensordicts, non-tensor values made of Python builtins, such
+as strings, numbers, lists, and dicts, and the `torch.return_types` that
+`max(dim=...)`, `min(dim=...)`, `cummax` and `cummin` return:
 
 ```
 >>> batch = TensorDict({"loss": torch.zeros(3), "meta": {"split": "train"}}, batch_size=[3])
