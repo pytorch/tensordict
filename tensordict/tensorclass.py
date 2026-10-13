@@ -93,7 +93,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
 from torch import multiprocessing as mp, Tensor
 from torch.compiler import is_compiling, is_dynamo_compiling
 from torch.multiprocessing import Manager
-from torch.utils._pytree import tree_map
+from torch.utils._pytree import tree_is_leaf, tree_map
 
 if TYPE_CHECKING:
     from typing import Self
@@ -5838,8 +5838,22 @@ class NonTensorDataBase(TensorClass):
             names=self.names if self._has_names() else None,
         )
 
+    def copy(self):
+        """Return a shallow copy, equivalent to ``_clone(recurse=False)``."""
+        return self._clone(recurse=False)
+
     def _clone(self, recurse: bool = True):
-        result = TensorClass._clone(self, recurse)
+        non_tensordict = self._non_tensordict
+        if not recurse and all(map(tree_is_leaf, non_tensordict.values())):
+            # TensorClass._clone would copy the values with tree_map, which
+            # returns pytree leaves unchanged: skip it.
+            result = self._from_tensordict(
+                self._tensordict._clone(recurse=False),
+                dict(non_tensordict),
+                safe=False,
+            )
+        else:
+            result = TensorClass._clone(self, recurse)
         if not recurse and self._tensordict._is_shared:
             # The shallow copy holds the same shared wrapper: mark it shared so
             # that reads unwrap the value and in-place updates write through it.

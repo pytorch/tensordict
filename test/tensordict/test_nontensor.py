@@ -1885,6 +1885,36 @@ class TestNonTensorData:
             assert type(td["val"]) is type(val1)
             assert td["val"] == val1
 
+    @pytest.mark.parametrize("data", ["a string", 3, None, [1, 2], {"a": [1]}])
+    def test_copy(self, data, monkeypatch):
+        nt = NonTensorData(data, batch_size=[2], names=["n"], device="cpu")
+        is_leaf = not isinstance(data, (list, dict))
+        if is_leaf:
+            # A shallow copy of a value that is not a container skips the
+            # pytree pass over the non-tensor fields (#2554)
+            def tree_map(*args, **kwargs):
+                raise AssertionError("tree_map was called")
+
+            monkeypatch.setattr(
+                sys.modules[NonTensorData.__module__], "tree_map", tree_map
+            )
+        for copy in (nt.copy(), nt._clone(recurse=False)):
+            assert type(copy) is NonTensorData
+            assert copy._tensordict is not nt._tensordict
+            assert copy.batch_size == nt.batch_size
+            assert copy.names == nt.names
+            assert copy.device == nt.device
+            assert copy.data == data
+            # containers are copied, other values are not
+            assert (copy.data is nt.data) is is_leaf
+
+    def test_shared_copy_non_tensor_data(self):
+        # copy() of a shared NonTensorData reads the value, not the shared
+        # wrapper, as clone(recurse=False) does
+        nt = NonTensorData("hello").share_memory_()
+        for copy in (nt.copy(), nt.clone(recurse=False)):
+            assert copy.data == "hello"
+
     def test_shared_copy(self):
         # A shallow copy of a shared tensordict reads the values, not the
         # shared wrappers, and keeps sharing them like the tensors
