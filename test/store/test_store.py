@@ -656,6 +656,36 @@ class TestTensorDictStore:
         result = store_td["obs"]
         assert torch.allclose(result, torch.full((10, 3), 42.0))
 
+    def test_fill_nested(self, store_td):
+        """fill_ on a nested key fills each of its leaves on the server."""
+        store_td["nested"] = TensorDict(
+            a=torch.zeros(10, 3),
+            m=TensorDict(b=torch.zeros(10), batch_size=[10]),
+            batch_size=[10],
+        )
+        assert store_td.fill_("nested", 2.0) is store_td
+        assert (store_td["nested", "a"] == 2).all()
+        assert (store_td["nested", "m", "b"] == 2).all()
+
+    @pytest.mark.parametrize("key", ["missing", ("missing", "x")])
+    def test_fill_missing_key(self, store_td, key):
+        """fill_ of a missing key raises a KeyError, as on a TensorDict."""
+        store_td["obs"] = torch.zeros(10, 3)
+        with pytest.raises(KeyError):
+            store_td.fill_(key, 1.0)
+
+    def test_detach_no_read(self, store_td, monkeypatch):
+        """detach_ returns the store without calling the server."""
+        store_td["obs"] = torch.zeros(10, 3)
+
+        def no_round_trip(self, coro):
+            coro.close()
+            raise AssertionError("the server was called")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(TensorDictStore, "_run_sync", no_round_trip)
+            assert store_td.detach_() is store_td
+
     def test_inplace_methods_write(self, store_td):
         """The in-place methods, update_ and copy_ write to the server (#2242)."""
         source = TensorDict(
@@ -750,6 +780,18 @@ class TestTensorDictStore:
         for key in expected.keys(include_nested=True, leaves_only=True):
             torch.testing.assert_close(store_td[key], expected[key])
 
+    def test_masked_fill_non_tensor(self, store_td):
+        """masked_fill_ leaves a non-tensor entry unchanged, as on a TensorDict."""
+        store_td["a"] = torch.zeros(10, 3)
+        store_td["text"] = "hello"
+        mask = torch.zeros(10, dtype=torch.bool)
+        mask[[1, 4]] = True
+        assert store_td.masked_fill_(mask, 1.0) is store_td
+        torch.testing.assert_close(
+            store_td["a"], torch.zeros(10, 3).masked_fill_(mask[:, None], 1.0)
+        )
+        assert store_td["text"] == "hello"
+
     def test_masked_select_inplace(self, store_td):
         """masked_select(inplace=True) masks the entries of the store itself."""
         source = TensorDict(
@@ -767,6 +809,33 @@ class TestTensorDictStore:
         expected = source.masked_select(mask)
         for key in expected.keys(include_nested=True, leaves_only=True):
             torch.testing.assert_close(store_td[key], expected[key])
+
+    def test_masked_select_copy(self, store_td, monkeypatch):
+        """masked_select returns a dense copy, read in one to_tensordict call."""
+        source = TensorDict(
+            {
+                "a": torch.arange(10.0),
+                "nested": TensorDict({"d": torch.ones(10, 4)}, [10]),
+            },
+            [10],
+        )
+        store_td.update(source)
+        mask = torch.zeros(10, dtype=torch.bool)
+        mask[[1, 4, 7]] = True
+        calls = []
+        to_tensordict = TensorDictStore.to_tensordict
+
+        def counting_to_tensordict(self, *args, **kwargs):
+            calls.append(self)
+            return to_tensordict(self, *args, **kwargs)
+
+        monkeypatch.setattr(TensorDictStore, "to_tensordict", counting_to_tensordict)
+        result = store_td.masked_select(mask)
+        assert len(calls) == 1 and calls[0] is store_td
+        assert type(result) is TensorDict
+        assert (result == source.masked_select(mask)).all()
+        assert store_td.batch_size == (10,)
+        assert (store_td.to_tensordict() == source).all()
 
     def test_is_contiguous(self, store_td):
         """Redis TDs are not contiguous."""
@@ -2575,11 +2644,96 @@ class TestLazyStackedTensorDictStore:
     def test_masked_select_inplace_raises(self, store_stack):
         """masked_select(inplace=True) raises on the stack and its element views."""
         store_td, tds, lazy_td = store_stack
-        with pytest.raises(NotImplementedError, match="masked_select"):
+        with pytest.raises(
+            NotImplementedError,
+            match="masked_select.inplace=True. is not supported on "
+            "LazyStackedTensorDictStore",
+        ):
             store_td.masked_select(torch.ones(5, 4, dtype=torch.bool), inplace=True)
-        with pytest.raises(NotImplementedError, match="masked_select"):
+        with pytest.raises(
+            NotImplementedError,
+            match="masked_select.inplace=True. is not supported on "
+            "_StoreStackElementView",
+        ):
             store_td[1].masked_select(torch.ones(4, dtype=torch.bool), inplace=True)
         assert store_td.batch_size == torch.Size([5, 4])
+        # the store is still readable
+        assert (store_td.to_tensordict() == lazy_td).all()
+
+    @pytest.mark.parametrize("element", [False, True])
+    def test_masked_select_copy(self, store_stack, element, monkeypatch):
+        """masked_select returns a dense copy, read in one to_tensordict call."""
+        store_td, tds, lazy_td = store_stack
+        target, expected = (store_td[1], tds[1]) if element else (store_td, lazy_td)
+        mask = torch.zeros(target.shape, dtype=torch.bool)
+        mask[1] = True
+        mask[-1] = True
+        calls = []
+        cls = type(target)
+        to_tensordict = cls.to_tensordict
+
+        def counting_to_tensordict(self, *args, **kwargs):
+            calls.append(self)
+            return to_tensordict(self, *args, **kwargs)
+
+        monkeypatch.setattr(cls, "to_tensordict", counting_to_tensordict)
+        result = target.masked_select(mask)
+        assert len(calls) == 1 and calls[0] is target
+        assert type(result) is TensorDict
+        assert (result == expected.masked_select(mask)).all()
+        monkeypatch.undo()
+        assert (store_td.to_tensordict() == lazy_td).all()
+
+    @pytest.mark.parametrize("key", ["missing", ("missing", "x")])
+    def test_fill_missing_key(self, store_stack, key):
+        """fill_ of a missing key raises a KeyError, on the stack and on an element view."""
+        store_td, tds, lazy_td = store_stack
+        for td in (store_td, store_td[1]):
+            with pytest.raises(KeyError):
+                td.fill_(key, 1.0)
+
+    def test_detach_no_read(self, store_stack, monkeypatch):
+        """detach_ returns the stack or the element view without calling the server."""
+        store_td, tds, lazy_td = store_stack
+        view = store_td[1]
+
+        def no_round_trip(self, coro):
+            coro.close()
+            raise AssertionError("the server was called")
+
+        with monkeypatch.context() as patch:
+            for cls in (LazyStackedTensorDictStore, _StoreStackElementView):
+                patch.setattr(cls, "_run_sync", no_round_trip)
+            assert store_td.detach_() is store_td
+            assert view.detach_() is view
+
+    def test_view_fill_nested(self, store_kwargs):
+        """fill_ on a nested key of an element view fills that element only."""
+        lazy_td = lazy_stack(
+            [
+                TensorDict(
+                    a=torch.zeros(3),
+                    n=TensorDict(
+                        b=torch.zeros(3, 2),
+                        m=TensorDict(c=torch.zeros(3), batch_size=[3]),
+                        batch_size=[3],
+                    ),
+                    batch_size=[3],
+                )
+                for _ in range(4)
+            ]
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            for td in (store_td, lazy_td):
+                view = td[1]
+                assert view.fill_("n", 5.0) is view
+            assert_allclose_td(store_td.to_tensordict(), lazy_td.to_tensordict())
+            assert (store_td["n", "m", "c"][1] == 5).all()
+            assert (store_td["n", "b"][2] == 0).all()
+        finally:
+            store_td.clear_redis()
+            store_td.close()
 
     def test_view_masked_fill_(self, store_stack):
         """rltd[1].masked_fill_ fills the masked rows of element 1 only."""
@@ -2626,11 +2780,11 @@ class TestLazyStackedTensorDictStore:
 
     @pytest.mark.parametrize("batch_size,mask_shape", [[(5, 4), (4,)], [(5, 5), (5,)]])
     def test_masked_fill_trailing_mask(self, store_kwargs, batch_size, mask_shape):
-        """A mask that is not batch-shaped still broadcasts from the right.
+        """A mask that is not batch-shaped still broadcasts from the right, with a warning.
 
-        TensorDict.masked_fill_ rejects these masks, but the store has always
-        accepted them for entries without feature dims. The behaviour is kept
-        for compatibility.
+        TensorDict.masked_fill_ aligns a mask with the leading batch dims, but
+        the store has always broadcast these masks from the right. This is
+        kept until TensorDict 0.17.
         """
         lazy_td = lazy_stack(
             [
@@ -2642,10 +2796,91 @@ class TestLazyStackedTensorDictStore:
         try:
             mask = torch.zeros(mask_shape, dtype=torch.bool)
             mask[1] = True
-            store_td.masked_fill_(mask, 1.0)
+            match = (
+                r"^Calling LazyStackedTensorDictStore\.masked_fill_ with a mask of "
+                r"shape .* broadcasts the mask from the right .* will be removed "
+                r"in TensorDict 0\.17\."
+            )
+            with pytest.warns(FutureWarning, match=match) as record:
+                assert store_td.masked_fill_(mask, 1.0) is store_td
+            assert record[0].filename == __file__
             torch.testing.assert_close(
                 store_td["b"], torch.zeros(batch_size).masked_fill(mask, 1.0)
             )
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_masked_fill_entry_shaped_mask(self, store_kwargs):
+        """A mask of the shape of every entry fills it as TensorDict does, without a warning."""
+        lazy_td = lazy_stack(
+            [TensorDict(a=torch.zeros(3, 2), batch_size=[3]) for _ in range(4)]
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            mask = torch.zeros(4, 3, 2, dtype=torch.bool)
+            mask[1, 2, 0] = True
+            expected = torch.zeros(4, 3, 2).masked_fill(mask, 1.0)
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", FutureWarning)
+                assert store_td.masked_fill_(mask, 1.0) is store_td
+            torch.testing.assert_close(store_td["a"], expected)
+            # a mask with the entry's dims that broadcasts from a dim of size 1
+            # fills the same elements either way
+            for mask in (
+                torch.ones(4, 1, 2, dtype=torch.bool),
+                torch.ones(1, 3, 2, dtype=torch.bool),
+            ):
+                mask[0, 0, 1] = False
+                expected = store_td["a"].masked_fill(mask, 2.0)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("error", FutureWarning)
+                    assert store_td.masked_fill_(mask, 2.0) is store_td
+                torch.testing.assert_close(store_td["a"], expected)
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_masked_fill_warns_before_writing(self, store_kwargs):
+        """The FutureWarning for a mask that is not batch-shaped comes before any write."""
+        lazy_td = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(3, 2), d=torch.zeros(3, 2, 5), batch_size=[3])
+                for _ in range(4)
+            ]
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            mask = torch.ones(4, 3, 2, dtype=torch.bool)
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", FutureWarning)
+                with pytest.raises(FutureWarning, match="broadcasts the mask"):
+                    store_td.masked_fill_(mask, 1.0)
+            assert_allclose_td(store_td.to_tensordict(), lazy_td.to_tensordict())
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_masked_fill_heterogeneous(self, store_kwargs):
+        """masked_fill_ on a store whose elements differ in shape (#2030).
+
+        A 0-d mask fills each element; a batch-shaped mask cannot be split
+        over the elements of the entries that differ in shape.
+        """
+        tds = [
+            TensorDict(a=torch.zeros(3), h=torch.zeros(3, 2 + i), batch_size=[3])
+            for i in range(2)
+        ]
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            with pytest.raises(RuntimeError, match=r"^masked_fill_ cannot split"):
+                store_td.masked_fill_(torch.ones(2, 3, dtype=torch.bool), 1.0)
+            assert store_td.masked_fill_(torch.tensor(True), 1.0) is store_td
+            torch.testing.assert_close(store_td["a"], torch.ones(2, 3))
+            for i in range(2):
+                torch.testing.assert_close(store_td[i]["h"], torch.ones(3, 2 + i))
         finally:
             store_td.clear_redis()
             store_td.close()
@@ -2875,6 +3110,54 @@ class TestLazyStackedTensorDictStore:
                     td["n", "m"] = TensorDict(c=td["a"], batch_size=td.shape)
                 td.unlock_()
             assert_allclose_td(store_td.to_tensordict(), lazy_td.to_tensordict())
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_view_of_locked_store(self, store_kwargs):
+        """The view of an element of a locked store raises for a new key and writes the keys the store has (#2404)."""
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(
+                [
+                    TensorDict(a=torch.zeros(3), n=TensorDict(b=torch.zeros(3)))
+                    for _ in range(2)
+                ]
+            ),
+            **store_kwargs,
+        )
+        try:
+            store_td.lock_()
+            view = store_td[1]
+            for key in ("x", ("n", "x")):
+                with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                    view.set(key, torch.ones(3))
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                view.update({"x": torch.ones(3)}, inplace=True)
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                view["n"] = TensorDict(c=torch.ones(3))
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                view.set("n", TensorDict(b=torch.ones(3), c=torch.ones(3)))
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                view["n"] = torch.ones(3)
+            assert list(store_td.keys(True, True)) == ["a", ("n", "b")]
+            # the keys the store has are written, with or without inplace
+            view.set("a", torch.ones(3))
+            view.set(("n", "b"), torch.ones(3))
+            view.update({"a": view["a"] + 1})
+            view.update({"a": view["a"] + 1}, inplace=True)
+            torch.testing.assert_close(store_td["a"][1], torch.full((3,), 3.0))
+            torch.testing.assert_close(store_td["n", "b"][1], torch.ones(3))
+            torch.testing.assert_close(store_td["a"][0], torch.zeros(3))
+            # the view follows the lock of the store
+            store_td.unlock_()
+            view.set("x", torch.ones(3))
+            torch.testing.assert_close(store_td["x"][1], torch.ones(3))
+            # a locked view still needs inplace for the keys the store has
+            view.lock_()
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                view.set("a", torch.ones(3))
+            view.set("a", torch.zeros(3), inplace=True)
+            torch.testing.assert_close(store_td["a"][1], torch.zeros(3))
         finally:
             store_td.clear_redis()
             store_td.close()

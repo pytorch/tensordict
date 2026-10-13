@@ -37,7 +37,6 @@ from tensordict.utils import (
     _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
-    expand_as_right,
     is_non_tensor,
     NestedKey,
     unravel_key,
@@ -306,8 +305,10 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
 
     _td_dim_names = None
     _masking_on_dense_copy = True
+    _masked_select_on_dense_copy = True
     # each read fetches the entry from the server into a new tensor
     _reads_return_copies = True
+    _storage_holds_no_gradients = True
     _rename_key_lenient = True
     # Set on the shallow copies that _clone(recurse=False) returns: they share
     # the data and the metadata keys of the store, but not its batch size.
@@ -2315,10 +2316,6 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
     def is_contiguous(self) -> bool:
         return False
 
-    # Override: the server holds no gradients.
-    def detach_(self) -> Self:
-        return self
-
     def _check_new_batch_size(self, new_size: torch.Size) -> None:
         # Check the stored shapes of the tensors instead of fetching them. A
         # non-tensor value stored once fits any batch size; one written per
@@ -2349,16 +2346,6 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         if not self._prefix and not self._is_shallow_copy:
             self._run_sync(self._apersist_metadata())
 
-    def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
-        existing = self.get(key)
-        if is_tensor_collection(existing):
-            for subkey in existing.keys():
-                existing.fill_(subkey, value)
-        else:
-            existing = existing.fill_(value)
-            self.set_(key, existing)
-        return self
-
     # Override: a TensorDict skeleton, built without reading the data.
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
@@ -2388,21 +2375,6 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
             batch_size=self.batch_size if batch_size is None else batch_size,
             names=self.names if names is None and self._has_names() else names,
         )
-
-    # Override: reads give copies, so each filled entry is written back with
-    # set_.
-    def masked_fill_(self, mask, value):
-        for key in self.keys(include_nested=True, leaves_only=True):
-            tensor = self.get(key)
-            tensor = tensor.masked_fill(expand_as_right(mask, tensor), value)
-            self.set_(key, tensor)
-        return self
-
-    # Override: to_tensordict reads all the entries in one round trip.
-    def masked_select(self, mask, *, inplace=False):
-        if inplace:
-            return super().masked_select(mask, inplace=True)
-        return self.to_tensordict().masked_select(mask)
 
     def __repr__(self):
         keys_str = list(self.keys())

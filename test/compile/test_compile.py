@@ -358,6 +358,42 @@ def test_setitem_compiles(value, non_tensor, lazy):
     assert out.tolist() == [expected, expected, 1.0]
 
 
+@pytest.mark.parametrize(
+    "name", ["td == 0", "td != td", "td ^ True", "td.all(0)", "td.where(mask, 0)"]
+)
+def test_comparison_where_fullgraph(name):
+    fn = {
+        "td == 0": lambda td, mask: td == 0,
+        "td != td": lambda td, mask: td != td.clone(),
+        "td ^ True": lambda td, mask: td.bool() ^ True,
+        "td.all(0)": lambda td, mask: td.all(0),
+        "td.where(mask, 0)": lambda td, mask: td.where(mask, 0),
+    }[name]
+    td = TensorDict(
+        a=torch.arange(8.0).view(4, 2),
+        nested=TensorDict(b=torch.arange(4), batch_size=[4]),
+        batch_size=[4],
+    )
+    mask = torch.tensor([True, False, True, False])
+    result = torch.compile(fn, fullgraph=True, backend="eager")(td, mask)
+    assert (result == fn(td, mask)).all()
+
+
+@pytest.mark.xfail(
+    reason="td < tensor breaks the graph: all __torch_function__ overrides "
+    "return NotImplemented",
+    strict=True,
+)
+def test_comparison_tensor_fullgraph():
+    def fn(td, other):
+        return td < other
+
+    td = TensorDict(a=torch.arange(8.0).view(4, 2), batch_size=[4])
+    other = torch.ones(4)
+    result = torch.compile(fn, fullgraph=True, backend="eager")(td, other)
+    assert (result == fn(td, other)).all()
+
+
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
     def test_tensor_output(self, mode):
