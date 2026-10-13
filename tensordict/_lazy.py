@@ -5462,30 +5462,9 @@ class _CustomOpTensorDict(TensorDictBase):
             "Cannot call `unsqueeze` on a lazy tensordict. Make it dense before calling this method by calling `to_tensordict`."
         )
 
-    def _cast_reduction(
-        self,
-        *,
-        reduction_name,
-        dim=NO_DEFAULT,
-        keepdim=NO_DEFAULT,
-        tuple_ok=True,
-        **kwargs,
-    ):
-        try:
-            td = self.to_tensordict()
-        except Exception:
-            raise RuntimeError(
-                f"{reduction_name} requires this object to be cast to a regular TensorDict. "
-                f"If you need {type(self).__name__} to support {reduction_name}, help us by filing an issue"
-                f" on github!"
-            )
-        return td._cast_reduction(
-            reduction_name=reduction_name,
-            dim=dim,
-            keepdim=keepdim,
-            tuple_ok=tuple_ok,
-            **kwargs,
-        )
+    # Override: reduces a dense copy, which is faster than reading each
+    # entry through the view.
+    _cast_reduction = _SubTensorDict._cast_reduction
 
     _add_batch_dim = TensorDict._add_batch_dim
 
