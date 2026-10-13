@@ -843,6 +843,23 @@ def test_empty(benchmark, recurse):
     benchmark(func)
 
 
+def test_to_same_device(benchmark):
+    # A device-less env step whose leaves are already on the CPU
+    td = TensorDict(
+        observation=torch.randn(4),
+        action=torch.randn(2),
+        done=torch.zeros(1, dtype=torch.bool),
+        next=TensorDict(
+            observation=torch.randn(4),
+            reward=torch.randn(1),
+            done=torch.zeros(1, dtype=torch.bool),
+            terminated=torch.zeros(1, dtype=torch.bool),
+        ),
+        collector=TensorDict(traj_ids=torch.zeros((), dtype=torch.long)),
+    )
+    benchmark(td.to, "cpu")
+
+
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device")
 def test_to(benchmark, td):
     benchmark(td.to, "cuda:0")
