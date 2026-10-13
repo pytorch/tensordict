@@ -131,7 +131,11 @@ class _Reductions:
                 device=self.device,
                 names=self._reduced_names(dim),
             )
-        return any(value.any() for value in self._reduction_parts())
+        # A loop, not any() of a generator, which is slower when no part holds a True
+        for value in self._reduction_parts():
+            if value.any():
+                return True
+        return False
 
     def _reduction_parts(self) -> Iterable:
         """The parts whose ``all()`` or ``any()`` give the result of :meth:`all` or :meth:`any` without a dim.
