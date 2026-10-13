@@ -352,6 +352,28 @@ Returns a tuple of indexed tensorclass instances unbound along the indicated dim
 
 Resulting tensorclass instances will share the storage of the initial tensorclass instance.
 
+update_(*input_dict_or_td: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection] | T | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *clone: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *keys_to_update: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***kwargs*)
+
+Writes the entries of a dictionary, a tensordict or a tensorclass into the existing entries.
+
+See [`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_). A tensorclass or dict
+source ignores `keys_to_update`: the entries that it leaves out are
+written too, and the call warns. Starting with TensorDict 0.17, the default
+will change to writing only the entries in `keys_to_update`, as for a
+TensorDict source.
+
+update_at_(*input_dict_or_td: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection] | T*, *index: [None](https://docs.python.org/3/builtins/constants.html#None) | [int](https://docs.python.org/3/builtins/functions.html#int) | [slice](https://docs.python.org/3/builtins/functions.html#slice) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [List](https://docs.python.org/3/library/typing.html#typing.List)[[Any](https://docs.python.org/3/library/typing.html#typing.Any)] | [Tuple](https://docs.python.org/3/library/typing.html#typing.Tuple)[[Any](https://docs.python.org/3/library/typing.html#typing.Any), ...]*, *clone: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *keys_to_update: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
+
+Writes the entries of a dictionary, a tensordict or a tensorclass in place at an index.
+
+See [`update_at_()`](tensordict.TensorDictBase.update_at_.html#tensordict.TensorDictBase.update_at_). A tensorclass or dict
+source that [`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update) accepts, such as one with the batch size of
+the tensorclass, goes to [`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update) instead: its entries replace
+those of the tensorclass whatever the index, and the call warns. Starting
+with TensorDict 0.17, the default will change to writing such a source in
+place at the index, as [`update_at_()`](tensordict.TensorDictBase.update_at_.html#tensordict.TensorDictBase.update_at_)
+does.
+
 ## Tutorials that use `TensorClass`
 
 ![](../../_images/sphx_glr_tensorclass_fashion_thumb.png)
