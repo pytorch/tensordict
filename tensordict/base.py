@@ -1076,7 +1076,7 @@ def _set_at_each_key(
     """Writes ``value`` at ``index`` of every entry of ``td``: the write step of ``td[index] = value``.
 
     ``value`` is not a tensor collection, and ``index`` has been read by
-    ``__setitem__`` (no Ellipsis, no new dim left to add). Every entry is
+    ``__setitem__`` (no Ellipsis left; ``None`` may remain). Every entry is
     written: a tensor entry casts the value to its dtype, a nested tensordict
     writes it into each of its entries, and a non-tensor entry casts a list or
     a number to a tensor. No entry is skipped.

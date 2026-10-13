@@ -1751,6 +1751,13 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             if is_tensor_collection(entry) and not is_non_tensor(entry):
                 # the value is written to each entry of the nested tensordicts
+                if (
+                    warn_cast
+                    and isinstance(original, _SET_AT_CAST_TYPES)
+                    and entry._has_non_tensor
+                    and not (self._is_shared or self._is_memmap)
+                ):
+                    _warn_set_at_cast(None, original)
                 self._get_str(key, NO_DEFAULT)[index] = value
                 return self
             if (
@@ -1818,7 +1825,9 @@ class LazyStackedTensorDict(TensorDictBase):
         for member, member_index, _ in self._split_index(index).parts:
             td = self.tensordicts[member]
             member_index = () if member_index is None else member_index
-            if type(td)._set_at_warns_cast:
+            # the members of a NonTensorStack are NonTensorData tensorclasses,
+            # which do not have the attribute
+            if getattr(type(td), "_set_at_warns_cast", False):
                 td._set_at_str(
                     key,
                     value,

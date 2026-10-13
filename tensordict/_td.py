@@ -1366,13 +1366,18 @@ class TensorDict(TensorDictBase):
             validated = True
             if (
                 warn_cast
-                and getattr(type(tensor_in), "_is_non_tensor", False)
+                and type(tensor_in) is not Tensor
                 and isinstance(original, _SET_AT_CAST_TYPES)
                 and not is_tensor_collection(value)
                 # shared and memmap containers refuse the write below
                 and not (self._is_shared or self._is_memmap)
             ):
-                _warn_set_at_cast(key, original)
+                if getattr(type(tensor_in), "_is_non_tensor", False):
+                    _warn_set_at_cast(key, original)
+                elif is_tensor_collection(tensor_in) and tensor_in._has_non_tensor:
+                    # written into each entry of the nested tensordict, as
+                    # td[index] = value does
+                    _warn_set_at_cast(None, original)
 
         if is_non_tensor(value) and not (self._is_shared or self._is_memmap):
             if isinstance(idx, tuple) and len(idx) == 1:

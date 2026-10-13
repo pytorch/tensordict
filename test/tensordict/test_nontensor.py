@@ -1013,6 +1013,47 @@ class TestNonTensorData:
         assert td[2]["a"] == "s"
 
     @pytest.mark.parametrize("lazy", [False, True], ids=["dense", "lazy"])
+    @pytest.mark.parametrize("nested", ["tensorclass", "tensordict"])
+    @pytest.mark.parametrize(
+        "value", [3, np.bool_(True), [1, 2]], ids=lambda value: type(value).__name__
+    )
+    def test_set_at_cast_into_nested_non_tensor_warns(self, value, nested, lazy):
+        # set_at_ of a list or a scalar on a nested tensordict writes it into
+        # each entry, as td[index] = value does, and warns once (gh-2522)
+        @tensorclass
+        class Named:
+            x: torch.Tensor
+            s: str
+
+        if nested == "tensorclass":
+            inner = Named(x=torch.zeros(3), s="v", batch_size=[3])
+        else:
+            inner = TensorDict(
+                x=torch.zeros(3), s=NonTensorData("v", batch_size=[3]), batch_size=[3]
+            )
+        td = TensorDict(n=inner, batch_size=[3])
+        if lazy:
+            td = lazy_stack(td.unbind(0))
+        with pytest.warns(
+            FutureWarning, match="leaving the non-tensor entries unchanged"
+        ) as w:
+            td.set_at_("n", value, slice(0, 2))
+        assert len(w) == 1
+        assert w[0].filename == __file__
+        assert torch.equal(td[0]["n", "s"], torch.as_tensor(value))
+        assert td[2]["n", "s"] == "v"
+
+    def test_set_at_non_tensor_stack_data(self):
+        # The members of a NonTensorStack are NonTensorData: set_at_ writes
+        # the value into the first one, which holds it as it is
+        stack = NonTensorStack("a", "b", "c")
+        stack.set_at_("data", 3, 0)
+        assert stack.tolist() == [3, "b", "c"]
+        td = TensorDict(s=NonTensorStack("a", "b", "c"), batch_size=[3])
+        td.set_at_(("s", "data"), 3, 0)
+        assert td.get("s").tolist() == [3, "b", "c"]
+
+    @pytest.mark.parametrize("lazy", [False, True], ids=["dense", "lazy"])
     @pytest.mark.parametrize(
         "key,value",
         [
