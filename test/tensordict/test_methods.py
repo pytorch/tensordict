@@ -646,9 +646,24 @@ class TestTensorDicts(TestTensorDictsBase):
                     torch.device("cpu:1"), torch.int, batch_size=torch.Size([])
                 )
         else:
-            td_dtype_device = td.to(
-                torch.device("cpu:1"), torch.int, batch_size=torch.Size([])
-            )
+            # These have batched nested entries, which keep their batch size
+            # in 0.17 instead of getting batch_size=[]
+            with (
+                pytest.warns(FutureWarning, match="TensorDict 0.17")
+                if td_name
+                in (
+                    "nested_td",
+                    "nested_tensorclass",
+                    "td_h5",
+                    "td_with_non_tensor",
+                    "td_with_non_tensor_and_metadata",
+                    "nested_typed_td",
+                )
+                else contextlib.nullcontext()
+            ):
+                td_dtype_device = td.to(
+                    torch.device("cpu:1"), torch.int, batch_size=torch.Size([])
+                )
             assert all(t.dtype == torch.int for t in td_dtype_device.values(True, True))
             assert td_dtype_device.device == torch.device("cpu:1")
             assert td_dtype_device.batch_size == torch.Size([])
