@@ -199,6 +199,25 @@ class TestH5Serialization:
         assert h5td.device is None
         h5td.close()
 
+    def test_batch_size_setter_incompatible(self, tmp_path):
+        # as on a TensorDict, an incompatible batch size raises and the old
+        # one stays
+        td = TensorDict({"a": torch.zeros(2, 3)}, [2])
+        h5td = PersistentTensorDict.from_dict(
+            td, filename=tmp_path / "file.h5", device="cpu"
+        )
+        with pytest.raises(RuntimeError, match="batch size and array size mismatch"):
+            h5td.batch_size = [5]
+        assert h5td.batch_size == (2,)
+        with pytest.raises(RuntimeError, match="batch size and array size mismatch"):
+            h5td.to(batch_size=[5])
+        with pytest.raises(RuntimeError, match="batch size and array size mismatch"):
+            h5td.to("cpu", batch_size=[5])
+        assert h5td.batch_size == (2,)
+        h5td.batch_size = [2, 3]
+        assert h5td.batch_size == (2, 3)
+        h5td.close()
+
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_auto_batch_size(tmpdir):

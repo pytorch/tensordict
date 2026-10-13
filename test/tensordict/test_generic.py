@@ -878,6 +878,9 @@ class TestGeneric:
             assert td.to("cpu", batch_size=[2, 3]) is td
             assert td.batch_size == (2, 3)
             torch.testing.assert_close(td["a"], torch.zeros(2, 3))
+            with pytest.raises(RuntimeError, match="mismatch"):
+                td.to("cpu", batch_size=[5])
+            assert td.batch_size == (2, 3)
         finally:
             td.close()
 
