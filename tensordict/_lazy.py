@@ -4546,18 +4546,48 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def _view(self, *args, raise_if_not_view: bool = True, **kwargs) -> Self:
         shape = _get_shape_from_args(*args, **kwargs)
-        if any(dim < 0 for dim in shape):
-            if not self.batch_size.numel():
-                # Regrouping the members of an empty batch would lose the
-                # keys: reshape a dense copy, which has the shared keys.
-                shape = torch.Size(_infer_size_impl(shape, 0))
-                if shape == self.batch_size:
-                    return self
-                return self.contiguous().reshape(shape)
+        has_neg_dim = any(dim < 0 for dim in shape)
+        if not self.batch_size.numel() and (has_neg_dim or not is_non_tensor(self)):
+            # With no elements, the flatten and unflatten checks match shapes
+            # they cannot regroup, and regrouping can lose the keys. Keep the
+            # regrouped stack only for a -1-free shape it gets right;
+            # otherwise reshape a dense copy, which has the shared keys. A
+            # NonTensorStack is its own contiguous() and its reshape calls
+            # _view with the sizes inferred, so only a -1 is sent back there.
+            shape = torch.Size(_infer_size_impl(shape, 0))
+            if shape == self.batch_size:
+                return self
+            result = None
+            if not has_neg_dim:
+                try:
+                    result = self._regroup(shape)
+                except ValueError:
+                    # chunk(0) in the unflatten branch
+                    pass
+            if (
+                result is not None
+                and result.batch_size == shape
+                and set(result.keys()) == set(self.keys())
+            ):
+                return result
+            result = self.contiguous().reshape(shape)
+            if self.is_locked:
+                result.lock_()
+            return result
+        if has_neg_dim:
             shape = _infer_size_impl(shape, self.numel())
-
-        # Then we just need to reorganize the lazy stack
         shape = torch.Size(shape)
+        result = self._regroup(shape)
+        if result is not None:
+            return result
+        if raise_if_not_view:
+            raise RuntimeError(
+                "Cannot call `view` on a lazy stacked tensordict. Call `reshape` instead."
+            )
+        return TensorDict.reshape(self, shape)
+
+    def _regroup(self, shape: torch.Size) -> Self | None:
+        # Then we just need to reorganize the lazy stack
         is_flatten, (i, j) = _check_is_flatten(
             shape, self.batch_size, return_flatten_dim=True
         )
@@ -4599,11 +4629,7 @@ class LazyStackedTensorDict(TensorDictBase):
             if self.is_locked:
                 return tds.lock_()
             return tds
-        if raise_if_not_view:
-            raise RuntimeError(
-                "Cannot call `view` on a lazy stacked tensordict. Call `reshape` instead."
-            )
-        return TensorDict.reshape(self, shape)
+        return None
 
     def reshape(
         self,
