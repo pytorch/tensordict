@@ -5652,6 +5652,24 @@ class TestToModule:
         assert module.bias is bias
         assert not swap._last_op_queue
 
+    def test_to_module_context_manager_keeps_source_locked(self, as_module):
+        # The exit of the block unlocks the source only to write back the
+        # tensors that the block replaced, so the source keeps its lock and
+        # its shared-memory state, and a sub-tensordict of a locked
+        # tensordict can be the source
+        module = nn.Sequential(nn.Linear(4, 3), nn.Linear(3, 2))
+        weight = module[0].weight
+        params = TensorDict.from_module(module, as_module=as_module)
+        params = params.data.clone().share_memory_()
+        assert params.is_locked
+        with params["0"].to_module(module[0], preserve_module_state=False):
+            assert module[0].weight is params["0", "weight"]
+        assert module[0].weight is weight
+        with params.to_module(module, preserve_module_state=False):
+            assert module[1].weight is params["1", "weight"]
+        assert params.is_locked
+        assert params._is_shared
+
     @pytest.mark.parametrize("custom_setattr", [False, True])
     def test_to_module_from_load_memmap(self, as_module, custom_setattr, tmpdir):
         class MyLinear(nn.Linear):

@@ -158,6 +158,94 @@ def _warn_structseq_keys(obj) -> None:
     )
 
 
+def _swap_into_module(td, module, memo, non_blocking, preserve_module_state):
+    """Writes the leaves of ``td`` into ``module`` and returns the old ones in a dict.
+
+    The fast path of ``_to_module`` for a module with the native
+    ``__setattr__``, with ``return_swap=True``, not in place, without
+    ``use_state_dict`` and outside dynamo. It recurses into the submodules
+    without going through ``_to_module``, whose checks cost more than the swap
+    of the leaves.
+    """
+    hooks = memo["hooks"]
+    __dict__ = module.__dict__
+    _parameters = __dict__["_parameters"]
+    _buffers = __dict__["_buffers"]
+    _modules = __dict__["_modules"]
+    swap = memo[weakref.ref(module)] = {}
+    for key, value in td.items():
+        if isinstance(value, (Tensor, ftdim.Tensor)):
+            local_out = _set_tensor_dict(
+                __dict__,
+                _parameters,
+                _buffers,
+                hooks,
+                module,
+                key,
+                value,
+                False,
+                return_swap=True,
+                preserve_module_state=preserve_module_state,
+            )
+        else:
+            child = _modules[key]
+            local_out = memo.get(weakref.ref(child), NO_DEFAULT)
+            if local_out is NO_DEFAULT:
+                if (
+                    type(value)._to_module is _Conversion._to_module
+                    and type(child).__setattr__ is __base__setattr__
+                    and not _is_tensor_collection(type(child))
+                ):
+                    local_out = _swap_into_module(
+                        value, child, memo, non_blocking, preserve_module_state
+                    )
+                else:
+                    local_out = value._to_module(
+                        child,
+                        swap_dest={},
+                        memo=memo,
+                        non_blocking=non_blocking,
+                        preserve_module_state=preserve_module_state,
+                        is_dynamo=False,
+                    )
+        swap[key] = local_out
+    return swap
+
+
+def _replaced_entries(swap: dict, td, entries: list) -> list:
+    """Lists the ``(sub-tensordict, key, value)`` of ``swap`` that are not the values of ``td``."""
+    for key, val in swap.items():
+        if isinstance(val, dict):
+            _replaced_entries(val, td._get_str(key, default=NO_DEFAULT), entries)
+        elif td._get_str(key, None) is not val:
+            entries.append((td, key, val))
+    return entries
+
+
+def _restore_module(swap, args, kwargs, out):
+    """Writes ``swap`` back into the module when ``with out.to_module(...)`` exits.
+
+    The tensors that the module holds at the exit and that are not in ``out``
+    (for example the materialized parameters of a lazy module) are written
+    into ``out``. ``out`` is unlocked only if there are any, as unlocking and
+    relocking it costs more than the swap.
+    """
+    hooks = torch.nn.modules.module._global_parameter_registration_hooks
+    memo = {"hooks": tuple(hooks.values())}
+    current = swap._to_module(*args, **kwargs, swap_dest={}, memo=memo)
+    if not isinstance(current, dict):
+        return current
+    replaced = _replaced_entries(current, out, [])
+    if replaced:
+        non_blocking = kwargs.get("non_blocking", False)
+        with out.unlock_():
+            for td, key, val in replaced:
+                td._set_str(
+                    key, val, inplace=False, validated=True, non_blocking=non_blocking
+                )
+    return out
+
+
 class _Conversion:
     """Conversions to and from other containers, file formats and nn.Module parameters."""
 
@@ -1197,6 +1285,21 @@ class _Conversion:
                 module.update(self)
                 return
 
+        if (
+            return_swap
+            and not inplace
+            and not use_state_dict
+            and not is_dynamo
+            and (swap_dest is None or isinstance(swap_dest, dict))
+            and type(module).__setattr__ is __base__setattr__
+        ):
+            _swap = _swap_into_module(
+                self, module, memo, non_blocking, preserve_module_state
+            )
+            if swap_dest is None:
+                return self._new_unsafe(_swap, batch_size=torch.Size(()))
+            return _swap
+
         hooks = memo["hooks"]
         if return_swap:
             _swap = {}
@@ -1312,21 +1415,14 @@ class _Conversion:
             if isinstance(swap_dest, dict):
                 return _swap
             elif swap_dest is not None:
-
-                def _quick_set(swap_dict, swap_td):
-                    for key, val in swap_dict.items():
-                        if isinstance(val, dict):
-                            _quick_set(val, swap_td._get_str(key, default=NO_DEFAULT))
-                        elif swap_td._get_str(key, None) is not val:
-                            swap_td._set_str(
-                                key,
-                                val,
-                                inplace=False,
-                                validated=True,
-                                non_blocking=non_blocking,
-                            )
-
-                _quick_set(_swap, swap_dest)
+                for td, key, val in _replaced_entries(_swap, swap_dest, []):
+                    td._set_str(
+                        key,
+                        val,
+                        inplace=False,
+                        validated=True,
+                        non_blocking=non_blocking,
+                    )
                 return swap_dest
             else:
                 return self._new_unsafe(_swap, batch_size=torch.Size(()))
