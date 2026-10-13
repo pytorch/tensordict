@@ -24,7 +24,6 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.base import _is_tensor_collection, is_tensor_collection, Self, T
 from tensordict.utils import (
     _as_context_manager,
-    _create_segments_from_int,
     _create_segments_from_list,
     _get_shape_from_args,
     _infer_size_impl,
@@ -53,6 +52,30 @@ def _squeeze_dim(dim: int | None = None) -> int | None:
 def _unsqueeze_dim(dim: int) -> int:
     # the arguments of unsqueeze, which takes *args and **kwargs
     return dim
+
+
+def _repeat_interleave_batch_size(
+    batch_size: torch.Size, repeats: torch.Tensor | int, dim: int
+) -> torch.Size:
+    # the batch size after repeat_interleave(repeats, dim)
+    new_batch_size = []
+    for i, s in enumerate(batch_size):
+        if i == dim:
+            if isinstance(repeats, int):
+                new_batch_size.append(s * repeats)
+            elif (
+                isinstance(repeats, torch.Tensor)
+                and repeats.ndim <= 1
+                and repeats.numel() == 1
+                and repeats.dtype in (torch.int32, torch.int64)
+            ):
+                # torch broadcasts a 0-d or one-element repeats to the size of dim
+                new_batch_size.append(s * int(repeats))
+            else:
+                new_batch_size.append(repeats.sum().item())
+        else:
+            new_batch_size.append(s)
+    return torch.Size(new_batch_size)
 
 
 class _ShapeOps:
@@ -687,7 +710,8 @@ class _ShapeOps:
         """
         if inplace:
             self._raise_if_inplace_shape_ops_unsupported("repeat_interleave")
-        if self.ndim == 0:
+        ndim = self.batch_dims
+        if ndim == 0:
             if inplace:
                 raise RuntimeError(
                     "repeat_interleave(inplace=True) is not supported on a "
@@ -703,42 +727,23 @@ class _ShapeOps:
                     "the dim=None path reshapes the tensordict to 1D first, "
                     "which would change ndim."
                 )
-            if self.ndim > 1:
+            if ndim > 1:
                 return self.reshape(-1).repeat_interleave(repeats, dim=0)
             return self.repeat_interleave(repeats, dim=0)
-        dim_corrected = dim if dim >= 0 else self.ndim + dim
+        dim_corrected = dim if dim >= 0 else ndim + dim
         if not (dim_corrected >= 0):
             raise ValueError(
                 f"dim {dim} is out of range for tensordict with shape {self.shape}."
             )
-        if dim_corrected >= self.ndim:
+        if dim_corrected >= ndim:
             _warn_dim_past_batch_dims("repeat_interleave")
-        new_batch_size = []
-        for i, s in enumerate(self.batch_size):
-            if i == dim_corrected:
-                if isinstance(repeats, int):
-                    new_batch_size.append(s * repeats)
-                elif (
-                    isinstance(repeats, torch.Tensor)
-                    and repeats.ndim <= 1
-                    and repeats.numel() == 1
-                    and repeats.dtype in (torch.int32, torch.int64)
-                ):
-                    # torch broadcasts a 0-d or one-element repeats to the size of dim
-                    new_batch_size.append(s * int(repeats))
-                else:
-                    new_batch_size.append(repeats.sum().item())
-            else:
-                new_batch_size.append(s)
-        new_batch_size = torch.Size(new_batch_size)
-
-        def rep(leaf):
-            return leaf.repeat_interleave(
-                repeats=repeats, dim=dim_corrected, output_size=output_size
-            )
-
         if inplace:
             self._raise_if_holds_lazy_stack("repeat_interleave")
+
+            def rep(leaf):
+                return leaf.repeat_interleave(
+                    repeats=repeats, dim=dim_corrected, output_size=output_size
+                )
 
             def nested_fn(nested):
                 nested.repeat_interleave(
@@ -748,24 +753,25 @@ class _ShapeOps:
                     inplace=True,
                 )
 
-            return self._inplace_rebind_leaves(rep, nested_fn, new_batch_size)
-        return self._repeat_interleave(
-            repeats, dim_corrected, output_size, new_batch_size
-        )
+            return self._inplace_rebind_leaves(
+                rep,
+                nested_fn,
+                _repeat_interleave_batch_size(self.batch_size, repeats, dim_corrected),
+            )
+        return self._repeat_interleave(repeats, dim_corrected, output_size)
 
     def _repeat_interleave(
         self,
         repeats: torch.Tensor | int,
         dim: int,
         output_size: int | None,
-        batch_size: torch.Size,
     ) -> Self:
         """Repeats the elements of the batch along ``dim``, as :meth:`torch.Tensor.repeat_interleave` does.
 
         Called by :meth:`repeat_interleave` for ``inplace=False`` after it has
-        handled a 0-d tensordict and ``dim=None``, made ``dim`` non-negative
-        (warning for a ``dim`` past the batch dims, until 0.17) and computed
-        the new ``batch_size``. The result keeps the names of ``self``.
+        handled a 0-d tensordict and ``dim=None``, and made ``dim``
+        non-negative (warning for a ``dim`` past the batch dims, until 0.17).
+        The result keeps the names of ``self``.
 
         The default repeats each leaf. ``LazyStackedTensorDict`` repeats its
         members along the stack dim, after checking ``repeats`` as torch
@@ -779,7 +785,7 @@ class _ShapeOps:
 
         return self._fast_apply(
             rep,
-            batch_size=batch_size,
+            batch_size=_repeat_interleave_batch_size(self.batch_size, repeats, dim),
             call_on_nested=True,
             propagate_lock=True,
             names=self._maybe_names(),
@@ -1284,10 +1290,8 @@ class _ShapeOps:
                 split_sizes = [0]
             else:
                 split_size = min(split_size, max_size)
-                split_sizes = [
-                    end - start
-                    for start, end in _create_segments_from_int(split_size, max_size)
-                ]
+                num_full, rest = divmod(max_size, split_size)
+                split_sizes = [split_size] * num_full + ([rest] if rest else [])
         elif isinstance(split_size, (list, tuple)):
             if not all(isinstance(x, int) for x in split_size):
                 raise TypeError(WRONG_TYPE)

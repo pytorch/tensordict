@@ -4672,7 +4672,6 @@ class LazyStackedTensorDict(TensorDictBase):
         repeats: torch.Tensor | int,
         dim: int,
         output_size: int | None,
-        batch_size: torch.Size,
     ) -> TensorDictBase:
         if dim == self.stack_dim:
             num_members = len(self.tensordicts)
@@ -4695,7 +4694,7 @@ class LazyStackedTensorDict(TensorDictBase):
                         f"got repeats.size(0) = {len(repeats)} and "
                         f"input.size({dim}) = {num_members}"
                     )
-            if any(r < 0 for r in repeats):
+            if repeats and min(repeats) < 0:
                 raise RuntimeError("repeats can not be negative")
             new_list_of_tds = [
                 t for t, r in zip(self.tensordicts, repeats) for _ in range(r)
