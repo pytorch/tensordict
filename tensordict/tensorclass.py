@@ -65,6 +65,7 @@ from tensordict.base import (
     CompatibleType,
 )
 from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
+    _expands_to,
     _GENERIC_NESTED_ERR,
     _get_shape_from_args,
     _is_dataclass as is_dataclass,
@@ -5998,10 +5999,7 @@ class NonTensorData(NonTensorDataBase):
         shape = _get_shape_from_args(*args, **kwargs)
         if -1 in shape:
             shape = _resolve_expand_shape(shape, self.batch_size)
-        if len(shape) < self.ndim or any(
-            old != 1 and new != old
-            for old, new in zip(self.batch_size, shape[len(shape) - self.ndim :])
-        ):
+        if not _expands_to(self.batch_size, shape):
             warnings.warn(
                 f"Expanding a NonTensorData of batch size {list(self.batch_size)} "
                 f"to {list(shape)} does not raise today, although "
@@ -6071,12 +6069,7 @@ class NonTensorData(NonTensorDataBase):
                 update_batch_size=update_batch_size,
             )
         if other.batch_size != self.batch_size:
-            if other.ndim > self.ndim or any(
-                old != 1 and new != old
-                for old, new in zip(
-                    other.batch_size, self.batch_size[self.ndim - other.ndim :]
-                )
-            ):
+            if not _expands_to(other.batch_size, self.batch_size):
                 raise ValueError(
                     f"other of batch size {list(other.batch_size)} cannot be "
                     f"expanded to the batch size {list(self.batch_size)}."
