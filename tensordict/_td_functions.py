@@ -267,7 +267,11 @@ def lazy_stack(input: Sequence["T"], dim: int = 0, *, out=None, **kwargs) -> "T"
             tensordicts to stack. It must not be empty. The batch sizes must
             have the same number of dimensions. If a dimension differs
             between inputs, it is ``-1`` in the stacked batch size.
-        dim (int, optional): the new dimension. Defaults to ``0``.
+        dim (int, optional): the new dimension. Defaults to ``0``. A ``dim``
+            below ``-batch_dims - 1`` warns and wraps around once more (and
+            raises if it is still out of range).
+            Starting with TensorDict 0.17, the default will change to raising
+            an ``IndexError``, as for a tensor.
 
     Keyword Args:
         out (TensorDictBase, optional): a lazy stack to write the result
@@ -419,6 +423,10 @@ def from_consolidated(filename):
     A consolidated file is the single file that
     :meth:`~tensordict.TensorDictBase.consolidate` writes when you pass it a
     ``filename``. Same as :meth:`tensordict.TensorDict.from_consolidated`.
+
+    The batch sizes and names are as they were when the file was written.
+    To write later changes into the file, call
+    ``consolidate(filename=filename)`` again on the consolidated tensordict.
 
     Args:
         filename (str or Path): the path of the file.

@@ -766,6 +766,33 @@ class TestNonTensorData:
         result.extend(["baz", "qux"])
         assert result._td() is None
 
+    @set_list_to_stack(True)
+    @pytest.mark.parametrize(
+        "rows,batch_size",
+        [
+            ([["a"], ["b"]], (2, 1)),
+            ([["a"], ["b", "c"]], (2,)),
+            ([[{"role": "user"}], [{"role": "user"}, {"role": "bot"}]], (2,)),
+        ],
+    )
+    @pytest.mark.parametrize("batch_dims", [None, 1])
+    def test_from_dict_auto_batch_size_list_of_lists(
+        self, rows, batch_size, batch_dims
+    ):
+        # Regression test for #2542: the nested NonTensorStack is not resized,
+        # and a ragged dim (-1) does not enter the batch size
+        if batch_dims is not None:
+            batch_size = batch_size[:batch_dims]
+        td = TensorDict.from_dict(
+            {"q": rows}, auto_batch_size=True, batch_dims=batch_dims
+        )
+        assert type(td) is TensorDict
+        assert td.batch_size == batch_size
+        assert isinstance(td.get("q"), NonTensorStack)
+        assert td["q"] == rows
+        td = TensorDict(q=rows).auto_batch_size_(batch_dims=batch_dims)
+        assert td.batch_size == batch_size
+
     def test_new_empty_nontensorstack(self):
         td = TensorDict(a=NonTensorStack("a", "b").unsqueeze(-1), batch_size=(2,))
         assert isinstance(td.new_empty((4,), empty_lazy=True).get("a"), NonTensorStack)
@@ -889,11 +916,24 @@ class TestNonTensorData:
             (lambda td: td.set("a", 1), "a", 1),
             (lambda td: td.update({"a": 1.5}), "a", 1.5),
             (lambda td: td.set(("nested", "a"), False), ("nested", "a"), False),
+            (lambda td: td.set("a", np.bool_(False)), "a", False),
+            (lambda td: td.set("a", np.int64(1)), "a", 1),
+            (lambda td: td.set("a", np.float32(1.5)), "a", 1.5),
+            (lambda td: td.set("a", np.float64(1.5)), "a", 1.5),
         ],
-        ids=["setitem", "set", "update", "nested"],
+        ids=[
+            "setitem",
+            "set",
+            "update",
+            "nested",
+            "np-bool",
+            "np-int64",
+            "np-float32",
+            "np-float64",
+        ],
     )
     def test_set_scalar_over_non_tensor_warns(self, write, key, expected):
-        # A Python scalar written over a NonTensorData entry is a 0-d tensor
+        # A Python or NumPy scalar written over a NonTensorData entry is a 0-d tensor
         # today, and stays NonTensorData in 0.17 (gh-1199)
         td = TensorDict(a=NonTensorData(True), nested=TensorDict(a=NonTensorData(True)))
         with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17") as w:
@@ -1079,6 +1119,49 @@ class TestNonTensorData:
         assert data.data == "a"
         assert data.tolist() == ["a", "a", "a"]
 
+    @pytest.mark.parametrize(
+        "index",
+        [torch.tensor([1, 3]), slice(1, 3), [0, 2], torch.tensor([1, 0, 1, 0]) == 1],
+        ids=["tensor", "slice", "list", "mask"],
+    )
+    @pytest.mark.parametrize("ndim", [1, 2])
+    def test_set_at_writes_into_stack(self, index, ndim):
+        # A write into a NonTensorStack entry writes into the stack. It used to
+        # rebuild the whole stack first, which cost O(size) per write.
+        def make(prefix):
+            if ndim == 1:
+                return NonTensorStack.from_list([f"{prefix}{i}" for i in range(4)])
+            return NonTensorStack.from_list(
+                [[f"{prefix}{i}{j}" for j in range(2)] for i in range(4)]
+            )
+
+        td = TensorDict(a=make("s"), batch_size=[4, 2][:ndim])
+        stack = td.get("a")
+        value = make("v")[index]
+        expected = make("s")
+        expected[index] = value
+        td[index] = TensorDict(a=value, batch_size=value.batch_size)
+        assert td.get("a") is stack
+        assert stack.tolist() == expected.tolist()
+        value = make("w")[index]
+        expected[index] = value
+        td.set_at_("a", value, index)
+        assert td.get("a") is stack
+        assert stack.tolist() == expected.tolist()
+
+    def test_set_at_into_stack_of_batched_members(self):
+        # The NonTensorData members of this stack have batch dims: a write
+        # into one element of a member still turns that member into a stack
+        stack = NonTensorStack(*[NonTensorData(c, batch_size=[2]) for c in "abc"])
+        td = TensorDict(a=stack, batch_size=[3, 2])
+        td.set_at_("a", "z", 1)
+        assert td.get("a").tolist() == [["a", "a"], ["z", "z"], ["c", "c"]]
+        td.set_at_("a", NonTensorStack("x", "y"), 0)
+        assert td.get("a").tolist() == [["x", "y"], ["z", "z"], ["c", "c"]]
+        td.lock_()
+        td.set_at_("a", "q", (2, 1))
+        assert td.get("a").tolist() == [["x", "y"], ["z", "z"], ["c", "q"]]
+
     def test_setitem_edge_case(self):
         s = NonTensorStack("a string")
         t = NonTensorStack("another string")
@@ -1145,6 +1228,36 @@ class TestNonTensorData:
         data[1] = NonTensorData("s0")
         data[1:] = NonTensorStack("s0", "s0")
         assert data.tolist() == ["s0"] * 3
+
+    @pytest.mark.parametrize(
+        "index,rows",
+        [
+            (torch.tensor([0, 2]), [0, 2]),
+            (torch.tensor([True, False, True, False]), [0, 2]),
+            (slice(0, 2), [0, 1]),
+        ],
+    )
+    @pytest.mark.parametrize("source", ["stack", "data", "nested"])
+    def test_setitem_new_key(self, index, rows, source):
+        # A non-tensor stack that the destination lacks gets the full batch
+        # size, with None in the rows not written, as a tensor key gets zeros
+        if source == "data":
+            # A NonTensorData keeps its one value for all rows
+            text, values, rows = NonTensorData("a", batch_size=[2]), ["a"] * 4, range(4)
+        else:
+            text, values = NonTensorStack("a", "b"), ["a", "b"]
+        src = TensorDict(obs=torch.ones(2), text=text, batch_size=[2])
+        key = "text"
+        if source == "nested":
+            src = TensorDict(nested=src, batch_size=[2])
+            key = ("nested", "text")
+        out = TensorDict(obs=torch.zeros(4), batch_size=[4])
+        out[index] = src
+        expected = [None] * 4
+        for row, value in zip(rows, values):
+            expected[row] = value
+        assert out.get(key).batch_size == out.batch_size
+        assert out.get(key).tolist() == expected
 
     def test_stack(self, non_tensor_data):
         assert (
@@ -1291,6 +1404,42 @@ class TestNonTensorData:
         assert td_rt["sub", "t"] == ["c", "d"]
         # The consolidated metadata holds the old values
         assert not td.is_consolidated()
+
+    @pytest.mark.parametrize("layout", ["1d", "nd_members", "stack_dim1", "nested"])
+    @pytest.mark.parametrize("mode", ["plain", "locked", "memmap", "memmap_shared"])
+    @pytest.mark.parametrize("write", ["update_", "copy_"])
+    def test_update__data_into_stack(self, layout, mode, write, tmpdir):
+        # A NonTensorData written into a NonTensorStack goes to every member,
+        # also when the members are NonTensorData with batch dims (#2263)
+        if layout == "1d":
+            s = NonTensorStack("a", "b", "c")
+        elif layout == "nd_members":
+            s = torch.stack([NonTensorData(f"m{i}", batch_size=[3]) for i in range(4)])
+        elif layout == "stack_dim1":
+            s = NonTensorStack(
+                *[NonTensorData(f"m{i}", batch_size=[4]) for i in range(3)],
+                stack_dim=1,
+            )
+        else:
+            s = NonTensorStack(
+                *[NonTensorStack(*[f"m{i}{j}" for j in range(3)]) for i in range(4)]
+            )
+        assert isinstance(s, NonTensorStack)
+        td = TensorDict(s=s, batch_size=s.batch_size)
+        if mode == "locked":
+            td.lock_()
+        elif mode != "plain":
+            td.memmap_(tmpdir, share_non_tensor=mode == "memmap_shared")
+        source = TensorDict(
+            x=torch.ones(s.batch_size),
+            s=NonTensorData("w", batch_size=s.batch_size),
+            batch_size=s.batch_size,
+        )
+        getattr(td, write)(source.select("s"))
+        expected = NonTensorData("w", batch_size=s.batch_size).tolist()
+        assert td.get("s").tolist() == expected
+        if mode.startswith("memmap"):
+            assert TensorDict.load_memmap(tmpdir).get("s").tolist() == expected
 
     @pytest.mark.parametrize("mode", ["shared", "memmap", "memmap_shared"])
     @pytest.mark.parametrize("stack", [False, True])
@@ -1835,6 +1984,36 @@ class TestNonTensorData:
             td.update_(TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []))
             assert type(td["val"]) is type(val1)
             assert td["val"] == val1
+
+    @pytest.mark.parametrize("data", ["a string", 3, None, [1, 2], {"a": [1]}])
+    def test_copy(self, data, monkeypatch):
+        nt = NonTensorData(data, batch_size=[2], names=["n"], device="cpu")
+        is_leaf = not isinstance(data, (list, dict))
+        if is_leaf:
+            # A shallow copy of a value that is not a container skips the
+            # pytree pass over the non-tensor fields (#2554)
+            def tree_map(*args, **kwargs):
+                raise AssertionError("tree_map was called")
+
+            monkeypatch.setattr(
+                sys.modules[NonTensorData.__module__], "tree_map", tree_map
+            )
+        for copy in (nt.copy(), nt._clone(recurse=False)):
+            assert type(copy) is NonTensorData
+            assert copy._tensordict is not nt._tensordict
+            assert copy.batch_size == nt.batch_size
+            assert copy.names == nt.names
+            assert copy.device == nt.device
+            assert copy.data == data
+            # containers are copied, other values are not
+            assert (copy.data is nt.data) is is_leaf
+
+    def test_shared_copy_non_tensor_data(self):
+        # copy() of a shared NonTensorData reads the value, not the shared
+        # wrapper, as clone(recurse=False) does
+        nt = NonTensorData("hello").share_memory_()
+        for copy in (nt.copy(), nt.clone(recurse=False)):
+            assert copy.data == "hello"
 
     def test_shared_copy(self):
         # A shallow copy of a shared tensordict reads the values, not the

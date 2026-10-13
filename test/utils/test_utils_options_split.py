@@ -10,6 +10,7 @@ import sys
 import warnings
 
 import pytest
+import torch
 
 
 def test_utils_options_import_paths_are_preserved():
@@ -89,33 +90,163 @@ def test_option_env_vars_give_bool(value):
     assert result.stdout.strip() == repr((value == "1",) * 3), result.stderr
 
 
-@pytest.mark.parametrize(
-    "context,env_var,global_name",
+_OPTIONS = pytest.mark.parametrize(
+    "context,env_var,global_name,getter,default",
     [
-        ("_set_list_to_stack", "LIST_TO_STACK", "_LIST_TO_STACK"),
+        (
+            "_set_list_to_stack",
+            "LIST_TO_STACK",
+            "_LIST_TO_STACK",
+            "list_to_stack",
+            True,
+        ),
         (
             "_set_capture_non_tensor_stack",
             "CAPTURE_NONTENSOR_STACK",
             "_CAPTURE_NONTENSOR_STACK",
+            "capture_non_tensor_stack",
+            False,
         ),
-        ("set_lazy_legacy", "LAZY_LEGACY_OP", "_LAZY_OP"),
+        ("set_lazy_legacy", "LAZY_LEGACY_OP", "_LAZY_OP", "lazy_legacy", False),
     ],
 )
-def test_option_block_restores_env(monkeypatch, context, env_var, global_name):
+
+
+@_OPTIONS
+def test_option_block_restores_env(
+    monkeypatch, context, env_var, global_name, getter, default
+):
     from tensordict import _utils_options
 
+    mode = not default
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        block = getattr(_utils_options, context)(mode)
     monkeypatch.delenv(env_var, raising=False)
     monkeypatch.setattr(_utils_options, global_name, None)
-    with getattr(_utils_options, context)(False):
-        assert os.environ[env_var] == "False"
+    with block:
+        assert os.environ[env_var] == str(mode)
     assert env_var not in os.environ
 
     # an option read from the environment at import keeps its value
-    monkeypatch.setenv(env_var, "0")
-    monkeypatch.setattr(_utils_options, global_name, "0")
-    with getattr(_utils_options, context)(False):
-        assert os.environ[env_var] == "False"
-    assert os.environ[env_var] == "0"
+    env_value = "1" if default else "0"
+    monkeypatch.setenv(env_var, env_value)
+    monkeypatch.setattr(_utils_options, global_name, env_value)
+    with block:
+        assert os.environ[env_var] == str(mode)
+    assert os.environ[env_var] == env_value
+    assert getattr(_utils_options, global_name) == env_value
+
+
+@_OPTIONS
+@pytest.mark.parametrize("env_value", [None, "1", "0"])
+def test_option_block_with_current_mode_leaves_env(
+    monkeypatch, context, env_var, global_name, getter, default, env_value
+):
+    # A block that sets the mode the option already has writes nothing to
+    # the environment, so that it compiles and costs little (#2549).
+    from tensordict import _utils_options
+
+    if env_value is None:
+        monkeypatch.delenv(env_var, raising=False)
+        mode = default
+    else:
+        monkeypatch.setenv(env_var, env_value)
+        mode = env_value == "1"
+    monkeypatch.setattr(_utils_options, global_name, env_value)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        block = getattr(_utils_options, context)(mode)
+    with block:
+        assert os.environ.get(env_var) == env_value
+        assert getattr(_utils_options, getter)() is mode
+        # the option counts as set inside the block, as when it is written
+        assert getattr(_utils_options, getter)(allow_none=True) is mode
+    assert os.environ.get(env_var) == env_value
+    assert getattr(_utils_options, global_name) == env_value
+
+
+@_OPTIONS
+@pytest.mark.parametrize("env_value", [None, "1", "0"])
+def test_option_set_inside_block_with_current_mode(
+    monkeypatch, context, env_var, global_name, getter, default, env_value
+):
+    # .set() with the other mode inside a block that changed nothing: on exit
+    # the environment is restored with the mode, as when the block writes it
+    from tensordict import _utils_options
+
+    if env_value is None:
+        monkeypatch.delenv(env_var, raising=False)
+        mode = default
+    else:
+        monkeypatch.setenv(env_var, env_value)
+        mode = env_value == "1"
+    monkeypatch.setattr(_utils_options, global_name, env_value)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        block = getattr(_utils_options, context)(mode)
+        other = getattr(_utils_options, context)(not mode)
+    with block:
+        other.set()
+        assert os.environ[env_var] == str(not mode)
+        assert getattr(_utils_options, getter)() is (not mode)
+    assert os.environ.get(env_var) == env_value
+    assert getattr(_utils_options, global_name) == env_value
+    assert getattr(_utils_options, getter)() is mode
+
+
+def test_option_block_changing_mode_compiles(monkeypatch):
+    # A block that changes the mode under torch.compile sets it inside and
+    # restores it after, without writing the environment, which Dynamo
+    # cannot trace
+    from tensordict import _utils_options
+
+    monkeypatch.delenv("LIST_TO_STACK", raising=False)
+    monkeypatch.setattr(_utils_options, "_LIST_TO_STACK", None)
+
+    def get_mode(x):
+        with _utils_options._set_list_to_stack(False):
+            inside = _utils_options.list_to_stack()
+        return x + 1, inside
+
+    torch._dynamo.reset()
+    out, inside = torch.compile(get_mode, fullgraph=True, backend="eager")(
+        torch.zeros(3)
+    )
+    assert (out == 1).all()
+    assert inside is False
+    assert _utils_options.list_to_stack() is True
+    assert _utils_options._LIST_TO_STACK is None
+    assert "LIST_TO_STACK" not in os.environ
+
+
+@pytest.mark.parametrize(
+    "switch",
+    ["set_list_to_stack", "set_capture_non_tensor_stack", "set_lazy_legacy"],
+)
+def test_option_switch_with_default_compiles(monkeypatch, switch):
+    # TorchRL decorates per-step code with these switches at their default
+    # value: that must not break the graph (#2549).
+    import tensordict
+    from tensordict import _utils_options
+
+    for env_var, global_name in [
+        ("LIST_TO_STACK", "_LIST_TO_STACK"),
+        ("CAPTURE_NONTENSOR_STACK", "_CAPTURE_NONTENSOR_STACK"),
+        ("LAZY_LEGACY_OP", "_LAZY_OP"),
+    ]:
+        monkeypatch.delenv(env_var, raising=False)
+        monkeypatch.setattr(_utils_options, global_name, None)
+    default = switch == "set_list_to_stack"
+
+    @getattr(tensordict, switch)(default)
+    def add_one(td):
+        return td["a"] + 1
+
+    td = tensordict.TensorDict(a=torch.zeros(3), batch_size=[3])
+    torch._dynamo.reset()
+    out = torch.compile(add_one, fullgraph=True, backend="eager")(td)
+    assert (out == 1).all()
 
 
 def test_lazy_legacy_block_keeps_child_process_working(monkeypatch):

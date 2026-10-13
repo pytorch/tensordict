@@ -93,7 +93,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
 from torch import multiprocessing as mp, Tensor
 from torch.compiler import is_compiling, is_dynamo_compiling
 from torch.multiprocessing import Manager
-from torch.utils._pytree import tree_map
+from torch.utils._pytree import tree_is_leaf, tree_map
 
 if TYPE_CHECKING:
     from typing import Self
@@ -1300,6 +1300,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
                             # see above: only for the guard, as keys() can be
                             # costly (e.g. on a lazy stack)
                             out = td._get_str(key, None)
+                        if out is _UNSET:
+                            out = _partial_field(td, key)
                     if out is _UNSET:
                         # A field missing from the TensorDict is None
                         non_tensordict = self._non_tensordict
@@ -1418,7 +1420,11 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             setattr(cls, method_name, _unchecked_copy(getattr(TensorDict, method_name)))
     for method_name in _FALLBACK_METHOD_FROM_TD:
         if not hasattr(cls, method_name):
-            setattr(cls, method_name, _wrap_td_method(method_name))
+            if inspect.ismethod(getattr(TensorDict, method_name)):
+                # classmethod: TC.stack(...) must not take its input as self
+                setattr(cls, method_name, _wrap_td_classmethod(method_name))
+            else:
+                setattr(cls, method_name, _wrap_td_method(method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD_FORCE:
         setattr(cls, method_name, _wrap_td_method(method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD_NOWRAP:
@@ -2754,6 +2760,51 @@ def _none_fields(self) -> list[str]:
     ]
 
 
+def _partial_field(td, key: str) -> Any:
+    # A lazy stack's keys() lists only the keys every member holds. A field
+    # that only some members set reads as the list of the members' values,
+    # with None for a member that does not set it, like get(key, as_list=True).
+    # Returns _UNSET if no member sets it.
+    if not isinstance(td, LazyStackedTensorDict):
+        return _UNSET
+    values = []
+    found = False
+    for member in td.tensordicts:
+        if type(member) is TensorDict:
+            # cheaper than _get_str, which raises a KeyError for a miss
+            out = member._tensordict.get(key)
+        else:
+            out = member._get_str(key, _UNSET)
+            if out is _UNSET:
+                out = _partial_field(member, key)
+                if out is _UNSET:
+                    out = None
+        if out is not None:
+            found = True
+            if is_non_tensor(out):
+                out = (
+                    out.data
+                    if not isinstance(out, NonTensorStack)
+                    else out.tolist(as_linked_list=True)
+                )
+        values.append(out)
+    return values if found else _UNSET
+
+
+def _del_partial_field(td, key: str) -> None:
+    # Deletes key from the members of a lazy stack that hold it, when the
+    # stack's keys() does not list it because other members do not.
+    if isinstance(td, LazyStackedTensorDict):
+        for member in td.tensordicts:
+            if type(member) is TensorDict:
+                if key in member._tensordict:
+                    member.del_(key)
+            elif key in member.keys():
+                member.del_(key)
+            else:
+                _del_partial_field(member, key)
+
+
 def _non_tensor_keys(self):
     # The fields that the TensorDict of self does not hold
     if not type(self)._is_non_tensor:
@@ -2828,6 +2879,8 @@ def _getattr(self, item: str, **kwargs) -> Any:
             out = td._get_str(item, _UNSET, **kwargs)
             if out is _UNSET and is_compiling() and item in td.keys():
                 out = td._get_str(item, None, **kwargs)
+            if out is _UNSET:
+                out = _partial_field(td, item)
         if out is _UNSET:
             # A declared field that neither store holds is None
             return None
@@ -2887,6 +2940,8 @@ class _FieldGetter:
             out = td._get_str(name, _UNSET)
             if out is _UNSET and is_compiling() and name in td.keys():
                 out = td._get_str(name, None)
+            if out is _UNSET:
+                out = _partial_field(td, name)
         if out is _UNSET:
             # A declared field that neither store holds is None
             return None
@@ -3001,6 +3056,8 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
         td = self._tensordict
         if key in (td._tensordict if type(td) is TensorDict else td.keys()):
             td.del_(key)
+        elif type(td) is not TensorDict:
+            _del_partial_field(td, key)
         # _set_none_field, inlined
         if __dict__ is None:
             __dict__ = self.__dict__
@@ -3638,6 +3695,26 @@ def _wrap_classmethod(td_cls, cls, func):
     return wrapped_func
 
 
+class _wrap_td_classmethod:
+    """A TensorDict classmethod (e.g. ``stack``, ``from_list``) on a tensorclass.
+
+    Accessed on the class, it calls the TensorDict classmethod and returns an
+    instance of that class, as ``_wrap_classmethod`` does. Accessed on an
+    instance, it calls the method on the instance's tensordict, as
+    ``_wrap_td_method`` does.
+    """
+
+    def __init__(self, funcname):
+        self.funcname = funcname
+        self.instance_method = _wrap_td_method(funcname)
+
+    def __get__(self, instance, owner=None):
+        if instance is None:
+            func = getattr(TensorDict, self.funcname)
+            return _wrap_classmethod(TensorDict, owner, func)
+        return self.instance_method.__get__(instance, owner)
+
+
 def _getitem(self, item: NestedKey) -> Tensor | TensorCollection | Any:
     """Retrieve the class object at the given index. Indexing will happen for nested tensors as well.
 
@@ -4181,6 +4258,12 @@ def _set(
                         f"Cannot update an existing entry of type {type(self._tensordict.get(key))} with a value of type {value_type}."
                     )
                 self._tensordict.del_(key)
+            elif (
+                not self_is_non_tensor
+                and not inplace
+                and type(self._tensordict) is not TensorDict
+            ):
+                _del_partial_field(self._tensordict, key)
             if self_is_non_tensor:
                 self._non_tensordict[key] = value
             # _set_none_field, inlined: a None field is a missing key
@@ -5814,8 +5897,22 @@ class NonTensorDataBase(TensorClass):
             names=self.names if self._has_names() else None,
         )
 
+    def copy(self):
+        """Return a shallow copy, equivalent to ``_clone(recurse=False)``."""
+        return self._clone(recurse=False)
+
     def _clone(self, recurse: bool = True):
-        result = TensorClass._clone(self, recurse)
+        non_tensordict = self._non_tensordict
+        if not recurse and all(map(tree_is_leaf, non_tensordict.values())):
+            # TensorClass._clone would copy the values with tree_map, which
+            # returns pytree leaves unchanged: skip it.
+            result = self._from_tensordict(
+                self._tensordict._clone(recurse=False),
+                dict(non_tensordict),
+                safe=False,
+            )
+        else:
+            result = TensorClass._clone(self, recurse)
         if not recurse and self._tensordict._is_shared:
             # The shallow copy holds the same shared wrapper: mark it shared so
             # that reads unwrap the value and in-place updates write through it.
@@ -7106,20 +7203,16 @@ class NonTensorStack(LazyStackedTensorDict):
         ignore_lock: bool = False,
     ) -> T:
         if isinstance(input_dict_or_td, NonTensorData):
-            datalist = input_dict_or_td.data
-            for d in reversed(self.batch_size):
-                datalist = [datalist] * d
-            reconstructed = self._from_list(
-                datalist, device=self.device, ndim=self.ndim
-            )
-            return self.update(
-                reconstructed,
-                clone=clone,
-                inplace=inplace,
-                keys_to_update=keys_to_update,
-                is_leaf=is_leaf,
-                update_batch_size=update_batch_size,
-                ignore_lock=ignore_lock,
+            # One NonTensorData per member, with the member's batch size: a
+            # member that is a NonTensorData with batch dims cannot be updated
+            # with a NonTensorStack
+            data = input_dict_or_td.data
+            input_dict_or_td = NonTensorStack(
+                *[
+                    NonTensorData(data, batch_size=td.batch_size, device=td.device)
+                    for td in self.tensordicts
+                ],
+                stack_dim=self.stack_dim,
             )
 
         memmap = False

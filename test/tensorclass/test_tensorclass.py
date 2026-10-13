@@ -1400,6 +1400,26 @@ class TestTensorClass:
         assert data.del_(("td", "a")) is data
         assert list(data.td.keys()) == ["b"]
 
+    def test_rename_key_inside_old_key(self):
+        # a new key inside the old one moves the field there: the field was
+        # deleted with everything below it
+        @tensorclass
+        class Inner:
+            x: torch.Tensor
+
+        @tensorclass
+        class MyClass:
+            td: TensorDict
+
+        inner = Inner(x=torch.ones(3), batch_size=[3])
+        data = MyClass(
+            td=TensorDict(a=torch.zeros(3), c=inner, batch_size=[3]), batch_size=[3]
+        )
+        assert data.rename_key_("td", ("td", "td")) is data
+        assert set(data.keys(True, True)) == {("td", "td", "a"), ("td", "td", "c", "x")}
+        assert (data.td["td", "a"] == 0).all()
+        assert data.td["td", "c"] is inner
+
     def test_deleted_field_reads_as_none(self):
         # #2147: a deleted field reads as None, so hasattr() and
         # getattr(obj, name, default) work after a delete instead of raising
@@ -1529,6 +1549,60 @@ class TestTensorClass:
         # the renamed field is None
         check(d, "x")
         assert d.to_dict()["x"] is None
+
+    @pytest.mark.parametrize("kind", ["regular", "tensor_only", "shadow"])
+    def test_lazy_stack_field_set_on_some_members(self, kind):
+        # #2526: a field that only some members of a lazy stack set reads as
+        # the list of the members' values, and setting it to None clears it
+        # on every member
+        @tensorclass
+        class Inner:
+            a: torch.Tensor
+
+        @tensorclass(tensor_only=kind == "tensor_only", shadow=kind == "shadow")
+        class Data:
+            x: torch.Tensor
+            y: torch.Tensor | None = None
+            inner: Inner | None = None
+
+        def members():
+            p = Data(
+                x=torch.zeros(3),
+                y=torch.ones(3),
+                inner=Inner(a=torch.ones(3), batch_size=[3]),
+                batch_size=[3],
+            )
+            return p, Data(x=torch.zeros(3), batch_size=[3])
+
+        p, q = members()
+        stack = lazy_stack([p, q])
+        for value in (stack.y, stack.get("y")):
+            assert isinstance(value, list) and len(value) == 2
+            assert (value[0] == 1).all() and value[1] is None
+        inner = stack.inner
+        assert isinstance(inner[0], Inner) and inner[1] is None
+        # a field that every member sets, or none, reads as before
+        assert stack.x.shape == (2, 3)
+        assert lazy_stack([q, q.clone()]).y is None
+        # a stack of stacks reads each member as it reads on its own
+        nested = lazy_stack([stack, lazy_stack([p.clone(), p.clone()])])
+        assert nested.y[0][1] is None and nested.y[1].shape == (2, 3)
+
+        for clear in (
+            lambda s: setattr(s, "y", None),
+            lambda s: s.set("y", None),
+        ):
+            p, q = members()
+            r, _ = members()
+            stack = lazy_stack([lazy_stack([p, r]), lazy_stack([q, q.clone()])])
+            clear(stack)
+            assert stack.y is None
+            assert p.y is None and r.y is None
+            assert stack[0].y is None and stack[0, 0].y is None
+            assert "y" not in p._tensordict.keys()
+            assert stack.x.shape == (2, 2, 3)
+        stack.inner = None
+        assert p.inner is None and stack.inner is None
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_device(self, device):
@@ -2509,6 +2583,7 @@ class TestTensorClass:
             (torch.abs(data), torch.ones(3, 4)),
             (torch.add(data, data), -2 * torch.ones(3, 4)),
             (torch.clamp(data, min=-0.5), -0.5 * torch.ones(3, 4)),
+            (torch.lerp(data, torch.zeros(3, 4), 0.5), -0.5 * torch.ones(3, 4)),
         ):
             assert type(result) is MyData
             assert result.z == "test"
@@ -3520,6 +3595,37 @@ class TestTensorClass:
         mc = MC(foo=torch.zeros(3), bar=torch.ones(3), batch_size=[3])
         for name in ("stack", "cat", "lazy_stack", "maybe_dense_stack"):
             assert type(getattr(MC, name)([mc, mc])) is MC, name
+
+    @pytest.mark.parametrize(
+        "flags", [{}, {"tensor_only": True}, {"shadow": True}], ids=str
+    )
+    def test_td_classmethods_on_decorated_class(self, flags):
+        # https://github.com/pytorch/tensordict/issues/2524: on a @tensorclass,
+        # MC.stack([...]) bound the list to self and raised AttributeError.
+        @tensorclass(**flags)
+        class MC:
+            foo: torch.Tensor
+            bar: torch.Tensor
+
+        class MCChild(MC):
+            pass
+
+        out = MC.from_list(
+            [{"foo": torch.zeros(()), "bar": 2}, {"foo": 3, "bar": torch.ones(())}]
+        )
+        assert type(out) is MC
+        assert out.batch_size == (2,)
+        assert (out.foo == torch.tensor([0, 3])).all()
+        assert type(MCChild.from_list([{"foo": 1, "bar": 2}])) is MCChild
+        assert type(MC.fromkeys(["foo", "bar"], 0)) is MC
+        assert type(MC.from_any({"foo": torch.zeros(3), "bar": 1})) is MC
+        mc = MC(foo=torch.zeros(3), bar=torch.ones(3), batch_size=[3])
+        for name in ("stack", "cat", "lazy_stack", "maybe_dense_stack"):
+            assert type(getattr(MC, name)([mc, mc])) is MC, name
+            # the call on an instance keeps working
+            assert type(getattr(mc, name)([mc, mc])) is MC, name
+        assert MC.stack([mc, mc], 1).batch_size == (3, 2)
+        assert MC.cat([mc, mc]).batch_size == (6,)
 
     def test_to_lazystack(self):
         class MyTensorClass(TensorClass):
