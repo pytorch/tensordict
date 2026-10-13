@@ -2723,7 +2723,8 @@ class LazyStackedTensorDict(TensorDictBase):
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> Self:
-        name = None
+        # names=None keeps the names of the stack and of its members
+        name = self._td_dim_name
         if batch_size is not None and (
             self.stack_dim
             and batch_size[: self.stack_dim] != self.batch_size[: self.stack_dim]
@@ -2733,12 +2734,14 @@ class LazyStackedTensorDict(TensorDictBase):
                 recurse=recurse,
                 batch_size=batch_size,
                 device=device if device is not NO_DEFAULT else self.device,
-                names=names if names is not None else None,
+                names=names if names is not None else NO_DEFAULT,
             )
+        names_kwarg = {}
         if names is not None:
-            if len(names) > self.stack_dim:
-                name = names[self.stack_dim]
-            names = [name for i, name in enumerate(names) if i != self.stack_dim]
+            name = names[self.stack_dim] if len(names) > self.stack_dim else None
+            names_kwarg["names"] = [
+                name for i, name in enumerate(names) if i != self.stack_dim
+            ]
         if batch_size is not None:
             batch_size = torch.Size(
                 [b for i, b in enumerate(batch_size) if i != self.stack_dim]
@@ -2746,7 +2749,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return type(self)(
             *[
                 td.empty(
-                    recurse=recurse, batch_size=batch_size, device=device, names=names
+                    recurse=recurse, batch_size=batch_size, device=device, **names_kwarg
                 )
                 for td in self.tensordicts
             ],
