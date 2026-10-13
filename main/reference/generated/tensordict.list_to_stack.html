@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5272+gdc3031df7.d20261013)">
+<meta name="llm:version" content="main (0.14.0.dev5275+g9e66927ba.d20261013)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5272+gdc3031df7.d20261013)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5275+g9e66927ba.d20261013)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1643,9 +1643,7 @@ document.write(`
 <dt class="sig sig-object py" id="tensordict.list_to_stack">
 <span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">list_to_stack</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">allow_none</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.list_to_stack" title="Link to this definition">#</a></dt>
 <dd><p>Returns whether assigning a list to a key stores a <a class="reference internal" href="tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a>.</p>
-<p>See <a class="reference internal" href="tensordict.set_list_to_stack.html#tensordict.set_list_to_stack" title="tensordict.set_list_to_stack"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_list_to_stack</span></code></a>. When the option was never
-set, the default is returned as the string <code class="docutils literal notranslate"><span class="pre">&quot;1&quot;</span></code> (a value that is
-true), not as <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+<p>See <a class="reference internal" href="tensordict.set_list_to_stack.html#tensordict.set_list_to_stack" title="tensordict.set_list_to_stack"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_list_to_stack</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>allow_none</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> and the option was never
@@ -2011,7 +2009,7 @@ set, <code class="docutils literal notranslate"><span class="pre">None</span></c
        "headline": "list_to_stack",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - list_to_stack",
        "url": "/reference/generated/tensordict.list_to_stack.html",
-       "articleBody": "list_to_stack# tensordict.list_to_stack(allow_none=False)# Returns whether assigning a list to a key stores a NonTensorStack. See set_list_to_stack. When the option was never set, the default is returned as the string \"1\" (a value that is true), not as True. Parameters: allow_none (bool, optional) \u2013 if True and the option was never set, None is returned instead of the default. Defaults to False.",
+       "articleBody": "list_to_stack# tensordict.list_to_stack(allow_none=False)# Returns whether assigning a list to a key stores a NonTensorStack. See set_list_to_stack. Parameters: allow_none (bool, optional) \u2013 if True and the option was never set, None is returned instead of the default. Defaults to False.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
