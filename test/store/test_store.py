@@ -2374,12 +2374,43 @@ class TestLazyStackedTensorDictStore:
         try:
             mask = torch.zeros(4, 3, 2, dtype=torch.bool)
             mask[1, 2, 0] = True
+            expected = torch.zeros(4, 3, 2).masked_fill(mask, 1.0)
             with warnings.catch_warnings():
                 warnings.simplefilter("error", FutureWarning)
                 assert store_td.masked_fill_(mask, 1.0) is store_td
-            torch.testing.assert_close(
-                store_td["a"], torch.zeros(4, 3, 2).masked_fill(mask, 1.0)
-            )
+            torch.testing.assert_close(store_td["a"], expected)
+            # a mask with the entry's dims that broadcasts from a dim of size 1
+            # fills the same elements either way
+            for mask in (
+                torch.ones(4, 1, 2, dtype=torch.bool),
+                torch.ones(1, 3, 2, dtype=torch.bool),
+            ):
+                mask[0, 0, 1] = False
+                expected = store_td["a"].masked_fill(mask, 2.0)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("error", FutureWarning)
+                    assert store_td.masked_fill_(mask, 2.0) is store_td
+                torch.testing.assert_close(store_td["a"], expected)
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_masked_fill_warns_before_writing(self, store_kwargs):
+        """The FutureWarning for a mask that is not batch-shaped comes before any write."""
+        lazy_td = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(3, 2), d=torch.zeros(3, 2, 5), batch_size=[3])
+                for _ in range(4)
+            ]
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            mask = torch.ones(4, 3, 2, dtype=torch.bool)
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", FutureWarning)
+                with pytest.raises(FutureWarning, match="broadcasts the mask"):
+                    store_td.masked_fill_(mask, 1.0)
+            assert_allclose_td(store_td.to_tensordict(), lazy_td.to_tensordict())
         finally:
             store_td.clear_redis()
             store_td.close()

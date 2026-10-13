@@ -422,6 +422,15 @@ def test_fill_write_blocks(tmp_path, monkeypatch):
     torch.testing.assert_close(h5td.to_tensordict(), td)
     assert h5td.zero_() is h5td
     torch.testing.assert_close(h5td.to_tensordict(), td.zero_())
+    # a value that is not a scalar is broadcast into the whole dataset, as
+    # before, also when it is larger than one block
+    value = torch.arange(21).view(7, 3)
+    assert h5td.fill_("a", value) is h5td
+    assert (h5td["a"] == value).all()
+    assert h5td.fill_("a", torch.arange(3)) is h5td
+    assert (h5td["a"] == torch.arange(3)).all()
+    with pytest.raises(TypeError, match="Can't broadcast"):
+        h5td.fill_("a", torch.arange(7))
     # the value is cast as h5py casts it: a complex value raises for a real
     # dataset, even an empty one
     for key in ("a", "empty"):

@@ -2280,28 +2280,29 @@ class LazyStackedTensorDictStore(_StoreUnsupported, TensorDictBase):
     def _masked_fill_(self, mask, value):
         if mask.shape == self.batch_size or not mask.ndim:
             return super()._masked_fill_(mask, value)
-        # an entry with as many dims as a mask that starts with the batch size
-        # is filled the same way when the mask is aligned with the leading dims
-        aligned = mask.shape[: self.batch_dims] == self.batch_size
-        warned = False
-        for key in self.keys(include_nested=True, leaves_only=True):
-            tensor = self.get(key)
-            if not warned and not (aligned and tensor.ndim == mask.ndim):
-                warnings.warn(
-                    deprecation_message(
-                        f"Calling {type(self).__name__}.masked_fill_ with a mask "
-                        f"of shape {tuple(mask.shape)}, which is not the batch "
-                        f"size {tuple(self.batch_size)}, broadcasts the mask from "
-                        "the right against each entry. This",
-                        removal="0.17",
-                    )
-                    + " From then on, the mask is aligned with the leading batch "
-                    "dims, as in TensorDict.masked_fill_. Expand the mask to the "
-                    "shape of the entries to keep today's result.",
-                    FutureWarning,
-                    stacklevel=3,
+        # an entry with as many dims as the mask is filled the same way when the
+        # mask is aligned with its leading dims; the warning comes before any
+        # write
+        entries = [
+            (key, self.get(key))
+            for key in self.keys(include_nested=True, leaves_only=True)
+        ]
+        if any(tensor.ndim != mask.ndim for _, tensor in entries):
+            warnings.warn(
+                deprecation_message(
+                    f"Calling {type(self).__name__}.masked_fill_ with a mask of "
+                    f"shape {tuple(mask.shape)}, which is not the batch size "
+                    f"{tuple(self.batch_size)}, broadcasts the mask from the right "
+                    "against each entry. This",
+                    removal="0.17",
                 )
-                warned = True
+                + " From then on, the mask is aligned with the leading batch dims, "
+                "as in TensorDict.masked_fill_. Expand the mask to the shape of "
+                "the entries to keep today's result.",
+                FutureWarning,
+                stacklevel=3,
+            )
+        for key, tensor in entries:
             self.set_(key, tensor.masked_fill(mask, value))
         return self
 

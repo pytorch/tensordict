@@ -354,6 +354,10 @@ class _H5Backend(_PersistentBackend):
         if not node.shape:
             node[()] = value
             return
+        if np.ndim(value):
+            # not a scalar: h5py broadcasts it into the whole dataset, as before
+            node[:] = value
+            return
         # cast as h5py casts a scalar: a complex value raises for a real dataset
         value = np.asarray(value, dtype=node.dtype)
         if not node.size:
