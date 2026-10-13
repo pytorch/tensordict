@@ -816,6 +816,18 @@ class TestGeneric:
         # another file name writes nothing
         assert td.consolidate(filename=tmp_path / "other.bin") is td
         assert not (tmp_path / "other.bin").exists()
+        # nor does a file that was replaced, or deleted
+        os.remove(filename)
+        td2 = TensorDict(z=torch.ones(2), batch_size=[2]).consolidate(filename=filename)
+        td.batch_size = []
+        assert td.consolidate(filename=filename) is td
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.batch_size == (2,)
+        assert (loaded == td2).all()
+        del td2, loaded
+        os.remove(filename)
+        assert td.consolidate(filename=filename) is td
+        assert not filename.exists()
 
     def test_consolidated_lazy_stack_names_serialized(self):
         td = lazy_stack(

@@ -595,7 +595,9 @@ class _Serialization:
             (unless ``use_buffer=True``), but setting ``batch_size`` or ``names`` later
             does not. Call ``consolidate(filename=filename)`` again on the result to write
             the current ones into the file. Another file name writes nothing:
-            ``td.contiguous().consolidate(filename=other)`` writes a new file.
+            ``td.contiguous().consolidate(filename=other)`` writes a new file. Nothing
+            is written either if the file has been deleted or replaced, or has changed
+            size, since this tensordict was written to it.
 
         .. note::
             A pickle (or :func:`torch.save`, :meth:`~.send`, :meth:`~.broadcast`) of a
@@ -630,12 +632,14 @@ class _Serialization:
             if (
                 filename is not None
                 and consolidated.get("filename") == Path(filename).resolve()
+                and consolidated["file_id"] == _file_id(filename)
             ):
                 _write_consolidated_metadata(
                     filename,
                     consolidated["metadata"],
                     data_size=consolidated["storage"].numel(),
                 )
+                consolidated["file_id"] = _file_id(filename)
             return self
 
         (
@@ -904,14 +908,14 @@ class _Serialization:
             device=device,
         )
         result._consolidated = {"storage": storage, "metadata": metadata_dict}
-        if filename is not None:
-            result._consolidated["filename"] = Path(filename).resolve()
         # Lock the consolidated TensorDict to prevent modifications that could break consolidation
         result.lock_()
         if filename is not None:
             if use_buffer:
                 with open(filename, "w+b") as f:
                     f.write(total_storage._handler.buffer)
+            result._consolidated["filename"] = Path(filename).resolve()
+            result._consolidated["file_id"] = _file_id(filename)
             # with open(Path(filename).with_suffix(".json"), "wb") as f:
             #     metadata_dict["size"] = filesize
             #     f.write(json.dumps(metadata_dict))
@@ -1958,6 +1962,19 @@ def _consolidated_metadata_json(metadata: dict) -> bytes:
     if isinstance(metadata_json, str):
         metadata_json = metadata_json.encode("utf-8")
     return metadata_json
+
+
+def _file_id(filename) -> tuple[int, int, int] | None:
+    """Identifies the file at ``filename``, or returns ``None`` if there is none.
+
+    A consolidated tensordict only rewrites the metadata of the file it was
+    written to: the path may since name another file, or no file at all.
+    """
+    try:
+        stat = os.stat(filename)
+    except OSError:
+        return None
+    return stat.st_dev, stat.st_ino, stat.st_size
 
 
 def _write_consolidated_metadata(filename, metadata: dict, data_size: int) -> None:
