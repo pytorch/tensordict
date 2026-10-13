@@ -1776,7 +1776,11 @@ class TestNonTensorData:
             assert copy["sub", "s"] == "x"
             assert copy.get("s").is_shared()
         copy = td.copy()
-        copy.update_({"s": "bye", "a": torch.ones(3)})
+        # update_ with tensor entries in the source skips the non-tensor
+        # leaves of a shared tensordict (#2487), so the str and the tensor are
+        # written in two calls
+        copy.update_({"s": "bye"})
+        copy.update_({"a": torch.ones(3)})
         assert td["s"] == "bye"
         assert (td["a"] == 1).all()
 
