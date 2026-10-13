@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import io
+import math
 import os
 import pickle
 import platform
@@ -1123,18 +1124,25 @@ class TestLazyStackedTensorDict:
         for member, td in zip(result.tensordicts, lazy.tensordicts):
             assert (member == (td == other)).all()
 
+    @pytest.mark.parametrize("op", ["__eq__", "__lt__", "__or__"])
+    @pytest.mark.parametrize("shape", ["batch", "ends in 1", "starts with 1"])
     @pytest.mark.parametrize("stack_dim", [0, 1])
-    def test_comparison_full_batch_tensor(self, stack_dim):
-        # A tensor of the batch shape goes whole to each member
+    def test_comparison_full_batch_tensor(self, stack_dim, shape, op):
+        # A tensor that broadcasts to the batch shape is split along the stack
+        # dim, as TensorDict pairs it with its rows
         lazy = self._compare_stack(stack_dim, False)
-        other = torch.ones(lazy.shape, dtype=torch.long)
-        if stack_dim == 1:
-            with pytest.raises(RuntimeError, match="broadcast"):
-                _ = lazy == other
-            return
-        result = lazy == other
-        assert result.batch_size == (3, 3, 4)
-        assert result["a"].shape == (3, 3, 4, 2)
+        other_shape = {
+            "batch": lazy.shape,
+            "ends in 1": (*lazy.shape[:-1], 1),
+            "starts with 1": (1, *lazy.shape[1:]),
+        }[shape]
+        other = torch.arange(math.prod(other_shape)).view(other_shape) % 3
+        result = getattr(lazy, op)(other)
+        assert isinstance(result, LazyStackedTensorDict)
+        assert result.stack_dim == stack_dim
+        expected = getattr(lazy.to_tensordict(), op)(other)
+        assert result.batch_size == expected.batch_size == lazy.batch_size
+        assert (result.to_tensordict() == expected).all()
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
     def test_comparison_dict_operand(self, stack_dim):

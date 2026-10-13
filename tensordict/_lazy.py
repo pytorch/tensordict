@@ -455,6 +455,16 @@ def _broadcasts(shape: torch.Size, other_shape: torch.Size) -> bool:
     return True
 
 
+def _broadcasts_to(shape: torch.Size, target: torch.Size) -> bool:
+    """Whether ``shape`` broadcasts to ``target``, without growing it."""
+    try:
+        return torch.broadcast_shapes(shape, target) == target
+    except (RuntimeError, ValueError):
+        # ValueError: the batch size of a stack of members of different shapes
+        # holds -1
+        return False
+
+
 def _fits_stack(
     stack_batch_size: torch.Size, stack_dim: int, batch_size: torch.Size
 ) -> bool:
@@ -3473,8 +3483,22 @@ class LazyStackedTensorDict(TensorDictBase):
                 out.append(getattr(td0, op)(td1))
             return LazyStackedTensorDict.lazy_stack(out, self_expand.stack_dim)
         if isinstance(other, (numbers.Number, Tensor)):
+            if (
+                isinstance(other, Tensor)
+                and other.ndim
+                and _broadcasts_to(other.shape, self.batch_size)
+            ):
+                # Each member gets its slice, as each row of a TensorDict does
+                others = other.expand(self.batch_size).unbind(self.stack_dim)
+            else:
+                # A number, a 0-dim tensor or a tensor that only broadcasts
+                # against the members goes whole to each member
+                others = [other] * len(self.tensordicts)
             return LazyStackedTensorDict.lazy_stack(
-                [getattr(td, op)(other) for td in self.tensordicts],
+                [
+                    getattr(td, op)(_other)
+                    for td, _other in _zip_strict(self.tensordicts, others)
+                ],
                 self.stack_dim,
             )
         if op not in ("__eq__", "__ne__"):
