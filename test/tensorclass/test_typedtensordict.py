@@ -883,6 +883,30 @@ class TestFromTensordict:
             state.update_(before + 1)
         torch.testing.assert_close(state.to_tensordict(), before)
 
+    @pytest.mark.parametrize("hetero", [False, True], ids=["same", "hetero"])
+    def test_from_tensordict_lazy_stack_nested_inplace(self, hetero):
+        # #2519: the in-place methods write into the members of a stack with a
+        # nested entry, also when the nested members differ in shape
+        class Nested(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        tds = [
+            TensorDict(
+                a=torch.ones(3), n={"x": torch.ones(3, 2 + hetero * i)}, batch_size=[3]
+            )
+            for i in range(4)
+        ]
+        state = Nested.from_tensordict(lazy_stack(tds))
+        other = lazy_stack(tds).apply(lambda x: torch.full_like(x, 2.0))
+        assert state.zero_() is state
+        assert state.add_(1.0) is state
+        assert state.add_(other, alpha=2.0) is state
+        assert state.lerp_(other, 0.5) is state
+        for td in tds:
+            assert (td["a"] == 3.5).all()
+            assert (td["n", "x"] == 3.5).all()
+
     def test_from_tensordict_memmap(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             td = self._make_td()

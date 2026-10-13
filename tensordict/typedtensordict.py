@@ -14,8 +14,18 @@ import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._pytree import _register_td_node
 from tensordict._td import TensorDict
-from tensordict.base import _register_tensor_class, NO_DEFAULT, TensorDictBase
-from tensordict.utils import _as_context_manager, _cache_while_locked
+from tensordict.base import (
+    _is_tensor_collection,
+    _register_tensor_class,
+    NO_DEFAULT,
+    TensorDictBase,
+)
+from tensordict.utils import (
+    _as_context_manager,
+    _cache_while_locked,
+    _is_non_tensor,
+    _is_tensorclass,
+)
 
 try:
     # Python 3.11+ (PEP 681)
@@ -297,6 +307,46 @@ def _make_delegate_inplace(method_name: str) -> Callable:
 
     def method(self, *args, **kwargs):
         getattr(self._source, method_name)(*args, **kwargs)
+        return self
+
+    method.__name__ = method_name
+    method.__qualname__ = f"TypedTensorDict.{method_name}"
+    return method
+
+
+def _reads_copies(td: TensorDictBase) -> bool:
+    """Whether ``td``, or a tensordict that it holds or stacks, reads copies of its tensors."""
+    if _is_tensorclass(type(td)):
+        td = td._tensordict
+    if td._reads_return_copies:
+        return True
+    if isinstance(td, LazyStackedTensorDict):
+        return any(_reads_copies(member) for member in td.tensordicts)
+    return any(
+        _reads_copies(value)
+        for value in td.values()
+        if _is_tensor_collection(type(value)) and not _is_non_tensor(type(value))
+    )
+
+
+def _make_delegate_inplace_pointwise(method_name: str) -> Callable:
+    """Delegate an in-place pointwise method to a lazy-stack ``self._source``.
+
+    The stack writes into its members, which writing back the leaves read from
+    ``self`` cannot do when they are nested. Other sources, and stacks that
+    hold copies, such as files, run the inherited method, which writes the
+    copies back.
+    """
+    inherited = getattr(TypedTensorDict, method_name)
+
+    def method(self, *args, **kwargs):
+        source = self._source
+        if not isinstance(source, LazyStackedTensorDict) or _reads_copies(source):
+            return inherited(self, *args, **kwargs)
+        result = getattr(source, method_name)(*args, **kwargs)
+        if result is not source:
+            # broadcasting self returns a new tensordict and writes nothing
+            return result
         return self
 
     method.__name__ = method_name
@@ -1044,6 +1094,52 @@ _INPLACE_DELEGATES = [
     "masked_fill_",
 ]
 
+# In-place pointwise: delegate to a lazy-stack source, return self
+_INPLACE_POINTWISE_DELEGATES = [
+    "abs_",
+    "acos_",
+    "exp_",
+    "neg_",
+    "reciprocal_",
+    "sigmoid_",
+    "sign_",
+    "sin_",
+    "sinh_",
+    "tan_",
+    "tanh_",
+    "trunc_",
+    "lgamma_",
+    "frac_",
+    "expm1_",
+    "log_",
+    "log10_",
+    "log1p_",
+    "log2_",
+    "ceil_",
+    "floor_",
+    "round_",
+    "erf_",
+    "erfc_",
+    "asin_",
+    "atan_",
+    "cos_",
+    "cosh_",
+    "add_",
+    "lerp_",
+    "addcdiv_",
+    "addcmul_",
+    "sub_",
+    "mul_",
+    "maximum_",
+    "minimum_",
+    "clamp_max_",
+    "clamp_min_",
+    "pow_",
+    "div_",
+    "sqrt_",
+    "zero_",
+]
+
 # Tuple wrap: delegate to _source, wrap each element
 _TUPLE_WRAP_DELEGATES = [
     "_unbind",
@@ -1059,6 +1155,9 @@ for _name in _WRAP_DELEGATES:
 
 for _name in _INPLACE_DELEGATES:
     setattr(TypedTensorDict, _name, _make_delegate_inplace(_name))
+
+for _name in _INPLACE_POINTWISE_DELEGATES:
+    setattr(TypedTensorDict, _name, _make_delegate_inplace_pointwise(_name))
 
 for _name in _TUPLE_WRAP_DELEGATES:
     setattr(TypedTensorDict, _name, _make_delegate_tuple_wrap(_name))
