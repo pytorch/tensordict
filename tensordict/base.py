@@ -480,17 +480,18 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     return pointwise(self, others, args, kwargs)
                 try:
                     return func(self, *others, *args, **kwargs)
-                except KeyError as err:
+                except KeyError:
                     # A lazy stack nested in a dense tensordict gives keys such
                     # as ("n", "0", "a"), which a dense operand lacks (#1932).
                     if kwargs.get("default") is not None or not _same_leaf_keys(
                         self, others
                     ):
                         raise
-                    try:
-                        return pointwise(self, others, args, kwargs)
-                    except Exception:
-                        raise err from None
+                    if inplace:
+                        # apply_ writes as it goes: raise for a leaf that only
+                        # some members of a lazy stack have before any write
+                        _apply_pointwise(self, lambda *xs: None, others, False)
+                    return pointwise(self, others, args, kwargs)
             others_map = []
             shape = self.shape
             self_expand = self

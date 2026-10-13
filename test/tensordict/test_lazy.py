@@ -848,6 +848,19 @@ class TestLazyStackedTensorDict:
             self_td.add_(other)
         assert (self_td["n", "a"] == 1).all()
 
+    @pytest.mark.parametrize("op", ["add", "add_", "mul_"])
+    def test_arithmetic_with_nested_dense_member_key(self, op):
+        # A key that only one member of the lazy stack has raises with that
+        # key, and an in-place op writes nothing first
+        dense = TensorDict(a=torch.ones(2, 3), batch_size=[2, 3])
+        members = list(dense.clone().unbind(0))
+        members[1].set("z", torch.ones(3))
+        self_td = TensorDict(n=lazy_stack(members), batch_size=[2, 3])
+        other = TensorDict(n=dense * 2, batch_size=[2, 3])
+        with pytest.raises(KeyError, match="z"):
+            getattr(self_td, op)(other)
+        assert (self_td["n", "a"] == 1).all()
+
     def test_auto_device(self):
         # The device of a lazy stack is read from its members, so auto_device_
         # sets it on them, also when the lazy stack is nested in a tensordict.
