@@ -1092,6 +1092,49 @@ class TestNonTensorData:
         assert data.data == "a"
         assert data.tolist() == ["a", "a", "a"]
 
+    @pytest.mark.parametrize(
+        "index",
+        [torch.tensor([1, 3]), slice(1, 3), [0, 2], torch.tensor([1, 0, 1, 0]) == 1],
+        ids=["tensor", "slice", "list", "mask"],
+    )
+    @pytest.mark.parametrize("ndim", [1, 2])
+    def test_set_at_writes_into_stack(self, index, ndim):
+        # A write into a NonTensorStack entry writes into the stack. It used to
+        # rebuild the whole stack first, which cost O(size) per write.
+        def make(prefix):
+            if ndim == 1:
+                return NonTensorStack.from_list([f"{prefix}{i}" for i in range(4)])
+            return NonTensorStack.from_list(
+                [[f"{prefix}{i}{j}" for j in range(2)] for i in range(4)]
+            )
+
+        td = TensorDict(a=make("s"), batch_size=[4, 2][:ndim])
+        stack = td.get("a")
+        value = make("v")[index]
+        expected = make("s")
+        expected[index] = value
+        td[index] = TensorDict(a=value, batch_size=value.batch_size)
+        assert td.get("a") is stack
+        assert stack.tolist() == expected.tolist()
+        value = make("w")[index]
+        expected[index] = value
+        td.set_at_("a", value, index)
+        assert td.get("a") is stack
+        assert stack.tolist() == expected.tolist()
+
+    def test_set_at_into_stack_of_batched_members(self):
+        # The NonTensorData members of this stack have batch dims: a write
+        # into one element of a member still turns that member into a stack
+        stack = NonTensorStack(*[NonTensorData(c, batch_size=[2]) for c in "abc"])
+        td = TensorDict(a=stack, batch_size=[3, 2])
+        td.set_at_("a", "z", 1)
+        assert td.get("a").tolist() == [["a", "a"], ["z", "z"], ["c", "c"]]
+        td.set_at_("a", NonTensorStack("x", "y"), 0)
+        assert td.get("a").tolist() == [["x", "y"], ["z", "z"], ["c", "c"]]
+        td.lock_()
+        td.set_at_("a", "q", (2, 1))
+        assert td.get("a").tolist() == [["x", "y"], ["z", "z"], ["c", "q"]]
+
     def test_setitem_edge_case(self):
         s = NonTensorStack("a string")
         t = NonTensorStack("another string")
