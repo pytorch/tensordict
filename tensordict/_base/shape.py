@@ -23,6 +23,7 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.base import _is_tensor_collection, is_tensor_collection, Self, T
 from tensordict.utils import (
     _as_context_manager,
+    _check_unflatten_size,
     _create_segments_from_int,
     _create_segments_from_list,
     _get_shape_from_args,
@@ -2362,6 +2363,7 @@ class _ShapeOps:
                 .unflatten(dim, unflattened_size)
                 .shape[dim : dim + len(unflattened_size)]
             )
+        _check_unflatten_size(self.batch_size, dim, unflattened_size)
 
         def unflatten(tensor):
             return torch.unflatten(

@@ -80,6 +80,7 @@ from tensordict.utils import (
     _cast_scalar,
     _check_is_flatten,
     _check_is_unflatten,
+    _check_unflatten_size,
     _erase_cache_first,
     _get_shape_from_args,
     _import_and_wrap_functorch,
@@ -4637,6 +4638,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 "call .to_tensordict() first or use inplace=False."
             )
         dim = _maybe_correct_neg_dim(dim, shape=self.batch_size)
+        _check_unflatten_size(self.batch_size, dim, unflattened_size)
         new_shape = self.batch_size
         if dim == 0:
             new_shape = torch.Size(unflattened_size) + new_shape[1:]
