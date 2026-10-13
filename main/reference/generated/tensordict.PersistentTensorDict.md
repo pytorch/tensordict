@@ -34,6 +34,11 @@ Like other [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDi
 mean that the data is stored on that device: the entries are cast to it
 when they are read.
 
+With the h5 backend, a string comes back as `bytes`. Starting with
+TensorDict 0.17, the default will change to `str` for the strings that
+tensordict wrote, which it marks with an attribute; reading one as
+`bytes` warns until then. Strings that other tools wrote stay `bytes`.
+
 Keyword Arguments:
 
 - **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or**compatible*) - the tensordict batch size.
