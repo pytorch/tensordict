@@ -2614,6 +2614,40 @@ class LazyStackedTensorDict(TensorDictBase):
 
     # Override: returns a dense TensorDict, locked like the stack.
     def contiguous(self, *, canonical: bool = False, inplace: bool = False) -> Self:
+        """Returns a dense :class:`~tensordict.TensorDict` copy of the lazy stack.
+
+        The result owns its data and is locked if the stack is locked.
+
+        Args:
+            canonical (bool, optional): if ``True``, every dense tensor leaf
+                whose strides are not the C-row-major strides of its shape is
+                copied into a new contiguous tensor. Defaults to ``False``.
+            inplace (bool, optional): not supported on a lazy stack, which
+                cannot become a TensorDict in place. ``True`` raises a
+                ``NotImplementedError``. Defaults to ``False``.
+
+        .. note::
+            If the stacked tensordicts have no names, the result has no
+            names either, even when the stack dimension has a name (from
+            ``stack_dim_name`` or ``names``). :meth:`densify` and
+            :meth:`clone` keep that name. To keep it here, name the
+            dimension again with :meth:`refine_names`.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict, lazy_stack
+            >>> stack = lazy_stack(
+            ...     [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)],
+            ...     stack_dim_name="s",
+            ... )
+            >>> stack.names, stack.contiguous().names
+            (['s', None], [None, None])
+            >>> stack.contiguous().refine_names("s", ...).names
+            ['s', None]
+            >>> stack.densify().names
+            ['s', None]
+
+        """
         if inplace:
             raise NotImplementedError(
                 "contiguous(inplace=True) is not supported on "
@@ -2659,7 +2693,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 raise
             # Only some of the stacked tensordicts have names. As in
             # contiguous(), the dims are left unnamed, but the name of the
-            # stack dim is kept.
+            # stack dim is kept, which contiguous() drops.
             names = None
             if self._td_dim_name is not None:
                 names = [None] * self.batch_dims

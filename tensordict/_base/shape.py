@@ -815,6 +815,11 @@ class _ShapeOps:
         Returns:
             The padded tensordict. When ``inplace=True`` this is ``self``.
 
+        .. note::
+            On a lazy stack whose tensordicts have no names, the result of
+            ``inplace=False`` has no names, even when the stack dimension has
+            a name. See :func:`~tensordict.pad`.
+
         Examples:
             >>> import torch
             >>> from tensordict import TensorDict
