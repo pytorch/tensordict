@@ -6324,6 +6324,26 @@ class TestGeneric:
             assert result["b"].batch_size == torch.Size([])
             assert_allclose_td(result, expected)
 
+    @pytest.mark.parametrize("reduction", ["sum", "mean", "max", "cummax"])
+    @pytest.mark.parametrize("dim", ["omitted", 0])
+    @pytest.mark.parametrize(
+        "td",
+        [
+            TensorDict(batch_size=[3]),
+            TensorDict(s="text", batch_size=[3]),
+            NonTensorData("text", batch_size=[3]),
+        ],
+        ids=["empty", "non-tensor-only", "NonTensorData"],
+    )
+    def test_reduction_reduce_no_tensor_leaves(self, td, dim, reduction):
+        # reduce=True with no tensor leaves names the cause, instead of the
+        # error of torch.cat on an empty list
+        if dim == "omitted" and reduction == "cummax":
+            pytest.skip("cummax needs a dim")
+        kwargs = {} if dim == "omitted" else {"dim": dim}
+        with pytest.raises(ValueError, match="has no tensor leaves"):
+            getattr(td, reduction)(reduce=True, **kwargs)
+
     @pytest.mark.parametrize(
         "reduction",
         ["sum", "nansum", "mean", "nanmean", "std", "var", "quantile", "amax", "amin"],
