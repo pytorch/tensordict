@@ -383,7 +383,11 @@ def _mixes_lazy_stacks(td: TensorDictBase, others: tuple) -> bool:
     # a cheap filter first: lazy stacks set _lazy, numbers and tensors do not have it
     lazy = td._lazy
     for other in others:
-        lazy = lazy or getattr(type(other), "_lazy", False)
+        other_lazy = getattr(type(other), "_lazy", None)
+        if other_lazy is None and _is_tensorclass(type(other)):
+            # a tensorclass counts as the tensordict it wraps
+            other_lazy = other._tensordict._lazy
+        lazy = lazy or other_lazy
     if not lazy:
         return False
     from tensordict._lazy import LazyStackedTensorDict
@@ -392,14 +396,31 @@ def _mixes_lazy_stacks(td: TensorDictBase, others: tuple) -> bool:
     return any(
         isinstance(other, TensorDictBase)
         and isinstance(other, LazyStackedTensorDict) is not is_stack
-        for other in others
+        for other in map(_unwrap_tensorclass, others)
     )
+
+
+def _unwrap_tensorclass(other: Any) -> Any:
+    """Returns the tensordict behind a tensorclass ``other``, and any other ``other`` as it is."""
+    return other._tensordict if _is_tensorclass(type(other)) else other
+
+
+def _same_leaf_keys(td: TensorDictBase, others: tuple) -> bool:
+    """Returns whether ``others`` holds tensordicts, all with the leaf keys of ``td``."""
+    tds = [
+        other
+        for other in map(_unwrap_tensorclass, others)
+        if isinstance(other, TensorDictBase)
+    ]
+    keys = set(td.keys(True, True))
+    return bool(tds) and all(set(other.keys(True, True)) == keys for other in tds)
 
 
 def _apply_pointwise(
     td: TensorDictBase, fn: Callable, others: tuple, inplace: bool
 ) -> TensorDictBase:
     """Computes ``fn(leaf, *others)`` leaf by leaf, pairing the leaves of the tensordicts in ``others`` by key."""
+    others = tuple(map(_unwrap_tensorclass, others))
     is_td = [isinstance(other, TensorDictBase) for other in others]
 
     def leaf_fn(x, *leaves):
@@ -432,6 +453,13 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
             return getattr(x, op)(*args, **kwargs)
         return torch_op(x, *args, **kwargs)
 
+    def pointwise(self, others, args, kwargs):
+        # alpha=None and default=None are the defaults of the ops
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        return _apply_pointwise(
+            self, lambda x, *xs: leaf_op(x, *xs, *args, **kwargs), others, inplace
+        )
+
     def wrap_func(func):
         @wraps(func)
         def new_func(self, *others, **kwargs):
@@ -449,15 +477,20 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     break
             if not need_broadcast:
                 if kwargs.get("default") is None and _mixes_lazy_stacks(self, others):
-                    # alpha=None and default=None are the defaults of the ops
-                    kwargs = {k: v for k, v in kwargs.items() if v is not None}
-                    return _apply_pointwise(
-                        self,
-                        lambda x, *xs: leaf_op(x, *xs, *args, **kwargs),
-                        others,
-                        inplace,
-                    )
-                return func(self, *others, *args, **kwargs)
+                    return pointwise(self, others, args, kwargs)
+                try:
+                    return func(self, *others, *args, **kwargs)
+                except KeyError as err:
+                    # A lazy stack nested in a dense tensordict gives keys such
+                    # as ("n", "0", "a"), which a dense operand lacks (#1932).
+                    if kwargs.get("default") is not None or not _same_leaf_keys(
+                        self, others
+                    ):
+                        raise
+                    try:
+                        return pointwise(self, others, args, kwargs)
+                    except Exception:
+                        raise err from None
             others_map = []
             shape = self.shape
             self_expand = self
