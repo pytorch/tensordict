@@ -3031,10 +3031,6 @@ def _record_tensorclass(tc, result, last_op):
     # ``with tc.view(-1) as f:`` writes f back into tc._tensordict on exit, the
     # object that the last op of f refers to. Also refer to tc.
     name, (args, kwargs, td_ref) = last_op
-    if type(td_ref) is functools.partial and td_ref.func is _write_back_dest:
-        # flatten_keys/unflatten_keys of a locked TensorDict return their cached
-        # result again: record the tensorclass again, do not wrap twice
-        td_ref = td_ref.args[0]
     if td_ref() is tc._tensordict:
         tc_ref = _strong_ref(tc) if is_compiling() else weakref.ref(tc)
         dest = functools.partial(_write_back_dest, td_ref, tc_ref)

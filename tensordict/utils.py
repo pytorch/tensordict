@@ -739,6 +739,24 @@ def _cache_while_locked(fun):
     return newfun
 
 
+def _copy_cached_result(fun):
+    """Returns a shallow copy of the tensordict cached by ``_cache_while_locked``.
+
+    Put it above ``@_cache_while_locked`` on methods that return a new, unlocked
+    tensordict, so that a write into the result does not change the cache and
+    later calls.
+    """
+
+    @wraps(fun)
+    def newfun(_self: "TensorDictBase", *args, **kwargs):
+        out = fun(_self, *args, **kwargs)
+        if _self.is_locked and not is_compiling() and not out.is_locked:
+            out = out.copy()
+        return out
+
+    return newfun
+
+
 def _erase_cache_first(fun):
     """A decorator to erase the cache at each call."""
 

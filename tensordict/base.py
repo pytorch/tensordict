@@ -65,6 +65,7 @@ from tensordict.utils import (
     _canonicalize_tensor,
     _CloudpickleWrapper,
     _convert_list_to_stack,
+    _copy_cached_result,
     _erase_cache_first,
     _foreach,
     _GENERIC_NESTED_ERR,
@@ -7416,8 +7417,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             "Call .to_tensordict() first or use inplace=False."
         )
 
-    @_cache_while_locked  # noqa: B019
     @_as_context_manager()
+    @_copy_cached_result
+    @_cache_while_locked  # noqa: B019
     def flatten_keys(
         self,
         separator: str = ".",
@@ -7585,8 +7587,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         self.exclude(*root_keys, inplace=True)
         return self
 
-    @_cache_while_locked  # noqa: B019
     @_as_context_manager()
+    @_copy_cached_result
+    @_cache_while_locked  # noqa: B019
     def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> Self:
         """Converts a flat tensordict into a nested one, recursively.
 
