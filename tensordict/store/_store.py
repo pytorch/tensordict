@@ -158,6 +158,53 @@ def _iter_registry_keys(paths, include_nested, leaves_only):
         yield open_prefix[:depth] if depth > 1 else open_prefix[0]
 
 
+def _rename_plan(all_keys, old_path, new_path, old_key, new_key):
+    """Plans the move of the entry at ``old_path`` to ``new_path`` in a store.
+
+    Returns ``None`` if nothing is stored at or below ``old_path``. Otherwise
+    returns ``(renames, deletes)``: the ``(source, destination)`` pairs of
+    leaf paths, ordered so that no leaf is overwritten before it moves, and
+    the leaves at or below ``new_path`` that the entry replaces, as
+    ``TensorDict`` does. A destination below a leaf raises ``KeyError``,
+    unless that leaf moves.
+    """
+    old_prefix = old_path + _KEY_SEP
+    new_prefix = new_path + _KEY_SEP
+    if old_path in all_keys:
+        renames = [(old_path, new_path)]
+    else:
+        renames = [
+            (k, new_prefix + k[len(old_prefix) :])
+            for k in all_keys
+            if k.startswith(old_prefix)
+        ]
+    if not renames:
+        return None
+    if old_path == new_path:
+        return [], []
+    parts = new_path.split(_KEY_SEP)
+    for i in range(1, len(parts)):
+        parent = _KEY_SEP.join(parts[:i])
+        # a leaf at or below old_path moves away
+        moves = parent == old_path or parent.startswith(old_prefix)
+        if not moves and parent in all_keys:
+            raise KeyError(
+                f"Cannot rename {old_key!r} to {new_key!r}: the new key is "
+                "below a leaf."
+            )
+    sources = {src for src, _ in renames}
+    deletes = [
+        k
+        for k in all_keys
+        if (k == new_path or k.startswith(new_prefix)) and k not in sources
+    ]
+    # A destination can be the source of another move: a shorter one when
+    # new_path holds old_path, a longer one when old_path holds new_path.
+    # Move that source first.
+    renames.sort(key=lambda pair: len(pair[0]), reverse=new_path.startswith(old_prefix))
+    return renames, deletes
+
+
 class _StoreTDKeysView(_TensorDictKeysView):
     """Keys view for TensorDictStore backed by a Redis key registry."""
 
@@ -1699,38 +1746,35 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
 
         async def _arename(old_path, new_path):
             all_keys = await self._aget_all_keys()
-            # Rename exact match
-            found = old_path in all_keys
-            if found:
-                pipe = self._client.pipeline()
-                pipe.rename(self._data_key(old_path), self._data_key(new_path))
-                pipe.rename(self._meta_key(old_path), self._meta_key(new_path))
-                pipe.srem(self._keys_registry_key, old_path)
-                pipe.sadd(self._keys_registry_key, new_path)
-                await pipe.execute()
-            # Rename nested keys
-            old_prefix = old_path + _KEY_SEP
-            new_prefix = new_path + _KEY_SEP
-            nested = [k for k in all_keys if k.startswith(old_prefix)]
-            for k in nested:
-                new_k = new_prefix + k[len(old_prefix) :]
-                pipe = self._client.pipeline()
-                pipe.rename(self._data_key(k), self._data_key(new_k))
-                pipe.rename(self._meta_key(k), self._meta_key(new_k))
+            plan = _rename_plan(all_keys, old_path, new_path, old_key, new_key)
+            if plan is None:
+                return None
+            renames, deletes = plan
+            pipe = self._client.pipeline()
+            # the entry replaces what is stored at new_path, as in TensorDict
+            for k in deletes:
+                pipe.delete(self._data_key(k))
+                pipe.delete(self._meta_key(k))
                 pipe.srem(self._keys_registry_key, k)
-                pipe.sadd(self._keys_registry_key, new_k)
-                await pipe.execute()
-            return found or bool(nested)
+            for src, dst in renames:
+                pipe.rename(self._data_key(src), self._data_key(dst))
+                pipe.rename(self._meta_key(src), self._meta_key(dst))
+                pipe.srem(self._keys_registry_key, src)
+                pipe.sadd(self._keys_registry_key, dst)
+            await pipe.execute()
+            return plan
 
-        found = self._run_sync(_arename(old_path, new_path))
+        plan = self._run_sync(_arename(old_path, new_path))
         # Invalidate keys cache — rename changes the set of keys
         self._keys_cache[0] = None
-        if self._meta_cache is not None:
-            # Transfer cached metadata from old to new path
-            old_meta = self._meta_cache.pop(old_path, None)
-            if old_meta is not None:
-                self._meta_cache[new_path] = old_meta
-        if not found:
+        if plan is not None and self._meta_cache is not None:
+            renames, deletes = plan
+            for key_path in deletes:
+                self._meta_cache.pop(key_path, None)
+            for src, dst in renames:
+                self._meta_cache.pop(src, None)
+                self._meta_cache.pop(dst, None)
+        if plan is None:
             # stacklevel 3: skip rename_key_
             _warn_missing_key(self, "rename_key_", old_key, stacklevel=3)
 

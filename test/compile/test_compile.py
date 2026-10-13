@@ -3027,6 +3027,47 @@ class TestCudaGraphs:
                 __file__
             }
 
+    def test_interaction_type_change_warns(self, compiled):
+        # pytorch/tensordict#2547: the replay repeats the branch that the
+        # probabilistic modules took at capture, whatever the interaction type.
+        if not torch.cuda.is_available():
+            pytest.skip("CudaGraphModule only replays graphs on CUDA")
+        policy = Prob(
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=torch.distributions.Normal,
+            distribution_kwargs={"validate_args": False},
+        )
+        td = TensorDict(loc=torch.zeros(3), scale=torch.ones(3), batch_size=[3])
+        random = self._make_cudagraph(policy, compiled, warmup=3)
+        default = self._make_cudagraph(policy, compiled, warmup=3)
+        linear = self._make_cudagraph(
+            Mod(torch.nn.Linear(3, 3), in_keys=["loc"], out_keys=["y"]), compiled
+        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings("error", "CudaGraphModule was captured")
+            with set_interaction_type("random"):
+                for _ in range(4):
+                    random(td.clone())
+                    linear(td.clone())
+            for _ in range(4):
+                default(td.clone())
+            # The default interaction type of the policy is "deterministic".
+            with set_interaction_type("deterministic"):
+                default(td.clone())
+                linear(td.clone())
+        with set_interaction_type("deterministic"):
+            with pytest.warns(
+                UserWarning, match="Capture one CudaGraphModule per interaction type"
+            ) as record:
+                random(td.clone())
+            assert [w.filename for w in record] == [__file__]
+            with warnings.catch_warnings():
+                warnings.filterwarnings("error", "CudaGraphModule was captured")
+                random(td.clone())
+        with set_interaction_type("random"), pytest.warns(UserWarning):
+            default(td.clone())
+
     def test_state_dict(self, compiled):
         # Create a linear layer and wrap it in CudaGraphModule
         linear = torch.nn.Linear(3, 4)

@@ -16,8 +16,10 @@ from tensordict.utils import _unravel_key_to_tuple, unravel_key, unravel_key_lis
 warn_deprecated(
     "tensordict._C",
     removal="0.17",
-    replacement="unravel_key, unravel_key_list and _unravel_key_to_tuple "
-    "from tensordict.utils",
+    replacement="tensordict.unravel_key (also for unravel_keys) and "
+    "tensordict.unravel_key_list. _unravel_key_to_tuple has no public "
+    "replacement; for a valid key, use "
+    "`k if isinstance(k := tensordict.unravel_key(key), tuple) else (k,)`",
 )
 
 # The C++ binding took a single key, as unravel_key does.

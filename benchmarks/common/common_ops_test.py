@@ -5,10 +5,16 @@
 from __future__ import annotations
 
 import argparse
+import itertools
 
 import pytest
 import torch
-from tensordict import is_tensor_collection, LazyStackedTensorDict, TensorDict
+from tensordict import (
+    is_tensor_collection,
+    LazyStackedTensorDict,
+    NonTensorStack,
+    TensorDict,
+)
 from tensordict.utils import _unravel_key_to_tuple, unravel_key, unravel_key_list
 
 
@@ -601,6 +607,37 @@ def test_setitem_dim(benchmark, td, c, index):
     benchmark.pedantic(exec_setitem, setup=setup, warmup_rounds=10, rounds=1000)
 
 
+@pytest.fixture(scope="module")
+def big_non_tensor_td():
+    n = 100_000
+    return TensorDict(
+        obs=torch.zeros(n, 3),
+        text=NonTensorStack.from_list([f"x{i}" for i in range(n)]),
+        batch_size=[n],
+    )
+
+
+def test_setitem_non_tensor_rows(benchmark, big_non_tensor_td):
+    # 4-row writes into a 100k-row tensordict with a string entry, as in a
+    # replay buffer extend; each write brings new strings to new rows
+    td = big_non_tensor_td
+    counter = itertools.count()
+
+    def setup():
+        i = next(counter)
+        chunk = TensorDict(
+            obs=torch.ones(4, 3),
+            text=NonTensorStack(*[f"v{i}_{j}" for j in range(4)]),
+            batch_size=[4],
+        )
+        return ((td, chunk, torch.arange(4) + 4 * i), {})
+
+    def exec_setitem(td, chunk, index):
+        td[index] = chunk
+
+    benchmark.pedantic(exec_setitem, setup=setup, warmup_rounds=2, rounds=20)
+
+
 def test_setitem(benchmark, td, c):
     def exec_setitem():
         tdc = td.clone()
@@ -796,6 +833,48 @@ def test_exclude_nested(benchmark):
     benchmark(func)
 
 
+@pytest.mark.parametrize("op", ["exclude", "select", "step"])
+def test_exclude_select_update_step(benchmark, op):
+    # One env step of a nested (multi-agent style) env turned into the next
+    # root, as TorchRL's step_mdp does (#2558).
+    def leaf(dtype=torch.float32):
+        return torch.zeros(3, 1, dtype=dtype)
+
+    td = TensorDict(
+        data=TensorDict(
+            states=leaf(torch.int32),
+            action=leaf(),
+            done=leaf(torch.bool),
+            terminated=leaf(torch.bool),
+            batch_size=[3],
+        ),
+        next=TensorDict(
+            data=TensorDict(
+                states=leaf(torch.int32),
+                done=leaf(torch.bool),
+                terminated=leaf(torch.bool),
+                reward=leaf(),
+                batch_size=[3],
+            )
+        ),
+    )
+    excl = [
+        ("next",),
+        ("data", "done"),
+        ("data", "terminated"),
+        ("data", "_reset"),
+        ("data", "reward"),
+    ]
+    keep = [("data", "states"), ("data", "done"), ("data", "terminated")]
+    nxt = td.get("next")
+    func = {
+        "exclude": lambda: td.exclude(*excl),
+        "select": lambda: nxt.select(*keep, strict=False),
+        "step": lambda: td.exclude(*excl).update(nxt.select(*keep, strict=False)),
+    }[op]
+    benchmark(func)
+
+
 @pytest.mark.parametrize("recurse", [True, False])
 def test_empty(benchmark, recurse):
     td = big_nested_td()[0][0]
@@ -804,6 +883,23 @@ def test_empty(benchmark, recurse):
         td.empty(recurse=recurse)
 
     benchmark(func)
+
+
+def test_to_same_device(benchmark):
+    # A device-less env step whose leaves are already on the CPU
+    td = TensorDict(
+        observation=torch.randn(4),
+        action=torch.randn(2),
+        done=torch.zeros(1, dtype=torch.bool),
+        next=TensorDict(
+            observation=torch.randn(4),
+            reward=torch.randn(1),
+            done=torch.zeros(1, dtype=torch.bool),
+            terminated=torch.zeros(1, dtype=torch.bool),
+        ),
+        collector=TensorDict(traj_ids=torch.zeros((), dtype=torch.long)),
+    )
+    benchmark(td.to, "cpu")
 
 
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device")
