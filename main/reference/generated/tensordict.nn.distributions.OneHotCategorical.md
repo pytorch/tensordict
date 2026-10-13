@@ -9,7 +9,9 @@ One-hot categorical distribution.
 This class behaves exactly as torch.distributions.Categorical except that it reads and produces one-hot encodings
 of the discrete tensors. `sample()`, `mode` and
 `deterministic_sample` return `torch.long` one-hot tensors, and
-`log_prob()` takes one.
+`log_prob()` takes one. When several logits tie for the maximum,
+`mode` marks the first, as `torch.distributions.OneHotCategorical`
+does.
 
 `rsample()` returns a straight-through sample: its values are one-hot,
 and its gradient is the gradient of a

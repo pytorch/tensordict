@@ -93,7 +93,8 @@ to make sure that all of these are fulfilled.
 > - Tensor and tensordict arguments can change between calls, if their device and shape stay the same.
 > Arguments that are not tensors (a `float`, a `str`) must not change after the capture. If the
 > function takes tensors, a changed value raises a `ValueError`. If it takes a tensordict, the replay uses
-> the captured value and ignores the new one, without an error (pytorch/tensordict#2075).
+> the captured value, ignores the new one and emits a `FutureWarning`. Starting with TensorDict 0.17, the
+> default will change to raising a `ValueError` there too (pytorch/tensordict#2075).
 > The keyword arguments of a tensordict module are its `in_keys` (see [`dispatch()`](tensordict.nn.dispatch.html#tensordict.nn.dispatch))
 > and `tensordict_out`.
 > - If the module is a [`TensorDictModuleBase`](tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) instance and the output id matches the input

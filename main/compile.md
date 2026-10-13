@@ -286,9 +286,10 @@ for instance with `torch.cuda.current_stream().wait_stream(stream)`.
 Issue consecutive calls from one stream, or order them in the same way.
 - Arguments that are not tensors (a `float`, a `str`) must not change
 after the capture. If the function takes a tensordict, the replay uses the
-captured values and ignores the new ones without an error
-(pytorch/tensordict#2075), and every tensor must be an entry of the
-tensordict, not a separate argument. If the function takes tensors, a
+captured values, ignores the new ones and emits a `FutureWarning`.
+Starting with TensorDict 0.17, the default will change to raising a
+`ValueError` (pytorch/tensordict#2075). Every tensor must be an entry of
+the tensordict, not a separate argument. If the function takes tensors, a
 changed value raises a `ValueError`.
 
 ### `mode="reduce-overhead"`
