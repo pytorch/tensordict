@@ -2016,6 +2016,19 @@ def _get_shape_from_args(*args, kwarg_name="size", **kwargs):
     return size
 
 
+def _expands_to(batch_size: torch.Size, shape: Sequence[int]) -> bool:
+    """Whether :meth:`torch.Tensor.expand` accepts ``shape`` for a tensor of size ``batch_size``.
+
+    ``shape`` needs at least as many sizes as ``batch_size`` has dims, and its trailing
+    sizes must match ``batch_size`` except where ``batch_size`` is 1.
+    """
+    ndim = len(batch_size)
+    return len(shape) >= ndim and all(
+        old == 1 or new == old
+        for old, new in zip(batch_size, shape[len(shape) - ndim :])
+    )
+
+
 def _resolve_expand_shape(shape: Sequence[int], batch_size: torch.Size) -> torch.Size:
     """Replaces the ``-1`` sizes of an ``expand`` shape and checks the shape, as :meth:`torch.Tensor.expand` does.
 
