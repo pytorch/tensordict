@@ -1146,6 +1146,20 @@ class TestGeneric:
         assert len(list(td_empty.keys())) == 1
         assert len(list(td_empty.get("b").keys())) == 1
 
+    @pytest.mark.parametrize(
+        "batch_size,names",
+        [([3], ["x"]), ([3, 2, 4], ["x", "y", None]), ([5, 6], ["x", "y"])],
+    )
+    def test_empty_batch_size_names(self, batch_size, names):
+        # A new batch size keeps the leading names, as the batch_size setter does
+        td = TensorDict(a=torch.zeros(3, 2), batch_size=[3, 2], names=["x", "y"])
+        td_empty = td.empty(batch_size=batch_size)
+        assert td_empty.batch_size == torch.Size(batch_size)
+        assert td_empty.names == names
+        assert td_empty.unsqueeze(0).names == [None, *names]
+        td = TensorDict(a=torch.zeros(3, 2), batch_size=[3, 2], names=[None, "y"])
+        assert not td.empty(batch_size=[3])._has_names()
+
     @pytest.mark.parametrize("inplace", [True, False])
     def test_exclude_nested(self, inplace):
         tensor_1 = torch.rand(4, 5, 6, 7)

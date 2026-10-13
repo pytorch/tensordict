@@ -2252,17 +2252,20 @@ class TensorDict(TensorDictBase):
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=NO_DEFAULT
     ) -> Self:
         if not recurse:
+            if names is NO_DEFAULT:
+                names = self._maybe_names()
+                if names is not None and batch_size is not None:
+                    # as the batch_size setter: keep the leading names, pad with None
+                    names = (names + [None] * len(batch_size))[: len(batch_size)]
+                    if all(name is None for name in names):
+                        names = None
             return self._new_unsafe(
                 device=self._device if device is NO_DEFAULT else device,
                 batch_size=(
                     self._batch_size if batch_size is None else torch.Size(batch_size)
                 ),
                 source={},
-                names=(
-                    (self.names if self._has_names() else None)
-                    if names is NO_DEFAULT
-                    else names
-                ),
+                names=names,
             )
         return super().empty(recurse=recurse)
 
