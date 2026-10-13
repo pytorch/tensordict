@@ -42,6 +42,15 @@ _KNOWN_FAILURES_FILE = pathlib.Path(__file__).with_name(
 )
 _KNOWN_FAILURES = json.loads(_KNOWN_FAILURES_FILE.read_text())
 _UPDATE_KNOWN_FAILURES = bool(os.environ.get("TENSORDICT_UPDATE_KNOWN_FAILURES"))
+# Cases that run but whose outcome depends on the torch version, so the
+# known-failure check skips them and conformance_known_failures.json does not
+# list them.
+# - detach_() on td_with_unbatched: the UnbatchedTensor in the tensordict is a
+#   view (an alias that carries the batch size), so detach_() raises. Its dense
+#   copy is a view too, and raises the same way, only where UnbatchedTensor falls
+#   back to __torch_function__ (torch without pytorch/pytorch#176977, such as
+#   2.13), whose results are views made by as_subclass.
+_VERSION_DEPENDENT = {"td_with_unbatched filling": {"detach_()"}}
 
 pytestmark = pytest.mark.filterwarnings(
     "ignore:A destination should be provided when cloning a PersistentTensorDict"
@@ -315,6 +324,8 @@ def _compare(make, op):
 
 def _check_known_failures(key, failures):
     """Compare ``failures`` ({case: reason}) with the known failures of ``key``."""
+    skipped = _VERSION_DEPENDENT.get(key, set())
+    failures = {case: r for case, r in failures.items() if case not in skipped}
     if _UPDATE_KNOWN_FAILURES:
         known = json.loads(_KNOWN_FAILURES_FILE.read_text())
         known[key] = sorted(failures)
