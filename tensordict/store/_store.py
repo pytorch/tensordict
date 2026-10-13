@@ -53,6 +53,7 @@ else:
     Self = Any
 
 from tensordict.store._connection import (
+    _client_settings,
     _connect_kwargs,
     _KEY_SEP,
     _read_stored_metadata,
@@ -2241,6 +2242,11 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         redis_kwargs = {
             k: v for k, v in kwargs.items() if k not in ("client", "cache_metadata")
         }
+        settings = _client_settings(kwargs.get("client"))
+        if settings is not None:
+            # the store is on the server of the client
+            host, port, db, unix_socket_path, credentials = settings
+            redis_kwargs = {**redis_kwargs, **credentials}
         raw_bs, raw_dev, raw_tc = _read_stored_metadata(
             _connect_kwargs(host, port, db, unix_socket_path, redis_kwargs),
             prefix,
@@ -2249,9 +2255,10 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         )
 
         if raw_bs is None:
+            server = unix_socket_path or f"{host}:{port}"
             raise KeyError(
                 f"No TensorDictStore with td_id={td_id!r} found at "
-                f"{host}:{port} db={db} (prefix={prefix!r})."
+                f"{server} db={db} (prefix={prefix!r})."
             )
 
         batch_size = torch.Size(json.loads(raw_bs))
@@ -2286,10 +2293,7 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
             # Deep clone: new UUID, copies all data
             new_td = TensorDictStore(
                 backend=self._backend,
-                host=self._host,
-                port=self._port,
-                db=self._db,
-                unix_socket_path=self._unix_socket_path,
+                **self._connection_kwargs(),
                 prefix=self._namespace,
                 batch_size=self._batch_size,
                 device=self._device,

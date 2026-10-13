@@ -35,6 +35,7 @@ from tensordict.base import (
     TensorDictBase,
 )
 from tensordict.store._connection import (
+    _client_settings,
     _connect_kwargs,
     _read_stored_metadata,
     _StoreConnection,
@@ -2037,6 +2038,11 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         redis_kwargs = {
             k: v for k, v in kwargs.items() if k not in ("client", "cache_metadata")
         }
+        settings = _client_settings(kwargs.get("client"))
+        if settings is not None:
+            # the store is on the server of the client
+            host, port, db, unix_socket_path, credentials = settings
+            redis_kwargs = {**redis_kwargs, **credentials}
         raw_type, raw_count, raw_sd, raw_ibs, raw_dev = _read_stored_metadata(
             _connect_kwargs(host, port, db, unix_socket_path, redis_kwargs),
             prefix,
@@ -2097,10 +2103,7 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
     def _clone(self, recurse: bool = True) -> LazyStackedTensorDictStore:
         if recurse:
             new_td = LazyStackedTensorDictStore(
-                host=self._host,
-                port=self._port,
-                db=self._db,
-                unix_socket_path=self._unix_socket_path,
+                **self._connection_kwargs(),
                 prefix=self._namespace,
                 count=self._count,
                 stack_dim=self._stack_dim,
@@ -2111,10 +2114,7 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             return new_td
         # Shallow: same data, new wrapper
         return LazyStackedTensorDictStore(
-            host=self._host,
-            port=self._port,
-            db=self._db,
-            unix_socket_path=self._unix_socket_path,
+            **self._connection_kwargs(),
             prefix=self._namespace,
             count=self._count,
             stack_dim=self._stack_dim,

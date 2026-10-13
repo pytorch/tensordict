@@ -1755,26 +1755,7 @@ def test_from_store_unix_socket_path(cls, tmp_path):
         )
 
 
-_CLIENT_COPY_XFAIL = pytest.mark.xfail(
-    strict=True, reason="the copy connects to localhost:6379 db 0, not to the client"
-)
-
-
-@pytest.mark.parametrize(
-    "copy",
-    [
-        None,
-        pytest.param("pickle", marks=_CLIENT_COPY_XFAIL),
-        pytest.param("clone", marks=_CLIENT_COPY_XFAIL),
-        pytest.param(
-            "from_store",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="from_store reads the metadata from host and port, not from the client",
-            ),
-        ),
-    ],
-)
+@pytest.mark.parametrize("copy", [None, "pickle", "clone", "from_store"])
 @pytest.mark.parametrize("stacked", [False, True])
 def test_client_kwarg(store_kwargs, stacked, copy):
     """A store built with client= uses it, and its copies connect to the same server."""
@@ -1803,6 +1784,40 @@ def test_client_kwarg(store_kwargs, stacked, copy):
             if copy == "clone":
                 other.clear_redis()
             other.close()
+    finally:
+        store.clear_redis()
+        store.close()
+
+
+class _ClientWithoutPool:
+    """A client that does not expose its server address."""
+
+    def __init__(self, client):
+        self._client = client
+
+    def __getattr__(self, name):
+        if name == "connection_pool":
+            raise AttributeError(name)
+        return getattr(self._client, name)
+
+
+@pytest.mark.parametrize("stacked", [False, True])
+def test_client_without_settings(store_kwargs, stacked):
+    """A store whose client hides its server works, but cannot be copied."""
+    import redis.asyncio as aioredis
+
+    client = aioredis.Redis(port=store_kwargs["port"], db=store_kwargs["db"])
+    store = _small_store(
+        {"backend": store_kwargs["backend"]},
+        stacked,
+        client=_ClientWithoutPool(client),
+    )
+    try:
+        assert torch.equal(store["a"], _SMALL_A)
+        with pytest.raises(RuntimeError, match="Cannot connect a copy"):
+            pickle.dumps(store)
+        with pytest.raises(RuntimeError, match="Cannot connect a copy"):
+            store.clone()
     finally:
         store.clear_redis()
         store.close()

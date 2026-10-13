@@ -52,6 +52,33 @@ def _connect_kwargs(
     return connect_kwargs
 
 
+def _client_settings(client) -> tuple | None:
+    """Reads the server of a ``redis.asyncio.Redis`` client.
+
+    Returns ``(host, port, db, unix_socket_path, credentials)``, where
+    ``credentials`` holds the username and the password of the client, if it
+    has them. A copy of a store built with ``client`` (pickled or cloned)
+    connects with these. Returns ``None`` if ``client`` does not expose
+    ``connection_pool.connection_kwargs``, as redis-py does, or is ``None``.
+    """
+    try:
+        kwargs = client.connection_pool.connection_kwargs
+    except AttributeError:
+        return None
+    credentials = {
+        name: kwargs[name]
+        for name in ("username", "password")
+        if kwargs.get(name) is not None
+    }
+    return (
+        kwargs.get("host", "localhost"),
+        kwargs.get("port", 6379),
+        kwargs.get("db", 0),
+        kwargs.get("path"),
+        credentials,
+    )
+
+
 def _read_stored_metadata(
     connect_kwargs: dict[str, Any],
     namespace: str,
@@ -163,7 +190,18 @@ class _StoreConnection:
     # ---- connection ----
 
     def _connection_kwargs(self) -> dict[str, Any]:
-        """Returns the keyword arguments of ``redis.asyncio.Redis`` for the server of the store."""
+        """Returns the keyword arguments of ``redis.asyncio.Redis`` for the server of the store.
+
+        Raises a ``RuntimeError`` if the store was built with a client whose
+        server cannot be read.
+        """
+        if self._redis_kwargs is None:
+            raise RuntimeError(
+                f"Cannot connect a copy of this {type(self).__name__}: it was "
+                "built with a client that does not expose its server in "
+                "client.connection_pool.connection_kwargs. Build the store "
+                "with host, port and db instead."
+            )
         return _connect_kwargs(
             self._host, self._port, self._db, self._unix_socket_path, self._redis_kwargs
         )
@@ -172,6 +210,10 @@ class _StoreConnection:
         """Starts the background event loop and sets the client.
 
         Without ``client``, a new client connects with :meth:`_connection_kwargs`.
+        With ``client``, the server of the client replaces the connection
+        attributes, so that the copies of the store connect to it. If it
+        cannot be read, ``_redis_kwargs`` is ``None`` and the store cannot be
+        copied.
         """
         import redis.asyncio as aioredis
 
@@ -181,6 +223,19 @@ class _StoreConnection:
         self._owns_loop = True
         if client is None:
             client = aioredis.Redis(**self._connection_kwargs())
+        else:
+            settings = _client_settings(client)
+            if settings is None:
+                self._redis_kwargs = None
+            else:
+                (
+                    self._host,
+                    self._port,
+                    self._db,
+                    self._unix_socket_path,
+                    credentials,
+                ) = settings
+                self._redis_kwargs = {**self._redis_kwargs, **credentials}
         self._client = client
 
     def _run_sync(self, coro):
@@ -372,6 +427,7 @@ class _StoreConnection:
     # Override: the event loop, its thread and the client cannot be pickled.
     # The copy opens its own connection to the same server.
     def __getstate__(self) -> dict[str, Any]:
+        self._connection_kwargs()  # raises if the copy cannot connect
         return {name: getattr(self, name) for name in self._pickled_attrs}
 
     # Override: see __getstate__.
