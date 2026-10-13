@@ -919,6 +919,52 @@ class TestNonTensorData:
             s[:, i] = t
             assert s.tolist() == ["2", "3"]
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_setitem_into_members(self, stack_dim):
+        # A write that changes part of a NonTensorData member, along a dim
+        # other than the stack dim, turns the member into a stack.
+        def make():
+            n = 2 if stack_dim == 0 else 3
+            return NonTensorStack(
+                *[NonTensorData("s0", batch_size=[5 - n]) for _ in range(n)],
+                stack_dim=stack_dim,
+            )
+
+        s = make()
+        assert s.batch_size == (2, 3)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            s[1] = NonTensorData("x", batch_size=[3])
+        assert s.tolist() == [["s0"] * 3, ["x"] * 3]
+        s = make()
+        s[1, 0] = NonTensorData("x")
+        assert s.tolist() == [["s0"] * 3, ["x", "s0", "s0"]]
+        s = make()
+        s[0, 1:] = NonTensorStack("a", "b")
+        assert s.tolist() == [["s0", "a", "b"], ["s0"] * 3]
+        # an equal value leaves the members as they are
+        s = make()
+        s[1, 0] = NonTensorData("s0")
+        assert all(type(td) is NonTensorData for td in s.tensordicts)
+        assert s.tolist() == [["s0"] * 3] * 2
+        s = make().lock_()
+        with pytest.raises(RuntimeError, match="Cannot modify locked"):
+            s[1, 0] = NonTensorData("x")
+        assert s.tolist() == [["s0"] * 3] * 2
+
+    def test_setitem_other_value_raises(self):
+        # One NonTensorData holds one value: it cannot take another value at
+        # an index
+        data = NonTensorData("s0", batch_size=[3])
+        with pytest.raises(ValueError, match="one value for all its elements"):
+            data[1] = NonTensorData("x")
+        with pytest.raises(ValueError, match="one value for all its elements"):
+            data[1:] = NonTensorStack("s0", "x")
+        assert data.tolist() == ["s0"] * 3
+        data[1] = NonTensorData("s0")
+        data[1:] = NonTensorStack("s0", "s0")
+        assert data.tolist() == ["s0"] * 3
+
     def test_stack(self, non_tensor_data):
         assert (
             LazyStackedTensorDict.lazy_stack([non_tensor_data, non_tensor_data], 0).get(

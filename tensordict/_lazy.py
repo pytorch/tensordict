@@ -1522,14 +1522,14 @@ class LazyStackedTensorDict(TensorDictBase):
                 value = value.clone()
         if split.kind == _MEMBER:
             ((member, member_index, _),) = split.parts
-            yield self.tensordicts[member], member_index, value
+            yield member, member_index, value
         elif split.kind == _STACK:
             for (member, member_index, _), piece in _zip_strict(
                 split.parts, value.unbind(split.dim)
             ):
                 if split.keepdim:
                     piece = piece.unsqueeze(split.dim)
-                yield self.tensordicts[member], member_index, piece
+                yield member, member_index, piece
         else:
             if not split.block and len(split.shape) == 1:
                 pieces = value.unbind(split.dim)
@@ -1543,7 +1543,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 else:
                     where = _unravel(positions[-1], split.shape)
                     piece = value[(slice(None),) * split.dim + where]
-                yield self.tensordicts[member], member_index, piece
+                yield member, member_index, piece
 
     def _empty_getitem_result(self, index: IndexType, stack_dim: int) -> TensorDictBase:
         """Build the result of an index that selects no element along the stack dim.
@@ -1651,8 +1651,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 value = value.squeeze(0)
             value = value[(None,) * (ndim - value.ndim)]
             value = value.expand((*batch_size, *value.shape[len(batch_size) :]))
-        for td, member_index, piece in self._split_value(index, value):
-            td._set_at_str(
+        for member, member_index, piece in self._split_value(index, value):
+            self.tensordicts[member]._set_at_str(
                 key,
                 piece,
                 () if member_index is None else member_index,
@@ -3219,17 +3219,21 @@ class LazyStackedTensorDict(TensorDictBase):
                         f"(batch_size = {self.batch_size}, index={index}), "
                         f"which differs from the source batch size {value.batch_size}"
                     ) from err
-            for td, member_index, piece in self._split_value(index, value):
+            for member, member_index, piece in self._split_value(index, value):
                 if member_index is None:
-                    td.update(piece, inplace=True)
+                    self.tensordicts[member].update(piece, inplace=True)
                 else:
-                    td[member_index] = piece
+                    self._setitem_member(member, member_index, piece)
         else:
             # the Ellipsis covers the batch dims, where set_at_ would read it on
             # the entries
             index = convert_ellipsis_to_idx(index, self.batch_size)
             for key in self.keys():
                 self.set_at_(key, value, index)
+
+    def _setitem_member(self, member: int, member_index: IndexType, piece) -> None:
+        """Write ``piece`` at ``member_index`` of the member at position ``member``, for :meth:`__setitem__`."""
+        self.tensordicts[member][member_index] = piece
 
     def __contains__(self, item: IndexType) -> bool:
         if isinstance(item, TensorDictBase):
@@ -4090,8 +4094,8 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         elif input_dict_or_td.batch_size != indexed_bs:
             input_dict_or_td = input_dict_or_td.expand(indexed_bs)
-        for td, member_index, piece in self._split_value(index, input_dict_or_td):
-            td.update_at_(
+        for member, member_index, piece in self._split_value(index, input_dict_or_td):
+            self.tensordicts[member].update_at_(
                 piece,
                 () if member_index is None else member_index,
                 non_blocking=non_blocking,
