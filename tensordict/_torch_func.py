@@ -652,6 +652,8 @@ def _lazy_cat(
         else:
             init_idx = 0
             for td_in in list_of_tensordicts:
+                if td_in.shape[dim] == 0:
+                    continue
                 sub_dest = out.tensordicts[init_idx : init_idx + td_in.shape[dim]]
                 init_idx += td_in.shape[dim]
                 # write into the members of out (a dense stack would copy them)
@@ -1058,6 +1060,107 @@ def _sum(td: T, *args: Any, **kwargs: Any) -> T:
 @implements_for_td(torch.maximum)
 def _maximum(td: T, other: T, *args: Any, **kwargs: Any) -> T:
     return td.maximum(other, *args, **kwargs)
+
+
+def _call_method(name: str) -> Callable:
+    def _method(td: T, *args: Any, **kwargs: Any) -> T:
+        if not _is_tensor_collection(type(td)):
+            # torch.add(tensor, td): a tensor has no method that takes a tensordict
+            raise TypeError(
+                f"torch.{name} takes a tensordict as its first argument, "
+                f"got {type(td).__name__}."
+            )
+        return getattr(td, name)(*args, **kwargs)
+
+    _method.__name__ = f"_{name}"
+    return _method
+
+
+# Pointwise functions whose TensorDict method has the arguments and results of
+# the torch function. Reductions such as torch.max and torch.all are left out:
+# their methods return other results.
+_POINTWISE_FUNCTIONS = (
+    "abs",
+    "abs_",
+    "acos",
+    "acos_",
+    "add",
+    "addcdiv",
+    "addcmul",
+    "asin",
+    "asin_",
+    "atan",
+    "atan_",
+    "bitwise_and",
+    "ceil",
+    "ceil_",
+    "clamp",
+    "clamp_max",
+    "clamp_max_",
+    "clamp_min",
+    "clamp_min_",
+    "cos",
+    "cos_",
+    "cosh",
+    "cosh_",
+    "div",
+    "erf",
+    "erf_",
+    "erfc",
+    "erfc_",
+    "exp",
+    "exp_",
+    "expm1",
+    "expm1_",
+    "floor",
+    "floor_",
+    "frac",
+    "frac_",
+    "isfinite",
+    "isnan",
+    "isneginf",
+    "isposinf",
+    "isreal",
+    "lerp",
+    "lgamma",
+    "log",
+    "log10",
+    "log10_",
+    "log1p",
+    "log1p_",
+    "log2",
+    "log2_",
+    "log_",
+    "logical_and",
+    "minimum",
+    "mul",
+    "neg",
+    "neg_",
+    "pow",
+    "reciprocal",
+    "reciprocal_",
+    "round",
+    "round_",
+    "rsub",
+    "sigmoid",
+    "sigmoid_",
+    "sign",
+    "sin",
+    "sin_",
+    "sinh",
+    "sinh_",
+    "sqrt",
+    "sqrt_",
+    "sub",
+    "tan",
+    "tan_",
+    "tanh",
+    "tanh_",
+    "trunc",
+    "trunc_",
+)
+for _name in _POINTWISE_FUNCTIONS:
+    implements_for_td(getattr(torch, _name))(_call_method(_name))
 
 
 @implements_for_td(torch.nn.functional.l1_loss)

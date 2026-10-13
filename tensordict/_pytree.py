@@ -104,9 +104,17 @@ def _pytree_non_tensor_data(d: TensorDictBase) -> dict | tuple:
     # NonTensorData.__eq__, which returns a tensor when the entry has a batch
     # size.
     if _is_tensorclass(type(d)):
-        # A dict: the fields of a NonTensorData rebuilt by set_non_tensor are
-        # in another order than those of the original entry.
-        return dict(d.non_tensor_items())
+        # The fields held outside the TensorDict of the tensorclass. A dict:
+        # the fields of a NonTensorData rebuilt by set_non_tensor are in
+        # another order than those of the original entry.
+        non_tensor = dict(d._non_tensordict)
+        if not type(d)._is_non_tensor:
+            # tensorclass imports this module
+            from tensordict.tensorclass import _none_fields
+
+            # A None field is a missing key
+            non_tensor.update(dict.fromkeys(_none_fields(d)))
+        return non_tensor
     items = []
     for key, value in d.non_tensor_items():
         if isinstance(value, LazyStackedTensorDict):

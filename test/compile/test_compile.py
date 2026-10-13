@@ -1811,6 +1811,20 @@ class TestTC:
         )
         assert (unbind(data)[-1] == unbind_c(data)[-1]).all()
 
+    def test_tc_max(self, mode):
+        def max_values(td):
+            result = td.max(dim=0)
+            return result.values, result.indices
+
+        max_values_c = torch.compile(max_values, fullgraph=True, mode=mode)
+        data = MyClass(a=None, b=torch.randn(3, 4), batch_size=[3, 4])
+        values, indices = max_values_c(data)
+        expected = data.b.max(dim=0)
+        assert isinstance(values, MyClass)
+        assert isinstance(indices, MyClass)
+        assert (values.b == expected.values).all()
+        assert (indices.b == expected.indices).all()
+
     def test_tc_iter(self, mode):
         def iterate(tc):
             return torch.stack([t.a.b + 1 for t in tc])

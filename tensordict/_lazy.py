@@ -80,6 +80,7 @@ from tensordict.utils import (
     _cast_scalar,
     _check_is_flatten,
     _check_is_unflatten,
+    _check_unflatten_size,
     _erase_cache_first,
     _get_shape_from_args,
     _import_and_wrap_functorch,
@@ -96,6 +97,7 @@ from tensordict.utils import (
     _shape,
     _td_fields,
     _unravel_key_to_tuple,
+    _warn_dim_past_batch_dims,
     _zip_strict,
     DeviceType,
     expand_right,
@@ -998,6 +1000,13 @@ class LazyStackedTensorDict(TensorDictBase):
             )
             for i in range(len(input_dict))
         ]
+        if names is not None and stack_dim_name is not None and tensordicts:
+            # the stack inserts stack_dim_name into the names of its members,
+            # which must all match: it must not name one of their dims already
+            stack_names = list(tensordicts[0].names)
+            if stack_dim_name in stack_names:
+                stack_names.insert(stack_dim % (len(stack_names) + 1), stack_dim_name)
+                raise ValueError(f"Some dimension names are non-unique: {stack_names}.")
         if names is not None and batch_size is None:
             # TensorDict.from_dict dropped the names: say when that changes
             dropped = list(names)
@@ -1030,6 +1039,11 @@ class LazyStackedTensorDict(TensorDictBase):
                         stacklevel=stacklevel,
                     )
 
+        if stack_dim < 0 and tensordicts:
+            # count from the end of the stack's dims, as __init__ does
+            ndim = tensordicts[0].batch_dims + 1
+            if stack_dim >= -ndim:
+                stack_dim += ndim
         return cls._new_lazy_unsafe(
             *tensordicts,
             stack_dim=stack_dim,
@@ -1149,6 +1163,7 @@ class LazyStackedTensorDict(TensorDictBase):
     @_erase_cache_first  # a nested lazy stacked tensordict is not apparent to the root
     def names(self, value):
         self._set_names(value)
+        self._update_consolidated_metadata()
 
     # Override: the names are stored on the members and the stack dim.
     def _set_names(self, names: Sequence[str] | None):
@@ -1595,14 +1610,14 @@ class LazyStackedTensorDict(TensorDictBase):
                 value = value.clone()
         if split.kind == _MEMBER:
             ((member, member_index, _),) = split.parts
-            yield self.tensordicts[member], member_index, value
+            yield member, member_index, value
         elif split.kind == _STACK:
             for (member, member_index, _), piece in _zip_strict(
                 split.parts, value.unbind(split.dim)
             ):
                 if split.keepdim:
                     piece = piece.unsqueeze(split.dim)
-                yield self.tensordicts[member], member_index, piece
+                yield member, member_index, piece
         else:
             if not split.block and len(split.shape) == 1:
                 pieces = value.unbind(split.dim)
@@ -1616,7 +1631,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 else:
                     where = _unravel(positions[-1], split.shape)
                     piece = value[(slice(None),) * split.dim + where]
-                yield self.tensordicts[member], member_index, piece
+                yield member, member_index, piece
 
     def _empty_getitem_result(self, index: IndexType, stack_dim: int) -> TensorDictBase:
         """Build the result of an index that selects no element along the stack dim.
@@ -1717,10 +1732,12 @@ class LazyStackedTensorDict(TensorDictBase):
             feature_ndim = entry.ndim
             if not _is_unbatched(entry):
                 feature_ndim -= entry_batch_dims
-            if value.numel() == 1 or value.ndim <= feature_ndim:
+            if value.numel() == 1 or value.ndim <= feature_ndim or is_non_tensor(entry):
                 # The value is the same for every element, so each member
                 # writes it as it is, as torch does. torch casts a value of one
                 # element to the dtype of the entry, but not an expanded one.
+                # A non-tensor entry holds the whole value in each element, as
+                # in a tensordict.
                 self._set_at_members(
                     key, value, index, validated=validated, non_blocking=non_blocking
                 )
@@ -1731,8 +1748,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 value = value.squeeze(0)
             value = value[(None,) * (ndim - value.ndim)]
             value = value.expand((*batch_size, *value.shape[len(batch_size) :]))
-        for td, member_index, piece in self._split_value(index, value):
-            td._set_at_str(
+        for member, member_index, piece in self._split_value(index, value):
+            self.tensordicts[member]._set_at_str(
                 key,
                 piece,
                 () if member_index is None else member_index,
@@ -2161,7 +2178,10 @@ class LazyStackedTensorDict(TensorDictBase):
             items (Sequence of TensorDictBase instances): the tensordicts to
                 stack. It must not be empty, or a ``RuntimeError`` is raised.
             dim (int, optional): the dim along which to perform the lazy stack.
-                Defaults to 0.
+                Defaults to 0. A ``dim`` below ``-batch_dims - 1`` warns and
+                wraps around once more (and raises if it is still out of
+                range). Starting with TensorDict 0.17, the default will change
+                to raising an ``IndexError``, as for a tensor.
 
         Keyword Args:
             device (torch.device, optional): not used: the stack takes the
@@ -2270,6 +2290,8 @@ class LazyStackedTensorDict(TensorDictBase):
         batch_size = items[0].batch_size
         if dim < 0:
             dim = len(batch_size) + dim + 1
+            if dim < 0:
+                _warn_dim_past_batch_dims("lazy_stack")
 
         if strict_shape:
             for td in items[1:]:
@@ -2720,7 +2742,8 @@ class LazyStackedTensorDict(TensorDictBase):
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> Self:
-        name = None
+        # names=None keeps the names of the stack and of its members
+        name = self._td_dim_name
         if batch_size is not None and (
             self.stack_dim
             and batch_size[: self.stack_dim] != self.batch_size[: self.stack_dim]
@@ -2730,12 +2753,14 @@ class LazyStackedTensorDict(TensorDictBase):
                 recurse=recurse,
                 batch_size=batch_size,
                 device=device if device is not NO_DEFAULT else self.device,
-                names=names if names is not None else None,
+                names=names if names is not None else NO_DEFAULT,
             )
+        names_kwarg = {}
         if names is not None:
-            if len(names) > self.stack_dim:
-                name = names[self.stack_dim]
-            names = [name for i, name in enumerate(names) if i != self.stack_dim]
+            name = names[self.stack_dim] if len(names) > self.stack_dim else None
+            names_kwarg["names"] = [
+                name for i, name in enumerate(names) if i != self.stack_dim
+            ]
         if batch_size is not None:
             batch_size = torch.Size(
                 [b for i, b in enumerate(batch_size) if i != self.stack_dim]
@@ -2743,7 +2768,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return type(self)(
             *[
                 td.empty(
-                    recurse=recurse, batch_size=batch_size, device=device, names=names
+                    recurse=recurse, batch_size=batch_size, device=device, **names_kwarg
                 )
                 for td in self.tensordicts
             ],
@@ -3154,6 +3179,7 @@ class LazyStackedTensorDict(TensorDictBase):
         filter_empty: bool | None = None,
         is_leaf: Callable | None = None,
         out: TensorDictBase | None = None,
+        call_on_unbatched: bool = False,
         **constructor_kwargs,
     ) -> Self | None:
         if inplace and any(
@@ -3202,6 +3228,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 filter_empty=filter_empty,
                 is_leaf=is_leaf,
                 out=out,
+                call_on_unbatched=call_on_unbatched,
                 **constructor_kwargs,
             )
 
@@ -3354,17 +3381,21 @@ class LazyStackedTensorDict(TensorDictBase):
                         f"(batch_size = {self.batch_size}, index={index}), "
                         f"which differs from the source batch size {value.batch_size}"
                     ) from err
-            for td, member_index, piece in self._split_value(index, value):
+            for member, member_index, piece in self._split_value(index, value):
                 if member_index is None:
-                    td.update(piece, inplace=True)
+                    self.tensordicts[member].update(piece, inplace=True)
                 else:
-                    td[member_index] = piece
+                    self._setitem_member(member, member_index, piece)
         else:
             # the Ellipsis covers the batch dims, where set_at_ would read it on
             # the entries
             index = convert_ellipsis_to_idx(index, self.batch_size)
             for key in self.keys():
                 self.set_at_(key, value, index)
+
+    def _setitem_member(self, member: int, member_index: IndexType, piece) -> None:
+        """Write ``piece`` at ``member_index`` of the member at position ``member``, for :meth:`__setitem__`."""
+        self.tensordicts[member][member_index] = piece
 
     def __contains__(self, item: IndexType) -> bool:
         if isinstance(item, TensorDictBase):
@@ -4171,8 +4202,8 @@ class LazyStackedTensorDict(TensorDictBase):
             input_dict_or_td = input_dict_or_td.expand(indexed_bs)
         # the members of a NonTensorStack take no keys_to_update
         kwargs = {} if keys_to_update is None else {"keys_to_update": keys_to_update}
-        for td, member_index, piece in self._split_value(idx, input_dict_or_td):
-            td.update_at_(
+        for member, member_index, piece in self._split_value(idx, input_dict_or_td):
+            self.tensordicts[member].update_at_(
                 piece,
                 () if member_index is None else member_index,
                 non_blocking=non_blocking,
@@ -4513,18 +4544,48 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def _view(self, *args, raise_if_not_view: bool = True, **kwargs) -> Self:
         shape = _get_shape_from_args(*args, **kwargs)
-        if any(dim < 0 for dim in shape):
-            if not self.batch_size.numel():
-                # Regrouping the members of an empty batch would lose the
-                # keys: reshape a dense copy, which has the shared keys.
-                shape = torch.Size(_infer_size_impl(shape, 0))
-                if shape == self.batch_size:
-                    return self
-                return self.contiguous().reshape(shape)
+        has_neg_dim = any(dim < 0 for dim in shape)
+        if not self.batch_size.numel() and (has_neg_dim or not is_non_tensor(self)):
+            # With no elements, the flatten and unflatten checks match shapes
+            # they cannot regroup, and regrouping can lose the keys. Keep the
+            # regrouped stack only for a -1-free shape it gets right;
+            # otherwise reshape a dense copy, which has the shared keys. A
+            # NonTensorStack is its own contiguous() and its reshape calls
+            # _view with the sizes inferred, so only a -1 is sent back there.
+            shape = torch.Size(_infer_size_impl(shape, 0))
+            if shape == self.batch_size:
+                return self
+            result = None
+            if not has_neg_dim:
+                try:
+                    result = self._regroup(shape)
+                except ValueError:
+                    # chunk(0) in the unflatten branch
+                    pass
+            if (
+                result is not None
+                and result.batch_size == shape
+                and set(result.keys()) == set(self.keys())
+            ):
+                return result
+            result = self.contiguous().reshape(shape)
+            if self.is_locked:
+                result.lock_()
+            return result
+        if has_neg_dim:
             shape = _infer_size_impl(shape, self.numel())
-
-        # Then we just need to reorganize the lazy stack
         shape = torch.Size(shape)
+        result = self._regroup(shape)
+        if result is not None:
+            return result
+        if raise_if_not_view:
+            raise RuntimeError(
+                "Cannot call `view` on a lazy stacked tensordict. Call `reshape` instead."
+            )
+        return TensorDict.reshape(self, shape)
+
+    def _regroup(self, shape: torch.Size) -> Self | None:
+        # Then we just need to reorganize the lazy stack
         is_flatten, (i, j) = _check_is_flatten(
             shape, self.batch_size, return_flatten_dim=True
         )
@@ -4566,11 +4627,7 @@ class LazyStackedTensorDict(TensorDictBase):
             if self.is_locked:
                 return tds.lock_()
             return tds
-        if raise_if_not_view:
-            raise RuntimeError(
-                "Cannot call `view` on a lazy stacked tensordict. Call `reshape` instead."
-            )
-        return TensorDict.reshape(self, shape)
+        return None
 
     def reshape(
         self,
@@ -4605,6 +4662,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 "call .to_tensordict() first or use inplace=False."
             )
         dim = _maybe_correct_neg_dim(dim, shape=self.batch_size)
+        _check_unflatten_size(self.batch_size, dim, unflattened_size)
         new_shape = self.batch_size
         if dim == 0:
             new_shape = torch.Size(unflattened_size) + new_shape[1:]
@@ -5447,9 +5505,6 @@ class _CustomOpTensorDict(TensorDictBase):
     @_erase_cache_first
     def _propagate_unlock(self):
         return self._source._propagate_unlock()
-
-    def __del__(self):
-        pass
 
     @property
     def sorted_keys(self):

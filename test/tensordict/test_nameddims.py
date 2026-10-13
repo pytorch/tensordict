@@ -337,6 +337,22 @@ class TestNamedDims(TestTensorDictsBase):
             pytest.param(
                 lambda td: td.memmap_like(), ["a", "b", "c"], id="memmap_like"
             ),
+            pytest.param(lambda td: td.empty(), ["a", "b", "c"], id="empty"),
+            pytest.param(
+                lambda td: td.empty(recurse=True),
+                ["a", "b", "c"],
+                id="empty-recurse",
+            ),
+            pytest.param(
+                lambda td: td.empty(batch_size=[3, 4, 5, 2]),
+                ["a", "b", "c", None],
+                id="empty-batch-size",
+            ),
+            pytest.param(
+                lambda td: td.empty(batch_size=[2, 4, 5]),
+                ["a", "b", "c"],
+                id="empty-batch-size-leading",
+            ),
         ],
     )
     def test_lazy_stack_op_names(self, stack_dim, op, names):
@@ -963,6 +979,31 @@ class TestNamedDims(TestTensorDictsBase):
         assert out["b"].dtype == td["b"].dtype
         assert out["a"].device == td["a"].device
         assert out["b"].device == td["b"].device
+
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_to_attrs_td_inplace_nested(self, num_threads):
+        # https://github.com/pytorch/tensordict/issues/2498
+        td = TensorDict(
+            a=torch.zeros(3),
+            nested=TensorDict(b=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        nested = td["nested"]
+        attrs = td.to(torch.float64).attrs()
+        out = td.to(attrs, inplace=True, num_threads=num_threads)
+        assert out is td
+        assert set(td.keys()) == {"a", "nested"}
+        assert td["nested"] is nested
+        assert td["a"].dtype == torch.float64
+        assert td["nested", "b"].dtype == torch.float64
+
+        # The same with a separate out
+        out = td.clone()
+        td._fast_apply(lambda x: x + 1, out=out, num_threads=num_threads)
+        assert set(out.keys()) == {"a", "nested"}
+        assert out["nested"] is not out
+        assert set(out["nested"].keys()) == {"b"}
+        assert (out["nested", "b"] == 1).all()
 
     def test_to_attrs_td_extra_positional_rejected(self):
         td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])

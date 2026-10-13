@@ -66,6 +66,7 @@ from tensordict.utils import (
     _canonicalize_tensor,
     _CloudpickleWrapper,
     _convert_list_to_stack,
+    _copy_cached_result,
     _erase_cache_first,
     _foreach,
     _GENERIC_NESTED_ERR,
@@ -467,12 +468,17 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
             others_map = []
             shape = self.shape
             self_expand = self
-            shapes = [shape, *[other.shape for other in others if other is not None]]
+            # None and numbers, such as the weight of lerp, are passed as they are
+            is_operand = [
+                isinstance(other, torch.Tensor) or _is_tensor_collection(type(other))
+                for other in others
+            ]
+            shapes = [shape, *[o.shape for o, f in zip(others, is_operand) if f]]
             shape = torch.broadcast_shapes(*shapes)
             if shape != self_expand.shape:
                 self_expand = self_expand.expand(shape)
-            for other in others:
-                if other is None:
+            for other, flag in zip(others, is_operand):
+                if not flag:
                     others_map.append(other)
                     continue
                 # broadcast dims
@@ -480,12 +486,39 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     other = other.expand(shape)
                 others_map.append(other)
             if any(isinstance(other, torch.Tensor) for other in others_map):
+                from tensordict._lazy import LazyStackedTensorDict
+
+                if isinstance(self_expand, LazyStackedTensorDict) and not is_non_tensor(
+                    self_expand
+                ):
+                    # The leaves of each member lack the stack dim: give each
+                    # member its slice of the operands.
+                    stack_dim = self_expand.stack_dim
+                    others_split = [
+                        other.unbind(stack_dim)
+                        if flag
+                        else [other] * self_expand.shape[stack_dim]
+                        for other, flag in zip(others_map, is_operand)
+                    ]
+                    results = [
+                        getattr(td, op)(*member_others, *args, **kwargs)
+                        for td, *member_others in zip(
+                            self_expand.tensordicts, *others_split
+                        )
+                    ]
+                    if inplace and self_expand is self:
+                        return self
+                    return self_expand._new_lazy_unsafe(
+                        *results,
+                        stack_dim=stack_dim,
+                        stack_dim_name=self_expand._td_dim_name,
+                    )
                 result = self_expand._fast_apply(
                     lambda x: leaf_op(
                         x,
                         *[
-                            expand_as_right(other, x) if other is not None else None
-                            for other in others_map
+                            expand_as_right(other, x) if flag else other
+                            for other, flag in zip(others_map, is_operand)
                         ],
                         *args,
                         **kwargs,
@@ -975,7 +1008,13 @@ def _warn_read_only(method: str) -> None:
     )
 
 
-def _warn_scalar_over_non_tensor(key: str, value: bool | int | float) -> None:
+# the scalars that _warn_scalar_over_non_tensor warns about
+_SCALAR_TYPES = (bool, int, float, np.bool_, np.integer, np.floating)
+
+
+def _warn_scalar_over_non_tensor(
+    key: str, value: bool | int | float | np.bool_ | np.integer | np.floating
+) -> None:
     """Warns that ``value``, written over the non-tensor entry ``key``, becomes a tensor today."""
     # point to the first frame outside tensordict: the user's call
     frame, stacklevel = sys._getframe(1), 2
@@ -1264,6 +1303,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # from the stored data, as in the lazy stores. update() then writes the
     # leaves it merges into the sub-tensordict back (see _update_write_back).
     _nested_reads_return_copies = False
+    # Whether the in-place shape methods (reshape, flatten, repeat, ... with
+    # inplace=True) can change the batch size after they rewrite the leaves.
+    # If not, _inplace_rebind_leaves raises before it writes anything.
+    _inplace_batch_size_change = True
     # Set by PersistentTensorDict and the stores, whose rename_key_ did not
     # check the lock or the type of the old key before 0.15: until 0.17 they
     # rename in a locked tensordict with a warning, and pass an old key that is
@@ -1763,6 +1806,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     @batch_size.setter
     def batch_size(self, new_size: torch.Size) -> None:
         self._batch_size_setter(new_size)
+        self._update_consolidated_metadata()
 
     def size(self, dim: int | None = None) -> torch.Size | int:
         """Returns the batch size, or the size of one batch dimension.
@@ -2485,6 +2529,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     @names.setter
     def names(self, value):
         self._set_names(value)
+        self._update_consolidated_metadata()
 
     def _get_names_idx(self, idx):
         if not self._has_names():
@@ -2970,11 +3015,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Arrays and numbers are converted to tensors. Strings and other
         objects are stored as :class:`~tensordict.NonTensorData`.
 
-        A Python ``bool``, ``int`` or ``float`` written over an existing
-        :class:`~tensordict.NonTensorData` entry is stored as a 0-d tensor,
-        and the write emits a :class:`FutureWarning`. Starting with
-        TensorDict 0.17, the default will change to storing it as
-        :class:`~tensordict.NonTensorData`, like the entry it replaces.
+        A ``bool``, ``int`` or ``float``, or a NumPy scalar of one of these
+        kinds, written over an existing :class:`~tensordict.NonTensorData`
+        entry is stored as a 0-d tensor, and the write emits a
+        :class:`FutureWarning`. Starting with TensorDict 0.17, the default will
+        change to storing it as :class:`~tensordict.NonTensorData`, like the
+        entry it replaces.
 
         Args:
             key (NestedKey): the key to set: a string, or a tuple of strings
@@ -5695,7 +5741,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             if out.is_locked:
                 raise RuntimeError(_LOCK_ERROR)
             is_locked = False
-            if batch_size is not None and batch_size != out.batch_size:
+            if batch_size is not None and torch.Size(batch_size) != out.batch_size:
                 raise RuntimeError(
                     "batch_size and out.batch_size must be equal when both are provided."
                 )
@@ -5784,7 +5830,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     names=names,
                     inplace=inplace,
                     checked=checked,
-                    out=out,
+                    out=out._get_str(key, default=None) if out is not None else None,
                     filter_empty=filter_empty,
                     executor=executor,
                     futures=futures,
@@ -5931,6 +5977,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         filter_empty: bool | None = None,
         is_leaf: Callable[[Type], bool] | None = None,
         out: TensorDictBase | None = None,
+        call_on_unbatched: bool = False,
         **constructor_kwargs,
     ) -> Self | None:
         from tensordict._td import _SubTensorDict
@@ -5943,7 +5990,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             if out.is_locked:
                 raise RuntimeError(_LOCK_ERROR)
             is_locked = False
-            if batch_size is not None and batch_size != out.batch_size:
+            if batch_size is not None and torch.Size(batch_size) != out.batch_size:
                 raise RuntimeError(
                     "batch_size and out.batch_size must be equal when both are provided."
                 )
@@ -6009,14 +6056,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     filter_empty=filter_empty,
                     is_leaf=is_leaf,
                     out=out._get_str(key, default=None) if out is not None else None,
+                    call_on_unbatched=call_on_unbatched,
                     **constructor_kwargs,
                 )
             else:
                 # Pass-through values (e.g., UnbatchedTensor) with shape-changing ops
                 # (indicated by batch_size being set) keep their payload unchanged
                 # but must expose the new TensorDict-facing batch metadata.
-                # For other ops (data ops like zero_), apply the function normally.
-                if batch_size is not None and _is_unbatched(item):
+                # For other ops (data ops like zero_, and to() with a
+                # batch_size, which passes call_on_unbatched=True), apply the
+                # function normally.
+                unbatched_new_batch = batch_size is not None and _is_unbatched(item)
+                if unbatched_new_batch and not call_on_unbatched:
                     item_trsf = item._with_batch_size(batch_size)
                 else:
                     _others = [
@@ -6031,6 +6082,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                             item_trsf = fn(key, item, *_others)
                     else:
                         item_trsf = fn(item, *_others)
+                    if unbatched_new_batch and _is_unbatched(item_trsf):
+                        item_trsf = item_trsf._with_batch_size(batch_size)
             if item_trsf is not None:
                 if not any_set:
                     if result is None:
@@ -6142,6 +6195,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         provided and differs from the current one — bypassing the redundant
         shape check in ``_batch_size_setter``.
         """
+        if (
+            not self._inplace_batch_size_change
+            and new_batch_size is not None
+            and tuple(new_batch_size) != tuple(self.batch_size)
+        ):
+            raise NotImplementedError(
+                "An in-place shape operation that changes the batch size is not "
+                f"supported on {type(self).__name__}: call to_tensordict() first, "
+                "or use inplace=False."
+            )
         keys = list(self.keys())
         for key in keys:
             leaf = self._get_str(key, default=None)
@@ -6742,7 +6805,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             get,
             named=True,
             nested_keys=True,
-            batch_size=[],
+            batch_size=torch.Size([]),
             propagate_lock=True,
             out=out,
         )
@@ -7595,8 +7658,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             "Call .to_tensordict() first or use inplace=False."
         )
 
-    @_cache_while_locked  # noqa: B019
     @_as_context_manager()
+    @_copy_cached_result
+    @_cache_while_locked  # noqa: B019
     def flatten_keys(
         self,
         separator: str = ".",
@@ -7764,8 +7828,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         self.exclude(*root_keys, inplace=True)
         return self
 
-    @_cache_while_locked  # noqa: B019
     @_as_context_manager()
+    @_copy_cached_result
+    @_cache_while_locked  # noqa: B019
     def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> Self:
         """Converts a flat tensordict into a nested one, recursively.
 

@@ -23,6 +23,7 @@ from tensordict import (
 )
 from tensordict.base import TensorDictBase
 from tensordict.store import LazyStackedTensorDictStore, TensorDictStore
+from tensordict.store._connection import _client_settings
 from tensordict.store._lazy import _StoreStackElementView
 
 _has_redis = importlib.util.find_spec("redis", None) is not None
@@ -549,6 +550,69 @@ class TestTensorDictStore:
         finally:
             restored.close()
 
+    def test_pickle_nested_and_locked(self, store_td):
+        """A pickled nested view keeps its prefix, and a pickled locked store is locked."""
+        store_td["a"] = torch.arange(10.0)
+        store_td["n", "b"] = torch.ones(10, 2)
+        copies = []
+        try:
+            nested = pickle.loads(pickle.dumps(store_td["n"]))
+            copies.append(nested)
+            assert nested._prefix == "n"
+            assert list(nested.keys()) == ["b"]
+            assert nested.batch_size == torch.Size([10])
+            assert torch.equal(nested["b"], torch.ones(10, 2))
+            assert not nested.is_locked
+
+            store_td.lock_()
+            root = pickle.loads(pickle.dumps(store_td))
+            copies.append(root)
+            assert root.is_locked
+            assert sorted(root.keys()) == ["a", "n"]
+            assert root.batch_size == torch.Size([10])
+            locked_nested = pickle.loads(pickle.dumps(store_td["n"]))
+            copies.append(locked_nested)
+            assert locked_nested.is_locked
+            assert locked_nested._prefix == "n"
+            assert torch.equal(locked_nested["b"], torch.ones(10, 2))
+        finally:
+            store_td.unlock_()
+            for copy in copies:
+                copy.close()
+
+    def test_nested_clear_redis(self, store_td, store_kwargs):
+        """clear_redis() on a nested view deletes the entries under the view only."""
+        store_td["a"] = torch.arange(10.0)
+        store_td["n", "b"] = torch.ones(10, 2)
+        store_td["n", "m", "c"] = torch.ones(10)
+        store_td["nn"] = torch.zeros(10)  # starts with "n", but is not under it
+        store_td["n"].clear_redis()
+        assert sorted(store_td.keys(True, True)) == ["a", "nn"]
+        server_keys = _server_keys(store_td, store_kwargs)
+        assert not [key for key in server_keys if ":n." in key]
+        assert store_td._batch_size_key in server_keys
+        reader = TensorDictStore.from_store(td_id=store_td._td_id, **store_kwargs)
+        try:
+            assert sorted(reader.keys(True, True)) == ["a", "nn"]
+            assert torch.equal(reader["a"], torch.arange(10.0))
+        finally:
+            reader.close()
+
+    def test_get_at_stale_key_cache(self, store_td, store_kwargs):
+        """get_at of a key that another handle deleted, with a stale key cache."""
+        store_td["a"] = torch.arange(10.0)
+        store_td["n", "b"] = torch.ones(10, 2)
+        reader = TensorDictStore.from_store(td_id=store_td._td_id, **store_kwargs)
+        try:
+            assert sorted(reader.keys()) == ["a", "n"]
+            # the metadata of the reader is not cached yet
+            assert torch.equal(reader.get_at(("n", "b"), 1), torch.ones(2))
+            store_td.del_("a")
+            with pytest.raises(KeyError, match="key a not found in TensorDictStore"):
+                reader.get_at("a", 0)
+        finally:
+            reader.close()
+
     def test_entry_class(self, store_td):
         """Test entry_class returns correct types."""
 
@@ -948,6 +1012,12 @@ class TestTensorDictStore:
 
         with pytest.raises(KeyError, match="No TensorDictStore"):
             TensorDictStore.from_store(td_id="nonexistent-uuid", **store_kwargs)
+
+    def test_get_at_missing_key(self, store_td):
+        store_td["a"] = torch.arange(10.0)
+        store_td["n", "b"] = torch.ones(10, 2)
+        assert store_td.get_at("zz", 0, None) is None
+        assert torch.equal(store_td.get_at("n", 1)["b"], torch.ones(2))
 
     def test_from_store_with_device_override(self, store_kwargs):
         """from_store should allow overriding the device."""
@@ -1502,6 +1572,283 @@ def test_store_indexed_write_cuda(store_kwargs, stacked, idx, value):
         store.close()
 
 
+# ---- Connection, pickling and cleanup, on both stores ----
+
+_SMALL_A = torch.arange(6.0).view(2, 3)
+
+
+def _small_store(store_kwargs, stacked, **kwargs):
+    """A store with batch size [2], an entry "a" and a nested entry ("n", "b")."""
+    source = TensorDict(
+        a=_SMALL_A, n=TensorDict(b=torch.ones(2, 2), batch_size=[2]), batch_size=[2]
+    )
+    if stacked:
+        return LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(source.unbind(0)), **store_kwargs, **kwargs
+        )
+    return TensorDictStore.from_tensordict(source, **store_kwargs, **kwargs)
+
+
+def _server_keys(store, store_kwargs):
+    """The keys of ``store`` on the server, read with another client."""
+    import redis
+
+    client = redis.Redis(port=store_kwargs["port"], db=store_kwargs["db"])
+    try:
+        pattern = f"{store._namespace}:{{{store._td_id}}}:*"
+        return sorted(key.decode() for key in client.scan_iter(match=pattern))
+    finally:
+        client.close()
+
+
+@pytest.mark.parametrize("stacked", [False, True])
+def test_clear_redis_deletes_server_keys(store_kwargs, stacked):
+    store = _small_store(store_kwargs, stacked)
+    try:
+        assert torch.equal(store["a"], _SMALL_A)
+        assert _server_keys(store, store_kwargs)
+        store.clear_redis()
+        assert _server_keys(store, store_kwargs) == []
+        assert store._meta_cache == {}
+        assert getattr(store, "_keys_cache", [None]) == [None]
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("stacked", [False, True])
+def test_clear_redis_then_write(store_kwargs, stacked):
+    """A cleared store writes again, but from_store cannot find it: its metadata is gone."""
+    store = _small_store(store_kwargs, stacked)
+    cls = type(store)
+    try:
+        store.clear_redis()
+        store["c"] = torch.full((2, 3), 2.0)
+        assert list(store.keys()) == ["c"]
+        assert torch.equal(store["c"], torch.full((2, 3), 2.0))
+        with pytest.raises(KeyError, match=f"No {cls.__name__} with td_id"):
+            cls.from_store(td_id=store._td_id, **store_kwargs)
+    finally:
+        store.clear_redis()
+        store.close()
+
+
+@pytest.mark.parametrize("stacked", [False, True])
+def test_reader_sees_new_keys(store_kwargs, stacked):
+    """A TensorDictStore caches the key registry; a LazyStackedTensorDictStore reads it each time."""
+    writer = _small_store(store_kwargs, stacked)
+    reader = type(writer).from_store(td_id=writer._td_id, **store_kwargs)
+    try:
+        assert sorted(reader.keys()) == ["a", "n"]
+        writer["c"] = torch.zeros(2, 3)
+        assert sorted(reader.keys()) == (["a", "c", "n"] if stacked else ["a", "n"])
+    finally:
+        reader.close()
+        writer.clear_redis()
+        writer.close()
+
+
+@pytest.mark.parametrize("cache_metadata", [True, False])
+@pytest.mark.parametrize("stacked", [False, True])
+def test_del_key_removes_server_keys(store_kwargs, stacked, cache_metadata):
+    if stacked:
+        # "h" has elements of different shapes, so it also has an offset table
+        source = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(3), h=torch.zeros(2)),
+                TensorDict(a=torch.ones(3), h=torch.zeros(4)),
+            ]
+        )
+        store = LazyStackedTensorDictStore.from_lazy_stack(
+            source, cache_metadata=cache_metadata, **store_kwargs
+        )
+        entries = {"a": ["d:a", "m:a"], "h": ["d:h", "d:h:idx", "m:h"]}
+    else:
+        store = _small_store(store_kwargs, stacked, cache_metadata=cache_metadata)
+        entries = {"a": ["d:a", "m:a"], ("n", "b"): ["d:n.b", "m:n.b"]}
+    try:
+        for key, suffixes in entries.items():
+            entry_keys = {store._redis_key(suffix) for suffix in suffixes}
+            assert entry_keys <= set(_server_keys(store, store_kwargs))
+            store.del_(key)
+            assert not entry_keys & set(_server_keys(store, store_kwargs))
+            assert key not in store.keys(True)
+        assert store._run_sync(store._aget_all_keys()) == set()
+        assert store._meta_cache == ({} if cache_metadata else None)
+    finally:
+        store.clear_redis()
+        store.close()
+
+
+@pytest.mark.parametrize("stacked", [False, True])
+def test_close_twice_and_nested_close(store_kwargs, stacked):
+    store = _small_store(store_kwargs, stacked)
+    try:
+        if stacked:
+            # an element reads through the connection of the stack, and has no close
+            assert not hasattr(store[0], "close")
+        else:
+            nested = store["n"]
+            nested.close()  # a nested view does not own the connection
+            nested.__del__()
+            assert torch.equal(nested["b"], torch.ones(2, 2))
+        assert torch.equal(store["a"], _SMALL_A)
+        store.clear_redis()
+    finally:
+        store.close()
+    assert store._loop.is_closed()
+    store.close()  # closing again is a no-op
+
+
+@pytest.mark.parametrize("stacked", [False, True])
+def test_close_swallows_errors(store_kwargs, stacked, monkeypatch):
+    """close() stops the loop when closing the client fails, and __del__ never raises."""
+    store = _small_store(store_kwargs, stacked)
+    store.clear_redis()
+
+    async def failing_aclose():
+        raise ConnectionError("connection lost")
+
+    def failing_close():
+        raise RuntimeError("close failed")
+
+    monkeypatch.setattr(store._client, "aclose", failing_aclose)
+    monkeypatch.setattr(store, "close", failing_close)
+    store.__del__()
+    monkeypatch.delattr(store, "close")
+    store.close()
+    assert store._loop.is_closed()
+
+
+@pytest.mark.parametrize("stacked", [False, True])
+def test_setstate_unix_socket_path(store_kwargs, stacked, tmp_path):
+    """An unpickled store connects through its unix socket, not through host and port."""
+    store = _small_store(store_kwargs, stacked)
+    try:
+        state = store.__getstate__()
+    finally:
+        store.clear_redis()
+        store.close()
+    state["_unix_socket_path"] = str(tmp_path / "redis.sock")
+    copy = type(store).__new__(type(store))
+    copy.__setstate__(state)
+    try:
+        kwargs = copy._client.connection_pool.connection_kwargs
+        assert kwargs["path"] == str(tmp_path / "redis.sock")
+        assert "port" not in kwargs
+    finally:
+        copy.close()
+
+
+@pytest.mark.parametrize("cls", [TensorDictStore, LazyStackedTensorDictStore])
+def test_from_store_unix_socket_path(cls, tmp_path):
+    """from_store reads the metadata through the unix socket, not through host and port."""
+    if not _has_redis:
+        pytest.skip("redis package not installed")
+    import redis
+    from redis.asyncio.retry import Retry
+    from redis.backoff import NoBackoff
+
+    with pytest.raises(redis.exceptions.ConnectionError, match="missing.sock"):
+        cls.from_store(
+            td_id="nonexistent-uuid",
+            unix_socket_path=str(tmp_path / "missing.sock"),
+            retry=Retry(NoBackoff(), 0),
+        )
+
+
+@pytest.mark.parametrize("copy", [None, "pickle", "clone", "from_store"])
+@pytest.mark.parametrize("stacked", [False, True])
+def test_client_kwarg(store_kwargs, stacked, copy):
+    """A store built with client= uses it, and its copies connect to the same server."""
+    import redis.asyncio as aioredis
+
+    def client():
+        return aioredis.Redis(port=store_kwargs["port"], db=store_kwargs["db"])
+
+    # no port and no db: the store must take them from the client
+    store = _small_store({"backend": store_kwargs["backend"]}, stacked, client=client())
+    try:
+        assert torch.equal(store["a"], _SMALL_A)
+        assert store._redis_key("m:a") in _server_keys(store, store_kwargs)
+        if copy is None:
+            return
+        if copy == "pickle":
+            other = pickle.loads(pickle.dumps(store))
+        elif copy == "clone":
+            other = store.clone()
+        else:
+            other = type(store).from_store(td_id=store._td_id, client=client())
+        try:
+            assert torch.equal(other["a"], _SMALL_A)
+            assert other._redis_key("m:a") in _server_keys(other, store_kwargs)
+        finally:
+            if copy == "clone":
+                other.clear_redis()
+            other.close()
+    finally:
+        store.clear_redis()
+        store.close()
+
+
+class _ClientWithoutPool:
+    """A client that does not expose its server address."""
+
+    def __init__(self, client):
+        self._client = client
+
+    def __getattr__(self, name):
+        if name == "connection_pool":
+            raise AttributeError(name)
+        return getattr(self._client, name)
+
+
+@pytest.mark.parametrize("stacked", [False, True])
+def test_client_without_settings(store_kwargs, stacked):
+    """A store whose client hides its server works, but cannot be copied."""
+    import redis.asyncio as aioredis
+
+    client = aioredis.Redis(port=store_kwargs["port"], db=store_kwargs["db"])
+    store = _small_store(
+        {"backend": store_kwargs["backend"]},
+        stacked,
+        client=_ClientWithoutPool(client),
+    )
+    try:
+        assert torch.equal(store["a"], _SMALL_A)
+        with pytest.raises(RuntimeError, match="Cannot connect a copy"):
+            pickle.dumps(store)
+        with pytest.raises(RuntimeError, match="Cannot connect a copy"):
+            store.clone()
+        if stacked:
+            # a shallow copy of a lazy stack opens its own connection too
+            with pytest.raises(RuntimeError, match="Cannot connect a copy"):
+                store.copy()
+    finally:
+        store.clear_redis()
+        store.close()
+
+
+def test_client_settings():
+    """_client_settings reads the server and the credentials of a client."""
+    if not _has_redis:
+        pytest.skip("redis package not installed")
+    import redis.asyncio as aioredis
+
+    # building a client does not connect, so no server is needed
+    client = aioredis.Redis(port=6380, db=3, username="u", password="p")
+    assert _client_settings(client) == (
+        "localhost",
+        6380,
+        3,
+        None,
+        {"username": "u", "password": "p"},
+    )
+    client = aioredis.Redis(unix_socket_path="/tmp/redis.sock", db=2)
+    host, port, db, path, credentials = _client_settings(client)
+    assert (db, path, credentials) == (2, "/tmp/redis.sock", {})
+    assert _client_settings(None) is None
+
+
 class TestLazyStackedTensorDictStore:
     """Tests for LazyStackedTensorDictStore requiring a running store server."""
 
@@ -2014,6 +2361,44 @@ class TestLazyStackedTensorDictStore:
         finally:
             restored.close()
 
+    def test_pickle_locked_and_names(self, store_stack):
+        store_td, tds, lazy_td = store_stack
+        store_td.names = ["stack", "inner"]
+        store_td.lock_()
+        try:
+            restored = pickle.loads(pickle.dumps(store_td))
+            try:
+                assert restored.is_locked
+                assert restored.names == ["stack", "inner"]
+                assert restored.batch_size == torch.Size([5, 4])
+                assert torch.equal(restored[1]["b"], tds[1]["b"])
+            finally:
+                restored.close()
+        finally:
+            store_td.unlock_()
+
+    def test_from_store_not_found(self, store_kwargs):
+        with pytest.raises(
+            KeyError,
+            match=r"No LazyStackedTensorDictStore with td_id='nonexistent-uuid' found\.",
+        ):
+            LazyStackedTensorDictStore.from_store(
+                td_id="nonexistent-uuid", **store_kwargs
+            )
+
+    def test_get_at_missing_key(self, store_kwargs):
+        store = _small_store(store_kwargs, stacked=True)
+        try:
+            assert store.get_at("zz", 0, None) is None
+            assert store.get_at(("n", "zz"), 0, None) is None
+            assert torch.equal(store.get_at("n", 1)["b"], torch.ones(2))
+            assert torch.equal(store.get_at(("n", "b"), 1), torch.ones(2))
+            with pytest.raises(ValueError, match="'a' is a Tensor, not a tensordict"):
+                store.get_at(("a", "x"), 0)
+        finally:
+            store.clear_redis()
+            store.close()
+
     # ---- from_store reconnect ----
 
     def test_from_store_reconnect(self, store_stack, store_kwargs):
@@ -2405,6 +2790,14 @@ class TestLazyStackedTensorDictStore:
             store_td[1].update({"n": {"h": torch.zeros(3, 3)}})
             torch.testing.assert_close(store_td[1]["n", "h"], torch.zeros(3, 3))
             torch.testing.assert_close(store_td[0]["n", "h"], tds[0]["n", "h"])
+            # a locked store takes an in-place update of an existing leaf only
+            store_td.lock_()
+            store_td.update({"n": {"b": torch.full((2, 3), 7.0)}}, inplace=True)
+            torch.testing.assert_close(store_td["n", "b"], torch.full((2, 3), 7.0))
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                store_td.update({"n": {"e": torch.ones(2, 3)}}, inplace=True)
+            assert ("n", "e") not in store_td.keys(True)
+            store_td.unlock_()
         finally:
             store_td.clear_redis()
             store_td.close()
@@ -2479,6 +2872,43 @@ class TestLazyStackedTensorDictStore:
             for i in range(2):
                 assert (store_td[i]["h"] == 0).all()
             assert (store_td["a"] == 0).all()
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_locked_update_inplace(self, store_kwargs):
+        """A locked store and element view write their keys with inplace=True, as a lazy stack does (#2403)."""
+        tds = [
+            TensorDict(a=torch.zeros(3), n=TensorDict(b=torch.zeros(3)))
+            for _ in range(2)
+        ]
+        lazy_td = lazy_stack([td.clone() for td in tds])
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            for td in (store_td, lazy_td, store_td[1], lazy_td[1]):
+                td.lock_()
+                td.update({"a": td["a"] + 1}, inplace=True)
+                td.set(("n", "b"), td["n", "b"] + 2, inplace=True)
+                td.set(
+                    "n",
+                    TensorDict(b=td["n", "b"] + 3, batch_size=td.shape),
+                    inplace=True,
+                )
+                # a new key still raises, also as a leaf of a tensordict value
+                with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                    td.update({"c": td["a"]}, inplace=True)
+                with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                    td.set(("n", "c"), td["a"], inplace=True)
+                with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                    td["n"] = TensorDict(c=td["a"], batch_size=td.shape)
+                with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                    td["n"] = td["a"]
+                with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                    td["n", "m"] = TensorDict(c=td["a"], batch_size=td.shape)
+                td.unlock_()
+            assert_allclose_td(store_td.to_tensordict(), lazy_td.to_tensordict())
         finally:
             store_td.clear_redis()
             store_td.close()
