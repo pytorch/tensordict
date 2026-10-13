@@ -1202,8 +1202,8 @@ class TestNonTensorData:
     @pytest.mark.parametrize("write", ["update_", "copy_"])
     def test_shared_inplace_write_skips_non_tensor(self, mode, stack, write):
         # update_ and copy_ write the tensor leaves of a shared or memmapped
-        # tensordict and skip its non-tensor leaves, which most types cannot
-        # update in place
+        # tensordict, and skip with a warning the non-tensor values that its
+        # shared buffers cannot store, such as None
         def make(x):
             s = NonTensorStack(None, None) if stack else NonTensorData(None)
             return TensorDict(x=torch.full((2,), x), s=s, batch_size=[2])
@@ -1213,9 +1213,72 @@ class TestNonTensorData:
             td.share_memory_()
         else:
             td.memmap_(share_non_tensor=mode == "memmap_shared")
-        getattr(td, write)(make(1.0))
+        if mode == "memmap":
+            # without shared buffers, the memmapped values are rewritten
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                getattr(td, write)(make(1.0))
+        else:
+            with pytest.warns(
+                UserWarning, match=r"skipped the non-tensor entries \['s'\]"
+            ):
+                getattr(td, write)(make(1.0))
         assert (td["x"] == 1).all()
         assert td.get("s").tolist() == [None, None]
+
+    @pytest.mark.parametrize("mode", ["shared", "memmap", "memmap_shared"])
+    @pytest.mark.parametrize("with_tensor", [False, True])
+    @pytest.mark.parametrize("keys_to_update", [False, True])
+    def test_shared_update__non_tensor(self, mode, with_tensor, keys_to_update):
+        # update_ on a shared or memmapped tensordict writes the non-tensor
+        # values that its storage can store, and skips the others with a
+        # warning, whether or not the source also holds a tensor (#2487)
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("s", "hello")
+        td.set_non_tensor("i", 3)
+        td.set_non_tensor("f", 1.5)
+        td.set_non_tensor("by", b"xx")
+        td.set_non_tensor("n", None)
+        if mode == "shared":
+            td.share_memory_()
+        else:
+            td.memmap_(share_non_tensor=mode == "memmap_shared")
+
+        def update_(entries):
+            source = TensorDict(batch_size=[3])
+            for key, value in entries.items():
+                source.set_non_tensor(key, value)
+            if with_tensor:
+                source["a"] = torch.ones(3)
+            kwargs = {"keys_to_update": list(source.keys())} if keys_to_update else {}
+            return td.update_(source, **kwargs)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            update_({"s": "bye", "i": 7, "f": 2})
+        assert td["s"] == "bye" and td["i"] == 7 and td["f"] == 2
+        assert (td["a"] == float(with_tensor)).all()
+        entries = {"s": 5, "i": "x", "f": "y", "by": b"yy", "n": "z"}
+        if mode == "memmap":
+            # without shared buffers, any value is stored
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                update_(entries)
+            assert {key: td[key] for key in entries} == entries
+        else:
+            with pytest.warns(
+                UserWarning, match="skipped the non-tensor entries"
+            ) as record:
+                update_(entries)
+            assert len(record) == 1
+            for key in entries:
+                assert repr(key) in str(record[0].message)
+            assert td["s"] == "bye" and td["i"] == 7 and td["f"] == 2
+            assert td["by"] == b"xx" and td["n"] is None
+        if mode == "shared":
+            # a shallow copy shares the values
+            td.copy().update_({"s": "copied", "a": torch.full((3,), 2.0)})
+            assert td["s"] == "copied" and (td["a"] == 2).all()
 
     def test_ignore_lock(self):
         td = TensorDict({"a": {"b": "1"}}, batch_size=[10])
@@ -1710,10 +1773,12 @@ class TestNonTensorData:
                 inplace=True,
                 non_blocking=False,
             )
-        with pytest.raises(
-            NotImplementedError, match="Updating MyClass within a shared/memmaped"
+        # update_ skips what the shared value cannot store (#2487)
+        with pytest.warns(
+            UserWarning, match=r"skipped the non-tensor entries \['val'\]"
         ):
             td.update_(TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []))
+        assert td["val"] == val0
 
         # We can update a batched NonTensorData to a NonTensorStack if it's not already shared
         td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
@@ -1730,8 +1795,13 @@ class TestNonTensorData:
         # A shared bool only takes what a shared int takes
         td = TensorDict({"val": NonTensorData(data=True, batch_size=[])}, [])
         td.share_memory_()
-        with pytest.raises(TypeError, match="cannot be interpreted as an integer"):
+        with pytest.warns(
+            UserWarning, match=r"skipped the non-tensor entries \['val'\]"
+        ):
             td.update_(TensorDict({"val": NonTensorData(data=None, batch_size=[])}, []))
+        assert td["val"] is True
+        with pytest.raises(TypeError, match="cannot be interpreted as an integer"):
+            td.get("val").copy_(NonTensorData(data=None, batch_size=[]))
 
     @pytest.mark.parametrize("strategy", ["shared", "memmap"])
     @pytest.mark.parametrize(

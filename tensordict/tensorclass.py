@@ -7202,3 +7202,49 @@ def _update_shared_nontensor(nontensor, val):
         raise NotImplementedError(
             f"Updating {type(nontensor).__name__} within a shared/memmaped structure is not supported."
         )
+
+
+def _shared_nontensor_takes(nontensor, val) -> bool:
+    """Whether :func:`_update_shared_nontensor` writes ``val`` into ``nontensor`` without raising."""
+    if isinstance(nontensor, multiprocessing.managers.ListProxy):
+        return isinstance(val, (list, tuple))
+    if isinstance(nontensor, multiprocessing.managers.DictProxy):
+        return isinstance(val, Mapping)
+    if isinstance(nontensor, multiprocessing.sharedctypes.Synchronized):
+        # ctypes takes what has __index__ in an int or bool slot, and also
+        # what has __float__ in a float slot
+        if isinstance(nontensor.get_obj(), ctypes.c_double) and hasattr(
+            type(val), "__float__"
+        ):
+            return True
+        return hasattr(type(val), "__index__")
+    if isinstance(nontensor, multiprocessing.sharedctypes.SynchronizedArray):
+        return isinstance(val, str)
+    return False
+
+
+def _stores_non_tensor(dest, source) -> bool:
+    """Whether ``dest.copy_(source)`` can store the values of ``source`` in ``dest``, a shared or memory-mapped non-tensor leaf.
+
+    A memory-mapped value that does not share its data takes any value. The
+    pairs that ``copy_`` rejects whatever the storage are left to ``copy_``.
+    """
+    if not is_non_tensor(source):
+        return True
+    if isinstance(dest, NonTensorStack):
+        if isinstance(source, NonTensorStack):
+            sources = source.unbind(dest.stack_dim)
+            if len(sources) != len(dest.tensordicts):
+                return True
+        else:
+            sources = [source] * len(dest.tensordicts)
+        return all(
+            _stores_non_tensor(member, value)
+            for member, value in zip(dest.tensordicts, sources)
+        )
+    if isinstance(source, NonTensorStack) or not (
+        dest._tensordict._is_shared
+        or (dest._is_memmap and dest._metadata.get("_share_non_tensor"))
+    ):
+        return True
+    return _shared_nontensor_takes(dest._non_tensordict["data"], source.data)

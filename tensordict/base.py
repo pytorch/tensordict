@@ -1176,6 +1176,15 @@ def _select_entry(key: tuple, value: Any, keys_to_update: list[tuple]) -> Any:
         return value.to_tensordict().select(*leaves)
 
 
+def _cannot_store(source, dest) -> bool:
+    """Whether ``dest`` is a shared or memory-mapped non-tensor leaf that cannot store the values of ``source``."""
+    if not (_is_non_tensor(type(dest)) and (dest._is_shared or dest._is_memmap)):
+        return False
+    from tensordict.tensorclass import _stores_non_tensor
+
+    return not _stores_non_tensor(dest, source)
+
+
 def _update_at_aliases(update_at_: Callable) -> Callable:
     """Accepts the argument names that the overrides of ``update_at_`` took before 0.15.
 
@@ -4086,6 +4095,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         # lazy stack in the input splits self into its elements: those leaves
         # are not recorded, and stay unchanged.
         written = None
+        # The keys of the non-tensor values that a shared or memory-mapped
+        # leaf of self cannot store: they are skipped on every route (#2487).
+        skipped = []
 
         if keys_to_update is not None:
             if self._reads_return_copies and not _has_lazy_stack(input_dict_or_td):
@@ -4103,6 +4115,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                             raise KeyError(
                                 f"The key {name} was not found in the dest tensordict."
                             )
+                        if not isinstance(dest, Tensor) and _cannot_store(source, dest):
+                            skipped.append(name)
+                            return None
                         dest.copy_(source, non_blocking=non_blocking)
                         if written is not None and isinstance(dest, Tensor):
                             written.append((name, dest))
@@ -4134,18 +4149,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
                 # _items_list leaves out the non-tensor leaves: copy them below.
                 # Like the tensor leaves above, keys missing in self are skipped.
-                # copy_ raises between a NonTensorData and a NonTensorStack, and
-                # for most types in a shared or memmapped dest: these leaves are
-                # skipped too.
+                # copy_ raises between a NonTensorData and a NonTensorStack:
+                # these leaves are skipped too.
                 def inplace_update(name, source, dest):
                     if (
                         _is_non_tensor(type(source))
                         and _is_non_tensor(type(dest))
-                        and not (dest._is_shared or dest._is_memmap)
                         and isinstance(source, NonTensorStack)
                         == isinstance(dest, NonTensorStack)
                     ):
-                        dest.copy_(source, non_blocking=non_blocking)
+                        if _cannot_store(source, dest):
+                            skipped.append(name)
+                        else:
+                            dest.copy_(source, non_blocking=non_blocking)
 
             else:
                 if self._reads_return_copies and not _has_lazy_stack(input_dict_or_td):
@@ -4158,6 +4174,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         raise KeyError(
                             f"The key {name} was not found in the dest tensordict."
                         )
+                    if not isinstance(dest, Tensor) and _cannot_store(source, dest):
+                        skipped.append(name)
+                        return None
                     dest.copy_(source, non_blocking=non_blocking)
                     if written is not None and isinstance(dest, Tensor):
                         written.append((name, dest))
@@ -4175,6 +4194,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         )
         if written:
             self._write_back(*zip(*written), "update_")
+        if skipped:
+            warnings.warn(
+                f"update_() skipped the non-tensor entries {skipped} of the source: "
+                "the shared or memory-mapped destination cannot store their values.",
+                UserWarning,
+                stacklevel=3,
+            )
         return self
 
     @_update_at_aliases
