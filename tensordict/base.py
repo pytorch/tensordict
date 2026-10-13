@@ -1100,6 +1100,13 @@ def _expand_to_match_shape(
     else:
         # tensordict
         batch_size = torch.Size([*parent_batch_size, *_shape(data)[self_batch_dims:]])
+        if is_non_tensor(data):
+            from tensordict.tensorclass import NonTensorData, NonTensorStack
+
+            if isinstance(data, NonTensorStack):
+                # The rows that are not written hold None, as a tensor gets
+                #  zeros (a NonTensorData keeps its one value for all rows)
+                return NonTensorData(None, batch_size=batch_size, device=self_device)
         result = data.empty(batch_size=batch_size)
     return result
 
