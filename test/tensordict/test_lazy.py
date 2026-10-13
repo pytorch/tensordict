@@ -3220,6 +3220,20 @@ class TestLazyStackedTensorDict:
         with pytest.raises(RuntimeError, match="repeats must have the same size"):
             td.repeat_interleave(torch.tensor([1, 2, 3]), stack_dim)
 
+    def test_repeat_interleave_past_batch_dims_warns(self):
+        # a stack of 0-d members warns for a dim past its batch dims, as a
+        # TensorDict does (#2148), and keeps the result of its members, which
+        # unsqueeze to batch size [1] and repeat along it
+        td = LazyStackedTensorDict(
+            *[TensorDict(a=torch.arange(4.0) + i) for i in range(3)]
+        )
+        with pytest.warns(FutureWarning, match="repeat_interleave got a dim outside"):
+            out = td.repeat_interleave(2, 1)
+        assert type(out) is LazyStackedTensorDict
+        assert out.batch_size == (3, 2)
+        expected = td.to_tensordict()["a"].unsqueeze(1).expand(3, 2, 4)
+        assert (out["a"] == expected).all()
+
     def test_densify_paths(self):
         # an exclusive key is stacked with empty entries for the members that
         # lack it

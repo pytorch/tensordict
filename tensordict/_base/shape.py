@@ -1292,7 +1292,7 @@ class _ShapeOps:
                 split_size = min(split_size, max_size)
                 num_full, rest = divmod(max_size, split_size)
                 split_sizes = [split_size] * num_full + ([rest] if rest else [])
-        elif isinstance(split_size, (list, tuple)) or isinstance(split_size, Iterable):
+        elif isinstance(split_size, (list, tuple, Iterable)):
             # LazyStackedTensorDict.split took any iterable of sizes, such as
             # a tensor, a numpy array or a list of 0-d tensors
             try:
