@@ -1160,8 +1160,8 @@ class TestGeneric:
         td = TensorDict(a=torch.zeros(3, 2), batch_size=[3, 2], names=[None, "y"])
         assert not td.empty(batch_size=[3])._has_names()
 
-    @pytest.mark.parametrize("shared", [False, True])
-    def test_empty_recurse_kwargs(self, shared):
+    @pytest.mark.parametrize("shared", [None, "memory", "memmap"])
+    def test_empty_recurse_kwargs(self, shared, tmpdir):
         # empty(recurse=True) keeps the entries without tensors ("b", "c", "d").
         # The new batch size, names and device must not reach those of td.
         td = TensorDict(
@@ -1173,8 +1173,10 @@ class TestGeneric:
             names=["x", "y"],
             device="cpu",
         )
-        if shared:
+        if shared == "memory":
             td.share_memory_()
+        elif shared == "memmap":
+            td.memmap_(tmpdir, share_non_tensor=True)
         td_empty = td.empty(
             recurse=True, batch_size=[3, 2, 4], names=["p", "q", "r"], device=None
         )
