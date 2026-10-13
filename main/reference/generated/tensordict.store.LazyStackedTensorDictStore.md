@@ -7,7 +7,7 @@ documentation.
 
 *class*tensordict.store.LazyStackedTensorDictStore(***, *backend: [Literal](https://docs.python.org/3/library/typing.html#typing.Literal)['redis', 'dragonfly'] = 'redis'*, *host: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'localhost'*, *port: [int](https://docs.python.org/3/builtins/functions.html#int) = 6379*, *db: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *unix_socket_path: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'tensordict'*, *count: [int](https://docs.python.org/3/builtins/functions.html#int)*, *stack_dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *inner_batch_size: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[int](https://docs.python.org/3/builtins/functions.html#int)]*, *device=None*, *client=None*, *td_id: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *cache_metadata: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, ***redis_kwargs*)
 
-Bases: `_StoreUnsupported`, [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
+Bases: `_StoreConnection`, `_StoreUnsupported`, [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 A lazy stack of tensordicts whose entries live on a Redis-compatible server.
 
@@ -89,10 +89,6 @@ tensor([1., 1., 1., 1., 1.])
 >>> store.clear_redis()
 >>> store.close()
 ```
-
-clear_redis()
-
-Delete all keys associated with this TensorDict from Redis.
 
 flatten_keys(*separator='.'*, *inplace=False*)
 

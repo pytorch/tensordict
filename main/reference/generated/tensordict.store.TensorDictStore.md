@@ -7,7 +7,7 @@ documentation.
 
 *class*tensordict.store.TensorDictStore(***, *backend: [Literal](https://docs.python.org/3/library/typing.html#typing.Literal)['redis', 'dragonfly'] = 'redis'*, *host: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'localhost'*, *port: [int](https://docs.python.org/3/builtins/functions.html#int) = 6379*, *db: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *unix_socket_path: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'tensordict'*, *batch_size=None*, *device=None*, *client=None*, *td_id: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *cache_metadata: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, ***redis_kwargs*)
 
-Bases: `_StoreUnsupported`, [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
+Bases: `_StoreConnection`, `_StoreUnsupported`, [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 A TensorDict whose entries live on a Redis-compatible server.
 
@@ -110,23 +110,6 @@ Note
 
 Tensors are stored as CPU contiguous bytes. The `device` attribute
 controls the device tensors are cast to upon retrieval.
-
-clear_redis()
-
-Delete all keys associated with this TensorDict from Redis.
-
-This removes all tensor data, metadata, the key registry and the
-stored TensorClass path. The connection stays open, so you can write
-new entries. Call `close()` to close it.
-
-close()
-
-Close the Redis connection and stop the background event loop.
-
-The data stays on the server: reconnect with `from_store()`, or
-delete it with `clear_redis()` before you close. After
-`close()`, this object cannot read or write. Garbage collection
-calls `close()`.
 
 contiguous(***, *canonical: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [TensorDict](tensordict.TensorDict.html#tensordict.TensorDict)
 
