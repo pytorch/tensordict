@@ -984,6 +984,15 @@ class LazyStackedTensorDict(TensorDictBase):
                 # the stack inserts its dimension and name at stack_dim
                 if stack_dim < 0:
                     stack_dim += len(names)
+            if batch_size is not None:
+                # the stack inserts stack_dim_name into the member names
+                stack_names = list(member_names)
+                stack_names.insert(stack_dim % (len(stack_names) + 1), stack_dim_name)
+                named = [name for name in stack_names if name is not None]
+                if len(set(named)) != len(named):
+                    raise ValueError(
+                        f"Some dimension names are non-unique: {stack_names}."
+                    )
 
         tensordicts = [
             TensorDict.from_dict(

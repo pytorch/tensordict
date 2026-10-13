@@ -1466,6 +1466,29 @@ class TestLazyStackedTensorDict:
         assert td.batch_size == torch.Size([3, 2, 4])
         assert td.names == ["s", None, None]
 
+    @pytest.mark.parametrize(
+        "batch_size,stack_dim,names,stack_names",
+        [
+            ([3], 0, ["x"], ["x", "x"]),
+            ([3], 0, ["x", "x"], ["x", "x"]),
+            ([3, 4], 0, ["s", None], ["s", "s", None]),
+            ([3, 4], 1, [None, "s"], [None, "s", "s"]),
+        ],
+    )
+    def test_from_dict_names_non_unique(
+        self, batch_size, stack_dim, names, stack_names
+    ):
+        # names that would name two dimensions of the stack alike are rejected
+        # as TensorDict rejects them, instead of building an invalid stack
+        members = [{"a": torch.zeros(3, 4)}, {"a": torch.ones(3, 4)}]
+        with pytest.raises(ValueError) as excinfo:
+            LazyStackedTensorDict.from_dict(
+                members, batch_size=batch_size, stack_dim=stack_dim, names=names
+            )
+        assert str(excinfo.value) == (
+            f"Some dimension names are non-unique: {stack_names}."
+        )
+
     @pytest.mark.parametrize("from_list", [False, True])
     def test_from_dict_names_without_batch_size(self, from_list):
         # without a batch_size the members get no names today; the calls that
