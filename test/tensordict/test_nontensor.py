@@ -1546,6 +1546,21 @@ class TestNonTensorData:
         assert td["s"] == "bye"
         assert (td["a"] == 1).all()
 
+    def test_memmap_share_non_tensor_copy(self, tmpdir):
+        # A shallow copy of a tensordict memory-mapped with share_non_tensor
+        # reads the values, not the shared wrappers
+        td = TensorDict(
+            a=torch.zeros(3),
+            s="hello",
+            n=NonTensorData(3.5, batch_size=[3]),
+            sub=TensorDict(s="x", batch_size=[3]),
+            batch_size=[3],
+        ).memmap_(tmpdir, share_non_tensor=True)
+        for copy in (td.copy(), td.clone(recurse=False)):
+            assert copy["s"] == "hello"
+            assert copy["n"] == 3.5
+            assert copy["sub", "s"] == "x"
+
     @pytest.mark.parametrize("strategy", ["shared", "memmap"])
     @pytest.mark.parametrize(
         "val1,expected",
