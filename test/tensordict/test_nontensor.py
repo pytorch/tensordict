@@ -366,6 +366,78 @@ class TestNonTensorData:
         with pytest.raises(RuntimeError, match="invalid for input of size 6"):
             grid.reshape(4, 2)
 
+    def test_non_tensor_stack_shape_op_types(self):
+        values = [["a", "b", "c"], ["d", "e", "f"]]
+        ref = np.array(values, dtype=object)
+        calls = {
+            "flip": (lambda x: x.flip(1), lambda a: np.flip(a, 1)),
+            "roll": (lambda x: x.roll(1, 1), lambda a: np.roll(a, 1, 1)),
+            "roll()": (lambda x: x.roll(1), lambda a: np.roll(a, 1)),
+            "rot90": (lambda x: x.rot90(1, (0, 1)), lambda a: np.rot90(a, 1, (0, 1))),
+            "tile": (lambda x: x.tile((2, 1)), lambda a: np.tile(a, (2, 1))),
+            "narrow": (lambda x: x.narrow(1, 1, 2), lambda a: a[:, 1:3]),
+            "broadcast_to": (
+                lambda x: x.broadcast_to((2, 2, 3)),
+                lambda a: np.broadcast_to(a, (2, 2, 3)),
+            ),
+            "expand": (
+                lambda x: x.expand(2, 2, 3),
+                lambda a: np.broadcast_to(a, (2, 2, 3)),
+            ),
+            "reshape(3, 2)": (lambda x: x.reshape(3, 2), lambda a: a.reshape(3, 2)),
+            "reshape(6)": (lambda x: x.reshape(6), lambda a: a.reshape(6)),
+            "reshape(2, 3, 1)": (
+                lambda x: x.reshape(2, 3, 1),
+                lambda a: a.reshape(2, 3, 1),
+            ),
+        }
+        for name, (call, ref_call) in calls.items():
+            stack = NonTensorStack.from_list(values)
+            out = call(stack)
+            assert isinstance(out, NonTensorStack), name
+            assert out.tolist() == ref_call(ref).tolist(), name
+            assert stack.tolist() == values, name
+
+        # narrow and a reshape that regroups the stack share the entries;
+        # the other ops make new ones, which hold the same data
+        def leaves(x):
+            if isinstance(x, LazyStackedTensorDict):
+                return [leaf for m in x.tensordicts for leaf in leaves(m)]
+            return [x]
+
+        stack = NonTensorStack.from_list(values)
+        ids = {id(leaf) for leaf in leaves(stack)}
+        data_ids = {id(leaf.data) for leaf in leaves(stack)}
+        for name, (call, _) in calls.items():
+            out = leaves(call(stack))
+            shared = sum(id(leaf) in ids for leaf in out)
+            regroups = ("narrow", "reshape(6)", "reshape(2, 3, 1)")
+            assert shared == (len(out) if name in regroups else 0), name
+            assert all(id(leaf.data) in data_ids for leaf in out), name
+
+    def test_non_tensor_stack_reshape_inplace_raises(self):
+        stack = NonTensorStack.from_list([["a", "b", "c"], ["d", "e", "f"]])
+        with pytest.raises(
+            NotImplementedError,
+            match="reshape.inplace=True. is not supported on LazyStackedTensorDict",
+        ):
+            stack.reshape(6, inplace=True)
+        assert stack.batch_size == (2, 3)
+
+    def test_non_tensor_stack_lazy_stack_types(self):
+        out = NonTensorStack.lazy_stack([NonTensorData("a"), NonTensorData("b")])
+        assert type(out) is NonTensorStack
+        assert out.tolist() == ["a", "b"]
+        out = NonTensorStack.lazy_stack(
+            [NonTensorStack("a", "b"), NonTensorStack("c", "d")], 1
+        )
+        assert type(out) is NonTensorStack
+        assert out.tolist() == [["a", "c"], ["b", "d"]]
+        out = LazyStackedTensorDict.lazy_stack([NonTensorData("a"), NonTensorData("b")])
+        assert type(out) is NonTensorStack
+        with pytest.raises(RuntimeError, match="Unexpected result type"):
+            NonTensorStack.lazy_stack([TensorDict(), TensorDict()])
+
     def test_comparison(self, non_tensor_data):
         non_tensor_data = non_tensor_data.exclude(("nested", "str"))
         assert (non_tensor_data | non_tensor_data).get_non_tensor(("nested", "bool"))

@@ -2553,6 +2553,22 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    def test_element_view_index_and_chunk(self, store_stack):
+        """An element view reads one element for indexing and chunk, with the values of its dense copy."""
+        store_td, tds, lazy_td = store_stack
+        view = store_td[1]
+        assert isinstance(view, _StoreStackElementView)
+        dense = view.to_tensordict()
+        for index in (0, slice(1, 3), torch.tensor([3, 0]), (Ellipsis,)):
+            out = view[index]
+            assert (out == dense[index]).all()
+            assert out.batch_size == dense[index].batch_size
+        pieces = view.chunk(3)
+        ref = dense.chunk(3)
+        assert [p.batch_size for p in pieces] == [r.batch_size for r in ref]
+        for piece, r in zip(pieces, ref):
+            assert (piece == r).all()
+
     def test_view_set_new_key_last_element(self, store_kwargs):
         """A new key set on any element view, the last one too, reads back exactly."""
         lazy_td = self._nested_lazy_td()

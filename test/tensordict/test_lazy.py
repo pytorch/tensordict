@@ -3018,6 +3018,309 @@ class TestLazyStackedTensorDict:
         # A shape that matches the batch size returns the stack itself
         assert td.reshape([size or -1 for size in td.batch_size]) is td
 
+    @staticmethod
+    def _shape_stack(stack_dim=1, n=2, hetero=False, **kwargs):
+        # members of batch [3] with a nested tensordict; with hetero=True the
+        # feature shape of "a" and the keys differ between members
+        tds = []
+        for i in range(n):
+            td = TensorDict(
+                a=torch.arange(6.0 * (1 + hetero * i)).view(3, -1) + 10 * i,
+                nested=TensorDict(c=torch.full((3,), float(i)), batch_size=[3]),
+                batch_size=[3],
+            )
+            if hetero and i:
+                td["extra"] = torch.zeros(3)
+            tds.append(td)
+        return LazyStackedTensorDict(*tds, stack_dim=stack_dim, **kwargs)
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_split_stack_dim_shares_members(self, stack_dim):
+        td = self._shape_stack(stack_dim, n=3)
+        pieces = td.split([1, 2], stack_dim)
+        assert [type(p) for p in pieces] == [LazyStackedTensorDict] * 2
+        assert [p.batch_size[stack_dim] for p in pieces] == [1, 2]
+        members = [m for p in pieces for m in p.tensordicts]
+        assert all(m is orig for m, orig in zip(members, td.tensordicts))
+        # along another dim, the pieces stay lazy and share the leaves
+        other = 1 - stack_dim
+        pieces = td.split(2, other)
+        assert [type(p) for p in pieces] == [LazyStackedTensorDict] * 2
+        assert [p.batch_size[other] for p in pieces] == [2, 1]
+        for p in pieces:
+            for member, orig in zip(p.tensordicts, td.tensordicts):
+                assert member["a"].untyped_storage().data_ptr() == (
+                    orig["a"].untyped_storage().data_ptr()
+                )
+        assert (torch.cat(pieces, other) == td).all()
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_split_stack_dim_bad_sizes_warn(self, stack_dim):
+        # #2361: sizes that do not add up to the stack size warn until 0.17
+        td = self._shape_stack(stack_dim, n=3)
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            assert td.split([], stack_dim) == ()
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            pieces = td.split([1, 5], stack_dim)
+        assert [p.batch_size[stack_dim] for p in pieces] == [1, 2]
+        with pytest.raises(ZeroDivisionError):
+            td.split(0, stack_dim)
+        with pytest.raises(IndexError):
+            td.split(-1, stack_dim)
+        with pytest.raises(TypeError, match="not iterable"):
+            td.split(2.0, stack_dim)
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_expand_dense_or_lazy_result(self, stack_dim):
+        td = self._shape_stack(stack_dim, stack_dim_name="s")
+        result = td.expand(4, *td.batch_size)
+        assert type(result) is TensorDict
+        assert result.batch_size == (4, *td.batch_size)
+        assert result.names[stack_dim + 1] == "s"
+        assert (result[0] == td).all()
+        hetero = self._shape_stack(stack_dim, hetero=True, stack_dim_name="s")
+        result = hetero.expand(4, *hetero.batch_size)
+        assert type(result) is LazyStackedTensorDict
+        assert result.batch_size == (4, *hetero.batch_size)
+        assert result._td_dim_name == "s"
+        assert (result[1] == hetero).all()
+        # a stack dim of size 1 grows by copying its member
+        single = self._shape_stack(stack_dim, n=1)
+        shape = list(single.batch_size)
+        shape[stack_dim] = 3
+        result = single.expand(shape)
+        assert result.batch_size == torch.Size(shape)
+        index = (slice(None),) * stack_dim
+        for i in range(3):
+            assert (result[index + (i,)] == single[index + (0,)]).all()
+        # an incompatible size
+        shape = list(td.batch_size)
+        shape[stack_dim] = 3
+        with pytest.raises(ValueError, match="Cannot expand LazyStackedTensorDict"):
+            td.expand(shape)
+        shape = list(td.batch_size)
+        shape[1 - stack_dim] = 5
+        with pytest.raises(RuntimeError):
+            td.expand(shape)
+        # too few sizes, and the size= keyword
+        with pytest.raises(IndexError):
+            td.expand(())
+        with pytest.raises(TypeError, match="unexpected keyword argument 'size'"):
+            td.expand(size=(4, *td.batch_size))
+
+    def test_expand_inplace_breaks_stack(self):
+        # The undocumented inplace=True of LazyStackedTensorDict.expand
+        # changes the members but not the batch size of the stack
+        td = self._shape_stack(1)
+        out = td.expand(2, 3, 2, inplace=True)
+        assert out is td
+        assert td.batch_size == (3, 2)
+        assert td.tensordicts[0].batch_size == (2, 3)
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_heterogeneous_shape_ops_stay_lazy(self, stack_dim):
+        td = self._shape_stack(stack_dim, hetero=True)
+        calls = {
+            "reshape(6)": lambda x: x.reshape(6),
+            "reshape(-1)": lambda x: x.reshape(-1),
+            "flatten(0, 1)": lambda x: x.flatten(0, 1),
+            "unflatten": lambda x: x.unflatten(1 - stack_dim, (3, 1)),
+            "expand": lambda x: x.expand(4, *x.batch_size),
+            "repeat_interleave": lambda x: x.repeat_interleave(2, stack_dim),
+            "split": lambda x: x.split(1, stack_dim)[1],
+        }
+
+        def feature_shapes(x):
+            if isinstance(x, LazyStackedTensorDict):
+                return {s for m in x.tensordicts for s in feature_shapes(m)}
+            return {x["a"].shape[x.ndim :]}
+
+        for name, call in calls.items():
+            out = call(td)
+            assert type(out) is LazyStackedTensorDict, name
+            assert feature_shapes(out) == {(2,), (4,)} or name == "split", name
+        assert feature_shapes(td.split(1, stack_dim)[1]) == {(4,)}
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_repeat_interleave_stack_dim_tensor_repeats(self, stack_dim):
+        td = self._shape_stack(stack_dim)
+        dense = td.to_tensordict()
+        for repeats in (torch.tensor(3), torch.tensor([3]), torch.tensor([1, 2])):
+            out = td.repeat_interleave(repeats, stack_dim)
+            assert type(out) is LazyStackedTensorDict
+            assert (out == dense.repeat_interleave(repeats, stack_dim)).all()
+        # the members are repeated, not copied
+        out = td.repeat_interleave(torch.tensor([2, 1]), stack_dim)
+        assert [id(m) for m in out.tensordicts] == [
+            id(m) for m in td.tensordicts[:1]
+        ] * 2 + [id(td.tensordicts[1])]
+        # dim=None on a 1-d stack, and a negative dim out of range
+        flat = self._shape_stack(0).reshape(-1)
+        assert (
+            flat.repeat_interleave(2) == flat.to_tensordict().repeat_interleave(2)
+        ).all()
+        with pytest.raises(ValueError, match="out of range"):
+            td.repeat_interleave(2, -3)
+        # main does not check the repeats along the stack dim
+        out = td.repeat_interleave(torch.tensor(-1), stack_dim)
+        assert out.batch_size == torch.Size([0])
+        out = td.repeat_interleave(torch.tensor([1, 2, 3]), stack_dim)
+        assert out.batch_size[stack_dim] == 3
+
+    def test_densify_paths(self):
+        # an exclusive key is stacked with empty entries for the members that
+        # lack it
+        td = LazyStackedTensorDict(
+            TensorDict(a=torch.ones(3), b=torch.ones(2, 3), batch_size=[]),
+            TensorDict(a=torch.ones(3), batch_size=[]),
+            stack_dim=0,
+        )
+        out = td.densify()
+        assert type(out) is TensorDict
+        assert [t.shape for t in out.get("b").unbind(0)] == [(2, 3), (2, 0)]
+        # a key of empty shape that is exclusive cannot be padded
+        td = LazyStackedTensorDict(
+            TensorDict(a=torch.ones(3), b=torch.ones(())),
+            TensorDict(a=torch.ones(3)),
+        )
+        with pytest.raises(RuntimeError, match="empty shape and exclusive keys"):
+            td.densify()
+        # different shapes give a nested tensor along stack dim 0
+        td = LazyStackedTensorDict(
+            TensorDict(a=torch.ones(2), batch_size=[]),
+            TensorDict(a=torch.ones(3), batch_size=[]),
+            stack_dim=0,
+        )
+        assert td.densify().get("a").is_nested
+        # ... and raise along another stack dim
+        td = LazyStackedTensorDict(
+            TensorDict(a=torch.ones(2, 2), batch_size=[2]),
+            TensorDict(a=torch.ones(2, 3), batch_size=[2]),
+            stack_dim=1,
+        )
+        with pytest.raises(NotImplementedError, match="stack_dim is 1"):
+            td.densify()
+        # a nested non-tensor entry and a missing nested collection
+        td = LazyStackedTensorDict(
+            TensorDict(
+                s=NonTensorData("x"), n=TensorDict(c=torch.ones(())), batch_size=[]
+            ),
+            TensorDict(s=NonTensorData("y"), batch_size=[]),
+        )
+        out = td.densify()
+        assert out["s"] == ["x", "y"]
+        # the layout is keyword only on main
+        with pytest.raises(TypeError):
+            td.densify(torch.strided)
+        # a NonTensorStack is its own dense form
+        stack = NonTensorStack("a", "b")
+        assert stack.densify() is stack
+
+    def test_get_item_shape_heterogeneous(self):
+        td = LazyStackedTensorDict(
+            TensorDict(
+                a=torch.ones(2, 3, 4), n=TensorDict(b=torch.ones(2, 5)), batch_size=[2]
+            ),
+            TensorDict(
+                a=torch.ones(2, 3, 5), n=TensorDict(b=torch.ones(2, 5)), batch_size=[2]
+            ),
+            stack_dim=1,
+        )
+        assert td.get_item_shape("a") == torch.Size([2, 2, 3, -1])
+        assert td.get_item_shape(("n", "b")) == torch.Size([2, 2, 5])
+        td = LazyStackedTensorDict(
+            TensorDict(a=torch.ones(2, 3), batch_size=[2]),
+            TensorDict(a=torch.ones(2, 3, 1), batch_size=[2]),
+        )
+        assert td.get_item_shape("a") == torch.Size([-1])
+        # get returns None for a missing key with TD_GET_DEFAULTS_TO_NONE
+        with pytest.raises((KeyError, AttributeError)):
+            td.get_item_shape("missing")
+
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2])
+    def test_view_flatten_regroup_shares(self, stack_dim):
+        tds = [
+            TensorDict(a=torch.arange(8.0).view(2, 2, 2) + 10 * i, batch_size=[2, 2])
+            for i in range(2)
+        ]
+        td = LazyStackedTensorDict(*tds, stack_dim=stack_dim)
+        dense = td.to_tensordict()
+
+        def leaf_members(x):
+            if isinstance(x, LazyStackedTensorDict):
+                return [m for member in x.tensordicts for m in leaf_members(member)]
+            return [x]
+
+        for call in (
+            lambda x: x.view(-1),
+            lambda x: x.flatten(0, 1),
+            lambda x: x.flatten(1, 2),
+            lambda x: x.view(4, 2) if stack_dim < 2 else x.view(2, 4),
+            lambda x: x.unflatten(0, (2, 1)),
+        ):
+            out = call(td)
+            assert type(out) is LazyStackedTensorDict
+            assert (out == call(dense)).all()
+            ptrs = {m["a"].untyped_storage().data_ptr() for m in tds}
+            assert {
+                m["a"].untyped_storage().data_ptr() for m in leaf_members(out)
+            } <= ptrs
+
+    def test_shape_ops_names_main(self):
+        # The names that the lazy shape ops give on main
+        td = self._shape_stack(1, stack_dim_name="s")
+        td.names = ["r", "s"]
+        assert [p.names for p in td.split(2, 0)] == [["r", None]] * 2
+        assert [p.names for p in td.split(1, 1)] == [["r", None]] * 2
+        assert [p.names for p in td.chunk(2, 1)] == [["r", None]] * 2
+        assert td.reshape(2, 3).names == ["r", "s"]
+        assert td.flatten().names == [None]
+        assert td.unflatten(0, (3, 1)).names == ["r", None, "s"]
+        assert td.expand(2, 3, 2).names == [None, "r", "s"]
+        assert td.names == ["r", "s"]
+        assert td.tensordicts[0].names == ["r"]
+
+    def test_shape_ops_arguments_main(self):
+        td = self._shape_stack(1)
+        # the identity raises in view and flatten
+        with pytest.raises(RuntimeError, match="Cannot call `view`"):
+            td.view(3, 2)
+        with pytest.raises(RuntimeError, match="Cannot call `view`"):
+            td.flatten(1, 1)
+        # start_dim > end_dim adds a dim, and repeated dims including the
+        # stack dim keep the input, without a warning
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert td.flatten(1, 0).batch_size == (3, 1, 2)
+            out = self._shape_stack(0).permute(0, 0)
+            assert out.batch_size == (2, 3)
+        # squeeze and unsqueeze out of range
+        with pytest.raises(RuntimeError, match="The dim provided to squeeze"):
+            td.squeeze(5)
+        with pytest.raises(RuntimeError, match="The dim provided to unsqueeze"):
+            td.unsqueeze(5)
+        # flatten past the batch dims raises without the #2148 warning
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with pytest.raises(IndexError):
+                td.flatten(0, 3)
+        # reshape(inplace=True)
+        with pytest.raises(
+            NotImplementedError,
+            match="reshape.inplace=True. is not supported on LazyStackedTensorDict",
+        ):
+            td.reshape(6, inplace=True)
+        with pytest.raises(
+            NotImplementedError,
+            match="repeat_interleave.inplace=True. is not supported on LazyStackedTensorDict",
+        ):
+            td.repeat_interleave(2, 0, inplace=True)
+        with pytest.raises(
+            NotImplementedError,
+            match="repeat_interleave.inplace=True. is not supported on LazyStackedTensorDict",
+        ):
+            td.repeat_interleave(2, inplace=True)
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_stack(self, device):
         torch.manual_seed(1)
