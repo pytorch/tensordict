@@ -20,6 +20,7 @@ import numpy as np
 import pytest
 import torch
 from tensordict import (
+    _utils_key_json,
     capture_non_tensor_stack,
     lazy_stack,
     LazyStackedTensorDict,
@@ -68,6 +69,7 @@ except ImportError:
     _has_h5py = False
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
+_has_orjson = importlib.util.find_spec("orjson", None) is not None
 
 PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
 
@@ -1472,6 +1474,28 @@ class TestNonTensorData:
         assert (tmp_path / "pickle.pkl").exists()
         loaded = TensorDict.load_memmap(tmp_path, allow_pickle=True)
         assert loaded.tolist() == [{1, 2}, {3}]
+
+    @pytest.mark.parametrize(
+        "backend",
+        [
+            "json",
+            pytest.param(
+                "orjson",
+                marks=pytest.mark.skipif(not _has_orjson, reason="orjson not found"),
+            ),
+        ],
+    )
+    def test_memmap_int_outside_64_bit(self, tmp_path, backend, monkeypatch):
+        # orjson only writes ints that fit in 64 bits
+        monkeypatch.setattr(_utils_key_json, "_JSON_BACKEND", backend)
+        td = TensorDict(n=NonTensorData(2**64), m=NonTensorData(-(2**63) - 1))
+        td.memmap_(tmp_path / "td")
+        loaded = TensorDict.load_memmap(tmp_path / "td", allow_pickle=False)
+        assert loaded["n"] == 2**64
+        assert loaded["m"] == -(2**63) - 1
+        NonTensorStack(2**64, 1).memmap(tmp_path / "stack")
+        loaded = TensorDict.load_memmap(tmp_path / "stack", allow_pickle=False)
+        assert loaded.tolist() == [2**64, 1]
 
     def test_load_memmap_refreshes_non_tensor(self, tmp_path):
         def make(version):
