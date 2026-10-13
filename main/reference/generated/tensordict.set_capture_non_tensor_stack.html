@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5529+gdbef7a03f.d20261013)">
+<meta name="llm:version" content="main (0.14.0.dev5530+gb19743a91.d20261013)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5529+gdbef7a03f.d20261013)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5530+gb19743a91.d20261013)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1648,7 +1648,8 @@ document.write(`
 or <code class="docutils literal notranslate"><span class="pre">CAPTURE_NONTENSOR_STACK=1</span></code>) is deprecated and will be removed in
 TensorDict 0.17. Use <a class="reference internal" href="tensordict.NonTensorStack.html#tensordict.NonTensorStack.data" title="tensordict.NonTensorStack.data"><code class="xref py py-attr docutils literal notranslate"><span class="pre">NonTensorStack.data</span></code></a>
 to get the single value of a stack of identical values.
-<code class="docutils literal notranslate"><span class="pre">set_capture_non_tensor_stack(False)</span></code>, the default, does not warn.</p>
+<code class="docutils literal notranslate"><span class="pre">set_capture_non_tensor_stack(False)</span></code>, the default, does not warn,
+and will keep working, doing nothing, after the removal.</p>
 </div>
 </dd></dl>
 
@@ -2008,7 +2009,7 @@ to get the single value of a stack of identical values.
        "headline": "set_capture_non_tensor_stack",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - set_capture_non_tensor_stack",
        "url": "/reference/generated/tensordict.set_capture_non_tensor_stack.html",
-       "articleBody": "set_capture_non_tensor_stack# class tensordict.set_capture_non_tensor_stack(mode: bool)# Controls whether identical non-tensor data should be captured when stacked. Deprecated since version 0.15: Capturing identical non-tensor data (set_capture_non_tensor_stack(True) or CAPTURE_NONTENSOR_STACK=1) is deprecated and will be removed in TensorDict 0.17. Use NonTensorStack.data to get the single value of a stack of identical values. set_capture_non_tensor_stack(False), the default, does not warn.",
+       "articleBody": "set_capture_non_tensor_stack# class tensordict.set_capture_non_tensor_stack(mode: bool)# Controls whether identical non-tensor data should be captured when stacked. Deprecated since version 0.15: Capturing identical non-tensor data (set_capture_non_tensor_stack(True) or CAPTURE_NONTENSOR_STACK=1) is deprecated and will be removed in TensorDict 0.17. Use NonTensorStack.data to get the single value of a stack of identical values. set_capture_non_tensor_stack(False), the default, does not warn, and will keep working, doing nothing, after the removal.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

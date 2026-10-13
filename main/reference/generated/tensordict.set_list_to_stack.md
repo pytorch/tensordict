@@ -8,4 +8,4 @@ Deprecated since version 0.15: Turning list-to-stack conversion off (`set_list_t
 `LIST_TO_STACK=0`) is deprecated and will be removed in TensorDict 0.17.
 Use [`td.set_non_tensor(key, value)`](tensordict.TensorDictBase.set_non_tensor.html#tensordict.TensorDictBase.set_non_tensor)
 to store a list as one value. `set_list_to_stack(True)`, the default,
-does not warn.
+does not warn, and will keep working, doing nothing, after the removal.

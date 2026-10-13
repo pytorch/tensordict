@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5529+gdbef7a03f.d20261013)">
+<meta name="llm:version" content="main (0.14.0.dev5530+gb19743a91.d20261013)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5529+gdbef7a03f.d20261013)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5530+gb19743a91.d20261013)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1648,7 +1648,7 @@ document.write(`
 <code class="docutils literal notranslate"><span class="pre">LIST_TO_STACK=0</span></code>) is deprecated and will be removed in TensorDict 0.17.
 Use <a class="reference internal" href="tensordict.TensorDictBase.set_non_tensor.html#tensordict.TensorDictBase.set_non_tensor" title="tensordict.TensorDictBase.set_non_tensor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">td.set_non_tensor(key,</span> <span class="pre">value)</span></code></a>
 to store a list as one value. <code class="docutils literal notranslate"><span class="pre">set_list_to_stack(True)</span></code>, the default,
-does not warn.</p>
+does not warn, and will keep working, doing nothing, after the removal.</p>
 </div>
 </dd></dl>
 
@@ -2008,7 +2008,7 @@ does not warn.</p>
        "headline": "set_list_to_stack",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - set_list_to_stack",
        "url": "/reference/generated/tensordict.set_list_to_stack.html",
-       "articleBody": "set_list_to_stack# class tensordict.set_list_to_stack(mode: bool)# Context manager and decorator to control list handling in TensorDict. Deprecated since version 0.15: Turning list-to-stack conversion off (set_list_to_stack(False) or LIST_TO_STACK=0) is deprecated and will be removed in TensorDict 0.17. Use td.set_non_tensor(key, value) to store a list as one value. set_list_to_stack(True), the default, does not warn.",
+       "articleBody": "set_list_to_stack# class tensordict.set_list_to_stack(mode: bool)# Context manager and decorator to control list handling in TensorDict. Deprecated since version 0.15: Turning list-to-stack conversion off (set_list_to_stack(False) or LIST_TO_STACK=0) is deprecated and will be removed in TensorDict 0.17. Use td.set_non_tensor(key, value) to store a list as one value. set_list_to_stack(True), the default, does not warn, and will keep working, doing nothing, after the removal.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

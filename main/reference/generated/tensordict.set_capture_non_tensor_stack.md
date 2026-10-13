@@ -8,4 +8,5 @@ Deprecated since version 0.15: Capturing identical non-tensor data (`set_capture
 or `CAPTURE_NONTENSOR_STACK=1`) is deprecated and will be removed in
 TensorDict 0.17. Use [`NonTensorStack.data`](tensordict.NonTensorStack.html#tensordict.NonTensorStack.data)
 to get the single value of a stack of identical values.
-`set_capture_non_tensor_stack(False)`, the default, does not warn.
+`set_capture_non_tensor_stack(False)`, the default, does not warn,
+and will keep working, doing nothing, after the removal.
