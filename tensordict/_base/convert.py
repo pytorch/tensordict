@@ -135,6 +135,47 @@ class _Conversion:
         names: list[str] | None = None,
         lazy: bool | None = None,
     ) -> Self:
+        """Builds a tensordict by stacking a list of dicts or tensor collections.
+
+        Each dict is converted with :meth:`from_dict` and the results are
+        stacked along a new leading dimension.
+
+        Args:
+            input (list): the dicts or tensor collections to stack.
+
+        Keyword Args:
+            auto_batch_size (bool, optional): if ``True``, the batch size of
+                each element is computed automatically. See :meth:`from_dict`.
+            batch_size (iterable of int, optional): the batch size of the
+                result, with the length of the list first. Each element gets
+                ``batch_size[1:]``.
+            device (torch.device or compatible type, optional): a device for
+                the result.
+            batch_dims (int, optional): the maximum number of batch dimensions
+                of the result, the list dimension included. Exclusive with
+                ``batch_size``.
+            names (list of str, optional): the dimension names of the result,
+                one per batch dimension, with the name of the list dimension
+                first.
+            lazy (bool, optional): if ``True``, the result is a lazy stack;
+                if ``False``, a dense stack. Defaults to ``None``, which builds
+                a dense stack when the elements have the same shape and a lazy
+                stack otherwise.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict.from_list(
+            ...     [{"a": torch.zeros(3)}, {"a": torch.zeros(3)}],
+            ...     batch_size=[2, 3],
+            ...     names=["x", "y"],
+            ... )
+            >>> td.batch_size
+            torch.Size([2, 3])
+            >>> td.names
+            ['x', 'y']
+
+        """
         from tensordict.base import TensorDictBase
 
         if lazy is None:
@@ -155,8 +196,7 @@ class _Conversion:
             bsz = None
         if batch_dims is not None:
             batch_dims -= 1
-        if names is not None:
-            names = names[1:]
+        member_names = names[1:] if names is not None else None
         if cls is TensorDictBase:
             from tensordict import TensorDict
 
@@ -169,14 +209,29 @@ class _Conversion:
                     batch_size=bsz,
                     batch_dims=batch_dims,
                     device=device,
-                    names=names,
+                    names=member_names,
                 )
                 if not is_tensor_collection(d)
                 else d
             )
             for d in input
         ]
-        return stack(input)
+        out = stack(input)
+        if names is not None:
+            # the stack does not name the list dimension, and from_dict does
+            # not apply names with auto_batch_size: name the result
+            if len(names) == out.batch_dims:
+                out.names = names
+            else:
+                warnings.warn(
+                    f"from_list ignores names={names} for a result of batch "
+                    f"size {out.batch_size} today. Starting with TensorDict "
+                    "0.17, the default will change to raising a ValueError, "
+                    "as for a batch_size of another length.",
+                    FutureWarning,
+                    stacklevel=2,
+                )
+        return out
 
     def from_dict_instance(
         self,

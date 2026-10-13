@@ -1915,6 +1915,32 @@ class TestGeneric:
             assert data["d"].batch_size == torch.Size(batch_size)
             assert data["d", "g"].batch_size == torch.Size(batch_size)
 
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"batch_size": [2, 3]},
+            {"auto_batch_size": True},
+            {"batch_dims": 2},
+            {"batch_size": [2, 3], "lazy": True},
+            {"auto_batch_size": True, "lazy": True},
+            {"batch_size": [2, 3], "lazy": False},
+        ],
+    )
+    def test_from_list_names(self, kwargs):
+        # https://github.com/pytorch/tensordict/issues/2370
+        data = [{"a": torch.zeros(3)}, {"a": torch.zeros(3)}]
+        td = TensorDict.from_list(data, names=["x", "y"], **kwargs)
+        assert td.batch_size == (2, 3)
+        assert td.names == ["x", "y"]
+
+    def test_from_list_names_mismatch(self):
+        data = [{"a": torch.zeros(3)}, {"a": torch.zeros(3)}]
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            td = TensorDict.from_list(data, batch_dims=1, names=["x", "y"])
+        assert td.names == [None]
+        with pytest.raises(ValueError):
+            TensorDict.from_list(data, batch_size=[2, 3], names=["x"])
+
     def test_from_dict_instance(self):
         @tensorclass(autocast=True)
         class MyClass:
