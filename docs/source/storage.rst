@@ -377,7 +377,9 @@ Each backend stores non-tensor values, such as strings (see
      - ``str``
    * - ``"h5"``
      - an HDF5 string or opaque dataset
-     - ``bytes``: call ``.decode()``
+     - ``bytes``: call ``.decode()``. Starting with TensorDict 0.17, the
+       default will change to ``str`` for the strings that tensordict wrote;
+       reading one as ``bytes`` warns until then
        (`#2255 <https://github.com/pytorch/tensordict/issues/2255>`_)
    * - ``"zarr"``
      - JSON or pickle in a ``uint8`` array

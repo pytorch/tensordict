@@ -30,6 +30,10 @@ from tensordict.base import (
 )
 from tensordict.utils import _maybe_correct_neg_dim
 
+# dim=() reduces over every element, as in torch.sum(x, dim=()), except in
+# these reductions, which keep raising for it
+_NO_EMPTY_DIM_REDUCTIONS = frozenset({"max", "min", "cummax", "cummin", "quantile"})
+
 
 def _user_stacklevel() -> int:
     """Returns the ``stacklevel`` that points the caller's warning to the first frame outside tensordict."""
@@ -1979,6 +1983,13 @@ class _Reductions:
     ):
         from tensordict._td import TensorDict
 
+        if (
+            isinstance(dim, tuple)
+            and not dim
+            and reduction_name not in _NO_EMPTY_DIM_REDUCTIONS
+        ):
+            # dim=() reduces over all the elements, as in torch
+            dim = None
         if dim is None and not keepdim:
             # dim=None reduces over all the elements, as an omitted dim does
             dim = NO_DEFAULT
