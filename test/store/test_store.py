@@ -2879,6 +2879,54 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    def test_view_of_locked_store(self, store_kwargs):
+        """The view of an element of a locked store raises for a new key and writes the keys the store has (#2404)."""
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(
+                [
+                    TensorDict(a=torch.zeros(3), n=TensorDict(b=torch.zeros(3)))
+                    for _ in range(2)
+                ]
+            ),
+            **store_kwargs,
+        )
+        try:
+            store_td.lock_()
+            view = store_td[1]
+            for key in ("x", ("n", "x")):
+                with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                    view.set(key, torch.ones(3))
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                view.update({"x": torch.ones(3)}, inplace=True)
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                view["n"] = TensorDict(c=torch.ones(3))
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                view.set("n", TensorDict(b=torch.ones(3), c=torch.ones(3)))
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                view["n"] = torch.ones(3)
+            assert list(store_td.keys(True, True)) == ["a", ("n", "b")]
+            # the keys the store has are written, with or without inplace
+            view.set("a", torch.ones(3))
+            view.set(("n", "b"), torch.ones(3))
+            view.update({"a": view["a"] + 1})
+            view.update({"a": view["a"] + 1}, inplace=True)
+            torch.testing.assert_close(store_td["a"][1], torch.full((3,), 3.0))
+            torch.testing.assert_close(store_td["n", "b"][1], torch.ones(3))
+            torch.testing.assert_close(store_td["a"][0], torch.zeros(3))
+            # the view follows the lock of the store
+            store_td.unlock_()
+            view.set("x", torch.ones(3))
+            torch.testing.assert_close(store_td["x"][1], torch.ones(3))
+            # a locked view still needs inplace for the keys the store has
+            view.lock_()
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                view.set("a", torch.ones(3))
+            view.set("a", torch.zeros(3), inplace=True)
+            torch.testing.assert_close(store_td["a"][1], torch.zeros(3))
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     def test_view_shape_change_raises(self, store_stack):
         """Changing element shape through the view should raise."""
         store_td, tds, lazy_td = store_stack

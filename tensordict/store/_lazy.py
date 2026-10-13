@@ -254,12 +254,14 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
     ):
         if not validated:
             value = self._validate_value(value, check_shape=True, key=key)
+        # the view of a locked store writes the keys the store has, also
+        # without inplace, and raises for a new key (#2404)
         if (
-            self.is_locked
+            (self.is_locked or self._parent.is_locked)
             and not ignore_lock
             and inplace is not True
             and (
-                inplace is False
+                (self.is_locked and inplace is False)
                 or not _writes_existing_leaves(self._get_all_keys(), key, value)
             )
         ):
@@ -307,10 +309,10 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
         if not validated:
             value = self._validate_value(value, check_shape=True, key=key)
         if (
-            self.is_locked
+            (self.is_locked or self._parent.is_locked)
             and inplace is not True
             and (
-                inplace is False
+                (self.is_locked and inplace is False)
                 or not _writes_existing_leaves(self._get_all_keys(), key_path, value)
             )
         ):
