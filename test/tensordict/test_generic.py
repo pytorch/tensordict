@@ -7745,13 +7745,12 @@ class TestGeneric:
             sub.update({"a": torch.ones(3)})
         assert sub.update({"a": torch.ones(3)}, inplace=True) is sub
 
-    def test_sub_td_update_at_keyword_only_clone(self):
-        # _SubTensorDict.update_at_ takes clone as a keyword only, and
-        # update_ takes input_dict
+    def test_sub_td_update_at_arguments(self):
+        # _SubTensorDict.update_at_ and update_ take the arguments of
+        # TensorDictBase, and still discard_idx_attr and input_dict
         source = TensorDict(a=torch.zeros(2, 3), batch_size=[2, 3])
         sub = source._get_sub_tensordict(0)
-        with pytest.raises(TypeError, match="positional"):
-            sub.update_at_({"a": torch.ones(())}, 0, True)
+        assert sub.update_at_({"a": torch.ones(())}, 0, True) is sub
         assert sub.update_at_({"a": torch.ones(())}, 0, clone=True) is sub
         assert source["a"][0, 0] == 1 and source["a"][0, 1] == 0
         assert sub.update_at_({"a": torch.ones(())}, 1, discard_idx_attr=True) is sub
@@ -7771,8 +7770,10 @@ class TestGeneric:
         )
         assert (source["a"][0] == 1).all()
         assert sub.update_(None) is sub
-        with pytest.raises(KeyError, match="input_dict_or_td"):
-            sub.update_(input_dict_or_td={"a": torch.ones(3)})
+        assert sub.update_(input_dict_or_td={"a": torch.full((3,), 7.0)}) is sub
+        assert (source["a"][0] == 7).all()
+        assert sub.update_at_({"a": torch.full((3,), 8.0)}, ()) is sub
+        assert (source["a"][0] == 8).all()
 
     def test_eager_mutation_custom_validation(self):
         class ValidatedTD(TensorDict):

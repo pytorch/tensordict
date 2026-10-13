@@ -96,8 +96,6 @@ from tensordict.utils import (
     _shape,
     _td_fields,
     _unravel_key_to_tuple,
-    _UPDATE_IGNORE_LOCK_WARNED,
-    _warn_update_ignore_lock,
     _zip_strict,
     DeviceType,
     expand_right,
@@ -106,7 +104,6 @@ from tensordict.utils import (
     is_tensorclass,
     list_to_stack,
     NestedKey,
-    unravel_key_list,
 )
 from torch import Tensor
 from torch.compiler import is_compiling
@@ -3941,71 +3938,50 @@ class LazyStackedTensorDict(TensorDictBase):
                     pass
         return result
 
-    @_lock_blocked
-    def update(
+    # Override: updates each member, which keeps exclusive keys and vmapped stacks working.
+    def _update_entries(
         self,
-        input_dict_or_td: T | None = None,
-        clone: bool = False,
-        inplace: bool = False,
+        input_dict_or_td: dict[str, CompatibleType] | T,
         *,
-        keys_to_update: Sequence[NestedKey] | None = None,
-        non_blocking: bool = False,
-        is_leaf: Callable[[Type], bool] | None = None,
-        update_batch_size: bool = False,
-        ignore_lock: bool = False,
-        **kwargs: Any,
+        clone: bool,
+        inplace: bool,
+        non_blocking: bool,
+        keys_to_update: list[NestedKey] | None,
+        is_leaf: Callable[[Type], bool],
+        update_batch_size: bool,
+        ignore_lock: bool,
     ) -> Self:
-        # This implementation of update is compatible with exclusive keys
-        # as well as vmapped lazy stacks.
         # We iterate over the tensordicts rather than iterating over the keys,
         # which requires stacking and unbinding but is also not robust to missing keys.
-        if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
-            ignore_lock = _warn_update_ignore_lock(stacklevel=3)
-        if kwargs:
-            if input_dict_or_td is None:
-                input_dict_or_td = kwargs
-            elif isinstance(input_dict_or_td, dict):
-                input_dict_or_td = {**input_dict_or_td, **kwargs}
-            else:
-                self.update(
-                    input_dict_or_td,
-                    clone=clone,
-                    inplace=inplace,
-                    keys_to_update=keys_to_update,
-                    non_blocking=non_blocking,
-                    is_leaf=is_leaf,
-                    update_batch_size=update_batch_size,
-                    ignore_lock=ignore_lock,
-                )
-                input_dict_or_td = kwargs
-            kwargs = {}
-        elif input_dict_or_td is None:
-            return self
-        if input_dict_or_td is self:
-            # no op
-            return self
-        if is_leaf is None:
-            is_leaf = _is_leaf_nontensor
         if isinstance(input_dict_or_td, dict):
+            self._check_tuple_keys(input_dict_or_td)
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_size=self.batch_size
             )
-
-        if keys_to_update is not None:
-            keys_to_update = unravel_key_list(keys_to_update)
-            if len(keys_to_update) == 0:
-                return self
+        kwargs = {
+            "clone": clone,
+            "inplace": inplace,
+            "keys_to_update": keys_to_update,
+            "non_blocking": non_blocking,
+            "is_leaf": is_leaf,
+            "update_batch_size": update_batch_size,
+            "ignore_lock": ignore_lock,
+        }
 
         if (
             isinstance(input_dict_or_td, LazyStackedTensorDict)
             and input_dict_or_td.stack_dim == self.stack_dim
         ):
-            tds = list(self.tensordicts)
-            if len(input_dict_or_td.tensordicts) > len(self.tensordicts):
-                tds.extend(
-                    [td.copy() for td in input_dict_or_td.tensordicts[len(tds) :]]
-                )
-            elif len(input_dict_or_td.tensordicts) != len(self.tensordicts):
+            n = len(self.tensordicts)
+            sources = input_dict_or_td.tensordicts
+            if len(sources) > n:
+                for td_dest, td_source in zip(self.tensordicts, sources):
+                    td_dest.update(td_source, **kwargs)
+                if update_batch_size:
+                    # the extra members of the source are appended (#2206)
+                    self.extend([td.copy() for td in sources[n:]])
+                return self
+            if len(sources) != n:
                 if update_batch_size:
                     keys_source = set(input_dict_or_td.keys(True))
                     keys_dest = set(self.keys(True))
@@ -4018,7 +3994,7 @@ class LazyStackedTensorDict(TensorDictBase):
                         )
                     hook_out, hook_in = self._hook_out, self._hook_in
                     self.__init__(
-                        *input_dict_or_td.tensordicts,
+                        *sources,
                         stack_dim=self.stack_dim,
                         stack_dim_name=self._td_dim_name,
                     )
@@ -4029,17 +4005,8 @@ class LazyStackedTensorDict(TensorDictBase):
                     raise ValueError(
                         "cannot update stacked tensordicts with different shapes when update_batch_size=False."
                     )
-            for td_dest, td_source in _zip_strict(tds, input_dict_or_td.tensordicts):
-                td_dest.update(
-                    td_source,
-                    clone=clone,
-                    inplace=inplace,
-                    keys_to_update=keys_to_update,
-                    non_blocking=non_blocking,
-                    is_leaf=is_leaf,
-                    update_batch_size=update_batch_size,
-                    ignore_lock=ignore_lock,
-                )
+            for td_dest, td_source in _zip_strict(self.tensordicts, sources):
+                td_dest.update(td_source, **kwargs)
             return self
 
         if self._hook_in is not None:
@@ -4060,14 +4027,7 @@ class LazyStackedTensorDict(TensorDictBase):
             # remain unchanged) is incompatible with the content of the input tensordict.
             if update_batch_size:
                 return self.update(
-                    input_dict_or_td.to_lazystack(self.stack_dim),
-                    clone=clone,
-                    inplace=inplace,
-                    keys_to_update=keys_to_update,
-                    non_blocking=non_blocking,
-                    is_leaf=is_leaf,
-                    update_batch_size=update_batch_size,
-                    ignore_lock=ignore_lock,
+                    input_dict_or_td.to_lazystack(self.stack_dim), **kwargs
                 )
             # if the batch-size does not permit unbinding, let's first try to reset the batch-size.
             input_dict_or_td = input_dict_or_td.copy()
@@ -4084,64 +4044,58 @@ class LazyStackedTensorDict(TensorDictBase):
         for td_dest, td_source in _zip_strict(
             self_upd.tensordicts, input_dict_or_td.unbind(self_upd.stack_dim)
         ):
-            td_dest.update(
-                td_source,
-                clone=clone,
-                inplace=inplace,
-                keys_to_update=keys_to_update,
-                non_blocking=non_blocking,
-                is_leaf=is_leaf,
-                update_batch_size=update_batch_size,
-                ignore_lock=ignore_lock,
-            )
+            td_dest.update(td_source, **kwargs)
         if self._hook_out is not None:
             self_upd = self._hook_out(self_upd)
         else:
             self_upd = self
         return self_upd
 
-    def update_(
+    def _check_tuple_keys(self, source: dict) -> None:
+        """Raises as a TensorDict does for a tuple key of ``source`` that goes through a tensor of a member.
+
+        ``TensorDict.from_dict`` would turn such a key into a sub-tensordict
+        that replaces the tensor.
+        """
+        for key in source:
+            key = _unravel_key_to_tuple(key)
+            if len(key) < 2:
+                continue
+            for node in self.tensordicts:
+                for subkey in key[:-1]:
+                    entry = node._get_str(subkey, None)
+                    if entry is None:
+                        break
+                    if not _is_tensor_collection(type(entry)):
+                        raise KeyError(
+                            f"The entry {subkey} is already present in tensordict {node}."
+                        )
+                    node = entry
+
+    # Override: splits the source along the stack dim and updates each member.
+    def _update_(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | TensorDictBase | None = None,
-        clone: bool = False,
+        input_dict_or_td: dict[str, CompatibleType] | T,
         *,
-        non_blocking: bool = False,
-        **kwargs: Any,
+        clone: bool,
+        non_blocking: bool,
+        keys_to_update: list[tuple[str, ...]] | None,
     ) -> Self:
-        # Extract reserved kwargs that aren't user key-value pairs.
-        keys_to_update = kwargs.pop("keys_to_update", None)
-        if kwargs:
-            if input_dict_or_td is None:
-                input_dict_or_td = kwargs
-            elif isinstance(input_dict_or_td, dict):
-                input_dict_or_td = {**input_dict_or_td, **kwargs}
-            else:
-                self.update_(
-                    input_dict_or_td,
-                    clone=clone,
-                    non_blocking=non_blocking,
-                    keys_to_update=keys_to_update,
-                )
-                input_dict_or_td = kwargs
-            kwargs = {}
-        elif input_dict_or_td is None:
-            return self
-        if input_dict_or_td is self:
-            # no op
-            return self
         if not is_tensor_collection(input_dict_or_td):
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_dims=self.batch_dims
             )
-            if input_dict_or_td.batch_dims <= self.stack_dim:
-                raise RuntimeError(
-                    f"Built tensordict with ndim={input_dict_or_td.ndim} does not have enough dims."
-                )
-        if input_dict_or_td.batch_size[self.stack_dim] != len(self.tensordicts):
-            raise ValueError("cannot update stacked tensordicts with different shapes.")
-        for td_dest, td_source in _zip_strict(
-            self.tensordicts, input_dict_or_td.unbind(self.stack_dim)
-        ):
+        stack_dim = self.stack_dim
+        if input_dict_or_td.batch_dims > stack_dim and input_dict_or_td.batch_size[
+            stack_dim
+        ] == len(self.tensordicts):
+            pieces = input_dict_or_td.unbind(stack_dim)
+        else:
+            pieces = [
+                self._broadcast_piece(input_dict_or_td, i)
+                for i in range(len(self.tensordicts))
+            ]
+        for td_dest, td_source in _zip_strict(self.tensordicts, pieces):
             td_dest.update_(
                 td_source,
                 clone=clone,
@@ -4150,55 +4104,69 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return self
 
-    def update_at_(
-        self,
-        input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
-        index: IndexType,
-        clone: bool = False,
-        *,
-        non_blocking: bool = False,
-    ) -> Self:
-        """Updates the lazy stack in-place at the specified index with values from either a dictionary or another TensorDict.
+    def _broadcast_piece(self, source: T, i: int) -> TensorDictBase:
+        """The part of ``source`` that :meth:`update_` writes into member ``i``, for a source that cannot be split along the stack dim.
 
-        See :meth:`~tensordict.TensorDictBase.update_at_`. Unlike the base method,
-        this override does not accept ``keys_to_update``.
-
-        Args:
-            input_dict_or_td (TensorDictBase or dict): input data to be written
-                in self.
-            index (int, torch.Tensor, iterable, slice): index of the tensordict
-                where the update should occur.
-            clone (bool, optional): accepted for compatibility with the base
-                method. It has no effect, as the values are copied into the
-                existing entries. Default is `False`.
-
-        Keyword Args:
-            non_blocking (bool, optional): if ``True`` and this copy is between
-                different devices, the copy may occur asynchronously with respect
-                to the host.
-
-        Returns:
-            self
+        Each leaf of ``source`` broadcasts to the leaf of ``self``, as in
+        ``TensorDict.update_``: it is indexed at ``i`` along the stack dim if
+        it has that dim, and goes whole to each member otherwise.
         """
-        if isinstance(index, tuple) and any(
-            element is Ellipsis for element in index[:-1]
-        ):
+        member = self.tensordicts[i]
+        piece = {}
+        for key, value in source.items(True, True, is_leaf=_is_leaf_nontensor):
+            if isinstance(value, Tensor):
+                dest = member._get_tuple(_unravel_key_to_tuple(key), None)
+                if isinstance(dest, Tensor):
+                    # the dim of value that the stack dim of self faces when
+                    # the shapes are aligned on the right, as torch does
+                    dim = self.stack_dim + value.ndim - dest.ndim - 1
+                    if dim >= 0:
+                        if value.shape[dim] == len(self.tensordicts):
+                            value = value.select(dim, i)
+                        elif value.shape[dim] == 1:
+                            value = value.select(dim, 0)
+                        else:
+                            raise ValueError(
+                                "cannot update stacked tensordicts with different shapes."
+                            )
+            piece[key] = value
+        return TensorDict(piece, batch_size=[])
+
+    # Override: splits the index and the source over the members.
+    def _update_at_(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | T,
+        idx: IndexType,
+        *,
+        clone: bool,
+        non_blocking: bool,
+        keys_to_update: list[tuple[str, ...]] | None,
+    ) -> Self:
+        if isinstance(idx, tuple) and any(element is Ellipsis for element in idx[:-1]):
             # each entry reads the Ellipsis on its own dims, as in set_at_
-            return TensorDictBase.update_at_(
-                self, input_dict_or_td, index, clone=clone, non_blocking=non_blocking
+            return TensorDictBase._update_at_(
+                self,
+                input_dict_or_td,
+                idx,
+                clone=clone,
+                non_blocking=non_blocking,
+                keys_to_update=keys_to_update,
             )
-        indexed_bs = _getitem_batch_size(self.batch_size, index)
+        indexed_bs = _getitem_batch_size(self.batch_size, idx)
         if not _is_tensor_collection(type(input_dict_or_td)):
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_size=indexed_bs
             )
         elif input_dict_or_td.batch_size != indexed_bs:
             input_dict_or_td = input_dict_or_td.expand(indexed_bs)
-        for td, member_index, piece in self._split_value(index, input_dict_or_td):
+        # the members of a NonTensorStack take no keys_to_update
+        kwargs = {} if keys_to_update is None else {"keys_to_update": keys_to_update}
+        for td, member_index, piece in self._split_value(idx, input_dict_or_td):
             td.update_at_(
                 piece,
                 () if member_index is None else member_index,
                 non_blocking=non_blocking,
+                **kwargs,
             )
         return self
 

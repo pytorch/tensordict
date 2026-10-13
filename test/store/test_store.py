@@ -2419,8 +2419,10 @@ class TestLazyStackedTensorDictStore:
             lazy_stack(tds), **store_kwargs
         )
         try:
-            # without keys_to_update, a missing key is ignored
-            assert store_td.update_({"zz": torch.ones(2, 3)}) is store_td
+            # a key that the store lacks raises, as on every other class,
+            # unless another key matches and keys_to_update is not given
+            with pytest.raises(KeyError, match="zz"):
+                store_td.update_({"zz": torch.ones(2, 3)})
             assert "zz" not in store_td.keys()
             store_td.update_({"a": torch.ones(2, 3), "zz": torch.ones(2, 3)})
             torch.testing.assert_close(store_td["a"], torch.ones(2, 3))

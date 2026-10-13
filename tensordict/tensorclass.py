@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import abc
 import concurrent
+import contextlib
 import ctypes
 import dataclasses
 import functools
@@ -6870,6 +6871,7 @@ class NonTensorStack(LazyStackedTensorDict):
         # No need to do anything with a non tensor stack
         return self
 
+    # Override: the source is a NonTensorData or a NonTensorStack, not a mapping.
     def update(
         self,
         input_dict_or_td: dict[str, CompatibleType] | T | None = None,
@@ -6902,6 +6904,7 @@ class NonTensorStack(LazyStackedTensorDict):
             ignore_lock=ignore_lock,
         )
 
+    # Override: the source is a NonTensorData or a NonTensorStack, not a mapping.
     def update_(
         self,
         input_dict_or_td: dict[str, CompatibleType] | T | None = None,
@@ -7036,29 +7039,40 @@ class NonTensorStack(LazyStackedTensorDict):
         finally:
             _BREAK_ON_MEMMAP = True
 
-    def update_at_(
-        self,
-        input_dict_or_td: dict[str, CompatibleType] | TensorCollection,
-        index: IndexType,
-        clone: bool = False,
-        *,
-        non_blocking: bool = False,
-    ) -> T:
-        memmap = False
-        if self._is_memmap and hasattr(self, "_path_to_memmap"):
-            global _BREAK_ON_MEMMAP
+    @contextlib.contextmanager
+    def _rewrite_memmap(self):
+        """Lets the members of a memory-mapped stack be written, and writes the stack to its path again at the end."""
+        global _BREAK_ON_MEMMAP
+        memmap = self._is_memmap and hasattr(self, "_path_to_memmap")
+        if memmap:
             _BREAK_ON_MEMMAP = False
-            memmap = True
         try:
-            super().update_at_(
-                input_dict_or_td, index, clone=clone, non_blocking=non_blocking
-            )
+            yield
             if memmap:
                 self._memmap_(
                     prefix=self._path_to_memmap, inplace=True, robust_key=True
                 )
         finally:
             _BREAK_ON_MEMMAP = True
+
+    # Override: a memory-mapped stack is written again after its members.
+    def _update_at_(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | TensorCollection,
+        idx: IndexType,
+        *,
+        clone: bool,
+        non_blocking: bool,
+        keys_to_update: list[tuple[str, ...]] | None,
+    ) -> T:
+        with self._rewrite_memmap():
+            super()._update_at_(
+                input_dict_or_td,
+                idx,
+                clone=clone,
+                non_blocking=non_blocking,
+                keys_to_update=keys_to_update,
+            )
         return self
 
     @property
