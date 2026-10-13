@@ -447,6 +447,14 @@ def _fails_exclusive_keys(func):
     return newfunc
 
 
+def _broadcasts(shape: torch.Size, other_shape: torch.Size) -> bool:
+    try:
+        torch.broadcast_shapes(shape, other_shape)
+    except RuntimeError:
+        return False
+    return True
+
+
 def _fits_stack(
     stack_batch_size: torch.Size, stack_dim: int, batch_size: torch.Size
 ) -> bool:
@@ -4253,6 +4261,22 @@ class LazyStackedTensorDict(TensorDictBase):
             and other.ndim > 0
             and other.shape[: self.stack_dim] == self.shape[: self.stack_dim]
         ):
+            if (
+                isinstance(other, Tensor)
+                and (
+                    other.ndim <= self.stack_dim
+                    or other.shape[self.stack_dim] != self.shape[self.stack_dim]
+                )
+                and _broadcasts(other.shape, self.shape)
+            ):
+                # A tensor that does not broadcast against the batch fails
+                # below as it does on TensorDict
+                raise ValueError(
+                    "A tensor `other` in LazyStackedTensorDict.where must be 0-dim "
+                    "or start with the batch shape up to the stack dim, "
+                    f"{self.shape[: self.stack_dim + 1]}, got shape {other.shape}. "
+                    f"Expand it to the batch shape {self.shape} first."
+                )
             other = other.unbind(self.stack_dim)
 
             def where(td, cond, other, pad):

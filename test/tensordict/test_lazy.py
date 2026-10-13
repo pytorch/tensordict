@@ -3454,6 +3454,40 @@ class TestLazyStackedTensorDict:
         assert (lazy.where(cond, other) == expected).all()
         assert (torch.where(cond, lazy, other) == expected).all()
 
+    @pytest.mark.parametrize(
+        "stack_dim,other_shape,broadcasts",
+        [
+            (0, (3,), True),
+            (0, (1, 3), True),
+            (1, (3, 1), True),
+            (0, (1, 2), False),
+            (1, (3,), False),
+        ],
+    )
+    def test_where_tensor_not_batch_shaped(self, stack_dim, other_shape, broadcasts):
+        # A tensor `other` is split along the stack dim, so it must start with
+        # the batch shape up to the stack dim
+        lazy = lazy_stack(
+            [
+                TensorDict(a=torch.arange(3.0) + 10 * i, batch_size=[3])
+                for i in range(2)
+            ],
+            stack_dim,
+        )
+        cond = torch.arange(6).reshape(lazy.shape) % 2 == 0
+        other = torch.full(other_shape, -1.0)
+        if not broadcasts:
+            # A tensor that does not broadcast against the batch fails as before
+            with pytest.raises((RuntimeError, IndexError)):
+                lazy.where(cond, other)
+            return
+        with pytest.raises(ValueError, match="Expand it to the batch shape"):
+            lazy.where(cond, other)
+        # Expanded to the batch shape, it gives what TensorDict.where gives
+        other = other.expand(lazy.shape)
+        expected = lazy.to_tensordict().where(cond, other)
+        assert (lazy.where(cond, other) == expected).all()
+
     @pytest.mark.parametrize("other_type", ["lazy", "dense", "tensor", "scalar"])
     def test_where_whole_members(self, other_type):
         # With 0-dim members, the condition selects whole members: the result
