@@ -64,7 +64,8 @@ to be valid. Defaults to `True`.
 Returns:
 
 The padded tensordict. When `inplace=True` this is the same object as
-the input; otherwise a new tensordict.
+the input; otherwise a new tensordict, or a new tensorclass of the
+same type for a tensorclass input.
 
 Examples
 
