@@ -22,7 +22,7 @@ import shutil
 import sys
 import warnings
 import weakref
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -7410,15 +7410,22 @@ def _update_shared_nontensor(nontensor, val):
         )
 
 
-def _shared_nontensor_takes(nontensor, val) -> bool:
-    """Whether :func:`_update_shared_nontensor` writes ``val`` into ``nontensor`` without raising."""
+def _shared_nontensor_value(nontensor, val):
+    """The value that :func:`_update_shared_nontensor` writes into ``nontensor`` for ``val``, or ``NO_DEFAULT`` if the write would raise.
+
+    The manager of a shared list or dict pickles the value it is given, so a
+    generator cannot be written. These take a list or dict built from a value
+    that pickles: the write stores that one, so an iterator is read once.
+    """
     try:
         if isinstance(nontensor, multiprocessing.managers.ListProxy):
+            pickle.dumps(val)
             # extend takes any iterable
-            iter(val)
+            val = list(val)
         elif isinstance(nontensor, multiprocessing.managers.DictProxy):
+            pickle.dumps(val)
             # update takes a mapping or an iterable of pairs
-            dict(val)
+            val = dict(val)
         elif isinstance(nontensor, multiprocessing.sharedctypes.Synchronized):
             # ctypes converts with __index__ in an int or bool slot, and also
             # with __float__ in a float slot
@@ -7429,44 +7436,72 @@ def _shared_nontensor_takes(nontensor, val) -> bool:
             else:
                 operator.index(val)
         elif isinstance(nontensor, multiprocessing.sharedctypes.SynchronizedArray):
-            return isinstance(val, str)
+            if not isinstance(val, str):
+                return NO_DEFAULT
         else:
-            return False
-    except (TypeError, ValueError, OverflowError):
-        return False
-    return True
+            return NO_DEFAULT
+    except Exception:
+        return NO_DEFAULT
+    return val
 
 
-def _stores_non_tensor(dest, source) -> bool:
-    """Whether ``dest.copy_(source)`` can store the values of ``source`` in ``dest``, a shared or memory-mapped non-tensor leaf.
+def _stored_non_tensor(dest, source, break_on_memmap: bool | None = None):
+    """The source that ``dest.copy_`` writes into ``dest``, a shared or memory-mapped non-tensor leaf, for ``source``.
 
-    A memory-mapped value that does not share its data takes any value that it
-    can write to its files: JSON or pickle. The pairs that ``copy_`` rejects
-    whatever the storage are left to ``copy_``.
+    That is ``source``, or a copy holding the list or dict that a shared
+    ``dest`` stores, or ``None`` if ``dest`` cannot store the values of
+    ``source``. A memory-mapped value that does not share its data takes any
+    value that it can write to its files: JSON or pickle. A member of a
+    memory-mapped stack takes none, unless the write goes through the stack
+    (``break_on_memmap=False``, as in :meth:`NonTensorDataBase._update`). The
+    pairs that ``copy_`` rejects whatever the storage are left to ``copy_``.
     """
     if not is_non_tensor(source):
-        return True
+        return source
     if isinstance(dest, NonTensorStack):
-        if isinstance(source, NonTensorStack):
+        broadcast = not isinstance(source, NonTensorStack)
+        if broadcast:
+            sources = [source] * len(dest.tensordicts)
+        else:
             sources = source.unbind(dest.stack_dim)
             if len(sources) != len(dest.tensordicts):
-                return True
-        else:
-            sources = [source] * len(dest.tensordicts)
-        return all(
-            _stores_non_tensor(member, value)
-            for member, value in zip(dest.tensordicts, sources)
-        )
+                return source
+        if dest._is_memmap and hasattr(dest, "_path_to_memmap"):
+            # the stack lets its members be written, then saves itself again
+            break_on_memmap = False
+        stored = []
+        for member, value in zip(dest.tensordicts, sources):
+            if broadcast and stored and isinstance(source.data, Iterator):
+                # an iterator is read once: the other members take what the
+                # first one read
+                value = stored[0]
+            value = _stored_non_tensor(member, value, break_on_memmap)
+            if value is None:
+                return None
+            stored.append(value)
+        if all(new is old for new, old in zip(stored, sources)):
+            return source
+        return NonTensorStack(*stored, stack_dim=dest.stack_dim)
     if isinstance(source, NonTensorStack):
-        return True
+        return source
+    if break_on_memmap is None:
+        break_on_memmap = _BREAK_ON_MEMMAP
+    if dest._is_memmap and dest._is_memmaped_from_above() and break_on_memmap:
+        # the write raises: only the stack writes its members
+        return None
     if dest._tensordict._is_shared or (
         dest._is_memmap and dest._metadata.get("_share_non_tensor")
     ):
-        return _shared_nontensor_takes(dest._non_tensordict["data"], source.data)
+        data = _shared_nontensor_value(dest._non_tensordict["data"], source.data)
+        if data is NO_DEFAULT:
+            return None
+        if data is source.data:
+            return source
+        return NonTensorData(data, batch_size=dest.batch_size, device=dest.device)
     if dest._is_memmap and not _is_json_serializable(source.data):
         # the write pickles the value: try it before any entry is written
         try:
             pickle.dumps(source.data)
-        except (TypeError, pickle.PicklingError, AttributeError):
-            return False
-    return True
+        except Exception:
+            return None
+    return source

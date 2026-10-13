@@ -1215,13 +1215,13 @@ def _select_entry(key: tuple, value: Any, keys_to_update: list[tuple]) -> Any:
         return value.to_tensordict().select(*leaves)
 
 
-def _cannot_store(source, dest) -> bool:
-    """Whether ``dest`` is a shared or memory-mapped non-tensor leaf that cannot store the values of ``source``."""
+def _stored_value(source, dest):
+    """The source that ``dest.copy_`` writes for ``source``, or ``None`` if ``dest`` is a shared or memory-mapped non-tensor leaf that cannot store its values."""
     if not (_is_non_tensor(type(dest)) and (dest._is_shared or dest._is_memmap)):
-        return False
-    from tensordict.tensorclass import _stores_non_tensor
+        return source
+    from tensordict.tensorclass import _stored_non_tensor
 
-    return not _stores_non_tensor(dest, source)
+    return _stored_non_tensor(dest, source)
 
 
 def _update_at_aliases(update_at_: Callable) -> Callable:
@@ -4167,10 +4167,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                             raise KeyError(
                                 f"The key {name} was not found in the dest tensordict."
                             )
-                        if not isinstance(dest, Tensor) and _cannot_store(source, dest):
-                            # a str for a flat key, as on the other routes
-                            skipped.append(name if len(name) > 1 else name[0])
-                            return None
+                        if not isinstance(dest, Tensor):
+                            source = _stored_value(source, dest)
+                            if source is None:
+                                # a str for a flat key, as on the other routes
+                                skipped.append(name if len(name) > 1 else name[0])
+                                return None
                         dest.copy_(source, non_blocking=non_blocking)
                         if written is not None and isinstance(dest, Tensor):
                             written.append((name, dest))
@@ -4213,7 +4215,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                             or isinstance(dest, NonTensorStack)
                         )
                     ):
-                        if _cannot_store(source, dest):
+                        source = _stored_value(source, dest)
+                        if source is None:
                             skipped.append(name)
                         else:
                             dest.copy_(source, non_blocking=non_blocking)
@@ -4229,9 +4232,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         raise KeyError(
                             f"The key {name} was not found in the dest tensordict."
                         )
-                    if not isinstance(dest, Tensor) and _cannot_store(source, dest):
-                        skipped.append(name)
-                        return None
+                    if not isinstance(dest, Tensor):
+                        source = _stored_value(source, dest)
+                        if source is None:
+                            skipped.append(name)
+                            return None
                     dest.copy_(source, non_blocking=non_blocking)
                     if written is not None and isinstance(dest, Tensor):
                         written.append((name, dest))

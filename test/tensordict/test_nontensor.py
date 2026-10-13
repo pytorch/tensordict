@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import ctypes
 import importlib.util
 import math
 import operator
@@ -1483,18 +1484,85 @@ class TestNonTensorData:
             td.copy().update_({"s": "copied", "a": torch.full((3,), 2.0)})
             assert td["s"] == "copied" and (td["a"] == 2).all()
 
+    @pytest.mark.parametrize("mode", ["shared", "memmap_shared"])
+    @pytest.mark.parametrize("with_tensor", [False, True])
+    def test_shared_update__iterator(self, mode, with_tensor):
+        # The manager of a shared list or dict cannot pickle a generator: it is
+        # skipped with a warning and not read. Other iterators are read once.
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("l", [1])
+        td.set_non_tensor("d", {"k": 1})
+        if mode == "shared":
+            td.share_memory_()
+        else:
+            td.memmap_(share_non_tensor=True)
+
+        def update_(entries):
+            source = TensorDict(batch_size=[3])
+            for key, value in entries.items():
+                source.set_non_tensor(key, value)
+            if with_tensor:
+                source["a"] = torch.ones(3)
+            td.update_(source)
+
+        generators = [(x for x in [1]), (x for x in [("k", 2)])]
+        with pytest.warns(
+            UserWarning, match=r"skipped the non-tensor entries \['l', 'd'\]"
+        ) as record:
+            update_({"l": generators[0], "d": generators[1]})
+        assert record[0].filename == __file__
+        assert [list(gen) for gen in generators] == [[1], [("k", 2)]]
+        assert td["l"] == [1] and td["d"] == {"k": 1}
+        assert (td["a"] == float(with_tensor)).all()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            update_({"l": ["ab", "cd"], "d": iter([("k", 2)])})
+        assert td["l"] == ["ab", "cd"] and td["d"] == {"k": 2}
+
+    @pytest.mark.parametrize("share_non_tensor", [False, True])
+    @pytest.mark.parametrize("index", [1, slice(1, 3)])
+    @pytest.mark.parametrize("write", ["update_", "copy_"])
+    def test_memmap_stack_view_update__non_tensor(
+        self, share_non_tensor, index, write, tmp_path
+    ):
+        # The members of a memmapped NonTensorStack are written only through
+        # the stack: a view at an index skips them with a warning, and still
+        # writes the tensors
+        td = TensorDict(a=torch.zeros(4), batch_size=[4])
+        td["s"] = NonTensorStack("a", "b", "c", "d")
+        td.memmap_(tmp_path, share_non_tensor=share_non_tensor)
+        view = td[index]
+        source = TensorDict(a=torch.ones(view.shape), batch_size=view.shape)
+        source.set_non_tensor("s", "z")
+        with pytest.warns(
+            UserWarning, match=r"skipped the non-tensor entries \['s'\]"
+        ) as record:
+            getattr(view, write)(source)
+        assert record[0].filename == __file__
+        expected = torch.zeros(4)
+        expected[index] = 1
+        assert (td["a"] == expected).all()
+        assert td.get("s").tolist() == ["a", "b", "c", "d"]
+        loaded = TensorDict.load_memmap(tmp_path)
+        assert loaded.get("s").tolist() == ["a", "b", "c", "d"]
+
     @pytest.mark.parametrize(
         "route", ["update_", "update_no_tensor", "copy_", "keys_to_update"]
     )
-    def test_memmap_update__unpicklable(self, route, tmp_path):
+    @pytest.mark.parametrize("unpicklable", ["lock", "ctypes_pointer"])
+    def test_memmap_update__unpicklable(self, route, unpicklable, tmp_path):
         # A value that cannot be pickled is one that a memmapped tensordict
-        # cannot store: update_ skips it with a warning and writes the others
+        # cannot store: update_ skips it with a warning and writes the others.
+        # Pickling a lock raises a TypeError, a ctypes pointer a ValueError.
         td = TensorDict(a=torch.zeros(3), batch_size=[3])
         td.set_non_tensor("o", 1)
         td.set_non_tensor("s", "old")
         td.memmap_(tmp_path)
         source = TensorDict(batch_size=[3])
-        source.set_non_tensor("o", threading.Lock())
+        if unpicklable == "lock":
+            source.set_non_tensor("o", threading.Lock())
+        else:
+            source.set_non_tensor("o", ctypes.pointer(ctypes.c_int(1)))
         source.set_non_tensor("s", "new")
         if route != "update_no_tensor":
             source["a"] = torch.ones(3)
