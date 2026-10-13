@@ -467,6 +467,31 @@ class TestNonTensorData:
         assert not result.is_locked
         assert stack.lock_().reshape(shape).is_locked
 
+    @pytest.mark.parametrize(
+        "call,shape",
+        [
+            (lambda x: x.flatten(), (0,)),
+            (lambda x: x.unflatten(1, (3, 1)), (0, 3, 1, 0)),
+            (lambda x: x.unflatten(0, (2, 0)), (2, 0, 3, 0)),
+        ],
+    )
+    def test_flatten_unflatten_non_tensor_stack_zero_size(self, call, shape):
+        # flatten and unflatten give the stack that reshape gives, locked
+        # like the input, which they leave as it is
+        def make():
+            return NonTensorStack(*[NonTensorStack(batch_size=[0])] * 3, stack_dim=1)
+
+        stack = make()
+        assert stack.batch_size == (0, 3, 0)
+        out = call(stack)
+        expected = make().reshape(shape)
+        assert isinstance(out, NonTensorStack)
+        assert out.batch_size == expected.batch_size
+        assert out.tolist() == expected.tolist()
+        assert not out.is_locked
+        assert not stack.is_locked
+        assert call(make().lock_()).is_locked
+
     def test_comparison(self, non_tensor_data):
         non_tensor_data = non_tensor_data.exclude(("nested", "str"))
         assert (non_tensor_data | non_tensor_data).get_non_tensor(("nested", "bool"))
