@@ -4623,7 +4623,11 @@ def _non_tensor_items(self, include_nested=False):
 
 
 def _bool(self):
-    raise RuntimeError("Converting a tensorclass to boolean value is not permitted")
+    raise RuntimeError(
+        "Converting a tensorclass to boolean value is not permitted. "
+        "Use len(tc.keys()) to test for keys, tc.is_empty() to test for "
+        "leaves, or (a == b).all() / .any() to reduce a comparison."
+    )
 
 
 def _all_non_td_fields_as_str(src_dict) -> list:

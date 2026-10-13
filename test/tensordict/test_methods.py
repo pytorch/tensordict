@@ -423,7 +423,9 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         with pytest.raises(
             RuntimeError,
-            match="Converting a tensordict to boolean value is not permitted",
+            match=r"Converting a tensordict to boolean value is not permitted. "
+            r"Use len\(td.keys\(\)\) to test for keys, td.is_empty\(\) to test "
+            r"for leaves, or \(a == b\).all\(\) / .any\(\) to reduce a comparison.",
         ):
             assert td
 

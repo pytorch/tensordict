@@ -1140,6 +1140,19 @@ class TestTensorClass:
 
         assert myc.X.shape == torch.Size([2, 3, 4])
 
+    def test_bool(self):
+        # bool() raises and names the replacements (#1939)
+        myc = _make_data([3])
+        with pytest.raises(
+            RuntimeError,
+            match=r"Converting a tensorclass to boolean value is not permitted. "
+            r"Use len\(tc.keys\(\)\) to test for keys, tc.is_empty\(\) to test "
+            r"for leaves, or \(a == b\).all\(\) / .any\(\) to reduce a comparison.",
+        ):
+            bool(myc)
+        with pytest.raises(RuntimeError, match="is not permitted"):
+            assert myc == myc
+
     def test_cat(self):
         @tensorclass
         class MyDataNested:
