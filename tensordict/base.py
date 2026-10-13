@@ -3784,12 +3784,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
                 # _items_list leaves out the non-tensor leaves: copy them below.
                 # Like the tensor leaves above, keys missing in self are skipped.
-                # copy_ raises between a NonTensorData and a NonTensorStack:
-                # these leaves are skipped too.
+                # copy_ raises between a NonTensorData and a NonTensorStack, and
+                # for most types in a shared or memmapped dest: these leaves are
+                # skipped too.
                 def inplace_update(name, source, dest):
                     if (
                         _is_non_tensor(type(source))
                         and _is_non_tensor(type(dest))
+                        and not (dest._is_shared or dest._is_memmap)
                         and isinstance(source, NonTensorStack)
                         == isinstance(dest, NonTensorStack)
                     ):

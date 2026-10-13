@@ -1066,6 +1066,26 @@ class TestNonTensorData:
         # The consolidated metadata holds the old values
         assert not td.is_consolidated()
 
+    @pytest.mark.parametrize("mode", ["shared", "memmap", "memmap_shared"])
+    @pytest.mark.parametrize("stack", [False, True])
+    @pytest.mark.parametrize("write", ["update_", "copy_"])
+    def test_shared_inplace_write_skips_non_tensor(self, mode, stack, write):
+        # update_ and copy_ write the tensor leaves of a shared or memmapped
+        # tensordict and skip its non-tensor leaves, which most types cannot
+        # update in place
+        def make(x):
+            s = NonTensorStack(None, None) if stack else NonTensorData(None)
+            return TensorDict(x=torch.full((2,), x), s=s, batch_size=[2])
+
+        td = make(0.0)
+        if mode == "shared":
+            td.share_memory_()
+        else:
+            td.memmap_(share_non_tensor=mode == "memmap_shared")
+        getattr(td, write)(make(1.0))
+        assert (td["x"] == 1).all()
+        assert td.get("s").tolist() == [None, None]
+
     def test_ignore_lock(self):
         td = TensorDict({"a": {"b": "1"}}, batch_size=[10])
         td.lock_()
