@@ -24,6 +24,7 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.base import _is_tensor_collection, is_tensor_collection, Self, T
 from tensordict.utils import (
     _as_context_manager,
+    _check_unflatten_size,
     _create_segments_from_list,
     _get_shape_from_args,
     _infer_size_impl,
@@ -597,7 +598,11 @@ class _ShapeOps:
             def nested_fn(nested):
                 nested.reshape((*shape, *nested.batch_size[batch_dims:]), inplace=True)
 
-            return self._inplace_rebind_leaves(_reshape, nested_fn, torch.Size(shape))
+            self._inplace_rebind_leaves(_reshape, nested_fn, torch.Size(shape))
+            if self._has_names():
+                # as without inplace: the reshaped dims have no name
+                self._erase_names()
+            return self
         return self._reshape(shape, None)
 
     def _reshape(
@@ -2508,9 +2513,10 @@ class _ShapeOps:
             def nested_fn(nested):
                 nested.flatten(start_dim, end_dim, inplace=True)
 
-            return self._inplace_rebind_leaves(
-                flatten, nested_fn, torch.Size(batch_size)
-            )
+            self._inplace_rebind_leaves(flatten, nested_fn, torch.Size(batch_size))
+            if names is not None:
+                self.names = names
+            return self
         if not past_batch_dims and start_dim != end_dim:
             return self._reshape(torch.Size(batch_size), names, flatten)
         out = self._fast_apply(
@@ -2550,22 +2556,6 @@ class _ShapeOps:
                 "inplace=False."
             )
         dim = _maybe_correct_neg_dim(dim, self.batch_size)
-        if (
-            -1 not in unflattened_size
-            and -1 not in self.batch_size
-            and math.prod(unflattened_size) != self.batch_size[dim]
-            # A lazy stack (_flatten_lenient) checks even with no keys: it
-            # regroups its members, which can't follow sizes that don't fit.
-            and (self._flatten_lenient or not self.is_empty())
-        ):
-            # the error of torch.unflatten, which the leaves raised before
-            # unflatten went through _reshape (a tensordict with no leaves
-            # returned, a lazy stack, which regroups its members, raised)
-            raise RuntimeError(
-                f"unflatten: Provided sizes {list(unflattened_size)} don't "
-                f"multiply up to the size of dim {dim} ({self.batch_size[dim]}) "
-                "in the input tensor"
-            )
         if -1 in unflattened_size and -1 not in self.batch_size:
             # Infer the -1 as torch.unflatten does, which raises for sizes that
             # don't fit. A batch with a -1 (a ragged dim) is left as it is.
@@ -2574,6 +2564,7 @@ class _ShapeOps:
                 .unflatten(dim, unflattened_size)
                 .shape[dim : dim + len(unflattened_size)]
             )
+        _check_unflatten_size(self.batch_size, dim, unflattened_size)
 
         def unflatten(tensor):
             return torch.unflatten(
@@ -2590,6 +2581,12 @@ class _ShapeOps:
             )
         else:
             batch_size = list(unflattened_size) + list(self.batch_size[1:])
+        if self._has_names():
+            names = list(self.names)
+            for _ in range(len(unflattened_size) - 1):
+                names.insert(dim, None)
+        else:
+            names = None
         # TODO: check that this works with nested tds of different batch size
         if inplace:
             self._raise_if_holds_lazy_stack("unflatten")
@@ -2597,15 +2594,10 @@ class _ShapeOps:
             def nested_fn(nested):
                 nested.unflatten(dim, unflattened_size, inplace=True)
 
-            return self._inplace_rebind_leaves(
-                unflatten, nested_fn, torch.Size(batch_size)
-            )
-        if self._has_names():
-            names = list(self.names)
-            for _ in range(len(unflattened_size) - 1):
-                names.insert(dim, None)
-        else:
-            names = None
+            self._inplace_rebind_leaves(unflatten, nested_fn, torch.Size(batch_size))
+            if names is not None:
+                self.names = names
+            return self
         return self._reshape(torch.Size(batch_size), names, unflatten)
 
     def scatter(

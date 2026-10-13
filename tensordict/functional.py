@@ -607,6 +607,9 @@ def pad_sequence(
     # padded along it too.
     batch_pad_dim = None
     if update_batch_size and len(old_batch_size) > 0:
+        if max_seq_length == float("-inf"):
+            # No tensor leaf: pad the non-tensor entries to the longest batch
+            max_seq_length = max(td.batch_size[pad_dim] for td in list_of_tensordicts)
         old_batch_size[pad_dim] = max_seq_length
         batch_pad_dim = pad_dim % len(old_batch_size)
     shape = [

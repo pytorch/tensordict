@@ -11,6 +11,7 @@ import importlib
 import json
 import os
 import pickle
+import sys
 import tempfile
 import warnings
 from functools import wraps
@@ -34,6 +35,7 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _default_is_leaf,
     _is_leaf_nontensor,
+    _PACKAGE_DIR,
     _register_tensor_class,
     is_tensor_collection,
     T,
@@ -243,6 +245,10 @@ class _PersistentBackend:
         return None
 
 
+# marks the h5 string datasets that tensordict wrote
+_H5_STR_ATTR = "__tensordict_str__"
+
+
 class _H5Backend(_PersistentBackend):
     """h5py storage dialect."""
 
@@ -287,7 +293,24 @@ class _H5Backend(_PersistentBackend):
         return node[()]
 
     def read_non_tensor(self, node):
-        return node[()]
+        value = node[()]
+        if isinstance(value, bytes) and node.attrs.get(_H5_STR_ATTR, False):
+            # point to the first frame outside tensordict: the user's call
+            frame, stacklevel = sys._getframe(1), 2
+            while frame is not None and frame.f_code.co_filename.startswith(
+                _PACKAGE_DIR
+            ):
+                frame, stacklevel = frame.f_back, stacklevel + 1
+            warnings.warn(
+                f"The h5 backend of PersistentTensorDict reads the string "
+                f"{node.name!r}, which tensordict wrote, as bytes. Starting with "
+                "TensorDict 0.17, the default will change to reading it as str, "
+                "as the other backends do. To support both, decode only bytes: "
+                "`value.decode() if isinstance(value, bytes) else value`.",
+                FutureWarning,
+                stacklevel=stacklevel,
+            )
+        return value
 
     def read_at(self, node, idx, device):
         try:
@@ -338,7 +361,10 @@ class _H5Backend(_PersistentBackend):
 
     def try_create_dataset(self, file, key, value, kwargs) -> bool:
         try:
-            file.create_dataset(key, data=value, **kwargs)
+            node = file.create_dataset(key, data=value, **kwargs)
+            if isinstance(value, str):
+                # marks the strings that tensordict wrote, to read them as str
+                node.attrs[_H5_STR_ATTR] = True
             return True
         except (ValueError, OSError) as err:
             if "name already exists" in str(err):
@@ -346,7 +372,9 @@ class _H5Backend(_PersistentBackend):
             return True
 
     def copy_dataset(self, dest_file, key, src_node, kwargs) -> None:
-        dest_file.create_dataset(key, data=src_node, **kwargs)
+        node = dest_file.create_dataset(key, data=src_node, **kwargs)
+        if _H5_STR_ATTR in src_node.attrs:
+            node.attrs[_H5_STR_ATTR] = src_node.attrs[_H5_STR_ATTR]
 
     def create_group(self, file, key, metadata=None) -> None:
         file.create_group(key)
@@ -821,6 +849,11 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     mean that the data is stored on that device: the entries are cast to it
     when they are read.
 
+    With the h5 backend, a string comes back as ``bytes``. Starting with
+    TensorDict 0.17, the default will change to ``str`` for the strings that
+    tensordict wrote, which it marks with an attribute; reading one as
+    ``bytes`` warns until then. Strings that other tools wrote stay ``bytes``.
+
     Keyword Args:
         batch_size (torch.Size or compatible): the tensordict batch size.
             Defaults to ``torch.Size(())``.
@@ -879,6 +912,9 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     LOCKING = None
     # each read loads the entry from the file into a new tensor
     _reads_return_copies = True
+    # _change_batch_size raises, so an in-place shape method that changes the
+    # batch size raises before it rewrites the datasets
+    _inplace_batch_size_change = False
 
     @property
     @deprecated("PersistentTensorDict.kwargs", removal="0.17")
@@ -1467,16 +1503,17 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     def _change_batch_size(self, value):
         raise NotImplementedError
 
-    # Override: checks the batch size against the file, and keeps the old
-    # one if it does not fit.
+    # Override: checks the batch size against the file; if it does not fit,
+    # keeps the old one and raises, like TensorDict.
     @TensorDictBase.batch_size.setter
     def batch_size(self, value):
         _batch_size = self._batch_size
         try:
             self._batch_size = torch.Size(value)
             self._check_batch_size(self._batch_size)
-        except ValueError:
+        except ValueError as err:
             self._batch_size = _batch_size
+            raise RuntimeError(str(err)) from err
 
     def _rename_subtds(self, names):
         if names is None:
@@ -1500,6 +1537,9 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         # h5py raises a KeyError for a missing key, zarr does not
         missing = self.backend == "zarr" and not self._backend.contains(self.file, path)
         self._backend.delete(self.file, path)
+        # a sub-tensordict read before keeps the deleted group: drop it, so that
+        # a new entry at this key gets a fresh one
+        self._forget_nested(_unravel_key_to_tuple(key))
         if missing:
             # stacklevel 3: skip the _lock_blocked wrapper
             warnings.warn(
