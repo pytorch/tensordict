@@ -846,14 +846,23 @@ class TestTensorDicts(TestTensorDictsBase):
         del td["a"]
         assert "a" not in td.keys()
 
-    def test_empty(self, td_name, device):
+    @pytest.mark.parametrize("recurse", [False, True])
+    def test_empty(self, td_name, device, recurse):
         td = getattr(self, td_name)(device)
-        td_empty = td.empty()
+        td_empty = td.empty(recurse=recurse)
         assert not td_empty.is_locked
         assert td_empty.shape == td.shape
         assert td_empty.names == td.names
         assert td_empty.device == td.device
         td_empty.set("a", torch.zeros(()).expand(td.shape))
+        batch_size = torch.Size([*td.batch_size, 1])
+        names = [f"dim{i}" for i in range(len(batch_size))]
+        td_empty = td.empty(
+            recurse=recurse, batch_size=batch_size, names=names, device="meta"
+        )
+        assert td_empty.batch_size == batch_size
+        assert td_empty.names == names
+        assert td_empty.device == torch.device("meta")
 
     def test_empty_like(self, td_name, device):
         if "sub_td" in td_name:

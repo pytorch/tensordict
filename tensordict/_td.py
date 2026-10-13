@@ -2267,7 +2267,19 @@ class TensorDict(TensorDictBase):
                 source={},
                 names=names,
             )
-        return super().empty(recurse=recurse)
+        # names=None keeps the names, as in TensorDictBase.empty: lazy stacks
+        # pass names=None to their members when no names are given.
+        if names is NO_DEFAULT:
+            names = None
+        if batch_size is None and device is NO_DEFAULT and names is None:
+            return super().empty(recurse=recurse)
+        # super().empty() reuses the entries of self that hold no tensor
+        # (non-tensor data, sub-tensordicts without leaves). Start from a
+        # shallow copy so that the new batch size, device and names do not
+        # reach self.
+        return super(TensorDict, self.copy()).empty(
+            recurse=recurse, batch_size=batch_size, device=device, names=names
+        )
 
     # Override: dense fast path that shares the leaves and supports inplace.
     def _select(
