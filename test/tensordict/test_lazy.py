@@ -3900,7 +3900,7 @@ class TestLazyStackedTensorDict:
         for td in (dense, lazy):
             if isinstance(value, list):
                 # a list is cast to a tensor until 0.17
-                with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+                with pytest.warns(FutureWarning, match="storing it as non-tensor data"):
                     td.set_at_("a", value, index)
             else:
                 td.set_at_("a", value, index)

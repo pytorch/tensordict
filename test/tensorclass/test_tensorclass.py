@@ -2921,9 +2921,13 @@ class TestTensorClass:
 
             if broadcast_type == "scalar":
                 # z is a non-tensor entry, where the scalar is cast to a
-                # tensor until 0.17 (gh-2522)
-                with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+                # tensor until 0.17, which leaves it unchanged (gh-2522). The
+                # call warns once, for z and y.z.
+                with pytest.warns(
+                    FutureWarning, match="leaving the non-tensor entries unchanged"
+                ) as w:
                     data[:2] = val
+                assert len(w) == 1
             else:
                 data[:2] = val
             assert (data[:2] == 0).all()

@@ -95,6 +95,23 @@ number written at an index of a non-tensor entry to a tensor, and emits a
 to storing it as non-tensor data
 (`#2522 <https://github.com/pytorch/tensordict/issues/2522>`_).
 
+``td[index] = value``, with a list or a number, writes the value into every
+entry, and casts it to a tensor in the non-tensor entries too. The write emits a
+:class:`FutureWarning`. Starting with TensorDict 0.17, the default will change
+to leaving the non-tensor entries unchanged, as a
+:class:`~tensordict.store.TensorDictStore` does. To reset the tensor entries of
+a tensordict with a string entry, for example:
+
+.. code-block:: python
+
+    td = TensorDict(x=torch.ones(3), name=NonTensorStack("a", "b", "c"), batch_size=[3])
+    td[mask] = 0
+    # today: td["x"][mask] is 0 and td["name"][mask] holds tensor(0), with a FutureWarning
+    # from 0.17: td["x"][mask] is 0 and td["name"] is still ["a", "b", "c"]
+
+To leave the non-tensor entries unchanged now, write into
+``td.exclude("name")[mask]``, which shares the tensors of ``td``.
+
 Read a non-tensor entry
 ~~~~~~~~~~~~~~~~~~~~~~~
 

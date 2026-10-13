@@ -67,6 +67,7 @@ from tensordict.base import (
     _SELF_NESTING_ERROR,
     _SET_AT_CAST_CALL,
     _SET_AT_CAST_TYPES,
+    _set_at_each_key,
     _warn_set_at_cast,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
@@ -3413,8 +3414,7 @@ class LazyStackedTensorDict(TensorDictBase):
             # the Ellipsis covers the batch dims, where set_at_ would read it on
             # the entries
             index = convert_ellipsis_to_idx(index, self.batch_size)
-            for key in self.keys():
-                self.set_at_(key, value, index)
+            _set_at_each_key(self, value, index)
 
     def _setitem_member(self, member: int, member_index: IndexType, piece) -> None:
         """Write ``piece`` at ``member_index`` of the member at position ``member``, for :meth:`__setitem__`."""

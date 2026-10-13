@@ -972,11 +972,45 @@ class TestNonTensorData:
         td = TensorDict(a=NonTensorData("s", batch_size=[3]), batch_size=[3])
         if lazy:
             td = lazy_stack(td.unbind(0))
-        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17") as w:
+        with pytest.warns(
+            FutureWarning,
+            match="Starting with TensorDict 0.17, the default will change to "
+            "storing it as non-tensor data",
+        ) as w:
             td.set_at_("a", value, index)
         assert len(w) == 1
         assert w[0].filename == __file__
         assert torch.equal(td[1]["a"], torch.as_tensor(value))
+
+    @pytest.mark.parametrize("lazy", [False, True], ids=["dense", "lazy"])
+    @pytest.mark.parametrize(
+        "value", [[1, 2], 0, np.float32(1.5)], ids=lambda value: type(value).__name__
+    )
+    def test_setitem_cast_over_non_tensor_warns(self, value, lazy):
+        # td[index] = value casts a list or a scalar to a tensor in the
+        # non-tensor entries today, and leaves them unchanged in 0.17, as a
+        # TensorDictStore does (gh-2522). The call warns once, whatever the
+        # number of non-tensor entries and members.
+        td = TensorDict(
+            a=NonTensorData("s", batch_size=[3]),
+            b=torch.zeros(3),
+            nested=TensorDict(c=NonTensorData("t", batch_size=[3]), batch_size=[3]),
+            batch_size=[3],
+        )
+        if lazy:
+            td = lazy_stack(td.unbind(0))
+        with pytest.warns(
+            FutureWarning,
+            match="Starting with TensorDict 0.17, the default will change to "
+            "leaving the non-tensor entries unchanged",
+        ) as w:
+            td[:2] = value
+        assert len(w) == 1
+        assert w[0].filename == __file__
+        expected = torch.as_tensor(value)
+        assert torch.equal(td[1]["a"], expected)
+        assert torch.equal(td[1]["nested", "c"], expected)
+        assert td[2]["a"] == "s"
 
     @pytest.mark.parametrize("lazy", [False, True], ids=["dense", "lazy"])
     @pytest.mark.parametrize(
@@ -1078,9 +1112,9 @@ class TestNonTensorData:
         dense = make()
         lazy = lazy_stack(list(make().unbind(0)))
         # the scalar is cast to a tensor until 0.17 (gh-2522)
-        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+        with pytest.warns(FutureWarning, match="storing it as non-tensor data"):
             dense.set_at_("a", value, index)
-        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+        with pytest.warns(FutureWarning, match="storing it as non-tensor data"):
             lazy.set_at_("a", value, index)
         expected = dense.get("a").tolist()
         result = lazy.get("a").tolist()
@@ -1102,7 +1136,7 @@ class TestNonTensorData:
         # at (), which selects the whole entry
         td = TensorDict(a=NonTensorData("s0"))
         # the scalar is cast to a tensor until 0.17 (gh-2522)
-        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+        with pytest.warns(FutureWarning, match="storing it as non-tensor data"):
             td.set_at_("a", 3, ())
         assert type(td.get("a")) is NonTensorData
         assert td.get("a").data == torch.tensor(3)

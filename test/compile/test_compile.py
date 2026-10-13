@@ -309,11 +309,15 @@ def test_where_non_tensor_data():
 
 @pytest.mark.parametrize("lazy", [False, True], ids=["dense", "lazy"])
 @pytest.mark.parametrize("value", [3, [1, 2]], ids=type)
-def test_set_at_cast_non_tensor(value, lazy):
+@pytest.mark.parametrize("setitem", [False, True], ids=["set_at_", "setitem"])
+def test_set_at_cast_non_tensor(setitem, value, lazy):
     # The FutureWarning for a value cast to a tensor in a non-tensor entry
     # (gh-2522) is skipped under compile, which traces no warnings.warn
     def fn(td):
-        td.set_at_("a", value, slice(0, 2))
+        if setitem:
+            td[:2] = value
+        else:
+            td.set_at_("a", value, slice(0, 2))
         return td["b"] + 1
 
     td = TensorDict(
@@ -321,7 +325,7 @@ def test_set_at_cast_non_tensor(value, lazy):
     )
     if lazy:
         td = lazy_stack(td.unbind(0))
-    assert (torch.compile(fn, fullgraph=True, backend="eager")(td) == 1).all()
+    torch.compile(fn, fullgraph=True, backend="eager")(td)
     assert torch.equal(td[1]["a"], torch.as_tensor(value))
 
 

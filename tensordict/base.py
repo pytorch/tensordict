@@ -1033,7 +1033,9 @@ def _warn_scalar_over_non_tensor(
 # the values that set_at_ casts to a tensor in a non-tensor entry, and warns about
 _SET_AT_CAST_TYPES = (list, *_SCALAR_TYPES)
 # Set while a lazy stack writes a scalar into its members, each of which casts
-# it, so that the call warns once: False until the first warning, then True.
+# it, or while td[index] = value writes each entry, so that the call warns
+# once: ``warned`` is False until the first warning, then True. ``setitem`` is
+# True in td[index] = value, which warns of its own default change.
 _SET_AT_CAST_CALL = local()
 
 
@@ -1053,15 +1055,48 @@ def _warn_set_at_cast(
     frame, stacklevel = sys._getframe(1), 2
     while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
         frame, stacklevel = frame.f_back, stacklevel + 1
-    warnings.warn(
-        f"The {type(value).__name__} written at an index of the non-tensor "
-        f"entry {key!r} is cast to a tensor today. Starting with TensorDict "
-        "0.17, the default will change to storing it as non-tensor data. "
-        "Write torch.tensor(value) to keep the tensor, or "
-        "NonTensorData(value) to store it as non-tensor data now.",
-        FutureWarning,
-        stacklevel=stacklevel,
-    )
+    if getattr(_SET_AT_CAST_CALL, "setitem", False):
+        message = (
+            f"The {type(value).__name__} written with [index] = value is cast "
+            f"to a tensor in the non-tensor entry {key!r} today. Starting with "
+            "TensorDict "
+            "0.17, the default will change to leaving the non-tensor entries "
+            "unchanged, as a TensorDictStore does. Write into "
+            "td.exclude(<non-tensor keys>)[index] to leave them unchanged now."
+        )
+    else:
+        message = (
+            f"The {type(value).__name__} written at an index of the non-tensor "
+            f"entry {key!r} is cast to a tensor today. Starting with TensorDict "
+            "0.17, the default will change to storing it as non-tensor data. "
+            "Write torch.tensor(value) to keep the tensor, or "
+            "NonTensorData(value) to store it as non-tensor data now."
+        )
+    warnings.warn(message, FutureWarning, stacklevel=stacklevel)
+
+
+def _set_at_each_key(td: TensorDictBase, value: Any, index: IndexType) -> None:
+    """Writes ``value`` at ``index`` of each entry of ``td``, for ``td[index] = value``.
+
+    A cast of a list or a scalar to a tensor in a non-tensor entry warns once
+    for the call, of the default change of ``td[index] = value``.
+    """
+    if not isinstance(value, _SET_AT_CAST_TYPES):
+        for key in td.keys():
+            td.set_at_(key, value, index)
+        return
+    warned = getattr(_SET_AT_CAST_CALL, "warned", None)
+    setitem = getattr(_SET_AT_CAST_CALL, "setitem", False)
+    if warned is None:
+        _SET_AT_CAST_CALL.warned = False
+    _SET_AT_CAST_CALL.setitem = True
+    try:
+        for key in td.keys():
+            td.set_at_(key, value, index)
+    finally:
+        _SET_AT_CAST_CALL.setitem = setitem
+        if warned is None:
+            _SET_AT_CAST_CALL.warned = None
 
 
 def _has_lazy_stack(td: TensorDictBase) -> bool:
@@ -1450,6 +1485,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         index: IndexType,
         value: Any,
     ) -> None:
+        """Writes ``value`` at a key, or at an index of every entry.
+
+        A list or a number written at an index, as in ``td[mask] = 0``, goes
+        into every entry, and is cast to a tensor in the non-tensor entries
+        too. That write emits a :class:`FutureWarning`: starting with
+        TensorDict 0.17, the default will change to leaving the non-tensor
+        entries unchanged, as a :class:`~tensordict.store.TensorDictStore`
+        does. To leave them unchanged now, write into
+        ``td.exclude(<non-tensor keys>)[index]``, which shares the tensors of
+        ``td``.
+        """
         istuple = isinstance(index, tuple)
         if istuple or isinstance(index, str):
             # try:
@@ -1552,8 +1598,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         else:
             # read the index as getitem does, also if there is no key to write
             index = _entry_index(index)
-            for key in self.keys():
-                self.set_at_(key, value, index)
+            _set_at_each_key(self, value, index)
 
     def __delitem__(self, key: NestedKey) -> Self:
         return self.del_(key)
@@ -3272,7 +3317,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         emits a :class:`FutureWarning`. Starting with TensorDict 0.17, the
         default will change to storing it as non-tensor data. Wrap the value
         in :class:`~tensordict.NonTensorData` to store it as non-tensor data
-        now, or pass a tensor to keep the tensor.
+        now, or pass a tensor to keep the tensor. ``td[index] = value`` writes
+        through ``set_at_`` too, but announces another change: see
+        :meth:`__setitem__`.
 
         Args:
             key (NestedKey): key to be modified. The key must exist: a
