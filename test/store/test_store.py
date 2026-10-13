@@ -105,6 +105,53 @@ _MISSING_KEY_WARNING = (
 )
 
 
+def _rename_source():
+    """A tensordict for the rename_key_ tests of the stores."""
+    return TensorDict(
+        a=torch.arange(3.0),
+        b={"c": torch.arange(3)},
+        other={"d": torch.zeros(3)},
+        nested={"d": {"y": torch.ones(3), "d": {"y": torch.full((3,), 2.0)}}},
+        s={"t": torch.zeros(3)},
+        batch_size=[3],
+    )
+
+
+# (old_key, new_key) with a destination that is not free
+_RENAME_OCCUPIED = [
+    ("b", "a"),
+    ("b", "other"),
+    (("nested", "d"), ("other", "d")),
+    ("a", "b"),
+    (("b", "c"), "nested"),
+    # nested.d.y moves to nested.y before nested.d.d.y moves to nested.d.y
+    (("nested", "d"), "nested"),
+]
+
+# (old_key, new_key, safe, match): renames that raise and change nothing
+_RENAME_INVALID = [
+    ("b", ("a", "q"), False, "below a leaf"),
+    ("a", ("b", "c", "q"), False, "below a leaf"),
+    ("s", ("s", "s"), False, "inside the old one"),
+    ("s", ("s", "x", "y"), False, "inside the old one"),
+    ("a", ("a", "b"), False, "inside the old one"),
+    ("b", "other", True, "already present"),
+    ("a", "b", True, "already present"),
+]
+
+
+def _assert_store_matches(store, expected):
+    assert set(store.keys(True, True)) == set(expected.keys(True, True))
+    # the store reads, element by element too (it keeps no empty
+    # sub-tensordict, so only the leaves are compared)
+    store[0:1]
+    elements = [store[i].to_tensordict() for i in range(len(expected))]
+    for key in expected.keys(True, True):
+        torch.testing.assert_close(store[key], expected[key])
+        for i, element in enumerate(elements):
+            torch.testing.assert_close(element[key], expected[i][key])
+
+
 class TestTensorDictStore:
     """Tests for TensorDictStore requiring a running store server."""
 
@@ -862,6 +909,34 @@ class TestTensorDictStore:
         with pytest.raises(KeyError, match="key nested already present"):
             store_td.rename_key_("obs", "nested", safe=True)
         assert set(store_td.keys(True, True)) == {"obs", ("nested", "a")}
+
+    @pytest.mark.parametrize("old_key,new_key", _RENAME_OCCUPIED)
+    def test_rename_key_occupied_destination(self, store_kwargs, old_key, new_key):
+        # the entry replaces what is at the destination, as in TensorDict: the
+        # store kept the old leaves there, or a leaf that was also a
+        # sub-tensordict, and could not be read
+        expected = _rename_source().rename_key_(old_key, new_key)
+        store_td = TensorDictStore.from_tensordict(_rename_source(), **store_kwargs)
+        try:
+            store_td.rename_key_(old_key, new_key)
+            _assert_store_matches(store_td, expected)
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize("old_key,new_key,safe,match", _RENAME_INVALID)
+    def test_rename_key_invalid_destination(
+        self, store_kwargs, old_key, new_key, safe, match
+    ):
+        # the store moved the entry below a leaf, or into itself
+        store_td = TensorDictStore.from_tensordict(_rename_source(), **store_kwargs)
+        try:
+            with pytest.raises(KeyError, match=match):
+                store_td.rename_key_(old_key, new_key, safe=safe)
+            _assert_store_matches(store_td, _rename_source())
+        finally:
+            store_td.clear_redis()
+            store_td.close()
 
     def test_from_tensordict(self, store_kwargs):
         """Test from_tensordict classmethod."""
@@ -2160,6 +2235,39 @@ class TestLazyStackedTensorDictStore:
                     store_td[i]["n", "m", "d", "y"], td["nested", "d", "y"]
                 )
                 torch.testing.assert_close(store_td[i]["x"], td["x"])
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize("old_key,new_key", _RENAME_OCCUPIED)
+    def test_rename_key_occupied_destination(self, store_kwargs, old_key, new_key):
+        # the entry replaces what is at the destination, as in TensorDict: the
+        # store was left unchanged, or with a leaf that was also a
+        # sub-tensordict, and could not be read
+        expected = _rename_source().rename_key_(old_key, new_key)
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(_rename_source().unbind(0)), **store_kwargs
+        )
+        try:
+            store_td.rename_key_(old_key, new_key)
+            _assert_store_matches(store_td, expected)
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize("old_key,new_key,safe,match", _RENAME_INVALID)
+    def test_rename_key_invalid_destination(
+        self, store_kwargs, old_key, new_key, safe, match
+    ):
+        # the store moved a leaf below a leaf, or into itself, and was left
+        # unchanged for a sub-tensordict
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(_rename_source().unbind(0)), **store_kwargs
+        )
+        try:
+            with pytest.raises(KeyError, match=match):
+                store_td.rename_key_(old_key, new_key, safe=safe)
+            _assert_store_matches(store_td, _rename_source())
         finally:
             store_td.clear_redis()
             store_td.close()

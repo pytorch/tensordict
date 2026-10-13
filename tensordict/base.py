@@ -4919,7 +4919,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Args:
             old_key (NestedKey): key to be renamed. A missing key raises
                 ``KeyError``.
-            new_key (NestedKey): new name of the entry.
+            new_key (NestedKey): new name of the entry. A key inside
+                ``old_key``, such as ``("a", "b")`` for ``"a"``, raises
+                ``KeyError``.
             safe (bool, optional): if ``True``, a ``KeyError`` is raised when
                 the new key is already present in the TensorDict. If
                 ``False``, the existing entry is overwritten. Defaults to
@@ -4965,6 +4967,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             )
         old_key = unravel_key(old_key)
         new_key = unravel_key(new_key)
+        # an unravelled tuple has two strings or more
+        if isinstance(new_key, tuple) and (
+            new_key[0] == old_key
+            if isinstance(old_key, str)
+            else len(new_key) > len(old_key) and new_key[: len(old_key)] == old_key
+        ):
+            # moving an entry inside itself would delete it
+            raise KeyError(
+                f"Cannot rename {old_key!r} to {new_key!r}: the new key is "
+                "inside the old one."
+            )
         if safe and old_key != new_key and new_key in self.keys(include_nested=True):
             raise KeyError(f"key {new_key} already present in TensorDict.")
         self._rename_key(old_key, new_key)

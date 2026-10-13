@@ -2886,6 +2886,22 @@ class TestTensorDicts(TestTensorDictsBase):
         assert "a" not in td.keys()
         torch.testing.assert_close(td.get("b"), a)
 
+    @pytest.mark.parametrize(
+        "old_key,new_key",
+        [("s", ("s", "s")), ("s", ("s", "x", "y")), ("a", ("a", "b"))],
+    )
+    def test_rename_key_inside_old_key(self, td_name, device, old_key, new_key):
+        # a new key inside the old one raises: a sub-tensordict was deleted
+        # with everything below it
+        td = getattr(self, td_name)(device)
+        td.unlock_()
+        td["s", "t"] = torch.zeros(td.shape)
+        keys = set(td.keys(True, True))
+        with pytest.raises(KeyError, match="the new key is inside the old one"):
+            td.rename_key_(old_key, new_key)
+        assert set(td.keys(True, True)) == keys
+        assert (td["s", "t"] == 0).all()
+
     def test_repeat(self, td_name, device):
         td = getattr(self, td_name)(device)
         assert (td.repeat(1, 1, 1, 1) == td).all()

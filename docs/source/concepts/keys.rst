@@ -238,7 +238,8 @@ levels:
   ['time', 'arm', 'pos']
 
 If the new key exists, ``rename_key_`` replaces its value. With
-``safe=True``, it raises a ``KeyError`` instead.
+``safe=True``, it raises a ``KeyError`` instead. A new key inside the old one,
+such as ``("arm", "arm")`` for ``"arm"``, also raises a ``KeyError``.
 
 Flatten and unflatten the keys
 ------------------------------
