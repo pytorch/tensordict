@@ -302,6 +302,21 @@ class TestTensorDictStore:
         assert isinstance(local, TensorDict)
         assert torch.allclose(local["x"], tensor)
 
+    def test_zero_numel_read(self, store_td, store_kwargs):
+        """A tensor with zero elements reads back with its shape and dtype."""
+        store_td["a"] = torch.zeros(10, 0, dtype=torch.int32)
+        for result in (store_td["a"], store_td.to_tensordict()["a"]):
+            assert result.shape == (10, 0)
+            assert result.dtype == torch.int32
+        td = TensorDictStore(batch_size=[0], **store_kwargs)
+        try:
+            td["c"] = torch.zeros(0)
+            assert td["c"].shape == (0,)
+            assert td.to_tensordict()["c"].shape == (0,)
+        finally:
+            td.clear_redis()
+            td.close()
+
     def test_contiguous(self, store_td):
         """contiguous should materialize."""
         tensor = torch.randn(10, 3)
