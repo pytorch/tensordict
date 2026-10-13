@@ -7202,7 +7202,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         # (see _select).
         if inplace:
             raise RuntimeError("Cannot call exclude inplace on a lazy tensordict.")
-        excluded = {key for key in map(unravel_key, keys) if isinstance(key, str)}
+        excluded = {key for key in keys if isinstance(key, str)}
         kept = [key for key in self.keys() if key not in excluded]
         return self._copy_entries(kept)._exclude(
             *keys, inplace=False, set_shared=set_shared

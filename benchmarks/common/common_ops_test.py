@@ -796,6 +796,48 @@ def test_exclude_nested(benchmark):
     benchmark(func)
 
 
+@pytest.mark.parametrize("op", ["exclude", "select", "step"])
+def test_exclude_select_update_step(benchmark, op):
+    # One env step of a nested (multi-agent style) env turned into the next
+    # root, as TorchRL's step_mdp does (#2558).
+    def leaf(dtype=torch.float32):
+        return torch.zeros(3, 1, dtype=dtype)
+
+    td = TensorDict(
+        data=TensorDict(
+            states=leaf(torch.int32),
+            action=leaf(),
+            done=leaf(torch.bool),
+            terminated=leaf(torch.bool),
+            batch_size=[3],
+        ),
+        next=TensorDict(
+            data=TensorDict(
+                states=leaf(torch.int32),
+                done=leaf(torch.bool),
+                terminated=leaf(torch.bool),
+                reward=leaf(),
+                batch_size=[3],
+            )
+        ),
+    )
+    excl = [
+        ("next",),
+        ("data", "done"),
+        ("data", "terminated"),
+        ("data", "_reset"),
+        ("data", "reward"),
+    ]
+    keep = [("data", "states"), ("data", "done"), ("data", "terminated")]
+    nxt = td.get("next")
+    func = {
+        "exclude": lambda: td.exclude(*excl),
+        "select": lambda: nxt.select(*keep, strict=False),
+        "step": lambda: td.exclude(*excl).update(nxt.select(*keep, strict=False)),
+    }[op]
+    benchmark(func)
+
+
 @pytest.mark.parametrize("recurse", [True, False])
 def test_empty(benchmark, recurse):
     td = big_nested_td()[0][0]

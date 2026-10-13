@@ -2343,8 +2343,9 @@ class TensorDict(TensorDictBase):
         else:
             _tensordict = self._tensordict
         keys_to_exclude = None
+        # The keys are unravelled (exclude does it once): a str or a tuple of
+        # two or more str. The sub-keys passed down keep that form.
         for key in keys:
-            key = unravel_key(key)
             if isinstance(key, str):
                 if inplace and self.is_locked and key in _tensordict:
                     raise RuntimeError(_LOCK_ERROR)
@@ -2354,7 +2355,7 @@ class TensorDict(TensorDictBase):
                     # delay creation of defaultdict
                     keys_to_exclude = defaultdict(list)
                 if key[0] in self._tensordict:
-                    keys_to_exclude[key[0]].append(key[1:])
+                    keys_to_exclude[key[0]].append(key[1] if len(key) == 2 else key[1:])
         if keys_to_exclude is not None:
             for key, cur_keys in keys_to_exclude.items():
                 val = _tensordict.get(key)
