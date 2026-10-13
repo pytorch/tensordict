@@ -24,6 +24,7 @@ from warnings import warn
 
 import torch
 from tensordict._archive import _memmap_tensor_from_path
+from tensordict._base.unsupported import _NoShapeOps
 from tensordict._indexing import (
     _entry_index,
     _getitem_batch_size,
@@ -54,7 +55,7 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
-from tensordict.memmap import MemoryMappedTensor
+from tensordict.memmap import _raise_if_jagged, MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
     _BatchedUninitializedBuffer,
@@ -1746,6 +1747,9 @@ class TensorDict(TensorDictBase):
                     )
                 continue
             else:
+                # Check on the calling thread: memmap() does not re-raise
+                # errors from executor jobs.
+                _raise_if_jagged(value, key)
                 if executor is None:
                     _populate_memmap(
                         dest=dest,
@@ -2505,7 +2509,7 @@ class TensorDict(TensorDictBase):
             )
 
 
-class _SubTensorDict(TensorDictBase):
+class _SubTensorDict(_NoShapeOps, TensorDictBase):
     """A TensorDict that only sees an index of the stored tensors."""
 
     _lazy = True
@@ -3287,40 +3291,6 @@ class _SubTensorDict(TensorDictBase):
             index,
         )
 
-    def make_memmap(
-        self,
-        key: NestedKey,
-        shape: torch.Size | torch.Tensor,
-        *,
-        dtype: torch.dtype | None = None,
-        robust_key: bool | None = True,
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't currently allowed for _SubTensorDict."
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
-    def make_memmap_from_storage(
-        self,
-        key: NestedKey,
-        storage: torch.UntypedStorage,
-        shape: torch.Size | torch.Tensor,
-        *,
-        dtype: torch.dtype | None = None,
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't currently allowed for _SubTensorDict."
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
-    def make_memmap_from_tensor(
-        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
-    ) -> MemoryMappedTensor:
-        raise RuntimeError(
-            "Making a memory-mapped tensor after instantiation isn't currently allowed for _SubTensorDict."
-            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
-        )
-
     # Override: a view over another tensordict cannot be shared.
     def share_memory_(self) -> Self:
         raise RuntimeError(
@@ -3396,37 +3366,6 @@ class _SubTensorDict(TensorDictBase):
             keepdim=keepdim,
             tuple_ok=tuple_ok,
             **kwargs,
-        )
-
-    # TODO: check these implementations
-
-    def _view(self, *args, **kwargs):
-        raise RuntimeError(
-            "Cannot call `view` on a sub-tensordict. Call `reshape` instead."
-        )
-
-    def _transpose(self, dim0, dim1):
-        raise RuntimeError(
-            "Cannot call `transpose` on a sub-tensordict. Make it dense before calling this method by calling `to_tensordict`."
-        )
-
-    def _permute(
-        self,
-        *args,
-        **kwargs,
-    ):
-        raise RuntimeError(
-            "Cannot call `permute` on a sub-tensordict. Make it dense before calling this method by calling `to_tensordict`."
-        )
-
-    def _squeeze(self, dim=None):
-        raise RuntimeError(
-            "Cannot call `squeeze` on a sub-tensordict. Make it dense before calling this method by calling `to_tensordict`."
-        )
-
-    def _unsqueeze(self, dim: int):
-        raise RuntimeError(
-            "Cannot call `unsqueeze` on a sub-tensordict. Make it dense before calling this method by calling `to_tensordict`."
         )
 
     _add_batch_dim = TensorDict._add_batch_dim

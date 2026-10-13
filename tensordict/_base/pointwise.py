@@ -21,8 +21,10 @@ import torch
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
+    _apply_pointwise,
     _is_tensor_collection,
     _maybe_broadcast_other,
+    _mixes_lazy_stacks,
     _NESTED_TENSORS_AS_LISTS,
     _write_back_inplace,
     CompatibleType,
@@ -1491,13 +1493,13 @@ class _PointwiseOps:
         """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(end)):
-            end_val = end._values_list(True, True)
+            end_val = _values_by_key(end, keys)
         else:
             end_val = end
         if isinstance(weight, (float, torch.Tensor)):
             weight_val = weight
         elif _is_tensor_collection(type(weight)):
-            weight_val = weight._values_list(True, True)
+            weight_val = _values_by_key(weight, keys)
         else:
             weight_val = weight
         vals = _foreach("lerp", vals, end_val, weight_val)
@@ -1521,6 +1523,8 @@ class _PointwiseOps:
         weight: TensorDictBase | torch.Tensor | float,
     ):
         """In-place version of :meth:`~.lerp`."""
+        if _mixes_lazy_stacks(self, (end, weight)):
+            return _apply_pointwise(self, Tensor.lerp_, (end, weight), inplace=True)
         # the leaves of the tensordict operands are paired by key, as in add_
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(end)):
@@ -1563,11 +1567,11 @@ class _PointwiseOps:
         """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other1)):
-            other1_val = other1._values_list(True, True)
+            other1_val = _values_by_key(other1, keys)
         else:
             other1_val = other1
         if _is_tensor_collection(type(other2)):
-            other2_val = other2._values_list(True, True)
+            other2_val = _values_by_key(other2, keys)
         else:
             other2_val = other2
         vals = _foreach("addcdiv", vals, other1_val, other2_val, value=value)
@@ -1635,11 +1639,11 @@ class _PointwiseOps:
         """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other1)):
-            other1_val = other1._values_list(True, True)
+            other1_val = _values_by_key(other1, keys)
         else:
             other1_val = other1
         if _is_tensor_collection(type(other2)):
-            other2_val = other2._values_list(True, True)
+            other2_val = _values_by_key(other2, keys)
         else:
             other2_val = other2
         vals = _foreach("addcmul", vals, other1_val, other2_val, value=value)
@@ -1983,6 +1987,10 @@ class _PointwiseOps:
             Inplace ``maximum`` does not support ``default`` keyword argument.
 
         """
+        if _mixes_lazy_stacks(self, (other,)):
+            return _apply_pointwise(
+                self, lambda x, y: torch.maximum(x, y, out=x), (other,), inplace=True
+            )
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
@@ -2069,6 +2077,10 @@ class _PointwiseOps:
             Inplace ``minimum`` does not support ``default`` keyword argument.
 
         """
+        if _mixes_lazy_stacks(self, (other,)):
+            return _apply_pointwise(
+                self, lambda x, y: torch.minimum(x, y, out=x), (other,), inplace=True
+            )
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
@@ -2155,6 +2167,8 @@ class _PointwiseOps:
             Inplace ``clamp_max`` does not support ``default`` keyword argument.
 
         """
+        if _mixes_lazy_stacks(self, (other,)):
+            return _apply_pointwise(self, Tensor.clamp_max_, (other,), inplace=True)
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
@@ -2257,6 +2271,8 @@ class _PointwiseOps:
             Inplace ``clamp_min`` does not support ``default`` keyword argument.
 
         """
+        if _mixes_lazy_stacks(self, (other,)):
+            return _apply_pointwise(self, Tensor.clamp_min_, (other,), inplace=True)
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
