@@ -17,7 +17,7 @@ Parameters:
 
 **value** (*Tensor*) -
 
-*property*entropy*: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*
+entropy() → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
 
 Returns entropy of distribution, batched over batch_shape.
 

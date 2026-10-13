@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5201+g924b72ab9.d20261012)">
+<meta name="llm:version" content="main (0.14.0.dev5228+g96e5ac60c.d20261013)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5201+g924b72ab9.d20261012)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5228+g96e5ac60c.d20261013)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1657,9 +1657,9 @@ document.write(`
 </dl>
 </dd></dl>
 
-<dl class="py property">
+<dl class="py method">
 <dt class="sig sig-object py" id="tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal.entropy">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">entropy</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></em><a class="headerlink" href="#tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal.entropy" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">entropy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal.entropy" title="Link to this definition">#</a></dt>
 <dd><p>Returns entropy of distribution, batched over batch_shape.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -1842,7 +1842,7 @@ representing this distribution’s support.</p>
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal"><code class="docutils literal notranslate"><span class="pre">TruncatedStandardNormal</span></code></a><ul class="visible nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal.cdf"><code class="docutils literal notranslate"><span class="pre">TruncatedStandardNormal.cdf()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal.entropy"><code class="docutils literal notranslate"><span class="pre">TruncatedStandardNormal.entropy</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal.entropy"><code class="docutils literal notranslate"><span class="pre">TruncatedStandardNormal.entropy()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal.icdf"><code class="docutils literal notranslate"><span class="pre">TruncatedStandardNormal.icdf()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal.log_prob"><code class="docutils literal notranslate"><span class="pre">TruncatedStandardNormal.log_prob()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal.mean"><code class="docutils literal notranslate"><span class="pre">TruncatedStandardNormal.mean</span></code></a></li>
@@ -2087,7 +2087,7 @@ representing this distribution’s support.</p>
        "headline": "TruncatedStandardNormal",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TruncatedStandardNormal",
        "url": "/reference/generated/tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal.html",
-       "articleBody": "TruncatedStandardNormal# class tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal(a: Number | Tensor, b: Number | Tensor, validate_args: bool | None = None)# Bases: Distribution Truncated Standard Normal distribution. Source: https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf cdf(value: Tensor) \u2192 Tensor# Returns the cumulative density/mass function evaluated at value. Parameters: value (Tensor) \u2013 property entropy: Tensor# Returns entropy of distribution, batched over batch_shape. Returns: Tensor of shape batch_shape. icdf(value: Tensor) \u2192 Tensor# Returns the inverse cumulative density/mass function evaluated at value. Parameters: value (Tensor) \u2013 log_prob(value: Tensor) \u2192 Tensor# Returns the log of the probability density/mass function evaluated at value. Parameters: value (Tensor) \u2013 property mean: Tensor# Returns the mean of the distribution. rsample(sample_shape: Sequence[int] | Size | None = None) \u2192 Tensor# Generates a sample_shape shaped reparameterized sample or sample_shape shaped batch of reparameterized samples if the distribution parameters are batched. property support: constraints.Constraints# Returns a Constraint object representing this distribution\u2019s support. property variance: Tensor# Returns the variance of the distribution.",
+       "articleBody": "TruncatedStandardNormal# class tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal(a: Number | Tensor, b: Number | Tensor, validate_args: bool | None = None)# Bases: Distribution Truncated Standard Normal distribution. Source: https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf cdf(value: Tensor) \u2192 Tensor# Returns the cumulative density/mass function evaluated at value. Parameters: value (Tensor) \u2013 entropy() \u2192 Tensor# Returns entropy of distribution, batched over batch_shape. Returns: Tensor of shape batch_shape. icdf(value: Tensor) \u2192 Tensor# Returns the inverse cumulative density/mass function evaluated at value. Parameters: value (Tensor) \u2013 log_prob(value: Tensor) \u2192 Tensor# Returns the log of the probability density/mass function evaluated at value. Parameters: value (Tensor) \u2013 property mean: Tensor# Returns the mean of the distribution. rsample(sample_shape: Sequence[int] | Size | None = None) \u2192 Tensor# Generates a sample_shape shaped reparameterized sample or sample_shape shaped batch of reparameterized samples if the distribution parameters are batched. property support: constraints.Constraints# Returns a Constraint object representing this distribution\u2019s support. property variance: Tensor# Returns the variance of the distribution.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
