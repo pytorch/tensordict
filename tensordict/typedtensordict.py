@@ -333,15 +333,19 @@ def _make_delegate_inplace_pointwise(method_name: str) -> Callable:
     """Delegate an in-place pointwise method to a lazy-stack ``self._source``.
 
     The stack writes into its members, which writing back the leaves read from
-    ``self`` cannot do when they are nested. Other sources, and stacks that
-    hold copies, such as files, run the inherited method, which writes the
-    copies back.
+    ``self`` cannot do when they are nested. Other sources, stacks that hold
+    copies, such as files, and stacks with exclusive keys, which the inherited
+    method leaves unchanged, run the inherited method.
     """
     inherited = getattr(TypedTensorDict, method_name)
 
     def method(self, *args, **kwargs):
         source = self._source
-        if not isinstance(source, LazyStackedTensorDict) or _reads_copies(source):
+        if (
+            not isinstance(source, LazyStackedTensorDict)
+            or source._has_exclusive_keys
+            or _reads_copies(source)
+        ):
             return inherited(self, *args, **kwargs)
         result = getattr(source, method_name)(*args, **kwargs)
         if result is not source:

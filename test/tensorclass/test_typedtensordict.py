@@ -907,6 +907,20 @@ class TestFromTensordict:
             assert (td["a"] == 3.5).all()
             assert (td["n", "x"] == 3.5).all()
 
+    def test_from_tensordict_lazy_stack_exclusive_keys_inplace(self):
+        # the in-place methods leave the keys that only some members hold
+        class Flat(TypedTensorDict):
+            a: Tensor
+
+        tds = [
+            TensorDict(a=torch.ones(3), batch_size=[3]),
+            TensorDict(a=torch.ones(3), c=torch.ones(3), batch_size=[3]),
+        ]
+        state = Flat.from_tensordict(lazy_stack(tds))
+        assert state.add_(1.0) is state
+        assert (tds[1]["a"] == 2).all()
+        assert (tds[1]["c"] == 1).all()
+
     def test_from_tensordict_memmap(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             td = self._make_td()
