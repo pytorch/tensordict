@@ -2521,6 +2521,14 @@ class TestGeneric:
         recon = td.to_pytree().nested
         assert type(recon).__name__ == "GenericDict"
         assert (recon.l == torch.tensor([1, 2, 3])).all()
+        # so does a field that holds an empty dict or namedtuple: as on main,
+        # it does not stop auto_batch_size from finding the batch dims
+        Empty = namedtuple("Empty", [])
+        for nested in ({}, Empty(), {"x": torch.ones(3), "y": {}}, Inner(a, {})):
+            pytree = Outer(a=a, nested=nested)
+            td = TensorDict.from_pytree(pytree, auto_batch_size=True)
+            assert td.batch_size == (3,)
+            assert type(td.to_pytree().nested).__name__ == "GenericDict"
 
     def test_from_pytree_subclasses(self):
         # https://github.com/pytorch/tensordict/issues/2371

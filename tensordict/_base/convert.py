@@ -100,6 +100,16 @@ def _dict_holds_sequence(value: dict) -> bool:
     )
 
 
+def _holds_empty(value) -> bool:
+    # from_pytree gives an empty dict or namedtuple a _pytree_type entry, so
+    # auto_batch_size finds no batch dims; from_any leaves it empty, as on main
+    if _is_namedtuple(value):
+        value = value._asdict()
+    elif not isinstance(value, dict):
+        return False
+    return not value or any(_holds_empty(val) for val in value.values())
+
+
 def _dict_to_namedtuple(dictionary: dict, dest_cls: type | None, root: bool = False):
     # the conversion of to_namedtuple(dest_cls=...), at a nested level unless root
     for key, value in dictionary.items():
@@ -444,13 +454,15 @@ class _Conversion:
         if _is_namedtuple(pytree):
             # Dict and namedtuple fields go through from_pytree, so that
             # to_pytree can rebuild them. The other fields, the dicts that hold
-            # a list or tuple, and the fields that from_pytree does not take
-            # (such as a dict holding a str) go through from_any, as on main.
+            # a list or tuple, the fields that hold an empty dict or namedtuple,
+            # and the fields that from_pytree does not take (such as a dict
+            # holding a str) go through from_any, as on main.
             nested = {}
             for key, value in pytree._asdict().items():
                 if (
-                    isinstance(value, dict) and not _dict_holds_sequence(value)
-                ) or _is_namedtuple(value):
+                    (isinstance(value, dict) and not _dict_holds_sequence(value))
+                    or _is_namedtuple(value)
+                ) and not _holds_empty(value):
                     try:
                         nested[key] = cls.from_pytree(value)
                     except NotImplementedError:
