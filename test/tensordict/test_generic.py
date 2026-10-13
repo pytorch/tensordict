@@ -1754,6 +1754,47 @@ class TestGeneric:
         excluded2 = tensordict2.exclude("nested", inplace=inplace)
         assert set(excluded2.keys(include_nested=True)) == {"a", "b", "c"}
 
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_exclude_nested_unravels_keys_once(self, inplace, monkeypatch):
+        # exclude unravels the keys once; the sub-tensordicts get sub-keys
+        # that are already unravelled (#2558).
+        def leaf():
+            return torch.zeros(3, 1)
+
+        td = TensorDict(
+            a=leaf(),
+            data=TensorDict(
+                done=leaf(),
+                states=leaf(),
+                deep=TensorDict(x=leaf(), y=leaf(), batch_size=[3]),
+                batch_size=[3],
+            ),
+            stack=lazy_stack([TensorDict(u=leaf(), v=leaf()) for _ in range(3)]),
+            next=TensorDict(b=leaf()),
+            batch_size=[3],
+        )
+
+        def unravel_key(key):
+            raise AssertionError(f"exclude unravelled {key} again")
+
+        monkeypatch.setattr(tensordict._td, "unravel_key", unravel_key)
+        monkeypatch.setattr(tensordict_base, "unravel_key", unravel_key)
+        excluded = td.exclude(
+            ("next",),
+            ("data", ("done",)),
+            ("data", "deep", "x"),
+            ("data", "missing"),
+            ("stack", "u"),
+            inplace=inplace,
+        )
+        assert (excluded is td) is inplace
+        assert set(excluded.keys(True, True)) == {
+            "a",
+            ("data", "states"),
+            ("data", "deep", "y"),
+            ("stack", "v"),
+        }
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_expand(self, device):
         torch.manual_seed(1)
