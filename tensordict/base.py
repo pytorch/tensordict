@@ -1002,7 +1002,13 @@ def _warn_read_only(method: str) -> None:
     )
 
 
-def _warn_scalar_over_non_tensor(key: str, value: bool | int | float) -> None:
+# the scalars that _warn_scalar_over_non_tensor warns about
+_SCALAR_TYPES = (bool, int, float, np.bool_, np.integer, np.floating)
+
+
+def _warn_scalar_over_non_tensor(
+    key: str, value: bool | int | float | np.bool_ | np.integer | np.floating
+) -> None:
     """Warns that ``value``, written over the non-tensor entry ``key``, becomes a tensor today."""
     # point to the first frame outside tensordict: the user's call
     frame, stacklevel = sys._getframe(1), 2
@@ -2946,11 +2952,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Arrays and numbers are converted to tensors. Strings and other
         objects are stored as :class:`~tensordict.NonTensorData`.
 
-        A Python ``bool``, ``int`` or ``float`` written over an existing
-        :class:`~tensordict.NonTensorData` entry is stored as a 0-d tensor,
-        and the write emits a :class:`FutureWarning`. Starting with
-        TensorDict 0.17, the default will change to storing it as
-        :class:`~tensordict.NonTensorData`, like the entry it replaces.
+        A ``bool``, ``int`` or ``float``, or a NumPy scalar of one of these
+        kinds, written over an existing :class:`~tensordict.NonTensorData`
+        entry is stored as a 0-d tensor, and the write emits a
+        :class:`FutureWarning`. Starting with TensorDict 0.17, the default will
+        change to storing it as :class:`~tensordict.NonTensorData`, like the
+        entry it replaces.
 
         Args:
             key (NestedKey): the key to set: a string, or a tuple of strings
