@@ -786,6 +786,49 @@ class TestGeneric:
         assert td.consolidate() is td
         assert pickle.loads(pickle.dumps(td))["b"].batch_size == (2, 3, 4)
 
+    @pytest.mark.parametrize("use_buffer", [False, True])
+    def test_consolidated_file_batch_size_names_consolidate_again(
+        self, tmp_path, use_buffer
+    ):
+        # the file keeps the batch sizes and names of consolidate(filename=...):
+        # calling it again with the same file writes the current ones
+        filename = tmp_path / "td.bin"
+        td = TensorDict(
+            a=torch.zeros(2, 3), b={"c": torch.ones(2, 3, 4)}, batch_size=[2]
+        ).consolidate(filename=filename, use_buffer=use_buffer)
+        td.batch_size = [2, 3]
+        td.names = ["x" * 100, "y"]
+        td["b"].batch_size = [2, 3, 4]
+        assert td.consolidate(filename=filename) is td
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.batch_size == (2, 3)
+        assert loaded.names == ["x" * 100, "y"]
+        assert loaded["b"].batch_size == (2, 3, 4)
+        assert (loaded == td).all()
+        # a shorter metadata
+        td.names = None
+        td.batch_size = [2]
+        assert td.consolidate(filename=str(filename)) is td
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.batch_size == (2,)
+        assert loaded.names == [None]
+        assert (loaded == td).all()
+        # another file name writes nothing
+        assert td.consolidate(filename=tmp_path / "other.bin") is td
+        assert not (tmp_path / "other.bin").exists()
+        # nor does a file that was replaced, or deleted
+        os.remove(filename)
+        td2 = TensorDict(z=torch.ones(2), batch_size=[2]).consolidate(filename=filename)
+        td.batch_size = []
+        assert td.consolidate(filename=filename) is td
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.batch_size == (2,)
+        assert (loaded == td2).all()
+        del td2, loaded
+        os.remove(filename)
+        assert td.consolidate(filename=filename) is td
+        assert not filename.exists()
+
     def test_consolidated_lazy_stack_names_serialized(self):
         td = lazy_stack(
             [
@@ -2594,6 +2637,81 @@ class TestGeneric:
         assert (pytree_recon.b == nt.b).all()
         # without auto_batch_size, batch_dims is ignored, as for lists and dicts
         assert TensorDict.from_pytree(nt, batch_dims=1).batch_size == ()
+        # an int batch_size with batch_dims gives the same batch size as for lists
+        td = TensorDict.from_pytree(nt, batch_size=3, batch_dims=1)
+        assert td.batch_size == (3,)
+        assert (
+            td.batch_size
+            == TensorDict.from_pytree(list(nt), batch_size=3, batch_dims=1).batch_size
+        )
+        # batch_size applies without batch_dims too, as for lists and dicts
+        for batch_size in ([3], 3):
+            td = TensorDict.from_pytree(nt, batch_size=batch_size)
+            assert td.batch_size == (3,)
+            assert type(td.to_pytree()) is NT
+        # and a batch size that does not fit the leaves raises, as for lists
+        with pytest.raises(RuntimeError):
+            TensorDict.from_pytree(list(nt), batch_size=[4])
+        with pytest.raises(RuntimeError):
+            TensorDict.from_pytree(nt, batch_size=[4])
+
+    def test_from_pytree_namedtuple_nested(self):
+        # dict and namedtuple fields come back with their own type
+        Outer = namedtuple("Outer", ["a", "nested"])
+        Same = namedtuple("Same", ["a", "nested"])
+        Inner = namedtuple("Inner", ["p", "name"])
+        a = torch.zeros(3)
+
+        def check(v1, v2):
+            assert (v1 == v2).all() if torch.is_tensor(v1) else v1 == v2
+
+        for nested in (
+            {"x": torch.ones(3), "y": {"z": torch.ones(3)}},
+            Inner(p=torch.ones(3), name="n"),
+            Same(a=torch.ones(3), nested="n"),
+            Outer(a=torch.ones(3), nested=None),
+        ):
+            pytree = Outer(a=a, nested=nested)
+            for kwargs in ({}, {"batch_size": [3]}):
+                recon = TensorDict.from_pytree(pytree, **kwargs).to_pytree()
+                assert type(recon) is Outer
+                assert type(recon.nested) is type(nested)
+                torch.utils._pytree.tree_map(check, pytree, recon)
+        # a dict field that from_pytree does not take (here, it holds a str)
+        # goes through from_any, as before, and comes back as on main: as the
+        # outer class if it takes the keys, and as a GenericDict otherwise
+        recon = TensorDict.from_pytree(
+            Outer(a=a, nested={"a": torch.ones(3), "nested": "n"})
+        ).to_pytree()
+        assert type(recon) is Outer
+        assert type(recon.nested) is Outer
+        assert recon.nested.nested == "n"
+        for kwargs in ({}, {"batch_size": [3]}):
+            recon = TensorDict.from_pytree(
+                Outer(a=a, nested={"s": "x", "t": torch.ones(3)}), **kwargs
+            ).to_pytree()
+            assert type(recon.nested).__name__ == "GenericDict"
+            assert recon.nested.s == "x"
+            assert (recon.nested.t == 1).all()
+        # so does a dict field that holds a list: the list stays a tensor, as
+        # on main, rather than a nested TensorDict as from_pytree would make it
+        pytree = Outer(a=a, nested={"l": [1, 2, 3]})
+        td = TensorDict.from_pytree(pytree)
+        assert isinstance(td["nested", "l"], torch.Tensor)
+        assert (td["nested", "l"] == torch.tensor([1, 2, 3])).all()
+        assert TensorDict.from_pytree(pytree, auto_batch_size=True).batch_size == (3,)
+        assert TensorDict.from_pytree(pytree, batch_size=[3]).batch_size == (3,)
+        recon = td.to_pytree().nested
+        assert type(recon).__name__ == "GenericDict"
+        assert (recon.l == torch.tensor([1, 2, 3])).all()
+        # so does a field that holds an empty dict or namedtuple: as on main,
+        # it does not stop auto_batch_size from finding the batch dims
+        Empty = namedtuple("Empty", [])
+        for nested in ({}, Empty(), {"x": torch.ones(3), "y": {}}, Inner(a, {})):
+            pytree = Outer(a=a, nested=nested)
+            td = TensorDict.from_pytree(pytree, auto_batch_size=True)
+            assert td.batch_size == (3,)
+            assert type(td.to_pytree().nested).__name__ == "GenericDict"
 
     def test_from_pytree_subclasses(self):
         # https://github.com/pytorch/tensordict/issues/2371
@@ -4716,6 +4834,15 @@ class TestGeneric:
         )
         with pytest.raises(NotImplementedError, match="masked_select"):
             lst.masked_select(torch.ones(3, 4, dtype=torch.bool), inplace=True)
+
+    def test_masked_select_inplace_sub_tensordict_raises(self):
+        sub = TensorDict({"x": torch.zeros(4, 3)}, [4])._get_sub_tensordict(slice(0, 2))
+        with pytest.raises(
+            NotImplementedError,
+            match="masked_select.inplace=True. is not supported on _SubTensorDict",
+        ):
+            sub.masked_select(torch.ones(2, dtype=torch.bool), inplace=True)
+        assert sub.batch_size == (2,)
 
     @pytest.mark.parametrize(
         "op",
@@ -7922,6 +8049,30 @@ class TestGeneric:
         td.set("x", value)
         td.update({"y": value})
         assert (td["x"] == 1).all() and (td["y"] == 1).all()
+
+    @pytest.mark.parametrize("operand", [None, "abc"])
+    def test_comparison_unsupported_operand(self, operand):
+        # An operand that is not a tensor, number, dict or tensor collection
+        # gives a bool: True for != and ^, False for the other ops
+        td = TensorDict(a=torch.zeros(3, dtype=torch.long), batch_size=[3])
+        for op in ("__eq__", "__lt__", "__le__", "__gt__", "__ge__", "__or__"):
+            assert getattr(td, op)(operand) is False
+        for op in ("__ne__", "__xor__"):
+            assert getattr(td, op)(operand) is True
+
+    @pytest.mark.parametrize("op", ["__ne__", "__xor__", "__or__"])
+    def test_comparison_mismatched_keys_keyerror(self, op):
+        td = TensorDict(a=torch.zeros(3, dtype=torch.long), batch_size=[3])
+        other = TensorDict(b=torch.zeros(3, dtype=torch.long), batch_size=[3])
+        with pytest.raises(KeyError, match="keys in TensorDict.* mismatch, got"):
+            getattr(td, op)(other)
+
+    @pytest.mark.parametrize("op", ["__eq__", "__lt__", "__le__", "__gt__", "__ge__"])
+    def test_comparison_mismatched_keys(self, op):
+        td = TensorDict(a=torch.zeros(3, dtype=torch.long), batch_size=[3])
+        other = TensorDict(b=torch.zeros(3, dtype=torch.long), batch_size=[3])
+        with pytest.raises(KeyError, match="keys in tensordicts mismatch. The first"):
+            getattr(td, op)(other)
 
     @pytest.mark.parametrize("nested", [False, True])
     def test_where_out_without_leaves(self, nested):

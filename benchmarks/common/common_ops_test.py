@@ -5,10 +5,16 @@
 from __future__ import annotations
 
 import argparse
+import itertools
 
 import pytest
 import torch
-from tensordict import is_tensor_collection, LazyStackedTensorDict, TensorDict
+from tensordict import (
+    is_tensor_collection,
+    LazyStackedTensorDict,
+    NonTensorStack,
+    TensorDict,
+)
 from tensordict.utils import _unravel_key_to_tuple, unravel_key, unravel_key_list
 
 
@@ -599,6 +605,37 @@ def test_setitem_dim(benchmark, td, c, index):
         td[index] = td_index
 
     benchmark.pedantic(exec_setitem, setup=setup, warmup_rounds=10, rounds=1000)
+
+
+@pytest.fixture(scope="module")
+def big_non_tensor_td():
+    n = 100_000
+    return TensorDict(
+        obs=torch.zeros(n, 3),
+        text=NonTensorStack.from_list([f"x{i}" for i in range(n)]),
+        batch_size=[n],
+    )
+
+
+def test_setitem_non_tensor_rows(benchmark, big_non_tensor_td):
+    # 4-row writes into a 100k-row tensordict with a string entry, as in a
+    # replay buffer extend; each write brings new strings to new rows
+    td = big_non_tensor_td
+    counter = itertools.count()
+
+    def setup():
+        i = next(counter)
+        chunk = TensorDict(
+            obs=torch.ones(4, 3),
+            text=NonTensorStack(*[f"v{i}_{j}" for j in range(4)]),
+            batch_size=[4],
+        )
+        return ((td, chunk, torch.arange(4) + 4 * i), {})
+
+    def exec_setitem(td, chunk, index):
+        td[index] = chunk
+
+    benchmark.pedantic(exec_setitem, setup=setup, warmup_rounds=2, rounds=20)
 
 
 def test_setitem(benchmark, td, c):

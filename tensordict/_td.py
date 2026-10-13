@@ -1391,7 +1391,12 @@ class TensorDict(TensorDictBase):
                 # result has no single truth value: write the value anyway.
                 is_diff = True
             if is_diff:
-                dest_val = dest.maybe_to_stack()
+                if _is_stack_of_batchless_non_tensors(dest):
+                    # Write into the stack: rebuilding it with
+                    # maybe_to_stack() would cost O(size) per write
+                    dest_val = dest
+                else:
+                    dest_val = dest.maybe_to_stack()
                 if (
                     idx is Ellipsis
                     and dest_val is dest
@@ -3196,12 +3201,14 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
         )
 
     # Override: a view over another tensordict cannot detach in place.
-    def detach_(self) -> Self:
+    def _detach_(self) -> None:
         raise RuntimeError("Detaching a sub-tensordict in-place cannot be done.")
 
-    # Override: an entry read through a tensor index is a copy, so the
-    # filled entry is written back with set_.
-    def masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
+    # Override: writes each filled entry with set_, which raises on a file
+    # opened read-only, where the base write-back would warn and skip it.
+    # Delete in 0.17, when in-place writes to read-only storage raise
+    # everywhere.
+    def _masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
         for key, item in self.items():
             self.set_(key, item.masked_fill(expand_as_right(mask, item), value))
         return self
@@ -3595,6 +3602,22 @@ class _TensorDictKeysView:
         include_nested = f"include_nested={self.include_nested}"
         leaves_only = f"leaves_only={self.leaves_only}"
         return f"{type(self).__name__}({list(self)},\n{indent(include_nested, 4 * ' ')},\n{indent(leaves_only, 4 * ' ')})"
+
+
+def _is_stack_of_batchless_non_tensors(dest) -> bool:
+    # A NonTensorStack whose NonTensorData leaves have no batch dims, which
+    # maybe_to_stack() would rebuild unchanged. The members of a stack are
+    # NonTensorData (tensorclasses) or NonTensorStacks.
+    if not is_non_tensor(dest) or is_tensorclass(dest):
+        return False
+    batch_dims = dest.batch_dims
+    if batch_dims == 1:
+        return True
+    members = dest.tensordicts
+    # read the class attribute: is_tensorclass is slower, once per member
+    if any(getattr(type(td), "_is_tensorclass", False) for td in members):
+        return False
+    return batch_dims == 2 or all(map(_is_stack_of_batchless_non_tensors, members))
 
 
 def _index_to_str(index: IndexType) -> Any:

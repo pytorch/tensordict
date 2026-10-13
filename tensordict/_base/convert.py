@@ -89,6 +89,44 @@ def _int_batch_dims(batch_dims):
     return None
 
 
+def _dict_holds_sequence(value: dict) -> bool:
+    # from_pytree turns a list or tuple inside a dict into a nested TensorDict,
+    # where from_any (used for namedtuple fields on main) keeps a tensor
+    return any(
+        _dict_holds_sequence(val)
+        if isinstance(val, dict)
+        else isinstance(val, (list, tuple)) and not _is_namedtuple(val)
+        for val in value.values()
+    )
+
+
+def _holds_empty(value) -> bool:
+    # from_pytree gives an empty dict or namedtuple a _pytree_type entry, so
+    # auto_batch_size finds no batch dims; from_any leaves it empty, as on main
+    if _is_namedtuple(value):
+        value = value._asdict()
+    elif not isinstance(value, dict):
+        return False
+    return not value or any(_holds_empty(val) for val in value.values())
+
+
+def _dict_to_namedtuple(dictionary: dict, dest_cls: type | None, root: bool = False):
+    # the conversion of to_namedtuple(dest_cls=...), at a nested level unless root
+    for key, value in dictionary.items():
+        if isinstance(value, dict):
+            dictionary[key] = _dict_to_namedtuple(value, dest_cls)
+    cls = dest_cls
+    if cls is not None and not root and hasattr(cls, "_fields"):
+        # a nested level uses dest_cls only if dest_cls takes its keys
+        keys = set(dictionary)
+        defaults = getattr(cls, "_field_defaults", {})
+        if not (keys <= set(cls._fields) and set(cls._fields) - keys <= set(defaults)):
+            cls = None
+    if cls is None:
+        cls = collections.namedtuple("GenericDict", dictionary.keys())
+    return cls(**dictionary)
+
+
 def _pytree_dict_key(key):
     # Reads a dict key that from_pytree stored. Once the non-tensor entry has
     # batch dims (e.g. after stack or unsqueeze), td["key"] returns a list, so
@@ -414,11 +452,25 @@ class _Conversion:
 
         result = None
         if _is_namedtuple(pytree):
-            result = TensorDict.from_namedtuple(named_tuple=pytree)
-            # Without batch_dims, batch_size is ignored here, unlike for lists
-            # and dicts: applying it would raise when it does not fit the leaves.
-            if batch_dims is not None and batch_size is not None:
-                result.batch_size = batch_size
+            # Dict and namedtuple fields go through from_pytree, so that
+            # to_pytree can rebuild them. The other fields, the dicts that hold
+            # a list or tuple, the fields that hold an empty dict or namedtuple,
+            # and the fields that from_pytree does not take (such as a dict
+            # holding a str) go through from_any, as on main.
+            nested = {}
+            for key, value in pytree._asdict().items():
+                if (
+                    (isinstance(value, dict) and not _dict_holds_sequence(value))
+                    or _is_namedtuple(value)
+                ) and not _holds_empty(value):
+                    try:
+                        nested[key] = cls.from_pytree(value)
+                    except NotImplementedError:
+                        pass
+            result = TensorDict.from_namedtuple(named_tuple=pytree._replace(**nested))
+            if batch_size is not None:
+                # parsed as the TensorDict constructor does, so that ints work
+                result.batch_size = TensorDict._parse_batch_size(None, batch_size)
             result["_pytree_type"] = type(pytree)
         elif isinstance(pytree, (list, tuple)):
             source = {str(i): cls.from_pytree(elt) for i, elt in enumerate(pytree)}
@@ -465,9 +517,20 @@ class _Conversion:
             for key, val in items.items()
         }
         if _is_namedtuple_class(_pytree_type):
-            from tensordict._td import TensorDict
-
-            return TensorDict(items).to_namedtuple(dest_cls=_pytree_type)
+            # Build this level only: the nested levels were rebuilt above, and
+            # to_namedtuple(dest_cls=...) would apply the class to them too.
+            fields = {}
+            for key, val in items.items():
+                if _is_non_tensor(type(val)):
+                    val = val.to_dict()
+                elif is_tensor_collection(val):
+                    # from_any built it (e.g. for a dict holding a str), not
+                    # from_pytree: convert it as to_namedtuple did on main
+                    val = _dict_to_namedtuple(
+                        val.to_dict(retain_none=False), _pytree_type
+                    )
+                fields[key] = val
+            return _pytree_type(**fields)
         if issubclass(_pytree_type, (list, tuple)):
             # a list, a tuple or a subclass, such as the torch.return_types
             # structseqs, which take a sequence
@@ -1304,7 +1367,12 @@ class _Conversion:
         get a regular, unlocked tensordict in memory from a lazy stack, a
         memory-mapped or locked tensordict, a
         :class:`~tensordict.PersistentTensorDict` or a tensorclass. The batch
-        size, device and dimension names are kept.
+        size, device and dimension names are kept, with one exception: if the
+        tensordicts of a lazy stack have no names, the result has no names
+        either, even when the stack dimension has a name (from
+        ``stack_dim_name`` or the ``names`` setter). ``densify()`` and
+        ``clone()`` of the lazy stack keep that name. To keep it here, name
+        the dimension again with :meth:`refine_names`.
 
         Keyword Args:
             retain_none (bool, optional): if ``True``, the ``None`` fields of
@@ -1323,6 +1391,11 @@ class _Conversion:
             >>> td = stack.to_tensordict()
             >>> type(td).__name__, td.batch_size
             ('TensorDict', torch.Size([2]))
+            >>> stack.names = ["s"]
+            >>> stack.to_tensordict().names
+            [None]
+            >>> stack.to_tensordict().refine_names("s").names
+            ['s']
 
         """
         from tensordict import TensorDict
@@ -1616,26 +1689,7 @@ class _Conversion:
             GenericDict(a_tensor=tensor([0., 0., 0.]), nested=GenericDict(a_tensor=tensor([0., 0., 0.]), a_string='zero!'))
 
         """
-
-        def dict_to_namedtuple(dictionary, root=False):
-            for key, value in dictionary.items():
-                if isinstance(value, dict):
-                    dictionary[key] = dict_to_namedtuple(value)
-            cls = dest_cls
-            if cls is not None and not root and hasattr(cls, "_fields"):
-                # a nested level uses dest_cls only if dest_cls takes its keys
-                keys = set(dictionary)
-                defaults = getattr(cls, "_field_defaults", {})
-                if not (
-                    keys <= set(cls._fields)
-                    and set(cls._fields) - keys <= set(defaults)
-                ):
-                    cls = None
-            if cls is None:
-                cls = collections.namedtuple("GenericDict", dictionary.keys())
-            return cls(**dictionary)
-
-        return dict_to_namedtuple(self.to_dict(retain_none=False), root=True)
+        return _dict_to_namedtuple(self.to_dict(retain_none=False), dest_cls, root=True)
 
     @classmethod
     def from_any(
