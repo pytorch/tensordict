@@ -4817,6 +4817,40 @@ class TestGeneric:
         with pytest.raises(NotImplementedError, match="gather"):
             lst.gather(dim=0, index=torch.zeros(3, 4, dtype=torch.long), inplace=True)
 
+    @pytest.mark.parametrize("locked", [False, True])
+    @pytest.mark.parametrize("lazy", [False, True])
+    def test_detach__unbatched(self, locked, lazy):
+        # A tensordict stores an UnbatchedTensor as an alias, which torch
+        # cannot detach in place: detach_ replaces it with its detach(), which
+        # shares the storage (#2565)
+        x = torch.ones(5, requires_grad=True) * 2
+
+        def build():
+            return TensorDict(
+                a=torch.zeros(3, requires_grad=True) * 1,
+                u=tensordict.UnbatchedTensor(x),
+                nested=TensorDict(u=tensordict.UnbatchedTensor(x), batch_size=[3]),
+                batch_size=[3],
+            )
+
+        td = lazy_stack([build(), build()]) if lazy else build()
+        if locked:
+            td.lock_()
+        members = td.tensordicts if lazy else [td]
+        ptrs = [
+            (m.get("u").data_ptr(), m.get(("nested", "u")).data_ptr()) for m in members
+        ]
+        assert td.detach_() is td
+        assert td.is_locked is locked
+        for member, (ptr, nested_ptr) in zip(members, ptrs):
+            u, nested_u = member.get("u"), member.get(("nested", "u"))
+            assert isinstance(u, tensordict.UnbatchedTensor)
+            assert isinstance(nested_u, tensordict.UnbatchedTensor)
+            assert not u.requires_grad and not nested_u.requires_grad
+            assert not member["a"].requires_grad
+            assert u.data_ptr() == ptr and nested_u.data_ptr() == nested_ptr
+            assert u.shape == (5,)
+
     @pytest.mark.parametrize("inplace", [True, False])
     @pytest.mark.parametrize("mask_dims", [1, 2])
     def test_masked_select_inplace(self, inplace, mask_dims):

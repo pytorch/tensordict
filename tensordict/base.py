@@ -8627,12 +8627,21 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         Called by :meth:`detach_`, which returns ``self`` afterwards, unless
         ``_storage_holds_no_gradients`` is set. The base implementation calls
-        ``detach_`` on each value. Override it when the values are not the
-        stored tensors (a lazy stack detaches each member) or when the leaves
-        cannot be detached in place (a sub-tensordict raises).
+        ``detach_`` on each value, and replaces each
+        :class:`~tensordict.UnbatchedTensor` with its ``detach()``, which
+        shares its storage. Override it when the values are not the stored
+        tensors (a lazy stack detaches each member) or when the leaves cannot
+        be detached in place (a sub-tensordict raises).
         """
-        for value in self.values():
-            value.detach_()
+        for key, value in self.items():
+            if _is_unbatched(value):
+                # A tensordict stores an UnbatchedTensor as an alias that
+                # keeps its batch size, and torch cannot detach a view in place.
+                self._set_str(
+                    key, value.detach(), inplace=False, validated=True, ignore_lock=True
+                )
+            else:
+                value.detach_()
 
     @_cache_while_locked  # noqa: B019
     def detach(self) -> Self:
