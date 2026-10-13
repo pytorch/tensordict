@@ -322,8 +322,10 @@ string as ``NonTensorData``:
       device=None,
       is_shared=False)
 
-A field that you delete with ``del obj.field``, ``obj.del_("field")`` or
-``obj.pop("field")`` reads as ``None`` afterwards.
+A ``None`` field is a key missing from the tensor storage. Setting a field to
+``None``, or deleting it with ``del obj.field``, ``obj.del_("field")`` or
+``obj.pop("field")``, removes its entry, and reading it gives ``None``.
+``to_dict()``, ``repr`` and ``state_dict()`` list it as ``None``.
 
 Comparison, item assignment, and concatenation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -412,9 +414,7 @@ The flags are:
   defined. Python numbers and NumPy arrays become tensors. A value that cannot
   become a tensor, for example a ``str``, is stored as
   :class:`~tensordict.NonTensorData` with no error, and attribute access
-  returns the ``NonTensorData`` wrapper. A ``None`` field is a key missing
-  from the tensor storage: setting a field to ``None`` or deleting it removes
-  its entry, and reading it gives ``None``. Attribute access does not look in
+  returns the ``NonTensorData`` wrapper. Attribute access does not look in
   the storage for non-tensor values, so it does less work. On one CPU, reading
   a tensor field took 150 ns with ``tensor_only`` and 230 ns without it.
   ``benchmarks/tensorclass/test_tensorclass_speed.py`` measures it.
