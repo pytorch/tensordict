@@ -222,7 +222,7 @@ class TestTensorDicts(TestTensorDictsBase):
         fun = vmap(lambda x: x)
         if td_name == "td_h5":
             with pytest.raises(
-                RuntimeError, match="Persistent tensordicts cannot be used with vmap"
+                RuntimeError, match="PersistentTensorDict cannot be used with vmap"
             ):
                 fun(td)
             return
@@ -2641,7 +2641,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -3603,7 +3603,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -3635,7 +3635,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -3675,7 +3675,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -3727,7 +3727,7 @@ class TestTensorDicts(TestTensorDictsBase):
             and not lazy_legacy()
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -4205,7 +4205,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -4246,7 +4246,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -4277,7 +4277,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -4323,7 +4323,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -4348,7 +4348,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -4584,7 +4584,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )
@@ -4613,7 +4613,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "td_h5",
         )
         error_dec = (
-            pytest.raises(RuntimeError, match="Make it dense")
+            pytest.raises(RuntimeError, match="to_tensordict")
             if is_lazy
             else contextlib.nullcontext()
         )

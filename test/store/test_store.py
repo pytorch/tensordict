@@ -699,6 +699,15 @@ class TestTensorDictStore:
         with pytest.raises(NotImplementedError):
             store_td.share_memory_()
 
+    def test_vmap_raises(self, store_td):
+        """vmap raises, also on a function that returns the store."""
+        store_td["obs"] = torch.randn(10, 3)
+        with pytest.raises(RuntimeError, match="cannot be used with vmap"):
+            torch.vmap(lambda x: x)(store_td)
+        # this used to return None
+        with pytest.raises(RuntimeError, match="cannot be used with vmap"):
+            torch.vmap(lambda x: store_td)(torch.zeros(2))
+
     def test_memmap(self, store_td, tmp_path):
         """memmap and save write a memory-mapped copy; only memmap_ raises."""
         source = TensorDict(
@@ -1817,6 +1826,18 @@ class TestLazyStackedTensorDictStore:
         assert (elem == tds[1]).all()
         with pytest.raises(RuntimeError, match="in-place"):
             store_td.memmap_(tmp_path / "memmap_")
+        with pytest.raises(RuntimeError, match="in-place"):
+            store_td[1].memmap_(tmp_path / "elem_")
+
+    def test_vmap_raises(self, store_stack):
+        """vmap raises, also on a function that returns the store or an element."""
+        store_td, tds, lazy_td = store_stack
+        for td in (store_td, store_td[0]):
+            with pytest.raises(RuntimeError, match="cannot be used with vmap"):
+                torch.vmap(lambda x: x)(td)
+            # this used to return None
+            with pytest.raises(RuntimeError, match="cannot be used with vmap"):
+                torch.vmap(lambda x, td=td: td)(torch.zeros(2))
 
     # ---- td[idx].to_tensordict() pattern ----
 
