@@ -4588,7 +4588,12 @@ class LazyStackedTensorDict(TensorDictBase):
 
     # Override: regroup the members when the new shape only flattens or
     # unflattens dims, which keeps the stack lazy.
-    def _reshape(self, shape: torch.Size, names: list | None) -> Self:
+    def _reshape(
+        self,
+        shape: torch.Size,
+        names: list | None,
+        leaf_fn: Callable[[Tensor], Tensor] | None = None,
+    ) -> Self:
         result = self._regroup(shape)
         if result is None:
             result = TensorDictBase._reshape(self, shape, names)

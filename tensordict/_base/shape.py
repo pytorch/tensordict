@@ -577,45 +577,38 @@ class _ShapeOps:
             return self._inplace_rebind_leaves(_reshape, nested_fn, torch.Size(shape))
         return self._reshape(shape, None)
 
-    def _reshape(self, shape: torch.Size, names: list | None) -> Self:
+    def _reshape(
+        self,
+        shape: torch.Size,
+        names: list | None,
+        leaf_fn: Callable[[Tensor], Tensor] | None = None,
+    ) -> Self:
         """Returns a tensordict whose batch size is ``shape``.
 
         Called by :meth:`reshape`, :meth:`flatten` and :meth:`unflatten` for
         ``inplace=False``, after they have resolved ``-1`` and checked that
         ``shape`` has as many elements as the batch and differs from the batch
-        size. Each leaf keeps its feature
-        dims and is a view of the original leaf when the layout allows it, a
-        copy otherwise. ``names`` (one per dim of ``shape``, or ``None``) are
-        the names of the result. The result has the lock of ``self``.
+        size. Each leaf keeps its feature dims and is a view of the original
+        leaf when the layout allows it, a copy otherwise. ``names`` (one per
+        dim of ``shape``, or ``None``) are the names of the result. The result
+        has the lock of ``self``.
 
-        The default reshapes each leaf. ``LazyStackedTensorDict`` regroups its
+        The default applies ``leaf_fn`` to each leaf, or reshapes each leaf
+        when it is ``None``: :meth:`flatten` and :meth:`unflatten` pass
+        :func:`torch.flatten` and :func:`torch.unflatten` with their dims,
+        which are faster than a reshape. ``LazyStackedTensorDict`` regroups its
         members when the new shape only flattens or unflattens dims, which
-        keeps the stack lazy, and falls back on the default otherwise;
+        keeps the stack lazy, and reshapes each leaf otherwise;
         ``NonTensorStack`` moves its entries instead.
         """
-        batch_dims = self.batch_dims
+        if leaf_fn is None:
+            batch_dims = self.batch_dims
 
-        def _reshape(tensor):
-            new_shape = (*shape, *tensor.shape[batch_dims:])
-            if (
-                names is not None
-                and type(tensor) is not Tensor
-                and _is_tensor_collection(type(tensor))
-                and not is_non_tensor(tensor)
-                and tensor._has_names()
-            ):
-                # a nested tensordict gets the names of the result for its
-                # first dims, as flatten and unflatten give it
-                nested_names = [*names, *tensor.names[batch_dims:]]
-                if not _is_tensorclass(type(tensor)):
-                    return tensor._reshape(torch.Size(new_shape), nested_names)
-                out = tensor.reshape(new_shape)
-                out.names = nested_names
-                return out
-            return tensor.reshape(new_shape)
+            def leaf_fn(tensor):
+                return tensor.reshape((*shape, *tensor.shape[batch_dims:]))
 
         return self._fast_apply(
-            _reshape,
+            leaf_fn,
             batch_size=shape,
             call_on_nested=True,
             propagate_lock=True,
@@ -2207,7 +2200,7 @@ class _ShapeOps:
         """Returns the result of a shape operation that moves the elements of the batch.
 
         Called by :meth:`flip`, :meth:`roll`, :meth:`rot90`, :meth:`tile`,
-        :meth:`narrow` and :meth:`broadcast_to` after they have checked their
+        :meth:`narrow` and :meth:`_broadcast_to` after they have checked their
         arguments and computed the ``batch_size`` and ``names`` of the result.
         ``fn`` takes a tensor whose leading dims are the batch dims, moves its
         elements and leaves the feature dims alone. ``index``, when given, is
@@ -2254,6 +2247,19 @@ class _ShapeOps:
         shape = torch.Size(shape)
         if -1 in shape:
             shape = _resolve_expand_shape(shape, self.batch_size)
+        return self._broadcast_to(shape)
+
+    def _broadcast_to(self, shape: torch.Size) -> Self:
+        """Returns the tensordict broadcast to the batch size ``shape``.
+
+        Called by :meth:`broadcast_to` after it has resolved ``-1``. The
+        result has no names, and its leaves are broadcast views of the leaves
+        of ``self``.
+
+        The default broadcasts each leaf through :meth:`_batch_op`, which
+        raises as :func:`torch.broadcast_to` does for a shape that does not
+        fit. ``NonTensorStack`` expands its members, which shares the entries.
+        """
 
         def _broadcast_to(tensor):
             return tensor.broadcast_to(shape + tensor.shape[self.ndim :])
@@ -2497,7 +2503,7 @@ class _ShapeOps:
                 flatten, nested_fn, torch.Size(batch_size)
             )
         if not past_batch_dims and start_dim != end_dim:
-            return self._reshape(torch.Size(batch_size), names)
+            return self._reshape(torch.Size(batch_size), names, flatten)
         out = self._fast_apply(
             flatten,
             batch_size=batch_size,
@@ -2588,7 +2594,7 @@ class _ShapeOps:
                 names.insert(dim, None)
         else:
             names = None
-        return self._reshape(torch.Size(batch_size), names)
+        return self._reshape(torch.Size(batch_size), names, unflatten)
 
     def scatter(
         self,

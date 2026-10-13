@@ -417,6 +417,11 @@ class TestNonTensorData:
             assert shared == (len(out) if name in regroups else 0), name
             assert all(id(leaf.data) in data_ids for leaf in out), name
 
+        # broadcast_to expands the members, as expand does: a locked stack
+        # broadcast to its own shape gives a locked stack
+        stack = NonTensorStack.from_list(values).lock_()
+        assert stack.broadcast_to((-1, -1)).is_locked
+
     def test_non_tensor_stack_reshape_inplace_raises(self):
         stack = NonTensorStack.from_list([["a", "b", "c"], ["d", "e", "f"]])
         with pytest.raises(

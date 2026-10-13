@@ -6674,11 +6674,21 @@ class NonTensorStack(LazyStackedTensorDict):
 
     # Override: regroup the stack when the new shape allows it, which shares
     # the entries like a view, and move the entries otherwise.
-    def _reshape(self, shape: torch.Size, names: list | None) -> NonTensorStack:
+    def _reshape(
+        self,
+        shape: torch.Size,
+        names: list | None,
+        leaf_fn: Callable[[torch.Tensor], torch.Tensor] | None = None,
+    ) -> NonTensorStack:
         result = self._regroup(shape)
         if result is not None:
             return result
         return self._batch_op(lambda positions: positions.reshape(shape), shape, names)
+
+    # Override: expanding the members shares the entries and is twice as fast
+    # as moving them.
+    def _broadcast_to(self, shape: torch.Size) -> NonTensorStack:
+        return self.expand(shape)
 
     # Override: a NonTensorStack is the dense form of stacked non-tensor data.
     def _densify(self, layout: torch.layout) -> NonTensorStack:
