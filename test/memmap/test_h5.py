@@ -10,7 +10,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from tensordict import NonTensorData, PersistentTensorDict, TensorClass, TensorDict
+from tensordict import (
+    NonTensorData,
+    NonTensorStack,
+    PersistentTensorDict,
+    TensorClass,
+    TensorDict,
+)
 from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import is_non_tensor
 from torch import multiprocessing as mp
@@ -148,6 +154,47 @@ class TestH5Serialization:
             warnings.simplefilter("error")
             assert h5td["s"] == b"dog"
             assert h5td.to_tensordict()["s"] == b"dog"
+
+    def test_h5_nontensor_stack(self, tmp_path):
+        # one value per row is written as a dataset of the stack's shape and
+        # read back as a NonTensorStack (#2544)
+        grid = NonTensorStack(*(NonTensorStack(f"{i}0", f"{i}1") for i in range(3)))
+        td = TensorDict(
+            {
+                "x": torch.zeros(3),
+                "text": NonTensorStack("a", "b", "c"),
+                ("n", "y"): torch.zeros(3, 2),
+                ("n", "grid"): grid,
+                "ints": NonTensorStack(1, 2, 3),
+            },
+            [3],
+        )
+        PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5").close()
+        with h5py.File(tmp_path / "file.h5") as f:
+            assert h5py.check_string_dtype(f["text"].dtype)
+            assert f["text"].shape == (3,)
+            assert f["n/grid"].shape == (3, 2)
+        h5td = PersistentTensorDict.from_h5(tmp_path / "file.h5")
+        with warnings.catch_warnings():
+            # the strings of a stack are read as str
+            warnings.simplefilter("error")
+            assert h5td.entry_class("text") is NonTensorStack
+            text = h5td.get("text")
+            assert isinstance(text, NonTensorStack)
+            assert text.batch_size == (3,)
+            assert text.tolist() == ["a", "b", "c"]
+            assert h5td[1]["text"] == "b"
+            assert h5td.get(("n", "grid")).batch_size == (3, 2)
+            assert h5td.get(("n", "grid")).tolist() == grid.tolist()
+            assert h5td[2]["n", "grid"] == ["20", "21"]
+            assert h5td.get("ints").tolist() == [1, 2, 3]
+            assert h5td.to_tensordict()["text"] == ["a", "b", "c"]
+            copy = h5td.clone(newfile=tmp_path / "copy.h5")
+            assert copy.get("text").tolist() == ["a", "b", "c"]
+        # a stack is written whole: an in-place write raises
+        with pytest.raises(RuntimeError, match="in place"):
+            copy.set_at_("text", "q", 0)
+        assert copy.get("text").tolist() == ["a", "b", "c"]
         h5td.close()
 
     def test_rename_key_missing(self, tmp_path):
