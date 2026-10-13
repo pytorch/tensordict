@@ -905,17 +905,43 @@ class TestGeneric:
         assert td.to("cpu", batch_size=[2]) is td
         assert td.to("cpu", batch_size=torch.Size([2])) is td
 
-    def test_to_device_leaves_already_there(self, monkeypatch):
-        # A device-less tree whose leaves are mostly on the device already:
-        # to() walks it once and calls Tensor.to only on the leaves that move
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_to_device_walks_once(self, monkeypatch, locked):
+        # to() walks an unlocked tree once. A locked tree caches its leaves,
+        # so it keeps the cheap first walk through _items_list.
         td = TensorDict(
             a=torch.zeros(2, device="meta"),
             b=torch.zeros(2),
-            nested=TensorDict(c=torch.zeros(2, 3, device="meta"), batch_size=[2]),
+            nested=TensorDict(c=torch.zeros(2, 3), batch_size=[2]),
             batch_size=[2],
             names=["x"],
         )
-        td.lock_()
+        if locked:
+            td.lock_()
+        else:
+
+            def items_list(*args, **kwargs):
+                raise AssertionError("to() should walk an unlocked tree once")
+
+            monkeypatch.setattr(type(td), "_items_list", items_list)
+        result = td.to("meta")
+        assert result.device == torch.device("meta")
+        assert result["nested"].device == torch.device("meta")
+        assert result.is_locked is locked
+        assert result["nested"].is_locked is locked
+        assert result.names == ["x"]
+        assert result["b"].device == torch.device("meta")
+        assert result["nested", "c"].device == torch.device("meta")
+
+    def test_to_cpu_skips_leaves_already_there(self, monkeypatch):
+        # A device-less tree whose leaves are on the CPU already: to("cpu")
+        # returns them as they are, without calling Tensor.to
+        td = TensorDict(
+            a=torch.zeros(2),
+            nested=TensorDict(c=torch.zeros(2, 3), batch_size=[2]),
+            batch_size=[2],
+        )
+        assert td.device is None
         moved = []
         tensor_to = torch.Tensor.to
 
@@ -923,20 +949,13 @@ class TestGeneric:
             moved.append(tensor.device.type)
             return tensor_to(tensor, *args, **kwargs)
 
-        def items_list(*args, **kwargs):
-            raise AssertionError("to() should walk the tree once")
-
         monkeypatch.setattr(torch.Tensor, "to", counting_to)
-        monkeypatch.setattr(type(td), "_items_list", items_list)
-        result = td.to("meta")
-        assert moved == ["cpu"]
-        assert result.device == torch.device("meta")
-        assert result["nested"].device == torch.device("meta")
-        assert result.is_locked and result["nested"].is_locked
-        assert result.names == ["x"]
+        result = td.to("cpu")
+        assert moved == []
+        assert result.device == torch.device("cpu")
+        assert result["nested"].device == torch.device("cpu")
         assert result["a"] is td["a"]
         assert result["nested", "c"] is td["nested", "c"]
-        assert result["b"].device == torch.device("meta")
 
     def test_sub_to_batch_size_same_device(self):
         source = TensorDict(a=torch.zeros(4, 2, 3), batch_size=[4, 2], device="cpu")
