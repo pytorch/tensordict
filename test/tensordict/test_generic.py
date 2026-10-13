@@ -520,6 +520,39 @@ class TestGeneric:
             assert actual.shape == expected.shape
             assert actual.dtype == expected.dtype
 
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_consolidate_column_slice(self, num_threads):
+        # x[:, :1] has strides (4, 1) and reshape(-1) returns a stride-4
+        # view of it, which cannot be viewed as bytes
+        x = torch.arange(12, dtype=torch.float32).reshape(3, 4)
+        td = TensorDict(
+            {
+                "column": x[:, :1],
+                "strided": x[:, ::2],
+                "transposed": x.t()[:3],
+                "expanded": torch.ones(()).expand(3, 1),
+            },
+            batch_size=[3],
+        )
+        td_c = td.consolidate(num_threads=num_threads)
+        td_p = pickle.loads(pickle.dumps(td_c))
+
+        for key, expected in td.items():
+            assert torch.equal(td_c[key], expected)
+            assert torch.equal(td_p[key], expected)
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_consolidate_one_element_strided(self, device, num_threads):
+        # x[:, 0] of a (1, 5) tensor counts as contiguous, but view(-1) keeps
+        # its stride of 5, which cannot be viewed as bytes. A CPU source with
+        # a CUDA device and threads takes the per-leaf copy path.
+        x = torch.arange(5, dtype=torch.float32).reshape(1, 5)
+        td = TensorDict(column=x[:, 0], other=torch.randn(2), batch_size=[])
+        td_c = td.consolidate(device=device, num_threads=num_threads)
+        for key, expected in td.items():
+            assert torch.equal(td_c[key].cpu(), expected)
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_consolidate_non_contiguous_requires_grad(self, device):
         base = torch.arange(24, dtype=torch.float32, device=device, requires_grad=True)

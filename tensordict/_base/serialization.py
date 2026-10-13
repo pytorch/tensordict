@@ -743,7 +743,13 @@ class _Serialization:
                         flat_views.append(None)
                         continue
                     stride = v.stride()
-                    if (stride and stride[-1] != 1) or v.storage_offset():
+                    # reshape(-1) may return a view that is not stride-1,
+                    # e.g. for x[:, :1], which cannot be viewed as bytes
+                    if (
+                        (stride and stride[-1] != 1)
+                        or v.storage_offset()
+                        or not v.is_contiguous()
+                    ):
                         v = v.clone(memory_format=torch.contiguous_format)
                     flat_view = v.reshape(-1).view(torch.uint8)
                     pad = offsets[idx + 1] - offsets[idx] - flat_view.numel()
@@ -775,7 +781,14 @@ class _Serialization:
                         v = values[idx]
                         if v.is_nested:
                             continue
-                        flat_view = v.contiguous().view(-1).view(torch.uint8)
+                        flat_view = v.contiguous().view(-1)
+                        if flat_view.stride(-1) != 1:
+                            # a one-element leaf such as x[:, 0] of a (1, 5)
+                            # tensor counts as contiguous and keeps its stride
+                            flat_view = flat_view.clone(
+                                memory_format=torch.contiguous_format
+                            )
+                        flat_view = flat_view.view(torch.uint8)
                         start, stop = offsets[idx], offsets[idx + 1]
                         pad = stop - start - flat_view.numel()
                         storage[start : stop - pad].copy_(
@@ -838,7 +851,11 @@ class _Serialization:
                 if is_compiling():
                     if not v.is_contiguous():
                         v = v.clone(memory_format=torch.contiguous_format)
-                elif (stride and stride[-1] != 1) or v.storage_offset():
+                elif (
+                    (stride and stride[-1] != 1)
+                    or v.storage_offset()
+                    or not v.is_contiguous()
+                ):
                     v = v.clone(memory_format=torch.contiguous_format)
                 v, pad = _view_and_pad(v)
                 items.append(v)
