@@ -138,6 +138,9 @@ class _PersistentBackend:
     """
 
     name: str
+    # set while from_dict writes data with a known batch size: groups then get
+    # their metadata when they are created
+    metadata_on_create = False
 
     def __init__(self, locking=None):
         self.locking = locking
@@ -153,7 +156,7 @@ class _PersistentBackend:
     def open_file(self, filename, mode):
         raise NotImplementedError
 
-    def open_new_file(self, filename):
+    def open_new_file(self, filename, metadata: dict | None = None):
         raise NotImplementedError
 
     def close(self, file) -> None:
@@ -198,7 +201,7 @@ class _PersistentBackend:
     def copy_dataset(self, dest_file, key, src_node, kwargs) -> None:
         raise NotImplementedError
 
-    def create_group(self, file, key) -> None:
+    def create_group(self, file, key, metadata: dict | None = None) -> None:
         raise NotImplementedError
 
     def encode_non_tensor(self, value):
@@ -257,7 +260,7 @@ class _H5Backend(_PersistentBackend):
 
         return h5py.File(filename, mode, locking=self.locking)
 
-    def open_new_file(self, filename):
+    def open_new_file(self, filename, metadata=None):
         import h5py
 
         return h5py.File(filename, "w", locking=self.locking)
@@ -344,7 +347,7 @@ class _H5Backend(_PersistentBackend):
     def copy_dataset(self, dest_file, key, src_node, kwargs) -> None:
         dest_file.create_dataset(key, data=src_node, **kwargs)
 
-    def create_group(self, file, key) -> None:
+    def create_group(self, file, key, metadata=None) -> None:
         file.create_group(key)
 
     def encode_non_tensor(self, value):
@@ -463,13 +466,18 @@ class _ZarrBackend(_PersistentBackend):
             # writable: consolidated metadata would go stale on mutation
             return zarr.open_group(filename, mode=mode, use_consolidated=False)
 
-    def open_new_file(self, filename):
+    def open_new_file(self, filename, metadata=None):
         import zarr
 
         if isinstance(filename, Path):
             filename = str(filename)
         self._store_consolidated = False
-        return zarr.open_group(filename, mode="w", use_consolidated=False)
+        return zarr.open_group(
+            filename,
+            mode="w",
+            use_consolidated=False,
+            attributes=_zarr_metadata_attributes(metadata),
+        )
 
     def finalize(self, file) -> None:
         """Consolidates the store metadata once a bulk write is complete."""
@@ -674,8 +682,10 @@ class _ZarrBackend(_PersistentBackend):
         if src_node.size:
             array[...] = src_node[...]
 
-    def create_group(self, file, key) -> None:
-        file.create_group(key)
+    def create_group(self, file, key, metadata=None) -> None:
+        # the metadata is written with the group so that its zarr.json is
+        # written once: an append-only store (e.g. ZipStore) cannot replace it
+        file.create_group(key, attributes=_zarr_metadata_attributes(metadata))
         self._after_structural_change(file)
 
     def encode_non_tensor(self, value):
@@ -755,10 +765,27 @@ class _ZarrBackend(_PersistentBackend):
 
     def write_attrs_metadata(self, group, metadata: dict) -> None:
         try:
+            if group.attrs.get(_ZARR_METADATA_ATTR) == metadata:
+                # written when the group was created
+                return
             group.attrs[_ZARR_METADATA_ATTR] = metadata
         except Exception:
             # best effort: read-only stores cannot persist metadata
             pass
+
+
+def _zarr_metadata_attributes(metadata: dict | None) -> dict | None:
+    if metadata is None:
+        return None
+    return {_ZARR_METADATA_ATTR: metadata}
+
+
+def _attrs_metadata(batch_size, names) -> dict:
+    """The batch size and names that a group persists in its attributes."""
+    metadata = {"batch_size": list(batch_size), "version": 1}
+    if names is not None:
+        metadata["names"] = list(names)
+    return metadata
 
 
 _BACKENDS: dict[str, Type[_PersistentBackend]] = {
@@ -1073,12 +1100,34 @@ class PersistentTensorDict(TensorDictBase):
             torch.Size([3]) tensor([1., 1., 1.])
 
         """
+        return cls._from_dict(
+            input_dict,
+            filename,
+            batch_size=batch_size,
+            device=device,
+            backend=backend,
+            **kwargs,
+        )
+
+    @classmethod
+    def _from_dict(
+        cls,
+        input_dict,
+        filename,
+        *,
+        batch_size=None,
+        device=None,
+        backend: str = "h5",
+        names=None,
+        **kwargs,
+    ):
+        # from_dict, which also sets the dimension names before writing the
+        # metadata, so that a store that cannot replace an entry gets it once
         backend_cls = _BACKENDS.get(backend)
         if backend_cls is None:
             raise NotImplementedError(
                 f"Unknown backend {backend!r}. Supported backends are {sorted(_BACKENDS)}."
             )
-        file = backend_cls(locking=cls.LOCKING).open_new_file(filename)
         _has_batch_size = True
         if batch_size is None:
             if is_tensor_collection(input_dict):
@@ -1086,27 +1135,32 @@ class PersistentTensorDict(TensorDictBase):
             else:
                 _has_batch_size = False
                 batch_size = torch.Size([])
+        metadata = None
+        if _has_batch_size:
+            metadata = _attrs_metadata(batch_size, _source_names(input_dict, names))
+        file = backend_cls(locking=cls.LOCKING).open_new_file(filename, metadata)
 
         # let's make a tensordict first
         out = cls(
             group=file, batch_size=batch_size, device=device, backend=backend, **kwargs
         )
+        out._backend.metadata_on_create = _has_batch_size
         if is_tensor_collection(input_dict):
             out.update(input_dict)
         else:
             out.update(TensorDict(input_dict, batch_size=batch_size))
+        out._backend.metadata_on_create = False
         if not _has_batch_size:
             _set_max_batch_size(out)
+        if names is not None:
+            out.names = names
         out._write_attrs_metadata()
         out._backend.finalize(out.file)
         return out
 
     def _write_attrs_metadata(self):
         """Persists batch size and names in the storage attributes (best effort)."""
-        metadata = {"batch_size": list(self.batch_size), "version": 1}
-        names = self._td_dim_names
-        if names is not None:
-            metadata["names"] = list(names)
+        metadata = _attrs_metadata(self.batch_size, self._td_dim_names)
         self._backend.write_attrs_metadata(self.file, metadata)
         for td in self._nested_tensordicts.values():
             td._write_attrs_metadata()
@@ -2024,7 +2078,10 @@ class PersistentTensorDict(TensorDictBase):
         if is_tensor_collection(value):
             target_td = self._get_str(first_key, default=None)
             if target_td is None:
-                self._backend.create_group(self.file, first_key)
+                metadata = None
+                if self._backend.metadata_on_create:
+                    metadata = _attrs_metadata(value.batch_size, _source_names(value))
+                self._backend.create_group(self.file, first_key, metadata)
                 target_td = self._get_str(first_key, default=NO_DEFAULT)
                 target_td.batch_size = value.batch_size
             elif not is_tensor_collection(target_td):
@@ -2320,6 +2377,13 @@ def _set_max_batch_size(source: PersistentTensorDict):
                 return
         batch_size.append(curr_dim_size)
         curr_dim += 1
+
+
+def _source_names(value, names=None):
+    """The names that a group written from ``value`` is expected to persist."""
+    if names is None and is_tensor_collection(value) and value._has_names():
+        names = value.names
+    return names
 
 
 def _is_non_tensor_h5(val):

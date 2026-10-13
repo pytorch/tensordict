@@ -2636,16 +2636,13 @@ class _Conversion:
         """
         from tensordict.persistent import PersistentTensorDict
 
-        out = PersistentTensorDict.from_dict(
+        return PersistentTensorDict._from_dict(
             self,
             filename=filename,
             backend="zarr",
+            names=self.names if self._has_names() else None,
             **kwargs,
         )
-        if self._has_names():
-            out.names = self.names
-            out._write_attrs_metadata()
-        return out
 
     def to_store(
         self,
