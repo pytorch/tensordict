@@ -588,6 +588,25 @@ class TestNonTensorData:
         )
         assert batch.get(("metadata", "index")).tolist() == [0, 1]
 
+    @pytest.mark.parametrize("cls", [NonTensorData, MetaData])
+    @pytest.mark.parametrize("old_names", [None, ["m"]])
+    def test_empty_names(self, cls, old_names):
+        # empty() applies the names it is given, as TensorDict.empty() does
+        x = cls(data="x", batch_size=[2], names=old_names)
+        assert x.empty().names == (old_names or [None])
+        assert x.empty(batch_size=[2]).names == [None]
+        for out in (
+            x.empty(names=["n"]),
+            x.empty(batch_size=[2], names=["n"]),
+            TensorDict(batch_size=[2]).empty(names=["n"]),
+        ):
+            assert out.names == ["n"]
+        out = x.empty(batch_size=[2, 3], names=["n", "o"])
+        assert type(out) is cls
+        assert out.batch_size == (2, 3)
+        assert out.names == ["n", "o"]
+        assert out.data == "x"
+
     def test_expand(self):
         d = NonTensorData(0, batch_size=(3,))
         d_expand = d.expand((2, 3))

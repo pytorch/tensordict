@@ -5525,9 +5525,7 @@ class NonTensorDataBase(TensorClass):
         )
 
     def empty(self, recurse=False, *, device=NO_DEFAULT, batch_size=None, names=None):
-        if batch_size is not None and names is None:
-            names = None
-        else:
+        if names is None and batch_size is None:
             names = self._maybe_names()
         return type(self)(
             data=self.data,
