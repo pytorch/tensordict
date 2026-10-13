@@ -685,6 +685,19 @@ def _set_tensor_dict(
     return out
 
 
+def _wrap_extra_state(state: Any) -> Any:
+    # Wrap the non-tensor objects that get_extra_state() returns, also inside
+    # dicts, in NonTensorData: the tensordict stays valid and to_dict() gives
+    # them back unchanged.
+    from tensordict.tensorclass import NonTensorData
+
+    if isinstance(state, dict):
+        return {key: _wrap_extra_state(val) for key, val in state.items()}
+    if isinstance(state, Tensor) or _is_tensor_collection(type(state)):
+        return state
+    return NonTensorData(state)
+
+
 def _new_parameter(tensor: torch.Tensor, *, requires_grad: bool) -> torch.nn.Parameter:
     """Wraps ``tensor`` in an ``nn.Parameter`` that shares its storage.
 
