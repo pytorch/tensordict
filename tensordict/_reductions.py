@@ -156,6 +156,10 @@ def _make_td(cls, state):
 
 def _reduce_td(data: TensorDict):
     consolidated = getattr(data, "_consolidated", None)
+    if consolidated and consolidated.get("stale", False):
+        # memmap_() or a non-tensor write made the consolidated state stale:
+        # consolidate again so that the pickle stays self-contained.
+        consolidated = data.consolidate(metadata=True)._consolidated
     if consolidated and consolidated["metadata"] is not None:
         storage = consolidated["storage"]
         storge_metadata = consolidated["metadata"]

@@ -5225,6 +5225,13 @@ class NonTensorDataBase(TensorClass):
                 raise RuntimeError(_LOCK_ERROR)
             if clone:
                 data = deepcopy(data)
+            if inplace and self.is_locked:
+                # Like an in-place tensor write, this keeps the keys of the
+                # locked tensordicts. The consolidated metadata of a parent
+                # holds the old value.
+                self._non_tensordict["data"] = data
+                self._tensordict._mark_consolidated_stale()
+                return self
             self.data = data
         elif isinstance(input_dict_or_td, NonTensorStack):
             raise ValueError(
@@ -6614,9 +6621,6 @@ class NonTensorStack(LazyStackedTensorDict):
         update_batch_size: bool = False,
         ignore_lock: bool = False,
     ) -> T:
-        if inplace and self.is_locked and not (self._is_shared or self._is_memmap):
-            raise RuntimeError(_LOCK_ERROR)
-
         if isinstance(input_dict_or_td, NonTensorData):
             datalist = input_dict_or_td.data
             for d in reversed(self.batch_size):

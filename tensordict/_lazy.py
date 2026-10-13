@@ -3707,6 +3707,8 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         else:
             results = self
+            # The leaves leave the consolidated storage
+            self._mark_consolidated_stale()
         results._device = torch.device("cpu")
         return results
 

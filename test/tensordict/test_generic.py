@@ -13,6 +13,7 @@ import os
 import pickle
 import platform
 import re
+import shutil
 import sys
 import threading
 import warnings
@@ -745,6 +746,50 @@ class TestGeneric:
             torch.testing.assert_close(td["a"], torch.zeros(2, 3))
         finally:
             td.close()
+
+    @pytest.mark.parametrize("lazy", [False, True])
+    @pytest.mark.parametrize("in_parent", [False, True])
+    @pytest.mark.parametrize("use_prefix", [False, True])
+    def test_consolidated_memmap_pickle(self, tmpdir, lazy, in_parent, use_prefix):
+        # memmap_ moves the leaves out of the consolidated storage: pickles
+        # must see later writes and stay self-contained (#2317)
+        if lazy:
+            td = LazyStackedTensorDict(
+                *[
+                    TensorDict(a=torch.zeros(3), b={"c": torch.ones(3)})
+                    for _ in range(2)
+                ]
+            )
+        else:
+            td = TensorDict(
+                a=torch.zeros(2, 3), b={"c": torch.ones(2, 3)}, batch_size=[2]
+            )
+        td = td.consolidate(metadata=True)
+        prefix = Path(tmpdir) / "memmap" if use_prefix else None
+        if in_parent:
+            parent = TensorDict(td=td, batch_size=[2]).lock_()
+            parent.memmap_(prefix)
+        else:
+            td.memmap_(prefix)
+        td.apply_(lambda x: x.fill_(5))
+        data = pickle.dumps(parent if in_parent else td)
+        if use_prefix:
+            shutil.rmtree(prefix)
+        td_rt = pickle.loads(data)
+        if in_parent:
+            td_rt = td_rt["td"]
+        assert (td_rt == 5).all()
+        assert td.is_locked
+        assert not td.is_consolidated()
+
+    def test_consolidated_inplace_write_stays_consolidated(self):
+        td = TensorDict(a=torch.zeros(3), b={"c": torch.ones(3)}).consolidate()
+        td["a"].add_(1)
+        td.set_(("b", "c"), torch.full((3,), 2.0))
+        assert td.is_consolidated()
+        td_rt = pickle.loads(pickle.dumps(td))
+        assert (td_rt["a"] == 1).all()
+        assert (td_rt["b", "c"] == 2).all()
 
     def test_consolidated_locking_behavior(self):
         """Test that consolidated TensorDicts are automatically locked and unlock properly."""

@@ -10,6 +10,7 @@ import importlib.util
 import math
 import operator
 import os
+import pickle
 import platform
 import sys
 import warnings
@@ -1023,6 +1024,47 @@ class TestNonTensorData:
             {"a": torch.zeros(10, dtype=torch.long), "b": "another string!"}, [10]
         )
         assert data.get("b").tolist() == [["another string!"] * 10]
+
+    @pytest.mark.parametrize("consolidated", [False, True])
+    @pytest.mark.parametrize(
+        "write", ["set_", "update_", "update_keys", "copy_", "copy_select"]
+    )
+    def test_locked_inplace_write(self, consolidated, write):
+        # In-place writes of non-tensor entries work on a locked tensordict, as
+        # for tensor entries, and a pickle of a consolidated one sees them (#2288)
+        td = TensorDict(
+            x=torch.zeros(2),
+            s=NonTensorData("hello"),
+            sub=TensorDict(t=NonTensorStack("a", "b"), batch_size=[2]),
+            batch_size=[2],
+        ).lock_()
+        if consolidated:
+            td = td.consolidate(metadata=True)
+        source = TensorDict(
+            x=torch.ones(2),
+            s=NonTensorData("world"),
+            sub=TensorDict(t=NonTensorStack("c", "d"), batch_size=[2]),
+            batch_size=[2],
+        )
+        if write == "set_":
+            td.set_("s", "world")
+            td.set_(("sub", "t"), NonTensorStack("c", "d"))
+        elif write == "update_":
+            td.update_(source)
+        elif write == "update_keys":
+            td.update_(source, keys_to_update=["s", ("sub", "t")])
+        elif write == "copy_":
+            td.copy_(source)
+        else:
+            td.copy_(source.select("s", ("sub", "t")))
+        assert td.is_locked
+        assert td["s"] == "world"
+        assert td["sub", "t"] == ["c", "d"]
+        td_rt = pickle.loads(pickle.dumps(td))
+        assert td_rt["s"] == "world"
+        assert td_rt["sub", "t"] == ["c", "d"]
+        # The consolidated metadata holds the old values
+        assert not td.is_consolidated()
 
     def test_ignore_lock(self):
         td = TensorDict({"a": {"b": "1"}}, batch_size=[10])
