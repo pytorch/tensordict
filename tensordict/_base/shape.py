@@ -2554,6 +2554,8 @@ class _ShapeOps:
             -1 not in unflattened_size
             and -1 not in self.batch_size
             and math.prod(unflattened_size) != self.batch_size[dim]
+            # A lazy stack (_flatten_lenient) checks even with no keys: it
+            # regroups its members, which can't follow sizes that don't fit.
             and (self._flatten_lenient or not self.is_empty())
         ):
             # the error of torch.unflatten, which the leaves raised before

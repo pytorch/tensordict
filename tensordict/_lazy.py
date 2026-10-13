@@ -4595,6 +4595,10 @@ class LazyStackedTensorDict(TensorDictBase):
     ) -> Self:
         result = self._regroup(shape)
         if result is None:
+            if shape == self.batch_size:
+                # an identity unflatten of a multi-dim stack: return self, as
+                # reshape and view do
+                return self
             result = TensorDictBase._reshape(self, shape, names)
             if names is None and result._has_names():
                 # the lazy _fast_apply keeps the names of self, which are
@@ -4602,11 +4606,14 @@ class LazyStackedTensorDict(TensorDictBase):
                 result._erase_names()
             return result
         if not self.batch_size.numel() and (
-            result.batch_size != shape or set(result.keys()) != set(self.keys())
+            result.batch_size != shape
+            or set(result.keys()) != set(self.keys())
+            or (isinstance(result, LazyStackedTensorDict) and not result.tensordicts)
         ):
             # With no elements, the flatten and unflatten checks match shapes
-            # that regrouping gets wrong, and regrouping can lose the keys:
-            # reshape a dense copy, which has the shared keys.
+            # that regrouping gets wrong, and regrouping can lose the keys or
+            # leave no members (which lose the device and the lock): reshape a
+            # dense copy, which has the shared keys.
             return self.contiguous().reshape(shape)
         return result
 

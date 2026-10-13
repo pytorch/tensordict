@@ -3033,6 +3033,26 @@ class TestLazyStackedTensorDict:
         ):
             assert call(td) is td
 
+    @pytest.mark.parametrize("keyed", [True, False])
+    @pytest.mark.parametrize("n", [3, 0])
+    def test_unflatten_same_shape_returns_self(self, keyed, n):
+        # an unflatten to the batch size returns the stack, as reshape and
+        # view do. Before, it returned the stack for some sizes with a -1 on
+        # an empty batch and raised "Cannot call view" otherwise.
+        members = [
+            TensorDict(a=torch.zeros(n, 2), batch_size=[n])
+            if keyed
+            else TensorDict(batch_size=[n])
+            for _ in range(2)
+        ]
+        for td in (
+            LazyStackedTensorDict(*members, stack_dim=0),
+            LazyStackedTensorDict(*members, stack_dim=1),
+        ):
+            for dim in (0, 1, -1):
+                for sizes in ((td.batch_size[dim],), (-1,)):
+                    assert td.unflatten(dim, sizes) is td
+
     @pytest.mark.parametrize("sizes", [(3, 3), (2, 2)])
     def test_unflatten_lazy_zero_size_dim_bad_sizes(self, sizes):
         # Sizes that don't multiply up to the dim raise, as on TensorDict.
@@ -3057,9 +3077,19 @@ class TestLazyStackedTensorDict:
             empty.unflatten(1, (3, 1))
         # with no keys to lose, the members are regrouped, as on a non-empty
         # stack
-        for out in (empty.flatten(), empty.unflatten(-1, (1, -1))):
-            assert type(out) is LazyStackedTensorDict
-        assert empty.unflatten(-1, (1, -1)).batch_size == (0, 1, 2)
+        out = empty.unflatten(-1, (1, -1))
+        assert type(out) is LazyStackedTensorDict
+        assert out.batch_size == (0, 1, 2)
+        # regrouping into a stack of no members would lose the device and the
+        # lock: these calls return a dense copy, as before
+        empty = LazyStackedTensorDict(
+            *[TensorDict(batch_size=[0], device="cpu")] * 2, stack_dim=1
+        ).lock_()
+        for out in (empty.flatten(), empty.reshape(-1), empty.repeat_interleave(2)):
+            assert type(out) is TensorDict
+            assert out.batch_size == (0,)
+            assert out.device == torch.device("cpu")
+            assert out.is_locked
         out = TensorDict(batch_size=[3, 2]).unflatten(1, (3, 1))
         assert out.batch_size == (3, 3, 1)
 
