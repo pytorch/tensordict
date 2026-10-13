@@ -520,6 +520,39 @@ class TestGeneric:
             assert actual.shape == expected.shape
             assert actual.dtype == expected.dtype
 
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_consolidate_column_slice(self, num_threads):
+        # x[:, :1] has strides (4, 1) and reshape(-1) returns a stride-4
+        # view of it, which cannot be viewed as bytes
+        x = torch.arange(12, dtype=torch.float32).reshape(3, 4)
+        td = TensorDict(
+            {
+                "column": x[:, :1],
+                "strided": x[:, ::2],
+                "transposed": x.t()[:3],
+                "expanded": torch.ones(()).expand(3, 1),
+            },
+            batch_size=[3],
+        )
+        td_c = td.consolidate(num_threads=num_threads)
+        td_p = pickle.loads(pickle.dumps(td_c))
+
+        for key, expected in td.items():
+            assert torch.equal(td_c[key], expected)
+            assert torch.equal(td_p[key], expected)
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_consolidate_one_element_strided(self, device, num_threads):
+        # x[:, 0] of a (1, 5) tensor counts as contiguous, but view(-1) keeps
+        # its stride of 5, which cannot be viewed as bytes. A CPU source with
+        # a CUDA device and threads takes the per-leaf copy path.
+        x = torch.arange(5, dtype=torch.float32).reshape(1, 5)
+        td = TensorDict(column=x[:, 0], other=torch.randn(2), batch_size=[])
+        td_c = td.consolidate(device=device, num_threads=num_threads)
+        for key, expected in td.items():
+            assert torch.equal(td_c[key].cpu(), expected)
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_consolidate_non_contiguous_requires_grad(self, device):
         base = torch.arange(24, dtype=torch.float32, device=device, requires_grad=True)
@@ -785,6 +818,49 @@ class TestGeneric:
         # consolidate() on a consolidated tensordict refreshes its metadata
         assert td.consolidate() is td
         assert pickle.loads(pickle.dumps(td))["b"].batch_size == (2, 3, 4)
+
+    @pytest.mark.parametrize("use_buffer", [False, True])
+    def test_consolidated_file_batch_size_names_consolidate_again(
+        self, tmp_path, use_buffer
+    ):
+        # the file keeps the batch sizes and names of consolidate(filename=...):
+        # calling it again with the same file writes the current ones
+        filename = tmp_path / "td.bin"
+        td = TensorDict(
+            a=torch.zeros(2, 3), b={"c": torch.ones(2, 3, 4)}, batch_size=[2]
+        ).consolidate(filename=filename, use_buffer=use_buffer)
+        td.batch_size = [2, 3]
+        td.names = ["x" * 100, "y"]
+        td["b"].batch_size = [2, 3, 4]
+        assert td.consolidate(filename=filename) is td
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.batch_size == (2, 3)
+        assert loaded.names == ["x" * 100, "y"]
+        assert loaded["b"].batch_size == (2, 3, 4)
+        assert (loaded == td).all()
+        # a shorter metadata
+        td.names = None
+        td.batch_size = [2]
+        assert td.consolidate(filename=str(filename)) is td
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.batch_size == (2,)
+        assert loaded.names == [None]
+        assert (loaded == td).all()
+        # another file name writes nothing
+        assert td.consolidate(filename=tmp_path / "other.bin") is td
+        assert not (tmp_path / "other.bin").exists()
+        # nor does a file that was replaced, or deleted
+        os.remove(filename)
+        td2 = TensorDict(z=torch.ones(2), batch_size=[2]).consolidate(filename=filename)
+        td.batch_size = []
+        assert td.consolidate(filename=filename) is td
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.batch_size == (2,)
+        assert (loaded == td2).all()
+        del td2, loaded
+        os.remove(filename)
+        assert td.consolidate(filename=filename) is td
+        assert not filename.exists()
 
     def test_consolidated_lazy_stack_names_serialized(self):
         td = lazy_stack(

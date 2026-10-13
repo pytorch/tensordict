@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from tensordict import NonTensorData, PersistentTensorDict, TensorDict
+from tensordict import lazy_stack, NonTensorData, PersistentTensorDict, TensorDict
 from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import _NUMPY_TO_TORCH_DTYPE_DICT, is_non_tensor
 from torch import multiprocessing as mp
@@ -344,12 +344,48 @@ class TestZarrWriteOps:
         with pytest.warns(FutureWarning, match="update_"):
             ro.update_(before + 1)
         torch.testing.assert_close(ro.to_tensordict(), before)
+        # masked_fill_ raises on the rows of the store too, as it did before
+        mask = torch.tensor([True, False])
+        for call in (
+            lambda: ro[0:2].masked_fill_(mask, 0.0),
+            lambda: lazy_stack([ro[0], ro[1]]).masked_fill_(mask, 0.0),
+        ):
+            with pytest.raises(ValueError, match="read-only"):
+                call()
+        torch.testing.assert_close(ro.to_tensordict(), before)
 
     def test_masked_fill_(self, ztd):
         ztd.zero_()
         ztd.masked_fill_(torch.tensor([True, False, False]), 3.0)
         assert (ztd["a"][0] == 3).all()
         assert (ztd["a"][1:] == 0).all()
+
+    def test_fill_zero_masked_fill_no_read(self, ztd, tmp_path, monkeypatch):
+        # fill_, zero_, masked_fill_ and detach_ write to the store without
+        # reading it
+        td = ztd.to_tensordict()
+
+        def no_read(*args, **kwargs):
+            raise AssertionError("the store was read")
+
+        backend = type(ztd._backend)
+        with monkeypatch.context() as patch:
+            patch.setattr(backend, "read_full", no_read)
+            patch.setattr(backend, "read_at", no_read)
+            assert ztd.detach_() is ztd
+            mask = torch.tensor([True, False, True])
+            for dest in (ztd, td):
+                assert dest.fill_("a", 2.0) is dest
+                assert dest.fill_("b", 3.0) is dest
+                assert dest.masked_fill_(mask, -1.0) is dest
+        reopened = PersistentTensorDict.from_zarr(tmp_path / "s.zarr")
+        torch.testing.assert_close(reopened.to_tensordict(), td)
+        with monkeypatch.context() as patch:
+            patch.setattr(backend, "read_full", no_read)
+            patch.setattr(backend, "read_at", no_read)
+            assert ztd.zero_() is ztd
+        reopened = PersistentTensorDict.from_zarr(tmp_path / "s.zarr")
+        torch.testing.assert_close(reopened.to_tensordict(), td.zero_())
 
     def test_del(self, ztd):
         ztd.del_("a")
@@ -386,6 +422,11 @@ class TestZarrWriteOps:
         assert ztd.rename_key_("a2", ("b", "c")) is ztd
         assert set(ztd.keys(True, True)) == {("b", "c")}
         torch.testing.assert_close(ztd["b", "c"], a2)
+        # an entry replaces the key that holds it, as in TensorDict: it raised
+        # a KeyError
+        ztd.rename_key_(("b", "c"), "b")
+        assert set(ztd.keys(True, True)) == {"b"}
+        torch.testing.assert_close(ztd["b"], a2)
 
     def test_rename_key_locked_warns(self, ztd):
         # a locked PersistentTensorDict renamed its keys without a check:
@@ -404,6 +445,16 @@ class TestZarrWriteOps:
     def test_rename_nested_group(self, ztd):
         ztd.rename_key_("b", "b2")
         assert ("b2", "c") in ztd.keys(True, True)
+
+    def test_rename_key_inside_old_key(self, ztd):
+        # a key moved into one of its own entries moves there, as in
+        # TensorDict: a group raised RecursionError, and an array TypeError
+        expected = ztd.to_tensordict()
+        ztd.rename_key_("b", ("b", "b"))
+        ztd.rename_key_("a", ("a", "x", "y"))
+        assert set(ztd.keys(True, True)) == {("a", "x", "y"), ("b", "b", "c")}
+        torch.testing.assert_close(ztd["a", "x", "y"], expected["a"])
+        torch.testing.assert_close(ztd["b", "b", "c"], expected["b", "c"])
 
     def test_pop_nested(self, ztd):
         # https://github.com/pytorch/tensordict/issues/2089

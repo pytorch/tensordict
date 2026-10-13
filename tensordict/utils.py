@@ -1964,6 +1964,10 @@ def _set_max_batch_size(
 
     for val in tensor_data:
         if _is_tensor_collection(type(val)):
+            # A lazy tensordict (such as a lazy stack or a NonTensorStack) gets
+            # its batch size from its members and cannot be resized.
+            if val._lazy:
+                continue
             if (
                 batch_dims is not None
                 and keep_compliant_size
@@ -1987,6 +1991,10 @@ def _set_max_batch_size(
         if len(tensor_shapes[0]) > curr_dim:
             curr_dim_size = tensor_shapes[0][curr_dim]
         else:
+            source.batch_size = batch_size
+            return
+        # A ragged dim (-1) cannot be part of a dense batch size
+        if curr_dim_size == -1:
             source.batch_size = batch_size
             return
         for leaf, shape in _zip_strict(tensor_data[1:], tensor_shapes[1:]):

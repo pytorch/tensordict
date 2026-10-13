@@ -323,6 +323,61 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
             yield key if prefix is None else full_key
 
 
+def _pad_tensors(
+    tensors: list[Tensor], padding_value: float | int | bool, padding_side: str
+) -> Tensor:
+    try:
+        return pad_sequence(
+            tensors,
+            padding_value=padding_value,
+            padding_side=padding_side,
+            batch_first=True,
+        )
+    except RuntimeError:
+        # pad_sequence pads only dim 0 and needs the other dims to match (or
+        # to broadcast, as size-1 dims do: it is tried first so that those
+        # inputs keep their result). A lazy stack of lazy stacks gets here with
+        # tensors that the inner stacks have padded, or members can be ragged
+        # after dim 0: pad every other dim to its largest size, then pad dim 0
+        # as before.
+        ndim = tensors[0].ndim
+        if ndim < 2 or any(t.ndim != ndim for t in tensors):
+            raise
+    max_shape = [max(sizes) for sizes in zip(*(t.shape[1:] for t in tensors))]
+    padded = []
+    for t in tensors:
+        pad = []
+        for size, max_size in zip(reversed(t.shape[1:]), reversed(max_shape)):
+            pad += (
+                [0, max_size - size]
+                if padding_side == "right"
+                else [max_size - size, 0]
+            )
+        padded.append(torch.nn.functional.pad(t, pad, value=padding_value))
+    return pad_sequence(
+        padded,
+        padding_value=padding_value,
+        padding_side=padding_side,
+        batch_first=True,
+    )
+
+
+def _as_nested_tensor(tensors: list[Tensor], layout: torch.layout | None) -> Tensor:
+    if layout is None:
+        layout = torch.jagged
+    try:
+        return torch.nested.as_nested_tensor(tensors, layout=layout)
+    except (RuntimeError, NotImplementedError) as err:
+        if not any(t.is_nested for t in tensors):
+            raise
+        raise ValueError(
+            "Cannot build a nested tensor from entries that are nested tensors "
+            "themselves, as the inner stacks of a lazy stack of lazy stacks "
+            "return: a nested tensor has a single nested level. Flatten the "
+            "lazy stack with view(-1) first, or use as_padded_tensor=True."
+        ) from err
+
+
 def _shared_keys(tensordicts: list[TensorDict]) -> list[str]:
     # LazyStackedTensorDict._key_list() for members that are TensorDict
     # instances: the keys that every member has, in the order of the first one
@@ -562,9 +617,11 @@ class LazyStackedTensorDict(TensorDictBase):
             tensordicts are given, the stack takes the device of the first
             one and ignores this argument.
         names (list of str, optional): the dimension names of an empty stack.
-            If tensordicts are given, the names come from them and this
-            argument is ignored. To name the stack dimension, use
-            ``stack_dim_name``.
+            If tensordicts are given, the names come from them, and this
+            argument is ignored with a ``FutureWarning``. To name the dims of
+            such a stack, pass ``stack_dim_name``, or set ``names`` on the
+            stack. Starting with TensorDict 0.17, the default will change to
+            applying these names to the stack.
         stack_dim_name (str, optional): the name of the stack dimension.
             Defaults to ``None``.
         strict_shape (bool, optional): if ``True``, the batch sizes of the
@@ -713,6 +770,16 @@ class LazyStackedTensorDict(TensorDictBase):
         else:
             td0 = tensordicts[0]
             device = td0.device
+            if names is not None:
+                warnings.warn(
+                    "LazyStackedTensorDict(*tensordicts, names=...) ignores the "
+                    "names when tensordicts are given. To name the dims, pass "
+                    "stack_dim_name=, or set names on the stack. Starting with "
+                    "TensorDict 0.17, the default will change to applying the "
+                    "names to the stack.",
+                    FutureWarning,
+                    stacklevel=2,
+                )
         if stack_dim < 0:
             ndim = td0.ndim
             try:
@@ -1980,14 +2047,17 @@ class LazyStackedTensorDict(TensorDictBase):
                 Exclusive with ``as_padded_tensor`` and ``as_nested_tensor``.
                 Defaults to ``False``.
             as_padded_tensor (bool, optional): if ``True``, the entries are
-                padded to the largest shape and returned as one tensor.
-                ``padding_value`` sets the padding value and ``padding_side``
-                sets the side.
+                padded to the largest shape and returned as one tensor: each
+                dim is padded to its largest size, also across the levels of
+                a lazy stack of lazy stacks. ``padding_value`` sets the
+                padding value and ``padding_side`` sets the side of every
+                padded dim.
                 Exclusive with ``as_list`` and ``as_nested_tensor``.
                 Defaults to ``False``.
             as_nested_tensor (bool, optional): if ``True``, the entries are
                 returned as a nested tensor (:mod:`torch.nested`). ``layout``
-                sets its layout.
+                sets its layout. A lazy stack of lazy stacks raises a
+                ``ValueError``, as a nested tensor has a single nested level.
                 Exclusive with ``as_list`` and ``as_padded_tensor``.
                 Defaults to ``False``.
             layout (torch.layout, optional): the layout of the nested tensor
@@ -2071,19 +2141,12 @@ class LazyStackedTensorDict(TensorDictBase):
         if as_nested_tensor:
             # If all collected items are plain tensors, convert directly to nested tensor
             if all(isinstance(item, torch.Tensor) for item in tensors):
-                if layout is None:
-                    layout = torch.jagged
-                return torch.nested.as_nested_tensor(tensors, layout=layout)
+                return _as_nested_tensor(tensors, layout)
             # Otherwise, pass to lazy_stack to handle nested structures
         if as_padded_tensor:
             # If all collected items are plain tensors, convert directly to padded tensor
             if all(isinstance(item, torch.Tensor) for item in tensors):
-                return pad_sequence(
-                    tensors,
-                    padding_value=padding_value,
-                    padding_side=padding_side,
-                    batch_first=True,
-                )
+                return _pad_tensors(tensors, padding_value, padding_side)
             # Otherwise, pass to lazy_stack to handle nested structures
         try:
             out = self.lazy_stack(
@@ -2217,14 +2280,17 @@ class LazyStackedTensorDict(TensorDictBase):
                 Exclusive with ``as_padded_tensor`` and ``as_nested_tensor``.
                 Defaults to ``False``.
             as_padded_tensor (bool, optional): if ``True``, the tensors are
-                padded to the largest shape and stacked into one tensor.
-                ``padding_value`` sets the padding value and ``padding_side``
-                sets the side.
+                padded to the largest shape and stacked into one tensor: each
+                dim is padded to its largest size. ``padding_value`` sets the
+                padding value and ``padding_side`` sets the side of every
+                padded dim.
                 Exclusive with ``as_list`` and ``as_nested_tensor``.
                 Defaults to ``False``.
             as_nested_tensor (bool, optional): if ``True``, the tensors are
                 returned as a nested tensor (:mod:`torch.nested`). ``layout``
-                sets its layout.
+                sets its layout. Tensors that are nested tensors themselves
+                raise a ``ValueError``, as a nested tensor has a single nested
+                level.
                 Exclusive with ``as_list`` and ``as_padded_tensor``.
                 Defaults to ``False``.
             layout (torch.layout, optional): the layout of the nested tensor
@@ -2261,16 +2327,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             elif special_return:
                 if as_padded_tensor:
-                    return pad_sequence(
-                        items,
-                        padding_value=padding_value,
-                        padding_side=padding_side,
-                        batch_first=True,
-                    )
+                    return _pad_tensors(items, padding_value, padding_side)
                 if as_nested_tensor:
-                    if layout is None:
-                        layout = torch.jagged
-                    return torch.nested.as_nested_tensor(items, layout=layout)
+                    return _as_nested_tensor(items, layout)
                 if as_list:
                     return items
             if _is_unbatched(items[0]):
@@ -2644,6 +2703,42 @@ class LazyStackedTensorDict(TensorDictBase):
 
     # Override: returns a dense TensorDict, locked like the stack.
     def contiguous(self, *, canonical: bool = False, inplace: bool = False) -> Self:
+        """Returns a dense :class:`~tensordict.TensorDict` copy of the lazy stack.
+
+        The result owns its data and is locked if the stack is locked.
+
+        Args:
+            canonical (bool, optional): if ``True``, every dense tensor leaf
+                whose strides are not the C-row-major strides of its shape is
+                copied into a new contiguous tensor, even if
+                :meth:`torch.Tensor.is_contiguous` returns ``True`` (e.g.
+                because of size-1 dimensions). Defaults to ``False``.
+            inplace (bool, optional): not supported on a lazy stack, which
+                cannot become a TensorDict in place. ``True`` raises a
+                ``NotImplementedError``. Defaults to ``False``.
+
+        .. note::
+            If the stacked tensordicts have no names, the result has no
+            names either, even when the stack dimension has a name (from
+            ``stack_dim_name`` or the ``names`` setter). :meth:`densify` and
+            :meth:`clone` keep that name. To keep it here, name the
+            dimension again with :meth:`refine_names`.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict, lazy_stack
+            >>> stack = lazy_stack(
+            ...     [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)],
+            ...     stack_dim_name="s",
+            ... )
+            >>> stack.names, stack.contiguous().names
+            (['s', None], [None, None])
+            >>> stack.contiguous().refine_names("s", ...).names
+            ['s', None]
+            >>> stack.densify().names
+            ['s', None]
+
+        """
         if inplace:
             raise NotImplementedError(
                 "contiguous(inplace=True) is not supported on "
@@ -2689,7 +2784,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 raise
             # Only some of the stacked tensordicts have names. As in
             # contiguous(), the dims are left unnamed, but the name of the
-            # stack dim is kept.
+            # stack dim is kept, which contiguous() drops.
             names = None
             if self._td_dim_name is not None:
                 names = [None] * self.batch_dims
@@ -3035,11 +3130,13 @@ class LazyStackedTensorDict(TensorDictBase):
         # through the members, such as rows of a file opened read-only
         return any(td._storage_is_read_only() for td in self.tensordicts)
 
-    def apply_(self, fn: Callable, *others, **kwargs):
+    # Override: applies fn to each member in place, which is faster than
+    # apply(inplace=True) and accepts the keyword arguments of TensorDict.apply.
+    def _apply_(self, fn: Callable, *others, **kwargs) -> None:
+        kwargs.pop("propagate_lock", None)
         others = (other.unbind(self.stack_dim) for other in others)
         for td, *_others in _zip_strict(self.tensordicts, *others):
             td._fast_apply(fn, *_others, inplace=True, propagate_lock=True, **kwargs)
-        return self
 
     def _multithread_apply_nest(self, *args, **kwargs):
         if kwargs.get("batch_size") is not None:
@@ -3778,10 +3875,9 @@ class LazyStackedTensorDict(TensorDictBase):
         return self
 
     # Override: detaches each member.
-    def detach_(self) -> Self:
+    def _detach_(self) -> None:
         for td in self.tensordicts:
             td.detach_()
-        return self
 
     def _memmap_(
         self,
@@ -4212,6 +4308,9 @@ class LazyStackedTensorDict(TensorDictBase):
     ) -> Self:
         old = _unravel_key_to_tuple(old_key)
         new = _unravel_key_to_tuple(new_key)
+        # a new key inside the old one moves with the entry: safe does not
+        # raise for it, and the old key is still there after the rename
+        inside = len(new) > len(old) and new[: len(old)] == old
         # Check every tensordict before any renames the key, so that a call
         # that raises leaves the stack unchanged: a tensordict that cannot
         # rename it raises before it changes anything.
@@ -4222,7 +4321,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 td.is_locked
                 or not (old and new)
                 or old not in keys
-                or (safe and new in keys)
+                or (safe and not inside and new in keys)
             ):
                 td.rename_key_(old_key, new_key, safe=safe)
             else:
@@ -4232,7 +4331,9 @@ class LazyStackedTensorDict(TensorDictBase):
             # first time. It is found with `is`, not id(): torch.compile
             # guards on the id of each member and would recompile for every
             # new stack.
-            if old in keys or not any(td is other for other, _ in islice(tds, i)):
+            if (old in keys and not inside) or not any(
+                td is other for other, _ in islice(tds, i)
+            ):
                 td.rename_key_(old_key, new_key, safe=safe)
         return self
 
@@ -4304,7 +4405,10 @@ class LazyStackedTensorDict(TensorDictBase):
 
     # Override: each member is filled with its slice of the mask, so that
     # members with different shapes work.
-    def masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
+    def _masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
+        if mask.ndim < self.batch_dims:
+            # a mask of the leading dims, which may not include the stack dim
+            mask = expand_right(mask, self.batch_size)
         mask_unbind = mask.unbind(dim=self.stack_dim)
         for _mask, td in _zip_strict(mask_unbind, self.tensordicts):
             td.masked_fill_(_mask, value)
