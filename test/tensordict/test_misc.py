@@ -588,14 +588,18 @@ class TestPointwiseOps:
         assert norm.batch_size == ()
         assert list(norm.keys(True)) == list(td.keys(True))
 
+    @pytest.mark.parametrize("keyword", [False, True])
     @pytest.mark.parametrize("lazy", [False, True])
     @pytest.mark.parametrize("inplace", [False, True])
     @pytest.mark.parametrize("end_shape", [(3,), ()])
-    def test_lerp_tensor_end(self, end_shape, inplace, lazy):
-        # A tensor end with a number weight, as torch.lerp takes them
+    def test_lerp_tensor_end(self, end_shape, inplace, lazy, keyword):
+        # A tensor end with a number weight, as torch.lerp takes them. The
+        # end is broadcast to the batch dims, also when passed by keyword:
+        # leaf c would take it on its last dim otherwise.
         torch.manual_seed(0)
         td = TensorDict(
             a=torch.randn(3),
+            c=torch.randn(3, 3),
             nested=TensorDict(b=torch.randn(3, 4), batch_size=[3]),
             batch_size=[3],
         )
@@ -603,11 +607,14 @@ class TestPointwiseOps:
         expected = td.apply(lambda x: torch.lerp(x, expand_as_right(end, x), 0.5))
         if lazy:
             td = LazyStackedTensorDict(*td.unbind(0), stack_dim=0)
+        kwargs = {"end": end, "weight": 0.5} if keyword else {}
+        args = () if keyword else (end, 0.5)
         if inplace:
-            result = td.lerp_(end, 0.5)
+            result = td.lerp_(*args, **kwargs)
             assert result is td
         else:
-            result = td.lerp(end, 0.5)
+            result = td.lerp(*args, **kwargs)
+            assert_allclose_td(torch.lerp(td, *args, **kwargs), expected)
         assert type(result) is type(td)
         assert_allclose_td(result, expected)
 

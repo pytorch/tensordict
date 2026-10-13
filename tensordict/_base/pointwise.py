@@ -1599,6 +1599,12 @@ class _PointwiseOps:
             weight (TensorDict, tensor or float): the weight for the interpolation formula.
 
         """
+        if (isinstance(end, Tensor) and end.ndim) or (
+            isinstance(weight, Tensor) and weight.ndim
+        ):
+            # passed by keyword: _maybe_broadcast_other only reads positional
+            # arguments, and broadcasts them to the batch dims
+            return self.lerp(end, weight)
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
