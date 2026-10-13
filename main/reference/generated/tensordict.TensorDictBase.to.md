@@ -29,7 +29,15 @@ the results. If `False`, the copies are blocking.
 format for the 4D and 5D tensors in this tensordict, as in
 [`torch.nn.Module.to()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.to).
 - **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - resulting batch-size of the
-output tensordict.
+output tensordict. When the device or dtype changes, every
+nested tensordict gets exactly this batch size and the names
+are erased. Starting with TensorDict 0.17, the default will
+change to setting the batch size as `to(batch_size=...)`
+does without a device: nested tensordicts with more batch
+dimensions keep their batch size, nested lazy stacks stay
+lazy stacks (or raise, as there, if they need more batch
+dimensions) and the names are kept. A `FutureWarning` is
+emitted when the result will change.
 - **other** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - 
 
 TensorDict instance whose dtype
