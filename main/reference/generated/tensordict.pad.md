@@ -67,6 +67,15 @@ The padded tensordict. When `inplace=True` this is the same object as
 the input; otherwise a new tensordict, or a new tensorclass of the
 same type for a tensorclass input.
 
+Note
+
+With `inplace=False`, a lazy stack gives a
+[`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict). If the stacked tensordicts have no
+names, it has no names either, even when the stack dimension has a
+name (from `stack_dim_name` or the `names` setter). To keep that
+name, name the dimension of the result again with
+[`refine_names()`](tensordict.TensorDictBase.refine_names.html#tensordict.TensorDictBase.refine_names).
+
 Examples
 
 ```

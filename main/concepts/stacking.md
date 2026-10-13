@@ -95,7 +95,7 @@ tensor(10.)
 
 Each read of an entry stacks the values again, and allocates a new tensor. If
 you read the same keys many times, call
-[`contiguous()`](../reference/generated/tensordict.TensorDictBase.contiguous.html#tensordict.TensorDictBase.contiguous) once and read from its
+[`contiguous()`](../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.contiguous) once and read from its
 result. `contiguous()` returns a regular TensorDict that owns its data, so a
 write to it does not change the original tensordicts:
 
@@ -111,6 +111,31 @@ tensor(10.)
 [`to_tensordict()`](../reference/generated/tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict) does the same.
 `contiguous()` raises a `RuntimeError` if the stacked entries have
 different shapes. See Variable-size data for that case.
+
+A lazy stack can name its stack dimension, with `stack_dim_name` in
+[`lazy_stack()`](../reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack), or by setting its `names`. If the stacked
+tensordicts have no names, `contiguous()`, `to_tensordict()` and
+[`pad()`](../reference/generated/tensordict.pad.html#tensordict.pad) give a TensorDict without that name. `clone()`,
+which returns a lazy stack, and
+[`densify()`](../reference/generated/tensordict.TensorDictBase.densify.html#tensordict.TensorDictBase.densify) keep it. To keep it in a
+TensorDict, call `densify()`, or name the dimension again with
+[`refine_names()`](../reference/generated/tensordict.TensorDictBase.refine_names.html#tensordict.TensorDictBase.refine_names):
+
+```
+>>> named = lazy_stack(tds, stack_dim_name="robot")
+>>> named.names
+['robot', None]
+>>> named.contiguous().names
+[None, None]
+>>> named.contiguous().refine_names("robot", ...).names
+['robot', None]
+>>> named.densify().names
+['robot', None]
+>>> named.clone().names
+['robot', None]
+```
+
+If the stacked tensordicts have names, all of these methods keep every name.
 
 Note
 

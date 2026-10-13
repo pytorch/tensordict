@@ -9,7 +9,12 @@ converted to a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict),
 get a regular, unlocked tensordict in memory from a lazy stack, a
 memory-mapped or locked tensordict, a
 [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) or a tensorclass. The batch
-size, device and dimension names are kept.
+size, device and dimension names are kept, with one exception: if the
+tensordicts of a lazy stack have no names, the result has no names
+either, even when the stack dimension has a name (from
+`stack_dim_name` or the `names` setter). `densify()` and
+`clone()` of the lazy stack keep that name. To keep it here, name
+the dimension again with [`refine_names()`](tensordict.TensorDictBase.refine_names.html#tensordict.TensorDictBase.refine_names).
 
 Keyword Arguments:
 
@@ -32,6 +37,11 @@ Examples
 >>> td = stack.to_tensordict()
 >>> type(td).__name__, td.batch_size
 ('TensorDict', torch.Size([2]))
+>>> stack.names = ["s"]
+>>> stack.to_tensordict().names
+[None]
+>>> stack.to_tensordict().refine_names("s").names
+['s']
 ```
 
 Every tensordict class and every tensorclass has this method. For the

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5515+gd17b39eef.d20261013)">
+<meta name="llm:version" content="main (0.14.0.dev5516+gf579634e5.d20261013)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5515+gd17b39eef.d20261013)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5516+gf579634e5.d20261013)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1676,6 +1676,12 @@ known to be valid. Defaults to <code class="docutils literal notranslate"><span 
 <dd class="field-even"><p>The padded tensordict. When <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> this is <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
 </dd>
 </dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>On a lazy stack whose tensordicts have no names, the result of
+<code class="docutils literal notranslate"><span class="pre">inplace=False</span></code> has no names, even when the stack dimension has
+a name. See <a class="reference internal" href="tensordict.pad.html#tensordict.pad" title="tensordict.pad"><code class="xref py py-func docutils literal notranslate"><span class="pre">pad()</span></code></a>.</p>
+</div>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
@@ -2048,7 +2054,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.pad",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.pad",
        "url": "/reference/generated/tensordict.TensorDictBase.pad.html",
-       "articleBody": "TensorDictBase.pad# TensorDictBase.pad(pad_size: Sequence[int], value: float = 0.0, inplace: bool = False, safe: bool = True) \u2192 Self# Pads this tensordict along the batch dimensions with a constant value. Parameters: pad_size (Sequence[int]) \u2013 The padding size, applied to the batch dimensions starting from the first. For a tensordict of ndim batch dimensions, pad_size is a sequence of even length up to 2 * ndim formatted as (dim0_left, dim0_right, dim1_left, dim1_right, ...). value (float, optional) \u2013 The fill value. Defaults to 0.0. inplace (bool, optional) \u2013 If True, this tensordict\u2019s object identity and key set are preserved; each leaf storage is replaced by its padded counterpart one leaf at a time, keeping peak memory close to 1x instead of 2x. The leaf tensors themselves are still freshly allocated because padding necessarily grows shapes. Defaults to False. Warning If inplace=True and a later leaf\u2019s pad fails (e.g. OOM), the tensordict is left in an inconsistent state. safe=True (the default) catches the user-error class of failures before any mutation occurs. safe (bool, optional) \u2013 If True, validate that the operation would succeed for every leaf before any mutation occurs. Set to False to skip the pre-flight walk when the inputs are known to be valid. Defaults to True. Returns: The padded tensordict. When inplace=True this is self. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.zeros(3, 4)}, batch_size=[3, 4]) \u003e\u003e\u003e td.pad([0, 0, 0, 1]).batch_size torch.Size([3, 5]) \u003e\u003e\u003e td.pad([0, 0, 0, 1], inplace=True) is td True \u003e\u003e\u003e td.batch_size torch.Size([3, 5]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.pad# TensorDictBase.pad(pad_size: Sequence[int], value: float = 0.0, inplace: bool = False, safe: bool = True) \u2192 Self# Pads this tensordict along the batch dimensions with a constant value. Parameters: pad_size (Sequence[int]) \u2013 The padding size, applied to the batch dimensions starting from the first. For a tensordict of ndim batch dimensions, pad_size is a sequence of even length up to 2 * ndim formatted as (dim0_left, dim0_right, dim1_left, dim1_right, ...). value (float, optional) \u2013 The fill value. Defaults to 0.0. inplace (bool, optional) \u2013 If True, this tensordict\u2019s object identity and key set are preserved; each leaf storage is replaced by its padded counterpart one leaf at a time, keeping peak memory close to 1x instead of 2x. The leaf tensors themselves are still freshly allocated because padding necessarily grows shapes. Defaults to False. Warning If inplace=True and a later leaf\u2019s pad fails (e.g. OOM), the tensordict is left in an inconsistent state. safe=True (the default) catches the user-error class of failures before any mutation occurs. safe (bool, optional) \u2013 If True, validate that the operation would succeed for every leaf before any mutation occurs. Set to False to skip the pre-flight walk when the inputs are known to be valid. Defaults to True. Returns: The padded tensordict. When inplace=True this is self. Note On a lazy stack whose tensordicts have no names, the result of inplace=False has no names, even when the stack dimension has a name. See pad(). Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.zeros(3, 4)}, batch_size=[3, 4]) \u003e\u003e\u003e td.pad([0, 0, 0, 1]).batch_size torch.Size([3, 5]) \u003e\u003e\u003e td.pad([0, 0, 0, 1], inplace=True) is td True \u003e\u003e\u003e td.batch_size torch.Size([3, 5]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

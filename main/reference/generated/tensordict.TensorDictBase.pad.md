@@ -36,6 +36,12 @@ Returns:
 
 The padded tensordict. When `inplace=True` this is `self`.
 
+Note
+
+On a lazy stack whose tensordicts have no names, the result of
+`inplace=False` has no names, even when the stack dimension has
+a name. See [`pad()`](tensordict.pad.html#tensordict.pad).
+
 Examples
 
 ```

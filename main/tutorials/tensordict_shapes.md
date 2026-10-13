@@ -35,7 +35,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7fe91f1c82f0>
+<torch._C.Generator object at 0x7fc99d3f02f0>
 ```
 
 ## Indexing
@@ -191,7 +191,7 @@ the stack more than once, convert the
 [`LazyStackedTensorDict`](../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) to a dense
 [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) first, with
 [`LazyStackedTensorDict.to_tensordict`](../reference/generated/tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict)
-or [`LazyStackedTensorDict.contiguous`](../reference/generated/tensordict.TensorDictBase.contiguous.html#tensordict.TensorDictBase.contiguous).
+or [`LazyStackedTensorDict.contiguous`](../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.contiguous).
 
 ```
 >>> assert isinstance(stacked_tensordict.to_tensordict(), TensorDict)

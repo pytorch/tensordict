@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5515+gd17b39eef.d20261013)">
+<meta name="llm:version" content="main (0.14.0.dev5516+gf579634e5.d20261013)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5515+gd17b39eef.d20261013)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5516+gf579634e5.d20261013)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1648,7 +1648,12 @@ converted to a <a class="reference internal" href="tensordict.TensorDict.html#te
 get a regular, unlocked tensordict in memory from a lazy stack, a
 memory-mapped or locked tensordict, a
 <a class="reference internal" href="tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a> or a tensorclass. The batch
-size, device and dimension names are kept.</p>
+size, device and dimension names are kept, with one exception: if the
+tensordicts of a lazy stack have no names, the result has no names
+either, even when the stack dimension has a name (from
+<code class="docutils literal notranslate"><span class="pre">stack_dim_name</span></code> or the <code class="docutils literal notranslate"><span class="pre">names</span></code> setter). <code class="docutils literal notranslate"><span class="pre">densify()</span></code> and
+<code class="docutils literal notranslate"><span class="pre">clone()</span></code> of the lazy stack keep that name. To keep it here, name
+the dimension again with <a class="reference internal" href="tensordict.TensorDictBase.refine_names.html#tensordict.TensorDictBase.refine_names" title="tensordict.TensorDictBase.refine_names"><code class="xref py py-meth docutils literal notranslate"><span class="pre">refine_names()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>retain_none</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the <code class="docutils literal notranslate"><span class="pre">None</span></code> fields of
@@ -1668,6 +1673,11 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">None</s
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">stack</span><span class="o">.</span><span class="n">to_tensordict</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">td</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">td</span><span class="o">.</span><span class="n">batch_size</span>
 <span class="go">('TensorDict', torch.Size([2]))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">stack</span><span class="o">.</span><span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"s"</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">stack</span><span class="o">.</span><span class="n">to_tensordict</span><span class="p">()</span><span class="o">.</span><span class="n">names</span>
+<span class="go">[None]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">stack</span><span class="o">.</span><span class="n">to_tensordict</span><span class="p">()</span><span class="o">.</span><span class="n">refine_names</span><span class="p">(</span><span class="s2">"s"</span><span class="p">)</span><span class="o">.</span><span class="n">names</span>
+<span class="go">['s']</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2030,7 +2040,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.to_tensordict",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.to_tensordict",
        "url": "/reference/generated/tensordict.TensorDictBase.to_tensordict.html",
-       "articleBody": "TensorDictBase.to_tensordict# TensorDictBase.to_tensordict(*, retain_none: bool | None = None) \u2192 Self# Returns a TensorDict copy of this tensordict. Every tensor is cloned, and every sub-tensordict and tensorclass is converted to a TensorDict, recursively. Use it to get a regular, unlocked tensordict in memory from a lazy stack, a memory-mapped or locked tensordict, a PersistentTensorDict or a tensorclass. The batch size, device and dimension names are kept. Keyword Arguments: retain_none (bool, optional) \u2013 if True, the None fields of tensorclass instances are written as entries of the result. Defaults to None, which behaves like False: the None fields are dropped. Returns: a new TensorDict object containing the same values. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import LazyStackedTensorDict, TensorDict \u003e\u003e\u003e stack = LazyStackedTensorDict( ... TensorDict(a=torch.zeros(3)), TensorDict(a=torch.ones(3)), stack_dim=0) \u003e\u003e\u003e td = stack.to_tensordict() \u003e\u003e\u003e type(td).__name__, td.batch_size (\u0027TensorDict\u0027, torch.Size([2])) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.to_tensordict# TensorDictBase.to_tensordict(*, retain_none: bool | None = None) \u2192 Self# Returns a TensorDict copy of this tensordict. Every tensor is cloned, and every sub-tensordict and tensorclass is converted to a TensorDict, recursively. Use it to get a regular, unlocked tensordict in memory from a lazy stack, a memory-mapped or locked tensordict, a PersistentTensorDict or a tensorclass. The batch size, device and dimension names are kept, with one exception: if the tensordicts of a lazy stack have no names, the result has no names either, even when the stack dimension has a name (from stack_dim_name or the names setter). densify() and clone() of the lazy stack keep that name. To keep it here, name the dimension again with refine_names(). Keyword Arguments: retain_none (bool, optional) \u2013 if True, the None fields of tensorclass instances are written as entries of the result. Defaults to None, which behaves like False: the None fields are dropped. Returns: a new TensorDict object containing the same values. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import LazyStackedTensorDict, TensorDict \u003e\u003e\u003e stack = LazyStackedTensorDict( ... TensorDict(a=torch.zeros(3)), TensorDict(a=torch.ones(3)), stack_dim=0) \u003e\u003e\u003e td = stack.to_tensordict() \u003e\u003e\u003e type(td).__name__, td.batch_size (\u0027TensorDict\u0027, torch.Size([2])) \u003e\u003e\u003e stack.names = [\"s\"] \u003e\u003e\u003e stack.to_tensordict().names [None] \u003e\u003e\u003e stack.to_tensordict().refine_names(\"s\").names [\u0027s\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
