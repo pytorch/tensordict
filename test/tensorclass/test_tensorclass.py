@@ -3134,6 +3134,79 @@ class TestTensorClass:
         other.load_state_dict(tc.state_dict())
         torch.testing.assert_close(other.z, z)
 
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    @pytest.mark.parametrize(
+        "method",
+        [
+            "set_non_tensor",
+            "setdefault",
+            "create_nested",
+            "rename_key_",
+            "update_td",
+            "update_tc",
+        ],
+    )
+    def test_write_non_field_key(self, method, tensor_only):
+        # set() rejects keys that are not fields. These methods store them
+        # and warn until TensorDict 0.17, and write fields without a warning.
+        @tensorclass(tensor_only=tensor_only)
+        class TC:
+            x: torch.Tensor
+            y: torch.Tensor = None
+            td: TensorDict = None
+
+        @tensorclass
+        class Other:
+            x: torch.Tensor
+            nope: torch.Tensor
+
+        def write(tc, key):
+            if method == "set_non_tensor":
+                tc.set_non_tensor(key, "v")
+            elif method == "setdefault":
+                tc.setdefault(key, torch.ones(3))
+            elif method == "create_nested":
+                tc.create_nested(key)
+            elif method == "rename_key_":
+                tc.rename_key_("x", key)
+            elif method == "update_td":
+                tc.update(
+                    TensorDict({key: torch.ones(3), "x": torch.ones(3)}, [3]),
+                    keys_to_update=None if key == "nope" else [key],
+                )
+            elif key == "nope":
+                tc.update(Other(x=torch.ones(3), nope=torch.ones(3), batch_size=[3]))
+            else:
+                tc.update(
+                    Other(x=torch.ones(3), nope=torch.ones(3), batch_size=[3]),
+                    keys_to_update=[key],
+                )
+
+        name = "update" if method.startswith("update") else method
+        tc = TC(x=torch.zeros(3), batch_size=[3])
+        with pytest.warns(
+            DeprecationWarning,
+            match=re.escape(
+                "Writing keys that are not fields (['nope']) with "
+                f"TC.{name}(), which set() rejects with "
+                "AttributeError, is deprecated and will be removed in "
+                "TensorDict 0.17."
+            ),
+        ) as record:
+            write(tc, "nope")
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert "nope" in tc._tensordict.keys()
+
+        # a field, and a key that is not a field left out by keys_to_update
+        key = "td" if method == "create_nested" else "x" if "update" in method else "y"
+        tc = TC(x=torch.zeros(3), batch_size=[3])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            write(tc, key)
+        assert "nope" not in tc._tensordict.keys()
+        assert key in tc._tensordict.keys()
+
     def test_replace(self):
         @tensorclass
         class MyDataNested:
