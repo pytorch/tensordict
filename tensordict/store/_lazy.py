@@ -31,6 +31,7 @@ from tensordict._td import (
 from tensordict.base import (
     _is_leaf_nontensor,
     _register_tensor_class,
+    BEST_ATTEMPT_INPLACE,
     is_tensor_collection,
     T,
     TensorDictBase,
@@ -203,11 +204,13 @@ class _StoreStackElementView(TensorDictBase):
     ):
         if not validated:
             value = self._validate_value(value, check_shape=True, key=key)
+        # a locked view, or the view of a locked store, writes the keys the
+        # store has whatever inplace is, and raises for a new key (#2404)
         if (
-            self.is_locked
+            (self.is_locked or self._parent.is_locked)
             and not ignore_lock
             and inplace is not True
-            and not self._convert_inplace(inplace, key)
+            and not self._convert_inplace(BEST_ATTEMPT_INPLACE, key)
         ):
             raise RuntimeError(_LOCK_ERROR)
 
@@ -253,9 +256,9 @@ class _StoreStackElementView(TensorDictBase):
         if not validated:
             value = self._validate_value(value, check_shape=True, key=key)
         if (
-            self.is_locked
+            (self.is_locked or self._parent.is_locked)
             and inplace is not True
-            and not self._convert_inplace(inplace, key_path)
+            and not self._convert_inplace(BEST_ATTEMPT_INPLACE, key_path)
         ):
             raise RuntimeError(_LOCK_ERROR)
         if isinstance(value, torch.Tensor):
