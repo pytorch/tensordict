@@ -3146,6 +3146,21 @@ def _maybe_correct_neg_dim(
     return new_dim
 
 
+def _check_unflatten_size(
+    batch_size: torch.Size, dim: int, unflattened_size: Sequence[int]
+) -> None:
+    """Raises as torch.unflatten does when the sizes don't multiply up to the dim size."""
+    if (
+        -1 not in unflattened_size
+        and -1 not in batch_size
+        and math.prod(unflattened_size) != batch_size[dim]
+    ):
+        raise RuntimeError(
+            f"unflatten: Provided sizes {list(unflattened_size)} don't multiply up "
+            f"to the size of dim {dim} ({batch_size[dim]}) in the input tensor"
+        )
+
+
 # Check if the new shape is a flatten / unflatten version of the current one
 def _check_is_flatten(new_shape, old_shape, return_flatten_dim=False):
     if not new_shape or not old_shape:

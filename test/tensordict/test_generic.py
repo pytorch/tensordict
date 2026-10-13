@@ -3893,6 +3893,38 @@ class TestGeneric:
         # the -1 of a ragged dim stays
         assert TensorDict({}, [2, -1]).unflatten(1, (1, -1)).batch_size == (2, 1, -1)
 
+    @pytest.mark.parametrize(
+        "td_type", ["empty", "nested", "non_tensor", "lazy", "non_tensor_stack"]
+    )
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_unflatten_wrong_element_count(self, td_type, inplace):
+        # Without tensor leaves, nothing used to check the element count
+        if td_type == "empty":
+            td = TensorDict(batch_size=[3, 12])
+        elif td_type == "nested":
+            td = TensorDict(n=TensorDict(batch_size=[3, 12]), batch_size=[3, 12])
+        elif td_type == "non_tensor":
+            td = NonTensorData("x", batch_size=[3, 12])
+        elif td_type == "lazy":
+            td = lazy_stack([TensorDict(batch_size=[12]) for _ in range(3)])
+        else:
+            td = NonTensorStack(*[NonTensorData("x", batch_size=[12])] * 3)
+        if inplace and td_type in ("lazy", "non_tensor_stack"):
+            pytest.skip("lazy stacks have no in-place unflatten")
+        with pytest.raises(
+            RuntimeError,
+            match=re.escape(
+                "unflatten: Provided sizes [2, 7] don't multiply up to the size "
+                "of dim 1 (12)"
+            ),
+        ):
+            td.unflatten(-1, (2, 7), inplace=inplace)
+        assert td.batch_size == (3, 12)
+        assert td.unflatten(1, (4, 3)).batch_size == (3, 4, 3)
+        assert TensorDict(batch_size=[0]).unflatten(0, (2, 0)).batch_size == (2, 0)
+        with pytest.raises(RuntimeError, match="don't multiply up"):
+            TensorDict(batch_size=[0]).unflatten(0, (2, 3))
+
     @pytest.mark.parametrize("inplace", [True, False])
     def test_contiguous_inplace(self, inplace):
         # Build a TD whose leaf is a non-contiguous view of a larger tensor.
