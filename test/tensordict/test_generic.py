@@ -5030,6 +5030,16 @@ class TestGeneric:
         )
         assert d.get("b").tolist() == [["asd"] * 3, ["efg"] * 3]
 
+    @pytest.mark.parametrize("pad_dim", [0, -1])
+    def test_pad_sequence_nontensor_only(self, pad_dim):
+        # https://github.com/pytorch/tensordict/issues/2490
+        d1 = TensorDict({"b": "asd", ("c", "d"): "x"}, batch_size=[3])
+        d2 = TensorDict({"b": "efg", ("c", "d"): "y"}, batch_size=[5])
+        d = pad_sequence([d1, d2], pad_dim=pad_dim)
+        assert d.batch_size == torch.Size([2, 5])
+        assert d.get("b").tolist() == [["asd"] * 3 + [None] * 2, ["efg"] * 5]
+        assert d.get(("c", "d")).tolist() == [["x"] * 3 + [None] * 2, ["y"] * 5]
+
     def test_pad_sequence_single_nontensor(self):
         d1 = TensorDict({"a": torch.tensor([1, 1]), "b": "asd"})
         d = pad_sequence([d1])
