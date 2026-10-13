@@ -2609,8 +2609,9 @@ class TestLazyStackedTensorDict:
         assert lazy_stack([td0, td1], -1).shape == (-1, 5, 2)
         assert lazy_stack([td0, td1], -2).shape == (-1, 2, 5)
         assert lazy_stack([td0, td1], -3).shape == (2, -1, 5)
-        with pytest.raises(RuntimeError):
-            assert lazy_stack([td0, td1], -4)
+        # a dim below the batch dims wraps around again, and warns (#2148)
+        with pytest.warns(FutureWarning, match="lazy_stack got a dim outside"):
+            assert lazy_stack([td0, td1], -4).shape == (-1, 5, 2)
         with pytest.raises(RuntimeError):
             assert lazy_stack([td0, td1, TensorDict()])
         with pytest.raises(RuntimeError):

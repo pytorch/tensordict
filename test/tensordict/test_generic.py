@@ -4458,6 +4458,7 @@ class TestGeneric:
             "maybe_dense_stack",
             "cat",
             "cat_lazy",
+            "lazy_stack",
         ],
     )
     def test_dim_past_batch_dims_warns(self, op):
@@ -4516,6 +4517,12 @@ class TestGeneric:
                 (2, 6),
                 torch.cat([x, x], 1),
                 lambda: torch.cat([lazy, lazy], -1),
+            ),
+            "lazy_stack": (
+                lambda: lazy_stack(tds, -3),
+                (3, 2),
+                torch.stack([x[0], x[1]], 1),
+                lambda: lazy_stack(tds, -2),
             ),
         }
         call, batch_size, leaf, in_range = calls[op]
