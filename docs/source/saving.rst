@@ -482,10 +482,17 @@ The ``date`` value of the example above is in a pickle file:
   >>> TensorDict.load_memmap(root / "run", allow_pickle=True)["date"]
   datetime.date(2024, 1, 1)
 
-Data without a pickle file loads with ``allow_pickle=False``. ``load_memmap_``
-and ``memmap_refresh_`` take the same argument. For :func:`torch.load`, keep
-``weights_only=True`` and allowlist only the classes that you trust (see
-`torch.save and torch.load`_).
+Data without a pickle file loads with ``allow_pickle=False``. So does the
+output of :meth:`~tensordict.TensorDict.from_pytree`, such as a module
+``state_dict()``, when its containers are only ``dict``,
+``collections.OrderedDict``, ``list`` and ``tuple``: tensordict pickles these
+classes for older versions, and also saves their names in a
+``json_types.json`` file, which ``load_memmap`` reads instead of the pickle
+file. Other classes, such as namedtuples, and the stacked results of
+``from_pytree`` (for example after :func:`torch.stack`) load only from the
+pickle file. ``load_memmap_`` and ``memmap_refresh_`` take the same
+argument. For :func:`torch.load`, keep ``weights_only=True`` and allowlist
+only the classes that you trust (see `torch.save and torch.load`_).
 
 tensordict also protects the paths that it writes:
 

@@ -10,6 +10,7 @@ import gc
 import importlib.util
 import inspect
 import io
+import json
 import os
 import pickle
 import platform
@@ -2499,8 +2500,7 @@ class TestGeneric:
         for td_other in (
             torch.stack([td, td.clone()]),
             td.unsqueeze(0),
-            # _pytree_type is a class, so it is pickled
-            TensorDict.load_memmap(tmpdir, allow_pickle=True),
+            TensorDict.load_memmap(tmpdir, allow_pickle=False),
         ):
             assert key_types(td_other.to_pytree()) == key_types(pytree)
         # The keys take no part in the batch size
@@ -2687,6 +2687,70 @@ class TestGeneric:
             assert (v1 == v2).all()
 
         torch.utils._pytree.tree_map(check, pytree, pytree_recon)
+
+    def test_from_pytree_memmap_without_pickle(self, tmpdir):
+        # https://github.com/pytorch/tensordict/issues/2550
+        # dict, OrderedDict, list and tuple are pickled for older versions,
+        # and saved by name for load_memmap
+        pytree = {
+            "model": nn.Linear(2, 3).state_dict(),
+            "seq": [torch.zeros(2), (torch.ones(1), {"x": torch.ones(2)})],
+        }
+        td = TensorDict.from_pytree(pytree)
+        assert td["model", "_pytree_type"] is OrderedDict
+        td.memmap(tmpdir)
+        prefix = Path(tmpdir) / "model" / "_pytree_type"
+        # meta.json and other.pickle are those that older versions write
+        assert set(json.loads((prefix / "meta.json").read_text())) == {
+            "_type",
+            "_metadata",
+            "_is_non_tensor",
+        }
+        assert pickle.loads((prefix / "other.pickle").read_bytes()) == {
+            "data": OrderedDict
+        }
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            loaded = TensorDict.load_memmap(tmpdir, allow_pickle=False)
+        assert loaded["_pytree_type"] is dict
+        assert loaded["model", "_pytree_type"] is OrderedDict
+        assert loaded["seq", "_pytree_type"] is list
+        assert loaded["seq", "1", "_pytree_type"] is tuple
+        pytree_recon = loaded.to_pytree()
+        assert torch.utils._pytree.tree_structure(
+            pytree_recon
+        ) == torch.utils._pytree.tree_structure(pytree)
+        torch.utils._pytree.tree_map(
+            lambda v1, v2: torch.testing.assert_close(v1, v2), pytree, pytree_recon
+        )
+        # an unknown name raises
+        types_file = prefix / "json_types.json"
+        saved = json.loads(types_file.read_text())
+        types_file.write_text(json.dumps({**saved, "types": {"data": "set"}}))
+        with pytest.raises(ValueError, match="Unknown type name 'set'.*json_types"):
+            TensorDict.load_memmap(tmpdir, allow_pickle=False)
+        # without the names (as older versions write), or with names of
+        # another other.pickle, the pickle is loaded
+        types_file.write_text(json.dumps({**saved, "pickle_sha256": "0"}))
+        with pytest.raises(RuntimeError, match="Refusing to load pickled"):
+            TensorDict.load_memmap(tmpdir, allow_pickle=False)
+        types_file.unlink()
+        with pytest.raises(RuntimeError, match="Refusing to load pickled"):
+            TensorDict.load_memmap(tmpdir, allow_pickle=False)
+        assert (
+            TensorDict.load_memmap(tmpdir, allow_pickle=True)["model"]["_pytree_type"]
+            is OrderedDict
+        )
+        # other classes are still pickled only
+        pytree = defaultdict(list, a=torch.zeros(2))
+        TensorDict.from_pytree(pytree).memmap(tmpdir / "other")
+        with pytest.raises(RuntimeError, match="Refusing to load pickled"):
+            TensorDict.load_memmap(tmpdir / "other", allow_pickle=False)
+        loaded = TensorDict.load_memmap(tmpdir / "other", allow_pickle=True)
+        assert loaded["_pytree_type"] is defaultdict
+        assert not (
+            Path(tmpdir) / "other" / "_pytree_type" / "json_types.json"
+        ).exists()
 
     def test_from_struct_array(self):
         x = np.array(

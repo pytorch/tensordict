@@ -6,11 +6,14 @@
 from __future__ import annotations
 
 import abc
+import collections
 import concurrent
 import ctypes
 import dataclasses
 import functools
+import hashlib
 import inspect
+import json
 import multiprocessing.managers
 import multiprocessing.sharedctypes
 import numbers
@@ -159,6 +162,19 @@ _TENSOR_ONLY_TYPE_ERR = TypeError(
 _TENSORCLASS_FLAGS = ("autocast", "nocast", "frozen", "tensor_only", "shadow")
 # methods where non_tensordict data should be cleared in the return value
 _CLEAR_METADATA = {"all", "any"}
+
+# The container types that from_pytree records under _pytree_type. memmap
+# pickles them to other.pickle, which older versions read, and also saves their
+# names to _JSON_TYPES_FILE, so that load_memmap needs no pickle for them.
+_JSON_TYPES = {
+    "dict": dict,
+    "OrderedDict": collections.OrderedDict,
+    "list": list,
+    "tuple": tuple,
+}
+_JSON_TYPE_NAMES = {value: key for key, value in _JSON_TYPES.items()}
+_JSON_TYPES_FILE = "json_types.json"
+
 # torch functions where we can wrap the corresponding TensorDict version
 _TD_PASS_THROUGH = {
     torch.atleast_1d: True,
@@ -2541,10 +2557,13 @@ def _memmap_(
                 else:
                     f.write(json_str)
                 if to_pickle:
+                    pickled = pickle.dumps(to_pickle)
                     with open(prefix / "other.pickle", "wb") as pickle_file:
-                        pickle.dump(to_pickle, pickle_file)
+                        pickle_file.write(pickled)
+                    _save_json_types(prefix, to_pickle, pickled)
                 else:
                     (prefix / "other.pickle").unlink(missing_ok=True)
+                    (prefix / _JSON_TYPES_FILE).unlink(missing_ok=True)
 
         if executor is None:
             save_metadata()
@@ -2594,6 +2613,47 @@ def _share_memory_(self):
     return self
 
 
+def _save_json_types(prefix: Path, to_pickle: dict, pickled: bytes) -> None:
+    # When other.pickle holds only classes of _JSON_TYPES, save their names
+    # with the hash of other.pickle, so that a file that an older version
+    # rewrote later is not read with stale names.
+    path = prefix / _JSON_TYPES_FILE
+    if not all(
+        isinstance(value, type) and value in _JSON_TYPE_NAMES
+        for value in to_pickle.values()
+    ):
+        path.unlink(missing_ok=True)
+        return
+    saved = {
+        "types": {key: _JSON_TYPE_NAMES[value] for key, value in to_pickle.items()},
+        "pickle_sha256": hashlib.sha256(pickled).hexdigest(),
+    }
+    with open(path, "w") as f:
+        json.dump(saved, f)
+
+
+def _load_json_types(prefix: Path) -> dict | None:
+    # The classes that other.pickle holds, read without pickle, or None if
+    # the save did not record them (e.g. files written by older versions).
+    path = prefix / _JSON_TYPES_FILE
+    if not path.exists() or not (prefix / "other.pickle").exists():
+        return None
+    with path.open("rb") as f:
+        saved = json.loads(f.read())
+    with (prefix / "other.pickle").open("rb") as f:
+        if hashlib.sha256(f.read()).hexdigest() != saved.get("pickle_sha256"):
+            return None
+    types = {}
+    for key, name in saved["types"].items():
+        if name not in _JSON_TYPES:
+            raise ValueError(
+                f"Unknown type name {name!r} for the field {key!r} in {path}. "
+                f"Expected one of {sorted(_JSON_TYPES)}."
+            )
+        types[key] = _JSON_TYPES[name]
+    return types
+
+
 def _load_pickle_file(path, *, allow_pickle: bool | None):
     if allow_pickle is False:
         raise RuntimeError(
@@ -2628,7 +2688,10 @@ def _load_memmap(
     del non_tensordict["_type"]
     # Path methods (rather than os.path) so that archive paths can be
     # traversed through the same code path as regular directories.
-    if (prefix / "other.pickle").exists():
+    json_types = _load_json_types(prefix)
+    if json_types is not None:
+        non_tensordict.update(json_types)
+    elif (prefix / "other.pickle").exists():
         non_tensordict.update(
             _load_pickle_file(
                 prefix / "other.pickle",
@@ -6032,8 +6095,12 @@ class NonTensorData(NonTensorDataBase):
     loads it. If JSON can encode the value, it goes to the ``meta.json``
     file of the entry (a tuple is loaded back as a list). Other values, such
     as a ``set`` or an instance of another class, are pickled to an
-    ``other.pickle`` file. Pickle can execute arbitrary code when it loads,
-    so :meth:`~tensordict.TensorDictBase.load_memmap` warns when it loads a
+    ``other.pickle`` file. The classes ``dict``, ``collections.OrderedDict``,
+    ``list`` and ``tuple``, which :meth:`~tensordict.TensorDict.from_pytree`
+    records, are pickled for older versions and also saved by name, and
+    :meth:`~tensordict.TensorDictBase.load_memmap` reads them without pickle.
+    Pickle can execute arbitrary code when it loads, so
+    :meth:`~tensordict.TensorDictBase.load_memmap` warns when it loads a
     pickled value. Pass ``allow_pickle=True`` for data that you trust. From
     TensorDict 0.16, the default is ``allow_pickle=False``, which raises a
     ``RuntimeError`` for pickled values.
