@@ -2601,7 +2601,7 @@ class TestGeneric:
     @pytest.mark.parametrize("leaves_only", [False, True])
     @pytest.mark.parametrize("is_leaf", ["default", "nontensor", "custom"])
     def test_keys_view_iteration(
-        self, stack, sort, include_nested, leaves_only, is_leaf, request
+        self, stack, sort, include_nested, leaves_only, is_leaf
     ):
         @tensorclass
         class MyClass:
@@ -2619,15 +2619,6 @@ class TestGeneric:
             batch_size=[3],
         )
         if stack:
-            if not include_nested and leaves_only and is_leaf != "default":
-                request.applymarker(
-                    pytest.mark.xfail(
-                        strict=True,
-                        reason="LazyStackedTensorDict.entry_class gives "
-                        "LazyStackedTensorDict for tensorclass and non-tensor "
-                        "entries, so flat leaves_only views drop them",
-                    )
-                )
             td = lazy_stack([td[0], td[1]])
         leaves = {"a", ("nested", "b"), ("nested", "c", "d"), ("tc", "x")}
         if not leaves_only:
