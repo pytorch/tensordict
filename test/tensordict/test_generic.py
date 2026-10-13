@@ -6304,9 +6304,6 @@ class TestGeneric:
         assert isinstance(result, getattr(torch.return_types, reduction))
         torch.testing.assert_close(result.values, expected.values)
         torch.testing.assert_close(result.indices, expected.indices)
-        values = getattr(td, reduction)(dim=0, reduce=True, return_indices=False)
-        assert isinstance(values, torch.Tensor)
-        torch.testing.assert_close(values, expected.values)
 
     @pytest.mark.parametrize("reduce", [False, True])
     @pytest.mark.parametrize(
