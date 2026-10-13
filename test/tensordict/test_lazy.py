@@ -852,6 +852,23 @@ class TestLazyStackedTensorDict:
         assert [td["a"].data_ptr() for td in out.tensordicts] == data_ptrs
         assert assert_allclose_td(out, expected)
 
+    @pytest.mark.parametrize("empty_lazy", [False, True])
+    @pytest.mark.parametrize("empty_first", [False, True])
+    def test_cat_lazy_stack_out_zero_size(self, empty_lazy, empty_first):
+        # An input with size 0 along the stack dim fills no member of out
+        td = TensorDict(a=torch.arange(6.0).view(2, 3), batch_size=[2, 3])
+        empty = TensorDict(a=torch.zeros(0, 3), batch_size=[0, 3])
+        if empty_lazy:
+            empty = LazyStackedTensorDict(stack_dim=0, batch_size=[3])
+        inputs = [td.to_lazystack(0), empty]
+        if empty_first:
+            inputs = inputs[::-1]
+        out = lazy_stack(
+            [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)]
+        )
+        assert torch.cat(inputs, 0, out=out) is out
+        assert (out["a"] == td["a"]).all()
+
     def test_cat_mixed_lazy_dense_stack_dim(self):
         td_lazy = LazyStackedTensorDict(
             *[

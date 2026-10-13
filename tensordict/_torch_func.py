@@ -652,6 +652,8 @@ def _lazy_cat(
         else:
             init_idx = 0
             for td_in in list_of_tensordicts:
+                if td_in.shape[dim] == 0:
+                    continue
                 sub_dest = out.tensordicts[init_idx : init_idx + td_in.shape[dim]]
                 init_idx += td_in.shape[dim]
                 # write into the members of out (a dense stack would copy them)
