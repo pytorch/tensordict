@@ -83,6 +83,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _zip_strict,
     capture_non_tensor_stack,
     DeviceType,
+    expand_as_right,
     IndexType,
     is_tensorclass,
     LinkedList,
@@ -5403,8 +5404,9 @@ class NonTensorDataBase(TensorClass):
             issubclass(t, (NonTensorData, NonTensorStack)) for t in types
         ):
             return NonTensorData._cat_non_tensor(*args, **(kwargs or {}))
-        # NonTensorData.where does not select elementwise, so torch.where is
-        # not passed through
+        # torch.where is not passed through: it would run on the tensordict
+        # of the NonTensorData, which does not hold the data. Use
+        # NonTensorData.where instead
         if (
             func not in _TD_PASS_THROUGH
             or func is torch.where
@@ -5910,6 +5912,79 @@ class NonTensorData(NonTensorDataBase):
 
     def unsqueeze(self, dim: int):
         return torch.stack([self], dim)
+
+    def where(
+        self,
+        condition: Tensor,
+        other: Any,
+        *,
+        out: T | None = None,
+        pad: int | bool | None = None,
+        update_batch_size: bool = False,
+    ) -> T:
+        """Returns the elements of ``self`` where ``condition`` is ``True``, and those of ``other`` elsewhere.
+
+        When ``other`` is a :class:`NonTensorData` with another value, or a
+        :class:`NonTensorStack`, the result is a :class:`NonTensorStack` with
+        the value that ``condition`` picks for each element, or a
+        :class:`NonTensorData` when all the elements have the same value. This
+        reads ``condition``, which breaks the graph under :func:`torch.compile`.
+        Otherwise, the result has the value of ``self`` everywhere.
+
+        ``out`` receives the result if it can hold it. A :class:`NonTensorData`
+        ``out`` cannot hold a :class:`NonTensorStack`: the stack is returned,
+        and ``out`` is left as it is. :meth:`TensorDict.where` then writes the
+        stack in place of the entry of its own ``out``. See
+        :meth:`TensorDictBase.where` for the arguments.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import NonTensorData
+            >>> a = NonTensorData("a", batch_size=[3])
+            >>> b = NonTensorData("b", batch_size=[3])
+            >>> a.where(torch.tensor([True, False, True]), b).tolist()
+            ['a', 'b', 'a']
+        """
+        if not is_non_tensor(other) or (
+            isinstance(other, NonTensorDataBase) and _check_equal(self.data, other.data)
+        ):
+            # every element has the value of self
+            return super().where(
+                condition,
+                other,
+                out=out,
+                pad=pad,
+                update_batch_size=update_batch_size,
+            )
+        if other.batch_size != self.batch_size:
+            other = other.expand(self.batch_size)
+
+        def pick(cond, other_values):
+            if isinstance(cond, bool):
+                return self.data if cond else other_values
+            return [pick(c, o) for c, o in _zip_strict(cond, other_values)]
+
+        values = pick(expand_as_right(condition, self).tolist(), other.tolist())
+        flat = [values]
+        for _ in range(self.ndim):
+            flat = [value for sublist in flat for value in sublist]
+        if not flat or all(_check_equal(value, flat[0]) for value in flat[1:]):
+            result = type(self)(
+                data=flat[0] if flat else self.data,
+                batch_size=self.batch_size,
+                names=self._maybe_names(),
+                device=self.device,
+            )
+        else:
+            result = NonTensorStack._from_list(
+                values, device=self.device, ndim=self.ndim
+            )
+        if out is None or (
+            isinstance(result, NonTensorStack) and not isinstance(out, NonTensorStack)
+        ):
+            return result
+        out.update_(result)
+        return out
 
     @classmethod
     def _stack_non_tensor(
