@@ -107,6 +107,10 @@ to make sure that all of these are fulfilled.
 > CUDA operation, inputs written on another stream must be ordered before the call by the caller, e.g. with
 > `torch.cuda.current_stream().wait_stream(producer_stream)`. Consecutive calls share the graph's buffers:
 > issue them from one stream, or order each call after the previous one in the same way.
+> - The replay repeats the branch that each [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) took at
+> capture: a graph captured under `set_interaction_type("random")` keeps sampling under
+> `set_interaction_type("deterministic")`. The first replay under another interaction type emits a
+> `UserWarning`. Capture one `CudaGraphModule` per interaction type.
 
 Warning
 
