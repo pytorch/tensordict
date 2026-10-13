@@ -17,6 +17,10 @@ Defaults to `False`.
 Keyword Arguments:
 
 - **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - a new batch-size for the tensordict.
+With `recurse=True`, a sub-tensordict whose batch size is the
+start of the new one gets the new one, a sub-tensordict whose
+batch size starts with the new one keeps it, and any other
+sub-tensordict raises a `RuntimeError`.
 - **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - a new device.
 - **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - dimension names.
 
