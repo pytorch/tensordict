@@ -5578,7 +5578,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     names=names,
                     inplace=inplace,
                     checked=checked,
-                    out=out,
+                    out=out._get_str(key, default=None) if out is not None else None,
                     filter_empty=filter_empty,
                     executor=executor,
                     futures=futures,

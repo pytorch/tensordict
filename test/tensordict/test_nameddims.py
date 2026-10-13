@@ -964,6 +964,31 @@ class TestNamedDims(TestTensorDictsBase):
         assert out["a"].device == td["a"].device
         assert out["b"].device == td["b"].device
 
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_to_attrs_td_inplace_nested(self, num_threads):
+        # https://github.com/pytorch/tensordict/issues/2498
+        td = TensorDict(
+            a=torch.zeros(3),
+            nested=TensorDict(b=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        nested = td["nested"]
+        attrs = td.to(torch.float64).attrs()
+        out = td.to(attrs, inplace=True, num_threads=num_threads)
+        assert out is td
+        assert set(td.keys()) == {"a", "nested"}
+        assert td["nested"] is nested
+        assert td["a"].dtype == torch.float64
+        assert td["nested", "b"].dtype == torch.float64
+
+        # The same with a separate out
+        out = td.clone()
+        td._fast_apply(lambda x: x + 1, out=out, num_threads=num_threads)
+        assert set(out.keys()) == {"a", "nested"}
+        assert out["nested"] is not out
+        assert set(out["nested"].keys()) == {"b"}
+        assert (out["nested", "b"] == 1).all()
+
     def test_to_attrs_td_extra_positional_rejected(self):
         td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
         spec = TensorDict(
