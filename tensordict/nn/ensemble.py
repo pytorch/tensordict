@@ -124,8 +124,15 @@ class EnsembleModule(TensorDictModuleBase):
                 "Ensembles are functional and require passing a TensorDict of parameters to reset_parameters_recursive"
             )
         if parameters.ndim:
+            if parameters.ndim > 1:
+                # The outputs of unbind are views of one multi-output op:
+                # once one is reset in place, the others cannot be unbound
+                # again. Indexing gives single-output views.
+                params_copies = [parameters[i] for i in range(parameters.shape[0])]
+            else:
+                params_copies = parameters.unbind(0)
             params_pointers = []
-            for params_copy in parameters.unbind(0):
+            for params_copy in params_copies:
                 self.reset_parameters_recursive(params_copy)
                 params_pointers.append(params_copy)
             return LazyStackedTensorDict.lazy_stack(params_pointers, 0)
