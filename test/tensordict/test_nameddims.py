@@ -914,6 +914,7 @@ class TestNamedDims(TestTensorDictsBase):
             {
                 "a": torch.zeros(3, dtype=torch.float32),
                 "b": torch.zeros(3, dtype=torch.float64),
+                "sub": {"c": torch.zeros(3, dtype=torch.float32)},
             },
             batch_size=[3],
         )
@@ -921,12 +922,14 @@ class TestNamedDims(TestTensorDictsBase):
             {
                 "a": TensorAttrs(tgt_dtype=torch.int32, batch_size=()),
                 "b": TensorAttrs(tgt_dtype=torch.int64, batch_size=()),
+                "sub": {"c": TensorAttrs(tgt_dtype=torch.int16, batch_size=())},
             },
             batch_size=[],
         )
         out = td.to(spec)
         assert out["a"].dtype == torch.int32
         assert out["b"].dtype == torch.int64
+        assert out["sub", "c"].dtype == torch.int16
         assert out["a"].device == td["a"].device
 
     def test_to_attrs_td_missing_keys_passthrough(self):

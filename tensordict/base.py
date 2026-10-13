@@ -847,6 +847,31 @@ def _default_is_leaf(cls: Type) -> bool:
     return not _is_tensor_collection(cls) or getattr(cls, "_pass_through", False)
 
 
+def _flatten_keys_leaves(
+    td: TensorCollection, is_leaf: Callable[[Type], bool]
+) -> list[tuple[NestedKey, Any]]:
+    """Returns the ``(key, value)`` pairs that ``flatten_keys`` keeps.
+
+    Unlike ``items(True, True, is_leaf)``, a tensor collection whose class
+    ``is_leaf`` accepts is kept whole: its entries are not listed.
+    """
+    result = []
+    for key, val in td.items():
+        cls = type(val)
+        if is_leaf(cls):
+            result.append(((key,), val))
+        elif (
+            _is_tensor_collection(cls)
+            and not is_non_tensor(cls)
+            and not _pass_through(val)
+        ):
+            result.extend(
+                ((key, *subkey), subval)
+                for subkey, subval in _flatten_keys_leaves(val, is_leaf)
+            )
+    return result
+
+
 def _is_leaf_nontensor(cls: Type) -> bool:
     """Returns ``True`` if a type is not a tensor collection (tensordict or tensorclass) or is a non-tensor.
 
@@ -909,6 +934,16 @@ _NESTED_TENSORS_AS_LISTS = _NestedTensorsAsLists()
 
 
 _NESTED_TENSORS_AS_LISTS_NONTENSOR = _NestedTensorsAsListsNonTensor()
+
+# The is_leaf functions that accept no tensor collection with entries: for
+# them, items(True, True, is_leaf) lists the leaves that flatten_keys keeps.
+_IS_LEAF_WITHOUT_NODES = (
+    _default_is_leaf,
+    _NESTED_TENSORS_AS_LISTS,
+    _NESTED_TENSORS_AS_LISTS_NONTENSOR,
+    _is_leaf_nontensor,
+    _is_non_tensor,
+)
 
 
 # Set while an in-place method runs on a tensordict whose file is opened
@@ -7361,9 +7396,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def _flatten_keys_outplace(self, separator, is_leaf):
         if is_leaf is None:
             is_leaf = _is_leaf_nontensor
-        all_leaves_all_vals = zip(
-            *self.items(include_nested=True, leaves_only=True, is_leaf=is_leaf)
-        )
+        if is_leaf in _IS_LEAF_WITHOUT_NODES:
+            # items() lists the same leaves, faster
+            leaves = self.items(include_nested=True, leaves_only=True, is_leaf=is_leaf)
+        else:
+            leaves = _flatten_keys_leaves(self, is_leaf)
+        all_leaves_all_vals = zip(*leaves)
         try:
             all_leaves, all_vals = all_leaves_all_vals
         except ValueError:
@@ -7409,10 +7447,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def _flatten_keys_inplace(self, separator, is_leaf):
         if is_leaf is None:
             is_leaf = _is_leaf_nontensor
-        all_leaves = [
-            _unravel_key_to_tuple(key)
-            for key in self.keys(include_nested=True, leaves_only=True, is_leaf=is_leaf)
-        ]
+        if is_leaf in _IS_LEAF_WITHOUT_NODES:
+            # keys() lists the same leaves, faster
+            leaves = self.keys(include_nested=True, leaves_only=True, is_leaf=is_leaf)
+        else:
+            leaves = (key for key, _ in _flatten_keys_leaves(self, is_leaf))
+        all_leaves = [_unravel_key_to_tuple(key) for key in leaves]
         all_leaves_flat = [separator.join(key) for key in all_leaves]
         if len(set(all_leaves_flat)) < len(set(all_leaves)):
             # find duplicates
@@ -7433,9 +7473,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self.rename_key_(leaf, leaf_flat)
             if len(leaf) == 1:
                 root_keys.discard(leaf[0])
-        # with a custom is_leaf, a sub-tensordict can be a leaf and still have
-        # leaves of its own; those were moved out, so remove it as well
-        root_keys.update(leaf[0] for leaf in all_leaves if len(leaf) > 1)
         self.exclude(*root_keys, inplace=True)
         return self
 
@@ -8101,12 +8138,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         def _is_attrs_leaf(cls):
             return issubclass(cls, TensorAttrs) or _default_is_leaf(cls)
 
+        # _flatten_keys_leaves keeps each TensorAttrs whole; items() would also
+        # search it for entries
         spec: dict = {}
-        for key, val in attrs_td.items(
-            include_nested=True, leaves_only=True, is_leaf=_is_attrs_leaf
-        ):
+        for key, val in _flatten_keys_leaves(attrs_td, _is_attrs_leaf):
             if isinstance(val, TensorAttrs):
-                spec[key] = val
+                spec[unravel_key(key)] = val
 
         # D2H (device-to-host) is the only transfer direction that needs an explicit
         # sync after an async copy: host memory is outside the source device's stream
