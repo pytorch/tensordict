@@ -23,6 +23,10 @@ keep a [`MetaData`](tensordict.MetaData.html#tensordict.MetaData).
 
 See [Non-tensor data and unbatched entries](../../concepts/non_tensor.html#non-tensor-data).
 
+copy()
+
+Return a shallow copy, equivalent to `_clone(recurse=False)`.
+
 *property*device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*
 
 Retrieves the device type of tensor class.
