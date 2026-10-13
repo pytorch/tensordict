@@ -491,17 +491,21 @@ class TestTensorDicts(TestTensorDictsBase):
         elif op == "flatten":
             a = td.flatten_keys()
             b = td.flatten_keys()
-            if td_name not in ("td_h5",):
-                assert a is b
-            else:
-                assert a is not b
+            # The result is a copy of the cached value: a write into it must
+            # not show up in later calls (gh-2375).
+            assert a is not b
+            assert set(a.keys(True)) == set(b.keys(True))
+            a["_new_key"] = torch.zeros(a.batch_size, device=a.device)
+            assert "_new_key" not in td.flatten_keys().keys()
         elif op == "unflatten":
             a = td.unflatten_keys()
             b = td.unflatten_keys()
-            if td_name not in ("td_h5",):
-                assert a is b
-            else:
-                assert a is not b
+            # The result is a copy of the cached value: a write into it must
+            # not show up in later calls (gh-2375).
+            assert a is not b
+            assert set(a.keys(True)) == set(b.keys(True))
+            a["_new_key"] = torch.zeros(a.batch_size, device=a.device)
+            assert "_new_key" not in td.unflatten_keys().keys()
 
         if td_name not in ("td_params", "td_h5"):
             assert len(td._cache)

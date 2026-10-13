@@ -3792,9 +3792,8 @@ class TestTensorClass:
         assert "s=None" not in repr(tc)
 
     def test_shape_cm_locked_cached_result(self):
-        # flatten_keys and unflatten_keys of a locked tensorclass return their
-        # cached result again. Calling them more times than the recursion limit
-        # must not raise.
+        # flatten_keys and unflatten_keys of a locked tensorclass are cached.
+        # Calling them more times than the recursion limit must not raise.
         @tensorclass
         class TC:
             x: torch.Tensor
