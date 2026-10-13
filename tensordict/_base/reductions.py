@@ -78,6 +78,16 @@ def _warn_tuple_dim(reduction_name: str, dim: tuple) -> None:
         )
 
 
+def _check_has_tensor_leaves(reduction_name: str, leaves: list) -> None:
+    # reduce=True reduces the tensor leaves together; without any, torch.cat
+    # would raise an error that does not say why
+    if not leaves:
+        raise ValueError(
+            f"{reduction_name}(reduce=True) reduces the tensor leaves together, "
+            "and this tensordict has no tensor leaves."
+        )
+
+
 class _Reductions:
     """Reductions over the batch dimensions or the leaves."""
 
@@ -2000,6 +2010,7 @@ class _Reductions:
                         True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
                     )
                 ]
+                _check_has_tensor_leaves(reduction_name, agglomerate)
                 agglomerate = torch.cat(agglomerate, dim=0)
                 if reduction_name == "quantile":
                     q = kwargs.pop("q")
@@ -2035,6 +2046,7 @@ class _Reductions:
                     cat_dim = dim[0]
                 else:
                     cat_dim = dim
+                _check_has_tensor_leaves(reduction_name, agglomerate)
                 agglomerate = torch.cat(agglomerate, dim=cat_dim)
                 kwargs_copy = {}
                 if keepdim is not NO_DEFAULT:
