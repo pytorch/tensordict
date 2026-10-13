@@ -1008,6 +1008,20 @@ class TestNonTensorData:
             warnings.simplefilter("error")
             td.set_at_(key, value, 1)
 
+    @pytest.mark.parametrize("lazy", [False, True], ids=["dense", "lazy"])
+    @pytest.mark.parametrize("kind", ["shared", "memmap"])
+    @pytest.mark.parametrize("value", [[1, 2], 1], ids=type)
+    def test_set_at_cast_raises_no_warning(self, value, kind, lazy):
+        # Shared and memmap containers refuse the write: it does not warn
+        td = TensorDict(a=NonTensorData("s", batch_size=[3]), batch_size=[3])
+        if lazy:
+            td = lazy_stack(td.unbind(0))
+        td = td.share_memory_() if kind == "shared" else td.memmap_()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with pytest.raises(RuntimeError):
+                td.set_at_("a", value, slice(0, 2))
+
     @pytest.mark.parametrize("stacked", [False, True])
     @pytest.mark.parametrize("array", [np.array, torch.tensor], ids=["numpy", "torch"])
     def test_set_at_array_data(self, array, stacked):

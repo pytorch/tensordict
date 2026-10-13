@@ -1041,6 +1041,9 @@ def _warn_set_at_cast(
     key: str, value: list | bool | int | float | np.bool_ | np.integer | np.floating
 ) -> None:
     """Warns that ``value``, written at an index of the non-tensor entry ``key``, becomes a tensor today."""
+    if is_compiling():
+        # Dynamo can trace neither the frame walk nor warnings.warn
+        return
     warned = getattr(_SET_AT_CAST_CALL, "warned", None)
     if warned:
         return

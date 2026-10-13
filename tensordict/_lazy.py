@@ -1745,8 +1745,11 @@ class LazyStackedTensorDict(TensorDictBase):
                 # the value is written to each entry of the nested tensordicts
                 self._get_str(key, NO_DEFAULT)[index] = value
                 return self
-            if getattr(type(entry), "_is_non_tensor", False) and isinstance(
-                original, _SET_AT_CAST_TYPES
+            if (
+                getattr(type(entry), "_is_non_tensor", False)
+                and isinstance(original, _SET_AT_CAST_TYPES)
+                # shared and memmap members refuse the write
+                and not (self._is_shared or self._is_memmap)
             ):
                 _warn_set_at_cast(key, original)
             feature_ndim = entry.ndim

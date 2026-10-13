@@ -1357,6 +1357,8 @@ class TensorDict(TensorDictBase):
                 getattr(type(tensor_in), "_is_non_tensor", False)
                 and isinstance(original, _SET_AT_CAST_TYPES)
                 and not is_tensor_collection(value)
+                # shared and memmap containers refuse the write below
+                and not (self._is_shared or self._is_memmap)
             ):
                 _warn_set_at_cast(key, original)
 

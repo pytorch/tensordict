@@ -307,6 +307,24 @@ def test_where_non_tensor_data():
     assert result.get("s").tolist() == ["a", "b", "a", "b"]
 
 
+@pytest.mark.parametrize("lazy", [False, True], ids=["dense", "lazy"])
+@pytest.mark.parametrize("value", [3, [1, 2]], ids=type)
+def test_set_at_cast_non_tensor(value, lazy):
+    # The FutureWarning for a value cast to a tensor in a non-tensor entry
+    # (gh-2522) is skipped under compile, which traces no warnings.warn
+    def fn(td):
+        td.set_at_("a", value, slice(0, 2))
+        return td["b"] + 1
+
+    td = TensorDict(
+        a=NonTensorData("s", batch_size=[3]), b=torch.zeros(3), batch_size=[3]
+    )
+    if lazy:
+        td = lazy_stack(td.unbind(0))
+    assert (torch.compile(fn, fullgraph=True, backend="eager")(td) == 1).all()
+    assert torch.equal(td[1]["a"], torch.as_tensor(value))
+
+
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
     def test_tensor_output(self, mode):
