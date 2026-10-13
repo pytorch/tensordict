@@ -541,6 +541,8 @@ class _Reductions:
 
         Args:
             dim (int): integer representing the dimension along which to perform the cummin operation.
+                A tuple uses only its first dim; passing one is deprecated
+                and will be removed in TensorDict 0.17.
 
         Keyword Args:
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
@@ -662,6 +664,8 @@ class _Reductions:
 
         Args:
             dim (int): integer representing the dimension along which to perform the cummax operation.
+                A tuple uses only its first dim; passing one is deprecated
+                and will be removed in TensorDict 0.17.
 
         Keyword Args:
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
@@ -1865,11 +1869,13 @@ class _Reductions:
 
         Args:
             q (float or torch.Tensor): quantile to compute, must be between 0 and 1.
-            dim (int, tuple of int, str, optional): if ``None``, returns a dimensionless
+            dim (int, str, optional): if ``None``, returns a dimensionless
                 tensordict containing the quantile value of all leaves (if this can be computed).
-                If integer or tuple of integers, `quantile` is called upon the dimension specified if
+                If integer, `quantile` is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
                 shape.
+                A tuple reduces only its first dim; passing one is deprecated
+                and will be removed in TensorDict 0.17.
                 Only the `"feature"` string is currently permitted. Using `dim="feature"` will
                 achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
                 shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
@@ -2093,8 +2099,15 @@ class _Reductions:
         # Only the first dim of the tuple is reduced, as is. amax and amin
         # give the same result as torch for one dim inside the batch dims.
         tuple_dim = None
-        if not tuple_ok and isinstance(dim, tuple) and dim:
-            if reduction_name in ("max", "min", "prod") or (
+        if isinstance(dim, tuple) and dim:
+            if reduction_name in (
+                "max",
+                "min",
+                "prod",
+                "cummax",
+                "cummin",
+                "quantile",
+            ) or (
                 reduction_name in ("amax", "amin")
                 and (len(dim) > 1 or not 0 <= dim[0] < self.batch_dims)
             ):
@@ -2102,6 +2115,10 @@ class _Reductions:
         if dim_needs_proc:
             dim = proc_dim(dim, self.batch_dims, tuple_ok=tuple_ok)
             if not tuple_ok and dim is not None:
+                dim = dim[0]
+            elif reduction_name == "quantile" and dim:
+                # torch.quantile takes one dim, so the leaves and the batch
+                # size are reduced over the first dim of the tuple only
                 dim = dim[0]
         if dim in ("feature",):
             if keepdim:
