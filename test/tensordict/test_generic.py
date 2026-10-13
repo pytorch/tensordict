@@ -786,6 +786,37 @@ class TestGeneric:
         assert td.consolidate() is td
         assert pickle.loads(pickle.dumps(td))["b"].batch_size == (2, 3, 4)
 
+    @pytest.mark.parametrize("use_buffer", [False, True])
+    def test_consolidated_file_batch_size_names_consolidate_again(
+        self, tmp_path, use_buffer
+    ):
+        # the file keeps the batch sizes and names of consolidate(filename=...):
+        # calling it again with the same file writes the current ones
+        filename = tmp_path / "td.bin"
+        td = TensorDict(
+            a=torch.zeros(2, 3), b={"c": torch.ones(2, 3, 4)}, batch_size=[2]
+        ).consolidate(filename=filename, use_buffer=use_buffer)
+        td.batch_size = [2, 3]
+        td.names = ["x" * 100, "y"]
+        td["b"].batch_size = [2, 3, 4]
+        assert td.consolidate(filename=filename) is td
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.batch_size == (2, 3)
+        assert loaded.names == ["x" * 100, "y"]
+        assert loaded["b"].batch_size == (2, 3, 4)
+        assert (loaded == td).all()
+        # a shorter metadata
+        td.names = None
+        td.batch_size = [2]
+        assert td.consolidate(filename=str(filename)) is td
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.batch_size == (2,)
+        assert loaded.names == [None]
+        assert (loaded == td).all()
+        # another file name writes nothing
+        assert td.consolidate(filename=tmp_path / "other.bin") is td
+        assert not (tmp_path / "other.bin").exists()
+
     def test_consolidated_lazy_stack_names_serialized(self):
         td = lazy_stack(
             [
