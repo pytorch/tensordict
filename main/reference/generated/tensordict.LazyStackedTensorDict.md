@@ -90,9 +90,11 @@ constructor raises a `RuntimeError`.
 tensordicts are given, the stack takes the device of the first
 one and ignores this argument.
 - **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the dimension names of an empty stack.
-If tensordicts are given, the names come from them and this
-argument is ignored. To name the stack dimension, use
-`stack_dim_name`.
+If tensordicts are given, the names come from them, and this
+argument is ignored with a `FutureWarning`. To name the dims of
+such a stack, pass `stack_dim_name`, or set `names` on the
+stack. Starting with TensorDict 0.17, the default will change to
+applying these names to the stack.
 - **stack_dim_name** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the name of the stack dimension.
 Defaults to `None`.
 - **strict_shape** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the batch sizes of the
@@ -322,14 +324,17 @@ a list, one item per stacked tensordict.
 Exclusive with `as_padded_tensor` and `as_nested_tensor`.
 Defaults to `False`.
 - **as_padded_tensor** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the entries are
-padded to the largest shape and returned as one tensor.
-`padding_value` sets the padding value and `padding_side`
-sets the side.
+padded to the largest shape and returned as one tensor: each
+dim is padded to its largest size, also across the levels of
+a lazy stack of lazy stacks. `padding_value` sets the
+padding value and `padding_side` sets the side of every
+padded dim.
 Exclusive with `as_list` and `as_nested_tensor`.
 Defaults to `False`.
 - **as_nested_tensor** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the entries are
 returned as a nested tensor ([`torch.nested`](https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested)). `layout`
-sets its layout.
+sets its layout. A lazy stack of lazy stacks raises a
+`ValueError`, as a nested tensor has a single nested level.
 Exclusive with `as_list` and `as_padded_tensor`.
 Defaults to `False`.
 - **layout** ([*layout*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout)*,**optional*) - the layout of the nested tensor
@@ -487,14 +492,17 @@ as a list.
 Exclusive with `as_padded_tensor` and `as_nested_tensor`.
 Defaults to `False`.
 - **as_padded_tensor** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the tensors are
-padded to the largest shape and stacked into one tensor.
-`padding_value` sets the padding value and `padding_side`
-sets the side.
+padded to the largest shape and stacked into one tensor: each
+dim is padded to its largest size. `padding_value` sets the
+padding value and `padding_side` sets the side of every
+padded dim.
 Exclusive with `as_list` and `as_nested_tensor`.
 Defaults to `False`.
 - **as_nested_tensor** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the tensors are
 returned as a nested tensor ([`torch.nested`](https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested)). `layout`
-sets its layout.
+sets its layout. Tensors that are nested tensors themselves
+raise a `ValueError`, as a nested tensor has a single nested
+level.
 Exclusive with `as_list` and `as_padded_tensor`.
 Defaults to `False`.
 - **layout** ([*layout*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout)*,**optional*) - the layout of the nested tensor
