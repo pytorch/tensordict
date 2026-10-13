@@ -732,6 +732,21 @@ class TestPointwiseOps:
                 result[key], torch.rsub(td[key], other_leaf, **kwargs)
             )
 
+    @pytest.mark.parametrize("alpha", [1, 2, -0.3])
+    @pytest.mark.parametrize("op", ["add", "add_", "sub", "sub_"])
+    def test_add_sub_alpha_number(self, op, alpha):
+        # Like torch, add and sub scale a number other by alpha (#2495)
+        torch.manual_seed(0)
+        td = TensorDict(
+            a=torch.randn(3, 4), b={"c": torch.randn(3, 4, 5)}, batch_size=(3, 4)
+        )
+        expected = td.apply(lambda x: getattr(x, op.rstrip("_"))(1.5, alpha=alpha))
+        result = getattr(td, op)(1.5, alpha=alpha)
+        if op.endswith("_"):
+            assert result is td
+        for key in ("a", ("b", "c")):
+            torch.testing.assert_close(result[key], expected[key])
+
     @pytest.mark.parametrize("shape", [(4,), (3, 4), (2, 3, 4)])
     def test_broadcast_tensordict(self, shape):
         torch.manual_seed(0)
