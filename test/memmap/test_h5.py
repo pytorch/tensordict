@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import tensordict.persistent as tensordict_persistent
 import torch
 from tensordict import (
     lazy_stack,
@@ -387,6 +388,25 @@ def test_fill_zero_masked_fill_no_read(tmp_path, monkeypatch):
     reopened = PersistentTensorDict.from_h5(tmp_path / "file.h5")
     torch.testing.assert_close(reopened.to_tensordict(), td.zero_())
     reopened.close()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_fill_write_blocks(tmp_path, monkeypatch):
+    # fill_ writes a dataset in blocks of rows, and a 0-d dataset at once
+    monkeypatch.setattr(tensordict_persistent, "_WRITE_FULL_BLOCK_BYTES", 100)
+    td = TensorDict(
+        {
+            "a": torch.zeros(7, 3, dtype=torch.int64),
+            "big": torch.zeros(2, 40),
+            "s": 0.0,
+        },
+        batch_size=[],
+    )
+    h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+    for key in td.keys():
+        assert h5td.fill_(key, 2.5) is h5td
+        td.fill_(key, 2.5)
+    torch.testing.assert_close(h5td.to_tensordict(), td)
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")

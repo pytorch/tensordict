@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import math
 import os
 import pickle
 import tempfile
@@ -127,6 +128,10 @@ class _PersistentTDKeysView(_TensorDictKeysView):
         except (KeyError, ValueError):
             return False
         return self._accepts(key, metadata)
+
+
+# The largest block that _H5Backend.write_full allocates.
+_WRITE_FULL_BLOCK_BYTES = 64 << 20
 
 
 class _PersistentBackend:
@@ -341,8 +346,18 @@ class _H5Backend(_PersistentBackend):
         node[mask] = value
 
     def write_full(self, node, value) -> None:
-        # h5py writes a broadcast scalar much more slowly than a full array
-        node[...] = np.full(node.shape, value, dtype=node.dtype)
+        # h5py writes a broadcast scalar much more slowly than a full array:
+        # write blocks of rows of at most _WRITE_FULL_BLOCK_BYTES, so that a
+        # dataset larger than memory can be filled too
+        if not node.shape:
+            node[()] = value
+            return
+        row_bytes = node.dtype.itemsize * math.prod(node.shape[1:])
+        rows = min(node.shape[0], max(1, _WRITE_FULL_BLOCK_BYTES // max(row_bytes, 1)))
+        block = np.full((rows, *node.shape[1:]), value, dtype=node.dtype)
+        for start in range(0, node.shape[0], rows):
+            stop = min(start + rows, node.shape[0])
+            node[start:stop] = block[: stop - start]
 
     def try_create_dataset(self, file, key, value, kwargs) -> bool:
         try:
