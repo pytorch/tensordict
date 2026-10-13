@@ -591,6 +591,43 @@ class TestZarrStores:
         assert (td_recon["b", "c", "d"] == td["b", "c", "d"]).all()
         td_recon.close()
 
+    def test_zip_store_from_dict_named_groups_written_once(self, tmp_path):
+        # the nested groups of a named source keep their names, so that
+        # from_dict writes each group's zarr.json once (#2252)
+        import zipfile
+
+        from zarr.storage import ZipStore
+
+        path = tmp_path / "s.zarr.zip"
+        td = TensorDict(
+            {
+                "meta": {"m": torch.randn(4, 3)},
+                "b": {"c": {"d": torch.randn(4, 2, 5)}},
+                "e": TensorDict({}, [4, 3]),
+            },
+            batch_size=[4],
+            names=["t"],
+        )
+        # no warnings filter: the metadata rewrite is best effort and would
+        # swallow the duplicate-entry warning raised as an error
+        store = ZipStore(str(path), mode="w")
+        ptd = PersistentTensorDict.from_dict(td, store, backend="zarr")
+        assert ptd["meta"].names == ["t"]
+        assert ptd["b"]["c"].names == ["t"]
+        ptd["s"] = TensorDict(
+            {"y": torch.zeros(4, 2)}, batch_size=[4, 2], names=["t", "u"]
+        )
+        assert ptd["s"].names == ["t", "u"]
+        ptd.close()
+
+        with zipfile.ZipFile(path) as zf:
+            names = zf.namelist()
+        assert len(names) == len(set(names))
+        td_recon = TensorDict.from_zarr(ZipStore(str(path), mode="r"))
+        assert td_recon["meta"].names == ["t"]
+        assert (td_recon["b", "c", "d"] == td["b", "c", "d"]).all()
+        td_recon.close()
+
     def test_group_kwarg(self, tmp_path):
         td = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [3])
         td.to_zarr(tmp_path / "s.zarr")

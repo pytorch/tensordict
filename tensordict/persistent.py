@@ -2085,6 +2085,8 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                 self._backend.create_group(self.file, first_key, metadata)
                 target_td = self._get_str(first_key, default=NO_DEFAULT)
                 target_td.batch_size = value.batch_size
+                if value._has_names():
+                    target_td.names = value.names
             elif not is_tensor_collection(target_td):
                 raise RuntimeError(
                     f"cannot set a tensor collection in place of a non-tensor collection in {type(self).__name__}. "

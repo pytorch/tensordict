@@ -199,6 +199,18 @@ class TestH5Serialization:
         assert h5td.device is None
         h5td.close()
 
+    def test_set_named_sub_td_keeps_names(self, tmp_path):
+        # as on a TensorDict, a nested tensordict keeps its names (#2252)
+        td = TensorDict({"a": torch.zeros(4), "meta": {"m": torch.zeros(4, 3)}}, [4])
+        td.names = ["t"]
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        assert h5td["meta"].names == ["t"]
+        h5td["s"] = TensorDict(
+            {"y": torch.zeros(4, 2)}, batch_size=[4, 2], names=["t", "u"]
+        )
+        assert h5td["s"].names == ["t", "u"]
+        h5td.close()
+
     def test_batch_size_setter_incompatible(self, tmp_path):
         # as on a TensorDict, an incompatible batch size raises and the old
         # one stays
