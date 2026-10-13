@@ -2084,6 +2084,59 @@ class TestUnbatchedTensor:
         assert td.unflatten_keys(separator="_")["c", "d"] is td["c_d"]
         assert td.unflatten_keys(separator="_").flatten_keys()["c.d"] is td["c_d"]
 
+    @pytest.mark.parametrize(
+        "op",
+        [
+            lambda td: td.exp(),
+            lambda td: td.abs(),
+            lambda td: td.sqrt(),
+            lambda td: td.sigmoid(),
+            lambda td: td.reciprocal(),
+            lambda td: td.floor(),
+            lambda td: td - td,
+            lambda td: 1 - td,
+            lambda td: td / 2,
+            lambda td: td**2,
+            lambda td: td.lerp(td, 0.5),
+            lambda td: td.addcmul(td, td),
+            lambda td: td.addcdiv(td, td),
+        ],
+    )
+    def test_unbatched_pointwise_keeps_batched_leaves(self, op):
+        # Regression test for #2352: the _foreach ops wrapped every leaf in an
+        # UnbatchedTensor and gave each unbatched leaf the same batch size.
+        td = TensorDict(
+            a=torch.ones(3, 2),
+            u=UnbatchedTensor(torch.ones(5)),
+            n=TensorDict(v=UnbatchedTensor(torch.ones(7)), batch_size=[3, 2]),
+            batch_size=[3],
+        )
+        out = op(td)
+        assert type(out.get("a")) is torch.Tensor
+        assert out[0]["a"].shape == (2,)
+        assert isinstance(out.get("u"), UnbatchedTensor)
+        assert out.get("u").batch_size == (3,)
+        assert isinstance(out.get(("n", "v")), UnbatchedTensor)
+        assert out.get(("n", "v")).batch_size == (3, 2)
+
+    def test_unbatched_pointwise_norm(self):
+        td = TensorDict(
+            a=torch.ones(3, 2), u=UnbatchedTensor(torch.ones(5)), batch_size=[3]
+        )
+        out = td.norm()
+        assert type(out.get("a")) is torch.Tensor
+        assert out["a"].shape == ()
+
+    @pytest.mark.parametrize("op", [operator.add, operator.sub, operator.mul])
+    def test_unbatched_pointwise_other_unbatched(self, op):
+        td = TensorDict(a=torch.ones(3, 2), u=torch.ones(3), batch_size=[3])
+        other = TensorDict(
+            a=torch.ones(3, 2), u=UnbatchedTensor(torch.ones(3)), batch_size=[3]
+        )
+        out = op(td, other)
+        assert type(out.get("a")) is torch.Tensor
+        assert out[0]["a"].shape == (2,)
+
     def test_unbatched_view_base(self):
         view = UnbatchedTensor(torch.arange(6.0)).clone().reshape(2, 3)
         base = view._base

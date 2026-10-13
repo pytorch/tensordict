@@ -103,6 +103,8 @@ class _StoreStackElementView(TensorDictBase):
     _masking_on_dense_copy = True
     # each read fetches the entry from the server into a new tensor
     _reads_return_copies = True
+    # and each sub-tensordict is a new TensorDict
+    _nested_reads_return_copies = True
 
     def __init__(self, parent, element_idx: int):
         self._parent = parent
@@ -126,19 +128,13 @@ class _StoreStackElementView(TensorDictBase):
 
     # ---- TensorDictBase interface ----
 
-    @property
-    def batch_size(self) -> torch.Size:
-        return self._batch_size
-
-    @batch_size.setter
+    # Override: sets the batch size without checking it against the entries.
+    @TensorDictBase.batch_size.setter
     def batch_size(self, value):
         self._batch_size = torch.Size(value)
 
-    @property
-    def device(self) -> torch.device | None:
-        return self._device
-
-    @device.setter
+    # Override: the device can be set.
+    @TensorDictBase.device.setter
     def device(self, value):
         self._device = torch.device(value) if value is not None else None
 
@@ -436,9 +432,6 @@ class _StoreStackElementView(TensorDictBase):
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         raise RuntimeError("Cannot popitem from a stack element view.")
 
-    def _change_batch_size(self, new_size: torch.Size) -> None:
-        self._batch_size = new_size
-
     def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
         existing = self.get(key)
         if is_tensor_collection(existing):
@@ -657,10 +650,11 @@ class LazyStackedTensorDictStore(TensorDictBase):
     limits" section).
 
     .. warning::
-        Writes to nested entries through :meth:`update`, :meth:`zero_`,
-        :meth:`fill_` or ``store["nested"].set_`` are dropped without an
-        error (see #2154). Write a full element instead, for example
-        ``store[1] = TensorDict(...)``.
+        ``store["nested"]`` is an in-memory copy of the nested entry: writes
+        through it, for example ``store["nested"].set_(...)`` or
+        ``store["nested"].zero_()``, change the copy only, not the store.
+        Write with the full key, ``store.set(("nested", "b"), ...)``, or with
+        :meth:`update`.
 
     Stores each leaf key as a single concatenated blob in the store,
     regardless of how many stack elements there are.  For *N* elements and
@@ -715,6 +709,8 @@ class LazyStackedTensorDictStore(TensorDictBase):
     _masking_on_dense_copy = True
     # each read fetches the entry from the server into a new tensor
     _reads_return_copies = True
+    # and each sub-tensordict is a new TensorDict
+    _nested_reads_return_copies = True
 
     def __init__(
         self,
@@ -1475,21 +1471,9 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
     # ---- TensorDictBase interface ----
 
-    @property
-    def batch_size(self) -> torch.Size:
-        return self._batch_size
-
-    @batch_size.setter
-    def batch_size(self, value):
-        self._batch_size = torch.Size(value)
-
-    @property
-    def device(self) -> torch.device | None:
-        return self._device
-
-    @device.setter
-    def device(self, value):
-        self._device = torch.device(value) if value is not None else None
+    # Override: assigns batch_size and device without checks, like a stack element.
+    batch_size = _StoreStackElementView.batch_size
+    device = _StoreStackElementView.device
 
     def _rename_subtds(self, names):
         pass
@@ -2176,9 +2160,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
     # Override: the server holds no gradients.
     def detach_(self) -> Self:
         return self
-
-    def _change_batch_size(self, new_size: torch.Size) -> None:
-        self._batch_size = new_size
 
     def _write_back(self, keys, values, method: str) -> None:
         # Override: a key whose elements differ in shape is read with the shape

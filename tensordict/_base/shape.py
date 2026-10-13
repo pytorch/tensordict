@@ -1145,7 +1145,7 @@ class _ShapeOps:
         dim = _maybe_correct_neg_dim(dim, batch_size)
         max_size = batch_size[dim]
         if isinstance(split_size, int):
-            if split_size <= 0:
+            if split_size < 0 or (split_size == 0 and max_size != 0):
                 raise ValueError(
                     f"TensorDict.split: split_size must be positive, got {split_size}."
                 )
@@ -1163,6 +1163,9 @@ class _ShapeOps:
             }
         elif isinstance(split_size, (list, tuple)):
             if len(split_size) == 0:
+                if max_size == 0:
+                    # torch.split returns no pieces along a zero-size dim
+                    return ()
                 raise RuntimeError("Insufficient number of elements in split_size.")
             if not all(isinstance(x, int) for x in split_size):
                 raise TypeError(WRONG_TYPE)

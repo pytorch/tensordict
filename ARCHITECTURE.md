@@ -198,7 +198,10 @@ The in-place methods (`add_`, `abs_`, `+=`, ...) change the tensors that
 `_items_list` returns. On these classes, the `@_write_back_inplace` decorator
 runs the method on a `TensorDict` of the leaves that it reads
 (`_inplace_on_copies`), and `_write_back` writes each leaf back with
-`_set_tuple(..., inplace=True)`; `update_` calls `_write_back` itself. A new
+`_set_tuple(..., inplace=True)`; `update_` calls `_write_back` itself. The
+lazy stores also set `_nested_reads_return_copies`: a sub-tensordict read
+with `_get_str` is a new `TensorDict`, so `update` writes the leaves it
+merges into it back under their full keys (`_update_write_back`). A new
 in-place method that changes the leaves takes the decorator. A file opened
 read-only stays unchanged, with a warning (`_storage_is_read_only`).
 

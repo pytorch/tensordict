@@ -1491,13 +1491,13 @@ class _PointwiseOps:
         """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(end)):
-            end_val = end._values_list(True, True)
+            end_val = _values_by_key(end, keys)
         else:
             end_val = end
         if isinstance(weight, (float, torch.Tensor)):
             weight_val = weight
         elif _is_tensor_collection(type(weight)):
-            weight_val = weight._values_list(True, True)
+            weight_val = _values_by_key(weight, keys)
         else:
             weight_val = weight
         vals = _foreach("lerp", vals, end_val, weight_val)
@@ -1563,11 +1563,11 @@ class _PointwiseOps:
         """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other1)):
-            other1_val = other1._values_list(True, True)
+            other1_val = _values_by_key(other1, keys)
         else:
             other1_val = other1
         if _is_tensor_collection(type(other2)):
-            other2_val = other2._values_list(True, True)
+            other2_val = _values_by_key(other2, keys)
         else:
             other2_val = other2
         vals = _foreach("addcdiv", vals, other1_val, other2_val, value=value)
@@ -1635,11 +1635,11 @@ class _PointwiseOps:
         """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other1)):
-            other1_val = other1._values_list(True, True)
+            other1_val = _values_by_key(other1, keys)
         else:
             other1_val = other1
         if _is_tensor_collection(type(other2)):
-            other2_val = other2._values_list(True, True)
+            other2_val = _values_by_key(other2, keys)
         else:
             other2_val = other2
         vals = _foreach("addcmul", vals, other1_val, other2_val, value=value)
@@ -1994,9 +1994,9 @@ class _PointwiseOps:
             return self
         if any(_is_unbatched(v) for v in vals):
             if _is_tensor_collection(type(other)):
-                self.apply_(lambda x, y: x.maximum_(y), other)
+                self.apply_(lambda x, y: x.clamp_min_(y), other)
             else:
-                self.apply_(lambda x: x.maximum_(other))
+                self.apply_(lambda x: x.clamp_min_(other))
             return self
         _foreach("maximum_", vals, other_val)
         return self
@@ -2029,9 +2029,9 @@ class _PointwiseOps:
             return self.copy()
         if any(_is_unbatched(v) for v in vals):
             if _is_tensor_collection(type(other)):
-                return self.apply(lambda x, y: torch.maximum(x, y), other)
+                return self.apply(lambda x, y: torch.clamp_min(x, y), other)
             else:
-                return self.apply(lambda x: torch.maximum(x, other))
+                return self.apply(lambda x: torch.clamp_min(x, other))
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
                 True, True, sorting_keys=keys, default=default
@@ -2080,9 +2080,9 @@ class _PointwiseOps:
             return self
         if any(_is_unbatched(v) for v in vals):
             if _is_tensor_collection(type(other)):
-                self.apply_(lambda x, y: x.minimum_(y), other)
+                self.apply_(lambda x, y: x.clamp_max_(y), other)
             else:
-                self.apply_(lambda x: x.minimum_(other))
+                self.apply_(lambda x: x.clamp_max_(other))
             return self
         _foreach("minimum_", vals, other_val)
         return self
@@ -2115,9 +2115,9 @@ class _PointwiseOps:
             return self.copy()
         if any(_is_unbatched(v) for v in vals):
             if _is_tensor_collection(type(other)):
-                return self.apply(lambda x, y: torch.minimum(x, y), other)
+                return self.apply(lambda x, y: torch.clamp_max(x, y), other)
             else:
-                return self.apply(lambda x: torch.minimum(x, other))
+                return self.apply(lambda x: torch.clamp_max(x, other))
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
                 True, True, sorting_keys=keys, default=default

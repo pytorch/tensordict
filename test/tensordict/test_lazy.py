@@ -2010,6 +2010,30 @@ class TestLazyStackedTensorDict:
             assert ("nested", "sub", "c") in keys
             assert ("nested", "sub") not in keys
 
+    @pytest.mark.parametrize(
+        "is_leaf", [None, is_leaf_nontensor], ids=["default", "nontensor"]
+    )
+    def test_lazy_stacked_contains_nested(self, is_leaf):
+        # A nested key that goes through a tensor is absent, as in TensorDict
+        td = TensorDict(
+            a=torch.zeros(3),
+            nested=TensorDict(b=torch.zeros(3), s="a string", batch_size=[3]),
+            batch_size=[3],
+        )
+        lstd = lazy_stack([td, td.clone()])
+        keys = lstd.keys(include_nested=True, is_leaf=is_leaf)
+        listed = list(keys)
+        for key in [
+            *listed,
+            ("a", "x"),
+            ("a", "x", "y"),
+            ("nested", "x"),
+            ("nested", "b", "x"),
+            ("nested", "s", "data"),
+        ]:
+            assert (key in keys) == (key in listed), key
+            assert (key in keys) == (key in td.keys(True, is_leaf=is_leaf)), key
+
     def test_lazy_stack_keys_tc(self):
         class MC(TensorClass):
             a: torch.Tensor
@@ -2593,6 +2617,17 @@ class TestLazyStackedTensorDict:
         (piece,) = td.split(2, 1)
         assert piece.batch_size == torch.Size([3, 0])
         assert piece["a"].shape == torch.Size([3, 0, 4])
+        # split(0) gives one empty piece and split([]) none, as in torch
+        (piece,) = td.split(0, 1)
+        assert piece.batch_size == torch.Size([3, 0])
+        assert piece["a"].shape == torch.Size([3, 0, 4])
+        assert td.split([], 1) == ()
+        # along the stack dim of a stack with no members
+        empty = LazyStackedTensorDict(batch_size=(3,), stack_dim=0)
+        for split_size in (0, 2):
+            (piece,) = empty.split(split_size, 0)
+            assert piece.batch_size == torch.Size([0, 3])
+        assert empty.split([], 0) == ()
 
     def test_chunk_lazy_zero_size_dim(self):
         # torch.chunk gives `chunks` empty pieces along a zero-size dim

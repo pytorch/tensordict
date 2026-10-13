@@ -1345,19 +1345,14 @@ class TensorDictStore(TensorDictBase):
 
     # ---- TensorDictBase interface: batch_size / device / names ----
 
-    @property
-    def batch_size(self) -> torch.Size:
-        return self._batch_size
-
-    @batch_size.setter
+    # Override: converts to torch.Size first, so that an unchanged batch size
+    # returns early and does not persist the metadata again.
+    @TensorDictBase.batch_size.setter
     def batch_size(self, value):
         self._batch_size_setter(torch.Size(value))
 
-    @property
-    def device(self) -> torch.device | None:
-        return self._device
-
-    @device.setter
+    # Override: the device can be set, and is persisted on the server.
+    @TensorDictBase.device.setter
     def device(self, value):
         self._device = torch.device(value) if value is not None else None
         self._run_sync(self._apersist_metadata())
@@ -2482,6 +2477,7 @@ class TensorDictStore(TensorDictBase):
                     f"is incompatible with the batch-size {new_size}."
                 )
 
+    # Override: persists the batch size on the server.
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._batch_size = new_size
         # Nested views and shallow copies share the metadata keys of the store:

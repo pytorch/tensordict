@@ -1472,6 +1472,27 @@ class TestTC:
         data.y = torch.full((3,), 2.0)
         assert (read_c(data) == 2).all()
 
+    @pytest.mark.parametrize("shadow", [False, True])
+    def test_tc_deleted_field_read(self, mode, shadow):
+        # #2147: a compiled read of a deleted field gives None, and sees the
+        # field again once it holds a tensor
+        @tensorclass(shadow=shadow)
+        class Regular:
+            x: torch.Tensor
+            y: torch.Tensor = None
+
+        def read(tc):
+            if tc.y is None:
+                return tc.x
+            return tc.x + tc.y
+
+        read_c = torch.compile(read, fullgraph=True, mode=mode)
+        data = Regular(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+        del data.y
+        assert (read_c(data) == 0).all()
+        data.y = torch.full((3,), 2.0)
+        assert (read_c(data) == 2).all()
+
     @pytest.mark.parametrize("form", ["bracket", "decorator"])
     def test_tc_tensor_only_init(self, mode, form):
         # The generated __init__ of the bracket form sets _tensordict

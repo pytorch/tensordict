@@ -22,6 +22,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, get_type_hints
+from unittest import mock
 
 import numpy as np
 import pytest
@@ -1044,6 +1045,47 @@ class TestGeneric:
         viewedtd.set("a", a)
         assert viewedtd.get("a").device == device
         assert (a.to(device) == viewedtd.get("a")).all()
+
+    @pytest.mark.parametrize("as_tensorclass", [False, True])
+    @pytest.mark.parametrize(
+        "device,expected",
+        [
+            (None, torch.device("cuda")),
+            (1, torch.device("cuda", 1)),
+            (torch.tensor(1), torch.device("cuda", 1)),
+            ("1", torch.device("cuda", 1)),
+            ("cuda", torch.device("cuda")),
+            ("cuda:1", torch.device("cuda", 1)),
+            (torch.device("cuda", 1), torch.device("cuda", 1)),
+        ],
+    )
+    def test_cuda_device_and_kwargs(self, as_tensorclass, device, expected):
+        # `to` is mocked so that the test runs without a GPU.
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        if as_tensorclass:
+
+            @tensorclass
+            class MyClass:
+                a: torch.Tensor
+
+            td = MyClass.from_tensordict(td)
+        with mock.patch.object(TensorDict, "to", autospec=True) as to:
+            if device is None:
+                td.cuda(non_blocking=True)
+            else:
+                td.cuda(device, non_blocking=True)
+        to.assert_called_once()
+        (target,) = to.call_args.args[1:]
+        assert torch.device(target) == expected
+        assert to.call_args.kwargs == {"non_blocking": True}
+
+    @pytest.mark.parametrize("device", ["cpu", torch.device("cpu"), "meta"])
+    def test_cuda_rejects_non_cuda_device(self, device):
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        with mock.patch.object(TensorDict, "to", autospec=True) as to:
+            with pytest.raises(RuntimeError, match="must be a cuda device"):
+                td.cuda(device)
+        to.assert_not_called()
 
     def test_data_grad(self):
         td = TensorDict(
@@ -2369,6 +2411,15 @@ class TestGeneric:
             {"a": {"b": {}, "c": NonTensorData("a string!", batch_size=[])}}, []
         ).is_empty()
         assert not TensorDict({"a": {"b": {}, "c": 1}}, []).is_empty()
+
+    @pytest.mark.parametrize("device", [None, "cpu", "meta"])
+    def test_is_meta(self, device):
+        td = TensorDict({"a": torch.zeros(3), ("b", "c"): torch.zeros(3)}, [3])
+        if device is not None:
+            td = td.to(device)
+        assert td.is_meta is (device == "meta")
+        assert td["b"].is_meta is (device == "meta")
+        assert lazy_stack([td, td]).is_meta is (device == "meta")
 
     def test_is_in(self):
         td = TensorDict.fromkeys({"a", "b", "c", ("d", "e")}, 0)
@@ -5212,6 +5263,18 @@ class TestGeneric:
                 for piece in pieces:
                     assert piece["a"].shape == (*piece.batch_size, 4)
                     assert piece["b", "c"].shape == piece.batch_size
+        # split(0) gives one empty piece and split([]) none, as in torch
+        for split_size in (0, []):
+            pieces = td.split(split_size, 0)
+            ref_pieces = ref.split(split_size, 0)
+            assert [p.batch_size for p in pieces] == [r.shape for r in ref_pieces]
+            for piece in pieces:
+                assert piece["a"].shape == (*piece.batch_size, 4)
+        # along dim 1, of size 3, both raise as in torch
+        with pytest.raises(ValueError, match="split_size must be positive"):
+            td.split(0, 1)
+        with pytest.raises(RuntimeError, match="Insufficient number of elements"):
+            td.split([], 1)
 
     def test_chunk_zero_size_dim_views(self, tmp_path):
         # sub-tensordicts, legacy lazy views and h5 tensordicts have their own

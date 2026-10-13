@@ -481,10 +481,7 @@ class TestStoresMatchDense:
                     dense[index] = value
                 except Exception:
                     continue
-                # reset one key at a time: LazyStackedTensorDictStore.update()
-                # does not write nested keys
-                for key in _tensor_keys(original):
-                    store[key] = original[key]
+                store.update(original)
                 try:
                     store[index] = value
                     if not (store.to_tensordict() == dense).all():

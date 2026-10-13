@@ -1051,7 +1051,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     _safe: bool = False
     _lazy: bool = False
     _inplace_set: bool = False
-    is_meta: bool = False
     _is_locked: bool = False
     _is_shared: bool = False
     _is_memmap: bool = False
@@ -1079,6 +1078,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # as for an h5 or zarr file or a store. The in-place methods then write
     # their results back (see _write_back_inplace and _write_back).
     _reads_return_copies = False
+    # Whether a sub-tensordict read with _get_str is a new TensorDict filled
+    # from the stored data, as in the lazy stores. update() then writes the
+    # leaves it merges into the sub-tensordict back (see _update_write_back).
+    _nested_reads_return_copies = False
 
     @classmethod
     def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
@@ -1521,7 +1524,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         self.batch_size = value
 
     @property
-    @abc.abstractmethod
     def batch_size(self) -> torch.Size:
         """The batch size of the tensordict, as a :class:`torch.Size`. ``shape`` is the same attribute.
 
@@ -1565,7 +1567,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             ...
             RuntimeError: the Tensor key 0 has shape torch.Size([3, 4]) which is incompatible with the batch-size torch.Size([4]).
         """
-        raise NotImplementedError
+        return self._batch_size
+
+    @batch_size.setter
+    def batch_size(self, new_size: torch.Size) -> None:
+        self._batch_size_setter(new_size)
 
     def size(self, dim: int | None = None) -> torch.Size | int:
         """Returns the batch size, or the size of one batch dimension.
@@ -2471,7 +2477,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Device functionality: device is optional. If provided, it will enforce
     # all data is on the same device
     @property
-    @abc.abstractmethod
     def device(self) -> torch.device | None:
         """Device of a TensorDict.
 
@@ -2517,12 +2522,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             device(type='meta')
 
         """
-        raise NotImplementedError
+        return self._device
 
     @device.setter
-    @abc.abstractmethod
     def device(self, value: DeviceType) -> None:
-        raise NotImplementedError
+        raise RuntimeError(
+            "device cannot be set using tensordict.device = device, "
+            "because device cannot be updated in-place. To update device, use "
+            "tensordict.to(new_device), which will return a new tensordict "
+            "on the new device. You can also use tensordict.to(new_device) as a "
+            "context manager for temporary device changes."
+        )
 
     @_lock_blocked
     def clear(self) -> Self:
@@ -2552,6 +2562,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     @property
     def is_cpu(self):
         return self.device is not None and self.device.type == "cpu"
+
+    @property
+    def is_meta(self) -> bool:
+        return self.device is not None and self.device.type == "meta"
 
     def share_memory_(self) -> Self:
         """Places all the tensors in shared memory.
@@ -3554,6 +3568,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                             update_batch_size=update_batch_size,
                             ignore_lock=ignore_lock,
                         )
+                        if self._nested_reads_return_copies:
+                            self._update_write_back(
+                                firstkey,
+                                target,
+                                subkey,
+                                value,
+                                sub_keys_to_update,
+                                is_leaf=is_leaf,
+                                inplace=inplace,
+                                non_blocking=non_blocking,
+                            )
                         continue
                     elif isinstance(value, (dict,)) or _is_tensor_collection(
                         type(value)
@@ -3598,6 +3623,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                                 update_batch_size=update_batch_size,
                                 ignore_lock=ignore_lock,
                             )
+                            if self._nested_reads_return_copies:
+                                self._update_write_back(
+                                    firstkey,
+                                    target,
+                                    (),
+                                    value,
+                                    sub_keys_to_update,
+                                    is_leaf=is_leaf,
+                                    inplace=inplace,
+                                    non_blocking=non_blocking,
+                                )
                         continue
                 # A tensor collection may still be a leaf so we need to duplicate the logic here
                 if (
@@ -3640,6 +3676,44 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # self.batch_size = ()
             self.auto_batch_size_(bd, keep_compliant_size=True)
         return self
+
+    def _update_write_back(
+        self,
+        firstkey,
+        target,
+        subkey,
+        value,
+        keys_to_update,
+        *,
+        is_leaf,
+        inplace,
+        non_blocking,
+    ):
+        """Writes the leaves that update() merged into the copy ``target`` back to self.
+
+        ``target`` is a copy of ``self[firstkey]`` and ``value`` was merged
+        into it at ``subkey``. Only the leaves of ``value`` are written, so the
+        other leaves of ``target``, which may have been read with the shape of
+        the first element of a stack, are left as they are.
+        """
+        if not _is_tensor_collection(type(value)):
+            from tensordict._td import TensorDict
+
+            value = TensorDict(value, batch_size=[])
+        keys_to_update = [_unravel_key_to_tuple(k) for k in keys_to_update or ()]
+        for key in value.keys(True, True, is_leaf=is_leaf):
+            key = (*subkey, *_unravel_key_to_tuple(key))
+            if keys_to_update and not any(key[: len(k)] == k for k in keys_to_update):
+                continue
+            full_key = (firstkey, *key)
+            self._set_tuple(
+                full_key,
+                target._get_tuple(key, NO_DEFAULT),
+                # a locked tensordict takes no new keys, even in place
+                inplace=inplace and (not self.is_locked or full_key in self.keys(True)),
+                validated=True,
+                non_blocking=non_blocking,
+            )
 
     def update_(
         self,
@@ -6983,9 +7057,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
-    @abc.abstractmethod
     def _change_batch_size(self, new_size: torch.Size) -> None:
-        raise NotImplementedError
+        self._batch_size = new_size
 
     def is_contiguous(self) -> bool:
         """Returns a boolean indicating if all the tensors are contiguous."""
