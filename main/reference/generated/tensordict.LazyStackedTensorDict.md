@@ -198,7 +198,15 @@ batch dimensions to keep.
 - **stack_dim** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the stack dimension. Defaults to `0`.
 - **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the names of the dimensions of the
 result, stack dimension included. Exclusive with
-`stack_dim_name`.
+`stack_dim_name`. Without a `batch_size`, only
+`names[stack_dim]` is used today and the members get no
+names. Starting with TensorDict 0.17, the default will change
+to giving the others to the members once their batch size is
+known (a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning) is emitted when this changes
+the result). Passing other entries whose number differs from
+the member batch dimensions is deprecated and will be removed
+in TensorDict 0.17 (a [`DeprecationWarning`](https://docs.python.org/3/builtins/exceptions.html#DeprecationWarning) is emitted);
+use `stack_dim_name` instead.
 
 Returns:
 
