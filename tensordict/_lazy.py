@@ -9,7 +9,9 @@ import numbers
 import operator
 import os
 import re
+import sys
 import textwrap
+import warnings
 import weakref
 from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -60,6 +62,7 @@ from tensordict.base import (
     _is_tensor_collection,
     _NESTED_TENSORS_AS_LISTS,
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
+    _PACKAGE_DIR,
     _register_tensor_class,
     _SELF_NESTING_ERROR,
     BEST_ATTEMPT_INPLACE,
@@ -920,7 +923,15 @@ class LazyStackedTensorDict(TensorDictBase):
             stack_dim (int, optional): the stack dimension. Defaults to ``0``.
             names (list of str, optional): the names of the dimensions of the
                 result, stack dimension included. Exclusive with
-                ``stack_dim_name``.
+                ``stack_dim_name``. Without a ``batch_size``, only
+                ``names[stack_dim]`` is used today and the members get no
+                names. Starting with TensorDict 0.17, the default will change
+                to giving the others to the members once their batch size is
+                known (a :class:`FutureWarning` is emitted when this changes
+                the result). Passing other entries whose number differs from
+                the member batch dimensions is deprecated and will be removed
+                in TensorDict 0.17 (a :class:`DeprecationWarning` is emitted);
+                use ``stack_dim_name`` instead.
 
         Returns:
             a :class:`~tensordict.LazyStackedTensorDict`.
@@ -937,28 +948,69 @@ class LazyStackedTensorDict(TensorDictBase):
             torch.Size([4])
 
         """
+        member_names = names
         if names is not None:
             if stack_dim_name is not None:
                 raise ValueError("names and stack_dim_name are exclusive.")
             stack_dim_name = list(names).pop(stack_dim)
+            # names includes the stack dimension: the members get the others
+            if batch_size is not None and len(names) == len(batch_size) + 1:
+                member_names = list(names)
+                del member_names[stack_dim]
+                # the stack inserts its dimension and name at stack_dim
+                if stack_dim < 0:
+                    stack_dim += len(names)
+
+        tensordicts = [
+            TensorDict.from_dict(
+                (
+                    input_dict[str(i)]
+                    if isinstance(input_dict, Mapping)
+                    else input_dict[i]
+                ),
+                *other,
+                auto_batch_size=auto_batch_size,
+                device=device,
+                batch_dims=batch_dims,
+                batch_size=batch_size,
+                names=member_names,
+            )
+            for i in range(len(input_dict))
+        ]
+        if names is not None and batch_size is None:
+            # TensorDict.from_dict dropped the names: say when that changes
+            dropped = list(names)
+            del dropped[stack_dim]
+            if dropped or any(td.batch_dims for td in tensordicts):
+                # point to the first frame outside tensordict: the user's call
+                frame, stacklevel = sys._getframe(1), 2
+                while frame is not None and frame.f_code.co_filename.startswith(
+                    _PACKAGE_DIR
+                ):
+                    frame, stacklevel = frame.f_back, stacklevel + 1
+                if all(td.batch_dims == len(dropped) for td in tensordicts):
+                    warnings.warn(
+                        "LazyStackedTensorDict.from_dict without a batch_size "
+                        "uses only names[stack_dim] and leaves the members "
+                        "unnamed. Starting with TensorDict 0.17, the default "
+                        "will change to giving the other entries of names, "
+                        f"{dropped}, to the members once their batch size is "
+                        "known.",
+                        FutureWarning,
+                        stacklevel=stacklevel,
+                    )
+                else:
+                    warn_deprecated(
+                        "LazyStackedTensorDict.from_dict with names whose "
+                        "entries other than names[stack_dim] do not match the "
+                        "member batch dimensions",
+                        removal="0.17",
+                        replacement="stack_dim_name",
+                        stacklevel=stacklevel,
+                    )
 
         return cls._new_lazy_unsafe(
-            *(
-                TensorDict.from_dict(
-                    (
-                        input_dict[str(i)]
-                        if isinstance(input_dict, Mapping)
-                        else input_dict[i]
-                    ),
-                    *other,
-                    auto_batch_size=auto_batch_size,
-                    device=device,
-                    batch_dims=batch_dims,
-                    batch_size=batch_size,
-                    names=names,
-                )
-                for i in range(len(input_dict))
-            ),
+            *tensordicts,
             stack_dim=stack_dim,
             stack_dim_name=stack_dim_name,
         )

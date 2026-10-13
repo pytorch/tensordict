@@ -1385,6 +1385,105 @@ class TestLazyStackedTensorDict:
         ragged.update_at_(TensorDict({}, []), 0)
         assert ragged.batch_size == (2, -1)
 
+    @pytest.mark.parametrize("auto_batch_size", [False, True])
+    @pytest.mark.parametrize("stack_dim", [0, 1, -1])
+    @pytest.mark.parametrize("as_list", [False, True])
+    def test_from_dict_names(self, auto_batch_size, stack_dim, as_list):
+        # names includes the stack dimension: names[stack_dim] names the stack
+        # and the other entries name the member dimensions
+        members = [{"a": torch.zeros(3)}, {"a": torch.ones(3)}]
+        if not as_list:
+            members = {str(i): member for i, member in enumerate(members)}
+        names = ["x", "s"] if stack_dim else ["s", "x"]
+        td = LazyStackedTensorDict.from_dict(
+            members,
+            auto_batch_size=auto_batch_size,
+            batch_size=[3],
+            stack_dim=stack_dim,
+            names=names,
+        )
+        assert td.batch_size == torch.Size([3, 2] if stack_dim else [2, 3])
+        assert td.names == names
+        assert all(member.names == ["x"] for member in td.tensordicts)
+
+    @pytest.mark.parametrize("auto_batch_size", [False, True])
+    def test_from_dict_member_names(self, auto_batch_size):
+        # names with one entry per member dimension keeps its current meaning:
+        # the members get all of it and names[stack_dim] names the stack
+        members = [{"a": torch.zeros(3, 4)}, {"a": torch.ones(3, 4)}]
+        td = LazyStackedTensorDict.from_dict(
+            members,
+            auto_batch_size=auto_batch_size,
+            batch_size=[3, 4],
+            names=[None, None],
+        )
+        assert td.names == [None, None, None]
+        td = LazyStackedTensorDict.from_dict(
+            members,
+            auto_batch_size=auto_batch_size,
+            batch_size=[3, 4],
+            stack_dim=1,
+            names=["s", None],
+        )
+        assert td.batch_size == torch.Size([3, 2, 4])
+        assert td.names == ["s", None, None]
+
+    @pytest.mark.parametrize("from_list", [False, True])
+    def test_from_dict_names_without_batch_size(self, from_list):
+        # without a batch_size the members get no names today; the calls that
+        # 0.17 changes warn and keep their result: a FutureWarning where the
+        # names will be given to the members, a DeprecationWarning where they
+        # do not match the member batch dimensions and the call will raise
+        def build(members, **kwargs):
+            if from_list:
+                return LazyStackedTensorDict.from_list(members, **kwargs)
+            return LazyStackedTensorDict.from_dict(members, **kwargs)
+
+        members = [{"a": torch.zeros(3)}, {"a": torch.ones(3)}]
+        scalars = [{"a": torch.zeros(())}, {"a": torch.ones(())}]
+        mixed = [{"a": torch.zeros(3)}, {"a": torch.ones(3, 4)}]
+        future = (FutureWarning, "Starting with TensorDict 0.17")
+        removal = (DeprecationWarning, "will be removed in TensorDict 0.17")
+        for data, kwargs, batch_size, names, (category, match) in [
+            (members, {"auto_batch_size": True}, [2, 3], ["s", None], future),
+            (members, {"auto_batch_size": True, "batch_dims": 1}, [2, 3], None, future),
+            (
+                members,
+                {"auto_batch_size": True, "names": ["s"]},
+                [2, 3],
+                None,
+                removal,
+            ),
+            (members, {}, [2], ["s"], removal),
+            (scalars, {"auto_batch_size": True}, [2], ["s"], removal),
+        ]:
+            kwargs.setdefault("names", ["s", "x"])
+            with pytest.warns(category, match=match) as record:
+                td = build(data, **kwargs)
+            assert len(record) == 1
+            assert record[0].filename == __file__
+            assert td.batch_size == torch.Size(batch_size)
+            assert td.names == (names or ["s", None])
+            assert all(
+                name is None for member in td.tensordicts for name in member.names
+            )
+        # one member matches and the other does not: the call will raise
+        with pytest.warns(DeprecationWarning, match="removed in TensorDict 0.17"):
+            td = build(mixed, auto_batch_size=True, names=["s", "x"])
+        assert td.batch_size == torch.Size([2, 3])
+        assert td._td_dim_name == "s"
+        assert all(name is None for member in td.tensordicts for name in member.names)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            td = build(scalars, auto_batch_size=True, names=["s"])
+            assert td.names == ["s"]
+            td = build(scalars, names=["s"])
+            assert td.names == ["s"]
+            td = build(members, batch_size=[3], names=["s", "x"])
+            assert td.names == ["s", "x"]
+            td = build(members, auto_batch_size=True)
+            assert td.names == [None, None]
+
     def test_lazy_get(self):
         inner_td = lazy_stack(
             [
