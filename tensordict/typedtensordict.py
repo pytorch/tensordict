@@ -13,7 +13,7 @@ from typing import Any, ClassVar
 import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._pytree import _register_td_node
-from tensordict._td import TensorDict
+from tensordict._td import _StateFromSource, TensorDict
 from tensordict.base import _register_tensor_class, NO_DEFAULT, TensorDictBase
 from tensordict.utils import _as_context_manager, _cache_while_locked
 
@@ -424,7 +424,7 @@ class _TypedTensorDictMeta(type(TensorDictBase)):
         )
 
 
-class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
+class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDictMeta):
     """A TensorDictBase subclass with typed field declarations and backend composition.
 
     .. warning::
@@ -479,20 +479,12 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     _source: TensorDictBase
 
     # Override: the flag lives on the source.
-    @property
-    def _is_shared(self):
-        return self._source._is_shared
-
-    @_is_shared.setter
+    @_StateFromSource._is_shared.setter
     def _is_shared(self, value):
         self._source._is_shared = value
 
     # Override: the flag lives on the source.
-    @property
-    def _is_memmap(self):
-        return self._source._is_memmap
-
-    @_is_memmap.setter
+    @_StateFromSource._is_memmap.setter
     def _is_memmap(self, value):
         self._source._is_memmap = value
 
@@ -598,27 +590,12 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
         self._source.batch_size = new_size
 
     @property
-    def device(self) -> torch.device | None:
-        return self._source.device
-
-    @device.setter
-    def device(self, value) -> None:
-        self._source.device = value
-
-    @property
     def names(self):
         return self._source.names
 
     @names.setter
     def names(self, value):
         self._source.names = value
-
-    def _has_names(self) -> bool:
-        return self._source._has_names()
-
-    @property
-    def _has_non_tensor(self) -> bool:
-        return self._source._has_non_tensor
 
     def _set_names(self, names: Sequence[str] | None) -> None:
         self._source._set_names(names)
@@ -631,11 +608,6 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
 
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._source._change_batch_size(new_size)
-
-    # Override: the lock state lives on the source.
-    @TensorDictBase.is_locked.getter
-    def is_locked(self) -> bool:
-        return self._source.is_locked
 
     @_as_context_manager("is_locked")
     def lock_(self, *args, **kwargs):

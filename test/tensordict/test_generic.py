@@ -5182,11 +5182,17 @@ class TestGeneric:
             lst.contiguous(inplace=True)
 
     def test_contiguous_inplace_locked(self):
-        # A locked tensordict cannot rebind its leaves, even to themselves
+        # A locked tensordict whose leaves are contiguous keeps them; one with a
+        # leaf to rebind raises
         td = TensorDict(
             {"a": torch.zeros(4, 3), "nested": {"b": torch.zeros(4, 3)}},
             batch_size=[4, 3],
         ).lock_()
+        a = td["a"]
+        assert td.contiguous(inplace=True) is td
+        assert td.contiguous(canonical=True, inplace=True) is td
+        assert td["a"] is a
+        td = TensorDict(a=torch.zeros(3, 4).T, batch_size=[4]).lock_()
         with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
             td.contiguous(inplace=True)
 
@@ -5196,7 +5202,10 @@ class TestGeneric:
             TensorDict(a=torch.zeros(3, 2), batch_size=[3]),
             filename=tmp_path / "file.h5",
         )
-        with pytest.raises(TypeError, match="unexpected keyword argument 'inplace'"):
+        with pytest.raises(
+            NotImplementedError,
+            match=r"contiguous\(inplace=True\) is not supported on PersistentTensorDict",
+        ):
             h5.contiguous(inplace=True)
         h5.close()
 
@@ -5948,14 +5957,10 @@ class TestGeneric:
 
     def test_batch_dims_setter_raises(self):
         td = TensorDict(batch_size=[3, 2])
-        with pytest.raises(
-            RuntimeError,
-            match="Setting batch dims on TensorDict instances is not allowed.",
-        ):
-            td.batch_dims = 1
         lazy = lazy_stack([td, td.clone()])
-        with pytest.raises(AttributeError, match="has no setter"):
-            lazy.batch_dims = 1
+        for value in (td, lazy):
+            with pytest.raises(AttributeError, match="has no setter"):
+                value.batch_dims = 1
         assert td.batch_dims == 2
 
     def test_subtd_lock_unlock_raise(self):

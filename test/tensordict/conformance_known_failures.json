@@ -176,9 +176,7 @@
   "view(-1)"
  ],
  "td_params apply": [],
- "td_params keys": [
-  "clear_device_()"
- ],
+ "td_params keys": [],
  "td_params masking": [],
  "td_params pointwise": [],
  "td_params reductions": [],

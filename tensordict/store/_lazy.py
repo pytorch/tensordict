@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import struct
 import uuid
+import warnings
 from numbers import Number
 from typing import Any, Callable, Sequence, Tuple, Type
 
@@ -140,6 +141,16 @@ def _element_index(idx, count: int) -> tuple[int, tuple] | None:
 # ---------------------------------------------------------------------------
 
 
+def _check_shape_fits(key_path: str, shape: list[int], batch_size: torch.Size) -> None:
+    """Raises if ``batch_size`` is not the leading dims of the entry ``shape``."""
+    if torch.Size(shape[: len(batch_size)]) != batch_size:
+        key = unravel_key(tuple(key_path.split(_KEY_SEP)))
+        raise RuntimeError(
+            f"the entry {key} has shape {torch.Size(shape)} which is "
+            f"incompatible with the batch-size {batch_size}."
+        )
+
+
 class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
     """Write-through view of one element in a :class:`LazyStackedTensorDictStore`.
 
@@ -158,6 +169,9 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
     _reads_return_copies = True
     # and each sub-tensordict is a new TensorDict
     _nested_reads_return_copies = True
+    _leaves_built_on_read = True
+    _contiguous_via_to_tensordict = True
+    _pin_memory_unsupported = True
 
     def __init__(self, parent, element_idx: int):
         self._parent = parent
@@ -181,18 +195,38 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
 
     # ---- TensorDictBase interface ----
 
-    # Override: sets the batch size without checking it against the entries.
-    @TensorDictBase.batch_size.setter
-    def batch_size(self, value):
-        self._batch_size = torch.Size(value)
+    # Override: checks the new batch size against the shapes in the metadata,
+    # without reading the entries.
+    def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
+        new_batch_size = torch.Size(new_batch_size)
+        if new_batch_size != self._batch_size:
+            self._check_new_batch_size(new_batch_size)
+            self._batch_size = new_batch_size
 
-    # Override: the device can be set.
+    # Override: the shapes of the element in the metadata.
+    def _check_new_batch_size(self, new_size: torch.Size) -> None:
+        parent = self._parent
+        for key_path, meta in parent._run_sync(parent._aget_metas()).items():
+            if parent._is_key_homogeneous(meta):
+                shape = json.loads(meta["shape"])[1:]
+            else:
+                shape = json.loads(meta["shapes"])[self._element_idx]
+            _check_shape_fits(key_path, shape, new_size)
+
+    # Override: the device can be set, but reads ignore it (a FutureWarning
+    # until 0.17, where it raises as on TensorDict).
     @TensorDictBase.device.setter
     def device(self, value):
+        warnings.warn(
+            "Setting the device of LazyStackedTensorDictStore[i] changes its "
+            "device attribute only: the entries that it reads stay on the device "
+            "of the store. Starting with TensorDict 0.17, the default will change "
+            "to raising a RuntimeError, as TensorDict does. Set the device of the "
+            "store instead.",
+            FutureWarning,
+            stacklevel=2,
+        )
         self._device = torch.device(value) if value is not None else None
-
-    def _rename_subtds(self, names):
-        pass
 
     # ---- reads ----
 
@@ -453,10 +487,6 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
 
     # ---- locking ----
 
-    # Override: a view records no lock parents.
-    def _propagate_lock(self, lock_parents_weakrefs=None, *, is_compiling):
-        self._is_locked = True
-
     # Override: a view holds no sub-tensordicts to lock.
     def _lock_sub_tensordicts(self):
         return []
@@ -482,17 +512,6 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
     )
     def to_local(self) -> TensorDict:
         return self.to_tensordict()
-
-    # Override: materializes in one round trip.
-    def contiguous(self, *, canonical: bool = False) -> TensorDict:
-        out = self.to_tensordict()
-        if canonical:
-            out = out.contiguous(canonical=True)
-        return out
-
-    # Override: entries live on the server.
-    def is_contiguous(self) -> bool:
-        return False
 
     # Override: the server holds no gradients.
     def detach_(self) -> Self:
@@ -563,10 +582,6 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
     # one key at a time
     def _chunk(self, chunks, dim):
         return self.to_tensordict()._chunk(chunks, dim)
-
-    # Override: server-side entries cannot be pinned.
-    def pin_memory(self, *a, **kw):
-        raise RuntimeError(f"Cannot pin memory of a {type(self).__name__}.")
 
     # Override: not supported: it would read the store.
     def _select(self, *keys, inplace=False, strict=True, set_shared=True):
@@ -722,6 +737,9 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
     _reads_return_copies = True
     # and each sub-tensordict is a new TensorDict
     _nested_reads_return_copies = True
+    _leaves_built_on_read = True
+    _contiguous_via_to_tensordict = True
+    _pin_memory_unsupported = True
     _rename_key_lenient = True
 
     _global_key_suffixes = (
@@ -1464,12 +1482,39 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
 
     # ---- TensorDictBase interface ----
 
-    # Override: assigns batch_size and device without checks, like a stack element.
-    batch_size = _StoreStackElementView.batch_size
-    device = _StoreStackElementView.device
+    # Override: checks the new batch size against the shapes in the metadata,
+    # without reading the entries, like a stack element.
+    _batch_size_setter = _StoreStackElementView._batch_size_setter
 
-    def _rename_subtds(self, names):
-        pass
+    # Override: the shapes of the elements in the metadata; a dim along which
+    # the elements differ fits no batch size.
+    def _check_new_batch_size(self, new_size: torch.Size) -> None:
+        for key_path, meta in self._run_sync(self._aget_metas()).items():
+            if self._is_key_homogeneous(meta):
+                shape = json.loads(meta["shape"])[1:]
+            else:
+                shape = [
+                    sizes[0] if len(set(sizes)) == 1 else -1
+                    for sizes in zip(*json.loads(meta["shapes"]))
+                ]
+            shape.insert(self._stack_dim, self._count)
+            _check_shape_fits(key_path, shape, new_size)
+
+    async def _aget_metas(self) -> dict[str, dict]:
+        """Reads the metadata of every entry, without its data."""
+        key_paths = sorted(await self._aget_all_keys())
+        if not key_paths:
+            return {}
+        pipe = self._client.pipeline()
+        for kp in key_paths:
+            pipe.hgetall(self._meta_key(kp))
+        raw_metas = await pipe.execute()
+        return {kp: _decode_meta(meta) for kp, meta in zip(key_paths, raw_metas)}
+
+    # Override: the device can be set; reads move the entries to it.
+    @TensorDictBase.device.setter
+    def device(self, value):
+        self._device = torch.device(value) if value is not None else None
 
     # ---- Key access ----
 
@@ -1964,13 +2009,6 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         """
         return self.to_tensordict()
 
-    # Override: materializes in one round trip.
-    def contiguous(self, *, canonical: bool = False) -> TensorDict:
-        out = self.to_tensordict()
-        if canonical:
-            out = out.contiguous(canonical=True)
-        return out
-
     # ---- Construction ----
 
     @classmethod
@@ -2171,10 +2209,6 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
 
     # ---- Misc required overrides ----
 
-    # Override: entries live on the server.
-    def is_contiguous(self) -> bool:
-        return False
-
     # Override: the server holds no gradients.
     def detach_(self) -> Self:
         return self
@@ -2368,10 +2402,6 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             f"    backend={self._backend!r},\n"
             f"    td_id={self._td_id!r})"
         )
-
-    # Override: server-side entries cannot be pinned.
-    def pin_memory(self, *args, **kwargs):
-        raise RuntimeError(f"Cannot pin memory of a {type(self).__name__}.")
 
     # Override: not supported: it would read the store.
     def _select(self, *keys, inplace=False, strict=True, set_shared=True):

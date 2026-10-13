@@ -1406,8 +1406,8 @@ class TestLazyStackedTensorDict:
         )
         for td in (lazy, sub):
             td.batch_size = torch.Size([2, 3])
-            with pytest.raises(RuntimeError, match="Modifying the batch size"):
-                td.batch_size = [2, 3]
+            td.batch_size = [2, 3]
+            td.batch_size = (2, 3)
             with pytest.raises(RuntimeError, match="Modifying the batch size"):
                 td.batch_size = [2]
             assert td.batch_size == torch.Size([2, 3])
@@ -1424,14 +1424,14 @@ class TestLazyStackedTensorDict:
             assert clone.device == torch.device("cpu")
 
     def test_create_empty_state(self):
+        # as on an empty TensorDict
         empty = LazyStackedTensorDict(stack_dim=0, batch_size=[3], device="cpu")
-        assert empty._is_shared
-        assert empty._is_memmap
-        assert empty.is_shared() is None
-        with pytest.raises(IndexError):
-            empty.is_memmap()
+        assert empty._is_shared is False
+        assert empty._is_memmap is False
+        assert empty.is_shared() is False
+        assert empty.is_memmap() is False
         assert empty.clear_device_() is empty
-        assert empty.device == torch.device("cpu")
+        assert empty.device is None
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize("names", [None, ["a"]])
@@ -3125,8 +3125,7 @@ class TestLazyStackedTensorDict:
         assert lazy.names == [None, None]
         getattr(lazy, method)("s", "x")
         assert tds[0].names == ["x"]
-        # the names read before the call are cached while the stack is locked
-        assert lazy.names == [None, None]
+        assert lazy.names == ["s", "x"]
         lazy.unlock_()
         assert lazy.names == ["s", "x"]
 
@@ -3134,11 +3133,13 @@ class TestLazyStackedTensorDict:
         tds = [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)]
         tds[0].share_memory_()
         lazy = lazy_stack(tds)
+        with pytest.raises(RuntimeError, match="shared status mismatch"):
+            lazy.is_shared()
+        assert not lazy.is_memmap()
+        # a view reads the flags of its source, which hold for every member
         sub = _SubTensorDict(lazy, (slice(0, 1),))
-        for td in (lazy, sub):
-            with pytest.raises(RuntimeError, match="shared status mismatch"):
-                td.is_shared()
-            assert not td.is_memmap()
+        assert sub.is_shared() is False
+        assert sub.is_memmap() is False
 
     @pytest.mark.parametrize("safe", [False, True])
     @pytest.mark.parametrize("key,new_key", [("a", "c"), (("n", "x"), ("n", "y"))])

@@ -1261,6 +1261,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # rename in a locked tensordict with a warning, and pass an old key that is
     # not a str or tuple to _rename_key (which raises or warns as before).
     _rename_key_lenient: bool = False
+    # Whether each read of a leaf builds a new tensor: a lazy stack stacks its
+    # members, a file or a store reads its data. is_contiguous() then returns
+    # False without reading the leaves.
+    _leaves_built_on_read: bool = False
+    # Set by the stores, on which contiguous() returns to_tensordict(), read
+    # in one round trip, instead of reading the leaves one at a time.
+    _contiguous_via_to_tensordict: bool = False
+    # Set by the views and the backends whose leaves cannot be pinned in
+    # place: pin_memory raises.
+    _pin_memory_unsupported: bool = False
 
     @classmethod
     def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
@@ -1841,7 +1851,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return self._dtype()
 
     def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
-        if new_batch_size == self.batch_size:
+        if new_batch_size == self.batch_size or (
+            # a list equal to the batch size
+            not isinstance(new_batch_size, torch.Size)
+            and torch.Size(new_batch_size) == self.batch_size
+        ):
             return
         if self._lazy:
             raise RuntimeError(
@@ -2492,14 +2506,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Erases the dimension names from a tensordict."""
         self._td_dim_names = None
 
-    @abc.abstractmethod
     def _rename_subtds(self, value):
         """Gives the sub-tensordicts the names in value for the dims they share with self.
 
         The dims a sub-tensordict has beyond ``self.batch_dims`` keep their
         names. ``value=None`` clears the names of the shared dims.
+
+        The default renames the sub-tensordicts that
+        :meth:`_lock_sub_tensordicts` returns, with ``rename_``.
         """
-        raise NotImplementedError
+        if value is None:
+            value = [None] * self.ndim
+        for item in self._lock_sub_tensordicts():
+            td_names = list(value) + list(item.names)[self.ndim :]
+            item.rename_(*td_names)
 
     def _check_dim_name(self, name):
         if name is None:
@@ -2765,6 +2785,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Returns:
             self
 
+        """
+        self._share_memory_()
+        return self
+
+    def _share_memory_(self) -> None:
+        """Places the leaves in shared memory and locks the tensordict.
+
+        The storage part of :meth:`share_memory_`, which returns ``self``. The
+        default raises ``NotImplementedError``.
         """
         raise NotImplementedError(
             f"Cannot call share_memory_ on a {type(self).__name__}. "
@@ -6023,6 +6052,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     _inplace_shape_state.nested = nested
                 continue
             new_leaf = leaf_fn(leaf)
+            if new_leaf is leaf:
+                # nothing to rebind, which a locked tensordict allows
+                continue
             del leaf
             self._set_str(key, new_leaf, validated=True, inplace=False)
         if new_batch_size is not None and tuple(new_batch_size) != tuple(
@@ -7404,6 +7436,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def is_contiguous(self) -> bool:
         """Returns a boolean indicating if all the tensors are contiguous."""
+        if self._leaves_built_on_read:
+            return False
         return all([value.is_contiguous() for value in self.values()])
 
     def contiguous(self, *, canonical: bool = False, inplace: bool = False) -> Self:
@@ -7429,6 +7463,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """
         if inplace:
             return self._contiguous_inplace(canonical)
+        if self._contiguous_via_to_tensordict:
+            result = self.to_tensordict()
+            return result.contiguous(canonical=True) if canonical else result
         if canonical:
             source = {
                 key: (

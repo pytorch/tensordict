@@ -780,9 +780,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td.clear_device_() is td
         # the leaves are not moved
         assert [leaf.device for leaf in td.values(True, True)] == leaf_devices
-        if isinstance(
-            td, (_SubTensorDict, _CustomOpTensorDict, TensorDictParams, TypedTensorDict)
-        ):
+        if isinstance(td, (_SubTensorDict, _CustomOpTensorDict, TypedTensorDict)):
             # a view reports the device of the tensordict it reads, which
             # clear_device_ leaves alone
             assert td.device == torch.device(device)
@@ -847,10 +845,8 @@ class TestTensorDicts(TestTensorDictsBase):
         for key, value in td.items():
             if is_tensorclass(value):
                 assert type(result.get(key)) is type(value)
-        # only a lazy stack and the legacy lazy views keep the lock
-        assert result.is_locked is (
-            locked and isinstance(td, (LazyStackedTensorDict, _CustomOpTensorDict))
-        )
+        # only the legacy lazy views keep the lock
+        assert result.is_locked is (locked and isinstance(td, _CustomOpTensorDict))
 
     @pytest.mark.skipif(
         torch.cuda.device_count() == 0 and npu_device_count == 0,

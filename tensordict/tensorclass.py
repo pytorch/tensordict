@@ -6828,6 +6828,7 @@ class NonTensorStack(LazyStackedTensorDict):
     def to_tensordict(self, *, retain_none: bool | None = None):
         return self
 
+    # Override: a NonTensorStack is its own materialized form.
     def contiguous(
         self, *, canonical: bool = False, inplace: bool = False
     ) -> NonTensorStack:

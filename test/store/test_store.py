@@ -371,13 +371,18 @@ class TestTensorDictStore:
         assert len(calls) == round_trips
         assert type(out) is TensorDict
         assert_allclose_td(out, expected)
-        with pytest.raises(TypeError, match="unexpected keyword argument 'inplace'"):
+        with pytest.raises(
+            NotImplementedError,
+            match=r"contiguous\(inplace=True\) is not supported on TensorDictStore",
+        ):
             store_td.contiguous(inplace=True)
 
     def test_pin_memory_raises(self, store_td):
         store_td["x"] = torch.randn(10, 3)
         with pytest.raises(
-            RuntimeError, match=r"^Cannot pin memory of a TensorDictStore\."
+            RuntimeError,
+            match=r"^Cannot pin memory of a TensorDictStore\. Call to_tensordict\(\) "
+            r"before making this call\.$",
         ):
             store_td.pin_memory()
 
@@ -3344,7 +3349,10 @@ class TestLazyStackedTensorDictStore:
         assert type(out) is TensorDict
         assert_allclose_td(out, expected)
         assert td.is_contiguous() is False
-        with pytest.raises(TypeError, match="unexpected keyword argument 'inplace'"):
+        with pytest.raises(
+            NotImplementedError,
+            match=rf"contiguous\(inplace=True\) is not supported on {type(td).__name__}",
+        ):
             td.contiguous(inplace=True)
 
     @pytest.mark.parametrize("element", [False, True])
@@ -3352,7 +3360,9 @@ class TestLazyStackedTensorDictStore:
         store_td, _, _ = store_stack
         td = store_td[0] if element else store_td
         with pytest.raises(
-            RuntimeError, match=rf"^Cannot pin memory of a {type(td).__name__}\."
+            RuntimeError,
+            match=rf"^Cannot pin memory of a {type(td).__name__}\. Call to_tensordict\(\) "
+            r"before making this call\.$",
         ):
             td.pin_memory()
 
@@ -3366,27 +3376,66 @@ class TestLazyStackedTensorDictStore:
         assert store_td[0]["a"].device == torch.device("meta")
         store_td.device = None
         element = store_td[0]
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
+        with pytest.warns(
+            FutureWarning,
+            match=r"the entries that it reads stay on the device of the store\. "
+            r"Starting with TensorDict 0\.17, the default will change to raising",
+        ):
             element.device = "meta"
         assert element.device == torch.device("meta")
         assert element["a"].device == torch.device("cpu")
 
-    def test_batch_size_setter(self, store_stack):
+    def test_batch_size_setter(self, store_stack, monkeypatch):
+        """The new batch size is checked against the stored shapes, without
+        reading the entries."""
         store_td, _, _ = store_stack
+
+        def no_read(*args, **kwargs):
+            raise AssertionError("the batch size setter read an entry")
+
         store_td.batch_size = [5]
         assert store_td.batch_size == torch.Size([5])
         assert store_td.to_tensordict().batch_size == torch.Size([5])
-        store_td.batch_size = [5, 4]
         element = store_td[0]
+        for name in (
+            "_abatch_get_at",
+            "_abatch_get_element",
+            "_abatch_get_element_keys",
+        ):
+            monkeypatch.setattr(LazyStackedTensorDictStore, name, no_read)
+        store_td.batch_size = [5, 4]
         element.batch_size = []
         assert element.batch_size == torch.Size([])
         element.batch_size = [4]
-        # a batch size that the entries do not have is accepted
-        store_td.batch_size = [17]
-        assert store_td.batch_size == torch.Size([17])
-        element.batch_size = [17]
-        assert element.batch_size == torch.Size([17])
+        for td, size in ((store_td, [17]), (store_td, [5, 4, 3]), (element, [17])):
+            with pytest.raises(RuntimeError, match="incompatible with the batch-size"):
+                td.batch_size = size
+        assert store_td.batch_size == torch.Size([5, 4])
+        assert element.batch_size == torch.Size([4])
+
+    def test_batch_size_setter_heterogeneous(self, store_kwargs):
+        """A dim along which the elements differ fits no batch size."""
+        lazy_td = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(2, 3), batch_size=[2]),
+                TensorDict(a=torch.zeros(2, 4), batch_size=[2]),
+            ]
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            store_td.batch_size = [2]
+            assert store_td.batch_size == torch.Size([2])
+            store_td.batch_size = [2, 2]
+            with pytest.raises(RuntimeError, match="incompatible with the batch-size"):
+                store_td.batch_size = [2, 2, 3]
+            element = store_td[1]
+            element.batch_size = [2, 4]
+            assert element.batch_size == torch.Size([2, 4])
+            with pytest.raises(RuntimeError, match="incompatible with the batch-size"):
+                element.batch_size = [2, 3]
+        finally:
+            store_td.clear_redis()
+            store_td.close()
 
     def test_lock_names(self, store_stack):
         store_td, _, _ = store_stack
