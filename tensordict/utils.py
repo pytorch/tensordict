@@ -739,6 +739,24 @@ def _cache_while_locked(fun):
     return newfun
 
 
+def _copy_cached_result(fun):
+    """Returns a shallow copy of the tensordict cached by ``_cache_while_locked``.
+
+    Put it above ``@_cache_while_locked`` on methods that return a new, unlocked
+    tensordict, so that a write into the result does not change the cache and
+    later calls.
+    """
+
+    @wraps(fun)
+    def newfun(_self: "TensorDictBase", *args, **kwargs):
+        out = fun(_self, *args, **kwargs)
+        if _self.is_locked and not is_compiling() and not out.is_locked:
+            out = out.copy()
+        return out
+
+    return newfun
+
+
 def _erase_cache_first(fun):
     """A decorator to erase the cache at each call."""
 
@@ -2016,6 +2034,19 @@ def _get_shape_from_args(*args, kwarg_name="size", **kwargs):
     return size
 
 
+def _expands_to(batch_size: torch.Size, shape: Sequence[int]) -> bool:
+    """Whether :meth:`torch.Tensor.expand` accepts ``shape`` for a tensor of size ``batch_size``.
+
+    ``shape`` needs at least as many sizes as ``batch_size`` has dims, and its trailing
+    sizes must match ``batch_size`` except where ``batch_size`` is 1.
+    """
+    ndim = len(batch_size)
+    return len(shape) >= ndim and all(
+        old == 1 or new == old
+        for old, new in zip(batch_size, shape[len(shape) - ndim :])
+    )
+
+
 def _resolve_expand_shape(shape: Sequence[int], batch_size: torch.Size) -> torch.Size:
     """Replaces the ``-1`` sizes of an ``expand`` shape and checks the shape, as :meth:`torch.Tensor.expand` does.
 
@@ -2147,8 +2178,13 @@ class TensorDictFuture:
         self.resulting_td = resulting_td
 
     def result(self):
-        """Wait and returns the resulting tensordict."""
+        """Wait and returns the resulting tensordict.
+
+        Raises the first error of the futures, if any.
+        """
         concurrent.futures.wait(self.futures)
+        for future in self.futures:
+            future.result()
         return self.resulting_td
 
 

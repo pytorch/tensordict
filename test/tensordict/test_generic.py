@@ -18,7 +18,7 @@ import sys
 import threading
 import warnings
 import weakref
-from collections import namedtuple, UserDict
+from collections import defaultdict, namedtuple, OrderedDict, UserDict
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -878,6 +878,9 @@ class TestGeneric:
             assert td.to("cpu", batch_size=[2, 3]) is td
             assert td.batch_size == (2, 3)
             torch.testing.assert_close(td["a"], torch.zeros(2, 3))
+            with pytest.raises(RuntimeError, match="mismatch"):
+                td.to("cpu", batch_size=[5])
+            assert td.batch_size == (2, 3)
         finally:
             td.close()
 
@@ -2395,6 +2398,23 @@ class TestGeneric:
         for name in fields:
             assert (td[name] == getattr(result, name)).all()
 
+    def test_to_namedtuple_dest_cls(self):
+        # https://github.com/pytorch/tensordict/issues/2372
+        Outer = namedtuple("Outer", ["a", "nested"])
+        td = TensorDict(a=torch.zeros(2), nested=TensorDict(p=torch.ones(2)))
+        nt = td.to_namedtuple(dest_cls=Outer)
+        assert type(nt) is Outer
+        assert type(nt.nested).__name__ == "GenericDict"
+        assert nt.nested._fields == ("p",)
+        assert (nt.nested.p == 1).all()
+        # a nested level that dest_cls takes keeps dest_cls
+        Same = namedtuple("Same", ["a", "b"], defaults=[None])
+        td = TensorDict(a=torch.zeros(2), b=TensorDict(a=torch.ones(2)))
+        nt = td.to_namedtuple(dest_cls=Same)
+        assert type(nt) is Same
+        assert type(nt.b) is Same
+        assert nt.b.b is None
+
     def test_from_pytree(self):
         class WeirdLookingClass:
             pass
@@ -2491,6 +2511,24 @@ class TestGeneric:
         assert TensorDict.from_pytree(pytree, auto_batch_size=True).batch_size == (3,)
         assert TensorDict.from_pytree(pytree, batch_size=[3]).batch_size == (3,)
         assert isinstance(td.to_pytree().nested, TensorDict)
+
+    def test_from_pytree_subclasses(self):
+        # https://github.com/pytorch/tensordict/issues/2371
+        pytree = OrderedDict(
+            b=torch.zeros(3, 2).max(1),
+            a=defaultdict(list, c=torch.ones(3)),
+        )
+        pytree_recon = TensorDict.from_pytree(pytree).to_pytree()
+        assert type(pytree_recon) is OrderedDict
+        assert list(pytree_recon) == ["b", "a"]
+        assert type(pytree_recon["b"]) is torch.return_types.max
+        assert type(pytree_recon["a"]) is defaultdict
+        assert pytree_recon["a"].default_factory is None
+
+        def check(v1, v2):
+            assert (v1 == v2).all()
+
+        torch.utils._pytree.tree_map(check, pytree, pytree_recon)
 
     def test_from_struct_array(self):
         x = np.array(
@@ -5627,6 +5665,26 @@ class TestGeneric:
         assert (td == 1).all()
         assert (TensorDict.load_memmap(tmpdir) == 1).all()
 
+    @pytest.mark.parametrize("method", ["memmap", "memmap_", "memmap_like"])
+    @pytest.mark.parametrize("return_early", [False, True])
+    def test_memmap_threads_raise_worker_error(
+        self, tmpdir, monkeypatch, method, return_early
+    ):
+        # An error in a worker thread is raised, as with num_threads=0
+        populate_memmap = tensordict._td._populate_memmap
+
+        def failing_populate_memmap(*args, key, **kwargs):
+            if key == "b":
+                raise OSError("failed to write b")
+            return populate_memmap(*args, key=key, **kwargs)
+
+        monkeypatch.setattr(tensordict._td, "_populate_memmap", failing_populate_memmap)
+        td = TensorDict(a=torch.zeros(3), b=torch.ones(3))
+        with pytest.raises(OSError, match="failed to write b"):
+            out = getattr(td, method)(tmpdir, num_threads=2, return_early=return_early)
+            if return_early:
+                out.result()
+
     @set_list_to_stack(True)
     @set_capture_non_tensor_stack(False)
     @pytest.mark.parametrize("like", [True, False])
@@ -7612,6 +7670,26 @@ class TestGeneric:
         mask = torch.tensor([True, False, True])
         out = td.clone().lock_()
         assert td.where(mask, 0, out=out) is out
+
+    def test_apply_out_batch_size_list(self):
+        # a batch_size list equal to out.batch_size is accepted
+        td = TensorDict(a=torch.ones(3), b={"c": torch.ones(3, 2)}, batch_size=[3])
+        out = td.clone()
+        assert td.apply(lambda x: x * 2, batch_size=[3], out=out) is out
+        assert_allclose_td(out, td * 2)
+
+    def test_apply_out_batch_size_list_multithread(self):
+        td = TensorDict(a=torch.ones(3), b=torch.ones(3, 2), batch_size=[3])
+        out = td.clone()
+        result = td._fast_apply(lambda x: x * 2, batch_size=[3], out=out, num_threads=2)
+        assert result is out
+        assert_allclose_td(out, td * 2)
+
+    def test_norm_out(self):
+        td = TensorDict(a=torch.ones(3), b={"c": torch.ones(3, 2)}, batch_size=[3])
+        out = td.norm().zero_()
+        assert td.norm(out=out) is out
+        assert_allclose_td(out, td.norm())
 
     def test_zero_grad_module(self):
         x = torch.randn(3, 3)

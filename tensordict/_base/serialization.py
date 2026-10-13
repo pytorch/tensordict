@@ -791,6 +791,9 @@ class _Serialization:
                 consolidate_futures = futures
             else:
                 wait(futures)
+                # re-raise the first error of the workers
+                for future in futures:
+                    future.result()
                 if non_blocking and (device is None or device.type != "cuda"):
                     # sync if needed
                     self._sync_all()
@@ -1018,6 +1021,9 @@ class _Serialization:
             )
             if not return_early:
                 concurrent.futures.wait(futures)
+                # re-raise the first error of the workers
+                for future in futures:
+                    future.result()
                 return result
             return TensorDictFuture(futures, result)
         return self._memmap_(
@@ -1224,6 +1230,9 @@ class _Serialization:
             )
             if not return_early:
                 concurrent.futures.wait(futures)
+                # re-raise the first error of the workers
+                for future in futures:
+                    future.result()
                 return result
             return TensorDictFuture(futures, result)
 
@@ -1375,6 +1384,9 @@ class _Serialization:
             )
             if not return_early:
                 concurrent.futures.wait(futures)
+                # re-raise the first error of the workers
+                for future in futures:
+                    future.result()
                 return result
             return TensorDictFuture(futures, result)
 
