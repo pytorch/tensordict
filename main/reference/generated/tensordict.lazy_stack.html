@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5471+gaac8c7521.d20261013)">
+<meta name="llm:version" content="main (0.14.0.dev5472+g170af09c3.d20261013)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5471+gaac8c7521.d20261013)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5472+g170af09c3.d20261013)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1657,7 +1657,11 @@ arguments.</p>
 tensordicts to stack. It must not be empty. The batch sizes must
 have the same number of dimensions. If a dimension differs
 between inputs, it is <code class="docutils literal notranslate"><span class="pre">-1</span></code> in the stacked batch size.</p></li>
-<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the new dimension. Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the new dimension. Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>. A <code class="docutils literal notranslate"><span class="pre">dim</span></code>
+below <code class="docutils literal notranslate"><span class="pre">-batch_dims</span> <span class="pre">-</span> <span class="pre">1</span></code> warns and wraps around once more (and
+raises if it is still out of range).
+Starting with TensorDict 0.17, the default will change to raising
+an <code class="docutils literal notranslate"><span class="pre">IndexError</span></code>, as for a tensor.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
@@ -2059,7 +2063,7 @@ an instance of their class that holds a lazy stack.</p>
        "headline": "lazy_stack",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - lazy_stack",
        "url": "/reference/generated/tensordict.lazy_stack.html",
-       "articleBody": "lazy_stack# tensordict.lazy_stack(input: Sequence[\u0027T\u0027], dim: int = 0, *, out=None, **kwargs) \u2192 T# Stacks tensordicts in a LazyStackedTensorDict. The result keeps each input as a separate tensordict, so the inputs can have different keys, entry shapes and batch sizes. Use it for data whose size changes from one sample to the next. Stacking and variable-size data compares this function with stack() and maybe_dense_stack(). Same as tensordict.LazyStackedTensorDict.lazy_stack(), which takes the same arguments. Parameters: input (sequence of TensorDictBase or tensorclass instances) \u2013 the tensordicts to stack. It must not be empty. The batch sizes must have the same number of dimensions. If a dimension differs between inputs, it is -1 in the stacked batch size. dim (int, optional) \u2013 the new dimension. Defaults to 0. Keyword Arguments: out (TensorDictBase, optional) \u2013 a lazy stack to write the result into. Its batch size must be the stacked batch size. stack_dim_name (str, optional) \u2013 a name for the stacked dimension. strict_shape (bool, optional) \u2013 if True, the batch sizes of the inputs must be equal, or a RuntimeError is raised. Defaults to False. Returns: a LazyStackedTensorDict. Tensorclass inputs give an instance of their class that holds a lazy stack. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e import tensordict \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = tensordict.lazy_stack( ... [TensorDict(a=torch.zeros(3), batch_size=[3]), ... TensorDict(a=torch.zeros(4), batch_size=[4])] ... ) \u003e\u003e\u003e type(td).__name__ \u0027LazyStackedTensorDict\u0027 \u003e\u003e\u003e td.batch_size torch.Size([2, -1]) \u003e\u003e\u003e td[1][\"a\"].shape torch.Size([4]) Tutorials that use lazy_stack# Building tensordicts from streams Building tensordicts from streams Changing the shape of a TensorDict Changing the shape of a TensorDict",
+       "articleBody": "lazy_stack# tensordict.lazy_stack(input: Sequence[\u0027T\u0027], dim: int = 0, *, out=None, **kwargs) \u2192 T# Stacks tensordicts in a LazyStackedTensorDict. The result keeps each input as a separate tensordict, so the inputs can have different keys, entry shapes and batch sizes. Use it for data whose size changes from one sample to the next. Stacking and variable-size data compares this function with stack() and maybe_dense_stack(). Same as tensordict.LazyStackedTensorDict.lazy_stack(), which takes the same arguments. Parameters: input (sequence of TensorDictBase or tensorclass instances) \u2013 the tensordicts to stack. It must not be empty. The batch sizes must have the same number of dimensions. If a dimension differs between inputs, it is -1 in the stacked batch size. dim (int, optional) \u2013 the new dimension. Defaults to 0. A dim below -batch_dims - 1 warns and wraps around once more (and raises if it is still out of range). Starting with TensorDict 0.17, the default will change to raising an IndexError, as for a tensor. Keyword Arguments: out (TensorDictBase, optional) \u2013 a lazy stack to write the result into. Its batch size must be the stacked batch size. stack_dim_name (str, optional) \u2013 a name for the stacked dimension. strict_shape (bool, optional) \u2013 if True, the batch sizes of the inputs must be equal, or a RuntimeError is raised. Defaults to False. Returns: a LazyStackedTensorDict. Tensorclass inputs give an instance of their class that holds a lazy stack. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e import tensordict \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = tensordict.lazy_stack( ... [TensorDict(a=torch.zeros(3), batch_size=[3]), ... TensorDict(a=torch.zeros(4), batch_size=[4])] ... ) \u003e\u003e\u003e type(td).__name__ \u0027LazyStackedTensorDict\u0027 \u003e\u003e\u003e td.batch_size torch.Size([2, -1]) \u003e\u003e\u003e td[1][\"a\"].shape torch.Size([4]) Tutorials that use lazy_stack# Building tensordicts from streams Building tensordicts from streams Changing the shape of a TensorDict Changing the shape of a TensorDict",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
