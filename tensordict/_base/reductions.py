@@ -2241,6 +2241,12 @@ class _Reductions:
                 f"The dimension {dim} is incompatible with a tensordict with batch_size {self.batch_size}."
             )
         batch_size = self.batch_size
+        names = None
+        if self._has_names():
+            if keepdim:
+                names = list(self.names)
+            else:
+                names = [name for i, name in enumerate(self.names) if i not in new_dim]
         if keepdim:
             batch_size = torch.Size(
                 [b if i not in new_dim else 1 for i, b in enumerate(batch_size)]
@@ -2250,15 +2256,26 @@ class _Reductions:
                 [b for i, b in enumerate(batch_size) if i not in new_dim]
             )
         if out is not None:
+
+            def reduction(x, y):
+                if _is_tensor_collection(type(x)):
+                    return x.logsumexp(new_dim, keepdim=keepdim, out=y)
+                return torch.logsumexp(x, dim=new_dim, keepdim=keepdim, out=y)
+
             result = self._fast_apply(
-                lambda x, y: torch.logsumexp(x, dim=new_dim, keepdim=keepdim, out=y),
+                reduction,
                 out,
                 default=None,
+                call_on_nested=True,
                 batch_size=batch_size,
+                names=names,
             )
             return out.update(result)
 
+        # Nested tensordicts reduce themselves, so that they get their own names
         return self._fast_apply(
-            lambda x: torch.logsumexp(x, dim=new_dim, keepdim=keepdim),
+            lambda x: x.logsumexp(new_dim, keepdim=keepdim),
+            call_on_nested=True,
             batch_size=batch_size,
+            names=names,
         )

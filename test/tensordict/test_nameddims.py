@@ -104,6 +104,31 @@ class TestNamedDims(TestTensorDictsBase):
         # no way to tell what the names have become, in general
         assert tda.names == [None] * 3
 
+    def test_apply_batch_size_lazy_stack_names(self):
+        # https://github.com/pytorch/tensordict/issues/2366: a lazy stack kept its
+        # names when the batch size changed, even if their count no longer fit
+        td = TensorDict(a=torch.zeros(2, 3), batch_size=[2, 3])
+        stack = LazyStackedTensorDict(*td.unbind(0), stack_dim=0)
+        stack.names = ["x", "y"]
+        result = stack.apply(lambda x: x[0], batch_size=[3])
+        assert result.batch_size == torch.Size([3])
+        assert result.names == [None]
+        result = stack.apply(lambda x: x[0], batch_size=[3], names=None)
+        assert result.names == [None]
+        result = stack.tile((2, 1, 1))
+        assert result.batch_size == torch.Size([2, 2, 3])
+        assert result.names == [None] * 3
+        # the number of dims is unchanged: the names are kept
+        result = stack.tile((2, 1))
+        assert result.batch_size == torch.Size([4, 3])
+        assert result.names == ["x", "y"]
+        # names given are used as given
+        result = stack.apply(lambda x: x[0], batch_size=[3], names=["z"])
+        assert result.names == ["z"]
+        result = stack.apply(lambda x: x[0, 0], batch_size=[], names=[])
+        assert result.batch_size == torch.Size([])
+        assert result.names == []
+
     def test_cat(self):
         td = TensorDict(batch_size=[3, 4, 5, 6], names=None)
         tdc = torch.cat([td, td], -1)
@@ -1123,6 +1148,34 @@ class TestNamedDims(TestTensorDictsBase):
             assert result.names == kept
             assert result_keepdim.names == ["x", "y"]
             assert result_keepdim.batch_size == td.sum(dim, keepdim=True).batch_size
+
+    @pytest.mark.parametrize("td_type", ["td", "lazy", "sub"])
+    @pytest.mark.parametrize("dim", [0, 1, -1, (0, 1), None])
+    @pytest.mark.parametrize("keepdim", [False, True])
+    def test_logsumexp_names(self, td_type, dim, keepdim):
+        # https://github.com/pytorch/tensordict/issues/2332: logsumexp keeps the
+        # names of the dims that survive the reduction, as sum does
+        td = TensorDict(
+            a=torch.rand(2, 3),
+            nested=TensorDict(b=torch.rand(2, 3, 4), batch_size=[2, 3]),
+            batch_size=[2, 3],
+            names=["x", "y"],
+        )
+        if td_type == "lazy":
+            td = LazyStackedTensorDict(*td.unbind(0), stack_dim=0)
+            td.names = ["x", "y"]
+        elif td_type == "sub":
+            td = td._get_sub_tensordict(slice(0, 2))
+        expected = td.sum(dim, keepdim=keepdim)
+        result = td.logsumexp(dim, keepdim=keepdim)
+        assert result.batch_size == expected.batch_size
+        assert result.names == expected.names
+        assert result["nested"].names == expected["nested"].names
+        out = td.logsumexp(dim, keepdim=keepdim).zero_()
+        result = td.logsumexp(dim, keepdim=keepdim, out=out)
+        assert result is out
+        assert result.names == expected.names
+        assert (result == td.logsumexp(dim, keepdim=keepdim)).all()
 
     @pytest.mark.parametrize("reduction", ["cummax", "cummin"])
     @pytest.mark.parametrize("dim", [0, 1, -1])

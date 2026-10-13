@@ -3119,11 +3119,18 @@ class LazyStackedTensorDict(TensorDictBase):
         elif batch_size is not None:
             # any op that modifies the batch-size will result in a regular TensorDict
             batch_size = torch.Size(batch_size)
+            if names is None or names is NO_DEFAULT:
+                # keep the names only if they still fit the batch dims
+                out_names = (
+                    self._maybe_names() if len(batch_size) == self.batch_dims else None
+                )
+            else:
+                out_names = names
             out = TensorDict._new_unsafe(
                 {},
                 batch_size=batch_size,
                 device=device if device is not NO_DEFAULT else self.device,
-                names=names if names else self._maybe_names(),
+                names=out_names,
             )
             return TensorDict._apply_nest(
                 self,
