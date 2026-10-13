@@ -291,10 +291,11 @@ Iteration
   is empty. ``len(td.keys())`` is the number of keys.
 
 ``bool``
-  ``bool(td)``, ``if td:``, and ``while td:`` raise a ``RuntimeError``
-  (`#1939 <https://github.com/pytorch/tensordict/issues/1939>`_ asks for a
-  dict-like truth value). To test for no entries, use
-  :meth:`~tensordict.TensorDict.is_empty`.
+  ``bool(td)``, ``if td:``, and ``while td:`` raise a ``RuntimeError``, so
+  that ``assert td1 == td2`` cannot pass by accident. To test for keys, use
+  ``len(td.keys())``. :meth:`~tensordict.TensorDict.is_empty` tests for
+  leaves: a tensordict that holds only empty sub-tensordicts is empty. To
+  reduce a comparison, use ``(td1 == td2).all()`` or ``.any()``.
 
 ``in``
   ``key in td`` tests the keys, as for a dict. A tuple of strings tests a

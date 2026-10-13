@@ -65,6 +65,7 @@ from tensordict.nn.probabilistic import (
     set_interaction_type,
 )
 from tensordict.nn.utils import (
+    _dispatch_td_nn_modules,
     _set_dispatch_td_nn_modules,
     composite_lp_aggregate,
     set_composite_lp_aggregate,
@@ -1037,6 +1038,48 @@ class TestTDModule:
         # checks that things are back in place
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
         tdm(a=torch.zeros(1, 1))
+
+    def test_dispatch_deactivate_restores_mode(self):
+        # Leaving the block restores the previous mode, not the global
+        # _ContextManager object (#1948).
+        mode = _dispatch_td_nn_modules()
+        with _set_dispatch_td_nn_modules(not mode):
+            assert _dispatch_td_nn_modules() == (not mode)
+        assert _dispatch_td_nn_modules() == mode
+
+        tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
+        with _set_dispatch_td_nn_modules(True):
+            with _set_dispatch_td_nn_modules(False):
+                with _set_dispatch_td_nn_modules(True):
+                    assert _dispatch_td_nn_modules()
+                assert not _dispatch_td_nn_modules()
+                with pytest.raises(
+                    TypeError, match="missing 1 required positional argument"
+                ):
+                    tdm(a=torch.zeros(1, 1))
+
+            # A reused instance that changes nothing on entry restores nothing.
+            set_dispatch_off = _set_dispatch_td_nn_modules(False)
+            with set_dispatch_off:
+                assert not _dispatch_td_nn_modules()
+            with _set_dispatch_td_nn_modules(False):
+                with set_dispatch_off:
+                    pass
+                assert not _dispatch_td_nn_modules()
+
+            # An instance nested in itself restores the mode of the outer block.
+            with set_dispatch_off:
+                with set_dispatch_off:
+                    assert not _dispatch_td_nn_modules()
+                assert not _dispatch_td_nn_modules()
+            assert _dispatch_td_nn_modules()
+
+            # The mode is restored when the block raises.
+            with pytest.raises(RuntimeError, match="inside"):
+                with set_dispatch_off:
+                    raise RuntimeError("inside")
+            assert _dispatch_td_nn_modules()
+        assert _dispatch_td_nn_modules() == mode
 
     def test_dispatch_deactivate_function(self):
         @dispatch(source=["a"], dest=["b"])
@@ -3433,6 +3476,45 @@ class TestProbabilisticTensorDictModule:
         assert torch.equal(sample, td["loc"])
 
     @pytest.mark.parametrize("param", ["logits", "probs"])
+    def test_onehot_categorical_mode_ties(self, param):
+        # Tied logits, e.g. from a zero-initialised head, give the first
+        # maximum, as torch's OneHotCategorical does (pytorch/tensordict#2145).
+        logits = torch.tensor([[0.0, 0.0, -1.0], [0.0, 0.0, 0.0], [0.3, 2.0, 1.0]])
+        expected = torch.tensor([[1, 0, 0], [1, 0, 0], [0, 1, 0]])
+        kwargs = {param: logits if param == "logits" else logits.softmax(-1)}
+        dist = OneHotCategorical(**kwargs)
+        assert dist.mode.dtype == torch.long
+        assert torch.equal(dist.mode, expected)
+        assert torch.equal(dist.deterministic_sample, expected)
+        assert torch.equal(dist.mode, distributions.OneHotCategorical(**kwargs).mode)
+        module = ProbabilisticTensorDictModule(
+            in_keys=[param],
+            out_keys=["action"],
+            distribution_class=OneHotCategorical,
+        )
+        td = module(TensorDict(kwargs, batch_size=[3]))
+        assert torch.equal(td["action"], expected)
+
+    def test_deterministic_sample_read_once(self):
+        reads = []
+
+        class CountingDelta(Delta):
+            @property
+            def deterministic_sample(self):
+                reads.append(None)
+                return super().deterministic_sample
+
+        module = ProbabilisticTensorDictModule(
+            in_keys=["param"],
+            out_keys=["out"],
+            distribution_class=CountingDelta,
+            default_interaction_type="deterministic",
+        )
+        td = module(TensorDict(param=torch.ones(3)))
+        assert torch.equal(td["out"], torch.ones(3))
+        assert len(reads) == 1
+
+    @pytest.mark.parametrize("param", ["logits", "probs"])
     def test_onehot_categorical_rsample(self, param):
         torch.manual_seed(0)
         logits = torch.randn(3, 4, requires_grad=True)
@@ -3803,8 +3885,33 @@ class TestEnsembleModule:
         assert out.batch_size == params.batch_size
         assert (out == params).all()
 
+    @pytest.mark.parametrize("batch_size", [[4], [2, 3], [2, 3, 2]])
+    def test_reset_parameters_recursive_requires_grad(self, batch_size):
+        """Ensure parameters that require grad are reset in place for any batch dims"""
+        module = TensorDictModule(nn.Linear(2, 3), in_keys=["a"], out_keys=["b"])
+        ens = EnsembleModule(module, num_copies=2)
+        params = TensorDict.from_module(module).expand(*batch_size).clone()
+        assert params["module", "weight"].requires_grad
+        before = params.detach().clone()
+        out = ens.reset_parameters_recursive(params)
+        assert out.batch_size == params.batch_size
+        assert (out == params).all()
+        weight = params["module", "weight"].reshape(-1, 3, 2)
+        assert (weight != before["module", "weight"].reshape(-1, 3, 2)).any()
+        assert (weight[0] != weight[1:]).any(dim=(-2, -1)).all()
+
 
 class TestTensorDictParams:
+    def test_masked_select(self):
+        params = TensorDictParams(
+            TensorDict(a=nn.Parameter(torch.zeros(3, 2)), batch_size=[3])
+        )
+        mask = torch.tensor([True, False, True])
+        assert params.masked_select(mask).batch_size == torch.Size([2])
+        with pytest.raises(NotImplementedError, match="masked_select"):
+            params.masked_select(mask, inplace=True)
+        assert params.batch_size == torch.Size([3])
+
     @pytest.mark.parametrize(
         "name", ["TDPARAM_HANDLED_FUNCTIONS", "implements_for_tdparam"]
     )
@@ -4812,6 +4919,47 @@ class TestCompositeDist:
         torch.testing.assert_close(
             sample["nested", "logistic"], logistic.deterministic_sample
         )
+
+    @pytest.mark.parametrize("registered", [True, False])
+    def test_deterministic_sample_no_fallback(self, registered):
+        # TransformedDistribution has no deterministic_sample, mean or mode: the
+        # error names it, and no warning announces a fallback (#2083). The
+        # register maps it to MEAN; an unregistered subclass falls back on its
+        # support.
+        class _Transformed(distributions.TransformedDistribution):
+            pass
+
+        dist_cls = distributions.TransformedDistribution if registered else _Transformed
+        params = TensorDict(
+            x=TensorDict(loc=torch.zeros(3, 2), scale=torch.ones(3, 2)),
+            batch_size=[3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "x": lambda loc, scale: dist_cls(
+                    distributions.Normal(loc, scale), [distributions.TanhTransform()]
+                )
+            },
+        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "error", message="deterministic_sample wasn't found"
+            )
+            with pytest.raises(
+                NotImplementedError,
+                match=f"{dist_cls.__name__}'> has no deterministic_sample",
+            ):
+                dist.deterministic_sample
+
+        # A fallback that works still warns.
+        class _Normal(distributions.Normal):
+            pass
+
+        dist = CompositeDistribution(params, distribution_map={"x": _Normal})
+        with pytest.warns(UserWarning, match="is falling back on mean"):
+            sample = dist.deterministic_sample
+        torch.testing.assert_close(sample["x"], params["x", "loc"])
 
     @pytest.mark.parametrize(
         "interaction", [InteractionType.MODE, InteractionType.MEAN]
