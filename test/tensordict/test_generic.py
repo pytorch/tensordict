@@ -878,6 +878,9 @@ class TestGeneric:
             assert td.to("cpu", batch_size=[2, 3]) is td
             assert td.batch_size == (2, 3)
             torch.testing.assert_close(td["a"], torch.zeros(2, 3))
+            with pytest.raises(RuntimeError, match="mismatch"):
+                td.to("cpu", batch_size=[5])
+            assert td.batch_size == (2, 3)
         finally:
             td.close()
 
@@ -5605,6 +5608,26 @@ class TestGeneric:
         assert (td == 1).all()
         assert (TensorDict.load_memmap(tmpdir) == 1).all()
 
+    @pytest.mark.parametrize("method", ["memmap", "memmap_", "memmap_like"])
+    @pytest.mark.parametrize("return_early", [False, True])
+    def test_memmap_threads_raise_worker_error(
+        self, tmpdir, monkeypatch, method, return_early
+    ):
+        # An error in a worker thread is raised, as with num_threads=0
+        populate_memmap = tensordict._td._populate_memmap
+
+        def failing_populate_memmap(*args, key, **kwargs):
+            if key == "b":
+                raise OSError("failed to write b")
+            return populate_memmap(*args, key=key, **kwargs)
+
+        monkeypatch.setattr(tensordict._td, "_populate_memmap", failing_populate_memmap)
+        td = TensorDict(a=torch.zeros(3), b=torch.ones(3))
+        with pytest.raises(OSError, match="failed to write b"):
+            out = getattr(td, method)(tmpdir, num_threads=2, return_early=return_early)
+            if return_early:
+                out.result()
+
     @set_list_to_stack(True)
     @set_capture_non_tensor_stack(False)
     @pytest.mark.parametrize("like", [True, False])
@@ -7590,6 +7613,26 @@ class TestGeneric:
         mask = torch.tensor([True, False, True])
         out = td.clone().lock_()
         assert td.where(mask, 0, out=out) is out
+
+    def test_apply_out_batch_size_list(self):
+        # a batch_size list equal to out.batch_size is accepted
+        td = TensorDict(a=torch.ones(3), b={"c": torch.ones(3, 2)}, batch_size=[3])
+        out = td.clone()
+        assert td.apply(lambda x: x * 2, batch_size=[3], out=out) is out
+        assert_allclose_td(out, td * 2)
+
+    def test_apply_out_batch_size_list_multithread(self):
+        td = TensorDict(a=torch.ones(3), b=torch.ones(3, 2), batch_size=[3])
+        out = td.clone()
+        result = td._fast_apply(lambda x: x * 2, batch_size=[3], out=out, num_threads=2)
+        assert result is out
+        assert_allclose_td(out, td * 2)
+
+    def test_norm_out(self):
+        td = TensorDict(a=torch.ones(3), b={"c": torch.ones(3, 2)}, batch_size=[3])
+        out = td.norm().zero_()
+        assert td.norm(out=out) is out
+        assert_allclose_td(out, td.norm())
 
     def test_zero_grad_module(self):
         x = torch.randn(3, 3)

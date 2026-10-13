@@ -1503,16 +1503,17 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     def _change_batch_size(self, value):
         raise NotImplementedError
 
-    # Override: checks the batch size against the file, and keeps the old
-    # one if it does not fit.
+    # Override: checks the batch size against the file; if it does not fit,
+    # keeps the old one and raises, like TensorDict.
     @TensorDictBase.batch_size.setter
     def batch_size(self, value):
         _batch_size = self._batch_size
         try:
             self._batch_size = torch.Size(value)
             self._check_batch_size(self._batch_size)
-        except ValueError:
+        except ValueError as err:
             self._batch_size = _batch_size
+            raise RuntimeError(str(err)) from err
 
     def _rename_subtds(self, names):
         if names is None:

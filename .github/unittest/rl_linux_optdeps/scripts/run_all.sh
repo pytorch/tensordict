@@ -156,10 +156,19 @@ python -m torch.utils.collect_env
 # reverse-dependency job focused on TensorDict interoperability.
 # torchvision is not installed here (it would have to match the torch nightly),
 # and this test fails instead of skipping without it.
+# The last two tests fail at random, whatever the TensorDict change, and turn
+# unrelated PRs red. Run them again once TorchRL fixes them:
+# - test_discrete_actor[cpu-autocast]: under bfloat16 two logits can be equal,
+#   and the deterministic action then has two ones (pytorch/rl#4508).
+# - test_worker_affinity_error_shuts_down_workers: AsyncEnvPool reports
+#   "worker process exited unexpectedly" when another worker exits before
+#   worker 0 reports its CPU affinity error (pytorch/rl#4563).
 MUJOCO_GL=egl python -m pytest test --instafail -v --durations 20 \
   --ignore test/test_distributed.py \
   --ignore test/llm \
   --deselect test/modules/test_dreamer_components.py::test_public_block_gru_triton_gradient_parity \
   --deselect test/modules/test_dreamer_components.py::test_public_block_gru_triton_compile_recurrent_loss \
   --deselect "test/test_helpers.py::test_transformed_env_constructor_with_state_dict[from_pixels1]" \
+  --deselect "test/modules/test_dreamer_components.py::TestDreamerV3Components::test_discrete_actor[cpu-autocast]" \
+  --deselect test/envs/test_special.py::TestAsyncEnvPool::test_worker_affinity_error_shuts_down_workers \
   --timeout=120
