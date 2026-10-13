@@ -772,7 +772,14 @@ class _Serialization:
                         v = values[idx]
                         if v.is_nested:
                             continue
-                        flat_view = v.contiguous().view(-1).view(torch.uint8)
+                        flat_view = v.contiguous().view(-1)
+                        if flat_view.stride(-1) != 1:
+                            # a one-element leaf such as x[:, 0] of a (1, 5)
+                            # tensor counts as contiguous and keeps its stride
+                            flat_view = flat_view.clone(
+                                memory_format=torch.contiguous_format
+                            )
+                        flat_view = flat_view.view(torch.uint8)
                         start, stop = offsets[idx], offsets[idx + 1]
                         pad = stop - start - flat_view.numel()
                         storage[start : stop - pad].copy_(
