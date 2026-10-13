@@ -13,6 +13,7 @@ import os
 import pickle
 import platform
 import sys
+import threading
 import warnings
 from dataclasses import dataclass
 
@@ -1482,6 +1483,21 @@ class TestNonTensorData:
             td.copy().update_({"s": "copied", "a": torch.full((3,), 2.0)})
             assert td["s"] == "copied" and (td["a"] == 2).all()
 
+    @pytest.mark.parametrize("route", ["update_", "update_no_tensor", "copy_"])
+    def test_memmap_update__unpicklable(self, route, tmp_path):
+        # A value that cannot be pickled raises before the non-tensor files of
+        # a memmapped tensordict are rewritten, so the folder still loads
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("o", 1)
+        td.memmap_(tmp_path)
+        source = TensorDict(batch_size=[3])
+        source.set_non_tensor("o", threading.Lock())
+        if route != "update_no_tensor":
+            source["a"] = torch.ones(3)
+        with pytest.raises(TypeError, match="pickle"):
+            getattr(td, "copy_" if route == "copy_" else "update_")(source)
+        assert TensorDict.load_memmap(tmp_path, allow_pickle=True)["o"] == 1
+
     def test_ignore_lock(self):
         td = TensorDict({"a": {"b": "1"}}, batch_size=[10])
         td.lock_()
@@ -1722,6 +1738,31 @@ class TestNonTensorData:
         assert not pickle_path.exists()
         loaded = TensorDict.load_memmap(tmp_path, allow_pickle=False)
         assert loaded.tolist() == ["a", "b"]
+
+    @pytest.mark.parametrize("stack", [False, True])
+    @pytest.mark.parametrize("old", [1, {1, 2}])
+    def test_memmap_unpicklable_keeps_files(self, tmp_path, stack, old):
+        # memmap_ over an existing memmap with a value that cannot be pickled
+        # raises and leaves the files that are already there as they were
+        def make(value):
+            if stack:
+                return NonTensorStack(value, value)
+            return NonTensorData(value)
+
+        def files():
+            return {
+                path: path.read_bytes()
+                for path in tmp_path.rglob("*")
+                if path.is_file()
+            }
+
+        make(old).memmap_(tmp_path)
+        before = files()
+        with pytest.raises(TypeError, match="pickle"):
+            make(threading.Lock()).memmap_(tmp_path)
+        assert files() == before
+        loaded = TensorDict.load_memmap(tmp_path, allow_pickle=True)
+        assert loaded.tolist() == make(old).tolist()
 
     @pytest.mark.parametrize("value", [{1, 2}, {"a": {1, 2}}, [{1, 2}]])
     def test_memmap_set_is_pickled(self, tmp_path, value):

@@ -2524,28 +2524,30 @@ def _memmap_(
             os.makedirs(prefix, exist_ok=True)
 
         def save_metadata(cls=cls, _non_tensordict=_non_tensordict, prefix=prefix):
-            with open(prefix / "meta.json", "wb") as f:
-                metadata = {"_type": str(cls)}
-                to_pickle = {}
-                for key, value in _non_tensordict.items():
-                    value = _from_shared_nontensor(value)
-                    if _is_json_serializable(value):
-                        metadata[key] = value
-                    else:
-                        to_pickle[key] = value
-                from tensordict._utils_key_json import json_dumps
+            metadata = {"_type": str(cls)}
+            to_pickle = {}
+            for key, value in _non_tensordict.items():
+                value = _from_shared_nontensor(value)
+                if _is_json_serializable(value):
+                    metadata[key] = value
+                else:
+                    to_pickle[key] = value
+            from tensordict._utils_key_json import json_dumps
 
-                json_str = json_dumps(metadata)
-                # Ensure we write bytes to the binary file
-                if isinstance(json_str, str):
-                    f.write(json_str.encode("utf-8"))
-                else:
-                    f.write(json_str)
-                if to_pickle:
-                    with open(prefix / "other.pickle", "wb") as pickle_file:
-                        pickle.dump(to_pickle, pickle_file)
-                else:
-                    (prefix / "other.pickle").unlink(missing_ok=True)
+            json_str = json_dumps(metadata)
+            # Ensure we write bytes to the binary file
+            if isinstance(json_str, str):
+                json_str = json_str.encode("utf-8")
+            # Serialize before opening any file, so that a value that cannot be
+            # pickled leaves the files on disk as they were.
+            pickled = pickle.dumps(to_pickle) if to_pickle else None
+            with open(prefix / "meta.json", "wb") as f:
+                f.write(json_str)
+            if pickled is not None:
+                with open(prefix / "other.pickle", "wb") as pickle_file:
+                    pickle_file.write(pickled)
+            else:
+                (prefix / "other.pickle").unlink(missing_ok=True)
 
         if executor is None:
             save_metadata()
@@ -6954,19 +6956,23 @@ class NonTensorStack(LazyStackedTensorDict):
                 json_serializable = _is_json_serializable(data)
                 if json_serializable:
                     jsondict["data"] = data
+                    pickled = None
                 else:
                     jsondict["data"] = "pickle.pkl"
-                    with open(prefix / "pickle.pkl", "wb") as f:
-                        pickle.dump(data, f)
-                with open(prefix / "meta.json", "wb") as f:
-                    from tensordict._utils_key_json import json_dumps
+                    # Serialize before opening any file, so that data that cannot be
+                    # pickled leaves the files on disk as they were.
+                    pickled = pickle.dumps(data)
+                from tensordict._utils_key_json import json_dumps
 
-                    json_str = json_dumps(jsondict, separators=(",", ":"))
-                    # Ensure we write bytes to the binary file
-                    if isinstance(json_str, str):
-                        f.write(json_str.encode("utf-8"))
-                    else:
-                        f.write(json_str)
+                json_str = json_dumps(jsondict, separators=(",", ":"))
+                # Ensure we write bytes to the binary file
+                if isinstance(json_str, str):
+                    json_str = json_str.encode("utf-8")
+                if pickled is not None:
+                    with open(prefix / "pickle.pkl", "wb") as f:
+                        f.write(pickled)
+                with open(prefix / "meta.json", "wb") as f:
+                    f.write(json_str)
                 if json_serializable:
                     (prefix / "pickle.pkl").unlink(missing_ok=True)
 
