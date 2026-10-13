@@ -3045,9 +3045,11 @@ class TestLazyStackedTensorDict:
             else TensorDict(batch_size=[n])
             for _ in range(2)
         ]
+        non_tensor = [NonTensorData("x", batch_size=[n]) for _ in range(2)]
         for td in (
             LazyStackedTensorDict(*members, stack_dim=0),
             LazyStackedTensorDict(*members, stack_dim=1),
+            NonTensorStack(*non_tensor, stack_dim=1),
         ):
             for dim in (0, 1, -1):
                 for sizes in ((td.batch_size[dim],), (-1,)):

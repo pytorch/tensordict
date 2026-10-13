@@ -6683,6 +6683,10 @@ class NonTensorStack(LazyStackedTensorDict):
         result = self._regroup(shape)
         if result is not None:
             return result
+        if shape == self.batch_size:
+            # an identity unflatten of a multi-dim stack: return self, as
+            # reshape and view do
+            return self
         return self._batch_op(lambda positions: positions.reshape(shape), shape, names)
 
     # Override: expanding the members shares the entries and is twice as fast
