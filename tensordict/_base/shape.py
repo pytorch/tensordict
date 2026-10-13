@@ -31,6 +31,7 @@ from tensordict.utils import (
     _is_unbatched,
     _maybe_correct_neg_dim,
     _resolve_expand_shape,
+    _warn_dim_past_batch_dims,
     _zip_strict,
     is_non_tensor,
     lazy_legacy,
@@ -553,7 +554,9 @@ class _ShapeOps:
             repeats (torch.Tensor or int): The number of repetitions for each element. `repeats` is broadcast to fit
                 the shape of the given axis.
             dim (int, optional): The dimension along which to repeat values. By default, use the flattened input
-                array, and return a flat output array.
+                array, and return a flat output array. A ``dim`` past the batch dims warns, and is used on the
+                dims of the leaves. Starting with TensorDict 0.17, the default will change to raising an
+                ``IndexError``, as for a tensor.
 
         Keyword Args:
             output_size (int, optional): Total output size for the given axis (e.g. sum of repeats). If given, it
@@ -621,6 +624,8 @@ class _ShapeOps:
             raise ValueError(
                 f"dim {dim} is out of range for tensordict with shape {self.shape}."
             )
+        if dim_corrected >= self.ndim:
+            _warn_dim_past_batch_dims("repeat_interleave")
         new_batch_size = []
         for i, s in enumerate(self.batch_size):
             if i == dim_corrected:
@@ -2216,6 +2221,10 @@ class _ShapeOps:
             start_dim (int): the first dim to flatten
             end_dim (int): the last dim to flatten
 
+        A ``start_dim`` or ``end_dim`` outside the batch dims warns, and is
+        used on the dims of the leaves. Starting with TensorDict 0.17, the
+        default will change to raising an ``IndexError``, as for a tensor.
+
         Keyword Args:
             inplace (bool, optional): If ``True``, this tensordict's identity
                 and key set are preserved; each leaf is flattened one at a
@@ -2270,6 +2279,8 @@ class _ShapeOps:
             raise ValueError(
                 "The end dimension must be greater or equal to the start dim."
             )
+        if start_dim < 0 or end_dim >= self.ndim:
+            _warn_dim_past_batch_dims("flatten")
 
         def flatten(tensor):
             return torch.flatten(tensor, start_dim, end_dim)
