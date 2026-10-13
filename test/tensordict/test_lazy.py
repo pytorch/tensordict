@@ -3847,6 +3847,32 @@ class TestLazyStackedTensorDict:
         dense.set_at_("a", "s1", index)
         assert lazy.get("a").tolist() == dense.get("a").tolist()
 
+    @pytest.mark.parametrize("member_batch_size", [(), (2,)])
+    @pytest.mark.parametrize("value", [[1, 2, 3], torch.tensor([1, 2])], ids=type)
+    @pytest.mark.parametrize(
+        "index",
+        [(), slice(0, 2), 1, [0, 2], torch.tensor([True, False, True]), Ellipsis],
+    )
+    def test_lazy_set_at_non_tensor_list(self, member_batch_size, value, index):
+        # A value with more dims than the non-tensor entry is written whole
+        # into each element, as in a dense tensordict, not split over the
+        # members, which also raised when its size did not match (#2522)
+        dense = TensorDict(a="s0", batch_size=(3, *member_batch_size))
+        lazy = lazy_stack(list(dense.clone().unbind(0)))
+        dense.set_at_("a", value, index)
+        lazy.set_at_("a", value, index)
+        written = torch.arange(3)[index].reshape(-1).tolist()
+        for td in (dense, lazy):
+            for i in range(3):
+                elements = td[i].get("a").tolist()
+                if not member_batch_size:
+                    elements = [elements]
+                for element in elements:
+                    if i in written:
+                        assert torch.equal(element, torch.as_tensor(value))
+                    else:
+                        assert element == "s0"
+
     @pytest.mark.parametrize(
         "index",
         [1, slice(0, 2), torch.tensor([0, 2]), (slice(None), 0), (Ellipsis, 1)],
