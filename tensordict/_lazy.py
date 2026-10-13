@@ -58,6 +58,7 @@ from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _default_is_leaf,
+    _has_lazy_stack,
     _is_leaf_nontensor,
     _is_tensor_collection,
     _NESTED_TENSORS_AS_LISTS,
@@ -65,6 +66,7 @@ from tensordict.base import (
     _PACKAGE_DIR,
     _register_tensor_class,
     _SELF_NESTING_ERROR,
+    _warn_read_only,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
     is_tensor_collection,
@@ -3034,6 +3036,59 @@ class LazyStackedTensorDict(TensorDictBase):
         # a TypedTensorDict or a sub-tensordict over this stack writes back
         # through the members, such as rows of a file opened read-only
         return any(td._storage_is_read_only() for td in self.tensordicts)
+
+    # Override: the in-place methods change the leaves of the members, which
+    # are copies where a member reads copies, such as an h5 file.
+    @property
+    def _reads_return_copies(self) -> bool:
+        return any(td._reads_return_copies for td in self.tensordicts)
+
+    # Override: the base implementation reads the leaves of the stack under
+    # keys such as ("0", "a"), which it cannot write back. The method runs on
+    # a stack in which each member that reads copies is replaced by a copy of
+    # its leaves, so that the arguments are split over the members as on any
+    # stack, and each such member writes its leaves back.
+    def _inplace_on_copies(self, method: Callable, *args, **kwargs) -> Self:
+        # the public name of a hook such as _zero_
+        name = method.__name__.lstrip("_")
+        written = []
+        copies = self._stack_of_copies(written)
+        result = method(copies, *args, **kwargs)
+        if result is not copies:
+            # broadcasting self returns a new tensordict and writes nothing
+            return result
+        read_only = False
+        for td, leaves in written:
+            if td._storage_is_read_only():
+                read_only = True
+            else:
+                td._write_back(*leaves._items_list(True, True), name)
+        if read_only:
+            # one warning for the call, as for one file
+            _warn_read_only(name)
+        return self
+
+    def _stack_of_copies(self, written: list) -> LazyStackedTensorDict:
+        """The stack with each member that reads copies replaced by a copy of its leaves.
+
+        Called by ``_inplace_on_copies``. Appends each such member and its
+        copy to ``written``, for the member to write the copy back.
+        """
+        members = []
+        for td in self.tensordicts:
+            if not td._reads_return_copies:
+                members.append(td)
+            elif isinstance(td, LazyStackedTensorDict):
+                members.append(td._stack_of_copies(written))
+            elif _has_lazy_stack(td):
+                # a TypedTensorDict over a lazy stack, whose copy would split
+                # the keys over the members of that stack: changed as before
+                members.append(td)
+            else:
+                leaves = td._copy_of_leaves()
+                written.append((td, leaves))
+                members.append(leaves)
+        return self._new_lazy_unsafe(*members, stack_dim=self.stack_dim)
 
     # Override: applies fn to each member in place, which is faster than
     # apply(inplace=True) and accepts the keyword arguments of TensorDict.apply.

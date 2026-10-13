@@ -4619,8 +4619,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         Called by the in-place methods when ``_reads_return_copies`` is set.
         """
-        from tensordict._td import TensorDict
-
         # the public name of a hook such as _masked_fill_
         name = method.__name__.lstrip("_")
         if self._storage_is_read_only():
@@ -4634,12 +4632,29 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             _warn_read_only(name)
             return result
         try:
-            items = list(self.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS))
+            leaves = self._copy_of_leaves()
         except RuntimeError:
             # The members of a lazy stack that differ in shape cannot be read
             # as one tensor: the method runs on self, which writes nothing
             # unless it broadcasts self over its members.
             return method(self, *args, **kwargs)
+        result = method(leaves, *args, **kwargs)
+        if result is not leaves:
+            # broadcasting self returns a new tensordict and writes nothing
+            return result
+        keys, values = leaves._items_list(True, True)
+        self._write_back(keys, values, name)
+        return self
+
+    def _copy_of_leaves(self) -> TensorDictBase:
+        """A ``TensorDict`` of the tensor leaves that ``items`` reads, for an in-place method to change.
+
+        Only called when ``_reads_return_copies`` is set, by
+        ``_inplace_on_copies``.
+        """
+        from tensordict._td import TensorDict
+
+        items = list(self.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS))
         # The leaves are set in the order of self, as in to_tensordict():
         # lerp_, addcdiv_ and addcmul_ pair their operands by position.
         leaves = TensorDict(batch_size=self.batch_size, device=self.device)
@@ -4655,13 +4670,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 validated=True,
                 non_blocking=False,
             )
-        result = method(leaves, *args, **kwargs)
-        if result is not leaves:
-            # broadcasting self returns a new tensordict and writes nothing
-            return result
-        keys, values = leaves._items_list(True, True)
-        self._write_back(keys, values, name)
-        return self
+        return leaves
 
     def _write_back(self, keys, values, method: str) -> None:
         """Writes the leaves that the in-place method ``method`` changed back to storage.

@@ -416,6 +416,39 @@ def test_inplace_methods_write(tmp_path):
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_inplace_methods_write_lazy_stack(tmp_path):
+    # #2570: the in-place methods of a lazy stack write to its h5 members, also
+    # beside a dense member and in a stack of stacks
+    def make():
+        return TensorDict(
+            {"a": torch.ones(3), "nested": {"b": torch.ones(3, 2)}}, batch_size=[3]
+        )
+
+    files = [
+        PersistentTensorDict.from_dict(make(), filename=tmp_path / f"{i}.h5")
+        for i in range(4)
+    ]
+    dense = make()
+    expected = lazy_stack([make() for _ in range(3)])
+    for data in (lazy_stack([files[0], dense, files[1]]), expected):
+        assert data.add_(1.0) is data
+        assert data.lerp_(expected.to_tensordict() * 0 + 10, 0.5) is data
+        assert data.mul_(torch.arange(3.0).unsqueeze(-1).expand(3, 3)) is data
+    for td, member in zip((files[0], dense, files[1]), expected.tensordicts):
+        torch.testing.assert_close(td.to_tensordict(), member)
+    stack = lazy_stack([lazy_stack(files[:2]), lazy_stack(files[2:])], dim=1)
+    assert stack.zero_() is stack
+    for td in files:
+        assert (td["a"] == 0).all()
+        assert (td["nested", "b"] == 0).all()
+    # masked_fill_ writes as before
+    assert stack.masked_fill_(torch.ones(2, 2, 3, dtype=torch.bool), 5.0) is stack
+    for td in files:
+        assert (td["a"] == 5).all()
+        assert (td["nested", "b"] == 5).all()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_inplace_read_only_warns(tmp_path):
     # from_h5 opens files read-only by default: the in-place methods leave the
     # file unchanged, as before they wrote to files, and warn that this will
@@ -441,6 +474,9 @@ def test_inplace_read_only_warns(tmp_path):
         iadd,
         lambda: h5td[0:2].add_(1.0),
         lambda: h5td[0:2].zero_(),
+        # #2570: one warning for a lazy stack of rows of the file
+        lambda: lazy_stack([h5td[0], h5td[1]]).add_(1.0),
+        lambda: lazy_stack([h5td[0], h5td[1]]).zero_(),
         lambda: h5td.update_({"a": torch.zeros(3)}),
         lambda: h5td.copy_(td.clone().zero_()),
     ):
