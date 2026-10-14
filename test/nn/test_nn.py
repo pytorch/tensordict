@@ -4738,10 +4738,12 @@ class TestCompositeDist:
         assert "a" not in dist.sample().keys()
 
     @pytest.mark.parametrize("constructor", ["init", "from_distributions"])
-    def test_name_map_unknown_key(self, constructor):
-        # A name_map entry that matches no distribution is a KeyError.
-        with pytest.raises(KeyError, match="nope"):
-            self._dist_with_name_map(constructor, "a", {"nope": "x"})
+    def test_name_map_unknown_key_ignored(self, constructor):
+        # A name_map shared by several modules may name other distributions.
+        dist = self._dist_with_name_map(
+            constructor, "a", {"a": "b", "nope": "x", ("nope",): "y"}
+        )
+        assert list(dist.dists) == ["b"], list(dist.dists)
 
     def test_rsample(self):
         params = TensorDict(

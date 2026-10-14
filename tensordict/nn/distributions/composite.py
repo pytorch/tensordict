@@ -28,28 +28,13 @@ def _resolve_name_map(name_map: dict | None, names) -> dict[NestedKey, NestedKey
     """Map each distribution name to the key its sample is written under.
 
     Keys are matched after :func:`~tensordict.unravel_key`. Distributions
-    omitted from ``name_map`` keep their own name. A ``name_map`` key that
-    does not match any distribution raises ``KeyError``.
+    omitted from ``name_map`` keep their own name.
     """
     unraveled_names = [unravel_key(name) for name in names]
     if not name_map:
         return {name: name for name in unraveled_names}
-    known = set(unraveled_names)
-    resolved: dict[NestedKey, NestedKey] = {}
-    unknown = []
-    for key, value in name_map.items():
-        unraveled = unravel_key(key)
-        if unraveled not in known:
-            unknown.append(key)
-        else:
-            resolved[unraveled] = unravel_key(value)
-    if unknown:
-        missing = ", ".join(repr(key) for key in unknown)
-        raise KeyError(
-            f"name_map key {missing} cannot be found in the distributions "
-            f"with keys {unraveled_names}."
-        )
-    return {name: resolved.get(name, name) for name in unraveled_names}
+    name_map = {unravel_key(key): unravel_key(value) for key, value in name_map.items()}
+    return {name: name_map.get(name, name) for name in unraveled_names}
 
 
 class CompositeDistribution(d.Distribution, Mapping):
@@ -75,8 +60,7 @@ class CompositeDistribution(d.Distribution, Mapping):
     Keyword Arguments:
         name_map (Dict[NestedKey, NestedKey], optional): A mapping of where each sample should be written. If not provided,
             the key names from `distribution_map` will be used. Entries are
-            matched after :func:`~tensordict.unravel_key`. A key that does not
-            match any distribution raises ``KeyError``.
+            matched after :func:`~tensordict.unravel_key`.
         extra_kwargs (Dict[NestedKey, Dict], optional): A dictionary of additional keyword arguments for constructing the distributions.
         log_prob_key (NestedKey, optional): The key where the aggregated log probability will be stored.
             Defaults to `'sample_log_prob'`.
