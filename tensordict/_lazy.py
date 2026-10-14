@@ -1274,7 +1274,9 @@ class LazyStackedTensorDict(TensorDictBase):
         except Exception:
             self._td_dim_name = previous_stack_name
             self._empty_stack_names = previous_empty_names
-            for td, snapshot in renamed:
+            # A member may be in the stack twice: its first snapshot is the
+            # one taken before any rename, so restore it last.
+            for td, snapshot in reversed(renamed):
                 _restore_names(td, snapshot)
             raise
 

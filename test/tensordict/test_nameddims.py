@@ -884,6 +884,18 @@ class TestNamedDims(TestTensorDictsBase):
         assert outer.tensordicts[1].names == [None, "inner"]
         assert clash["nested"].names == ["inner", "taken"]
 
+        # The same member twice: its second snapshot is taken after its first
+        # rename, so the rollback must end on the first one.
+        td = TensorDict({}, [3], names=["q"])
+        bad = TensorDict(
+            {"n": TensorDict({}, [3, 4], names=["q", "taken"])}, [3], names=["q"]
+        )
+        stack = LazyStackedTensorDict(td, td, bad)
+        with pytest.raises(ValueError, match="non-unique"):
+            stack.names = ["s", "taken"]
+        assert td.names == ["q"]
+        assert stack.names == [None, "q"]
+
     def test_sub_td(self):
         td = self.sub_td("cpu")
         with pytest.raises(
