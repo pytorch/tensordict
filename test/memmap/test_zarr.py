@@ -610,6 +610,24 @@ class TestZarrWriteOps:
         assert (ztd["a"] == torch.arange(8.0) + 1).all()
         assert (ztd["b", "d"] == 1).all()
 
+    def test_to_context_manager_changes_entry_type(self, tmp_path):
+        # as on a TensorDict, a group that the block replaces with a tensor is
+        # replaced, and a tensor replaced with a tensordict raises
+        td = TensorDict(
+            {"a": torch.arange(8.0), "b": {"c": torch.zeros(8)}}, batch_size=[8]
+        )
+        td.to_zarr(tmp_path / "s.zarr")
+        ztd = PersistentTensorDict.from_zarr(tmp_path / "s.zarr", mode="r+")
+        with ztd.to(torch.float64) as td64:
+            td64["b"] = torch.ones(8)
+        assert set(ztd.keys(True, True)) == {"a", "b"}
+        assert (ztd["b"] == 1).all()
+        with pytest.raises(RuntimeError, match="cannot set a tensor collection"):
+            with ztd.to(torch.float64) as td64:
+                td64["a"] = TensorDict(c=torch.ones(8), batch_size=[8])
+        assert set(ztd.keys(True, True)) == {"a", "b"}
+        assert (ztd["a"] == torch.arange(8.0)).all()
+
     def test_chunks_heterogeneous_ranks(self, tmp_path):
         # a single chunks spec constrains the leading dims of every leaf,
         # whatever its rank, and leaves non-tensor payloads untouched

@@ -1361,6 +1361,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # ``to_tensordict()`` copy: the stores read it in one round trip, and on
     # all of them the result is a new, unlocked TensorDict.
     _masking_on_dense_copy: bool = False
+    # Set by the files, into which the exit of a ``with td.to(...)`` block
+    # writes the dense copy in place, with _write_back_to().
+    _to_writes_back_in_place: bool = False
     # Set by the stores, on which ``masked_select`` masks a
     # ``to_tensordict()`` copy, read in one round trip. On the views and h5
     # files, that is slower than masking each entry.

@@ -716,6 +716,11 @@ def test_to_context_manager(tmp_path):
     # so nothing is written back
     with h5td.to("meta") as meta:
         assert meta.device == torch.device("meta")
+    # a copy on meta holds no data to write back
+    with h5td.to("meta", torch.float64) as meta:
+        assert type(meta) is TensorDict
+        meta["a"] += 1
+    assert (h5td["a"] == torch.arange(12.0).view(4, 3) + 1).all()
     with h5td.to(batch_size=[4, 3]) as same:
         assert same is h5td
         same["a"] = same["a"] + 2
@@ -772,6 +777,28 @@ def test_to_context_manager_writes_in_place(tmp_path, monkeypatch):
     ):
         td64["nested", "b"] = torch.ones(4, 2)
     assert (h5td["nested", "b"] == torch.ones(4, 2)).all()
+    h5td.close()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_to_context_manager_changes_entry_type(tmp_path):
+    # as on a TensorDict, a group that the block replaces with a tensor is
+    # replaced, and a tensor replaced with a tensordict raises
+    td = TensorDict(
+        a=torch.arange(4.0),
+        nested=TensorDict(b=torch.zeros(4), batch_size=[4]),
+        batch_size=[4],
+    )
+    h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+    with h5td.to(torch.float64) as td64:
+        td64["nested"] = torch.ones(4)
+    assert set(h5td.keys(True, True)) == {"a", "nested"}
+    assert (h5td["nested"] == 1).all()
+    with pytest.raises(RuntimeError, match="cannot set a tensor collection"):
+        with h5td.to(torch.float64) as td64:
+            td64["a"] = TensorDict(c=torch.ones(4), batch_size=[4])
+    assert set(h5td.keys(True, True)) == {"a", "nested"}
+    assert (h5td["a"] == torch.arange(4.0)).all()
     h5td.close()
 
 

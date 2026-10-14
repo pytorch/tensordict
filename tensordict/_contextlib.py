@@ -451,15 +451,10 @@ def _reverse_to(self, args, kwargs, out):
     """
     if out is None:
         return self
-    from tensordict.base import (
-        _is_leaf_nontensor,
-        _is_tensor_collection,
-        _warn_read_only,
-    )
+    from tensordict.base import _is_tensor_collection, _warn_read_only
     from tensordict.tensorclass import TensorAttrs
 
     if getattr(out, "_masking_on_dense_copy", False):
-        from tensordict.persistent import PersistentTensorDict
         from tensordict.utils import is_tensorclass
 
         # to() on a tensorclass wraps the result of to() on its tensordict
@@ -470,26 +465,16 @@ def _reverse_to(self, args, kwargs, out):
             # written to it already. This assumes that no other class with
             # _masking_on_dense_copy returns a copy of its own type from to().
             return self
+        if result.device is not None and result.device.type == "meta":
+            # a copy on meta holds no data to write back
+            return self
         if out._storage_is_read_only():
             _warn_read_only("to")
             return self
-        if isinstance(out, PersistentTensorDict):
-            # Write into the datasets in place: the file casts each value to
-            # the dtype of its dataset and keeps its layout (compression,
-            # chunks), and nothing is read. Only the keys the block added
-            # are created, by update(), which creates new nested tensordicts
-            # without looking them up in the file. As on a TensorDict, the
-            # non-tensor entries that the file has stay unchanged.
-            keys = set(out.keys(True, True, is_leaf=_is_leaf_nontensor))
-            for key, value in result.items(True, True):
-                if key not in keys:
-                    continue
-                if out._get_metadata(key).get("shape") == value.shape:
-                    out.set_(key, value)
-                else:
-                    # the block changed its shape: update() replaces it
-                    keys.discard(key)
-            out.update(result.exclude(*keys))
+        # a tensorclass forwards the attribute to its tensordict, but is
+        # written back by apply() below
+        if out._to_writes_back_in_place and not is_tensorclass(out):
+            out._write_back_to(result)
             return self
 
     # to() casts the dtypes if it gets a dtype, a tensor, other= with a single dtype

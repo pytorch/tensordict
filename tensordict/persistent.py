@@ -1036,6 +1036,7 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
 
     _td_dim_names = None
     _masking_on_dense_copy = True
+    _to_writes_back_in_place = True
     _rename_key_lenient = True
     LOCKING = None
     # each read loads the entry from the file into a new tensor
@@ -1692,6 +1693,32 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
 
     def _storage_is_read_only(self) -> bool:
         return self._backend.is_read_only(self.file)
+
+    def _write_back_to(self, result: TensorDictBase) -> None:
+        """Writes the dense copy of a ``with self.to(...)`` block back into the file, on exit.
+
+        ``result`` is the copy that ``to()`` returned, as the block left it.
+        The caller has checked that it is not ``self``, not on ``meta``, and
+        that the file is writable. Each leaf that the file and ``result``
+        both have, with the same shape, is written into its dataset in
+        place: the file casts it to the dtype of the dataset, keeps its
+        layout (compression, chunks), and reads nothing. The other entries
+        of ``result`` (new keys, an entry whose shape or type the block
+        changed) go through ``update()``, which replaces or creates them
+        without looking them up in the file. As on a ``TensorDict``, the
+        non-tensor entries that the file has stay unchanged.
+        """
+        keys = set(self.keys(True, True, is_leaf=_is_leaf_nontensor))
+        keys &= set(result.keys(True, True, is_leaf=_is_leaf_nontensor))
+        for key, value in result.items(True, True):
+            if key not in keys:
+                continue
+            if self._get_metadata(key).get("shape") == value.shape:
+                self.set_(key, value)
+            else:
+                # the block changed its shape: update() replaces it
+                keys.discard(key)
+        self.update(result.exclude(*keys))
 
     def entry_class(self, key: NestedKey) -> type:
         # Inspects the node only: no data is read from storage.
