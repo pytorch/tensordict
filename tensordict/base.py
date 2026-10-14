@@ -926,6 +926,15 @@ def is_tensor_collection(datatype: type | Any) -> bool:
     return _is_tensor_collection(datatype)
 
 
+def _non_tensor_content(value):
+    # What td[key] returns for a non-tensor entry: its content, or a list for
+    # a stack of non-tensor data. Shared by TensorDictBase.__getitem__ and
+    # _get_tuple_maybe_non_tensor.
+    if isinstance(value, TensorDictBase):
+        return value.tolist(as_linked_list=True)
+    return value.data
+
+
 def _default_is_leaf(cls: Type) -> bool:
     """Returns ``True`` if a type is not a tensor collection (tensordict or tensorclass), or is a pass-through type.
 
@@ -1644,8 +1653,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         if istuple or isinstance(index, str):
             if not istuple and type(self) is _TENSORDICT_TYPE:
                 # An exact TensorDict reads a str key straight from its dict,
-                # as TensorDict._get_str does. The rest mirrors the tail of
-                # _get_tuple_maybe_non_tensor: keep them in sync.
+                # as TensorDict._get_str does, and non-tensor entries as
+                # _get_tuple_maybe_non_tensor returns them.
                 try:
                     result = self._tensordict[index]
                 except KeyError:
@@ -1654,9 +1663,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 if cls is Tensor or cls is _TENSORDICT_TYPE:
                     return result
                 if _pass_through(result) and not _is_unbatched(result):
-                    if isinstance(result, TensorDictBase):
-                        return result.tolist(as_linked_list=True)
-                    return result.data
+                    return _non_tensor_content(result)
                 return result
             # _unravel_key_to_tuple will return an empty tuple if the index isn't a NestedKey
             idx_unravel = _unravel_key_to_tuple(index)
@@ -3776,13 +3783,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             _raise_if_not_a_tensordict(err, key, 1, first)
 
     def _get_tuple_maybe_non_tensor(self, key, default, **kwargs):
-        # __getitem__ repeats the non-tensor handling below for a str key of
-        # an exact TensorDict: keep them in sync.
         result = self._get_tuple(key, default, **kwargs)
         if _pass_through(result) and not _is_unbatched(result):
-            if isinstance(result, TensorDictBase):
-                return result.tolist(as_linked_list=True)
-            return result.data
+            return _non_tensor_content(result)
         return result
 
     @overload
