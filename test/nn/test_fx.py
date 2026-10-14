@@ -81,6 +81,44 @@ def test_tensordictmodule_trace_underscore_sentinel():
     assert (module_out["y"] == graph_module_out["y"]).all()
 
 
+def test_tensordictmodule_trace_underscore_nested_key():
+    class Net(nn.Module):
+        def forward(self, x):
+            return x + 1, x - 1
+
+    # ("_", "y") is a real nested key, unlike the "_" sentinel.
+    module = TensorDictModule(Net(), in_keys=["x"], out_keys=["_", ("_", "y")])
+    graph_module = symbolic_trace(module)
+
+    tensordict = TensorDict({"x": torch.randn(4, 3)}, [4])
+    module_out = TensorDict()
+    graph_module_out = TensorDict()
+
+    module(tensordict, tensordict_out=module_out)
+    graph_module(tensordict, tensordict_out=graph_module_out)
+
+    assert set(graph_module_out.keys(True, True)) == set(module_out.keys(True, True))
+    assert set(graph_module_out.keys(True, True)) == {("_", "y")}
+    assert (module_out["_", "y"] == graph_module_out["_", "y"]).all()
+
+
+@pytest.mark.parametrize("num_outputs", [1, 2])
+def test_tensordictmodule_trace_list_output(num_outputs):
+    class Net(nn.Module):
+        def forward(self, x):
+            return [x + i for i in range(num_outputs)]
+
+    out_keys = ["y", "z"][:num_outputs]
+    module = TensorDictModule(Net(), in_keys=["x"], out_keys=out_keys)
+    graph_module = symbolic_trace(module)
+
+    x = torch.randn(4, 3)
+    graph_module_out = graph_module(TensorDict({"x": x}, [4]))
+
+    for i, out_key in enumerate(out_keys):
+        assert (graph_module_out[out_key] == x + i).all()
+
+
 def test_tensordictsequential_trace_consistency():
     class Net(nn.Module):
         def __init__(self, input_size=100, hidden_size=50, output_size=10):
