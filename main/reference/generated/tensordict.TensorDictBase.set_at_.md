@@ -6,6 +6,15 @@ Writes `value` into the existing entry `key` at the index `index`, in place.
 
 `td.set_at_(key, value, index)` is the same as `td[key][index] = value`.
 
+A list, or a `bool`, `int` or `float` (also as a NumPy scalar),
+written into a non-tensor entry is cast to a tensor, and the write
+emits a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning). Starting with TensorDict 0.17, the
+default will change to storing it as non-tensor data. Wrap the value
+in [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) to store it as non-tensor data
+now, or pass a tensor to keep the tensor. `td[index] = value` writes
+through `set_at_` too, but announces another change: see
+`__setitem__()`.
+
 Parameters:
 
 - **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - key to be modified. The key must exist: a
