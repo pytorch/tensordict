@@ -398,15 +398,12 @@ def _mask_to_indices(index, batch_size, device):
     leaf it indexes, and each read is a device sync on CUDA: this reads it
     once. A CPU mask is kept unless ``device``, the device of the tensordict, is
     the CPU: CUDA leaves read a CPU mask without a sync, but not CPU indices.
-    Any other index, such as a mask that does not match the leading batch dims
-    or a meta or fake mask, is returned as it is, so that indexing raises the
-    same errors.
+    The caller checks that ``index`` is a 1-tuple holding a plain boolean
+    ``torch.Tensor``, so that other indices pay nothing for this. A mask that
+    does not match the leading batch dims, or a meta mask, is returned as it
+    is, so that indexing raises the same errors.
     """
-    if type(index) is not tuple or len(index) != 1:
-        return index
     mask = index[0]
-    if type(mask) is not torch.Tensor or mask.dtype is not torch.bool:
-        return index
     if mask.is_cpu:
         if device is None or device.type != "cpu":
             return index
