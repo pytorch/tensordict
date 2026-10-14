@@ -836,6 +836,31 @@ class TestTensorDictStore:
             if with_string:
                 assert out["s"] == "hello"
 
+    def test_to_context_manager_same_device(self, store_kwargs):
+        # to() on the device of the store returns the store, so the block
+        # writes to it and nothing is written back on exit
+        store = TensorDictStore(batch_size=[10], device="cpu", **store_kwargs)
+        try:
+            store["obs"] = torch.zeros(10)
+            store["nested", "x"] = torch.zeros(10, 2)
+            calls = []
+            run_sync = store._run_sync
+
+            def counting_run_sync(coro):
+                calls.append(None)
+                return run_sync(coro)
+
+            with store.to("cpu") as same:
+                assert same is store
+                same["obs"] = torch.ones(10)
+                store._run_sync = counting_run_sync
+            del store._run_sync
+            assert calls == []
+            assert (store["obs"] == 1).all()
+        finally:
+            store.clear_redis()
+            store.close()
+
     def test_empty(self, store_td):
         """Test empty()."""
         store_td["obs"] = torch.randn(10, 3)

@@ -702,13 +702,13 @@ def test_to_memory_format(tmp_path):
 def test_to_context_manager(tmp_path):
     h5td = _h5_with_nested(tmp_path)
     # the dense copy is written back to the file on exit, as on TensorDict
-    with (
-        pytest.warns(UserWarning, match="Replacing an array"),
-        h5td.to(torch.float64) as td64,
-    ):
-        assert type(td64) is TensorDict
-        td64["a"] += 1
-        td64["new"] = torch.ones(4, 3)
+    # in place: no dataset is replaced, so nothing warns
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with h5td.to(torch.float64) as td64:
+            assert type(td64) is TensorDict
+            td64["a"] += 1
+            td64["new"] = torch.ones(4, 3)
     assert h5td["a"].dtype == torch.float32
     assert (h5td["a"] == torch.arange(12.0).view(4, 3) + 1).all()
     assert (h5td["new"] == 1).all()
@@ -731,6 +731,61 @@ def test_to_context_manager(tmp_path):
             td64["a"] += 1
     assert record[0].filename == __file__
     assert (h5td["a"] == torch.arange(12.0).view(4, 3) + 3).all()
+    h5td.close()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_to_context_manager_writes_in_place(tmp_path, monkeypatch):
+    # the write-back reads nothing and keeps the layout of the datasets, also
+    # for a file reopened without its creation arguments
+    td = TensorDict(
+        a=torch.arange(4.0),
+        nested=TensorDict(b=torch.zeros(4), batch_size=[4]),
+        batch_size=[4],
+    )
+    PersistentTensorDict.from_dict(
+        td, filename=tmp_path / "file.h5", compression="gzip"
+    ).close()
+    h5td = PersistentTensorDict.from_h5(tmp_path / "file.h5", mode="r+")
+    reads = []
+    getitem = h5py.Dataset.__getitem__
+
+    def counting_getitem(self, *args, **kwargs):
+        reads.append(self.name)
+        return getitem(self, *args, **kwargs)
+
+    with h5td.to(torch.float64) as td64:
+        td64["a"] += 1
+        td64["nested", "c"] = torch.ones(4)
+        monkeypatch.setattr(h5py.Dataset, "__getitem__", counting_getitem)
+    monkeypatch.undo()
+    assert reads == []
+    assert h5td.file["a"].compression == "gzip"
+    assert h5td.file["nested/b"].compression == "gzip"
+    assert h5td["a"].dtype == torch.float32
+    assert (h5td["a"] == torch.arange(4.0) + 1).all()
+    assert (h5td["nested", "c"] == 1).all()
+    h5td.close()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+@pytest.mark.parametrize("dest", ["meta", "cpu", torch.float64])
+def test_to_context_manager_tensorclass(tmp_path, dest):
+    # a tensorclass over a file writes back as the file does
+    class H5Data(TensorClass):
+        a: torch.Tensor
+
+    td = TensorDict(a=torch.arange(4.0), batch_size=[4])
+    h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+    tc = H5Data.from_tensordict(h5td)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with tc.to(dest) as out:
+            assert type(out) is H5Data
+            if dest is torch.float64:
+                out.a += 1
+    assert h5td["a"].dtype == torch.float32
+    assert (h5td["a"] == torch.arange(4.0) + (dest is torch.float64)).all()
     h5td.close()
 
 

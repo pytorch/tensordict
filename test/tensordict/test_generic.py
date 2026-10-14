@@ -7697,6 +7697,31 @@ class TestGeneric:
         assert td["i"].dtype == torch.float32
         assert (td["i"] == torch.arange(3) / 2).all()
 
+    @pytest.mark.parametrize(
+        "kwargs",
+        [{}, {"non_blocking": True}, {"num_threads": 2}, {"other": TensorDict()}],
+        ids=["none", "non_blocking", "num_threads", "other"],
+    )
+    def test_to_sub_tensordict_copies(self, kwargs):
+        # without a device, a sub-tensordict returns a TensorDict copy
+        td = TensorDict(x=torch.zeros(4, 3), batch_size=[4])
+        sub = td._get_sub_tensordict(slice(0, 2))
+        out = sub.to(**kwargs)
+        assert type(out) is TensorDict
+        out["x"] += 1
+        assert (td["x"] == 0).all()
+
+    def test_to_context_manager_sub_tensordict_same_device(self):
+        # to() on the device of a sub-tensordict returns it, so the block
+        # writes to the source and nothing is written back on exit
+        td = TensorDict(x=torch.zeros(4, 3), batch_size=[4], device="cpu")
+        sub = td._get_sub_tensordict(slice(0, 2))
+        with sub.to(sub.device) as same:
+            assert same is sub
+            same["x"] += 1
+        assert (td["x"][:2] == 1).all()
+        assert (td["x"][2:] == 0).all()
+
     @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
     def test_to_mds(self, tmpdir):
         td = TensorDict(

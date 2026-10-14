@@ -2850,8 +2850,9 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
         self._source._stack_onto_at_(list_item, dim=dim, idx=self.idx)
         return self
 
-    # Override: a view cannot change its leaves in place nor its batch size,
-    # so these calls work on a to_tensordict() copy, or raise.
+    # Override: a view cannot change its leaves in place nor its batch size:
+    # it returns itself on its own device, and converts a to_tensordict() copy
+    # otherwise.
     def _to(
         self,
         device,
@@ -2869,26 +2870,15 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
             raise TypeError(
                 "Cannot send a _SubTensorDict instance to device/dtype inplace."
             )
-        if batch_size is not None and not (
+        if (
             device is not None
             and dtype is None
             and convert_to_format is None
             and device == self.device
-            and torch.Size(batch_size) == self.batch_size
+            and (batch_size is None or torch.Size(batch_size) == self.batch_size)
         ):
-            return self.to_tensordict().to(*args, non_blocking=non_blocking, **kwargs)
-        return super()._to(
-            device,
-            dtype,
-            non_blocking,
-            convert_to_format,
-            batch_size,
-            non_blocking_pin,
-            num_threads,
-            inplace,
-            args,
-            kwargs,
-        )
+            return self
+        return self.to_tensordict().to(*args, non_blocking=non_blocking, **kwargs)
 
     def _get_non_tensor(self, key: NestedKey, default=NO_DEFAULT):
         out = super()._get_non_tensor(key, default=default)

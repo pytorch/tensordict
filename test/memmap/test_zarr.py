@@ -580,6 +580,36 @@ class TestZarrWriteOps:
         td_back = TensorDict.from_zarr(tmp_path / "s.zarr")
         assert (td_back == td).all()
 
+    def test_to_context_manager_writes_in_place(self, tmp_path, monkeypatch):
+        # the write-back of to() reads nothing and keeps the layout of the
+        # arrays, also for a store reopened without its creation arguments
+        td = TensorDict(
+            {"a": torch.arange(8.0), "b": {"c": torch.zeros(8)}}, batch_size=[8]
+        )
+        td.to_zarr(tmp_path / "s.zarr", chunks=(2,))
+        ztd = PersistentTensorDict.from_zarr(tmp_path / "s.zarr", mode="r+")
+        reads = []
+        getitem = zarr.Array.__getitem__
+
+        def counting_getitem(self, *args, **kwargs):
+            reads.append(self.path)
+            return getitem(self, *args, **kwargs)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with ztd.to(torch.float64) as td64:
+                td64["a"] += 1
+                td64["b", "d"] = torch.ones(8)
+                monkeypatch.setattr(zarr.Array, "__getitem__", counting_getitem)
+        monkeypatch.undo()
+        assert reads == []
+        root = zarr.open_group(str(tmp_path / "s.zarr"), mode="r")
+        assert root["a"].chunks == (2,)
+        assert root["b/c"].chunks == (2,)
+        assert ztd["a"].dtype == torch.float32
+        assert (ztd["a"] == torch.arange(8.0) + 1).all()
+        assert (ztd["b", "d"] == 1).all()
+
     def test_chunks_heterogeneous_ranks(self, tmp_path):
         # a single chunks spec constrains the leading dims of every leaf,
         # whatever its rank, and leaves non-tensor payloads untouched
