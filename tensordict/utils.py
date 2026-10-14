@@ -2634,14 +2634,14 @@ def _is_cuda_scalar_of(other, tensors) -> bool:
     # a float64 0-dim tensor give float64 instead of float32, and float16 or
     # bfloat16 tensors with a wider or integer 0-dim tensor round differently.
     # Both give the same dtypes and values for float32 and float64 tensors, and
-    # for tensors of the dtype of a floating-point 0-dim tensor.
+    # for tensors of the dtype of a floating-point 0-dim tensor. A subclass
+    # of Tensor would turn the results into that subclass.
     if not (
-        isinstance(other, Tensor)
+        type(other) is Tensor
         and other.is_cuda
         and not other.ndim
         and other.is_floating_point()
         and not other.requires_grad
-        and not _is_unbatched(other)
     ):
         return False
     device, dtype = other.device, other.dtype
@@ -2677,7 +2677,12 @@ def _foreach(name: str, tensors, *args, **kwargs):
         add_tensor = _FOREACH_ADD_TENSOR.get(name)
         if add_tensor is not None and _is_cuda_scalar_of(args[0], tensors):
             op, sign = add_tensor
-            return op(tensors, args[0], alpha=sign * kwargs.get("alpha", 1))
+            other = args[0]
+            if name.endswith("_"):
+                # The kernel reads other while it writes tensors that may hold
+                # it; the number overload reads it once, before any write.
+                other = other.clone()
+            return op(tensors, other, alpha=sign * kwargs.get("alpha", 1))
         return getattr(torch, "_foreach_" + name)(tensors, *args, **kwargs)
     op = _FOREACH_PER_TENSOR_OPS.get(name) or getattr(torch.Tensor, name)
     per_tensor_args = [

@@ -5482,6 +5482,15 @@ def test_add_cuda_scalar_tensor_other_leaves():
     assert (td.cpu() + t)["a"].device == torch.device("cpu")
     with pytest.raises(NotImplementedError, match="bool tensor"):
         td.exclude("a") - torch.tensor(True, device="cuda")
+    with pytest.raises(NotImplementedError, match="bool tensor"):
+        torch.tensor(True, device="cuda") - td.exclude("a")
+
+    class SubTensor(torch.Tensor):
+        pass
+
+    # A subclass of Tensor does not turn the leaves into that subclass
+    out = td.exclude("a") + t.float().as_subclass(SubTensor)
+    assert type(out["b"]) is torch.Tensor
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
@@ -5512,6 +5521,24 @@ def test_add_sub_cuda_scalar_tensor_half_leaves(op, dtype, other_dtype, value):
     t = torch.tensor(value, device="cuda", dtype=other_dtype)
     expected = op(td, t.item())
     torch.testing.assert_close(op(td, t)["a"], expected["a"], rtol=0, atol=0)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
+@pytest.mark.parametrize("op", ["add_", "sub_"])
+@pytest.mark.parametrize("view", [True, False], ids=["element", "leaf"])
+def test_add_sub_cuda_scalar_tensor_inplace_alias(op, view):
+    # A 0-dim tensor held by a leaf is read before any leaf is written, as with
+    # the number. Only CUDA leaves take the 0-dim tensor overload; with this
+    # many elements its kernels read the 0-dim tensor after writing ``a``.
+    a = torch.full((1,) if view else (), 0.5, device="cuda")
+    td = TensorDict(
+        a=a, **{f"b{i}": torch.ones(200_000, device="cuda") for i in range(20)}
+    )
+    t = a[0] if view else a
+    expected = getattr(td.clone(), op)(t.item())
+    getattr(td, op)(t)
+    for key, val in expected.items():
+        torch.testing.assert_close(td[key], val, rtol=0, atol=0)
 
 
 class TestEmptyTensorMemmapRoundtrip:
