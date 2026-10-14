@@ -79,7 +79,7 @@ from tensordict.utils import (
     _clone_value,
     _create_segments_from_int,
     _encode_key_for_filesystem,
-    _get_leaf_tensordict,
+    _GENERIC_NESTED_ERR,
     _get_robust_key_setting_with_warning,
     _import_and_wrap_functorch,
     _infer_size_impl,
@@ -1688,18 +1688,46 @@ class TensorDict(TensorDictBase):
         copy_fn(indexed_dest_values, source_values, non_blocking=non_blocking)
         return self
 
+    # Override: dense fast path: a top-level key is deleted without the call
+    # to _del.
     @_lock_blocked
     def del_(self, key: NestedKey) -> Self:
         key = _unravel_key_to_tuple(key)
-        if len(key) > 1:
-            td, subkey = _get_leaf_tensordict(self, key)
-            td.del_(subkey)
+        if len(key) == 1:
+            del self._tensordict[key[0]]
+            if "_consolidated" in self.__dict__:
+                self._mark_consolidated_stale()
             return self
-
-        del self._tensordict[key[0]]
-        if "_consolidated" in self.__dict__:
-            self._mark_consolidated_stale()
+        self._del(key)
         return self
+
+    def _del(self, key: tuple[str, ...]) -> None:
+        if len(key) == 1:
+            del self._tensordict[key[0]]
+            if "_consolidated" in self.__dict__:
+                self._mark_consolidated_stale()
+        elif not key:
+            raise KeyError(_GENERIC_NESTED_ERR.format(key))
+        else:
+            try:
+                parent = self._get_tuple(key[:-1], None)
+            except ValueError:
+                # a tensor before key[-2]: raise the error of the whole key,
+                # which names the rest of the path
+                self._get_tuple(key, None)
+                raise
+            if parent is None:
+                # name the first missing sub-tensordict
+                i = 1
+                while self._get_tuple(key[:i], None) is not None:
+                    i += 1
+                raise KeyError(f"No sub-tensordict with key {key[i - 1]}.")
+            if not _is_tensor_collection(type(parent)):
+                raise ValueError(
+                    f"{key[-2]!r} is a {type(parent).__name__}, not a tensordict, "
+                    f"so it has no entry {key[-1]!r}."
+                )
+            parent.del_(key[-1])
 
     # Override: stacks into the existing leaf storages (torch.stack(out=)).
     def _stack_onto_(self, list_item: list[CompatibleType], dim: int) -> TensorDict:
@@ -2820,7 +2848,8 @@ class TensorDict(TensorDictBase):
                 def keyfunc(x):
                     return x[0]
 
-                return list(zip(*sorted(self._tensordict.items(), key=keyfunc)))[1]
+                items = sorted(self._tensordict.items(), key=keyfunc)
+                return list(zip(*items))[1] if items else ()
         else:
             return TensorDictBase.values(
                 self,
@@ -3359,17 +3388,9 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
             )
         return self._source
 
-    @_lock_blocked
-    def del_(self, key: NestedKey) -> Self:
-        self._source = self._source.del_(key)
-        return self
-
-    # Override: not supported on a sub-tensordict.
-    @_lock_blocked
-    def popitem(self) -> Tuple[NestedKey, CompatibleType]:
-        raise NotImplementedError(
-            f"popitem not implemented for class {type(self).__name__}."
-        )
+    # Override: deletes the entry of the source.
+    def _del(self, key: tuple[str, ...]) -> None:
+        self._source.del_(key)
 
     def _clone(self, recurse: bool = True) -> _SubTensorDict:
         """Clones the _SubTensorDict.

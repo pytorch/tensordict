@@ -252,7 +252,7 @@ Lazy stacks
 A lazy stack holds tensordicts whose entries have different shapes. The shape
 of such an entry shows ``-1`` for each dimension that differs. ``stacked[key]``
 then raises a ``RuntimeError``. To read the entry, pass one of these keyword
-arguments to :meth:`~tensordict.LazyStackedTensorDict.get`:
+arguments to :meth:`~tensordict.TensorDictBase.get`:
 
 - ``as_list=True`` returns a list with one tensor for each element.
 - ``as_padded_tensor=True`` returns one tensor, padded to the longest element.

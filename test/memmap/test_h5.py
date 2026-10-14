@@ -1310,8 +1310,78 @@ class TestH5Indexing:
         assert h5td.get_at("s", slice(2, 5)).batch_size == (3,)
         assert h5td.get_at(("nested", "c"), 3).shape == (2,)
         assert h5td.get_at("missing", 0, None) is None
-        with pytest.raises(KeyError):
-            h5td.get_at("missing", 0)
+        # a missing key returns None, as on TensorDict
+        assert h5td.get_at("missing", 0) is None
+
+    def test_get_at_index_kwarg(self, data):
+        td, h5td = data
+        assert (h5td.get_at("a", index=1) == td["a"][1]).all()
+        with pytest.raises(TypeError, match="index argument missing"):
+            h5td.get_at("a")
+
+    def test_get_nested_through_tensor_default(self, data):
+        # a path through a tensor gives the default, as on TensorDict (#2701)
+        td, h5td = data
+        assert h5td.get(("a", "x"), None) is None
+        assert td.get(("a", "x"), None) is None
+
+    @pytest.mark.parametrize("op", ["flatten_keys", "unflatten_keys"])
+    def test_flatten_inplace_raises_before_read(self, data, op, monkeypatch):
+        td, h5td = data
+        keys = list(h5td.keys(True, True))
+        reads = []
+        monkeypatch.setattr(
+            type(h5td), "to_tensordict", lambda self, **kw: reads.append(1)
+        )
+        with pytest.raises(ValueError, match=f"Cannot call {op} in_place"):
+            getattr(h5td, op)(inplace=True)
+        assert not reads
+        assert list(h5td.keys(True, True)) == keys
+        assert (h5td["a"] == td["a"]).all()
+        monkeypatch.undo()
+        flat = h5td.flatten_keys()
+        assert type(flat) is TensorDict
+        assert set(flat.keys()) == {"a", "b", "nested.c", "s"}
+
+        def is_leaf(cls):
+            return cls is TensorDict
+
+        flat = h5td.flatten_keys(is_leaf=is_leaf)
+        assert list(flat.keys()) == list(td.flatten_keys(is_leaf=is_leaf).keys())
+
+    def test_subtd_rename_on_locked_h5(self, data):
+        # a sub-tensordict renames in its locked h5 source, with the source's
+        # warning
+        td, h5td = data
+        h5td.lock_()
+        sub = h5td._get_sub_tensordict(0)
+        assert sub.is_locked
+        with pytest.warns(FutureWarning, match="renames keys of a locked"):
+            assert sub.rename_key_("a", "z") is sub
+        assert "z" in h5td.keys()
+        assert "a" not in h5td.keys()
+        h5td.unlock_()
+        with pytest.raises(KeyError, match="already present"):
+            sub.rename_key_("z", "b", safe=True)
+
+    def test_select_exclude_unsupported(self, data):
+        td, h5td = data
+        with pytest.raises(
+            NotImplementedError,
+            match="Cannot call select on a PersistentTensorDict. Call to_tensordict",
+        ):
+            h5td.select("a")
+        with pytest.raises(
+            NotImplementedError,
+            match="Cannot call exclude on a PersistentTensorDict. Call to_tensordict",
+        ):
+            h5td.exclude("a")
+
+    def test_popitem(self, data):
+        td, h5td = data
+        key, value = h5td.popitem()
+        assert key == "s"
+        assert list(h5td.keys()) == ["a", "b", "nested"]
 
     def test_tensorclass_iter(self, tmp_path):
         class H5Data(TensorClass):

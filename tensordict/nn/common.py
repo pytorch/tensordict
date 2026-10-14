@@ -909,7 +909,7 @@ class TensorDictModule(TensorDictModuleBase):
         strict (bool, optional): if ``True``, the module will raise an exception if any of the inputs is missing from
             the input tensordict. Otherwise, a `None` value will be used as placeholder. Defaults to ``False``.
         get_kwargs (dict[str, Any], optional): additional keyword arguments to be passed to the :meth:`~tensordict.TensorDictBase.get`
-            method. This is particularly useful when dealing with ragged tensors (see :meth:`~tensordict.LazyStackedTensorDict.get`).
+            method. This is particularly useful when dealing with ragged tensors (see :meth:`~tensordict.TensorDictBase.get`).
             Defaults to ``{}``.
 
     To wrap a neural network, give it the input and output keys:
