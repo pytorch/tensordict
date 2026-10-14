@@ -1828,11 +1828,13 @@ class TensorDict(TensorDictBase):
             # Use encoded filename for file system operations
             safe_key = _encode_key_for_filesystem(key, robust=effective_robust_key)
             memmap_file = prefix / f"{safe_key}.memmap"
+            memmap_file_exists = memmap_file.exists()
 
             # If robust encoding is requested but file doesn't exist, try legacy filename
             if (
-                not memmap_file.exists()
+                not memmap_file_exists
                 and effective_robust_key
+                and safe_key != key
                 and _is_safe_legacy_key(key)
             ):
                 legacy_key = _encode_key_for_filesystem(key, robust=False)
@@ -1841,12 +1843,13 @@ class TensorDict(TensorDictBase):
                     # Use legacy filename for backward compatibility
                     safe_key = legacy_key
                     memmap_file = legacy_file
+                    memmap_file_exists = True
 
             if dtype is None or shape is None:
                 # invalid dict means
                 continue
             shape = torch.Size(shape)
-            if not memmap_file.exists():
+            if not memmap_file_exists:
                 # torch.from_file does not create a backing file for a tensor
                 # with no elements. Such tensors can be reconstructed from
                 # their metadata; a missing non-empty (or nested) tensor is an
@@ -1872,7 +1875,7 @@ class TensorDict(TensorDictBase):
                 if entry_metadata.get("is_nested", False):
                     # The shape is the shape of the shape, get the shape from it
                     shape = _memmap_tensor_from_path(
-                        (prefix / f"{safe_key}.memmap").with_suffix(".shape.memmap"),
+                        memmap_file.with_suffix(".shape.memmap"),
                         shape=shape,
                         dtype=torch.long,
                         mode=mode,
@@ -1880,7 +1883,7 @@ class TensorDict(TensorDictBase):
                 else:
                     shape = torch.Size(shape)
                 tensor = _memmap_tensor_from_path(
-                    prefix / f"{safe_key}.memmap",
+                    memmap_file,
                     dtype=_STR_DTYPE_TO_DTYPE[dtype],
                     shape=shape,
                     mode=mode,
@@ -1907,15 +1910,18 @@ class TensorDict(TensorDictBase):
             effective_robust_key = _get_robust_key_setting_with_warning(key, robust_key)
             safe_key = _encode_key_for_filesystem(key, robust=effective_robust_key)
             path = prefix / safe_key
+            path_is_dir = path.is_dir()
             if (
-                not path.is_dir()
+                not path_is_dir
                 and effective_robust_key
+                and safe_key != key
                 and _is_safe_legacy_key(key, is_collection=True)
             ):
                 legacy_path = prefix / key
                 if legacy_path.is_dir():
                     path = legacy_path
-            if not path.is_dir():
+                    path_is_dir = True
+            if not path_is_dir:
                 continue
             existing_elt = result._get_str(key, default=None)
             if existing_elt is not None and not _is_tensor_collection(
