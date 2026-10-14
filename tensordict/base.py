@@ -1297,7 +1297,9 @@ def _set_at_each_key(
         )
 
 
-def _empty_misfit(td: TensorDictBase, batch_size: torch.Size):
+def _empty_misfit(
+    td: TensorDictBase, batch_size: torch.Size
+) -> tuple[NestedKey, TensorDictBase] | None:
     """The first ``(key, entry)`` of ``td`` whose batch size ``empty(recurse=True, batch_size=batch_size)`` cannot set, or ``None``.
 
     The batch_size setter gives the new batch size to the shorter
@@ -8253,7 +8255,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 With ``recurse=True``, a sub-tensordict whose batch size is the
                 start of the new one gets the new one, a sub-tensordict whose
                 batch size starts with the new one keeps it, and any other
-                sub-tensordict raises a ``RuntimeError``.
+                sub-tensordict raises a ``RuntimeError``. A
+                :class:`~tensordict.LazyStackedTensorDict` whose members took
+                the batch size before 0.15 (one stacked along dim 0, for
+                instance) keeps that result, the empty stack of its members,
+                with a :class:`FutureWarning`, when a sub-tensordict does not
+                fit the new batch size or ``names`` has another length.
+                Starting with TensorDict 0.17, the default will change to
+                raising a ``RuntimeError`` or a ``ValueError``, as
+                ``TensorDict.empty`` and the names setter do.
             device (torch.device, optional): a new device.
             names (list of str, optional): dimension names.
 

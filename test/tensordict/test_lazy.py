@@ -1854,6 +1854,11 @@ class TestLazyStackedTensorDict:
         for batch_size in ([3, 5], torch.Size([4, 2])):
             with pytest.raises(RuntimeError, match="cannot give the batch size"):
                 lazy_stack([member] * 2, 1).empty(True, batch_size=batch_size)
+        # where the members raise, as before 0.15, the call does not warn
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            with pytest.raises(RuntimeError, match="cannot give the batch size"):
+                lazy_stack([member] * 2).empty(True, batch_size=[5, 7])
 
     def test_lazy_empty_names_other_length(self):
         # where the members took the batch size without the stack dim before
@@ -1874,9 +1879,9 @@ class TestLazyStackedTensorDict:
         ):
             with pytest.warns(
                 FutureWarning,
-                match=r"cannot name the \d+ dims of that batch size with 1 names.*"
+                match=r"cannot name a batch size of \d+ dims with 1 names.*"
                 r"Starting with TensorDict 0\.17, the default will change to "
-                r"raising a ValueError",
+                r"raising a ValueError, as the names setter does",
             ) as record:
                 empty = td.empty(recurse, batch_size=batch_size, names=names)
             assert record[0].filename == __file__
