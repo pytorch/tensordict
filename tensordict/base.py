@@ -5378,7 +5378,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def _data_setter(self, value: Self):
         keys, vals = value._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
-        keys_self, vals_self = value._items_list(
+        keys_self, vals_self = self._items_list(
             True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
         )
         self_dict = dict(zip(keys_self, vals_self))
