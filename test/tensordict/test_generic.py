@@ -6236,7 +6236,10 @@ class TestGeneric:
         td = TensorDict(batch_size=[3, 2])
         lazy = lazy_stack([td, td.clone()])
         for value in (td, lazy):
-            with pytest.raises(AttributeError, match="has no setter"):
+            # Python 3.10 says "can't set attribute", later versions "has no setter"
+            with pytest.raises(
+                AttributeError, match="has no setter|can't set attribute"
+            ):
                 value.batch_dims = 1
         assert td.batch_dims == 2
 

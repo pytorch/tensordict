@@ -786,8 +786,10 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         leaf_devices = [leaf.device for leaf in td.values(True, True)]
         assert td.clear_device_() is td
-        # the leaves are not moved
-        assert [leaf.device for leaf in td.values(True, True)] == leaf_devices
+        if not isinstance(td, PersistentTensorDict):
+            # the leaves are not moved (a file reads its leaves onto the device
+            # of the tensordict, so without one they come back as stored)
+            assert [leaf.device for leaf in td.values(True, True)] == leaf_devices
         if isinstance(td, (_SubTensorDict, _CustomOpTensorDict, TypedTensorDict)):
             # a view reports the device of the tensordict it reads, which
             # clear_device_ leaves alone
@@ -3646,7 +3648,16 @@ class TestTensorDicts(TestTensorDictsBase):
             return
         assert td.share_memory_() is td
         assert td.is_shared()
-        assert td.is_locked is not isinstance(td, TensorDictParams)
+        if (
+            type(td) is TensorDict
+            and td.device is not None
+            and td.device.type == "cuda"
+        ):
+            # CUDA tensors are shared already: TensorDict returns without
+            # locking
+            assert not td.is_locked
+        else:
+            assert td.is_locked is not isinstance(td, TensorDictParams)
 
     @pytest.mark.parametrize("dim", [0, -1, 3])
     def test_softmax(self, td_name, device, dim):
