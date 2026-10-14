@@ -422,6 +422,44 @@ class TensorDict(TensorDictBase):
             _check_invariants(self)
         return self
 
+    def _is_dense_tree(self) -> bool:
+        # Exact TensorDict nodes without dim names and exact Tensor leaves only.
+        if type(self) is not TensorDict or self._td_dim_names is not None:
+            return False
+        for value in self._tensordict.values():
+            cls = type(value)
+            if cls is not Tensor and (
+                cls is not TensorDict or not value._is_dense_tree()
+            ):
+                return False
+        return True
+
+    def _dense_apply(self, fn, named, nested_keys, prefix, filter_empty):
+        # What _apply_nest returns for a tree that passes _is_dense_tree, with
+        # checked=True and no others, out, inplace, batch size, device or
+        # names: each node gets the batch size and device of its source node.
+        result = self._new_unsafe(batch_size=self._batch_size, device=self._device)
+        _tensordict = result._tensordict
+        for key, item in self._tensordict.items():
+            if type(item) is TensorDict:
+                item_trsf = item._dense_apply(
+                    fn, named, nested_keys, prefix + (key,), filter_empty
+                )
+            elif named:
+                if nested_keys:
+                    item_trsf = fn(prefix + (key,) if prefix != () else key, item)
+                else:
+                    item_trsf = fn(key, item)
+            else:
+                item_trsf = fn(item)
+            if item_trsf is not None:
+                _tensordict[key] = item_trsf
+        if not _tensordict and (
+            filter_empty or (filter_empty is None and not self.is_empty())
+        ):
+            return None
+        return result
+
     @classmethod
     def from_module(
         cls,
