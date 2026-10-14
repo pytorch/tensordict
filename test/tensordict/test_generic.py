@@ -3762,6 +3762,27 @@ class TestGeneric:
         ],
         ids=["dense", "lazy", "sub"],
     )
+    def test_rename_key_empty_string_key(self, make):
+        # "" is a valid key: only the empty tuple is not
+        for old, new in (("a", ""), ("a", ("",)), ("", "b")):
+            td = make(TensorDict({old: torch.zeros(2, 3)}, batch_size=[2, 3]))
+            assert td.rename_key_(old, new) is td
+            new_key = new if isinstance(new, str) else new[0]
+            assert list(td.keys()) == [new_key]
+            assert (td.get(new_key) == 0).all()
+        td = make(TensorDict({"": torch.zeros(2, 3)}, batch_size=[2, 3]))
+        assert td.del_("") is td
+        assert list(td.keys()) == []
+
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda td: td,
+            lambda td: lazy_stack(list(td.unbind(0))),
+            lambda td: td._get_sub_tensordict(0),
+        ],
+        ids=["dense", "lazy", "sub"],
+    )
     def test_rename_key_empty_new_key(self, make):
         td = make(TensorDict(a=torch.zeros(2, 3), batch_size=[2, 3]))
         with pytest.raises(KeyError, match="Only NestedKeys are supported"):

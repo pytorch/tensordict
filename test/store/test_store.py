@@ -4266,6 +4266,26 @@ class TestLazyStackedTensorDictStore:
                 store.clear_redis()
                 store.close()
 
+    @pytest.mark.parametrize("kind", ["tds", "lstds"])
+    @pytest.mark.parametrize("old,new", [("a", ""), ("a", ("",)), ("", "b")])
+    def test_rename_key_empty_string_key(self, store_kwargs, kind, old, new):
+        # "" is a valid key: only the empty tuple is not
+        td = TensorDict({old: torch.zeros(2, 3)}, batch_size=[2, 3])
+        if kind == "tds":
+            store = TensorDictStore.from_tensordict(td, **store_kwargs)
+        else:
+            store = LazyStackedTensorDictStore.from_lazy_stack(
+                lazy_stack(list(td.unbind(0))), **store_kwargs
+            )
+        try:
+            assert store.rename_key_(old, new) is store
+            new_key = new if isinstance(new, str) else new[0]
+            assert list(store.keys()) == [new_key]
+            assert (store.get(new_key) == 0).all()
+        finally:
+            store.clear_redis()
+            store.close()
+
     @pytest.mark.parametrize("kind", ["tds", "lstds", "view"])
     def test_key_edits_empty_key(self, store_kwargs, kind):
         td, stores, owned = self._key_edit_stores(store_kwargs)

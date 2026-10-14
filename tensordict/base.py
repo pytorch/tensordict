@@ -5726,7 +5726,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             )
         old_key = unravel_key(old_key)
         new_key = unravel_key(new_key)
-        if not new_key:
+        if new_key == ():
             raise KeyError(_GENERIC_NESTED_ERR.format(new_key))
         if (
             safe
