@@ -1755,6 +1755,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # start_dim > end_dim it inserted a dim of size 1 before 0.15: until 0.17
     # it still does, with a FutureWarning, where the others raise a ValueError.
     _flatten_lenient: bool = False
+    # Set by TypedTensorDict, whose source can be lazy: there,
+    # gather(inplace=True) with an index of the batch shape keeps the shapes
+    # of the members and writes into them. Until 0.17 it warns, where the
+    # lazy tensordicts raise.
+    _gather_inplace_lenient: bool = False
     # Whether get() ignores as_list and as_nested_tensor, and warns about them
     # (see _warn_get_kwargs). False for lazy stacks, which honor them.
     _get_ignores_kwargs: bool = True

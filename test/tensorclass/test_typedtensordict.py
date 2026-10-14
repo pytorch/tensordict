@@ -1323,6 +1323,32 @@ class TestBackends:
         assert result.batch_size == (4,)
         assert result.is_locked
 
+    @pytest.mark.parametrize(
+        "op",
+        [
+            lambda s: s.reshape(-1, inplace=True),
+            lambda s: s.repeat_interleave(2, dim=1, inplace=True),
+            lambda s: s.masked_select(_BACKEND_MASK[:, 0], inplace=True),
+            lambda s: s.flatten(0, 1, inplace=True),
+            lambda s: s.unflatten(0, (2, 2), inplace=True),
+        ],
+        ids=["reshape", "repeat_interleave", "masked_select", "flatten", "unflatten"],
+    )
+    def test_inplace_shape_ops(self, source, op):
+        # a dense source changes shape; the others raise before writing
+        kind, td = source
+        state = _BackendState.from_tensordict(td)
+        expected = op(_BackendState.from_tensordict(td.to_tensordict()))
+        before = td.to_tensordict()
+        if kind == "dense":
+            assert op(state) is state
+            torch.testing.assert_close(state.to_tensordict(), expected.to_tensordict())
+            return
+        with pytest.raises(NotImplementedError, match="inplace=True|in-place"):
+            op(state)
+        assert td.batch_size == (4, 3)
+        torch.testing.assert_close(td.to_tensordict(), before)
+
     @staticmethod
     def _flat_lazy_state():
         class Flat(TypedTensorDict):
@@ -1343,26 +1369,20 @@ class TestBackends:
             pytest.param(
                 lambda s: s.flatten(0, 1, inplace=True),
                 id="flatten",
-                marks=pytest.mark.xfail(
-                    strict=True, reason="rewrites the members' leaves, then raises"
-                ),
             ),
             pytest.param(
                 lambda s: s.unflatten(1, (3, 1), inplace=True),
                 id="unflatten",
-                marks=pytest.mark.xfail(strict=True, reason="breaks the stack"),
             ),
             pytest.param(
                 lambda s: s.repeat(1, 2, inplace=True),
                 id="repeat",
-                marks=pytest.mark.xfail(strict=True, reason="breaks the stack"),
             ),
             pytest.param(
                 lambda s: s.gather(
                     1, torch.zeros(4, 2, dtype=torch.long), inplace=True
                 ),
                 id="gather_new_size",
-                marks=pytest.mark.xfail(strict=True, reason="breaks the stack"),
             ),
             pytest.param(lambda s: s.reshape(12, inplace=True), id="reshape"),
             pytest.param(
@@ -1390,11 +1410,12 @@ class TestBackends:
 
     def test_gather_inplace_same_shape_flat_lazy_source(self):
         # an index of the batch shape keeps the members' shapes, and the
-        # members get the gathered values
+        # members get the gathered values; until 0.17 it warns
         state, tds = self._flat_lazy_state()
         index = torch.zeros(4, 3, dtype=torch.long)
         expected = state.to_tensordict().gather(1, index)
-        assert state.gather(1, index, inplace=True) is state
+        with pytest.warns(FutureWarning, match="gather.*0.17"):
+            assert state.gather(1, index, inplace=True) is state
         assert state.batch_size == (4, 3)
         assert isinstance(state._source, LazyStackedTensorDict)
         assert all(td.batch_size == (3,) for td in tds)

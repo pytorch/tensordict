@@ -16,6 +16,7 @@ from __future__ import annotations
 import dataclasses
 import math
 import operator
+import warnings
 from collections.abc import Iterable
 from typing import Callable, List, overload, Sequence, TYPE_CHECKING
 
@@ -40,6 +41,7 @@ from tensordict.utils import (
     _is_unbatched,
     _maybe_correct_neg_dim,
     _resolve_expand_shape,
+    _user_stacklevel,
     _warn_dim_past_batch_dims,
     _warn_lazy_shape_args,
     _zip_strict,
@@ -1790,9 +1792,21 @@ class _ShapeOps:
                     "`out` and `inplace=True` are mutually exclusive in gather."
                 )
             if self._lazy:
-                raise NotImplementedError(
-                    "gather(inplace=True) is not supported on LazyStackedTensorDict; "
-                    "call .to_tensordict() first or use inplace=False."
+                if not (
+                    self._gather_inplace_lenient
+                    and tuple(index.shape) == tuple(self.batch_size)
+                ):
+                    raise NotImplementedError(
+                        "gather(inplace=True) is not supported on LazyStackedTensorDict; "
+                        "call .to_tensordict() first or use inplace=False."
+                    )
+                warnings.warn(
+                    f"gather(inplace=True) on a {type(self).__name__} over a "
+                    "lazy tensordict works when the index has the batch shape. "
+                    "Starting with TensorDict 0.17, the default will change to "
+                    "raising a NotImplementedError, as LazyStackedTensorDict does.",
+                    FutureWarning,
+                    stacklevel=_user_stacklevel(),
                 )
             self._raise_if_holds_lazy_stack("gather")
             if index.ndim != self.batch_dims:
