@@ -343,6 +343,70 @@ def test_comparison_tensor_fullgraph():
     assert (result == fn(td, other)).all()
 
 
+_NESTED_DEVICE_CASES = {
+    # #2647: a nested tensordict without a device, in a tensordict on CPU
+    "nested_td": lambda x: TensorDict(
+        {"s": TensorDict({"a": x, "b": x + 1}, [3]), "c": x * 2}, [3], device="cpu"
+    ),
+    "non_blocking_false": lambda x: TensorDict(
+        {"s": TensorDict({"a": x}, [3]), "c": x},
+        [3],
+        device="cpu",
+        non_blocking=False,
+    ),
+    "nested_dict": lambda x: TensorDict(
+        {"s": {"a": x, "b": {"c": x}}}, [3], device="cpu"
+    ),
+    "three_levels": lambda x: TensorDict(
+        {"s": TensorDict({"t": TensorDict({"a": x}, [3])}, [3])}, [3], device="cpu"
+    ),
+    "names": lambda x: TensorDict(
+        {"s": TensorDict({"a": x}, [3])}, [3], device="cpu", names=["n"]
+    ),
+    "expanded": lambda x: TensorDict(
+        {"g": TensorDict({"u": x[0]}).expand(3), "c": x}, [3], device="cpu"
+    ),
+    "to_cpu": lambda x: TensorDict({"s": TensorDict({"a": x}, [3])}, [3]).to("cpu"),
+}
+
+
+@pytest.mark.parametrize("name", list(_NESTED_DEVICE_CASES))
+def test_nested_device_construction_fullgraph(name):
+    # Moving a nested tensordict to the device of the outer one compiles into
+    # one graph, without the device-recorder sync (#2647).
+    fn = _NESTED_DEVICE_CASES[name]
+
+    def describe(td):
+        out = {"": (td.device, td.batch_size, td.names if td._has_names() else None)}
+        for key, value in td.items(include_nested=True):
+            if is_tensor_collection(value):
+                out[key] = (value.device, value.batch_size)
+            else:
+                out[key] = (value.device, value.shape, value.tolist())
+        return out
+
+    x = torch.arange(6.0).reshape(3, 2)
+    expected = describe(fn(x))
+    torch._dynamo.reset()
+    result = torch.compile(fn, fullgraph=True, backend="eager")(x)
+    assert describe(result) == expected
+
+
+@pytest.mark.parametrize("device", [None, "cpu"])
+def test_construction_empty_then_full_source(device):
+    # A graph traced with an empty source is not reused for a full one: the
+    # result kept no entries (#2648).
+    def fn(x, source):
+        return TensorDict(source, batch_size=[3], device=device)
+
+    compiled = torch.compile(fn, backend="eager")
+    x = torch.arange(3.0)
+    assert compiled(x, {}).is_empty()
+    result = compiled(x, {"a": x, "b": {"c": x}})
+    assert set(result.keys(True, True)) == {"a", ("b", "c")}
+    assert (result["b", "c"] == x).all()
+
+
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
     def test_tensor_output(self, mode):
