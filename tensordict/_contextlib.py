@@ -219,6 +219,13 @@ def _reverse_flatten(self, args, kwargs, out):
     else:
         dim0 = kwargs.get("start_dim", 0)
         dim1 = kwargs.get("end_dim", -1)
+    # A 0-dim flatten unsqueezes to shape [1] instead of calling unflatten.
+    # An empty size would make unflatten raise, so squeeze that dim back.
+    if not out.ndim and dim0 in (None, 0) and dim1 in (None, -1, 0):
+        self = self.squeeze(0)
+        if not out.is_locked:
+            return out.update(self, inplace=False)
+        return out.update_(self)
     if dim1 < 0:
         dim1 = out.ndim + dim1
     if dim0 < 0:
