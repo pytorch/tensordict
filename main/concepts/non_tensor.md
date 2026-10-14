@@ -413,6 +413,11 @@ as one.
 `permute`, `transpose`, `flatten`, `unflatten`, `chunk`,
 `expand`, `cat`, `stack`, and indexing return the same
 [`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor), with the same storage.
+- [`apply()`](../reference/generated/tensordict.TensorDictBase.apply.html#tensordict.TensorDictBase.apply) and
+[`named_apply()`](../reference/generated/tensordict.TensorDictBase.named_apply.html#tensordict.TensorDictBase.named_apply) with a `batch_size` (also
+with `out=`) count as shape operations: the function is not called on an
+[`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor), which keeps its data and takes the new
+batch size. Without a `batch_size`, the function is called on it.
 - Other operations work as for a tensor: device and dtype casts (`to`),
 pointwise arithmetic (`+`, `-`, `*`, `/`), `clone`, gradient
 computation, and access by key.

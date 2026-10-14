@@ -24,6 +24,9 @@ string is passed to the function.
 the resulting TensorDict will have the desired batch_size.
 The [`batch_size`](tensordict.TensorDictBase.batch_size.html#tensordict.TensorDictBase.batch_size) argument should match the batch_size after
 the transformation. This is a keyword only argument.
+With a `batch_size`, the call is treated as a shape operation:
+`fn` is not called on [`UnbatchedTensor`](tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor)
+entries, which keep their data and take the new batch size.
 - **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - the resulting device, if any.
 - **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the new dimension names, in case the
 batch_size is modified.
