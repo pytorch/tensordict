@@ -814,14 +814,7 @@ class TestTensorDictStore:
         "with_string",
         [
             False,
-            pytest.param(
-                True,
-                marks=pytest.mark.xfail(
-                    strict=True,
-                    raises=AttributeError,
-                    reason="to() reads a string entry as a str",
-                ),
-            ),
+            True,
         ],
     )
     def test_to_dtype_store(self, store_td, with_string):

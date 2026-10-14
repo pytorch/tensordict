@@ -86,7 +86,6 @@ from tensordict.utils import (
     _LockedSchema,
     _maybe_correct_neg_dim,
     _NON_STR_KEY_ERR,
-    _parse_to,
     _pass_through,
     _pass_through_cls,
     _prune_selected_keys,
@@ -2848,32 +2847,45 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
         self._source._stack_onto_at_(list_item, dim=dim, idx=self.idx)
         return self
 
-    @_as_context_manager()
-    def to(self, *args, **kwargs: Any) -> Self:
-        (
+    # Override: a view cannot change its leaves in place nor its batch size,
+    # so these calls work on a to_tensordict() copy, or raise.
+    def _to(
+        self,
+        device,
+        dtype,
+        non_blocking,
+        convert_to_format,
+        batch_size,
+        non_blocking_pin,
+        num_threads,
+        inplace,
+        args,
+        kwargs,
+    ):
+        if inplace:
+            raise TypeError(
+                "Cannot send a _SubTensorDict instance to device/dtype inplace."
+            )
+        if batch_size is not None and not (
+            device is not None
+            and dtype is None
+            and convert_to_format is None
+            and device == self.device
+            and torch.Size(batch_size) == self.batch_size
+        ):
+            return self.to_tensordict().to(*args, non_blocking=non_blocking, **kwargs)
+        return super()._to(
             device,
             dtype,
             non_blocking,
             convert_to_format,
             batch_size,
-            pin_memory,
+            non_blocking_pin,
             num_threads,
             inplace,
-        ) = _parse_to(*args, **kwargs)
-        result = self
-        if inplace:
-            raise TypeError(
-                "Cannot send a _SubTensorDict instance to device/dtype inplace."
-            )
-        if (
-            device is not None
-            and dtype is None
-            and convert_to_format is None
-            and device == self.device
-            and (batch_size is None or torch.Size(batch_size) == self.batch_size)
-        ):
-            return result
-        return self.to_tensordict().to(*args, **kwargs)
+            args,
+            kwargs,
+        )
 
     def _get_non_tensor(self, key: NestedKey, default=NO_DEFAULT):
         out = super()._get_non_tensor(key, default=default)

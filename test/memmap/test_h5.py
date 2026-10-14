@@ -679,38 +679,58 @@ def test_to_raises(tmp_path):
 def test_to_memory_format(tmp_path):
     td = TensorDict(a=torch.arange(120.0).view(2, 3, 4, 5), batch_size=[2])
     h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
-    # the memory format is ignored: the file itself is returned
-    out = h5td.to(memory_format=torch.channels_last)
+    # without a dtype, the memory format is ignored: the file itself is
+    # returned, with a warning
+    match = r"to\(memory_format=\.\.\.\) without a dtype ignores the memory format"
+    with pytest.warns(FutureWarning, match=match) as record:
+        out = h5td.to(memory_format=torch.channels_last)
+    assert record[0].filename == __file__
     assert out is h5td
     assert not out["a"].is_contiguous(memory_format=torch.channels_last)
+    with pytest.warns(FutureWarning, match=match):
+        meta = h5td.to("meta", memory_format=torch.channels_last)
+    assert type(meta) is PersistentTensorDict and meta.device == torch.device("meta")
+    # with a dtype, the dense copy takes the memory format
+    out = h5td.to(torch.float64, memory_format=torch.channels_last)
+    assert type(out) is TensorDict
+    assert out["a"].is_contiguous(memory_format=torch.channels_last)
+    assert (out["a"] == td["a"]).all()
     h5td.close()
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_to_context_manager(tmp_path):
     h5td = _h5_with_nested(tmp_path)
-    # nothing is written back to the file on exit
-    with h5td.to(torch.float64) as td64:
+    # the dense copy is written back to the file on exit, as on TensorDict
+    with (
+        pytest.warns(UserWarning, match="Replacing an array"),
+        h5td.to(torch.float64) as td64,
+    ):
         assert type(td64) is TensorDict
         td64["a"] += 1
         td64["new"] = torch.ones(4, 3)
-    assert (h5td["a"] == torch.arange(12.0).view(4, 3)).all()
-    assert "new" not in h5td.keys()
-    # the device-only copy and the file itself write to the file in the block
+    assert h5td["a"].dtype == torch.float32
+    assert (h5td["a"] == torch.arange(12.0).view(4, 3) + 1).all()
+    assert (h5td["new"] == 1).all()
+    # the device-only copy and the file itself write to the file in the block,
+    # so nothing is written back
     with h5td.to("meta") as meta:
         assert meta.device == torch.device("meta")
     with h5td.to(batch_size=[4, 3]) as same:
         assert same is h5td
         same["a"] = same["a"] + 2
-    assert (h5td["a"] == torch.arange(12.0).view(4, 3) + 2).all()
+    assert (h5td["a"] == torch.arange(12.0).view(4, 3) + 3).all()
     h5td.close()
-    # a file opened read-only
+    # a file opened read-only stays unchanged, with a warning
     h5td = PersistentTensorDict.from_h5(tmp_path / "file.h5")
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
+    with pytest.warns(
+        FutureWarning,
+        match=r"^Calling to\(\) on a tensordict stored in a file opened read-only",
+    ) as record:
         with h5td.to(torch.float64) as td64:
             td64["a"] += 1
-    assert (h5td["a"] == torch.arange(12.0).view(4, 3) + 2).all()
+    assert record[0].filename == __file__
+    assert (h5td["a"] == torch.arange(12.0).view(4, 3) + 3).all()
     h5td.close()
 
 

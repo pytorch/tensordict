@@ -50,7 +50,6 @@ from tensordict.utils import (
     _lock_blocked,
     _LOCK_ERROR,
     _NUMPY_TO_TORCH_DTYPE_DICT,
-    _parse_to,
     expand_right,
     IndexType,
     is_non_tensor,
@@ -1989,8 +1988,56 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             )
         return self.to_tensordict().unflatten_keys(separator=separator)
 
-    def to(self, *args, **kwargs: Any) -> PersistentTensorDict:
-        (
+    # Override: changes the device without reading the file, and rejects the
+    # in-place and pinned copies, which the file cannot hold.
+    def _to(
+        self,
+        device,
+        dtype,
+        non_blocking,
+        convert_to_format,
+        batch_size,
+        non_blocking_pin,
+        num_threads,
+        inplace,
+        args,
+        kwargs,
+    ):
+        if inplace:
+            raise TypeError(f"Cannot use inplace=True with {type(self).__name__}.to().")
+        if non_blocking_pin:
+            raise RuntimeError(
+                f"Cannot use non_blocking_pin=True {type(self).__name__}.to(). Call "
+                f"`to_tensordict()` before executing this code."
+            )
+        if convert_to_format is not None and dtype is None:
+            warnings.warn(
+                f"{type(self).__name__}.to(memory_format=...) without a dtype "
+                "ignores the memory format. Starting with TensorDict 0.17, the "
+                "default will change to returning a TensorDict copy in that "
+                "memory format, as to(dtype, memory_format=...) does, which "
+                "raises where torch.Tensor.to raises. Call "
+                "to_tensordict().to(memory_format=...) to get the new "
+                "behaviour now.",
+                FutureWarning,
+                # skip to() and the _as_context_manager wrapper
+                stacklevel=4,
+            )
+            convert_to_format = None
+        if (
+            device is not None
+            and dtype is None
+            and convert_to_format is None
+            and device != self.device
+        ):
+            result = self.clone(False)
+            result._device = device
+            for key, nested in list(result._nested_tensordicts.items()):
+                result._nested_tensordicts[key] = nested.to(device)
+            if batch_size is not None:
+                result.batch_size = batch_size
+            return result
+        return super()._to(
             device,
             dtype,
             non_blocking,
@@ -1999,31 +2046,9 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             non_blocking_pin,
             num_threads,
             inplace,
-        ) = _parse_to(*args, **kwargs)
-        if inplace:
-            raise TypeError(f"Cannot use inplace=True with {type(self).__name__}.to().")
-
-        if non_blocking_pin:
-            raise RuntimeError(
-                f"Cannot use non_blocking_pin=True {type(self).__name__}.to(). Call "
-                f"`to_tensordict()` before executing this code."
-            )
-        result = self
-        if device is not None and dtype is None and device == self.device:
-            if batch_size is not None and torch.Size(batch_size) != result.batch_size:
-                result.batch_size = batch_size
-            return result
-        if dtype is not None:
-            return self.to_tensordict().to(*args, **kwargs)
-        result = self
-        if device is not None:
-            result = result.clone(False)
-            result._device = device
-            for key, nested in list(result._nested_tensordicts.items()):
-                result._nested_tensordicts[key] = nested.to(device)
-        if batch_size is not None:
-            result.batch_size = batch_size
-        return result
+            args,
+            kwargs,
+        )
 
     def _to_numpy(self, value):
         if hasattr(value, "requires_grad") and value.requires_grad:

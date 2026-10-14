@@ -668,6 +668,47 @@ class _DeviceOps:
             num_threads,
             inplace,
         ) = _parse_to(*args, **kwargs)
+        return self._to(
+            device,
+            dtype,
+            non_blocking,
+            convert_to_format,
+            batch_size,
+            non_blocking_pin,
+            num_threads,
+            inplace,
+            args,
+            kwargs,
+        )
+
+    def _to(
+        self,
+        device: torch.device | None,
+        dtype: torch.dtype | None,
+        non_blocking: bool | None,
+        convert_to_format: torch.memory_format | None,
+        batch_size: torch.Size | None,
+        non_blocking_pin: bool,
+        num_threads: int | None,
+        inplace: bool,
+        args: tuple,
+        kwargs: dict,
+    ) -> Self:
+        """Casts the tensordict as :meth:`to` describes, with the parsed arguments.
+
+        :meth:`to` has handled an attrs tensordict, taken ``non_blocking`` out
+        of ``kwargs`` and parsed the other arguments; ``args`` and ``kwargs``
+        are the ones it received, without ``non_blocking``. It wraps the result
+        for use as a context manager.
+
+        Returns ``self`` when the device is already the right one and no dtype
+        or memory format is given (the batch size is then set in place, as
+        for a batch size alone), and a new tensordict otherwise. With
+        ``_masking_on_dense_copy``, a change of device, dtype or memory format
+        converts a :meth:`to_tensordict` copy. A class overrides it to reject
+        arguments that its storage cannot honor, or to change the device
+        without reading the data.
+        """
         result = self
 
         if (
@@ -679,6 +720,15 @@ class _DeviceOps:
             if batch_size is not None and tuple(batch_size) != result.batch_size:
                 result.batch_size = torch.Size(batch_size)
             return result
+
+        if (
+            self._masking_on_dense_copy
+            and not inplace
+            and (
+                device is not None or dtype is not None or convert_to_format is not None
+            )
+        ):
+            return self.to_tensordict().to(*args, non_blocking=non_blocking, **kwargs)
 
         if (
             self.is_consolidated()
@@ -813,8 +863,8 @@ class _DeviceOps:
                             "stacks and names. Call to(...) and then set the "
                             "batch_size to get the new behaviour now.",
                             FutureWarning,
-                            # skip the _as_context_manager wrapper
-                            stacklevel=3,
+                            # skip to() and the _as_context_manager wrapper
+                            stacklevel=4,
                         )
 
         if batch_size is not None:

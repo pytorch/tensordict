@@ -2899,10 +2899,34 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return result
 
-    def to(self, *args, **kwargs) -> Self:
-        if kwargs.get("batch_size") is not None:
+    # Override: the batch size of a lazy stack follows its members.
+    def _to(
+        self,
+        device,
+        dtype,
+        non_blocking,
+        convert_to_format,
+        batch_size,
+        non_blocking_pin,
+        num_threads,
+        inplace,
+        args,
+        kwargs,
+    ):
+        if batch_size is not None:
             raise TypeError("Cannot pass batch-size to a LazyStackedTensorDict.")
-        return super().to(*args, **kwargs)
+        return super()._to(
+            device,
+            dtype,
+            non_blocking,
+            convert_to_format,
+            batch_size,
+            non_blocking_pin,
+            num_threads,
+            inplace,
+            args,
+            kwargs,
+        )
 
     def _check_new_batch_size(self, new_size: torch.Size) -> None:
         if len(new_size) <= self.stack_dim:
