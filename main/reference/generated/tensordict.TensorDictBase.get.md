@@ -14,7 +14,10 @@ Parameters:
 - **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the key to read. A tuple reads a nested entry:
 `td.get(("a", "b"))` is `td["a"]["b"]`. See [Keys, nested keys, and locking](../../concepts/keys.html#keys).
 - **default** (*optional*) - the value returned if the key is missing.
-Defaults to `None`, as for [`dict.get()`](https://docs.python.org/3/builtins/stdtypes.html#dict.get).
+Defaults to `None`, as for [`dict.get()`](https://docs.python.org/3/builtins/stdtypes.html#dict.get). A nested key
+that runs through a tensor is missing too: `get` returns
+the default passed to it, and without one raises a
+`ValueError` that names the tensor.
 
 Changed in version 0.7: A missing key returns `None` instead of raising `KeyError`.
 `set_get_defaults_to_none(False)` and `TD_GET_DEFAULTS_TO_NONE=0`

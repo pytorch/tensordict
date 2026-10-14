@@ -12,7 +12,9 @@ Parameters:
 
 - **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the entry to look for. A tuple removes a nested
 entry, and keeps the sub-tensordict that held it.
-- **default** (*Any**,**optional*) - the value to return if the key cannot be found.
+- **default** (*Any**,**optional*) - the value to return if the key cannot be found,
+including a nested key that runs through a tensor (without a
+default, that key raises a `ValueError` that names the tensor).
 
 Examples
 

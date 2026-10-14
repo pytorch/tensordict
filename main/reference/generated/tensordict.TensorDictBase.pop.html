@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5699+g5210cdf32.d20261014)">
+<meta name="llm:version" content="main (0.14.0.dev5703+g99074d967.d20261014)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5699+g5210cdf32.d20261014)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5703+g99074d967.d20261014)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1651,7 +1651,9 @@ is thrown. A locked tensordict raises <code class="docutils literal notranslate"
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the entry to look for. A tuple removes a nested
 entry, and keeps the sub-tensordict that held it.</p></li>
-<li><p><strong>default</strong> (<em>Any</em><em>, </em><em>optional</em>) – the value to return if the key cannot be found.</p></li>
+<li><p><strong>default</strong> (<em>Any</em><em>, </em><em>optional</em>) – the value to return if the key cannot be found,
+including a nested key that runs through a tensor (without a
+default, that key raises a <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> that names the tensor).</p></li>
 </ul>
 </dd>
 </dl>
@@ -2024,7 +2026,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.pop",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.pop",
        "url": "/reference/generated/tensordict.TensorDictBase.pop.html",
-       "articleBody": "TensorDictBase.pop# TensorDictBase.pop(key: NestedKey, default: Any = NO_DEFAULT) \u2192 Tensor | TensorCollection# Removes and returns a value from a tensordict. If the value is not present and no default value is provided, a KeyError is thrown. A locked tensordict raises RuntimeError (see lock_()). Parameters: key (NestedKey) \u2013 the entry to look for. A tuple removes a nested entry, and keeps the sub-tensordict that held it. default (Any, optional) \u2013 the value to return if the key cannot be found. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"1\": 1}, []) \u003e\u003e\u003e one = td.pop(\"1\") \u003e\u003e\u003e assert one == 1 \u003e\u003e\u003e none = td.pop(\"1\", default=None) \u003e\u003e\u003e assert none is None Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.pop# TensorDictBase.pop(key: NestedKey, default: Any = NO_DEFAULT) \u2192 Tensor | TensorCollection# Removes and returns a value from a tensordict. If the value is not present and no default value is provided, a KeyError is thrown. A locked tensordict raises RuntimeError (see lock_()). Parameters: key (NestedKey) \u2013 the entry to look for. A tuple removes a nested entry, and keeps the sub-tensordict that held it. default (Any, optional) \u2013 the value to return if the key cannot be found, including a nested key that runs through a tensor (without a default, that key raises a ValueError that names the tensor). Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"1\": 1}, []) \u003e\u003e\u003e one = td.pop(\"1\") \u003e\u003e\u003e assert one == 1 \u003e\u003e\u003e none = td.pop(\"1\", default=None) \u003e\u003e\u003e assert none is None Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
