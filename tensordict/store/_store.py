@@ -1360,6 +1360,11 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         if index_unravel:
             return self.set(index_unravel, value, inplace=True)
 
+        # As in TensorDictBase.__getitem__, an Ellipsis stands for the
+        # remaining batch dimensions, not the leaf dimensions.
+        if isinstance(index, tuple) and any(idx is Ellipsis for idx in index):
+            index = convert_ellipsis_to_idx(index, self.batch_size)
+
         # Index-based assignment: bypass _SubTensorDict, batch SETRANGE
         if isinstance(index, list):
             index = torch.tensor(index)

@@ -1692,6 +1692,11 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         if index_unravel:
             return self.set(index_unravel, value, inplace=True)
 
+        # As in __getitem__, an Ellipsis stands for the remaining batch
+        # dimensions, not the leaf dimensions.
+        if isinstance(index, tuple) and any(idx is Ellipsis for idx in index):
+            index = convert_ellipsis_to_idx(index, self.batch_size)
+
         if isinstance(index, list):
             index = torch.tensor(index)
 
