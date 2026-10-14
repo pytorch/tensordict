@@ -540,6 +540,24 @@ def _fits_stack(
     return True
 
 
+def _names_snapshot(td):
+    # The members of a lazy stack may disagree on names, so that its names
+    # getter raises: keep the stack dim name and each member's names.
+    if isinstance(td, LazyStackedTensorDict) and td.tensordicts:
+        return td._td_dim_name, [_names_snapshot(sub) for sub in td.tensordicts]
+    return list(td.names)
+
+
+def _restore_names(td, snapshot) -> None:
+    if isinstance(td, LazyStackedTensorDict) and td.tensordicts:
+        td._erase_cache()
+        td._td_dim_name, sub_snapshots = snapshot
+        for sub, sub_snapshot in zip(td.tensordicts, sub_snapshots):
+            _restore_names(sub, sub_snapshot)
+    else:
+        td.names = snapshot
+
+
 class LazyStackedTensorDict(TensorDictBase):
     """A stack of tensordicts that keeps each input as a separate tensordict.
 
@@ -1235,33 +1253,29 @@ class LazyStackedTensorDict(TensorDictBase):
             self._empty_stack_names = None
             return
         # An empty stack has no members, so any list that reaches the stack
-        # dim is kept. With members, rename_ takes the other names and needs
-        # one per member dim: reject a bad length, or a stack dim name any
-        # member already uses, before the stack dim or a member is written.
+        # dim is kept. With members, reject a stack dim name any member
+        # already uses before the stack dim or a member is written, and undo
+        # the members already renamed if a later rename_ fails.
         names_list = list(names)
-        if self.tensordicts and len(names_list) != self.batch_dims:
-            raise ValueError(
-                "the length of the dimension names must equate the tensordict batch_dims attribute. "
-                f"Got {names_list} for batch_dims {self.batch_dims}."
-            )
         stack_name = names_list.pop(self.stack_dim)
         for td in self.tensordicts:
             if td._check_dim_name(stack_name):
                 raise ValueError(f"The dimension name {stack_name} is already taken.")
         previous_stack_name = self._td_dim_name
         previous_empty_names = self._empty_stack_names
-        previous_member_names = [list(td.names) for td in self.tensordicts]
+        renamed = []
         self._td_dim_name = stack_name
         if not self.tensordicts:
             self._empty_stack_names = names_list
         try:
             for td in self.tensordicts:
+                renamed.append((td, _names_snapshot(td)))
                 td.rename_(*names_list)
         except Exception:
             self._td_dim_name = previous_stack_name
             self._empty_stack_names = previous_empty_names
-            for td, old_names in zip(self.tensordicts, previous_member_names):
-                td.names = old_names
+            for td, snapshot in renamed:
+                _restore_names(td, snapshot)
             raise
 
     def _rename_subtds(self, names):

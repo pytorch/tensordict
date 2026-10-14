@@ -815,7 +815,7 @@ class TestNamedDims(TestTensorDictsBase):
         stack = LazyStackedTensorDict(*members, stack_dim=0)
         assert stack.names == [None, "inner"]
         with pytest.raises(ValueError, match="already taken"):
-            stack.names = ["inner", "other"]
+            stack.names = ["inner", "inner"]
         assert stack.names == [None, "inner"]
         assert [member.names for member in stack.tensordicts] == [
             ["inner"],
@@ -845,17 +845,44 @@ class TestNamedDims(TestTensorDictsBase):
         )
         assert stack.ndim == 2
         assert stack.names == [None, "feat"]
-        for bad_names in (["batch"], []):
-            with pytest.raises(
-                ValueError,
-                match="the length of the dimension names must equate the tensordict batch_dims",
-            ):
+        for bad_names, error in ((["batch"], ValueError), ([], IndexError)):
+            with pytest.raises(error):
                 stack.names = bad_names
             assert stack.names == [None, "feat"]
             assert [member.names for member in stack.tensordicts] == [
                 ["feat"],
                 ["feat"],
             ]
+
+    def test_lazy_stack_set_names_members_disagree(self):
+        # The members of a nested lazy stack may disagree on names, so that
+        # its names getter raises. Setting the names of the outer stack still
+        # works, and a failure restores each member's own names.
+        def disagree():
+            return LazyStackedTensorDict(
+                TensorDict({}, [3], names=["p"]), TensorDict({}, [3], names=["q"])
+            )
+
+        outer = LazyStackedTensorDict(disagree(), disagree())
+        outer.names = [None, None, None]
+        assert outer.names == [None, None, None]
+
+        clash = TensorDict(
+            {"nested": TensorDict({}, [3, 4], names=["inner", "taken"])},
+            [3],
+            names=["inner"],
+        )
+        outer = LazyStackedTensorDict(
+            disagree(), LazyStackedTensorDict(clash, clash.clone())
+        )
+        with pytest.raises(ValueError, match="non-unique"):
+            outer.names = [None, None, "taken"]
+        assert [member.names for member in outer.tensordicts[0].tensordicts] == [
+            ["p"],
+            ["q"],
+        ]
+        assert outer.tensordicts[1].names == [None, "inner"]
+        assert clash["nested"].names == ["inner", "taken"]
 
     def test_sub_td(self):
         td = self.sub_td("cpu")
