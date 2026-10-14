@@ -1230,6 +1230,18 @@ class TensorDict(TensorDictBase):
                     not value.is_nested and value.shape[: len(batch_size)] == batch_size
                 )
             ) and (device is None or value.device == device)
+        elif (
+            not validated
+            and type(value) is TensorDict
+            and type(self) is TensorDict
+            and not self._batch_size
+            and not is_compiling()
+        ):
+            # A plain TensorDict stored in a TensorDict without batch dims:
+            # the validator could only move it to self's device (there is no
+            # batch size or names to match).
+            device = self._device
+            validated = device is None or value._device == device
         original = None
         if not validated:
             original = value
