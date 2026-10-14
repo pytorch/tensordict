@@ -26,10 +26,8 @@ from tensordict.base import (
     _is_tensor_collection,
     _NESTED_TENSORS_AS_LISTS,
     _sync_cuda_transfer,
-    BEST_ATTEMPT_INPLACE,
     Buffer,
     is_compiling,
-    NO_DEFAULT,
     Self,
     T,
 )
@@ -94,128 +92,51 @@ def _pin_memory(x):
     return x.pin_memory()
 
 
-def _rebinds_pinned_leaves(td) -> bool:
-    # Whether pin_memory(inplace=True) replaces the leaves of td by their
-    # pinned copies: only an unlocked TensorDict or lazy stack, or a
-    # tensorclass over one, does. Any other tensordict keeps the _fast_apply
-    # path, which writes the pinned copies back into its leaves, so that a
-    # lock keeps its leaves and the overrides and errors stay the same.
+def _pin_memory_nodes(td) -> list | None:
+    # The nodes whose leaves pin_memory(inplace=True) replaces by their pinned
+    # copies, or None if any node is locked or is not exactly a TensorDict or
+    # a lazy stack (a tensorclass counts as the tensordict it wraps), or if
+    # any leaf is memory-mapped, shared, not strided or an UnbatchedTensor.
+    # Such a tree keeps the _fast_apply path, which writes the pinned copies
+    # back into its leaves.
     from tensordict._lazy import LazyStackedTensorDict
     from tensordict._td import TensorDict
 
-    if is_tensorclass(td):
-        if is_non_tensor(td):
-            return False
-        td = td._tensordict
-    return not td.is_locked and type(td) in (TensorDict, LazyStackedTensorDict)
+    def plain_node(node):
+        if is_tensorclass(node):
+            node = node._tensordict
+        if node.is_locked or type(node) not in (TensorDict, LazyStackedTensorDict):
+            return None
+        return node
 
-
-def _writes_back(leaf) -> bool:
-    # Whether pin_memory(inplace=True) writes the pinned copy back into leaf
-    # rather than replacing it, so that writes to a memory-mapped or shared
-    # leaf still reach the file or the shared memory.
-    if is_non_tensor(leaf):
-        return True
-    if _is_unbatched(leaf):
-        leaf = leaf._base_tensor()
-    if isinstance(leaf, MemoryMappedTensor):
-        return True
-    try:
-        return leaf.untyped_storage().is_shared()
-    except (NotImplementedError, RuntimeError):
-        # a layout without a storage, such as a sparse tensor
-        return True
-
-
-def _pin_memory_inplace(td, num_threads, executor, memo, pending, futures) -> None:
-    # Pins the leaves of td, for which _rebinds_pinned_leaves is True, for
-    # pin_memory(inplace=True); td and its nested tensordicts stay the same
-    # objects. memo maps the id of a node or a leaf to a weak reference to it
-    # (and the pinned copy of a leaf), so that a node reached twice is pinned
-    # once and keys that hold one tensor keep sharing one pinned copy.
-    # With an executor, every leaf is pinned on it, the leaves of the nodes
-    # that keep the _fast_apply path through _multithread_apply_flat as in
-    # _multithread_apply_nest, and pending gets
-    # (td, key, future or node, write_back, local_futures) for the caller to
-    # write once all of them are pinned.
-    if is_tensorclass(td):
-        td = td._tensordict
-    entry = memo.get(id(td))
-    if entry is not None and entry[0]() is td:
-        return
-    memo[id(td)] = (weakref.ref(td), None)
-    if td._lazy:
-        for member in td.tensordicts:
-            if _rebinds_pinned_leaves(member):
-                _pin_memory_inplace(
-                    member, num_threads, executor, memo, pending, futures
-                )
-            elif executor is None:
-                member._apply_nest(
-                    _pin_memory, inplace=True, checked=True, filter_empty=False
-                )
-            else:
-                local_futures = []
-                member._multithread_apply_flat(
-                    _pin_memory,
-                    executor=executor,
-                    futures=futures,
-                    local_futures=local_futures,
-                )
-                pending.append((None, None, member, True, local_futures))
-        return
-    for key in list(td.keys()):
-        value = td._get_str(key, default=NO_DEFAULT)
-        if _is_tensor_collection(type(value)) and not is_non_tensor(value):
-            if _rebinds_pinned_leaves(value):
-                _pin_memory_inplace(
-                    value, num_threads, executor, memo, pending, futures
-                )
-            elif executor is None:
-                value = value._apply_nest(
-                    _pin_memory, inplace=True, checked=True, filter_empty=False
-                )
-                td._set_str(
-                    key,
-                    value,
-                    inplace=BEST_ATTEMPT_INPLACE,
-                    validated=True,
-                    non_blocking=False,
-                )
-            else:
-                local_futures = []
-                value._multithread_apply_flat(
-                    _pin_memory,
-                    executor=executor,
-                    futures=futures,
-                    local_futures=local_futures,
-                )
-                pending.append((td, key, value, True, local_futures))
+    node = plain_node(td)
+    if node is None:
+        return None
+    nodes, todo = [], [node]
+    while todo:
+        node = todo.pop()
+        if node._lazy:
+            for child in node.tensordicts:
+                child = plain_node(child)
+                if child is None:
+                    return None
+                todo.append(child)
             continue
-        write_back = _writes_back(value)
-        entry = None if write_back else memo.get(id(value))
-        if entry is not None and entry[0]() is value:
-            pinned = entry[1]
-        else:
-            if executor is None:
-                pinned = _pin_memory(value)
-            else:
-                pinned = executor.submit(_pin_memory, value)
-                futures.append(pinned)
-            if not write_back:
-                memo[id(value)] = (weakref.ref(value), pinned)
-        # release the old leaf as its replacement is written
-        del value
-        if executor is not None:
-            pending.append((td, key, pinned, write_back, None))
-        else:
-            td._set_str(
-                key,
-                pinned,
-                inplace=BEST_ATTEMPT_INPLACE if write_back else False,
-                validated=True,
-                non_blocking=False,
-            )
+        nodes.append(node)
+        for value in node._tensordict.values():
+            if type(value) is not Tensor:
+                if _is_tensor_collection(type(value)):
+                    if not is_non_tensor(value):
+                        value = plain_node(value)
+                        if value is None:
+                            return None
+                        todo.append(value)
+                    continue
+                if _is_unbatched(value) or isinstance(value, MemoryMappedTensor):
+                    return None
+            if value.layout is not torch.strided or value.untyped_storage().is_shared():
+                return None
+    return nodes
 
 
 class _DeviceOps:
@@ -432,59 +353,54 @@ class _DeviceOps:
                 ``None``, which, like ``0``, calls
                 :meth:`~torch.Tensor.pin_memory` on the calling thread.
             inplace (bool, optional): if ``True``, the tensordict is modified
-                in-place. In a :class:`~tensordict.TensorDict`, a
-                :class:`~tensordict.LazyStackedTensorDict` or a tensorclass
-                over one of them, each leaf is replaced by its pinned copy,
-                and the tensordict, its nested tensordicts and tensorclasses
-                and the tensordicts of a lazy stack stay the same objects.
-                Keys that hold the same tensor share its pinned copy; a leaf
-                that is a view of another leaf, or a tensor that a locked
-                tensordict also holds, gets its own copy. A locked tensordict
-                (such as the result of :meth:`memmap_` or
-                :meth:`share_memory_`), any other type of tensordict, and
-                memory-mapped and shared leaves keep their leaves: the pinned
-                copies are written back into them, so they stay in pageable
-                memory. Defaults to ``False``.
+                in-place. When every node is an unlocked
+                :class:`~tensordict.TensorDict` or
+                :class:`~tensordict.LazyStackedTensorDict` (or a tensorclass
+                over one) and no leaf is memory-mapped, shared, sparse, jagged or an
+                :class:`~tensordict.UnbatchedTensor`, each leaf is replaced by
+                its pinned copy, and the tensordict and every nested node stay
+                the same objects; keys that hold the same tensor share its
+                pinned copy, and a leaf that is a view of another leaf gets its
+                own. Any other tree, such as a locked one or one that holds a
+                memory-mapped tensordict, has the pinned copies written back
+                into its leaves, as before, so they stay in pageable memory.
+                Defaults to ``False``.
 
         """
-        if inplace and _rebinds_pinned_leaves(self):
-            if not num_threads:
-                _pin_memory_inplace(self, num_threads, None, {}, None, None)
-                return self
-            # One pool for the whole tree, not shut down with wait=True, as in
-            # _multithread_apply_nest. The pinned copies are written back as
-            # they come, and the leaves are replaced once every leaf is pinned.
-            pending, futures, rebinds = [], [], []
-            executor = ThreadPoolExecutor(max_workers=num_threads)
+        nodes = _pin_memory_nodes(self) if inplace else None
+        if nodes is not None:
+            # Replace each leaf by its pinned copy. Keys that hold one tensor
+            # share its copy: memo maps the id of a leaf to a weak reference
+            # to it and its copy (or the future of its copy).
+            executor = ThreadPoolExecutor(num_threads) if num_threads else None
+            memo, pending = {}, []
             try:
-                _pin_memory_inplace(self, num_threads, executor, {}, pending, futures)
-                for td, key, value, write_back, local_futures in pending:
-                    if local_futures is not None:
-                        value = value._multithread_rebuild(
-                            inplace=True,
-                            checked=True,
-                            executor=executor,
-                            futures=futures,
-                            local_futures=local_futures,
-                        )
-                        if td is None or value is None:
+                for node in nodes:
+                    for key in list(node._tensordict):
+                        value = node._tensordict[key]
+                        if _is_tensor_collection(type(value)):
                             continue
-                    else:
-                        value = value.result()
-                        if not write_back:
-                            rebinds.append((td, key, value))
-                            continue
-                    td._set_str(
-                        key,
-                        value,
-                        inplace=BEST_ATTEMPT_INPLACE,
-                        validated=True,
-                        non_blocking=False,
-                    )
+                        entry = memo.get(id(value))
+                        if entry is None or entry[0]() is not value:
+                            if executor is None:
+                                pinned = _pin_memory(value)
+                            else:
+                                pinned = executor.submit(_pin_memory, value)
+                            entry = memo[id(value)] = (weakref.ref(value), pinned)
+                        # release the old leaf as its replacement is written
+                        del value
+                        if executor is None:
+                            node._set_str(key, entry[1], validated=True, inplace=False)
+                        else:
+                            pending.append((node, key, entry[1]))
+                # with threads, nothing is written until every leaf is pinned
+                values = [future.result() for _, _, future in pending]
             finally:
-                executor.shutdown(wait=False)
-            for td, key, value in rebinds:
-                td._set_str(key, value, validated=True, inplace=False)
+                # as in _multithread_apply_nest, do not wait for the threads
+                if executor is not None:
+                    executor.shutdown(wait=False)
+            for (node, key, _), value in zip(pending, values):
+                node._set_str(key, value, validated=True, inplace=False)
             return self
         return self._fast_apply(
             _pin_memory,
