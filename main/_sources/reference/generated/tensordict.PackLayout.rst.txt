@@ -1,0 +1,12 @@
+﻿.. currentmodule:: tensordict
+
+
+PackLayout
+==========
+
+.. autoclass:: PackLayout
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.PackLayout
+    :add-heading: Tutorials that use ``PackLayout``

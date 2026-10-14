@@ -159,12 +159,14 @@ Methods
 | [`TensorDictBase.cat_tensors`](generated/tensordict.TensorDictBase.cat_tensors.html#tensordict.TensorDictBase.cat_tensors)(*keys, out_key[, ...]) | Concatenates entries into a new entry and possibly remove the original values. |
 | [`TensorDictBase.stack_tensors`](generated/tensordict.TensorDictBase.stack_tensors.html#tensordict.TensorDictBase.stack_tensors)(*keys, out_key) | Stacks entries into a new entry and possibly remove the original values. |
 | [`TensorDictBase.cat_from_tensordict`](generated/tensordict.TensorDictBase.cat_from_tensordict.html#tensordict.TensorDictBase.cat_from_tensordict)([dim, ...]) | Concatenates all entries of a tensordict in a single tensor. |
+| [`TensorDictBase.pack`](generated/tensordict.TensorDictBase.pack.html#tensordict.TensorDictBase.pack)([dim, layout]) | Packs all the leaves of a tensordict into one tensor of features. |
 | [`TensorDictBase.stack_from_tensordict`](generated/tensordict.TensorDictBase.stack_from_tensordict.html#tensordict.TensorDictBase.stack_from_tensordict)([dim, ...]) | Stacks all entries of a tensordict in a single tensor. |
 
 Classes and functions
 
 | [`NestedKey`](generated/tensordict.NestedKey.html#tensordict.NestedKey)() | An abstract class for nested keys. |
 | --- | --- |
+| [`PackLayout`](generated/tensordict.PackLayout.html#tensordict.PackLayout)(keys, shapes[, dim, nested, ...]) | The layout of a tensordict packed by [`pack()`](generated/tensordict.TensorDictBase.pack.html#tensordict.TensorDictBase.pack). |
 
 | [`unravel_key`](generated/tensordict.unravel_key.html#tensordict.unravel_key)(key) | Unravel a nested key. |
 | --- | --- |
