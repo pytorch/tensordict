@@ -16,7 +16,6 @@ import weakref
 from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
 from copy import copy, deepcopy
-from functools import wraps
 from itertools import islice
 from pathlib import Path
 from textwrap import indent
@@ -63,7 +62,6 @@ from tensordict.base import (
     _NESTED_TENSORS_AS_LISTS,
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
     _PACKAGE_DIR,
-    _raise_if_inplace_call,
     _READ_ONLY_CALL,
     _register_tensor_class,
     _SELF_NESTING_ERROR,
@@ -72,6 +70,7 @@ from tensordict.base import (
     _warn_names_length,
     _warn_read_only,
     _warn_set_at_cast,
+    _warn_stack_dim_name_taken,
     _write_back_members,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
@@ -89,6 +88,7 @@ from tensordict.utils import (
     _check_is_flatten,
     _check_is_unflatten,
     _erase_cache_first,
+    _GENERIC_NESTED_ERR,
     _import_and_wrap_functorch,
     _infer_size_impl,
     _is_unbatched,
@@ -495,21 +495,6 @@ def _collect_memory(data, memory: set) -> None:
         memory.add(id(data))
 
 
-def _fails_exclusive_keys(func):
-    @wraps(func)
-    def newfunc(self, *args, **kwargs):
-        if self._has_exclusive_keys:
-            raise RuntimeError(
-                f"the method {func.__name__} cannot complete when there are exclusive keys."
-            )
-        parent_func = getattr(TensorDictBase, func.__name__, None)
-        if parent_func is None:
-            parent_func = getattr(TensorDict, func.__name__)
-        return parent_func(self, *args, **kwargs)
-
-    return newfunc
-
-
 def _broadcasts(shape: torch.Size, other_shape: torch.Size) -> bool:
     try:
         torch.broadcast_shapes(shape, other_shape)
@@ -842,6 +827,15 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         if stack_dim_name is not None:
             self._td_dim_name = stack_dim_name
+            # the stack has names only if its members share them
+            if num_tds and td0._has_names():
+                try:
+                    taken = stack_dim_name in td0.names
+                except ValueError:
+                    # a lazy stack whose members disagree on names has none
+                    taken = False
+                if taken:
+                    _warn_stack_dim_name_taken(stack_dim_name)
 
     def _new_impl(
         self,
@@ -1190,19 +1184,6 @@ class LazyStackedTensorDict(TensorDictBase):
             names=names,
         )
 
-    # Override: raises for keys that are not in every member.
-    @_fails_exclusive_keys
-    def flatten_keys(
-        self,
-        separator: str = ".",
-        inplace: bool = False,
-        is_leaf: Callable[[Type], bool] | None = None,
-    ) -> Self: ...
-
-    # Override: raises for keys that are not in every member.
-    @_fails_exclusive_keys
-    def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> Self: ...
-
     # Override: the device is the members' common device.
     @property
     def device(self) -> torch.device | None:
@@ -1259,14 +1240,15 @@ class LazyStackedTensorDict(TensorDictBase):
             self._empty_stack_names = None
             return
         # An empty stack has no members, so any list that reaches the stack
-        # dim is kept. With members, reject a stack dim name any member
-        # already uses before the stack dim or a member is written, and undo
-        # the members already renamed if a later rename_ fails.
+        # dim is kept. With members, the stack dim name may not be one the
+        # members use after the rename, as on a TensorDict: undo the rename
+        # if it is, or if a rename_ fails. A name the members use only after
+        # the rename was accepted before 0.15, so it warns until 0.17.
         names_list = list(names)
         stack_name = names_list.pop(self.stack_dim)
-        for td in self.tensordicts:
-            if td._check_dim_name(stack_name):
-                raise ValueError(f"The dimension name {stack_name} is already taken.")
+        taken = stack_name is not None and any(
+            td._check_dim_name(stack_name) for td in self.tensordicts
+        )
         member_dims = self.batch_dims - 1
         if (
             len(names_list) != member_dims
@@ -1286,6 +1268,20 @@ class LazyStackedTensorDict(TensorDictBase):
             for td in self.tensordicts:
                 renamed.append((td, _names_snapshot(td)))
                 td.rename_(*names_list)
+            # The rename gives the members names_list and keeps the names of
+            # the dims their nested tensordicts add, so a name free before
+            # the rename is taken after it only if it is in names_list.
+            if taken:
+                if stack_name in names_list or any(
+                    td._check_dim_name(stack_name) for td in self.tensordicts
+                ):
+                    raise ValueError(
+                        f"The dimension name {stack_name} is already taken."
+                    )
+            elif (
+                self.tensordicts and stack_name is not None and stack_name in names_list
+            ):
+                _warn_stack_dim_name_taken(stack_name)
         except Exception:
             self._td_dim_name = previous_stack_name
             self._empty_stack_names = previous_empty_names
@@ -2117,91 +2113,6 @@ class LazyStackedTensorDict(TensorDictBase):
             vals.append(val)
         return vals
 
-    def get(
-        self,
-        key: NestedKey,
-        *args,
-        as_list: bool = False,
-        as_padded_tensor: bool = False,
-        as_nested_tensor: bool = False,
-        padding_side: str = "right",
-        layout: torch.layout = None,
-        padding_value: float | int | bool = 0.0,
-        **kwargs,
-    ) -> CompatibleType:
-        """Gets the value stored with the input key.
-
-        The lazy stack reads the entry of every stacked tensordict and stacks
-        the results into a new tensor. If the entry shapes differ, the plain
-        call raises a ``RuntimeError``: pass ``as_list``, ``as_padded_tensor``
-        or ``as_nested_tensor`` to get a list, a padded tensor or a nested
-        tensor instead.
-
-        Args:
-            key (str, tuple of str): key to be queried. If tuple of str it is
-                equivalent to chained calls of getattr.
-            default: default value if the key is not found in the tensordict. Defaults to ``None``.
-
-                .. warning::
-                    If the key is missing and no default is given, ``get``
-                    returns ``None``, as ``dict.get`` does. Use ``td[key]`` to
-                    raise a ``KeyError`` for a missing key. Restoring the old
-                    behavior (a ``KeyError``) with ``TD_GET_DEFAULTS_TO_NONE=0``
-                    or ``set_get_defaults_to_none(False)`` is deprecated and
-                    will be removed in TensorDict 0.17.
-
-        Keyword Args:
-            as_list (bool, optional): if ``True``, the entries are returned as
-                a list, one item per stacked tensordict.
-                Exclusive with ``as_padded_tensor`` and ``as_nested_tensor``.
-                Defaults to ``False``.
-            as_padded_tensor (bool, optional): if ``True``, the entries are
-                padded to the largest shape and returned as one tensor: each
-                dim is padded to its largest size, also across the levels of
-                a lazy stack of lazy stacks. ``padding_value`` sets the
-                padding value and ``padding_side`` sets the side of every
-                padded dim.
-                Exclusive with ``as_list`` and ``as_nested_tensor``.
-                Defaults to ``False``.
-            as_nested_tensor (bool, optional): if ``True``, the entries are
-                returned as a nested tensor (:mod:`torch.nested`). ``layout``
-                sets its layout. A lazy stack of lazy stacks raises a
-                ``ValueError``, as a nested tensor has a single nested level.
-                Exclusive with ``as_list`` and ``as_padded_tensor``.
-                Defaults to ``False``.
-            layout (torch.layout, optional): the layout of the nested tensor
-                when ``as_nested_tensor=True``: ``torch.jagged`` or
-                ``torch.strided``. Defaults to ``torch.jagged``.
-            padding_side (str): The side of padding. Must be `"left"` or `"right"`. Defaults to `"right"`.
-            padding_value (scalar or bool, optional): The padding value. Defaults to 0.0.
-
-        Examples:
-            >>> from tensordict import TensorDict, lazy_stack
-            >>> import torch
-            >>> td = lazy_stack([
-            ...     TensorDict({"x": torch.ones(1,)}),
-            ...     TensorDict({"x": torch.ones(2,) * 2}),
-            ... ])
-            >>> nested = td.get("x", as_nested_tensor=True)
-            >>> nested.is_nested, nested.offsets()
-            (True, tensor([0, 1, 3]))
-            >>> td.get("x", as_padded_tensor=True)
-            tensor([[1., 0.],
-                    [2., 2.]])
-
-        """
-        return super().get(
-            key,
-            *args,
-            as_list=as_list,
-            as_padded_tensor=as_padded_tensor,
-            as_nested_tensor=as_nested_tensor,
-            padding_side=padding_side,
-            layout=layout,
-            padding_value=padding_value,
-            **kwargs,
-        )
-
     @_cache_while_locked  # noqa: B019
     def _get_str(
         self,
@@ -2993,70 +2904,9 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         return keys
 
-    def values(
-        self,
-        include_nested=False,
-        leaves_only=False,
-        is_leaf=None,
-        *,
-        sort: bool = False,
-    ):
-        if is_leaf not in (
-            _NESTED_TENSORS_AS_LISTS,
-            _NESTED_TENSORS_AS_LISTS_NONTENSOR,
-        ):
-            yield from super().values(
-                include_nested=include_nested,
-                leaves_only=leaves_only,
-                is_leaf=is_leaf,
-                sort=sort,
-            )
-        else:
-            for td in self.tensordicts:
-                if td._reads_return_copies and is_leaf is _NESTED_TENSORS_AS_LISTS:
-                    # an in-place method would change copies (#2592)
-                    _raise_if_inplace_call()
-                yield from td.values(
-                    include_nested=include_nested,
-                    leaves_only=leaves_only,
-                    is_leaf=is_leaf,
-                    sort=sort,
-                )
-
-    def items(
-        self,
-        include_nested=False,
-        leaves_only=False,
-        is_leaf=None,
-        *,
-        sort: bool = False,
-    ):
-        if is_leaf not in (
-            _NESTED_TENSORS_AS_LISTS,
-            _NESTED_TENSORS_AS_LISTS_NONTENSOR,
-        ):
-            yield from super().items(
-                include_nested=include_nested,
-                leaves_only=leaves_only,
-                is_leaf=is_leaf,
-                sort=sort,
-            )
-        else:
-            for i, td in enumerate(self.tensordicts):
-                if td._reads_return_copies and is_leaf is _NESTED_TENSORS_AS_LISTS:
-                    # an in-place method would change copies (#2592)
-                    _raise_if_inplace_call()
-                for key, val in td.items(
-                    include_nested=include_nested,
-                    leaves_only=leaves_only,
-                    is_leaf=is_leaf,
-                    sort=sort,
-                ):
-                    if isinstance(key, str):
-                        key = (str(i), key)
-                    else:
-                        key = (str(i), *key)
-                    yield key, val
+    # Override: the traversals walk each member.
+    def _members_as_lists(self) -> list[TensorDictBase]:
+        return self.tensordicts
 
     @deprecated(
         "LazyStackedTensorDict.valid_keys()", removal="0.17", replacement="keys()"
@@ -3119,36 +2969,6 @@ class LazyStackedTensorDict(TensorDictBase):
         # tensordict and _iter_items_lazystack (keys(include_nested=True)) do,
         # so that keys(), values() and items() agree.
         return [key for key in first_keys if key in keys]
-
-    # Override: pops the key from each member and stacks the values.
-    @_lock_blocked
-    def popitem(self) -> Tuple[NestedKey, CompatibleType]:
-        key, val = self.tensordicts[0].popitem()
-        vals = [val]
-        # Read and stack the other members' values before deleting them. If
-        # that fails (a member lacks the key, or the values have different
-        # shapes), put the first member's value back and raise. A member that
-        # appears twice lacks the key the second time, as when it was popped.
-        seen = {id(self.tensordicts[0])}
-        try:
-            for td in self.tensordicts[1:]:
-                val = None if id(td) in seen else td.get(key, None)
-                seen.add(id(td))
-                if val is None:
-                    raise RuntimeError(f"Could not find key {key} in all tensordicts.")
-                vals.append(val)
-            out = torch.stack(vals, dim=self.stack_dim)
-        except Exception:
-            self.tensordicts[0].set(key, vals[0])
-            raise
-        for i, td in enumerate(self.tensordicts[1:], 1):
-            if td.pop(key, None) is None:
-                # The member lost the key with an earlier one that shares its
-                # storage (e.g. two rows of one PersistentTensorDict).
-                for j in range(i):
-                    self.tensordicts[j].set(key, vals[j])
-                raise RuntimeError(f"Could not find key {key} in all tensordicts.")
-        return key, out
 
     def entry_class(self, key: NestedKey) -> type:
         data_type = type(self.tensordicts[0].get(key))
@@ -3636,10 +3456,11 @@ class LazyStackedTensorDict(TensorDictBase):
         """Write ``piece`` at ``member_index`` of the member at position ``member``, for :meth:`__setitem__`."""
         self.tensordicts[member][member_index] = piece
 
-    def __contains__(self, item: IndexType) -> bool:
+    # Override: a tensordict is in the stack if it is one of the members.
+    def _contains_tensordict(self, item: Any) -> bool:
         if isinstance(item, TensorDictBase):
             return any(item is td for td in self.tensordicts)
-        return super().__contains__(item)
+        return super()._contains_tensordict(item)
 
     @overload
     def __getitem__(self, index: str | tuple[str, ...]) -> Any: ...
@@ -3963,29 +3784,45 @@ class LazyStackedTensorDict(TensorDictBase):
                 future.wait()
             return
 
-    @_lock_blocked
-    def del_(self, key: NestedKey, **kwargs: Any) -> Self:
-        # Use check-before-delete pattern for torch.compile compatibility
-        key_tuple = _unravel_key_to_tuple(key)
-        is_nested = len(key_tuple) > 1
+    # Override: deletes the entry of each member that has it.
+    def _del(self, key: tuple[str, ...]) -> None:
+        if not key:
+            raise KeyError(_GENERIC_NESTED_ERR.format(key))
+        is_nested = len(key) > 1
         is_deleted = False
         for td in self.tensordicts:
             # Not all sub-tensordicts need to have the entry, but one must
             # have it (or an error is thrown). A tensordict that appears twice
             # in the stack no longer has the entry the second time (no id()
             # check: under torch.compile it guards on the id of every member).
-            if key_tuple[0] in td.keys():
+            if key[0] in td.keys():
                 if is_nested:
                     # For nested keys, check the full path exists
                     if key in td.keys(True):
-                        td.del_(key, **kwargs)
+                        td.del_(key)
                         is_deleted = True
                 else:
-                    td.del_(key, **kwargs)
+                    td.del_(key)
                     is_deleted = True
         if not is_deleted:
-            raise KeyError(f"Key {key} not found in any of the stacked tensordicts.")
-        return self
+            # a path through an entry that is not a tensordict raises
+            # ValueError, as in TensorDict
+            keys = self.keys(True)
+            for i in range(1, len(key)):
+                prefix = key[:i]
+                if prefix not in keys:
+                    break
+                entry_class = self.entry_class(prefix)
+                if not _is_tensor_collection(entry_class):
+                    rest = key[i] if len(key) == i + 1 else key[i:]
+                    raise ValueError(
+                        f"{key[i - 1]!r} is a {entry_class.__name__}, not a "
+                        f"tensordict, so it has no entry {rest!r}."
+                    )
+            raise KeyError(
+                f"Key {key[0] if len(key) == 1 else key} not found in any of the "
+                "stacked tensordicts."
+            )
 
     # Override: with a default, a key three or more levels deep that
     # keys(True) does not hold returns the default without reading it.

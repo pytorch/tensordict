@@ -3,6 +3,7 @@
  "idx_td filling": [
   "detach_()"
  ],
+ "idx_td key_edits": [],
  "idx_td keys": [],
  "idx_td masking": [],
  "idx_td pointwise": [],
@@ -16,6 +17,7 @@
   "detach_()",
   "share_memory_()"
  ],
+ "memmap_td key_edits": [],
  "memmap_td keys": [
   "list(td)"
  ],
@@ -31,6 +33,7 @@
  "memmap_td update": [],
  "nested_stacked_td apply": [],
  "nested_stacked_td filling": [],
+ "nested_stacked_td key_edits": [],
  "nested_stacked_td keys": [
   "is_contiguous()"
  ],
@@ -45,6 +48,7 @@
  "nested_stacked_td update": [],
  "nested_td apply": [],
  "nested_td filling": [],
+ "nested_td key_edits": [],
  "nested_td keys": [],
  "nested_td masking": [],
  "nested_td pointwise": [],
@@ -55,6 +59,7 @@
  "nested_td update": [],
  "nested_tensorclass apply": [],
  "nested_tensorclass filling": [],
+ "nested_tensorclass key_edits": [],
  "nested_tensorclass keys": [],
  "nested_tensorclass masking": [],
  "nested_tensorclass pointwise": [],
@@ -68,6 +73,7 @@
  "nested_tensorclass update": [],
  "nested_typed_td apply": [],
  "nested_typed_td filling": [],
+ "nested_typed_td key_edits": [],
  "nested_typed_td keys": [
   "clear_device_()"
  ],
@@ -80,6 +86,9 @@
  "nested_typed_td update": [],
  "permute_td apply": [],
  "permute_td filling": [],
+ "permute_td key_edits": [
+  "flatten_keys(inplace=True)"
+ ],
  "permute_td keys": [
   "clear_device_()"
  ],
@@ -106,6 +115,9 @@
  ],
  "squeezed_td apply": [],
  "squeezed_td filling": [],
+ "squeezed_td key_edits": [
+  "flatten_keys(inplace=True)"
+ ],
  "squeezed_td keys": [
   "clear_device_()"
  ],
@@ -133,6 +145,7 @@
  ],
  "stacked_td apply": [],
  "stacked_td filling": [],
+ "stacked_td key_edits": [],
  "stacked_td keys": [
   "is_contiguous()"
  ],
@@ -150,9 +163,11 @@
   "detach_()",
   "share_memory_()"
  ],
+ "sub_td key_edits": [
+  "flatten_keys(inplace=True)"
+ ],
  "sub_td keys": [
-  "clear_device_()",
-  "popitem()"
+  "clear_device_()"
  ],
  "sub_td masking": [],
  "sub_td pointwise": [],
@@ -178,10 +193,12 @@
   "detach_()",
   "share_memory_()"
  ],
+ "sub_td2 key_edits": [
+  "flatten_keys(inplace=True)"
+ ],
  "sub_td2 keys": [
   "clear_device_()",
-  "is_contiguous()",
-  "popitem()"
+  "is_contiguous()"
  ],
  "sub_td2 masking": [],
  "sub_td2 pointwise": [],
@@ -204,6 +221,7 @@
  ],
  "td apply": [],
  "td filling": [],
+ "td key_edits": [],
  "td keys": [],
  "td masking": [],
  "td pointwise": [],
@@ -216,10 +234,15 @@
  "td_h5 filling": [
   "share_memory_()"
  ],
+ "td_h5 key_edits": [
+  "del_(('a', 'x'))",
+  "del_(())",
+  "flatten_keys(inplace=True)",
+  "get_at(('a', 'x'), 0)"
+ ],
  "td_h5 keys": [
   "is_contiguous()",
-  "keys(True)",
-  "popitem()"
+  "keys(True)"
  ],
  "td_h5 masking": [],
  "td_h5 pointwise": [],
@@ -252,6 +275,7 @@
  "td_params filling": [
   "share_memory_()"
  ],
+ "td_params key_edits": [],
  "td_params keys": [],
  "td_params masking": [],
  "td_params pointwise": [],
@@ -262,6 +286,7 @@
  "td_params update": [],
  "td_reset_bs apply": [],
  "td_reset_bs filling": [],
+ "td_reset_bs key_edits": [],
  "td_reset_bs keys": [],
  "td_reset_bs masking": [],
  "td_reset_bs pointwise": [],
@@ -272,6 +297,7 @@
  "td_reset_bs update": [],
  "td_with_non_tensor apply": [],
  "td_with_non_tensor filling": [],
+ "td_with_non_tensor key_edits": [],
  "td_with_non_tensor keys": [],
  "td_with_non_tensor masking": [],
  "td_with_non_tensor pointwise": [],
@@ -282,6 +308,7 @@
  "td_with_non_tensor update": [],
  "td_with_non_tensor_and_metadata apply": [],
  "td_with_non_tensor_and_metadata filling": [],
+ "td_with_non_tensor_and_metadata key_edits": [],
  "td_with_non_tensor_and_metadata keys": [],
  "td_with_non_tensor_and_metadata masking": [],
  "td_with_non_tensor_and_metadata pointwise": [],
@@ -292,6 +319,7 @@
  "td_with_non_tensor_and_metadata update": [],
  "td_with_unbatched apply": [],
  "td_with_unbatched filling": [],
+ "td_with_unbatched key_edits": [],
  "td_with_unbatched keys": [],
  "td_with_unbatched masking": [],
  "td_with_unbatched pointwise": [],
@@ -302,6 +330,7 @@
  "td_with_unbatched update": [],
  "typed_lazy apply": [],
  "typed_lazy filling": [],
+ "typed_lazy key_edits": [],
  "typed_lazy keys": [
   "clear_device_()",
   "is_contiguous()"
@@ -325,6 +354,7 @@
  ],
  "typed_td apply": [],
  "typed_td filling": [],
+ "typed_td key_edits": [],
  "typed_td keys": [
   "clear_device_()"
  ],
@@ -337,6 +367,9 @@
  "typed_td update": [],
  "unsqueezed_td apply": [],
  "unsqueezed_td filling": [],
+ "unsqueezed_td key_edits": [
+  "flatten_keys(inplace=True)"
+ ],
  "unsqueezed_td keys": [
   "clear_device_()"
  ],

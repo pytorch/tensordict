@@ -730,6 +730,21 @@ class TestTD:
         data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
         assert (unbind(data)[-1] == unbind_c(data)[-1]).all()
 
+    def test_split_across_batch_sizes(self, mode):
+        # From the second batch size on, the batch size is dynamic: the split
+        # sizes must be computed from a symbolic size under fullgraph=True.
+        def split(td):
+            return td.split(2, 0)
+
+        split_c = torch.compile(split, fullgraph=True, mode=mode)
+        for n in (4, 6, 7, 8):
+            data = TensorDict({"a": {"b": torch.arange(n)}}, [n])
+            expected = split(data)
+            result = split_c(data)
+            assert [r.batch_size for r in result] == [e.batch_size for e in expected]
+            for r, e in zip(result, expected):
+                assert (r["a", "b"] == e["a", "b"]).all()
+
     def test_iter(self, mode):
         def iterate(td):
             return torch.stack([t["a", "b"] + 1 for t in td])

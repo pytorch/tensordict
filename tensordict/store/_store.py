@@ -27,6 +27,7 @@ from tensordict._td import (
 from tensordict.base import (
     _has_lazy_stack,
     _is_leaf_nontensor,
+    _is_tensor_collection,
     _normalize_from_dict_args,
     _register_tensor_class,
     is_tensor_collection,
@@ -37,7 +38,6 @@ from tensordict.utils import (
     _as_context_manager,
     _is_tensorclass,
     _KEY_ERROR,
-    _lock_blocked,
     _LOCK_ERROR,
     _warn_nested_key_in_flat_keys,
     is_non_tensor,
@@ -1517,6 +1517,11 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         first = self._get_str(key[0], default, **kwargs)
         if first is default:
             return default
+        if not _is_tensor_collection(type(first)):
+            raise ValueError(
+                f"{key[0]!r} is a {type(first).__name__}, not a tensordict, "
+                f"so it has no entry {key[1] if len(key) == 2 else key[1:]!r}."
+            )
         return first._get_at_tuple(key[1:], idx, default=default, **kwargs)
 
     def _convert_inplace(self, inplace, key):
@@ -1701,13 +1706,9 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
             sort=sort,
         )
 
-    @_lock_blocked
-    def del_(self, key: NestedKey) -> TensorDictStore:
-        if isinstance(key, str):
-            key_path = self._full_key_path(key)
-        else:
-            key = _unravel_key_to_tuple(key)
-            key_path = self._full_key_path(_KEY_SEP.join(key))
+    # Override: deletes the keys on the server.
+    def _del(self, key: tuple[str, ...]) -> None:
+        key_path = self._full_key_path(_KEY_SEP.join(key))
 
         all_keys = self._get_all_keys()
         # Delete exact key
@@ -1722,13 +1723,13 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
             self._run_sync(self._adel_key(nested_key))
 
         # Clean up nested cache
-        cache_key = key if isinstance(key, str) else key[0]
-        self._nested_tensordicts.pop(cache_key, None)
+        self._nested_tensordicts.pop(key[0], None)
 
         if not found and not nested_to_delete:
-            # stacklevel 3: skip the _lock_blocked wrapper
-            _warn_missing_key(self, "del_", key, stacklevel=3)
-        return self
+            # stacklevel 4: skip del_ and its _lock_blocked wrapper
+            _warn_missing_key(
+                self, "del_", key[0] if len(key) == 1 else key, stacklevel=4
+            )
 
     def _popped_value(self, value):
         # Override: a nested entry is a view that reads from the store, and
@@ -2446,23 +2447,11 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
             f"    td_id={self._td_id!r}",
         ]
 
-    # Override: not supported: it would read the store.
-    def _select(self, *keys, inplace=False, strict=True, set_shared=True):
-        raise NotImplementedError(
-            f"Cannot call select on a {type(self).__name__}. "
-            "Call `to_tensordict()` first."
-        )
-
-    # Override: not supported: it would read the store.
-    def _exclude(self, *keys, inplace=False, set_shared=True):
-        raise NotImplementedError(
-            f"Cannot call exclude on a {type(self).__name__}. "
-            "Call `to_tensordict()` first."
-        )
-
-    # Override: works on an in-memory copy; inplace would rename in the store.
+    # Override: one to_tensordict() read, outside the cache that the base
+    # keeps while locked: a locked store would keep a copy of its data, and
+    # later calls would miss writes from other processes. inplace=True raises.
     @_as_context_manager()
-    def flatten_keys(self, separator=".", inplace=False):
+    def flatten_keys(self, separator=".", inplace=False, is_leaf=None):
         """Returns an in-memory copy where the nested keys are joined by ``separator``.
 
         The content is first loaded with :meth:`~tensordict.TensorDictBase.to_tensordict`.
@@ -2471,6 +2460,8 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
             separator (str, optional): the separator between the nested items. Defaults to ``"."``.
             inplace (bool, optional): must be ``False``; ``True`` raises a ``ValueError``.
                 Defaults to ``False``.
+            is_leaf (callable, optional): see
+                :meth:`~tensordict.TensorDictBase.flatten_keys`.
 
         See :meth:`~tensordict.TensorDictBase.flatten_keys`.
         """
@@ -2478,9 +2469,11 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
             raise ValueError(
                 f"Cannot call flatten_keys in_place with a {type(self).__name__}."
             )
-        return self.to_tensordict().flatten_keys(separator=separator)
+        return self.to_tensordict().flatten_keys(separator=separator, is_leaf=is_leaf)
 
-    # Override: works on an in-memory copy; inplace would rename in the store.
+    # Override: one to_tensordict() read, outside the cache that the base
+    # keeps while locked: a locked store would keep a copy of its data, and
+    # later calls would miss writes from other processes. inplace=True raises.
     @_as_context_manager()
     def unflatten_keys(self, separator=".", inplace=False):
         if inplace:

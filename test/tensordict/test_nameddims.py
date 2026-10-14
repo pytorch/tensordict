@@ -13,7 +13,7 @@ import warnings
 
 import pytest
 import torch
-from tensordict import LazyStackedTensorDict, TensorAttrs, TensorDict
+from tensordict import lazy_stack, LazyStackedTensorDict, TensorAttrs, TensorDict
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
@@ -383,16 +383,17 @@ class TestNamedDims(TestTensorDictsBase):
         td = LazyStackedTensorDict(stack_dim=0, batch_size=[3])
         assert td.all(1).names == [None]
         assert td.any(0).names == [None]
-        # names that repeat once a dim is reduced: lazy_stack doesn't check
-        # that the stack dim name is not the name of a member dim
-        td = LazyStackedTensorDict.lazy_stack(
-            [
-                TensorDict({"a": torch.zeros(3, 4, 2)}, [3, 4], names=["x", "y"])
-                for _ in range(2)
-            ],
-            2,
-            stack_dim_name="x",
-        )
+        # names that repeat once a dim is reduced: lazy_stack accepts a stack
+        # dim name that names a member dim, with a warning until 0.17 (#2690)
+        with pytest.warns(FutureWarning, match="stack dim name 'x'"):
+            td = LazyStackedTensorDict.lazy_stack(
+                [
+                    TensorDict({"a": torch.zeros(3, 4, 2)}, [3, 4], names=["x", "y"])
+                    for _ in range(2)
+                ],
+                2,
+                stack_dim_name="x",
+            )
         assert td.all(1).names == [None, None]
         assert td.any(1).names == [None, None]
         # a nested lazy stack whose members have different names can't be
@@ -864,7 +865,7 @@ class TestNamedDims(TestTensorDictsBase):
 
     def test_lazy_stack_set_names_failure_leaves_names_unchanged(self):
         # A clash on the stack dim, or a names list of the wrong length, is
-        # rejected before the stack dim name or any member is written.
+        # rejected and leaves the stack dim name and every member unchanged.
         members = [
             TensorDict({"x": torch.zeros(3)}, [3], names=["inner"]),
             TensorDict({"x": torch.zeros(3)}, [3], names=["inner"]),
@@ -879,7 +880,8 @@ class TestNamedDims(TestTensorDictsBase):
             ["inner"],
         ]
 
-        # The clash is only on the second member. The first must not be renamed.
+        # The clash is only on the second member. The first must not stay
+        # renamed.
         first = TensorDict({"x": torch.zeros(3, 4)}, [3], names=["inner"])
         second = TensorDict(
             {"nested": TensorDict({}, [3, 4], names=["inner", "taken"])},
@@ -952,6 +954,73 @@ class TestNamedDims(TestTensorDictsBase):
             stack.names = ["s", "taken"]
         assert td.names == ["q"]
         assert stack.names == [None, "q"]
+
+    @pytest.mark.filterwarnings("error::FutureWarning")
+    def test_lazy_stack_set_names_checks_names_after_rename(self):
+        # The stack dim name is checked against the names the members have
+        # after the rename, as on a TensorDict (#2690).
+        def stack_of(names):
+            return LazyStackedTensorDict(
+                *[TensorDict({"x": torch.zeros(3)}, [3], names=names) for _ in "ab"]
+            )
+
+        # the members drop the name the stack dim takes
+        stack = stack_of(["inner"])
+        stack.names = ["inner", "other"]
+        assert stack.names == ["inner", "other"]
+        assert [member.names for member in stack.tensordicts] == [
+            ["other"],
+            ["other"],
+        ]
+        nested = TensorDict({"n": TensorDict({}, [3, 4])}, [3], names=["inner"])
+        stack = LazyStackedTensorDict(nested, nested.clone())
+        stack.names = ["inner", "other"]
+        assert stack.names == ["inner", "other"]
+        assert stack.tensordicts[0]["n"].names == ["other", None]
+
+        # the members keep the name: raises, and leaves the names unchanged
+        stack = stack_of(["inner"])
+        with pytest.raises(ValueError, match="already taken"):
+            stack.names = ["inner", "inner"]
+        assert stack.names == [None, "inner"]
+        assert [member.names for member in stack.tensordicts] == [
+            ["inner"],
+            ["inner"],
+        ]
+
+        # the members take the name in the rename: accepted until 0.17
+        stack = stack_of(None)
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            stack.names = ["a", "a"]
+        assert stack.names == ["a", "a"]
+
+        # names that do not clash stay silent
+        stack = stack_of(["inner"])
+        stack.names = ["s", "inner"]
+        assert stack.names == ["s", "inner"]
+        stack.names = [None, "other"]
+        assert stack.names == [None, "other"]
+
+    @pytest.mark.filterwarnings("error::FutureWarning")
+    def test_lazy_stack_stack_dim_name_taken_warns(self):
+        # A stack dim name that names a member dim gives duplicate names:
+        # accepted until 0.17 (#2690).
+        members = [TensorDict({"x": torch.zeros(3)}, [3], names=["a"]) for _ in "ab"]
+        with pytest.warns(FutureWarning, match="stack dim name 'a'"):
+            stack = LazyStackedTensorDict(*members, stack_dim_name="a")
+        assert stack.names == ["a", "a"]
+        with pytest.warns(FutureWarning, match="stack dim name 'a'"):
+            stack = lazy_stack(members, stack_dim_name="a")
+        assert stack.names == ["a", "a"]
+
+        # an unnamed or unique stack dim name stays silent
+        assert LazyStackedTensorDict(*members).names == [None, "a"]
+        assert lazy_stack(members).names == [None, "a"]
+        assert lazy_stack(members, stack_dim_name="s").names == ["s", "a"]
+        assert LazyStackedTensorDict(*members, stack_dim_name="s").names == [
+            "s",
+            "a",
+        ]
 
     def test_sub_td(self):
         td = self.sub_td("cpu")

@@ -1650,7 +1650,7 @@ class _ShapeOps:
                 split_sizes = [0]
             else:
                 split_size = min(split_size, max_size)
-                num_full, rest = divmod(max_size, split_size)
+                num_full, rest = max_size // split_size, max_size % split_size
                 split_sizes = [split_size] * num_full + ([rest] if rest else [])
         elif isinstance(split_size, (list, tuple, Iterable)):
             # LazyStackedTensorDict.split took any iterable of sizes, such as
@@ -2880,9 +2880,14 @@ class _ShapeOps:
             def nested_fn(nested):
                 nested.flatten(start_dim, end_dim, inplace=True)
 
+            # the sizes that a with-block restores on exit
+            sizes = self.batch_size[start_dim : end_dim + 1]
             self._inplace_rebind_leaves(flatten, nested_fn, torch.Size(batch_size))
             if names is not None:
                 self.names = names
+            self._inplace_flatten_sizes = (
+                None if past_batch_dims else (start_dim, sizes)
+            )
             return self
         if not past_batch_dims and start_dim != end_dim:
             return self._reshape(torch.Size(batch_size), names, flatten)
