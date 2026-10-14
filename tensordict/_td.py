@@ -2801,9 +2801,8 @@ class TensorDict(TensorDictBase):
                 def keyfunc(x):
                     return x[0]
 
-                return tuple(
-                    v for _, v in sorted(self._tensordict.items(), key=keyfunc)
-                )
+                items = sorted(self._tensordict.items(), key=keyfunc)
+                return list(zip(*items))[1] if items else ()
         else:
             return TensorDictBase.values(
                 self,
