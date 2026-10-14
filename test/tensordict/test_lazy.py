@@ -3505,7 +3505,9 @@ class TestLazyStackedTensorDict:
             assert result.names == [None, None]
             assert (result["a"] == getattr(lazy["a"], op)(dim % lazy.ndim)).all()
         member = TensorDict(a=torch.ones(3, 4, 2), batch_size=[3, 4], names=["x", "y"])
-        lazy = lazy_stack([member, member.clone()], stack_dim_name="y")
+        # non-unique names warn until 0.17 (#2690)
+        with pytest.warns(FutureWarning, match="stack dim name 'y'"):
+            lazy = lazy_stack([member, member.clone()], stack_dim_name="y")
         assert lazy.names == ["y", "x", "y"]
         assert getattr(lazy, op)(1).names == [None, None]
         assert getattr(lazy, op)(0).names == ["x", "y"]
