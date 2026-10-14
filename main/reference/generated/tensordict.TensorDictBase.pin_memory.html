@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5642+g20c84a2e6.d20261014)">
+<meta name="llm:version" content="main (0.14.0.dev5643+g957bbf60f.d20261014)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5642+g20c84a2e6.d20261014)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5643+g957bbf60f.d20261014)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1646,12 +1646,24 @@ document.write(`
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>num_threads</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – if provided, the number of threads to use
-to call <code class="docutils literal notranslate"><span class="pre">pin_memory</span></code> on the leaves. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which sets a high
-number of threads in <code class="xref py py-class docutils literal notranslate"><span class="pre">ThreadPoolExecutor(max_workers=None)</span></code>.
-To execute all the calls to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.pin_memory.html#torch.Tensor.pin_memory" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pin_memory()</span></code></a> on the main thread, pass
-<code class="docutils literal notranslate"><span class="pre">num_threads=0</span></code>.</p></li>
-<li><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the tensordict is modified in-place.
+<li><p><strong>num_threads</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – if provided, the number of threads to
+use to call <code class="docutils literal notranslate"><span class="pre">pin_memory</span></code> on the leaves, in a
+<a class="reference external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ThreadPoolExecutor" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ThreadPoolExecutor</span></code></a>. Defaults to
+<code class="docutils literal notranslate"><span class="pre">None</span></code>, which, like <code class="docutils literal notranslate"><span class="pre">0</span></code>, calls
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.pin_memory.html#torch.Tensor.pin_memory" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pin_memory()</span></code></a> on the calling thread.</p></li>
+<li><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the tensordict is modified
+in-place. When every node is an unlocked
+<a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> or
+<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a> (or a tensorclass
+over one) and no leaf is a <a class="reference internal" href="tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a>, in
+shared memory, sparse, jagged or an
+<a class="reference internal" href="tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor" title="tensordict.UnbatchedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code></a>, each leaf is replaced by
+its pinned copy, and the tensordict and every nested node stay
+the same objects; keys that hold the same tensor share its
+pinned copy, and a leaf that is a view of another leaf gets its
+own. Any other tree, such as a locked one or one that holds a
+memory-mapped tensordict, has the pinned copies written back
+into its leaves, as before, so they stay in pageable memory.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
@@ -2016,7 +2028,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.pin_memory",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.pin_memory",
        "url": "/reference/generated/tensordict.TensorDictBase.pin_memory.html",
-       "articleBody": "TensorDictBase.pin_memory# TensorDictBase.pin_memory(num_threads: int | None = None, inplace: bool = False) \u2192 Self# Calls pin_memory() on the stored tensors. Parameters: num_threads (int or str) \u2013 if provided, the number of threads to use to call pin_memory on the leaves. Defaults to None, which sets a high number of threads in ThreadPoolExecutor(max_workers=None). To execute all the calls to pin_memory() on the main thread, pass num_threads=0. inplace (bool, optional) \u2013 if True, the tensordict is modified in-place. Defaults to False. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.pin_memory# TensorDictBase.pin_memory(num_threads: int | None = None, inplace: bool = False) \u2192 Self# Calls pin_memory() on the stored tensors. Parameters: num_threads (int, optional) \u2013 if provided, the number of threads to use to call pin_memory on the leaves, in a ThreadPoolExecutor. Defaults to None, which, like 0, calls pin_memory() on the calling thread. inplace (bool, optional) \u2013 if True, the tensordict is modified in-place. When every node is an unlocked TensorDict or LazyStackedTensorDict (or a tensorclass over one) and no leaf is a MemoryMappedTensor, in shared memory, sparse, jagged or an UnbatchedTensor, each leaf is replaced by its pinned copy, and the tensordict and every nested node stay the same objects; keys that hold the same tensor share its pinned copy, and a leaf that is a view of another leaf gets its own. Any other tree, such as a locked one or one that holds a memory-mapped tensordict, has the pinned copies written back into its leaves, as before, so they stay in pageable memory. Defaults to False. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
