@@ -3999,13 +3999,26 @@ class TestGeneric:
         assert td.names == ["n"]
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
-    def test_pin_memory_inplace_locked(self):
+    @pytest.mark.parametrize("num_threads", [None, 2])
+    def test_pin_memory_inplace_locked(self, num_threads, monkeypatch):
         # A locked tensordict keeps its leaves, which pin_memory(inplace=True)
-        # copies into; an unlocked parent still pins its own leaves
+        # copies into; an unlocked parent still pins its own leaves, on the
+        # same pool as the leaves of the locked one
         td = TensorDict(a=torch.ones(3), nested=TensorDict(b=torch.ones(3)))
         nested = td["nested"].lock_()
         b = nested["b"]
-        assert td.pin_memory(inplace=True) is td
+        threads = set()
+        pin_memory = torch.Tensor.pin_memory
+
+        def spy(tensor, *args, **kwargs):
+            threads.add(threading.current_thread().name)
+            return pin_memory(tensor, *args, **kwargs)
+
+        monkeypatch.setattr(torch.Tensor, "pin_memory", spy)
+        assert td.pin_memory(num_threads=num_threads, inplace=True) is td
+        if num_threads:
+            assert len({name.rsplit("_", 1)[0] for name in threads}) == 1
+        monkeypatch.undo()
         assert td["a"].is_pinned()
         assert td["nested"] is nested
         assert nested.is_locked
