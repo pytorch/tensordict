@@ -765,6 +765,13 @@ def test_to_context_manager_writes_in_place(tmp_path, monkeypatch):
     assert h5td["a"].dtype == torch.float32
     assert (h5td["a"] == torch.arange(4.0) + 1).all()
     assert (h5td["nested", "c"] == 1).all()
+    # an entry whose shape the block changes replaces its dataset
+    with (
+        pytest.warns(UserWarning, match="Replacing an array"),
+        h5td.to(torch.float64) as td64,
+    ):
+        td64["nested", "b"] = torch.ones(4, 2)
+    assert (h5td["nested", "b"] == torch.ones(4, 2)).all()
     h5td.close()
 
 

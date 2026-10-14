@@ -482,8 +482,13 @@ def _reverse_to(self, args, kwargs, out):
             # non-tensor entries that the file has stay unchanged.
             keys = set(out.keys(True, True, is_leaf=_is_leaf_nontensor))
             for key, value in result.items(True, True):
-                if key in keys:
+                if key not in keys:
+                    continue
+                if out._get_metadata(key).get("shape") == value.shape:
                     out.set_(key, value)
+                else:
+                    # the block changed its shape: update() replaces it
+                    keys.discard(key)
             out.update(result.exclude(*keys))
             return self
 
