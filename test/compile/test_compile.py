@@ -427,13 +427,14 @@ class TestTD:
         assert result.shape == torch.Size([0])
         assert result["a", "b"].shape == torch.Size([0])
 
-    def test_td_index_bool_mask(self, mode):
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    def test_td_index_bool_mask(self, mode, device):
         # the masked size depends on the data, so this graph-breaks
         def add_one(td, mask):
             return td[mask] + 1
 
         add_one_c = torch.compile(add_one, mode=mode)
-        data = TensorDict({"a": {"b": torch.arange(3)}}, [3])
+        data = TensorDict({"a": {"b": torch.arange(3)}}, [3], device=device)
         result = add_one_c(data, torch.tensor([True, False, True]))
         assert result.shape == torch.Size([2])
         assert (result["a", "b"] == torch.tensor([1, 3])).all()
