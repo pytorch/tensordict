@@ -440,12 +440,13 @@ class TestTensorDicts(TestTensorDictsBase):
         except Exception as err:
             error = err
         if error is not None:
-            # the batch size cannot change: auto_batch_size_ raises, unless it
-            # finds the batch size that the tensordict has
-            try:
-                td.auto_batch_size_()
-            except type(error):
-                pass
+            # a lazy tensordict cannot change its batch size: auto_batch_size_
+            # finds the batch size that it has and returns, and raises for a
+            # smaller one
+            assert isinstance(
+                td, (LazyStackedTensorDict, _SubTensorDict, _CustomOpTensorDict)
+            )
+            td.auto_batch_size_()
             assert td.batch_size == batch_size
             with pytest.raises(type(error)):
                 td.auto_batch_size_(1)

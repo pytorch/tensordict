@@ -1919,9 +1919,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
         if new_batch_size == self.batch_size or (
-            # a list equal to the batch size
-            not isinstance(new_batch_size, torch.Size)
-            and torch.Size(new_batch_size) == self.batch_size
+            # a list equal to the batch size (a tuple compares equal above)
+            type(new_batch_size) is list and new_batch_size == list(self.batch_size)
         ):
             return
         if self._lazy:
@@ -7574,11 +7573,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 Defaults to ``False``.
 
         .. note::
-            On a :class:`~tensordict.LazyStackedTensorDict`, the result is a
-            :class:`~tensordict.TensorDict`. If the stacked tensordicts have no
-            names, the result has no names either, even when the stack
-            dimension has a name (from ``stack_dim_name`` or the ``names``
-            setter). :meth:`~tensordict.LazyStackedTensorDict.densify` and
+            On a :class:`~tensordict.LazyStackedTensorDict`, a
+            :class:`~tensordict.PersistentTensorDict` (h5, zarr) or a store,
+            the result is a :class:`~tensordict.TensorDict`. If the tensordicts
+            of a lazy stack have no names, the result has no names either,
+            even when the stack dimension has a name (from ``stack_dim_name``
+            or the ``names`` setter). :meth:`~tensordict.LazyStackedTensorDict.densify` and
             :meth:`clone` keep that name. To keep it here, name the dimension
             again with :meth:`refine_names`.
 

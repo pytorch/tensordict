@@ -1575,12 +1575,19 @@ class TestLazyStackedTensorDict:
         sub = _SubTensorDict(
             TensorDict(a=torch.zeros(4, 3), batch_size=[4, 3]), (slice(0, 2),)
         )
-        for td in (lazy, sub):
+        nontensor = lazy_stack(
+            [
+                lazy_stack([NonTensorData("a"), NonTensorData("b"), NonTensorData("c")])
+                for _ in range(2)
+            ]
+        )
+        for td in (lazy, sub, nontensor):
             td.batch_size = torch.Size([2, 3])
             td.batch_size = [2, 3]
             td.batch_size = (2, 3)
-            with pytest.raises(RuntimeError, match="Modifying the batch size"):
-                td.batch_size = [2]
+            for new_batch_size in ([2], 3, None, [2.0]):
+                with pytest.raises(RuntimeError, match="Modifying the batch size"):
+                    td.batch_size = new_batch_size
             assert td.batch_size == torch.Size([2, 3])
 
     def test_create_empty(self):

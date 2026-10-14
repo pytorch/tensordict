@@ -168,6 +168,11 @@ class TestGeneric:
         td = TensorDict(
             {"a": torch.randn(3, 4, 5, 6), "b": torch.randn(3, 4, 5)}, batch_size=[3, 4]
         )
+        # a generator, read once
+        td.batch_size = (size for size in [3])
+        assert td.batch_size == torch.Size([3])
+        td.batch_size = [3, 4]
+
         # smoke-test
         td.batch_size = torch.Size([3])
 
@@ -5427,6 +5432,11 @@ class TestGeneric:
         assert td.contiguous(inplace=True) is td
         assert td.contiguous(canonical=True, inplace=True) is td
         assert td["a"] is a
+        # an inplace op that returns the same leaves writes nothing either
+        assert td.flatten(0, 0, inplace=True) is td
+        assert td["a"] is a
+        memmap_td = TensorDict(a=torch.zeros(4, 3), batch_size=[4, 3]).memmap_()
+        assert memmap_td.flatten(0, 0, inplace=True) is memmap_td
         td = TensorDict(a=torch.zeros(3, 4).T, batch_size=[4]).lock_()
         with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
             td.contiguous(inplace=True)

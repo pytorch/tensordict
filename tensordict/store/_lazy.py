@@ -214,16 +214,17 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
                 shape = json.loads(meta["shapes"])[self._element_idx]
             _check_shape_fits(key_path, shape, new_size)
 
-    # Override: the device can be set, but reads ignore it (a FutureWarning
-    # until 0.17, where it raises as on TensorDict).
+    # Override: the device can be set, but leaf reads ignore it (a
+    # FutureWarning until 0.17, where it raises as on TensorDict).
     @TensorDictBase.device.setter
     def device(self, value):
         warnings.warn(
-            "Setting the device of LazyStackedTensorDictStore[i] changes its "
-            "device attribute only: the entries that it reads stay on the device "
-            "of the store. Starting with TensorDict 0.17, the default will change "
-            "to raising a RuntimeError, as TensorDict does. Set the device of the "
-            "store instead.",
+            "Setting the device of LazyStackedTensorDictStore[i] is applied only "
+            "in part: the leaves that it reads stay on the device of the store, "
+            "while its nested tensordicts, to_tensordict() and contiguous() use "
+            "the new device. Starting with TensorDict 0.17, the default will "
+            "change to raising a RuntimeError, as TensorDict does. Call "
+            ".to(device) instead.",
             FutureWarning,
             stacklevel=2,
         )

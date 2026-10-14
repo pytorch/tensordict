@@ -3691,7 +3691,7 @@ class TestLazyStackedTensorDictStore:
 
     def test_store_device_setter_moves_reads(self, store_stack):
         """The device of the store is the device of what it reads; the device
-        of an element is a label."""
+        of an element is a label for its leaf reads."""
         store_td, _, _ = store_stack
         store_td.device = "meta"
         assert store_td.device == torch.device("meta")
@@ -3701,12 +3701,16 @@ class TestLazyStackedTensorDictStore:
         element = store_td[0]
         with pytest.warns(
             FutureWarning,
-            match=r"the entries that it reads stay on the device of the store\. "
-            r"Starting with TensorDict 0\.17, the default will change to raising",
+            match=r"the leaves that it reads stay on the device of the store, while "
+            r"its nested tensordicts, to_tensordict\(\) and contiguous\(\) use the "
+            r"new device\. Starting with TensorDict 0\.17, the default will change "
+            r"to raising",
         ):
             element.device = "meta"
         assert element.device == torch.device("meta")
         assert element["a"].device == torch.device("cpu")
+        assert element.to_tensordict()["a"].device == torch.device("meta")
+        assert element.contiguous()["a"].device == torch.device("meta")
 
     def test_batch_size_setter(self, store_stack, monkeypatch):
         """The new batch size is checked against the stored shapes, without
