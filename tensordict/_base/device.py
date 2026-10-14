@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import queue
 import warnings
+import weakref
 from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
 from typing import Callable, overload
@@ -25,6 +26,7 @@ from tensordict.base import (
     _is_tensor_collection,
     _NESTED_TENSORS_AS_LISTS,
     _sync_cuda_transfer,
+    BEST_ATTEMPT_INPLACE,
     Buffer,
     is_compiling,
     NO_DEFAULT,
@@ -36,6 +38,7 @@ from tensordict.utils import (
     _as_context_manager,
     _cache_while_locked,
     _is_shared,
+    _is_unbatched,
     _make_dtype_promotion,
     _parse_to,
     _pin_mem,
@@ -85,6 +88,109 @@ def _to_batch_size_will_change(td, batch_size, root=True) -> bool:
         for value in td.values()
         if _is_tensor_collection(type(value))
     )
+
+
+def _pin_memory(x):
+    return x.pin_memory()
+
+
+def _rebinds_pinned_leaves(td) -> bool:
+    # Whether pin_memory(inplace=True) replaces the leaves of td by their
+    # pinned copies: only an unlocked TensorDict or lazy stack, or a
+    # tensorclass over one, does. Any other tensordict keeps the _fast_apply
+    # path, which writes the pinned copies back into its leaves, so that a
+    # lock keeps its leaves and the overrides and errors stay the same.
+    from tensordict._lazy import LazyStackedTensorDict
+    from tensordict._td import TensorDict
+
+    if is_tensorclass(td):
+        if is_non_tensor(td):
+            return False
+        td = td._tensordict
+    return not td.is_locked and type(td) in (TensorDict, LazyStackedTensorDict)
+
+
+def _writes_back(leaf) -> bool:
+    # Whether pin_memory(inplace=True) writes the pinned copy back into leaf
+    # rather than replacing it, so that writes to a memory-mapped or shared
+    # leaf still reach the file or the shared memory.
+    if is_non_tensor(leaf):
+        return True
+    if _is_unbatched(leaf):
+        leaf = leaf._base_tensor()
+    if isinstance(leaf, MemoryMappedTensor):
+        return True
+    try:
+        return leaf.untyped_storage().is_shared()
+    except (NotImplementedError, RuntimeError):
+        # a layout without a storage, such as a sparse tensor
+        return True
+
+
+def _pin_memory_inplace(td, num_threads, executor, memo, pending) -> None:
+    # Pins the leaves of td, for which _rebinds_pinned_leaves is True, for
+    # pin_memory(inplace=True); td and its nested tensordicts stay the same
+    # objects. memo maps the id of a leaf to a weak reference to it and its
+    # pinned copy, so that keys that hold one tensor keep sharing one pinned
+    # copy. With an executor, the leaves are pinned on it and pending gets
+    # (td, key, future, write_back) for the caller to write.
+    if is_tensorclass(td):
+        td = td._tensordict
+    if td._lazy:
+        for member in td.tensordicts:
+            if _rebinds_pinned_leaves(member):
+                _pin_memory_inplace(member, num_threads, executor, memo, pending)
+            else:
+                member._fast_apply(
+                    _pin_memory,
+                    num_threads=num_threads,
+                    inplace=True,
+                    propagate_lock=True,
+                )
+        return
+    for key in list(td.keys()):
+        value = td._get_str(key, default=NO_DEFAULT)
+        if _is_tensor_collection(type(value)) and not is_non_tensor(value):
+            if _rebinds_pinned_leaves(value):
+                _pin_memory_inplace(value, num_threads, executor, memo, pending)
+            else:
+                value = value._fast_apply(
+                    _pin_memory,
+                    num_threads=num_threads,
+                    inplace=True,
+                    propagate_lock=True,
+                )
+                td._set_str(
+                    key,
+                    value,
+                    inplace=BEST_ATTEMPT_INPLACE,
+                    validated=True,
+                    non_blocking=False,
+                )
+            continue
+        write_back = _writes_back(value)
+        entry = None if write_back else memo.get(id(value))
+        if entry is not None and entry[0]() is value:
+            pinned = entry[1]
+        else:
+            if executor is None:
+                pinned = _pin_memory(value)
+            else:
+                pinned = executor.submit(_pin_memory, value)
+            if not write_back:
+                memo[id(value)] = (weakref.ref(value), pinned)
+        # release the old leaf as its replacement is written
+        del value
+        if executor is not None:
+            pending.append((td, key, pinned, write_back))
+        else:
+            td._set_str(
+                key,
+                pinned,
+                inplace=BEST_ATTEMPT_INPLACE if write_back else False,
+                validated=True,
+                non_blocking=False,
+            )
 
 
 class _DeviceOps:
@@ -295,60 +401,48 @@ class _DeviceOps:
         """Calls :meth:`~torch.Tensor.pin_memory` on the stored tensors.
 
         Args:
-            num_threads (int or str): if provided, the number of threads to use
-                to call ``pin_memory`` on the leaves, in a
+            num_threads (int, optional): if provided, the number of threads to
+                use to call ``pin_memory`` on the leaves, in a
                 :class:`~concurrent.futures.ThreadPoolExecutor`. Defaults to
                 ``None``, which, like ``0``, calls
                 :meth:`~torch.Tensor.pin_memory` on the calling thread.
             inplace (bool, optional): if ``True``, the tensordict is modified
                 in-place: each leaf is replaced by its pinned copy, and the
-                tensordict and its nested tensordicts stay the same objects.
-                A locked tensordict (memory-mapped and shared tensordicts
-                included) keeps its leaves: the pinned copies are written back
-                into them, so they stay in pageable memory.
+                tensordict, its nested tensordicts and tensorclasses and the
+                tensordicts of a lazy stack stay the same objects. Keys that
+                hold the same tensor share its pinned copy. A locked
+                tensordict (such as the result of :meth:`memmap_` or
+                :meth:`share_memory_`) keeps its leaves, and so do
+                memory-mapped and shared leaves: the pinned copies are
+                written back into them, so they stay in pageable memory.
                 Defaults to ``False``.
 
         """
-
-        def pin_memory(x):
-            return x.pin_memory()
-
-        if not inplace or self.is_locked:
-            return self._fast_apply(
-                pin_memory,
-                num_threads=num_threads,
-                inplace=inplace,
-                propagate_lock=True,
-            )
-        if self._lazy:
-            # A lazy stack: its tensordicts hold the leaves
-            for td in self.tensordicts:
-                td.pin_memory(num_threads=num_threads, inplace=True)
-            return self
-        # Replace each leaf by its pinned copy, as _inplace_rebind_leaves does:
-        # copying the pinned copy back into the leaf would leave it pageable.
-        keys = []
-        for key in list(self.keys()):
-            value = self._get_str(key, default=NO_DEFAULT)
-            if _is_tensor_collection(type(value)):
-                value.pin_memory(num_threads=num_threads, inplace=True)
-            else:
-                keys.append(key)
-        if num_threads:
+        if inplace and _rebinds_pinned_leaves(self):
+            if not num_threads:
+                _pin_memory_inplace(self, num_threads, None, {}, None)
+                return self
+            # one pool for the whole tree; the leaves are written once all
+            # of them are pinned
+            pending = []
             with ThreadPoolExecutor(max_workers=num_threads) as executor:
-                values = list(
-                    executor.map(
-                        lambda key: pin_memory(self._get_str(key, default=NO_DEFAULT)),
-                        keys,
-                    )
+                _pin_memory_inplace(self, num_threads, executor, {}, pending)
+                values = [future.result() for _, _, future, _ in pending]
+            for (td, key, _, write_back), value in zip(pending, values):
+                td._set_str(
+                    key,
+                    value,
+                    inplace=BEST_ATTEMPT_INPLACE if write_back else False,
+                    validated=True,
+                    non_blocking=False,
                 )
-            for key, value in zip(keys, values):
-                self._set_str(key, value, validated=True, inplace=False)
-        else:
-            for key in keys:
-                value = pin_memory(self._get_str(key, default=NO_DEFAULT))
-                self._set_str(key, value, validated=True, inplace=False)
-        return self
+            return self
+        return self._fast_apply(
+            _pin_memory,
+            num_threads=num_threads,
+            inplace=inplace,
+            propagate_lock=True,
+        )
 
     @deprecated(
         "TensorDictBase.pin_memory_()",
@@ -366,9 +460,8 @@ class _DeviceOps:
             :meth:`pin_memory` to keep that behavior.
 
         Args:
-            num_threads (int or str): if provided, the number of threads to use
-                to call ``pin_memory`` on the leaves. If ``"auto"`` is passed, the
-                number of threads is automatically determined.
+            num_threads (int, optional): if provided, the number of threads to
+                use to call ``pin_memory`` on the leaves. Defaults to ``0``.
 
         """
         return self.pin_memory(num_threads=num_threads, inplace=True)

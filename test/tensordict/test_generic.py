@@ -3938,7 +3938,8 @@ class TestGeneric:
     @pytest.mark.parametrize("num_threads", [None, 0, 2])
     def test_pin_memory_inplace(self, num_threads, monkeypatch):
         # Each leaf is replaced by its pinned copy, and the tensordict, its
-        # nested tensordicts, tensorclasses and lazy stacks stay the same objects
+        # nested tensordicts, tensorclasses and lazy stacks stay the same
+        # objects. Keys that hold one tensor share its pinned copy.
         @tensorclass
         class MeshLike:
             points: torch.Tensor
@@ -3951,9 +3952,11 @@ class TestGeneric:
             batch_size=[4],
         )
         stack = lazy_stack([TensorDict(c=torch.ones(2)) for _ in range(4)])
+        shared = torch.ones(4)
         td = TensorDict(
-            a=torch.ones(4),
-            nested=TensorDict(b=torch.ones(4, 2), batch_size=[4]),
+            a=shared,
+            same=shared,
+            nested=TensorDict(b=torch.ones(4, 2), same=shared, batch_size=[4]),
             mesh=mesh,
             stack=stack,
             batch_size=[4],
@@ -3968,19 +3971,23 @@ class TestGeneric:
         pin_memory = torch.Tensor.pin_memory
 
         def spy(tensor, *args, **kwargs):
-            threads.add(threading.get_ident())
+            threads.add(threading.current_thread().name)
             return pin_memory(tensor, *args, **kwargs)
 
         monkeypatch.setattr(torch.Tensor, "pin_memory", spy)
         assert td.pin_memory(num_threads=num_threads, inplace=True) is td
         if num_threads:
-            assert threading.get_ident() not in threads
+            # one pool for the whole tree
+            assert threading.current_thread().name not in threads
+            assert len({name.rsplit("_", 1)[0] for name in threads}) == 1
         else:
-            assert threads == {threading.get_ident()}
+            assert threads == {threading.current_thread().name}
 
         leaves = [td["a"], nested["b"], mesh.points, cache["normals"]]
         leaves += [member["c"] for member in members]
         assert all(leaf.is_pinned() for leaf in leaves)
+        assert td["same"] is td["a"]
+        assert nested["same"] is td["a"]
         assert td["nested"] is nested
         assert td["mesh"] is mesh
         assert mesh.cache is cache
@@ -4010,6 +4017,60 @@ class TestGeneric:
         assert locked.pin_memory(inplace=True) is locked
         assert locked["a"] is a
         assert not a.is_pinned()
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+    @pytest.mark.parametrize("num_threads", [None, 2])
+    def test_pin_memory_inplace_keeps_storage(self, num_threads, tmpdir):
+        # Memory-mapped and shared leaves of an unlocked tensordict are copied
+        # into, so that writes still reach the file or the shared memory
+        TensorDict(a=torch.ones(3), nested=TensorDict(b=torch.ones(3))).memmap_(tmpdir)
+        td = TensorDict.load_memmap(tmpdir)
+        assert not td.is_locked
+        a = td["a"]
+        td.set("shared", torch.ones(3).share_memory_())
+        shared = td["shared"]
+        td.set("c", torch.ones(3))
+        assert td.pin_memory(num_threads=num_threads, inplace=True) is td
+        assert td["a"] is a
+        assert isinstance(td["nested", "b"], MemoryMappedTensor)
+        assert td["shared"] is shared
+        assert shared.is_shared()
+        assert td["c"].is_pinned()
+        td["a"].fill_(5)
+        assert (TensorDict.load_memmap(tmpdir)["a"] == 5).all()
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+    @pytest.mark.parametrize("num_threads", [None, 2])
+    def test_pin_memory_inplace_nested_types(self, num_threads, tmpdir):
+        # A nested tensorclass is pinned without calling its own pin_memory;
+        # other nested tensordicts are copied into, as before
+        @tensorclass
+        class WithPinMemory:
+            x: torch.Tensor
+
+            def pin_memory(self):
+                raise RuntimeError("WithPinMemory.pin_memory was called")
+
+        source = TensorDict(a=torch.ones(3, 2), batch_size=[3])
+        td = TensorDict(
+            t=WithPinMemory(x=torch.ones(3), batch_size=[3]),
+            c=torch.ones(3),
+            batch_size=[3],
+        )
+        td._set_str("sub", source._get_sub_tensordict(0), validated=True, inplace=False)
+        if _has_h5py:
+            persistent = PersistentTensorDict.from_dict(
+                source, filename=str(tmpdir / "file.h5")
+            )
+            td._set_str("p", persistent, validated=True, inplace=False)
+        sub_a = source["a"]
+        assert td.pin_memory(num_threads=num_threads, inplace=True) is td
+        assert td["t"].x.is_pinned()
+        assert td["c"].is_pinned()
+        assert source["a"] is sub_a
+        assert not sub_a.is_pinned()
+        if _has_h5py:
+            assert td["p"] is persistent
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_pin_memory_underscore_pins(self):
