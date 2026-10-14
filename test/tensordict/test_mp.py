@@ -726,7 +726,6 @@ class TestMap:
         )
         assert (out["a"] == torch.arange(24).view(8, 3) + 1).all()
 
-    @pytest.mark.xfail(strict=True, reason="map ignores out without a pool")
     def test_map_without_pool_h5_out(self, h5_input, tmp_path):
         gc.collect()
         out = TensorDict(a=torch.zeros(8, 3, dtype=torch.long), batch_size=[8, 3])
@@ -737,7 +736,6 @@ class TestMap:
         assert result is None
         assert (out["a"] == torch.arange(24).view(8, 3) + 1).all()
 
-    @pytest.mark.xfail(strict=True, reason="map ignores num_chunks without a pool")
     def test_map_without_pool_h5_num_chunks(self, h5_input):
         gc.collect()
         out = h5_input.map(

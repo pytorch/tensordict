@@ -1261,6 +1261,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # rename in a locked tensordict with a warning, and pass an old key that is
     # not a str or tuple to _rename_key (which raises or warns as before).
     _rename_key_lenient: bool = False
+    # Set by PersistentTensorDict, whose file handles cannot be sent to another
+    # process: map sends a to_tensordict() copy of each chunk to the workers.
+    _map_on_dense_copies: bool = False
 
     @classmethod
     def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
@@ -6494,9 +6497,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             dim,
             shuffle=shuffle,
             use_generator=index_with_generator,
+            to_tensordict=self._map_on_dense_copies,
         )
         if not index_with_generator:
             length = len(self_split)
+            if self._map_on_dense_copies:
+                self_split = tuple(split.to_tensordict() for split in self_split)
         else:
             length = None
         call_chunksize = 1

@@ -14,7 +14,6 @@ import pickle
 import sys
 import tempfile
 import warnings
-from functools import wraps
 from numbers import Number
 from pathlib import Path
 from typing import Any, Callable, overload, Tuple, Type, TYPE_CHECKING
@@ -45,22 +44,18 @@ from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
     _cache_while_locked,
-    _CloudpickleWrapper,
     _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
     _NUMPY_TO_TORCH_DTYPE_DICT,
     _parse_to,
-    _proc_init,
-    _split_tensordict,
-    _zip_strict,
     expand_right,
     IndexType,
     is_non_tensor,
     NestedKey,
     unravel_key,
 )
-from torch import multiprocessing as mp, Tensor
+from torch import Tensor
 
 _has_h5 = importlib.util.find_spec("h5py", None) is not None
 _has_zarr = importlib.util.find_spec("zarr", None) is not None
@@ -915,6 +910,8 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     # _change_batch_size raises, so an in-place shape method that changes the
     # batch size raises before it rewrites the datasets
     _inplace_batch_size_change = False
+    # an open file cannot be sent to the workers of map
+    _map_on_dense_copies = True
 
     @property
     @deprecated("PersistentTensorDict.kwargs", removal="0.17")
@@ -1791,130 +1788,6 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         raise NotImplementedError(
             f"popitem not implemented for class {type(self).__name__}."
         )
-
-    def map(
-        self,
-        fn: Callable,
-        dim: int = 0,
-        num_workers: int | None = None,
-        *,
-        out: TensorDictBase = None,
-        chunksize: int | None = None,
-        num_chunks: int | None = None,
-        pool: mp.Pool = None,
-        generator: torch.Generator | None = None,
-        max_tasks_per_child: int | None = None,
-        worker_threads: int = 1,
-        index_with_generator: bool = False,
-        pbar: bool = False,
-        mp_start_method: str | None = None,
-    ):
-        if pool is None:
-            if num_workers is None:
-                num_workers = mp.cpu_count()  # Get the number of CPU cores
-            if generator is None:
-                generator = torch.Generator()
-            seed = (
-                torch.empty((), dtype=torch.int64).random_(generator=generator).item()
-            )
-            if mp_start_method is not None:
-                ctx = mp.get_context(mp_start_method)
-            else:
-                ctx = mp.get_context()
-
-            queue = ctx.Queue(maxsize=num_workers)
-            for i in range(num_workers):
-                queue.put(i)
-            with ctx.Pool(
-                processes=num_workers,
-                initializer=_proc_init,
-                initargs=(seed, queue, worker_threads),
-                maxtasksperchild=max_tasks_per_child,
-            ) as pool:
-                return self.map(
-                    fn,
-                    dim=dim,
-                    chunksize=chunksize,
-                    pool=pool,
-                    index_with_generator=index_with_generator,
-                )
-        num_workers = pool._processes
-        dim_orig = dim
-        if dim < 0:
-            dim = self.ndim + dim
-        if dim < 0 or dim >= self.ndim:
-            raise ValueError(f"Got incompatible dimension {dim_orig}")
-
-        self_split = _split_tensordict(
-            self,
-            chunksize,
-            num_chunks,
-            num_workers,
-            dim,
-            use_generator=index_with_generator,
-            to_tensordict=True,
-        )
-        if not index_with_generator:
-            length = len(self_split)
-            self_split = tuple(split.to_tensordict() for split in self_split)
-        else:
-            length = None
-
-        if out is not None and (out.is_shared() or out.is_memmap()):
-
-            def wrap_fn_with_out(fn, out):
-                @wraps(fn)
-                def newfn(item_and_out):
-                    item, out = item_and_out
-                    result = fn(item)
-                    out.update_(result)
-                    return
-
-                out_split = _split_tensordict(
-                    out,
-                    chunksize,
-                    num_chunks,
-                    num_workers,
-                    dim,
-                    use_generator=index_with_generator,
-                )
-                return _CloudpickleWrapper(newfn), _zip_strict(self_split, out_split)
-
-            fn, self_split = wrap_fn_with_out(fn, out)
-            out = None
-
-        call_chunksize = 1
-        imap = pool.imap(fn, self_split, call_chunksize)
-
-        if pbar and importlib.util.find_spec("tqdm", None) is not None:
-            import tqdm
-
-            imap = tqdm.tqdm(imap, total=length)
-
-        imaplist = []
-        start = 0
-        for item in imap:
-            if item is not None:
-                if out is not None:
-                    if chunksize != 0:
-                        end = start + item.shape[dim]
-                        chunk = slice(start, end)
-                        out[chunk].update_(item)
-                        start = end
-                    else:
-                        out[start].update_(item)
-                        start += 1
-                else:
-                    imaplist.append(item)
-        del imap
-
-        # support inplace modif
-        if imaplist:
-            if chunksize == 0:
-                out = torch.stack(imaplist, dim)
-            else:
-                out = torch.cat(imaplist, dim)
-        return out
 
     # Override: moves the node in the file, without reading the data.
     def _rename_key(self, old_key: NestedKey, new_key: NestedKey) -> None:
