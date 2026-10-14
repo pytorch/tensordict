@@ -3237,6 +3237,14 @@ class TestLazyStackedTensorDict:
         assert lazy.pop(("n", "x", "deeper"), "D") == "D"
         assert lazy.pop(("n", "x", "deeper", "z"), None) is None
         assert lazy.pop(("n", "y"), 0) == 0
+        # two parts: the default too, as for three or more (#2678)
+        assert lazy.pop(("a", "b"), "D") == "D"
+        assert lazy.get(("a", "b"), "D") == "D"
+        assert lazy.get(("n", "x", "deeper"), None) is None
+        with pytest.raises(ValueError, match="'a' is a Tensor, not a tensordict"):
+            lazy.pop(("a", "b"))
+        with pytest.raises(ValueError, match="'x' is a Tensor, not a tensordict"):
+            lazy.pop(("n", "x", "deeper"))
         assert (lazy.pop(("n", "x"), None) == 1).all()
         assert list(lazy.keys(True)) == ["a", "n"]
 

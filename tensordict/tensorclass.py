@@ -4531,6 +4531,7 @@ def _get(self, key: NestedKey, *args, **kwargs):
     if not key:
         raise KeyError(_GENERIC_NESTED_ERR.format(key))
     # Find what the default is
+    passed_default = True
     if args:
         default = args[0]
         if len(args) > 1:
@@ -4543,11 +4544,16 @@ def _get(self, key: NestedKey, *args, **kwargs):
             raise TypeError("'default' arg was passed twice.")
     elif _td_base._GET_DEFAULTS_TO_NONE:
         default = None
+        passed_default = False
     else:
         default = NO_DEFAULT
 
     try:
         if len(key) > 1:
+            if not passed_default:
+                # the entry's get returns its own default, and keeps raising
+                # for a key that runs through a leaf, as get does without one
+                return _getattr(self, key[0], **kwargs).get(key[1:], **kwargs)
             return _getattr(self, key[0], **kwargs).get(
                 key[1:], default=default, **kwargs
             )
