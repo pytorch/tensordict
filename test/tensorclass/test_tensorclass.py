@@ -3052,7 +3052,17 @@ class TestTensorClass:
             elif broadcast_type == "maptensor":
                 val = MemoryMappedTensor.from_tensor(torch.zeros(4, 5))
 
-            data[:2] = val
+            if broadcast_type == "scalar":
+                # z is a non-tensor entry, where the scalar is cast to a
+                # tensor until 0.17, which leaves it unchanged (gh-2522). The
+                # call warns once, for z and y.z.
+                with pytest.warns(
+                    FutureWarning, match="leaving the non-tensor entries unchanged"
+                ) as w:
+                    data[:2] = val
+                assert len(w) == 1
+            else:
+                data[:2] = val
             assert (data[:2] == 0).all()
             assert (data.X[:2] == 0).all()
             assert (data.y.X[:2] == 0).all()

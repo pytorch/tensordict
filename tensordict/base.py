@@ -1161,6 +1161,99 @@ def _warn_scalar_over_non_tensor(
     )
 
 
+# the values that set_at_ casts to a tensor in a non-tensor entry, and warns about
+_SET_AT_CAST_TYPES = (list, *_SCALAR_TYPES)
+
+
+def _warn_set_at_cast(
+    key: str | None,
+    value: list | bool | int | float | np.bool_ | np.integer | np.floating,
+) -> None:
+    """Warns that ``value``, written at an index of a non-tensor entry, becomes a tensor today.
+
+    ``key`` is the entry for a direct ``set_at_``, and ``None`` for
+    ``td[index] = value``, which announces its own default change.
+    """
+    if is_compiling():
+        # Dynamo can trace neither the frame walk nor warnings.warn
+        return
+    # point to the first frame outside tensordict: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    if key is None:
+        message = (
+            f"The {type(value).__name__} written with [index] = value is cast "
+            "to a tensor in the non-tensor entries today. Starting with "
+            "TensorDict 0.17, the default will change to leaving the non-tensor "
+            "entries unchanged, as a TensorDictStore does for a number. Write "
+            "into td.exclude(<non-tensor keys>)[index] to leave them unchanged "
+            "now."
+        )
+    else:
+        message = (
+            f"The {type(value).__name__} written at an index of the non-tensor "
+            f"entry {key!r} is cast to a tensor today. Starting with TensorDict "
+            "0.17, the default will change to storing it as non-tensor data. "
+            "Write torch.tensor(value) to keep the tensor, or "
+            "NonTensorData(value) to store it as non-tensor data now."
+        )
+    warnings.warn(message, FutureWarning, stacklevel=stacklevel)
+
+
+def _set_at_each_key(
+    td: TensorDictBase, value: Any, index: IndexType, *, warn_cast: bool = True
+) -> None:
+    """Writes ``value`` at ``index`` of every entry of ``td``: the write step of ``td[index] = value``.
+
+    ``value`` is not a tensor collection, and ``index`` has been read by
+    ``__setitem__`` (no Ellipsis left; ``None`` may remain). Every entry is
+    written: a tensor entry casts the value to its dtype, a nested tensordict
+    writes it into each of its entries, and a non-tensor entry casts a list or
+    a number to a tensor. No entry is skipped.
+
+    When ``warn_cast`` is ``True`` and the call casts a list or a number into a
+    non-tensor entry, at any depth, it emits one :class:`FutureWarning` at the
+    user's line, before the writes: from TensorDict 0.17 the non-tensor entries
+    are left unchanged. It decides from the type of ``value`` and the types of
+    the entries, never from tensor data. It does not warn under
+    ``torch.compile``, nor for a shared or memmap container, which refuses
+    these writes. The writes of the entries do not warn: the nested calls get
+    ``warn_cast=False``. Containers whose ``_set_at_str`` does not take
+    ``warn_cast`` (``_set_at_warns_cast`` is ``False``) write each entry with
+    ``set_at_`` and do not warn.
+    """
+    if not type(td)._set_at_warns_cast:
+        # these containers never warn of the cast
+        for key in td.keys():
+            td.set_at_(key, value, index)
+        return
+    if (
+        warn_cast
+        and isinstance(value, _SET_AT_CAST_TYPES)
+        and td._has_non_tensor
+        and _set_at_casts(td, value)
+    ):
+        _warn_set_at_cast(None, value)
+    if not isinstance(index, (int, slice, Tensor)):
+        # a lazy stack passes the index on as it is
+        index = _entry_index(index)
+    for key in td.keys():
+        td._set_at_str(
+            key, value, index, validated=False, non_blocking=False, warn_cast=False
+        )
+
+
+def _set_at_casts(td: TensorDictBase, value: Any) -> bool:
+    """Whether writing the list or number ``value`` at an index of every entry of ``td``, which has a non-tensor entry, casts it to a tensor there."""
+    if is_compiling() or td._is_shared or td._is_memmap:
+        return False
+    if isinstance(value, list):
+        # a list of strings, for instance, is stored as non-tensor data
+        return not is_tensor_collection(td._validate_value(value, check_shape=False))
+    return True
+
+
 def _warn_get_kwargs(
     td: TensorDictBase, kwargs: dict[str, Any], result: Any, default: Any
 ) -> None:
@@ -1513,6 +1606,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     _is_locked: bool = False
     _is_shared: bool = False
     _is_memmap: bool = False
+    # whether _set_at_str takes warn_cast and may warn of a list or a number
+    # cast to a tensor in a non-tensor entry (gh-2522)
+    _set_at_warns_cast: bool = False
     _cache: bool | None = None
     _is_non_tensor: bool = False
     _memmap_prefix = None
@@ -1779,6 +1875,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         index: IndexType,
         value: Any,
     ) -> None:
+        """Writes ``value`` at a key, or at an index of every entry.
+
+        A list or a number written at an index, as in ``td[mask] = 0``, goes
+        into every entry, and is cast to a tensor in the non-tensor entries
+        too. That write emits a :class:`FutureWarning`: starting with
+        TensorDict 0.17, the default will change to leaving the non-tensor
+        entries unchanged, as a :class:`~tensordict.store.TensorDictStore`
+        does for a number. To leave them unchanged now, write into
+        ``td.exclude(<non-tensor keys>)[index]``, which shares the tensors of
+        ``td``.
+        """
         istuple = isinstance(index, tuple)
         if istuple or isinstance(index, str):
             # try:
@@ -1881,8 +1988,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         else:
             # read the index as getitem does, also if there is no key to write
             index = _entry_index(index)
-            for key in self.keys():
-                self.set_at_(key, value, index)
+            _set_at_each_key(self, value, index)
 
     def __delitem__(self, key: NestedKey) -> Self:
         return self.del_(key)
@@ -3639,6 +3745,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Writes ``value`` into the existing entry ``key`` at the index ``index``, in place.
 
         ``td.set_at_(key, value, index)`` is the same as ``td[key][index] = value``.
+
+        A list, or a ``bool``, ``int`` or ``float`` (also as a NumPy scalar),
+        written into a non-tensor entry is cast to a tensor, and the write
+        emits a :class:`FutureWarning`. Starting with TensorDict 0.17, the
+        default will change to storing it as non-tensor data. Wrap the value
+        in :class:`~tensordict.NonTensorData` to store it as non-tensor data
+        now, or pass a tensor to keep the tensor. ``td[index] = value`` writes
+        through ``set_at_`` too, but announces another change: see
+        :meth:`__setitem__`.
 
         Args:
             key (NestedKey): key to be modified. The key must exist: a
@@ -5755,6 +5870,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 the resulting TensorDict will have the desired batch_size.
                 The :obj:`batch_size` argument should match the batch_size after
                 the transformation. This is a keyword only argument.
+                With a ``batch_size``, the call is treated as a shape operation:
+                ``fn`` is not called on :class:`~tensordict.UnbatchedTensor`
+                entries, which keep their data and take the new batch size.
             device (torch.device, optional): the resulting device, if any.
             names (list of str, optional): the new dimension names, in case the
                 batch_size is modified.
@@ -5926,6 +6044,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 the resulting TensorDict will have the desired batch_size.
                 The :obj:`batch_size` argument should match the batch_size after
                 the transformation. This is a keyword only argument.
+                With a ``batch_size``, the call is treated as a shape operation:
+                ``fn`` is not called on :class:`~tensordict.UnbatchedTensor`
+                entries, which keep their data and take the new batch size.
             device (torch.device, optional): the resulting device, if any.
             names (list of str, optional): the new dimension names, in case the
                 batch_size is modified.
