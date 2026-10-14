@@ -1104,11 +1104,12 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
 
 # Direct delegation: return value from _source as-is
 # The public methods in these lists override the base: ``is_contiguous`` (the
-# base walks the leaves, several times slower), ``popitem`` (the source's value
-# class: a lazy source pops a dense nested tensordict), ``__setitem__`` (the
-# source's checks), ``make_memmap*`` (a memory-mapped source), ``contiguous``
-# (one call to the source), ``masked_fill`` (the source's copy: the base would
-# clone a file), ``masked_select`` (the typed result).
+# base walks the leaves, several times slower), ``all`` and ``any`` (the base
+# is 10-15% slower with a dim), ``popitem`` (the source's value class: a lazy
+# source pops a dense nested tensordict), ``__setitem__`` (the source's
+# checks), ``make_memmap*`` (a memory-mapped source), ``contiguous`` (one call
+# to the source), ``masked_fill`` (the source's copy: the base would clone a
+# file), ``masked_select`` (the typed result).
 _DIRECT_DELEGATES = [
     "_get_str",
     "_get_tuple",
@@ -1122,7 +1123,8 @@ _DIRECT_DELEGATES = [
     "_cast_reduction",
     "__setitem__",
     "_compare",
-    "_reduction_parts",
+    "all",
+    "any",
     "make_memmap",
     "make_memmap_from_storage",
     "make_memmap_from_tensor",

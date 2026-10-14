@@ -316,9 +316,12 @@ def _apply_on_data_and_non_tensor(func):
     # wrapped tensordict, which .data rebuilds: the writes reach them (#2263).
     @wraps(func)
     def new_func(self, *args, **kwargs):  # type: ignore[misc]
-        data = self._param_td._fast_apply(
-            _data_and_non_tensor, is_leaf=_is_leaf_nontensor, propagate_lock=True
-        )
+        if self._param_td._has_non_tensor:
+            data = self._param_td._fast_apply(
+                _data_and_non_tensor, is_leaf=_is_leaf_nontensor, propagate_lock=True
+            )
+        else:
+            data = self.data
         getattr(data, func.__name__)(*args, **kwargs)
         return self
 
