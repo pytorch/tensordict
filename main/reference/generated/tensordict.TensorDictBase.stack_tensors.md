@@ -12,7 +12,9 @@ Keyword Arguments:
 
 - **out_key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - new key name for the stacked inputs.
 - **keep_entries** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `False`, entries in `keys` will be deleted.
-Defaults to `False`.
+Defaults to `False`. Entries are deleted only after the result
+has been written. If stacking fails, or if the result cannot
+be written, every input entry is kept with its original value.
 - **dim** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the dimension along which the stack must occur.
 Defaults to `0`.
 
