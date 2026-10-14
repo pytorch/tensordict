@@ -7360,7 +7360,7 @@ class TestGeneric:
                 ) in str(w.message)
 
     def test_set_tuple_no_warning(self):
-        # Tuples that do not hold only numbers, and lists, do not warn (#2679)
+        # Tuples that do not hold only Python numbers, and lists, do not warn (#2679)
         with warnings.catch_warnings():
             warnings.simplefilter("error", FutureWarning)
             td = TensorDict(
@@ -7369,9 +7369,21 @@ class TestGeneric:
                 c=(np.float32(1.0), np.float32(2.0)),
                 d=[1.0, 2.0],
                 e=np.array([1.0, 2.0]),
+                f=(np.float64(1.0), 2.0),
+                g=(np.float32(1.0), 2.0),
+                h=(np.int64(1), np.uint64(1)),
             )
         assert td["b"].dtype == td["c"].dtype == td["d"].dtype == torch.float32
-        assert td["e"].dtype == torch.float64
+        for key in "efgh":
+            assert td[key].dtype == torch.float64
+        # torch has no complex dtype for a bfloat16 default: store as on main
+        default = torch.get_default_dtype()
+        torch.set_default_dtype(torch.bfloat16)
+        try:
+            td["i"] = (1j, 2.0)
+        finally:
+            torch.set_default_dtype(default)
+        assert td["i"].dtype == torch.complex128
 
     @pytest.fixture
     def _set_list_none(self):

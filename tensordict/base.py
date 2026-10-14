@@ -1144,25 +1144,35 @@ def _warn_scalar_over_non_tensor(
     )
 
 
-# the numbers that _warn_tuple_dtype warns about, in tuples and nested tuples
-_NUMBER_TYPES = (bool, int, float, complex, np.bool_, np.number)
+# the numbers that _warn_tuple_dtype warns about, in tuples and nested tuples;
+# exact types, since NumPy scalars such as np.float64 subclass float
+_NUMBER_TYPES = frozenset((bool, int, float, complex))
 
 
 def _is_tuple_of_numbers(value: tuple) -> bool:
     return all(
-        isinstance(item, _NUMBER_TYPES)
-        or (isinstance(item, tuple) and _is_tuple_of_numbers(item))
+        type(item) in _NUMBER_TYPES
+        or (type(item) is tuple and _is_tuple_of_numbers(item))
         for item in value
     )
 
 
 def _warn_tuple_dtype(value: tuple, array: np.ndarray) -> None:
-    """Warns that the tuple of numbers ``value``, stored as ``array``, will get the dtype of ``torch.tensor(value)``."""
-    if not _is_tuple_of_numbers(value):
+    """Warns that the tuple of numbers ``value``, stored as ``array``, will get the dtype of ``torch.tensor(value)``.
+
+    NumPy stores a float or complex tuple of Python numbers as float64 or
+    complex128, and ``torch.tensor`` as the default dtype or its complex
+    counterpart: they differ exactly when the default dtype is not float64.
+    """
+    new = torch.get_default_dtype()
+    if new == torch.float64 or not _is_tuple_of_numbers(value):
         return
-    old, new = torch.as_tensor(array).dtype, torch.tensor(value).dtype
-    if old == new:
-        return
+    old = torch.as_tensor(array).dtype
+    if old.is_complex:
+        # torch has no complex dtype for a bfloat16 default
+        new = {torch.float16: torch.complex32, torch.float32: torch.complex64}.get(new)
+        if new is None:
+            return
     # point to the first frame outside tensordict: the user's call
     frame, stacklevel = sys._getframe(1), 2
     while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
