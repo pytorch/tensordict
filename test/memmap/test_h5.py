@@ -216,6 +216,56 @@ class TestH5Serialization:
         copy.close()
         h5td.close()
 
+    def test_h5_foreign_column_as_stack(self, tmp_path):
+        # a string column that another tool wrote, one string per row, reads
+        # as a NonTensorStack of its rows with non_tensor_as_stack=True (#2545)
+        with h5py.File(tmp_path / "file.h5", "w") as f:
+            f["pos"] = np.zeros(4, dtype=np.float32)
+            strings = ["go left", "go right", "stop", "wait"]
+            f.create_dataset("mission", data=strings, dtype=h5py.string_dtype())
+            f.create_dataset("name", data="episode", dtype=h5py.string_dtype())
+            f["info/x"] = np.zeros((4, 2), dtype=np.float32)
+            f["info/s"] = np.array([b"a", b"b", b"c", b"d"])
+            f["obs/y"] = np.zeros(4, dtype=np.float32)
+            f["obs/s"] = np.array([b"a", b"b", b"c", b"d"])
+            # how tensordict writes a NonTensorData of a list
+            f["l"] = np.arange(4).astype(h5py.opaque_dtype(np.dtype("int64")))
+        h5td = PersistentTensorDict.from_h5(tmp_path / "file.h5")
+        # the default is unchanged: one value holds the whole column
+        assert h5td.entry_class("mission") is NonTensorData
+        assert h5td[1:3].get("mission").data.tolist() == [s.encode() for s in strings]
+        h5td.close()
+
+        h5td = PersistentTensorDict.from_h5(
+            tmp_path / "file.h5", non_tensor_as_stack=True
+        )
+        assert h5td.batch_size == (4,)
+        assert h5td.entry_class("mission") is NonTensorStack
+        mission = h5td.get("mission")
+        assert isinstance(mission, NonTensorStack)
+        assert mission.batch_size == (4,)
+        # decoded as the NonTensorData would be: bytes
+        assert mission.tolist() == [b"go left", b"go right", b"stop", b"wait"]
+        assert h5td[1:3].get("mission").tolist() == [b"go right", b"stop"]
+        assert h5td[2]["mission"] == b"stop"
+        assert h5td.get_at("mission", 1).data == b"go right"
+        # a column that does not have the rows of the batch stays one value
+        assert h5td.entry_class("name") is NonTensorData
+        assert h5td["name"] == b"episode"
+        # a value that tensordict wrote stays one value
+        assert h5td.entry_class("l") is NonTensorData
+        assert h5td[1]["l"].tolist() == [0, 1, 2, 3]
+        # the rows of a nested column are those of its own tensordict
+        assert h5td["info"].batch_size == (4, 2)
+        assert h5td.entry_class(("info", "s")) is NonTensorData
+        assert isinstance(h5td.get(("info", "s")), NonTensorData)
+        assert h5td.entry_class(("obs", "s")) is NonTensorStack
+        assert h5td["obs"][1]["s"] == b"b"
+        assert h5td[1]["obs", "s"] == b"b"
+        assert h5td.to_tensordict()[1:3]["mission"] == [b"go right", b"stop"]
+        assert h5td.clone(False)[3]["mission"] == b"wait"
+        h5td.close()
+
     def test_rename_key_missing(self, tmp_path):
         # the error names the missing source key, not the free destination
         td = TensorDict({"a": torch.zeros(3), ("b", "c"): torch.zeros(3)}, [3])

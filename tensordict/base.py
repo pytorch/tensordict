@@ -1406,6 +1406,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # rename in a locked tensordict with a warning, and pass an old key that is
     # not a str or tuple to _rename_key (which raises or warns as before).
     _rename_key_lenient: bool = False
+    # Set by LazyStackedTensorDict, whose leaves belong to its members:
+    # reshape and repeat_interleave with inplace=True raise
+    # NotImplementedError before they change anything.
+    _inplace_shape_ops_unsupported: bool = False
+    # Set by LazyStackedTensorDict, whose flatten regroups its members rather
+    # than flattening leaves: flatten(d, d) returns self, and for
+    # start_dim > end_dim it inserted a dim of size 1 before 0.15: until 0.17
+    # it still does, with a FutureWarning, where the others raise a ValueError.
+    _flatten_lenient: bool = False
     # Whether get() ignores as_list and as_nested_tensor, and warns about them
     # (see _warn_get_kwargs). False for lazy stacks, which honor them.
     _get_ignores_kwargs: bool = True
@@ -2550,10 +2559,23 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     @abc.abstractmethod
     def _unsqueeze(self, dim: int):
+        """Inserts a batch dim of size 1 at ``dim``.
+
+        Called by :meth:`unsqueeze`, which has checked that ``dim`` is in
+        ``[0, batch_dims]``. The leaves of the result are views of the leaves
+        of ``self``. :meth:`unsqueeze` locks a shared or memory-mapped result.
+        """
         raise NotImplementedError
 
     @abc.abstractmethod
     def _squeeze(self, dim=None):
+        """Removes the batch dim ``dim``, or every batch dim of size 1 when ``dim`` is ``None``.
+
+        Called by :meth:`squeeze`, which has checked that ``dim`` is in
+        ``[0, batch_dims)`` and that its size is 1 (it returns ``self``
+        otherwise). The leaves of the result are views of the leaves of
+        ``self``. :meth:`squeeze` locks a shared or memory-mapped result.
+        """
         raise NotImplementedError
 
     def copy(self) -> Self:
@@ -2564,11 +2586,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return self.clone(recurse=False)
 
     @abc.abstractmethod
-    def _view(
-        self,
-        *args,
-        **kwargs,
-    ) -> Self:
+    def _view(self, shape: torch.Size) -> Self:
+        """Returns a tensordict whose batch size is ``shape``, with views of the leaves of ``self``.
+
+        Called by :meth:`view` with a shape that is not the batch size of
+        ``self``. ``shape`` can hold one ``-1``, which the hook infers from
+        the number of elements of the batch. A class that cannot give views
+        raises. :meth:`view` locks a shared or memory-mapped result.
+        """
         raise NotImplementedError
 
     def _view_dtype(self, *, dtype, batch_size):
@@ -2585,11 +2610,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Alias for swapaxes (matching torch.swapdims)
 
     @abc.abstractmethod
-    def _permute(
-        self,
-        *args,
-        **kwargs,
-    ):
+    def _permute(self, dims: list[int]):
+        """Returns a tensordict whose batch dims are the batch dims ``dims`` of ``self``, in that order.
+
+        Called by :meth:`permute`, which has made the negative dims of
+        ``dims`` positive. ``dims`` can be shorter than the batch dims, if it
+        is a permutation of the first ``len(dims)`` dims: the other dims stay
+        in place. The hook checks ``dims``, because the check depends on the
+        class: ``TensorDict`` raises a ``ValueError`` for dims that are not
+        such a permutation, and ``LazyStackedTensorDict``, which permutes its
+        members, warns until TensorDict 0.17. ``TensorDict`` returns ``self``
+        for the identity. :meth:`permute` locks a shared or memory-mapped result.
+        """
         raise NotImplementedError
 
     # Alias for movedim (matching torch.moveaxis)
