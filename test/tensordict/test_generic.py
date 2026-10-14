@@ -2170,6 +2170,25 @@ class TestGeneric:
         assert td_flat.shape == (2,)
         assert td_flat["a"].shape == (2,)
 
+    def test_flatten_0d_context_manager_restores_batch(self):
+        # flatten on a 0-dim tensordict unsqueezes to 1-d. Exit must restore
+        # batch [] and the values written inside the block.
+        td = TensorDict({"a": torch.tensor([1.0, 2.0])}, batch_size=[])
+        with td.flatten() as flat:
+            assert flat.batch_size == torch.Size([1])
+            flat["a"] = torch.tensor([[3.0, 4.0]])
+        assert td.batch_size == torch.Size([])
+        assert td["a"].shape == torch.Size([2])
+        assert torch.equal(td["a"], torch.tensor([3.0, 4.0]))
+
+    def test_flatten_context_manager_writes_back(self):
+        td = TensorDict({"a": torch.arange(6).reshape(2, 3)}, batch_size=[2, 3])
+        with td.flatten(0, 1) as flat:
+            assert flat.batch_size == torch.Size([6])
+            flat["a"] = torch.arange(6) + 1
+        assert td.batch_size == torch.Size([2, 3])
+        assert torch.equal(td["a"], (torch.arange(6) + 1).reshape(2, 3))
+
     def test_fromkeys(self):
         td = TensorDict.fromkeys({"a", "b", "c"})
         assert td["a"] == 0
@@ -6989,6 +7008,29 @@ class TestGeneric:
         assert torch.atleast_1d(td0).shape == torch.Size([1])
         assert torch.atleast_2d(td_1d).shape == torch.Size([1, 3])
         assert torch.atleast_3d(td_1d).shape == torch.Size([1, 1, 3])
+
+    def test_atleast_1d_context_manager_keeps_empty_batch(self):
+        # 0-dim input: values written inside the block come back, batch stays [].
+        td = TensorDict({"a": torch.tensor(3.0)}, batch_size=[])
+        with td.atleast_1d() as expanded:
+            assert expanded.batch_size == torch.Size([1])
+            expanded["a"] = torch.tensor([5.0])
+        assert td.batch_size == torch.Size([])
+        assert td["a"].shape == torch.Size([])
+        assert td["a"].item() == 5.0
+
+    @pytest.mark.parametrize("nd", [2, 3])
+    def test_atleast_nd_context_manager_keeps_batch(self, nd):
+        # 1-dim input: exit is clean, the original batch is unchanged, and the
+        # in-block mutation is visible on the original.
+        td = TensorDict({"a": torch.arange(3)}, batch_size=[3])
+        expanded_batch = torch.Size((1,) * (nd - 1) + (3,))
+        with getattr(td, f"atleast_{nd}d")() as expanded:
+            assert expanded.batch_size == expanded_batch
+            expanded["a"] = (torch.arange(3) + 1).reshape(expanded_batch)
+        assert td.batch_size == torch.Size([3])
+        assert td["a"].shape == torch.Size([3])
+        assert torch.equal(td["a"], torch.arange(3) + 1)
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_requires_grad(self, device):
