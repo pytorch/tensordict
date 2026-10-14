@@ -86,8 +86,9 @@ Note
 
 When updating a [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) with N elements with another
 [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) with M elements, with M > N, along the stack dimension,
-the `update` method will append copies of the extra tensordicts to the dest (self) lazy stack.
-This allows users to rely on `update` to increment lazy stacks progressively.
+and `update_batch_size=True`, the `update` method will append copies of the extra tensordicts
+to the dest (self) lazy stack. This allows users to rely on `update` to increment lazy stacks
+progressively. Without `update_batch_size=True`, the extra tensordicts are left out.
 
 Note
 

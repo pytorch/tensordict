@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5600+gb937c02e2.d20261014)">
+<meta name="llm:version" content="main (0.14.0.dev5605+g106f7d353.d20261014)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5600+gb937c02e2.d20261014)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5605+g106f7d353.d20261014)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1675,6 +1675,12 @@ the kwarg value is itself a dict or tensor collection. Keys whose names collide 
 parameters (<code class="docutils literal notranslate"><span class="pre">clone</span></code>, <code class="docutils literal notranslate"><span class="pre">non_blocking</span></code>, <code class="docutils literal notranslate"><span class="pre">keys_to_update</span></code>) must be passed through the positional
 dict form.</p>
 </div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>On a shared or memory-mapped tensordict, a non-tensor value that its shared buffer cannot
+store (for instance <code class="docutils literal notranslate"><span class="pre">None</span></code>, or an int where a string is shared) is skipped, with a
+<a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#UserWarning" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">UserWarning</span></code></a> that names its key.</p>
+</div>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>self</p>
@@ -2056,7 +2062,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.update",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.update",
        "url": "/reference/generated/tensordict.TensorDictBase.update_.html",
-       "articleBody": "TensorDictBase.update# TensorDictBase.update_(input_dict_or_td: dict[str, Tensor | TensorCollection] | T | None = None, clone: bool = False, *, non_blocking: bool = False, keys_to_update: Sequence[NestedKey] | None = None, **kwargs) \u2192 Self# Updates the TensorDict in-place with values from either a dictionary or another TensorDict. Unlike update(), this function will throw an error if the key is unknown to self. Parameters: input_dict_or_td (TensorDictBase or dict, optional) \u2013 input data to be written in self. If None, only the keyword arguments are used. clone (bool, optional) \u2013 whether the tensors in the input ( tensor) dict should be cloned before being set. Defaults to False. Keyword Arguments: keys_to_update (sequence of NestedKeys, optional) \u2013 if provided, only the list of keys in key_to_update will be updated. This is aimed at avoiding calls to data_dest.update_(data_src.select(*keys_to_update)). non_blocking (bool, optional) \u2013 if True and this copy is between different devices, the copy may occur asynchronously with respect to the host. **kwargs \u2013 additional key-value pairs to write into self as top-level entries. As with the positional form, any key that does not already exist in self raises KeyError. When both input_dict_or_td and kwargs are provided, kwargs win on key conflict. Note Keyword arguments are treated as top-level keys only. Nested structures still work when the kwarg value is itself a dict or tensor collection. Keys whose names collide with reserved parameters (clone, non_blocking, keys_to_update) must be passed through the positional dict form. Returns: self Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e a = torch.randn(3) \u003e\u003e\u003e b = torch.randn(3, 4) \u003e\u003e\u003e td = TensorDict({\"a\": a, \"b\": b}, batch_size=[3]) \u003e\u003e\u003e other_td = TensorDict({\"a\": a*0, \"b\": b*0}, batch_size=[]) \u003e\u003e\u003e _ = td.update_(other_td) \u003e\u003e\u003e assert td[\u0027a\u0027] is not other_td[\u0027a\u0027] \u003e\u003e\u003e assert (td[\u0027a\u0027] == other_td[\u0027a\u0027]).all() \u003e\u003e\u003e assert (td[\u0027a\u0027] == 0).all() \u003e\u003e\u003e # keyword form for top-level entries (key must already exist) \u003e\u003e\u003e _ = td.update_(a=torch.ones(3)) \u003e\u003e\u003e assert (td[\"a\"] == 1).all() Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.update# TensorDictBase.update_(input_dict_or_td: dict[str, Tensor | TensorCollection] | T | None = None, clone: bool = False, *, non_blocking: bool = False, keys_to_update: Sequence[NestedKey] | None = None, **kwargs) \u2192 Self# Updates the TensorDict in-place with values from either a dictionary or another TensorDict. Unlike update(), this function will throw an error if the key is unknown to self. Parameters: input_dict_or_td (TensorDictBase or dict, optional) \u2013 input data to be written in self. If None, only the keyword arguments are used. clone (bool, optional) \u2013 whether the tensors in the input ( tensor) dict should be cloned before being set. Defaults to False. Keyword Arguments: keys_to_update (sequence of NestedKeys, optional) \u2013 if provided, only the list of keys in key_to_update will be updated. This is aimed at avoiding calls to data_dest.update_(data_src.select(*keys_to_update)). non_blocking (bool, optional) \u2013 if True and this copy is between different devices, the copy may occur asynchronously with respect to the host. **kwargs \u2013 additional key-value pairs to write into self as top-level entries. As with the positional form, any key that does not already exist in self raises KeyError. When both input_dict_or_td and kwargs are provided, kwargs win on key conflict. Note Keyword arguments are treated as top-level keys only. Nested structures still work when the kwarg value is itself a dict or tensor collection. Keys whose names collide with reserved parameters (clone, non_blocking, keys_to_update) must be passed through the positional dict form. Note On a shared or memory-mapped tensordict, a non-tensor value that its shared buffer cannot store (for instance None, or an int where a string is shared) is skipped, with a UserWarning that names its key. Returns: self Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e a = torch.randn(3) \u003e\u003e\u003e b = torch.randn(3, 4) \u003e\u003e\u003e td = TensorDict({\"a\": a, \"b\": b}, batch_size=[3]) \u003e\u003e\u003e other_td = TensorDict({\"a\": a*0, \"b\": b*0}, batch_size=[]) \u003e\u003e\u003e _ = td.update_(other_td) \u003e\u003e\u003e assert td[\u0027a\u0027] is not other_td[\u0027a\u0027] \u003e\u003e\u003e assert (td[\u0027a\u0027] == other_td[\u0027a\u0027]).all() \u003e\u003e\u003e assert (td[\u0027a\u0027] == 0).all() \u003e\u003e\u003e # keyword form for top-level entries (key must already exist) \u003e\u003e\u003e _ = td.update_(a=torch.ones(3)) \u003e\u003e\u003e assert (td[\"a\"] == 1).all() Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

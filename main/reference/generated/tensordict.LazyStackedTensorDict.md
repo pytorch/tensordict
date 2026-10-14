@@ -572,33 +572,6 @@ Examples
 >>> assert isinstance(out, LazyStackedTensorDict) and out.shape == (2,)
 ```
 
-update_at_(*input_dict_or_td: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection] | [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *index: [None](https://docs.python.org/3/builtins/constants.html#None) | [int](https://docs.python.org/3/builtins/functions.html#int) | [slice](https://docs.python.org/3/builtins/functions.html#slice) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [List](https://docs.python.org/3/library/typing.html#typing.List)[[Any](https://docs.python.org/3/library/typing.html#typing.Any)] | [Tuple](https://docs.python.org/3/library/typing.html#typing.Tuple)[[Any](https://docs.python.org/3/library/typing.html#typing.Any), ...]*, *clone: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
-
-Updates the lazy stack in-place at the specified index with values from either a dictionary or another TensorDict.
-
-See [`update_at_()`](tensordict.TensorDictBase.update_at_.html#tensordict.TensorDictBase.update_at_). Unlike the base method,
-this override does not accept `keys_to_update`.
-
-Parameters:
-
-- **input_dict_or_td** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*or*[*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)) - input data to be written
-in self.
-- **index** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**iterable**,*[*slice*](https://docs.python.org/3/builtins/functions.html#slice)) - index of the tensordict
-where the update should occur.
-- **clone** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - accepted for compatibility with the base
-method. It has no effect, as the values are copied into the
-existing entries. Default is False.
-
-Keyword Arguments:
-
-**non_blocking** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True` and this copy is between
-different devices, the copy may occur asynchronously with respect
-to the host.
-
-Returns:
-
-self
-
 valid_keys(*include_nested: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *leaves_only: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *is_leaf: [Callable](https://docs.python.org/3/library/typing.html#typing.Callable)[[[Type](https://docs.python.org/3/library/typing.html#typing.Type)], [bool](https://docs.python.org/3/builtins/functions.html#bool)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *sort: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → _LazyStackedTensorDictKeysView
 
 Returns the keys of the lazy stack, like [`keys()`](tensordict.TensorDictBase.keys.html#tensordict.TensorDictBase.keys).

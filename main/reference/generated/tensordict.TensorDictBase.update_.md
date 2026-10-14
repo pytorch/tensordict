@@ -33,6 +33,12 @@ the kwarg value is itself a dict or tensor collection. Keys whose names collide 
 parameters (`clone`, `non_blocking`, `keys_to_update`) must be passed through the positional
 dict form.
 
+Note
+
+On a shared or memory-mapped tensordict, a non-tensor value that its shared buffer cannot
+store (for instance `None`, or an int where a string is shared) is skipped, with a
+[`UserWarning`](https://docs.python.org/3/builtins/exceptions.html#UserWarning) that names its key.
+
 Returns:
 
 self
