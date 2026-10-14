@@ -40,7 +40,11 @@ import numpy as np
 import torch
 from pyvers import implement_for  # noqa: F401
 from tensordict import _indexing, _utils_key_json
-from tensordict._deprecation import deprecated_attributes, warn_deprecated
+from tensordict._deprecation import (
+    deprecated_attributes,
+    deprecation_message,
+    warn_deprecated,
+)
 from tensordict._indexing import _getitem_batch_size  # noqa: F401
 from tensordict._nestedkey import NestedKey
 from torch import Tensor
@@ -768,9 +772,24 @@ def _erase_cache_first(fun):
     return new_fun
 
 
-_NON_STR_KEY_TUPLE_ERR = "Nested membership checks with tuples of strings is only supported when setting `include_nested=True`."
 _NON_STR_KEY_ERR = "TensorDict keys are always strings. Membership checks are only supported for strings or non-empty tuples of strings (for nested TensorDicts)"
 _GENERIC_NESTED_ERR = "Only NestedKeys are supported: a key must be a string or a non-empty, possibly nested tuple of strings. Got key {!r}."
+
+
+def _warn_nested_key_in_flat_keys(key: tuple[str, ...], tensordict) -> None:
+    """Warns that ``key in tensordict.keys()`` finds the nested ``key`` today, and returns False in 0.17."""
+    warnings.warn(
+        deprecation_message(
+            f"Finding the nested key {key} in {type(tensordict).__name__}.keys() "
+            "without include_nested=True",
+            removal="0.17",
+        )
+        + " Starting with TensorDict 0.17, the check returns False, as it does "
+        "for TensorDict. Use keys(include_nested=True) to look up a nested key.",
+        FutureWarning,
+        # point to the code that runs `key in view`
+        stacklevel=3,
+    )
 
 
 class _StringKeys(KeysView):
@@ -804,7 +823,8 @@ class _StringKeys(KeysView):
             except Exception:
                 raise TypeError(_NON_STR_KEY_ERR)
             if len(unravel_item) > 1:
-                raise TypeError(_NON_STR_KEY_TUPLE_ERR)
+                # A nested key is not a top-level key
+                return False
             else:
                 item = unravel_item[0]
         return self.keys.__contains__(item)

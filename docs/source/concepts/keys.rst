@@ -114,11 +114,41 @@ has a timestamp, an arm, and a gripper on the arm:
 take the same arguments.
 
 To test a key, use ``key in td``. It accepts nested keys. ``key in td.keys()``
-accepts a nested key only with ``include_nested=True``:
+finds a nested key only with ``include_nested=True``:
 
   >>> ("arm", "pos") in td
   True
   >>> ("arm", "pos") in td.keys(include_nested=True)
+  True
+  >>> ("arm", "pos") in td.keys()
+  False
+
+On a :class:`~tensordict.LazyStackedTensorDict`, a
+:class:`~tensordict.store.TensorDictStore` and a
+:class:`~tensordict.store.LazyStackedTensorDictStore`,
+``("arm", "pos") in td.keys()`` is ``True`` and emits a ``FutureWarning``. This
+result is deprecated and will be removed in TensorDict 0.17: from then on, the
+check returns ``False``.
+
+On a :class:`~tensordict.TensorDict`, and on most other types,
+``key in td.keys(include_nested=True, leaves_only=True)`` checks that the key
+exists, not that it is a leaf. A sub-tensordict is in the view, although
+iterating the view does not list it (a
+:class:`~tensordict.LazyStackedTensorDict` and a
+:class:`~tensordict.PersistentTensorDict` check that the key is a leaf):
+
+  >>> "arm" in td.keys(include_nested=True, leaves_only=True)
+  True
+  >>> "arm" in list(td.keys(include_nested=True, leaves_only=True))
+  False
+
+To test that a key is a leaf, pass the class of its entry to the ``is_leaf``
+function of the view, by default :func:`~tensordict.default_is_leaf`:
+
+  >>> from tensordict import default_is_leaf
+  >>> default_is_leaf(td.entry_class("arm"))
+  False
+  >>> default_is_leaf(td.entry_class(("arm", "pos")))
   True
 
 Read an entry
