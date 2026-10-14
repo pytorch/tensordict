@@ -1686,8 +1686,20 @@ class _ShapeOps:
                 return ()
             raise RuntimeError("Insufficient number of elements in split_size.")
         num_splits = len(split_sizes)
+        # The front has checked dim and the sizes, and a sub-tensordict has
+        # the same batch dim: call its hook directly. A call through the
+        # front adds a Python frame per nesting level, which slows deep
+        # tensordicts.
         splits = {
-            k: (v,) * num_splits if _is_unbatched(v) else v.split(split_sizes, dim)
+            k: (
+                (v,) * num_splits
+                if _is_unbatched(v)
+                else v.split(split_sizes, dim)
+                if type(v) is Tensor
+                or _is_tensorclass(type(v))
+                or not _is_tensor_collection(type(v))
+                else v._split(split_sizes, dim)
+            )
             for k, v in self.items()
         }
         segments = _create_segments_from_list(split_sizes, max_size)

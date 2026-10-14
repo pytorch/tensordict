@@ -868,8 +868,18 @@ class TensorDict(TensorDictBase):
         max_size = batch_size[dim]
         split_size = -(max_size // -chunks)
         segments = _create_segments_from_int(split_size, max_size)
+        # The front has checked chunks and dim, and a sub-tensordict has
+        # the same batch dim: call its hook directly. A call through the
+        # front adds a Python frame per nesting level, which slows deep
+        # tensordicts.
         splits = {
-            k: (v,) * len(segments) if _is_unbatched(v) else v.chunk(chunks, dim)
+            k: (
+                (v,) * len(segments)
+                if _is_unbatched(v)
+                else v.chunk(chunks, dim)
+                if type(v) is Tensor or not isinstance(v, TensorDictBase)
+                else v._chunk(chunks, dim)
+            )
             for k, v in self.items()
         }
         names = self._maybe_names()
