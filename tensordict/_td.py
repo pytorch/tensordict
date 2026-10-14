@@ -475,6 +475,56 @@ class TensorDict(TensorDictBase):
             _check_invariants(self)
         return self
 
+    def _is_dense_node(self) -> bool:
+        # An exact TensorDict without dim names: _dense_apply rebuilds it.
+        return type(self) is TensorDict and self._td_dim_names is None
+
+    def _dense_apply(self, fn, named, nested_keys, prefix, filter_empty, is_leaf):
+        # What _apply_nest returns for a node that passes _is_dense_node, with
+        # checked=True and no others, out, inplace, batch size, device or
+        # names: each node gets the batch size and device of its source node.
+        # Entries other than tensors and such nodes take the steps of
+        # _apply_nest for one entry.
+        result = self._new_unsafe(batch_size=self._batch_size, device=self._device)
+        _tensordict = result._tensordict
+        for key, item in self._tensordict.items():
+            cls = type(item)
+            if cls is TensorDict and item._td_dim_names is None:
+                item_trsf = item._dense_apply(
+                    fn, named, nested_keys, prefix + (key,), filter_empty, is_leaf
+                )
+            elif cls is not Tensor and not is_leaf(cls):
+                # the call _apply_nest makes for a nested collection
+                item_trsf = item._apply_nest(
+                    fn,
+                    inplace=False,
+                    batch_size=None,
+                    device=NO_DEFAULT,
+                    checked=True,
+                    named=named,
+                    nested_keys=nested_keys,
+                    default=NO_DEFAULT,
+                    prefix=prefix + (key,),
+                    filter_empty=filter_empty,
+                    is_leaf=is_leaf,
+                    out=None,
+                    call_on_unbatched=False,
+                )
+            elif named:
+                if nested_keys:
+                    item_trsf = fn(prefix + (key,) if prefix != () else key, item)
+                else:
+                    item_trsf = fn(key, item)
+            else:
+                item_trsf = fn(item)
+            if item_trsf is not None:
+                _tensordict[key] = item_trsf
+        if not _tensordict and (
+            filter_empty or (filter_empty is None and not self.is_empty())
+        ):
+            return None
+        return result
+
     @classmethod
     def from_module(
         cls,

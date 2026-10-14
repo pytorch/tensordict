@@ -1067,6 +1067,20 @@ def test_apply_nested(benchmark):
     benchmark(td.apply, lambda x: x)
 
 
+@pytest.mark.parametrize("op", ["neg", "mul_scalar", "add"])
+def test_pointwise_nested(benchmark, op):
+    td = TensorDict(
+        {"a": torch.randn(8, 3), "b": torch.randn(8), "n": {"c": torch.randn(8, 4)}},
+        [8],
+    )
+    fn = {
+        "neg": lambda td: -td,
+        "mul_scalar": lambda td: td * 2.0,
+        "add": lambda td: td + td,
+    }[op]
+    benchmark(fn, td)
+
+
 def test_split(benchmark):
     (td,), _ = big_nested_td(size=(3, 20))
     benchmark(lambda td: td.split(2, dim=1), td)

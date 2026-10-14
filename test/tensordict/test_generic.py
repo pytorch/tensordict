@@ -8953,6 +8953,81 @@ class TestGeneric:
         assert result is out
         assert_allclose_td(out, td * 2)
 
+    @pytest.mark.parametrize(
+        "named,nested_keys", [[False, False], [True, False], [True, True]]
+    )
+    @pytest.mark.parametrize("filter_empty", [False, True, None])
+    @pytest.mark.parametrize("drop", [False, True])
+    @pytest.mark.parametrize("mixed", [False, True])
+    def test_fast_apply_dense_tree(
+        self, named, nested_keys, filter_empty, drop, mixed, monkeypatch
+    ):
+        # A tree of TensorDict nodes and tensors is rebuilt without the
+        # generic _apply_nest walker, with the same result. Other entries
+        # (here a NonTensorData and a lazy stack) take _apply_nest.
+        b = TensorDict(
+            c=torch.ones(3, 2), d={"e": torch.ones(3, 2, 1)}, batch_size=[3, 2]
+        )
+        td = TensorDict(a=torch.zeros(3), b=b, empty={}, batch_size=[3], device="cpu")
+        if mixed:
+            td["b", "s"] = NonTensorData("s", batch_size=[3, 2])
+            td["b", "l"] = lazy_stack(
+                [TensorDict(f=torch.ones(2, 4), batch_size=[2], device="cpu")] * 3
+            )
+            assert type(td["b", "l"]) is LazyStackedTensorDict
+        td.lock_()
+        calls = []
+
+        def fn(*args):
+            calls.append(args[:-1])
+            return None if drop else args[-1] + 1
+
+        kwargs = {
+            "named": named,
+            "nested_keys": nested_keys,
+            "filter_empty": filter_empty,
+            "propagate_lock": True,
+        }
+        # checked=False takes _apply_nest
+        expected = td._fast_apply(fn, checked=False, **kwargs)
+        expected_calls, calls[:] = list(calls), []
+        neg, mul, add = -td, td * 2, td + td
+
+        prefixes = []
+
+        def record(cls):
+            apply_nest = cls._apply_nest
+
+            def record_apply_nest(self, *args, **kwargs):
+                prefixes.append(kwargs.get("prefix", ()))
+                return apply_nest(self, *args, **kwargs)
+
+            monkeypatch.setattr(cls, "_apply_nest", record_apply_nest)
+
+        record(TensorDictBase)
+        record(LazyStackedTensorDict)
+        result = td._fast_apply(fn, **kwargs)
+        assert calls == expected_calls
+        if expected is None:
+            assert result is None
+            result = expected = td.empty()
+        results = [(result, expected), (-td, neg), (td * 2, mul), (td + td, add)]
+        # Of the recorded _apply_nest copies (TensorDictBase and lazy stacks),
+        # only the lazy stack's ran; the NonTensorData takes its own copy,
+        # which is not recorded.
+        assert bool(prefixes) is mixed
+        assert all(prefix[:2] == ("b", "l") for prefix in prefixes)
+        for res, exp in results:
+            assert list(res.keys(True)) == list(exp.keys(True))
+            nodes = [k for k in res.keys(True) if is_tensor_collection(res[k])]
+            for r, e in [(res, exp)] + [(res[k], exp[k]) for k in nodes]:
+                assert type(r) is type(e)
+                assert r.batch_size == e.batch_size
+                assert r.device == e.device
+                assert r.names == e.names
+                assert r.is_locked == e.is_locked
+            assert_allclose_td(res, exp)
+
     def test_norm_out(self):
         td = TensorDict(a=torch.ones(3), b={"c": torch.ones(3, 2)}, batch_size=[3])
         out = td.norm().zero_()

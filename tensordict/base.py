@@ -6411,6 +6411,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             result.lock_()
         return result
 
+    def _is_dense_node(self) -> bool:
+        # Whether _fast_apply can use _dense_apply: see TensorDict._is_dense_node.
+        return False
+
     def _fast_apply(
         self,
         fn: Callable,
@@ -6447,6 +6451,37 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     *args, **kwargs, num_threads=num_threads
                 )
 
+        elif (
+            not others
+            and out is None
+            and not inplace
+            and batch_size is None
+            and checked
+            and not call_on_nested
+            and not constructor_kwargs
+            and not is_compiling()
+            and device is NO_DEFAULT
+            and names is NO_DEFAULT
+            and (
+                is_leaf is None
+                or is_leaf is _default_is_leaf
+                or is_leaf is _NESTED_TENSORS_AS_LISTS
+            )
+            and self._is_dense_node()
+        ):
+            # An exact TensorDict without dim names: build the result
+            # directly, as _apply_nest would, without its generic steps.
+            result = self._dense_apply(
+                fn,
+                named,
+                nested_keys,
+                (),
+                filter_empty,
+                _default_is_leaf if is_leaf is None else is_leaf,
+            )
+            if propagate_lock and self.is_locked and result is not None:
+                result.lock_()
+            return result
         else:
             func = self._apply_nest
         result = func(
