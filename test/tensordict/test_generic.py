@@ -8754,6 +8754,97 @@ class TestGeneric:
         dest.update({"x": value})
         assert dest["x"].device.type == "meta"
 
+    @staticmethod
+    def _count_batchfree_validations(monkeypatch):
+        calls = []
+        for name in (
+            "_validate_value_batchfree",
+            "_validate_value_batchfree_devicefree",
+        ):
+            orig = getattr(TensorDictBase, name)
+
+            def counted(self, value, *args, _orig=orig, **kwargs):
+                calls.append(value)
+                return _orig(self, value, *args, **kwargs)
+
+            monkeypatch.setattr(TensorDictBase, name, counted)
+        return calls
+
+    @pytest.mark.parametrize("method", ["set", "setitem", "inplace"])
+    @pytest.mark.parametrize(
+        "parent_device,value_device,validates",
+        [
+            (None, None, False),
+            (None, "cpu", False),
+            ("cpu", "cpu", False),
+            ("cpu", None, True),
+            ("meta", "meta", False),
+            ("meta", "cpu", True),
+        ],
+    )
+    def test_eager_batchfree_td_set(
+        self, method, parent_device, value_device, validates, monkeypatch
+    ):
+        # A plain TensorDict stored in a TensorDict without batch dims skips
+        # the validator unless it has to move to the parent's device.
+        calls = self._count_batchfree_validations(monkeypatch)
+        parent = TensorDict(device=parent_device)
+        if method == "inplace":
+            parent["sub"] = TensorDict(
+                {"x": torch.zeros(3, 2, device=parent_device)}, [3, 2]
+            )
+            calls.clear()
+        value = TensorDict(
+            {"x": torch.ones(3, 2, device=value_device)},
+            [3, 2],
+            device=value_device,
+            names=["a", None],
+        ).lock_()
+        if method == "setitem":
+            parent["sub"] = value
+        else:
+            parent.set("sub", value, inplace=method == "inplace")
+        assert len(calls) == int(validates)
+        stored = parent["sub"]
+        if method == "inplace":
+            assert parent_device == "meta" or (stored["x"] == 1).all()
+            return
+        assert (stored is value) is not validates
+        assert type(stored) is TensorDict
+        assert stored.batch_size == (3, 2) and stored.names == ["a", None]
+        device = parent_device or value_device
+        assert stored.device == (device and torch.device(device))
+        assert stored["x"].device.type == (parent_device or value_device or "cpu")
+        assert stored.is_locked
+        assert parent.names == [] and not parent.is_locked
+        parent.lock_()
+        with pytest.raises(RuntimeError, match="locked"):
+            parent.set("other", value)
+        assert "other" not in parent.keys()
+
+    def test_eager_batchfree_td_set_fallbacks(self, monkeypatch):
+        calls = self._count_batchfree_validations(monkeypatch)
+
+        class SubTD(TensorDict):
+            pass
+
+        @tensorclass
+        class TC:
+            data: TensorDict
+
+        # Subclasses on either side and non-tensor data keep the validator.
+        TensorDict().set("a", SubTD())
+        SubTD().set("a", TensorDict())
+        TensorDict().set("a", NonTensorData("x"))
+        assert len(calls) == 3
+        calls.clear()
+        # A TensorDict field of a tensorclass without batch dims skips it.
+        sub = TensorDict({"x": torch.ones(3)}, [3])
+        tc = TC(data=sub, batch_size=[])
+        tc.data = sub
+        assert not calls
+        assert tc.data is sub
+
     class _SlowPathTensorDict(TensorDict):
         """A TensorDict subclass: update() never takes the fast path of TensorDict."""
 

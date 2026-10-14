@@ -172,6 +172,13 @@ def test_plain_set_stack_nested_inplace(benchmark):
     benchmark(lambda: td.set(key, tensor, inplace=True))
 
 
+def test_plain_set_td_batchfree(benchmark):
+    # the storage of a tensorclass: no batch dims and no device
+    td = TensorDict()
+    sub = TensorDict({"x": torch.zeros(1000)}, [1000])
+    benchmark(lambda: td.set("sub", sub))
+
+
 def test_items(benchmark):
     td = big_td()[0][0]
     benchmark(lambda: list(td.items()))
