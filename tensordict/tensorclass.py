@@ -1043,6 +1043,31 @@ def _own_annotation_names(cls: type) -> list[str]:
     return list(annotations)
 
 
+def _defines_method(cls: type, name: str, default: Callable | None) -> bool:
+    """Whether ``cls`` defines the method ``name``, in its body or in a parent.
+
+    The tensorclass ``default``, the methods that the TensorClass base forwards
+    to its TensorDict, those that :func:`dataclasses.dataclass` generates and
+    those of ``object`` do not count.
+    """
+    for base in cls.__mro__:
+        if name in base.__dict__:
+            method = base.__dict__[name]
+            break
+    else:
+        return False
+    if base is object or method is default:
+        return False
+    if getattr(method, "__qualname__", "").startswith("_wrap_td_method."):
+        return False
+    if "__dataclass_fields__" not in base.__dict__:
+        return True
+    # dataclasses compiles the methods it generates from a string, as for
+    # __init__ in _tensorclass
+    code = getattr(inspect.unwrap(method), "__code__", None)
+    return getattr(code, "co_filename", None) != "<string>"
+
+
 # The names of the members of a tensorclass and of the attributes that hold its
 # state. A tensorclass has or forwards to its TensorDict every TensorDict
 # attribute, and library code calls private TensorDict methods on nested tensor
@@ -1252,9 +1277,29 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         if own_doc == generated_doc:
             own_doc = None
 
+    # Keep the operators that the class defines, in its body or in a parent.
+    # Look for them before dataclass() adds a __repr__ and an __eq__.
+    operators = {
+        "__repr__": _repr,
+        "__eq__": _eq,
+        "__ne__": _ne,
+        "__or__": _or,
+        "__xor__": _xor,
+        "__bool__": _bool,
+    }
+    own_operators = {
+        name
+        for name in (*operators, *_FALLBACK_METHOD_FROM_TD_FORCE)
+        if _defines_method(cls, name, operators.get(name))
+    }
+
     # Breaks some tests, don't do that:
     # if not dataclasses.is_dataclass(cls):
     cls = dataclass(cls, frozen=frozen)
+    for name in own_operators:
+        if name in cls.__dict__ and name not in attrs_before:
+            # dataclass() replaced an inherited __repr__ or __eq__
+            delattr(cls, name)
     _TENSORCLASS_MEMO[cls] = True
 
     # Use dataclasses.fields() to get the correct field list (excludes ClassVar fields)
@@ -1380,16 +1425,11 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         cls.__getitems__ = _getitem
     if "__setitem__" not in cls.__dict__:
         cls.__setitem__ = _setitem
-    if not _is_non_tensor:
-        cls.__repr__ = _repr
     if "__len__" not in cls.__dict__:
         cls.__len__ = _len
-
-    cls.__eq__ = _eq
-    cls.__ne__ = _ne
-    cls.__or__ = _or
-    cls.__xor__ = _xor
-    cls.__bool__ = _bool
+    for name, method in operators.items():
+        if name not in own_operators and not (_is_non_tensor and name == "__repr__"):
+            setattr(cls, name, method)
 
     if not hasattr(cls, "_new_unsafe"):
         cls._new_unsafe = classmethod(_new_unsafe)
@@ -1443,7 +1483,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             else:
                 setattr(cls, method_name, _wrap_td_method(method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD_FORCE:
-        setattr(cls, method_name, _wrap_td_method(method_name))
+        if method_name not in own_operators:
+            setattr(cls, method_name, _wrap_td_method(method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD_NOWRAP:
         if not hasattr(cls, method_name) and method_name not in expected_keys:
             is_property = isinstance(
