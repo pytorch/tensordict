@@ -1662,6 +1662,40 @@ class TestGeneric:
         assert td.get("a").tolist() == [0.0, 0.0]
         assert td.get("b").tolist() == [0.0, 0.0]
 
+        nested = TensorDict(
+            {
+                "a": torch.zeros(2),
+                "b": TensorDict(c=torch.zeros(2, 3), batch_size=[2, 3]),
+            },
+            batch_size=[2],
+        )
+        with pytest.raises(RuntimeError, match="at key 'b'"):
+            nested.data = TensorDict(
+                {
+                    "a": torch.ones(2),
+                    "b": TensorDict(c=torch.ones(2, 4), batch_size=[2]),
+                },
+                batch_size=[2],
+            )
+        assert nested.get("a").tolist() == [0.0, 0.0]
+        assert nested.get(("b", "c")).shape == (2, 3)
+        nested._check_batch_size(raise_exception=True)
+
+        def stack(shape, bs):
+            return LazyStackedTensorDict(
+                *[
+                    TensorDict(x=TensorDict(y=torch.zeros(shape), batch_size=bs))
+                    for _ in range(2)
+                ]
+            )
+
+        lazy = stack((3, 1), [3])
+        with pytest.raises(RuntimeError, match=r"at key \('0', 'x'\)"):
+            lazy.data = stack((3, 2), [])
+        assert all(
+            member.get(("x", "y")).shape == (3, 1) for member in lazy.tensordicts
+        )
+
     @pytest.mark.parametrize(
         "stack_dim",
         [0, 1, 2, 3],

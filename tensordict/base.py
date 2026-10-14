@@ -2133,8 +2133,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         ``self`` to the matching leaf of ``other``, as :attr:`torch.Tensor.data`
         does. The leaves then share storage with ``other``: memory-mapped or
         shared-memory leaves stop writing to their file or shared memory.
-        ``other`` must have the batch size of ``self``, and each of its keys
-        must be in ``self``.
+        ``other`` and each of its sub-tensordicts must have the batch size of
+        the matching tensordict in ``self``, and each key of ``other`` must be
+        in ``self``.
         """
         return self._data()
 
@@ -5389,6 +5390,22 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 f"Cannot assign .data from a source with batch size {value.batch_size} "
                 f"to a destination with batch size {self.batch_size}."
             )
+        nodes_self = dict(
+            zip(*self._items_list(True, False, is_leaf=_NESTED_TENSORS_AS_LISTS))
+        )
+        for key, node in zip(
+            *value._items_list(True, False, is_leaf=_NESTED_TENSORS_AS_LISTS)
+        ):
+            node_self = nodes_self.get(key)
+            if (
+                _is_tensor_collection(type(node))
+                and _is_tensor_collection(type(node_self))
+                and node.batch_size != node_self.batch_size
+            ):
+                raise RuntimeError(
+                    f"Cannot assign .data from a source with batch size {node.batch_size} "
+                    f"to a destination with batch size {node_self.batch_size} at key {key!r}."
+                )
         keys, vals = value._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
         keys_self, vals_self = self._items_list(
             True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
