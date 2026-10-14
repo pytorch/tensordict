@@ -2256,9 +2256,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         num_none = 0
         for v in value:
             num_none += v is None
-        if num_none == self.batch_dims:
-            if len(value) != self.batch_dims:
-                _warn_names_length(value, self.batch_dims)
+        batch_dims = self.batch_dims
+        if num_none == batch_dims:
+            if len(value) != batch_dims:
+                _warn_names_length(value, batch_dims)
             self._set_names(None)
             return
         if num_none:
