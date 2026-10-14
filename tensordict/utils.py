@@ -2629,21 +2629,26 @@ _FOREACH_ADD_TENSOR = {
 
 
 def _is_cuda_scalar_of(other, tensors) -> bool:
-    # Integer tensors with a float64 0-dim tensor give float32 with the number
-    # and float64 with the 0-dim tensor; floating-point tensors on the device
-    # of the 0-dim tensor give the same dtypes and values with both.
+    # The overload that takes a 0-dim tensor casts it to the dtype of each
+    # tensor first, the one that takes a number does not: integer tensors with
+    # a float64 0-dim tensor give float64 instead of float32, and float16 or
+    # bfloat16 tensors with a wider or integer 0-dim tensor round differently.
+    # Both give the same dtypes and values for float32 and float64 tensors, and
+    # for tensors of the dtype of a floating-point 0-dim tensor.
     if not (
         isinstance(other, Tensor)
         and other.is_cuda
         and not other.ndim
-        and not other.is_complex()
+        and other.is_floating_point()
         and not other.requires_grad
         and not _is_unbatched(other)
     ):
         return False
-    device = other.device
+    device, dtype = other.device, other.dtype
     for tensor in tensors:
-        if not tensor.is_floating_point() or tensor.device != device:
+        if tensor.device != device or (
+            tensor.dtype not in (torch.float32, torch.float64) and tensor.dtype != dtype
+        ):
             return False
     return True
 

@@ -5480,6 +5480,38 @@ def test_add_cuda_scalar_tensor_other_leaves():
     td = TensorDict(a=torch.arange(3, device="cuda"), b=torch.ones(3, device="cuda"))
     assert (td + t)["a"].dtype == torch.float32
     assert (td.cpu() + t)["a"].device == torch.device("cpu")
+    with pytest.raises(NotImplementedError, match="bool tensor"):
+        td.exclude("a") - torch.tensor(True, device="cuda")
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
+@pytest.mark.parametrize(
+    "dtype,other_dtype,value",
+    [
+        (torch.bfloat16, torch.float32, 0.1234567),
+        (torch.bfloat16, torch.float16, 0.1234567),
+        (torch.float16, torch.float64, 0.1234567),
+        (torch.bfloat16, torch.int64, 257),
+    ],
+)
+@pytest.mark.parametrize(
+    "op",
+    [
+        lambda x, t: x + t,
+        lambda x, t: x - t,
+        lambda x, t: t - x,
+        lambda x, t: x.clone().add_(t),
+        lambda x, t: x.clone().sub_(t),
+    ],
+    ids=["add", "sub", "rsub", "add_", "sub_"],
+)
+def test_add_sub_cuda_scalar_tensor_half_leaves(op, dtype, other_dtype, value):
+    # Half-precision leaves with a wider 0-dim tensor keep the values they get
+    # with the number, which differ from those of the 0-dim tensor overload
+    td = TensorDict(a=torch.linspace(0, 3, 1000, device="cuda", dtype=dtype))
+    t = torch.tensor(value, device="cuda", dtype=other_dtype)
+    expected = op(td, t.item())
+    torch.testing.assert_close(op(td, t)["a"], expected["a"], rtol=0, atol=0)
 
 
 class TestEmptyTensorMemmapRoundtrip:
