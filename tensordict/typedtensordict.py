@@ -1041,11 +1041,12 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
         return type(self)._wrap_td(result)
 
     # ------------------------------------------------------------------
-    # del_ and rename_key_: in-place, return self
+    # _del and rename_key_
     # ------------------------------------------------------------------
-    def del_(self, key):
+    # Override: the source deletes, with its checks and the errors of its
+    # backend.
+    def _del(self, key):
         self._source.del_(key)
-        return self
 
     # Override: the source checks its lock and the keys, and renames: a lazy
     # stack renames in each member, where the base would write a stacked copy.
@@ -1105,11 +1106,11 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
 # Direct delegation: return value from _source as-is
 # The public methods in these lists override the base: ``is_contiguous`` (the
 # base walks the leaves, several times slower), ``all`` and ``any`` (the base
-# is 10-15% slower with a dim), ``popitem`` (the source's value class: a lazy
-# source pops a dense nested tensordict), ``__setitem__`` (the source's
-# checks), ``make_memmap*`` (a memory-mapped source), ``contiguous`` (one call
-# to the source), ``masked_fill`` (the source's copy: the base would clone a
-# file), ``masked_select`` (the typed result).
+# is 10-15% slower with a dim), ``popitem`` (one call to the source),
+# ``__setitem__`` (the source's checks), ``make_memmap*`` (a memory-mapped
+# source), ``contiguous`` (one call to the source), ``masked_fill`` (the
+# source's copy: the base would clone a file), ``masked_select`` (the typed
+# result).
 _DIRECT_DELEGATES = [
     "_get_str",
     "_get_tuple",

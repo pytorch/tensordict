@@ -909,14 +909,12 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback_property
     def batch_size(self) -> torch.Size: ...
 
-    # Override: forwards to _param_td so that results keep their nn.Parameters.
     # Override: the base would read the entries through the get hooks.
     @_fallback
     def contiguous(self, *args, **kwargs): ...
 
-    @_lock_blocked
     @_unlock_and_set
-    def del_(self, *args, **kwargs): ...
+    def _del(self, key): ...
 
     # Override: forwards to _param_td so that results keep their nn.Parameters.
     @_fallback
